@@ -21,12 +21,12 @@ const summary = (id: string, name: string, description: string): Schemas['SkillT
 const detail = (overrides: Partial<Schemas['SkillTemplate']> = {}): Schemas['SkillTemplate'] => ({
   id: 'sk-1',
   name: 'pdf-tools',
-  description: '处理 PDF',
+  description: 'Work with PDF files',
   files: [
     { path: 'SKILL.md', size: 40, sha256: 'a' },
     { path: 'scripts/run.sh', size: 7, sha256: 'b' },
   ],
-  skillMd: '---\nname: pdf-tools\ndescription: 处理 PDF\n---\n',
+  skillMd: '---\nname: pdf-tools\ndescription: Work with PDF files\n---\n',
   createdAt: '2026-10-12T00:00:00Z',
   updatedAt: '2026-10-12T00:00:00Z',
   ...overrides,
@@ -49,26 +49,26 @@ function withPath(content: string, relativePath: string) {
   return file
 }
 
-describe('模板列表', () => {
-  it('列出模板的名称、描述与更新时间', async () => {
-    setup('/skills', [], [summary('a', 'pdf-tools', '处理 PDF'), summary('b', 'git-helper', '协助 git 操作')])
-    const list = await screen.findByRole('list', { name: 'Skills 库' })
+describe('Template list', () => {
+  it('lists the templates with their name, description and update time', async () => {
+    setup('/skills', [], [summary('a', 'pdf-tools', 'Work with PDF files'), summary('b', 'git-helper', 'Help with git operations')])
+    const list = await screen.findByRole('list', { name: 'Skills library' })
     await waitFor(() => expect(within(list).getAllByRole('link')).toHaveLength(2))
-    expect(within(list).getByText('协助 git 操作')).toBeInTheDocument()
-    expect(within(list).getAllByText(/更新于/)).toHaveLength(2)
+    expect(within(list).getByText('Help with git operations')).toBeInTheDocument()
+    expect(within(list).getAllByText(/Updated/)).toHaveLength(2)
   })
 
-  it('库为空时显示空状态与上传、新建入口', async () => {
+  it('shows the empty state with the upload and create entries when the library is empty', async () => {
     setup('/skills')
-    expect(await screen.findByText('Skills 库中还没有模板。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '上传目录' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '上传 zip' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '在线新建' })).toBeInTheDocument()
+    expect(await screen.findByText('No templates in the Skills library yet.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload folder' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload zip' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Create online' })).toBeInTheDocument()
   })
 })
 
-describe('上传 Skill', () => {
-  it('上传目录：打包为 zip 后以 multipart 上传，成功后打开模板', async () => {
+describe('Upload Skill', () => {
+  it('upload folder: packs it as a zip, uploads it as multipart and opens the template on success', async () => {
     let contentType: string | null = null
     let hasArchive = false
     const { user, router } = setup('/skills', [
@@ -79,30 +79,30 @@ describe('上传 Skill', () => {
         return HttpResponse.json(detail(), { status: 201 })
       }),
     ])
-    await user.upload(await screen.findByLabelText('上传目录'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md'), withPath('echo hi', 'pdf-tools/scripts/run.sh')])
+    await user.upload(await screen.findByLabelText('Upload folder'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md'), withPath('echo hi', 'pdf-tools/scripts/run.sh')])
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills/sk-1'))
     expect(contentType).toMatch(/^multipart\/form-data/)
     expect(hasArchive).toBe(true)
   })
 
-  it('缺少 SKILL.md 时显示原因，没有新增模板', async () => {
+  it('without SKILL.md shows the reason and adds no template', async () => {
     const { user, router } = setup('/skills', [
       http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'SKILL.md is missing'), { status: 422 })),
     ])
-    await user.upload(await screen.findByLabelText('上传目录'), [withPath('echo hi', 'x/run.sh')])
+    await user.upload(await screen.findByLabelText('Upload folder'), [withPath('echo hi', 'x/run.sh')])
     expect(await screen.findByText(/SKILL.md is missing/)).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/skills')
   })
 
-  it('名称重复时提示改用替换', async () => {
+  it('on a duplicate name suggests using Replace instead', async () => {
     const { user } = setup('/skills', [http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('name_conflict', 'dup'), { status: 409 }))])
-    await user.upload(await screen.findByLabelText('上传 zip'), new File(['zip'], 'pdf-tools.zip', { type: 'application/zip' }))
-    expect(await screen.findByText(/请打开该模板并使用“替换”/)).toBeInTheDocument()
+    await user.upload(await screen.findByLabelText('Upload zip'), new File(['zip'], 'pdf-tools.zip', { type: 'application/zip' }))
+    expect(await screen.findByText(/open that template and use Replace/)).toBeInTheDocument()
   })
 })
 
-describe('在线新建 Skill', () => {
-  it('编辑器预填骨架，保存后创建模板', async () => {
+describe('Create Skill online', () => {
+  it('the editor is prefilled with a skeleton; saving creates the template', async () => {
     let body: unknown = null
     const { user, router } = setup('/skills/new', [
       http.post(apiUrl('/skills'), async ({ request }) => {
@@ -110,30 +110,30 @@ describe('在线新建 Skill', () => {
         return HttpResponse.json(detail(), { status: 201 })
       }),
     ])
-    const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
+    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
     const editor = within(sheet).getByLabelText('SKILL.md')
     expect((editor as HTMLTextAreaElement).value).toMatch(/^---\nname: .+\ndescription: .+\n---/)
-    await user.click(within(sheet).getByRole('button', { name: '创建' }))
+    await user.click(within(sheet).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(body).toEqual({ skillMd: (editor as HTMLTextAreaElement).value }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills/sk-1'))
   })
 
-  it('缺少描述时显示原因并保留内容', async () => {
+  it('without a description shows the reason and keeps the content', async () => {
     const { user } = setup('/skills/new', [
       http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'The frontmatter is missing description'), { status: 422 })),
     ])
-    const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
+    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
     const editor = within(sheet).getByLabelText('SKILL.md')
     await user.clear(editor)
     await user.type(editor, '---{Enter}name: x{Enter}---')
-    await user.click(within(sheet).getByRole('button', { name: '创建' }))
+    await user.click(within(sheet).getByRole('button', { name: 'Create' }))
     expect(await within(sheet).findByText(/missing description/)).toBeInTheDocument()
     expect(editor).toHaveValue('---\nname: x\n---')
   })
 })
 
-describe('查看与编辑模板的 SKILL.md', () => {
-  it('显示文件列表；保存只提交 SKILL.md', async () => {
+describe('View and edit a template\'s SKILL.md', () => {
+  it('shows the file list; saving submits only SKILL.md', async () => {
     let body: unknown = null
     const { user } = setup('/skills/sk-1', [
       http.put(apiUrl('/skills/sk-1/skill-md'), async ({ request }) => {
@@ -142,31 +142,31 @@ describe('查看与编辑模板的 SKILL.md', () => {
       }),
     ])
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    const files = await within(sheet).findByRole('list', { name: '文件' })
+    const files = await within(sheet).findByRole('list', { name: 'Files' })
     expect(within(files).getByText('scripts/run.sh')).toBeInTheDocument()
     const editor = within(sheet).getByLabelText('SKILL.md')
-    await user.type(editor, '正文')
-    await user.click(within(sheet).getByRole('button', { name: '保存' }))
-    await waitFor(() => expect(body).toEqual({ content: '---\nname: pdf-tools\ndescription: 处理 PDF\n---\n正文' }))
+    await user.type(editor, 'Body')
+    await user.click(within(sheet).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(body).toEqual({ content: '---\nname: pdf-tools\ndescription: Work with PDF files\n---\nBody' }))
   })
 
-  it('后台刷新失败时保留未保存的编辑，并显示原因', async () => {
+  it('when a background refresh fails keeps the unsaved edits and shows the reason', async () => {
     let fail = false
     const { user, client } = setup('/skills/sk-1', [
       http.get(apiUrl('/skills/sk-1'), () => (fail ? HttpResponse.json(errorBody('internal_error'), { status: 500 }) : HttpResponse.json(detail()))),
     ])
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
     const editor = within(sheet).getByLabelText('SKILL.md')
-    await user.type(editor, '还没保存')
+    await user.type(editor, 'Not saved yet')
     fail = true
     await act(() => client.refetchQueries({ queryKey: keys.skill('sk-1') }))
-    expect(await within(sheet).findByText('服务端内部错误')).toBeInTheDocument()
-    expect(within(sheet).getByLabelText('SKILL.md')).toHaveValue('---\nname: pdf-tools\ndescription: 处理 PDF\n---\n还没保存')
+    expect(await within(sheet).findByText('Internal server error')).toBeInTheDocument()
+    expect(within(sheet).getByLabelText('SKILL.md')).toHaveValue('---\nname: pdf-tools\ndescription: Work with PDF files\n---\nNot saved yet')
   })
 })
 
-describe('替换与删除模板', () => {
-  it('替换前确认，说明副本不受影响', async () => {
+describe('Replace and delete templates', () => {
+  it('asks for confirmation before replacing and says that copies are not affected', async () => {
     let replaced = false
     const { user } = setup('/skills/sk-1', [
       http.put(apiUrl('/skills/sk-1'), () => {
@@ -175,17 +175,17 @@ describe('替换与删除模板', () => {
       }),
     ])
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    await within(sheet).findByRole('list', { name: '文件' })
-    // The grid's toolbar also has “上传目录” (Upload folder), used for creating; replacing uses only the one in the drawer.
-    await user.upload(within(sheet).getByLabelText('上传目录'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md')])
+    await within(sheet).findByRole('list', { name: 'Files' })
+    // The grid's toolbar also has “Upload folder”, used for creating; replacing uses only the one in the drawer.
+    await user.upload(within(sheet).getByLabelText('Upload folder'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md')])
     const confirm = await screen.findByRole('alertdialog')
-    expect(confirm).toHaveTextContent('已复制给 Agent 的 Skill 副本不受影响')
+    expect(confirm).toHaveTextContent('Skill copies already given to Agents are not affected')
     expect(replaced).toBe(false)
-    await user.click(within(confirm).getByRole('button', { name: '替换' }))
+    await user.click(within(confirm).getByRole('button', { name: 'Replace' }))
     await waitFor(() => expect(replaced).toBe(true))
   })
 
-  it('删除前确认，删除后回到列表', async () => {
+  it('asks for confirmation before deleting and returns to the list afterwards', async () => {
     let deleted = false
     const { user, router } = setup('/skills/sk-1', [
       http.delete(apiUrl('/skills/sk-1'), () => {
@@ -194,41 +194,41 @@ describe('替换与删除模板', () => {
       }),
     ])
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    await within(sheet).findByRole('list', { name: '文件' })
-    await user.click(within(sheet).getByRole('button', { name: '删除' }))
+    await within(sheet).findByRole('list', { name: 'Files' })
+    await user.click(within(sheet).getByRole('button', { name: 'Delete' }))
     const confirm = await screen.findByRole('alertdialog')
-    expect(confirm).toHaveTextContent('已复制给 Agent 的 Skill 副本不受影响')
-    await user.click(within(confirm).getByRole('button', { name: '删除' }))
+    expect(confirm).toHaveTextContent('Skill copies already given to Agents are not affected')
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deleted).toBe(true))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
   })
 })
 
-describe('抽屉由地址控制开合', () => {
-  const templates = [summary('sk-1', 'pdf-tools', '处理 PDF'), summary('b', 'git-helper', '协助 git 操作')]
+describe('The URL opens and closes the drawer', () => {
+  const templates = [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('b', 'git-helper', 'Help with git operations')]
 
-  it('直接打开 /skills/:skillId 时显示网格并打开详情抽屉，关闭后回到 /skills', async () => {
+  it('opening /skills/:skillId directly shows the grid with the details drawer open; closing it returns to /skills', async () => {
     const { user, router } = setup('/skills/sk-1', [], templates)
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    expect(within(sheet).getByText('处理 PDF')).toBeInTheDocument()
+    expect(within(sheet).getByText('Work with PDF files')).toBeInTheDocument()
     // The drawer is modal: the grid is temporarily hidden from assistive technology but is still on the page.
-    const list = await screen.findByRole('list', { name: 'Skills 库', hidden: true })
+    const list = await screen.findByRole('list', { name: 'Skills library', hidden: true })
     await waitFor(() => expect(within(list).getAllByRole('link', { hidden: true })).toHaveLength(2))
     expect(within(list).getByRole('link', { name: /pdf-tools/, hidden: true })).toHaveAttribute('aria-current', 'true')
 
-    await user.click(within(sheet).getByRole('button', { name: '关闭' }))
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
     // The drawer opens and closes with the URL, and the new URL reaches the page
     // only inside a transition, so wait until the drawer has actually closed.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('list', { name: 'Skills 库' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Skills library' })).toBeInTheDocument()
   })
 
-  it('直接打开 /skills/new 时显示网格并打开在线新建抽屉，按 Esc 关闭后回到 /skills', async () => {
+  it('opening /skills/new directly shows the grid with the create drawer open; Esc closes it and returns to /skills', async () => {
     const { user, router } = setup('/skills/new', [], templates)
-    const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
+    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
     expect(within(sheet).getByLabelText('SKILL.md')).toBeInTheDocument()
-    expect(await screen.findByRole('list', { name: 'Skills 库', hidden: true })).toBeInTheDocument()
+    expect(await screen.findByRole('list', { name: 'Skills library', hidden: true })).toBeInTheDocument()
 
     await user.keyboard('{Escape}')
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
@@ -237,60 +237,60 @@ describe('抽屉由地址控制开合', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('在线新建抽屉的取消按钮关闭抽屉，不创建模板', async () => {
+  it('the Cancel button of the create drawer closes it without creating a template', async () => {
     const { user, router } = setup('/skills/new', [], templates)
-    const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
-    await user.click(within(sheet).getByRole('button', { name: '取消' }))
+    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
+    await user.click(within(sheet).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
     // The drawer opens and closes with the URL, and the new URL reaches the page
     // only inside a transition, so wait until the drawer has actually closed.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('点击模板卡片打开详情抽屉', async () => {
+  it('clicking a template card opens the details drawer', async () => {
     const { user, router } = setup('/skills', [], templates)
-    const list = await screen.findByRole('list', { name: 'Skills 库' })
+    const list = await screen.findByRole('list', { name: 'Skills library' })
     await user.click(await within(list).findByRole('link', { name: /pdf-tools/ }))
     expect(await screen.findByRole('dialog', { name: 'pdf-tools' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/skills/sk-1')
   })
 
-  it('模板不存在时抽屉内说明原因', async () => {
+  it('when the template doesn\'t exist the drawer says why', async () => {
     setup('/skills/gone', [http.get(apiUrl('/skills/gone'), () => HttpResponse.json(errorBody('not_found'), { status: 404 }))], templates)
-    const sheet = await screen.findByRole('dialog', { name: '模板详情' })
-    expect(await within(sheet).findByText('这个模板不存在或已删除。')).toBeInTheDocument()
+    const sheet = await screen.findByRole('dialog', { name: 'Template details' })
+    expect(await within(sheet).findByText('This template doesn\'t exist or was deleted.')).toBeInTheDocument()
   })
 })
 
 // "Printed sheet" redesign, step 4: the Skills library's page header, empty state and template cards.
-describe('纸张上的 Skills 库', () => {
-  it('页头是页面标题：面包屑“全局›Skills 库”，旁边写着共几个模板', async () => {
+describe('Skills library on the sheet', () => {
+  it('the header is the page title: breadcrumb “Global›Skills library”, next to it the number of templates', async () => {
     setup('/skills')
-    const header = (await screen.findByRole('heading', { level: 1, name: 'Skills 库' })).closest('header')!
-    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›Skills 库')
-    expect(await within(header).findByText('共 0 个模板')).toBeInTheDocument()
+    const header = (await screen.findByRole('heading', { level: 1, name: 'Skills library' })).closest('header')!
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Skills library')
+    expect(await within(header).findByText('0 templates')).toBeInTheDocument()
   })
 
-  it('空状态在纸上：叠印的卡片插画、黄色记号笔标题；三个按钮里只有“在线新建”是荧光粉', async () => {
+  it('the empty state is on the sheet: an overprinted card illustration and a yellow-marker title; of the three buttons only “Create online” is fluorescent pink', async () => {
     setup('/skills')
-    const title = await screen.findByText('Skills 库中还没有模板。')
+    const title = await screen.findByText('No templates in the Skills library yet.')
     expect(title).toHaveClass('riso-marker', 'font-display-cn')
     const empty = title.closest('[data-empty-library]')!
     expect(empty.closest('[data-sheet]')).not.toBeNull()
     expect(empty.querySelector('[data-empty-art]')).toHaveAttribute('aria-hidden', 'true')
-    for (const name of ['上传目录', '上传 zip']) {
+    for (const name of ['Upload folder', 'Upload zip']) {
       const button = within(empty as HTMLElement).getByRole('button', { name })
       expect(button).toHaveClass('border-2', 'border-ink', 'bg-white')
       expect(button).not.toHaveClass('bg-riso-pink')
     }
-    expect(within(empty as HTMLElement).getByRole('link', { name: '在线新建' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    expect(within(empty as HTMLElement).getByRole('link', { name: 'Create online' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
   })
 
-  it('有模板时：入口在页头的元信息里；模板是白底、藏青描边加投影的卡片，打开的那张是黄色', async () => {
-    setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', '处理 PDF'), summary('sk-2', 'csv-tools', '处理 CSV')])
-    const list = await screen.findByRole('list', { name: 'Skills 库', hidden: true })
-    const header = screen.getByRole('heading', { level: 1, name: 'Skills 库', hidden: true }).closest('header')!
-    expect(within(header).getByRole('link', { name: '在线新建', hidden: true })).toHaveClass('bg-riso-pink')
+  it('with templates: the entries sit in the header meta; templates are white cards with a navy outline and a shadow, and the open one is yellow', async () => {
+    setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('sk-2', 'csv-tools', 'Work with CSV files')])
+    const list = await screen.findByRole('list', { name: 'Skills library', hidden: true })
+    const header = screen.getByRole('heading', { level: 1, name: 'Skills library', hidden: true }).closest('header')!
+    expect(within(header).getByRole('link', { name: 'Create online', hidden: true })).toHaveClass('bg-riso-pink')
     const [open, other] = within(list).getAllByRole('link', { hidden: true })
     expect(open).toHaveAttribute('aria-current', 'true')
     expect(open).toHaveClass('aria-[current=true]:bg-riso-yellow', 'border-2', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')

@@ -15,8 +15,8 @@ afterEach(async () => {
   await host.close()
 })
 
-describe('启动与加载', () => {
-  it('第一行是 ready，协议版本 1', async () => {
+describe('Startup and loading', () => {
+  it('The first line is ready, protocol version 1', async () => {
     host = await HostHarness.start()
     const first = host.messages[0]!
     assert.equal(first.type, 'ready')
@@ -25,7 +25,7 @@ describe('启动与加载', () => {
     assert.equal(first.id, undefined)
   })
 
-  it('等异步 register 完成才回 result；按顺序加载多个插件', async () => {
+  it('Replies with result only after an async register finishes; loads several plugins in order', async () => {
     host = await HostHarness.start()
     const slow = fx.write('slow', {
       'index.ts': `export default async function (api) {
@@ -47,14 +47,14 @@ describe('启动与加载', () => {
     assert.deepEqual(r2.payload, { ok: true })
   })
 
-  it('模块求值出错只让这个插件加载失败，其他插件照常', async () => {
+  it('An error while evaluating the module fails only this plugin; the others load as usual', async () => {
     host = await HostHarness.start()
-    const broken = fx.write('broken', { 'index.ts': `throw new Error('坏掉的模块')\nexport default function () {}` }, { events: ['run.ended'] })
+    const broken = fx.write('broken', { 'index.ts': `throw new Error('broken module')\nexport default function () {}` }, { events: ['run.ended'] })
     const syntax = fx.write('syntax', { 'index.ts': `export default function ( {` })
     const good = fx.write('good', { 'index.ts': `export default function (api) { api.on('run.ended', () => api.log.info('good ran')) }` }, { events: ['run.ended'] })
     const r1 = await host.load(broken)
     assert.equal(r1.payload.ok, false)
-    assert.match(r1.payload.error, /load index\.ts failed: 坏掉的模块/)
+    assert.match(r1.payload.error, /load index\.ts failed: broken module/)
     const r2 = await host.load(syntax)
     assert.equal(r2.payload.ok, false)
     assert.match(r2.payload.error, /load index\.ts failed/)
@@ -65,13 +65,13 @@ describe('启动与加载', () => {
     assert.deepEqual(ack.payload, { ok: false, error: 'the plugin is not loaded' })
   })
 
-  it('register 抛错、没有默认导出、入口不存在都回 ok:false', async () => {
+  it('register throwing, no default export and a missing entry all reply ok:false', async () => {
     host = await HostHarness.start()
-    const throws = fx.write('throws', { 'index.ts': `export default function () { throw new Error('register 不行') }` })
+    const throws = fx.write('throws', { 'index.ts': `export default function () { throw new Error('register is broken') }` })
     const none = fx.write('none', { 'index.ts': `export const x = 1` })
     const missing = { ...fx.write('missing', { 'other.ts': '' }) }
     const r1 = await host.load(throws)
-    assert.deepEqual(r1.payload, { ok: false, error: 'register failed: register 不行' })
+    assert.deepEqual(r1.payload, { ok: false, error: 'register failed: register is broken' })
     const r2 = await host.load(none)
     assert.equal(r2.payload.ok, false)
     assert.match(r2.payload.error, /index\.ts does not export a default register function/)
@@ -81,7 +81,7 @@ describe('启动与加载', () => {
     assert.deepEqual(r4.payload, { ok: false, error: 'load payload id must match the message plugin' })
   })
 
-  it('订阅清单外的事件时加载失败', async () => {
+  it('Loading fails when the code subscribes to an event outside the manifest', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'greedy',
@@ -102,7 +102,7 @@ describe('启动与加载', () => {
     assert.match(r2.payload.error, /Registered action resend, which is not declared in the manifest's loopNow\.actions/)
   })
 
-  it('支持 TypeScript（含 enum）、相对导入与宿主提供的 SDK', async () => {
+  it('Supports TypeScript (including enum), relative imports and the SDK the host provides', async () => {
     host = await HostHarness.start()
     const p = fx.write('ts', {
       'index.ts': `import type { PluginAPI } from '@loop-now/plugin-sdk'
@@ -119,8 +119,8 @@ describe('启动与加载', () => {
   })
 })
 
-describe('观察类事件', () => {
-  it('处理完才回 ack；同一插件串行', async () => {
+describe('Observation events', () => {
+  it('Acks only after handling; one plugin handles events one at a time', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'serial',
@@ -152,29 +152,29 @@ describe('观察类事件', () => {
     assert.deepEqual(host.stateOf('serial').get('seen/E1'), { attempt: 2 })
   })
 
-  it('处理函数抛错回 ok:false，宿主继续；没有处理函数的事件直接 ok', async () => {
+  it('A throwing handler replies ok:false and the host carries on; an event without a handler is ok at once', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'flaky',
       {
         'index.ts': `export default function (api) {
-          api.on('run.ended', (event) => { if (event.status === 'failed') throw new Error('处理失败了') })
+          api.on('run.ended', (event) => { if (event.status === 'failed') throw new Error('handling failed') })
         }`,
       },
       { events: ['run.ended', 'run.started'] },
     )
     await host.load(p)
     const bad = await host.event('flaky', { type: 'run.ended', status: 'failed' })
-    assert.deepEqual(bad.payload, { ok: false, error: '处理失败了' })
+    assert.deepEqual(bad.payload, { ok: false, error: 'handling failed' })
     const good = await host.event('flaky', { type: 'run.ended', status: 'completed' })
     assert.deepEqual(good.payload, { ok: true })
     assert.deepEqual((await host.event('flaky', { type: 'run.started' })).payload, { ok: true })
-    const warned = host.logs('flaky').find((l) => l.level === 'warn' && /处理失败了/.test(l.message))!
-    assert.match(warned.message, /^Handler for run\.ended failed: 处理失败了\nat .*index\.ts:2:/)
+    const warned = host.logs('flaky').find((l) => l.level === 'warn' && /handling failed/.test(l.message))!
+    assert.match(warned.message, /^Handler for run\.ended failed: handling failed\nat .*index\.ts:2:/)
     assert.equal(warned.message.split('\n').length, 2)
   })
 
-  it('到 timeoutMs 回失败、触发 ctx.signal，队列放行下一条', async () => {
+  it('At timeoutMs it replies with a failure, fires ctx.signal and lets the queue move on', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'slowpoke',
@@ -202,8 +202,8 @@ describe('观察类事件', () => {
   })
 })
 
-describe('状态', () => {
-  it('get/set/delete/list 经 Go 往返，项目级与全局分开', async () => {
+describe('State', () => {
+  it('get/set/delete/list go through Go, with project and global state kept apart', async () => {
     host = await HostHarness.start()
     const project = '6f1c8e5e-0000-4000-8000-000000000001'
     const p = fx.write(
@@ -243,7 +243,7 @@ describe('状态', () => {
     assert.deepEqual([...host.stateOf('stateful', project).keys()], ['a/1'])
   })
 
-  it('没有 state 权限、key 不合规则时直接拒绝', async () => {
+  it('Refused at once without the state permission or with an invalid key', async () => {
     host = await HostHarness.start()
     const p = fx.write('nostate', {
       'index.ts': `export default function (api) {
@@ -279,15 +279,15 @@ describe('状态', () => {
   })
 })
 
-describe('账号', () => {
-  it('accounts.list 经 Go 读项目账号；权限、种类、项目在本地先检查', async () => {
+describe('Accounts', () => {
+  it('accounts.list reads project accounts through Go; permission, kind and project are checked locally first', async () => {
     host = await HostHarness.start()
     const project = '6f1c8e5e-0000-4000-8000-000000000003'
     const other = '6f1c8e5e-0000-4000-8000-000000000004'
     host.enabledIn.add(`acct/${project}`)
     host.accounts.set(`acct/${project}/lark`, [
-      { id: 'a1', kind: 'lark', name: '机器人一', values: { appId: 'cli_1', appSecret: 's1' } },
-      { id: 'a2', kind: 'lark', name: '机器人二', values: { appId: 'cli_2', appSecret: 's2' } },
+      { id: 'a1', kind: 'lark', name: 'Bot one', values: { appId: 'cli_1', appSecret: 's1' } },
+      { id: 'a2', kind: 'lark', name: 'Bot two', values: { appId: 'cli_2', appSecret: 's2' } },
     ])
     const p = fx.write(
       'acct',
@@ -304,20 +304,20 @@ describe('账号', () => {
           })
         }`,
       },
-      { permissions: ['accounts.read'], manifest: { accounts: [{ kind: 'lark', label: '飞书', fields: {}, multiple: true }] } },
+      { permissions: ['accounts.read'], manifest: { accounts: [{ kind: 'lark', label: 'Lark', fields: {}, multiple: true }] } },
     )
     assert.deepEqual((await host.load(p)).payload, { ok: true })
-    assert.equal((await host.waitLog('acct', /^names/)).message, 'names 机器人一:cli_1,机器人二:cli_2')
+    assert.equal((await host.waitLog('acct', /^names/)).message, 'names Bot one:cli_1,Bot two:cli_2')
     assert.equal((await host.waitLog('acct', /^errors/)).message, 'errors the manifest does not declare account kind github | projectId is invalid | the plugin is not enabled in this project')
     assert.equal(host.messages.filter((m) => m.type === 'accounts_list').length, 2, 'what can be checked locally is not sent to Go')
-    const noPerm = fx.write('noacct', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => { try { await api.accounts.list('${project}', 'lark') } catch (e) { api.log.info(e.message) } }) }` }, { manifest: { accounts: [{ kind: 'lark', label: '飞书', fields: {}, multiple: false }] } })
+    const noPerm = fx.write('noacct', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => { try { await api.accounts.list('${project}', 'lark') } catch (e) { api.log.info(e.message) } }) }` }, { manifest: { accounts: [{ kind: 'lark', label: 'Lark', fields: {}, multiple: false }] } })
     await host.load(noPerm)
     assert.equal((await host.waitLog('noacct', /permission/)).message, 'the manifest does not declare the accounts.read permission')
   })
 })
 
-describe('卸载与生命周期', () => {
-  it('unload 触发 stop、释放全部注册；再加载得到新的模块状态', async () => {
+describe('Unloading and lifecycle', () => {
+  it('unload fires stop and releases every registration; loading again gives fresh module state', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'cycle',
@@ -349,7 +349,7 @@ describe('卸载与生命周期', () => {
     assert.equal(host.logs('cycle').filter((l) => /^start/.test(l.message)).length, 2, 'the module is evaluated again, so its state starts over')
   })
 
-  it('注册返回的取消函数立即生效；start 里注册的处理函数同样可用', async () => {
+  it('The function a registration returns cancels it at once; handlers registered in start work too', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'late',
@@ -369,7 +369,7 @@ describe('卸载与生命周期', () => {
     assert.ok(!host.logs('late').some((l) => l.message === 'removed handler'))
   })
 
-  it('shutdown 卸载全部插件后退出', async () => {
+  it('shutdown unloads every plugin and exits', async () => {
     host = await HostHarness.start()
     const p = fx.write('bye', { 'index.ts': `export default function (api) { api.lifecycle.on('stop', () => api.log.info('bye')) }` })
     await host.load(p)
@@ -378,7 +378,7 @@ describe('卸载与生命周期', () => {
     assert.ok(host.logs('bye').some((l) => l.message === 'bye'))
   })
 
-  it('标准输入关闭时也卸载后退出', async () => {
+  it('Closing standard input also unloads and exits', async () => {
     host = await HostHarness.start()
     const p = fx.write('eof', { 'index.ts': `export default function (api) { api.lifecycle.on('stop', () => api.log.info('stopped')) }` })
     await host.load(p)
@@ -388,14 +388,14 @@ describe('卸载与生命周期', () => {
   })
 })
 
-describe('同步调用', () => {
-  it('intercept：第一个 block 生效，其余放行', async () => {
+describe('Synchronous calls', () => {
+  it('intercept: the first block wins, the rest pass', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'guard',
       {
         'index.ts': `export default function (api) {
-          api.on('node.before_submit', (e) => e.edgeId === 'deny' ? { block: true, reason: '不许提交' } : undefined)
+          api.on('node.before_submit', (e) => e.edgeId === 'deny' ? { block: true, reason: 'submitting is not allowed' } : undefined)
           api.on('node.before_submit', () => ({ block: true }))
           api.on('task.before_start', () => {})
         }`,
@@ -405,7 +405,7 @@ describe('同步调用', () => {
     await host.load(p)
     assert.deepEqual((await host.call('guard', 'intercept', { type: 'node.before_submit', edgeId: 'deny' })).payload, {
       ok: true,
-      value: { block: true, reason: '不许提交' },
+      value: { block: true, reason: 'submitting is not allowed' },
     })
     assert.deepEqual((await host.call('guard', 'intercept', { type: 'node.before_submit', edgeId: 'ok' })).payload, {
       ok: true,
@@ -414,7 +414,7 @@ describe('同步调用', () => {
     assert.deepEqual((await host.call('guard', 'intercept', { type: 'task.before_start' })).payload, { ok: true, value: {} })
   })
 
-  it('modify：本插件内按顺序合并 patch，固定字段不能改', async () => {
+  it('modify: patches merge in order within the plugin, and fixed fields cannot change', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'shaper',
@@ -433,7 +433,7 @@ describe('同步调用', () => {
     assert.deepEqual((await host.call('shaper', 'modify', { type: 'message.before_enqueue', text: 'x' })).payload, { ok: true, value: {} })
   })
 
-  it('claim：第一个 handled 的对象原样返回', async () => {
+  it('claim: the first handled object is returned as is', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'claimer',
@@ -455,14 +455,14 @@ describe('同步调用', () => {
     })
   })
 
-  it('超时回失败并触发 signal；抛错回 ok:false；未知种类拒绝', async () => {
+  it('A timeout replies with a failure and fires signal; a throw replies ok:false; an unknown kind is refused', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'stuck',
       {
         'index.ts': `export default function (api) {
           api.on('run.before_start', async (e, ctx) => {
-            if (e.origin === 'boom') throw new Error('检查出错')
+            if (e.origin === 'boom') throw new Error('check failed')
             await new Promise((resolve) => ctx.signal.addEventListener('abort', resolve))
             api.log.info('signal fired after ' + (Date.now() - Number(e.messageId)) + 'ms')
             return { block: true, reason: 'too late' }
@@ -478,14 +478,14 @@ describe('同步调用', () => {
     assert.match(r.payload.error, /^Handling run\.before_start timed out after 250 ms$/)
     const elapsed = Number(/after (\d+)ms/.exec((await host.waitLog('stuck', /signal fired/)).message)![1])
     assert.ok(elapsed >= 240 && elapsed < 2_000, `signal fired after ${elapsed}ms`)
-    assert.deepEqual((await host.call('stuck', 'intercept', { type: 'run.before_start', origin: 'boom' })).payload, { ok: false, error: '检查出错' })
+    assert.deepEqual((await host.call('stuck', 'intercept', { type: 'run.before_start', origin: 'boom' })).payload, { ok: false, error: 'check failed' })
     assert.deepEqual((await host.call('stuck', 'veto', { type: 'run.before_start' })).payload, { ok: false, error: 'Unknown call kind veto' })
     assert.deepEqual((await host.call('nobody', 'intercept', { type: 'run.before_start' })).payload, { ok: false, error: 'the plugin is not loaded' })
   })
 })
 
-describe('操作按钮、HTTP 入口、定时与渠道', () => {
-  it('action：把 input 与 where 交给处理函数，返回 {notice, url?}', async () => {
+describe('Action buttons, HTTP entry, schedules and channels', () => {
+  it('action: passes input and where to the handler and returns {notice, url?}', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'actor',
@@ -510,7 +510,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     assert.match(slow.payload.error, /^Action slow timed out after 150 ms$/)
   })
 
-  it('http：请求的方法、路径、查询、头与 base64 正文原样交给插件，回应原样带回', async () => {
+  it('http: the method, path, query, headers and base64 body reach the plugin as they are, and the response comes back as it is', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'hooky',
@@ -536,7 +536,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
       path: '/callback',
       query: 'a=1&b=2',
       headers: { 'x-sig': ['abc'], 'x-list': ['one', 'two'], 'content-type': ['text/plain'] },
-      body: Buffer.from('payload 你好').toString('base64'),
+      body: Buffer.from('payload 你好').toString('base64'),  // check-english: zh (multibyte text must survive the base64 round trip)
       timeoutMs: 2000,
     })
     assert.equal(r.payload.ok, true)
@@ -544,7 +544,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     assert.equal(v.status, 201)
     assert.deepEqual(v.headers, { 'content-type': ['application/json'], 'x-multi': ['a'], 'set-cookie': ['a=1', 'b=2'] })
     assert.deepEqual(JSON.parse(Buffer.from(v.body, 'base64').toString()), {
-      method: 'POST', path: '/callback', q: '1', sig: 'abc', multi: 'one, two', body: 'payload 你好', via: 'external',
+      method: 'POST', path: '/callback', q: '1', sig: 'abc', multi: 'one, two', body: 'payload 你好', via: 'external',  // check-english: zh (multibyte text must survive the base64 round trip)
     })
     const get = await host.request('http', 'hooky', { via: 'console', method: 'GET', path: '/x', query: '', headers: {}, body: '' })
     assert.equal(JSON.parse(Buffer.from(get.payload.value.body, 'base64').toString()).via, 'console')
@@ -554,14 +554,14 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     assert.deepEqual((await host.request('http', 'nohttp', { method: 'GET', path: '/', headers: {}, body: '' })).payload, { ok: false, error: 'Plugin has not registered an HTTP handler' })
   })
 
-  it('schedule：处理完回 ok；抛错回失败；未注册的条目拒绝', async () => {
+  it('schedule: ok after handling; a throw replies with a failure; an unregistered entry is refused', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'cron',
       {
         'index.ts': `export default function (api) {
           api.schedule.on('sweep', async (ctx) => { api.log.info('sweep ' + ctx.scheduleId + ' ' + ctx.cron + ' ' + ctx.at) })
-          api.schedule.on('fail', () => { throw new Error('清理失败') })
+          api.schedule.on('fail', () => { throw new Error('cleanup failed') })
         }`,
       },
       { manifest: { schedules: [{ id: 'sweep' }, { id: 'fail' }] } },
@@ -570,11 +570,11 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     const r = await host.request('schedule', 'cron', { scheduleId: 'sweep', cron: '*/10 * * * *', at: '2026-10-27T10:00:00Z', timeoutMs: 1000 })
     assert.deepEqual(r.payload, { ok: true })
     assert.equal((await host.waitLog('cron', /^sweep/)).message, 'sweep sweep */10 * * * * 2026-10-27T10:00:00Z')
-    assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'fail', cron: '* * * * *', at: '' })).payload, { ok: false, error: '清理失败' })
+    assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'fail', cron: '* * * * *', at: '' })).payload, { ok: false, error: 'cleanup failed' })
     assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'other' })).payload, { ok: false, error: 'Plugin has not registered scheduled job other' })
   })
 
-  it('渠道：channel.outbound 按 channelId 交给 outbound；send/reply/read/answer 以插件身份调用收件箱接口', async () => {
+  it('Channels: channel.outbound goes to outbound by channelId; send/reply/read/answer call the inbox API as the plugin', async () => {
     const seen: { method?: string; url?: string; auth?: string; body: unknown }[] = []
     const server = createServer(async (req, res) => {
       let body = ''
@@ -583,7 +583,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
       res.setHeader('content-type', 'application/json')
       if (req.url?.includes('/m-missing/')) {
         res.statusCode = 404
-        res.end(JSON.stringify({ error: { code: 'not_found', message: '消息不存在' } }))
+        res.end(JSON.stringify({ error: { code: 'not_found', message: 'message not found' } }))
         return
       }
       res.statusCode = req.url === '/api/v1/inbox/messages' ? 201 : 200
@@ -601,8 +601,8 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
               outbound: async (event, ctx) => {
                 if (event.question) {
                   await api.channels.answer('lark', event.question.id, { optionId: event.question.options[0].id })
-                  await api.channels.answer('lark', event.question.id, { text: '都行' })
-                  await api.channels.answer('lark', event.question.id, { optionId: 'o2', text: '下周再发' })
+                  await api.channels.answer('lark', event.question.id, { text: 'Either is fine' })
+                  await api.channels.answer('lark', event.question.id, { optionId: 'o2', text: 'Publish next week' })
                   for (const bad of [{}, { optionId: 'o1', text: 7 }, { text: '' }]) {
                     try { await api.channels.answer('lark', event.question.id, bad) } catch (e) { api.log.info('bad answer: ' + e.message) }
                   }
@@ -616,7 +616,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
               },
             })
             api.lifecycle.on('start', async () => {
-              const m = await api.channels.send('lark', { to: 'demo/manager', text: '用户说你好', senderName: '张三' })
+              const m = await api.channels.send('lark', { to: 'demo/manager', text: 'The user says hello', senderName: 'Alex' })
               api.log.info('sent ' + m.id)
               try { await api.channels.send('wechat', { to: 'x', text: 'y' }) } catch (e) { api.log.info('undeclared: ' + e.message) }
               try { await api.channels.read('m-missing') } catch (e) { api.log.info('missing: ' + e.message + ' ' + e.status) }
@@ -628,22 +628,22 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
       assert.deepEqual((await host.load(p)).payload, { ok: true })
       await host.waitLog('lark', /^sent m-new$/)
       await host.waitLog('lark', /^undeclared: Channel wechat is not declared in the manifest's loopNow\.channels$/)
-      await host.waitLog('lark', /^missing: Platform returned 404: 消息不存在 404$/)
-      const ack = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'm9', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, excerpt: '好的' }, { attempt: 2 })
+      await host.waitLog('lark', /^missing: Platform returned 404: message not found 404$/)
+      const ack = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'm9', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, excerpt: 'OK' }, { attempt: 2 })
       assert.deepEqual(ack.payload, { ok: true })
-      assert.equal((await host.waitLog('lark', /^outbound/)).message, 'outbound lark 好的 -> full body attempt 2')
+      assert.equal((await host.waitLog('lark', /^outbound/)).message, 'outbound lark OK -> full body attempt 2')
       assert.deepEqual(
         seen.map((s) => [s.method, s.url, s.auth, s.body]),
         [
-          ['POST', '/api/v1/inbox/messages', 'Bearer lnp_channel', { to: 'demo/manager', text: '用户说你好', channelId: 'lark', senderName: '张三' }],
+          ['POST', '/api/v1/inbox/messages', 'Bearer lnp_channel', { to: 'demo/manager', text: 'The user says hello', channelId: 'lark', senderName: 'Alex' }],
           ['POST', '/api/v1/inbox/messages/m-missing/read', 'Bearer lnp_channel', {}],
           ['POST', '/api/v1/inbox/messages/m9/read', 'Bearer lnp_channel', {}],
           ['POST', '/api/v1/inbox/messages/m9/reply', 'Bearer lnp_channel', { text: 'ack full body' }],
         ],
       )
       seen.length = 0
-      const question = { id: 'q1', options: [{ id: 'o1', label: '发布' }, { id: 'o2', label: '不发' }], allowText: true, deadline: null }
-      const asked = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'q1', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, isQuestion: true, question, excerpt: '发吗？' })
+      const question = { id: 'q1', options: [{ id: 'o1', label: 'Publish' }, { id: 'o2', label: 'Hold' }], allowText: true, deadline: null }
+      const asked = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'q1', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, isQuestion: true, question, excerpt: 'Publish?' })
       assert.deepEqual(asked.payload, { ok: true })
       await host.waitLog('lark', /^answered true$/)
       assert.deepEqual(
@@ -655,8 +655,8 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
         seen.map((s) => [s.method, s.url, s.body]),
         [
           ['POST', '/api/v1/inbox/messages/q1/reply', { optionId: 'o1' }],
-          ['POST', '/api/v1/inbox/messages/q1/reply', { text: '都行' }],
-          ['POST', '/api/v1/inbox/messages/q1/reply', { optionId: 'o2', text: '下周再发' }],
+          ['POST', '/api/v1/inbox/messages/q1/reply', { text: 'Either is fine' }],
+          ['POST', '/api/v1/inbox/messages/q1/reply', { optionId: 'o2', text: 'Publish next week' }],
         ],
       )
       const stray = await host.event('lark', { type: 'channel.outbound', channelId: 'other', messageId: 'm10' })
@@ -674,11 +674,11 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
   })
 })
 
-describe('代管外部身份', () => {
+describe('Managing external identities', () => {
   const identity = '6f1c8e5e-0000-4000-8000-0000000000e1'
   const manifest = { channels: [{ id: 'mail', manageIdentities: true }, { id: 'plain', manageIdentities: false }] } as never
 
-  it('identity.inbound 按 channelId 交给 identityInbound；identities.read/reply/answer 以身份名义调用收件箱接口', async () => {
+  it('identity.inbound goes to identityInbound by channelId; identities.read/reply/answer call the inbox API as the identity', async () => {
     const seen: { method?: string; url?: string; auth?: string; body: unknown }[] = []
     const server = createServer(async (req, res) => {
       let body = ''
@@ -687,11 +687,11 @@ describe('代管外部身份', () => {
       res.setHeader('content-type', 'application/json')
       if (req.url?.includes('/q-closed/')) {
         res.statusCode = 409
-        res.end(JSON.stringify({ error: { code: 'question_closed', message: '提问已关闭', details: { state: 'closed' } } }))
+        res.end(JSON.stringify({ error: { code: 'question_closed', message: 'question closed', details: { state: 'closed' } } }))
         return
       }
       res.statusCode = req.method === 'GET' ? 200 : 201
-      res.end(JSON.stringify(req.method === 'GET' ? { id: 'q1', threadId: 't1', text: '要不要发布？' } : { id: 'r1', threadId: 't1', text: 'ok', answerTo: { messageId: 'q1', optionId: 'yes', optionLabel: '发布' } }))
+      res.end(JSON.stringify(req.method === 'GET' ? { id: 'q1', threadId: 't1', text: 'Shall we publish?' } : { id: 'r1', threadId: 't1', text: 'ok', answerTo: { messageId: 'q1', optionId: 'yes', optionLabel: 'Publish' } }))
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const apiUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/v1`
@@ -705,8 +705,8 @@ describe('代管外部身份', () => {
               identityInbound: async (event, ctx) => {
                 const full = await api.identities.read(event.identityId, event.messageId)
                 const answered = await api.identities.answer(event.identityId, event.question.id, { optionId: event.question.options[0].id })
-                await api.identities.reply(event.identityId, event.messageId, { text: '收到' })
-                await api.identities.answer(event.identityId, 'q2', { text: '晚点再说' })
+                await api.identities.reply(event.identityId, event.messageId, { text: 'Got it' })
+                await api.identities.answer(event.identityId, 'q2', { text: 'Later' })
                 try { await api.identities.answer(event.identityId, 'q-closed', { optionId: 'yes' }) } catch (e) { api.log.info('closed ' + e.status + ' ' + e.code + ' ' + e.details.state) }
                 const errors = []
                 for (const f of [() => api.identities.answer(event.identityId, 'q3', {}), () => api.identities.answer(event.identityId, 'q3', { optionId: 'a', text: '' }), () => api.identities.reply(event.identityId, '', { text: 'x' })]) {
@@ -725,20 +725,20 @@ describe('代管外部身份', () => {
         {
           type: 'identity.inbound', identityId: identity, channelId: 'mail', messageId: 'q1', threadId: 't1',
           from: { kind: 'agent', agentId: 'a1', name: 'manager' }, nodeRunId: null, isQuestion: true,
-          question: { id: 'q1', options: [{ id: 'yes', label: '发布' }, { id: 'no', label: '不发' }], allowText: true, deadline: null }, excerpt: '要不要发布？',
+          question: { id: 'q1', options: [{ id: 'yes', label: 'Publish' }, { id: 'no', label: 'Hold' }], allowText: true, deadline: null }, excerpt: 'Shall we publish?',
         },
         { attempt: 3 },
       )
       assert.deepEqual(ack.payload, { ok: true })
-      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail 要不要发布？ -> 发布 attempt 3 errors optionId or text is required | text must be a non-empty string | messageId is required')
+      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail Shall we publish? -> Publish attempt 3 errors optionId or text is required | text must be a non-empty string | messageId is required')
       assert.equal((await host.waitLog('mailer', /^closed/)).message, 'closed 409 question_closed closed')
       assert.deepEqual(
         seen.map((s) => [s.method, s.url, s.auth, s.body]),
         [
           ['GET', `/api/v1/external-identities/${identity}/inbox/q1`, 'Bearer lnp_identity', null],
           ['POST', '/api/v1/inbox/messages/q1/reply', 'Bearer lnp_identity', { asIdentityId: identity, optionId: 'yes' }],
-          ['POST', '/api/v1/inbox/messages/q1/reply', 'Bearer lnp_identity', { text: '收到', asIdentityId: identity }],
-          ['POST', '/api/v1/inbox/messages/q2/reply', 'Bearer lnp_identity', { asIdentityId: identity, text: '晚点再说' }],
+          ['POST', '/api/v1/inbox/messages/q1/reply', 'Bearer lnp_identity', { text: 'Got it', asIdentityId: identity }],
+          ['POST', '/api/v1/inbox/messages/q2/reply', 'Bearer lnp_identity', { asIdentityId: identity, text: 'Later' }],
           ['POST', '/api/v1/inbox/messages/q-closed/reply', 'Bearer lnp_identity', { asIdentityId: identity, optionId: 'yes' }],
         ],
       )
@@ -749,7 +749,7 @@ describe('代管外部身份', () => {
     }
   })
 
-  it('清单不允许代管时加载失败或调用被本地拒绝', async () => {
+  it('When the manifest does not allow managing identities, loading fails or the call is refused locally', async () => {
     host = await HostHarness.start()
     const onPlain = fx.write('onplain', { 'index.ts': `export default function (api) { api.channels.register('plain', { identityInbound: () => {} }) }` }, { permissions: ['identities.manage'], manifest })
     const r1 = await host.load(onPlain)
@@ -779,8 +779,8 @@ describe('代管外部身份', () => {
   })
 })
 
-describe('配置、密钥与输出', () => {
-  it('config.get 叠加项目值，secrets.get 项目优先；日志遮住 secret 与令牌', async () => {
+describe('Config, secrets and output', () => {
+  it('config.get layers project values, secrets.get prefers the project; logs mask secrets and tokens', async () => {
     host = await HostHarness.start()
     const project = '6f1c8e5e-0000-4000-8000-000000000002'
     const p = fx.write(
@@ -824,7 +824,7 @@ describe('配置、密钥与输出', () => {
     assert.ok(!host.stderr.join('\n').includes('project-key-456'))
   })
 
-  it('插件写到标准输出与标准错误的内容逐行加前缀；未捕获的异常归到插件，宿主不退出', async () => {
+  it('What a plugin writes to standard output and standard error is prefixed line by line; an uncaught exception is put on the plugin, and the host does not exit', async () => {
     host = await HostHarness.start()
     const p = fx.write(
       'noisy',
@@ -835,8 +835,8 @@ describe('配置、密钥与输出', () => {
             process.stdout.write('and two\\nsecond line\\n')
             process.stderr.write('to stderr\\n')
             console.error('as error')
-            setTimeout(() => { throw new Error('定时器里炸了') }, 10)
-            Promise.reject(new Error('没人接的拒绝'))
+            setTimeout(() => { throw new Error('blew up in a timer') }, 10)
+            Promise.reject(new Error('a rejection nobody handled'))
           })
         }`,
       },
@@ -844,10 +844,10 @@ describe('配置、密钥与输出', () => {
     )
     await host.load(p)
     assert.deepEqual((await host.event('noisy', { type: 'run.ended' })).payload, { ok: true })
-    const uncaught = await host.waitLog('noisy', /^Uncaught exception: 定时器里炸了/)
+    const uncaught = await host.waitLog('noisy', /^Uncaught exception: blew up in a timer/)
     assert.equal(uncaught.message.split('\n').length, 2, 'only the description and one frame from the plugin code')
     assert.ok(uncaught.message.split('\n')[1]!.includes(p.root), uncaught.message)
-    await host.waitLog('noisy', /^Unhandled promise rejection: 没人接的拒绝/)
+    await host.waitLog('noisy', /^Unhandled promise rejection: a rejection nobody handled/)
     await host.waitStderr((lines) => lines.includes('[noisy] to stderr'))
     assert.deepEqual(
       host.stderr.filter((l) => l.startsWith('[noisy]')),
@@ -858,7 +858,7 @@ describe('配置、密钥与输出', () => {
     assert.deepEqual((await host.load(quick)).payload, { ok: true }, 'the host is still running')
   })
 
-  it('platform.fetch 带插件令牌调用 /api/v1，对象正文按 JSON 发送', async () => {
+  it('platform.fetch calls /api/v1 with the plugin token and sends an object body as JSON', async () => {
     const seen: { method?: string; url?: string; auth?: string; type?: string; body: string }[] = []
     const server = createServer(async (req, res) => {
       let body = ''

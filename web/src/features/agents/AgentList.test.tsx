@@ -12,7 +12,7 @@ import { baseHandlers, sidebar } from '@/test/shell'
 import { makeSleep } from '@/test/sleep'
 
 const names = () =>
-  within(screen.getByRole('list', { name: 'Agent' }))
+  within(screen.getByRole('list', { name: 'Agents' }))
     .queryAllByRole('link')
     .map((link) => link.textContent ?? '')
 
@@ -30,170 +30,170 @@ function setup(agents: Schemas['Agent'][], path = defaultAgentsPath) {
   return { user, listed, listCalls: () => listCalls, ...renderRoutes(routes, path) }
 }
 
-const review = makeAgent({ name: '代码审查助手' })
-const writer = makeAgent({ name: '写作助手' })
+const review = makeAgent({ name: 'Code review assistant' })
+const writer = makeAgent({ name: 'Writing assistant' })
 const deploy = makeAgent({ name: 'Deploy Bot' })
 
-describe('左侧栏的搜索', () => {
-  it('按名称做不区分大小写的包含匹配，去掉首尾空白；清空后恢复全部', async () => {
+describe('Sidebar search', () => {
+  it('matches names case-insensitively as a substring, trimming leading and trailing whitespace; clearing restores all', async () => {
     const { user } = setup([review, writer, deploy])
     await waitFor(() => expect(names()).toHaveLength(3))
-    const search = within(sidebar()).getByRole('searchbox', { name: '搜索 Agent' })
-    expect(search).toHaveAttribute('placeholder', '搜索')
+    const search = within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })
+    expect(search).toHaveAttribute('placeholder', 'Search')
 
     await user.type(search, '  deploy ')
     expect(names()).toEqual([expect.stringContaining('Deploy Bot')])
 
     await user.clear(search)
-    await user.type(search, '助手')
+    await user.type(search, 'assistant')
     expect(names()).toHaveLength(2)
 
     await user.clear(search)
     expect(names()).toHaveLength(3)
   })
 
-  it('按地址匹配：输入地址的一部分时筛出对应的 Agent；没有地址的 Agent 只按名称匹配', async () => {
-    const reviewer = makeAgent({ name: '审查', address: '测试组织/测试项目/审查' })
+  it('matches by address: typing part of an address filters to that Agent; an Agent without an address matches by name only', async () => {
+    const reviewer = makeAgent({ name: 'Review', address: 'test-org/test-project/Review' })
     const legacy = makeAgent({ name: 'old/bot', address: null })
-    const { user } = setup([reviewer, legacy, makeAgent({ name: '写作助手', address: '测试组织/测试项目/写作助手' })])
+    const { user } = setup([reviewer, legacy, makeAgent({ name: 'Writing assistant', address: 'test-org/test-project/Writing assistant' })])
     await waitFor(() => expect(names()).toHaveLength(3))
-    const search = within(sidebar()).getByRole('searchbox', { name: '搜索 Agent' })
-    await user.type(search, '测试项目/审')
-    expect(names()).toEqual([expect.stringContaining('审查')])
+    const search = within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })
+    await user.type(search, 'test-project/Rev')
+    expect(names()).toEqual([expect.stringContaining('Review')])
     await user.clear(search)
-    await user.type(search, '测试组织')
+    await user.type(search, 'test-org')
     expect(names()).toHaveLength(2)
     expect(names().some((name) => name.includes('old/bot'))).toBe(false)
   })
 
-  it('没有匹配的 Agent 时说明没有匹配项，右侧已打开的 Agent 保持不变', async () => {
+  it('when no Agent matches, says there are no matches and keeps the Agent open on the right unchanged', async () => {
     const { user, router } = setup([review, writer, deploy], defaultAgentPath(review.id, 'config'))
     await waitFor(() => expect(names()).toHaveLength(3))
-    expect(await screen.findByRole('link', { name: '配置' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
 
-    await user.type(within(sidebar()).getByRole('searchbox', { name: '搜索 Agent' }), '不存在的名字')
-    expect(within(sidebar()).getByText('没有匹配的 Agent')).toBeInTheDocument()
+    await user.type(within(sidebar()).getByRole('searchbox', { name: 'Search Agents' }), 'No such name')
+    expect(within(sidebar()).getByText('No matching Agents')).toBeInTheDocument()
     expect(names()).toHaveLength(0)
     expect(router.state.location.pathname).toBe(defaultAgentPath(review.id, 'config'))
-    expect(screen.getByRole('link', { name: '配置' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('搜索期间定期刷新仍在进行，新出现的匹配项会显示', async () => {
+  it('the periodic refresh keeps running during a search, and new matches show up', async () => {
     // Take over the timers before the list starts polling; only then can the list's periodic refresh be advanced.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const { user, listed, listCalls } = setup([review, deploy])
       await waitFor(() => expect(names()).toHaveLength(2))
-      await user.type(within(sidebar()).getByRole('searchbox', { name: '搜索 Agent' }), 'DEPLOY')
+      await user.type(within(sidebar()).getByRole('searchbox', { name: 'Search Agents' }), 'DEPLOY')
       expect(names()).toHaveLength(1)
 
-      listed.push(makeAgent({ name: 'deploy 预发' }))
+      listed.push(makeAgent({ name: 'deploy staging' }))
       const before = listCalls()
       await act(async () => {
         await vi.advanceTimersByTimeAsync(config.agentListPollMs + 100)
       })
       await waitFor(() => expect(names()).toHaveLength(2))
       expect(listCalls()).toBeGreaterThan(before)
-      expect(within(sidebar()).getByRole('searchbox', { name: '搜索 Agent' })).toHaveValue('DEPLOY')
+      expect(within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })).toHaveValue('DEPLOY')
     } finally {
       vi.useRealTimers()
     }
   })
 })
 
-describe('左侧栏 Agent 行的外观与状态', () => {
-  it('每行是名称与一个状态标签：回复中、Manager；空闲不显示标签；新建按钮是“+”', async () => {
+describe('Look and status of the Agent rows in the sidebar', () => {
+  it('each row is the name and one status label (Replying, Manager); idle shows no label; the create button is “+”', async () => {
     const busy = makeAgent({ name: 'A', busy: true })
     const idle = makeAgent({ name: 'B' })
     const manager = makeAgent({ name: 'C', isManager: true })
     setup([busy, idle, manager])
-    const list = await screen.findByRole('list', { name: 'Agent' })
+    const list = await screen.findByRole('list', { name: 'Agents' })
     const itemA = await within(list).findByRole('link', { name: /^A/ })
-    expect(itemA).toHaveTextContent(/^A回复中$/)
+    expect(itemA).toHaveTextContent(/^AReplying$/)
     expect(within(list).getByRole('link', { name: /^B/ })).toHaveTextContent(/^B$/)
-    expect(within(within(list).getByRole('link', { name: /^C/ })).getByText('Manager')).toHaveAttribute('title', '项目 Manager')
-    const create = within(sidebar()).getByRole('button', { name: '新建 Agent' })
+    expect(within(within(list).getByRole('link', { name: /^C/ })).getByText('Manager')).toHaveAttribute('title', 'Project Manager')
+    const create = within(sidebar()).getByRole('button', { name: 'New Agent' })
     expect(create).toHaveTextContent('')
     expect(create).toBeEnabled()
   })
 
-  it('Claude Code 的 Agent 在名称后有一个小图标标出运行时；Pi 的不标', async () => {
-    setup([makeAgent({ name: 'Pi 助手' }), makeAgent({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', busy: true })])
-    const list = await screen.findByRole('list', { name: 'Agent' })
-    const claude = await within(list).findByRole('link', { name: /^本机助手/ })
-    expect(claude).toHaveTextContent(/^本机助手运行时：本机的 Claude Code回复中$/)
-    expect(within(claude).getByTitle('运行时：本机的 Claude Code')).toBeInTheDocument()
-    expect(within(list).getByRole('link', { name: /^Pi 助手/ })).toHaveTextContent(/^Pi 助手$/)
+  it('a Claude Code Agent has a small icon after its name marking the runtime; a Pi Agent does not', async () => {
+    setup([makeAgent({ name: 'Pi assistant' }), makeAgent({ name: 'Local assistant', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', busy: true })])
+    const list = await screen.findByRole('list', { name: 'Agents' })
+    const claude = await within(list).findByRole('link', { name: /^Local assistant/ })
+    expect(claude).toHaveTextContent(/^Local assistantRuntime: Claude Code on this computerReplying$/)
+    expect(within(claude).getByTitle('Runtime: Claude Code on this computer')).toBeInTheDocument()
+    expect(within(list).getByRole('link', { name: /^Pi assistant/ })).toHaveTextContent(/^Pi assistant$/)
   })
 
-  it('sleep 中显示“zZ sleep”，唤醒时间与原因在悬停提示里', async () => {
-    const agent = makeAgent({ name: '等待中的助手' })
-    const reason = '等待外部确认并保留当前成果。'
+  it('while sleeping shows “zZ sleep”, with the wake time and the reason in the tooltip', async () => {
+    const agent = makeAgent({ name: 'Waiting assistant' })
+    const reason = 'Waiting for external confirmation; keeping the current results.'
     const sleep = makeSleep({ agentId: agent.id, reason, wakeAt: new Date(Date.now() + 120_000).toISOString() })
     server.use(http.get(agentsUrl, () => HttpResponse.json({ agents: [{ ...toListItem(agent), sleep, sleepRevision: sleep.revision }] })), ...baseHandlers([agent]))
     renderRoutes(routes, defaultAgentsPath)
-    const list = await screen.findByRole('list', { name: 'Agent' })
+    const list = await screen.findByRole('list', { name: 'Agents' })
     const chip = await within(list).findByText('zZ sleep')
-    expect(chip.getAttribute('title')).toMatch(/^sleep 至 .+ · 等待外部确认并保留当前成果。$/)
-    expect(chip.closest('a')).toHaveTextContent(/^等待中的助手zZ sleep$/)
+    expect(chip.getAttribute('title')).toMatch(/^Sleeping until .+ · Waiting for external confirmation; keeping the current results\.$/)
+    expect(chip.closest('a')).toHaveTextContent(/^Waiting assistantzZ sleep$/)
   })
 
-  it('发给你、还没处理的问题与消息在这一行显示“待你回复”的贴纸', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+  it('questions and messages sent to you and not yet handled show a “Needs your reply” sticker on the row', async () => {
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(
       http.get(apiUrl('/inbox/pending'), () => HttpResponse.json({ questions: [], unread: [], byAgent: [{ agentId: agent.id, projectId: null, questions: 1, unread: 2 }], byTask: [] })),
       ...baseHandlers([agent]),
     )
     renderRoutes(routes, defaultAgentsPath)
-    const list = await screen.findByRole('list', { name: 'Agent' })
-    expect(await within(list).findByRole('link', { name: /^开发助手\s*待你回复：1 个问题、2 条新消息/ })).toHaveTextContent('3')
+    const list = await screen.findByRole('list', { name: 'Agents' })
+    expect(await within(list).findByRole('link', { name: /^dev-helper\s*Needs your reply: 1 question, 2 new messages/ })).toHaveTextContent('3')
   })
 
-  it('无法连接时显示网点骨架和“无法连接服务端”，新建按钮禁用', async () => {
+  it('when the server is unreachable, shows the halftone skeleton and “Can\'t reach the server”, and the create button is disabled', async () => {
     server.use(http.all(`${config.apiBase}/*`, () => HttpResponse.error()))
     renderRoutes(routes, defaultAgentsPath)
     // A request still in flight from the previous test case may return here and briefly change
     // the connection status; wait for the sidebar to settle on the skeleton before checking.
     await waitFor(() => {
-      expect(within(sidebar()).getByText('无法连接服务端')).toBeInTheDocument()
+      expect(within(sidebar()).getByText('Can\'t reach the server')).toBeInTheDocument()
       expect(sidebar().querySelectorAll('.riso-skeleton')).toHaveLength(3)
     })
-    expect(within(sidebar()).getByRole('button', { name: '新建 Agent' })).toBeDisabled()
-    expect(within(sidebar()).queryByRole('list', { name: 'Agent' })).toBeNull()
+    expect(within(sidebar()).getByRole('button', { name: 'New Agent' })).toBeDisabled()
+    expect(within(sidebar()).queryByRole('list', { name: 'Agents' })).toBeNull()
   })
 })
 
 // "Printed sheet" redesign, item 10: the project card and the selected row share one border
 // and shadow style; the Manager badge in the selected row; the search box and the decoration.
-describe('左侧栏的样式', () => {
+describe('Sidebar styling', () => {
   const manager = makeAgent({ name: 'manager', isManager: true })
-  const other = makeAgent({ name: '研究员', isManager: true })
+  const other = makeAgent({ name: 'Researcher', isManager: true })
 
-  it('项目卡片与选中的 Agent 行都是 2px 藏青描边加 4px 藏青实色投影', async () => {
+  it('the project card and the selected Agent row both have a 2px navy border and a 4px solid navy shadow', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
     expect(row).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow', 'shadow-[4px_4px_0_var(--ink)]')
-    const card = within(sidebar()).getByRole('button', { name: /^切换范围/ })
+    const card = within(sidebar()).getByRole('button', { name: /^Switch scope/ })
     expect(card).toHaveClass('border-2', 'border-ink', 'bg-paper-raised', 'shadow-[4px_4px_0_var(--ink)]')
-    const unselected = within(sidebar()).getByRole('link', { name: /研究员/ })
+    const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
     expect(unselected).not.toHaveClass('bg-riso-yellow')
     expect(unselected).not.toHaveClass('shadow-[4px_4px_0_var(--ink)]')
   })
 
-  it('选中行里的 Manager 标记是藏青底白字；没选中的行仍是半透明藏青底', async () => {
+  it('the Manager badge in the selected row is white on solid navy; unselected rows keep the semi-transparent navy', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
     expect(within(row).getByText('Manager')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
-    const tag = within(within(sidebar()).getByRole('link', { name: /研究员/ })).getByText('Manager')
+    const tag = within(within(sidebar()).getByRole('link', { name: /Researcher/ })).getByText('Manager')
     expect(tag).toHaveClass('bg-ink/45', 'text-white')
     expect(tag).not.toHaveClass('bg-ink')
   })
 
   // Redesign step 3: the selected Manager row used to leave only 66px for the name
   // (55px when the sidebar shows a scrollbar), so "manager" was cut to "man…".
-  it('名字放得下时完整显示：名字先占满一行，右边的运行时、状态与 Manager 标记放不下时换到下一行；过长的才截断，悬停看到全名', async () => {
+  it('a name that fits is shown in full: the name fills the first line, and the runtime, status and Manager badge on the right wrap to the next line when they do not fit; only names that are too long are truncated, with the full name on hover', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
@@ -208,26 +208,26 @@ describe('左侧栏的样式', () => {
     expect(tags).toHaveClass('ml-auto', 'shrink-0')
     expect(tags).not.toContainElement(name)
     // Unselected rows use the same layout.
-    const unselected = within(sidebar()).getByRole('link', { name: /研究员/ })
+    const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
     expect(unselected).toHaveClass('min-h-9')
-    expect(within(unselected).getByText('研究员')).toHaveAttribute('title', '研究员')
+    expect(within(unselected).getByText('Researcher')).toHaveAttribute('title', 'Researcher')
   })
 
-  it('侧栏的滚动区在蓝底上用一条细的半透明白色滚动条', async () => {
+  it('the sidebar scroll area uses a thin semi-transparent white scrollbar on the blue background', async () => {
     setup([manager])
-    const list = await within(sidebar()).findByRole('list', { name: 'Agent' })
+    const list = await within(sidebar()).findByRole('list', { name: 'Agents' })
     const scroller = list.closest('.overflow-y-auto')!
     expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:rgb(255_255_255/.45)_transparent]')
   })
 
-  it('搜索框高 34px；快捷键提示有细描边', async () => {
+  it('the search box is 34px tall; the shortcut hint has a thin border', async () => {
     setup([manager])
-    const search = await within(sidebar()).findByRole('searchbox', { name: '搜索 Agent' })
+    const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
     expect(search.closest('label')).toHaveClass('h-[34px]', 'bg-ink/[0.42]')
     expect(search.closest('label')!.querySelector('kbd')).toHaveClass('border', 'border-white/45')
   })
 
-  it('中下部的网点圆和两个色点是装饰：读屏不读、不挡点击，放在按高度决定显示的空位里', async () => {
+  it('the halftone circle and the two color dots in the lower middle are decoration: hidden from screen readers, not blocking clicks, placed in a slot shown depending on the height', async () => {
     setup([manager])
     await within(sidebar()).findByRole('link', { name: /manager/ })
     const deco = sidebar().querySelector<HTMLElement>('[data-sidebar-deco]')!

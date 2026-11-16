@@ -8,8 +8,8 @@ import { commandList, platformCommands } from '@/test/commands'
 
 // Whether a command can be used right now depends on the session state: as soon as the
 // session changes, the list must be read again instead of waiting for the cache to expire.
-describe('命令列表跟着会话状态更新', () => {
-  it('收到 session.updated 后重新读命令列表：刚建好会话，/compact 不再是“还没有会话”', async () => {
+describe('The command list follows the session state', () => {
+  it('reads the command list again after session.updated: once the session is created, /compact is no longer “No session yet”', async () => {
     let session: 'none' | 'active' = 'none'
     let reads = 0
     const { agent, emit, user } = await renderChat({
@@ -21,9 +21,9 @@ describe('命令列表跟着会话状态更新', () => {
       ],
     })
     await emit('snapshot', { status: makeStatus(agent.id), currentText: null, queuedRuns: [], queueItems: [] })
-    const input = screen.getByLabelText('消息')
+    const input = screen.getByLabelText('Message')
     await user.type(input, '/comp')
-    expect(await screen.findByRole('group', { name: '现在不能用' })).toHaveTextContent('还没有会话')
+    expect(await screen.findByRole('group', { name: 'Not available now' })).toHaveTextContent('No session yet')
     await user.keyboard('{Escape}')
     await userEvent.clear(input)
     session = 'active'
@@ -32,10 +32,10 @@ describe('命令列表跟着会话状态更新', () => {
     await user.type(input, '/comp')
     await waitFor(() => expect(screen.getByRole('option', { name: /\/compact/ })).toBeInTheDocument())
     expect(reads).toBe(2)
-    expect(screen.queryByRole('group', { name: '现在不能用' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Not available now' })).toBeNull()
   })
 
-  it('只在 session.updated 时重读：平台命令执行完、没有会话变化时不额外读', async () => {
+  it('reads again only on session.updated: no extra read after a platform command finishes without a session change', async () => {
     let reads = 0
     const { agent, emit, user } = await renderChat({
       handlers: [
@@ -44,11 +44,11 @@ describe('命令列表跟着会话状态更新', () => {
       ],
     })
     await emit('snapshot', { status: makeStatus(agent.id), currentText: null, queuedRuns: [], queueItems: [] })
-    const input = screen.getByLabelText('消息')
+    const input = screen.getByLabelText('Message')
     await user.type(input, '/reload')
     await waitFor(() => expect(reads).toBe(1))
     await user.keyboard('{Escape}{Enter}')
-    await screen.findByText('已停止旧进程，下一条消息将重新加载')
+    await screen.findByText('Old process stopped; the next message will reload it')
     await user.type(input, '/rel')
     await waitFor(() => expect(screen.getByRole('option', { name: /\/reload/ })).toBeInTheDocument())
     expect(reads).toBe(1)

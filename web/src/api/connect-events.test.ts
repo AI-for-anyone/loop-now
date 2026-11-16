@@ -20,19 +20,19 @@ function connect(onClosed: () => Promise<boolean> = async () => true) {
 }
 
 describe('connectAgentEvents', () => {
-  it('按事件名解析数据，忽略未知事件与无法解析的数据', () => {
+  it('parses data by event name, ignoring unknown events and data that cannot be parsed', () => {
     const { events, states } = connect()
     const source = FakeEventSource.latest()
     expect(source.url).toBe(agentEventsUrl('a1'))
     source.open()
-    source.emit('run.text', { runId: 'r1', delta: '你' }, '7-0')
+    source.emit('run.text', { runId: 'r1', delta: 'You' }, '7-0')
     source.emit('unknown.event', { x: 1 }, '8-0')
     source.addEventListener('run.text', () => {})
-    expect(events).toEqual([{ type: 'run.text', id: '7-0', data: { runId: 'r1', delta: '你' } }])
+    expect(events).toEqual([{ type: 'run.text', id: '7-0', data: { runId: 'r1', delta: 'You' } }])
     expect(states).toEqual(['connecting', 'open'])
   })
 
-  it('浏览器自动重连期间显示重连状态', () => {
+  it('shows the reconnecting state while the browser reconnects on its own', () => {
     const { states } = connect()
     const source = FakeEventSource.latest()
     source.open()
@@ -41,7 +41,7 @@ describe('connectAgentEvents', () => {
     expect(FakeEventSource.instances).toHaveLength(1)
   })
 
-  it('永久关闭后按退避间隔重建连接', async () => {
+  it('after a permanent close, reconnects with backoff intervals', async () => {
     connect()
     FakeEventSource.latest().fail()
     await vi.advanceTimersByTimeAsync(999)
@@ -55,7 +55,7 @@ describe('connectAgentEvents', () => {
     expect(FakeEventSource.instances).toHaveLength(3)
   })
 
-  it('不再重连时进入关闭状态', async () => {
+  it('goes to the closed state when it no longer reconnects', async () => {
     const { states } = connect(async () => false)
     FakeEventSource.latest().fail()
     await vi.advanceTimersByTimeAsync(10_000)
@@ -63,7 +63,7 @@ describe('connectAgentEvents', () => {
     expect(states.at(-1)).toBe('closed')
   })
 
-  it('关闭后不再处理事件', () => {
+  it('handles no events after closing', () => {
     const { events, close } = connect()
     const source = FakeEventSource.latest()
     close()
@@ -72,7 +72,7 @@ describe('connectAgentEvents', () => {
     expect(source.readyState).toBe(FakeEventSource.CLOSED)
   })
 
-  it('概览事件流不带范围参数，按事件名解析，断开后同样按退避间隔重连', async () => {
+  it('the overview event stream has no scope parameter, parses by event name and also reconnects with backoff after a disconnect', async () => {
     const events: OverviewEvent[] = []
     connectOverviewEvents({ onEvent: (e) => events.push(e), onState: () => {}, onClosed: async () => true, retryMinMs: 1000 })
     const source = FakeEventSource.latest()

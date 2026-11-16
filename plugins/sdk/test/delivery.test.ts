@@ -108,7 +108,7 @@ function record(f: FakeApi, id: string): DeliveryRecord {
 }
 
 describe('createDelivery', () => {
-  it('2xx 一次送达；记录是 SPEC §7 的形状；签名可以校验', async () => {
+  it('2xx delivers in one attempt; the record has the SPEC §7 shape; the signature verifies', async () => {
     const f = fakeApi()
     f.secrets.secret = 's3cret-value'
     const srv = await serve(() => 204)
@@ -151,7 +151,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('可重试的失败按退避重试，记录在重试期间为 failed 并带 nextAttemptAt', async () => {
+  it('A retryable failure is retried with backoff; meanwhile the record is failed with nextAttemptAt', async () => {
     const f = fakeApi()
     const srv = await serve((n) => (n < 3 ? 503 : 200))
     const d = createDelivery(f.api, { backoffMs: [80, 160] })
@@ -174,7 +174,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('次数用尽后 abandoned；不可重试的 4xx 立即 failed 且不再重试', async () => {
+  it('abandoned after the attempts run out; a non-retryable 4xx is failed at once and never retried', async () => {
     const f = fakeApi()
     const down = await serve(() => 500)
     const reject = await serve(() => 422)
@@ -195,7 +195,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('同一事件对同一目标只投递一次', async () => {
+  it('One event is delivered to one target only once', async () => {
     const f = fakeApi()
     const srv = await serve(() => 200)
     const d = createDelivery(f.api)
@@ -214,7 +214,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('停止后留在状态里的投递在下次加载时继续', async () => {
+  it('Deliveries left in state after stopping continue on the next load', async () => {
     const state = new Map<string, unknown>()
     let up = false
     const srv = await serve(() => (up ? 200 : 503))
@@ -236,7 +236,7 @@ describe('createDelivery', () => {
     await second.stop()
   })
 
-  it('只保留最近 keep 条终态记录，连同请求一起删除', async () => {
+  it('Keeps only the latest `keep` final records, deleting older ones together with their requests', async () => {
     const f = fakeApi()
     const srv = await serve(() => 200)
     const d = createDelivery(f.api, { keep: 3 })
@@ -254,7 +254,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('resend 重发终态记录，尝试次数累计；请求丢失时放弃', async () => {
+  it('resend sends a final record again and adds up the attempts; gives up when the request is lost', async () => {
     const f = fakeApi()
     let ok = false
     const srv = await serve(() => (ok ? 200 : 400))
@@ -279,7 +279,7 @@ describe('createDelivery', () => {
     await f.stop()
   })
 
-  it('超时与连接失败可重试；签名密钥缺失不重试；参数不合规则时 deliver 抛错', async () => {
+  it('Timeouts and connection failures are retryable; a missing signing secret is not; deliver throws on invalid arguments', async () => {
     const f = fakeApi()
     const hang = await serve(() => null)
     const d = createDelivery(f.api, { timeoutMs: 100, backoffMs: [60_000] })

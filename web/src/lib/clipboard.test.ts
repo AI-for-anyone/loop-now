@@ -11,39 +11,39 @@ afterEach(() => {
   Reflect.deleteProperty(document, 'execCommand')
 })
 
-describe('写剪贴板', () => {
-  it('浏览器允许时直接写入', async () => {
+describe('writing to the clipboard', () => {
+  it('writes directly when the browser allows it', async () => {
     const writeText = vi.fn(() => Promise.resolve())
     setClipboard({ writeText })
-    await expect(copyText('内容')).resolves.toBe(true)
-    expect(writeText).toHaveBeenCalledWith('内容')
+    await expect(copyText('content')).resolves.toBe(true)
+    expect(writeText).toHaveBeenCalledWith('content')
   })
 
-  it('被拒绝时（不在按键手势内）改用旧的复制命令；它成功就算成功，用过的临时输入框要拿掉', async () => {
+  it('when refused (outside a key gesture), falls back to the old copy command; its success counts as success, and the temporary input it used is removed', async () => {
     setClipboard({ writeText: () => Promise.reject(new DOMException('denied', 'NotAllowedError')) })
     let copied = ''
     setExec((command) => {
       copied = command === 'copy' ? (document.activeElement as HTMLTextAreaElement).value : ''
       return true
     })
-    await expect(copyText('第二种办法')).resolves.toBe(true)
-    expect(copied).toBe('第二种办法')
+    await expect(copyText('second way')).resolves.toBe(true)
+    expect(copied).toBe('second way')
     expect(document.querySelector('textarea')).toBeNull()
   })
 
-  it('用普通 http 的局域网地址打开时没有 navigator.clipboard：不抛错，改用旧的复制命令', async () => {
+  it('opened on a plain-http LAN address there is no navigator.clipboard: does not throw, falls back to the old copy command', async () => {
     setClipboard(undefined)
     setExec(() => true)
-    await expect(copyText('内容')).resolves.toBe(true)
+    await expect(copyText('content')).resolves.toBe(true)
   })
 
-  it('两种办法都不行时返回 false，不抛错', async () => {
+  it('returns false without throwing when neither way works', async () => {
     setClipboard(undefined)
     setExec(() => false)
-    await expect(copyText('内容')).resolves.toBe(false)
+    await expect(copyText('content')).resolves.toBe(false)
     setExec(() => { throw new Error('unsupported') })
-    await expect(copyText('内容')).resolves.toBe(false)
+    await expect(copyText('content')).resolves.toBe(false)
     setExec(undefined)
-    await expect(copyText('内容')).resolves.toBe(false)
+    await expect(copyText('content')).resolves.toBe(false)
   })
 })

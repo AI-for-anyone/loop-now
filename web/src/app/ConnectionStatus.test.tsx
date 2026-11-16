@@ -9,15 +9,15 @@ import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 import { routes } from './routes'
 
-// The connection status area in the top bar. “数据库不可用” (Database unavailable) also
+// The connection status area in the top bar. “Database unavailable” also
 // appears on the global settings page, so all assertions are scoped to this area.
-const topStatus = () => screen.getByRole('status', { name: '连接状态' })
-const banner = () => screen.queryByText(/控制台访问的服务端地址是/)
+const topStatus = () => screen.getByRole('status', { name: 'Connection' })
+const banner = () => screen.queryByText(/The console talks to the server at/)
 
 const degraded = () => HttpResponse.json({ ok: false, database: { ok: false, error: 'unable to open database file' } }, { status: 503 })
 
-describe('顶栏连接状态', () => {
-  it('首次健康查询还没有结果时显示检查中，并显示服务端的主机和端口', async () => {
+describe('top bar connection status', () => {
+  it('shows Checking while the first health query has no result yet, and shows the host and port of the server', async () => {
     server.use(
       http.get(apiUrl('/health'), async () => {
         await delay('infinite')
@@ -26,11 +26,11 @@ describe('顶栏连接状态', () => {
       ...baseHandlers([]),
     )
     renderRoutes(routes, defaultAgentsPath)
-    expect(within(topStatus()).getByText('检查中…')).toBeInTheDocument()
+    expect(within(topStatus()).getByText('Checking…')).toBeInTheDocument()
     expect(within(topStatus()).getByText('127.0.0.1:8780')).toBeInTheDocument()
   })
 
-  it('接口地址是相对路径（服务端在同一端口提供控制台）时，按当前页面显示主机和端口', async () => {
+  it('when the API base is a relative path (the server serves the console on the same port), shows the host and port of the current page', async () => {
     server.use(...baseHandlers([]))
     const original = config.apiBase
     config.apiBase = '/api/v1'
@@ -42,44 +42,44 @@ describe('顶栏连接状态', () => {
     }
   })
 
-  it('健康检查报告数据库正常时显示已连接', async () => {
+  it('shows Connected when the health check reports the database is fine', async () => {
     server.use(...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('已连接')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
   })
 
-  it('健康检查报告数据库不可用时显示数据库不可用，不显示无法连接的全局提示', async () => {
+  it('shows Database unavailable when the health check reports the database is unavailable, without the global unreachable notice', async () => {
     server.use(http.get(apiUrl('/health'), degraded), ...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('数据库不可用')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Database unavailable')).toBeInTheDocument()
     expect(banner()).toBeNull()
   })
 
-  it('数据库日志过大只是提示，仍显示已连接', async () => {
+  it('an oversized database log is only a warning: still shows Connected', async () => {
     server.use(
       http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 300 << 20, events: 0 }, walWarning: true } })),
       ...baseHandlers([]),
     )
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('已连接')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
   })
 
-  it('请求没有到达服务端时显示无法连接，全局提示照常显示', async () => {
+  it('shows Unreachable when requests do not reach the server, and the global notice shows as usual', async () => {
     server.use(http.all(`${config.apiBase}/*`, () => HttpResponse.error()))
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('无法连接')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Unreachable')).toBeInTheDocument()
     await waitFor(() => expect(banner()).not.toBeNull())
   })
 
-  it('健康接口返回 503 以外的错误时显示无法连接', async () => {
+  it('shows Unreachable when the health endpoint returns an error other than 503', async () => {
     server.use(http.get(apiUrl('/health'), () => HttpResponse.json(errorBody('not_found'), { status: 404 })), ...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('无法连接')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Unreachable')).toBeInTheDocument()
     // The request reached the server, so the global notice about being unable to connect is not shown.
     expect(banner()).toBeNull()
   })
 
-  it('服务端停止期间显示无法连接，恢复后下一次健康查询时显示已连接', async () => {
+  it('shows Unreachable while the server is down, and Connected at the next health query after it is back', async () => {
     let up = false
     let healthCalls = 0
     // Take over the timers before the health query starts polling; only then can the periodic refresh be advanced.
@@ -94,14 +94,14 @@ describe('顶栏连接状态', () => {
         ...baseHandlers([]),
       )
       renderRoutes(routes, defaultAgentsPath)
-      expect(await within(topStatus()).findByText('无法连接')).toBeInTheDocument()
+      expect(await within(topStatus()).findByText('Unreachable')).toBeInTheDocument()
 
       up = true
       const before = healthCalls
       await act(async () => {
         await vi.advanceTimersByTimeAsync(config.agentListPollMs + 100)
       })
-      await waitFor(() => expect(within(topStatus()).getByText('已连接')).toBeInTheDocument())
+      await waitFor(() => expect(within(topStatus()).getByText('Connected')).toBeInTheDocument())
       expect(healthCalls).toBeGreaterThan(before)
       await waitFor(() => expect(banner()).toBeNull())
     } finally {
@@ -109,18 +109,18 @@ describe('顶栏连接状态', () => {
     }
   })
 
-  it('窗口重新获得焦点时也查询健康状态', async () => {
+  it('also queries health when the window regains focus', async () => {
     let healthy = true
     server.use(
       http.get(apiUrl('/health'), () => (healthy ? HttpResponse.json({ ok: true, database: { ok: true } }) : degraded())),
       ...baseHandlers([]),
     )
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('已连接')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
     healthy = false
     focusManager.setFocused(false)
     focusManager.setFocused(true)
-    await waitFor(() => expect(within(topStatus()).getByText('数据库不可用')).toBeInTheDocument())
+    await waitFor(() => expect(within(topStatus()).getByText('Database unavailable')).toBeInTheDocument())
     focusManager.setFocused(undefined)
   })
 })

@@ -59,14 +59,14 @@ const untilState = (server: ServerProcess, wanted: ServerState) =>
     server.on('state', listener)
   })
 
-describe('服务端进程', () => {
+describe('Server process', () => {
   let available = false
   before(() => {
     available = buildFake()
   })
 
-  test('拉起、就绪、健康、记下启动时刻，再停掉', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('Starts, becomes ready and healthy, records the start time, then stops', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server, notes, states, stampFile, log } = make('a')
     const ready = untilReady(server)
     await server.start()
@@ -79,7 +79,7 @@ describe('服务端进程', () => {
     assert.equal(response.status, 200)
     const stamp = JSON.parse(readFileSync(stampFile, 'utf8')) as { pid: number; started: string }
     const info = await processInfo(stamp.pid)
-    assert.ok(info, 'processInfo 应查得到服务端')
+    assert.ok(info, 'processInfo should find the server')
     assert.equal(info.started, stamp.started)
     assert.equal(process.platform === 'win32' ? info.command.toLowerCase() : info.command, process.platform === 'win32' ? bin.toLowerCase() : bin)
 
@@ -88,13 +88,13 @@ describe('服务端进程', () => {
     assert.equal(server.alive, false)
     assert.equal(await waitGone(stamp.pid, 5_000), true)
     assert.deepEqual(states, ['starting', 'running', 'stopping', 'stopped'])
-    assert.ok(!notes.some((n) => n.includes('force-killing')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
+    assert.ok(!notes.some((n) => n.includes('force-killing')), `should have exited by itself (SIGTERM on macOS, stdin closed on Windows): ${notes.join('\n')}`)
     // Windows: the server stopped by itself after reading EOF on stdin (the fake server writes a line to stderr).
     if (process.platform === 'win32') assert.match(log.tail(5), /stdin closed, shutting down/)
   })
 
-  test('开对外 TLS 端口：交给服务端监听地址与自签证书目录，从就绪文件读回 https 地址，停掉后清空', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('With the external TLS port: passes the listen address and the self-signed certificate directory to the server, reads the https address back from the ready file, and clears it after stopping', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server, notes, tlsDir, readyFile } = make('f', {}, true)
     const ready = untilReady(server)
     await server.start()
@@ -105,15 +105,15 @@ describe('服务端进程', () => {
     const written = JSON.parse(readFileSync(readyFile, 'utf8')) as { externalUrl?: string }
     assert.equal(written.externalUrl, server.externalUrl)
     // The fake server puts a certificate in the directory, as the real server does.
-    assert.ok(existsSync(join(tlsDir, 'cert.pem')), '证书目录应交给了服务端')
+    assert.ok(existsSync(join(tlsDir, 'cert.pem')), 'the certificate directory should have been passed to the server')
     assert.ok(notes.some((n) => n.includes('external TLS port chosen by the system')), notes.join('\n'))
     assert.ok(notes.some((n) => n.includes(`external TLS port ${server.externalUrl}`)), notes.join('\n'))
     await server.stop()
     assert.equal(server.externalUrl, undefined)
   })
 
-  test('不开对外端口时不交给服务端相关变量，就绪后也没有 https 地址', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('Without the external port, none of its variables are passed to the server, and there is no https address once ready', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server, tlsDir } = make('g')
     const ready = untilReady(server)
     await server.start()
@@ -123,8 +123,8 @@ describe('服务端进程', () => {
     await server.stop()
   })
 
-  test('关掉 stdin 时服务端自己优雅退出（LOOP_NOW_STOP_ON_STDIN_CLOSE=1，Windows 上壳靠它停服务端）', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('Closing stdin makes the server exit gracefully by itself (LOOP_NOW_STOP_ON_STDIN_CLOSE=1; on Windows the shell stops the server this way)', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const readyFile = join(dir, 'e', 'server-ready.json')
     const child = spawn(bin, [], {
       env: { ...process.env, LOOP_NOW_LISTEN_ADDR: '127.0.0.1:0', LOOP_NOW_READY_FILE: readyFile, LOOP_NOW_STOP_ON_STDIN_CLOSE: '1' },
@@ -137,18 +137,18 @@ describe('服务端进程', () => {
     child.stdin!.end()
     const result = await Promise.race([exit, sleep(10_000).then(() => 'timeout' as const)])
     assert.deepEqual(result, { code: 0, signal: null })
-    assert.equal(existsSync(readyFile), false, '优雅退出时删掉就绪文件')
+    assert.equal(existsSync(readyFile), false, 'A graceful exit deletes the ready file')
   })
 
-  test('启动时清理上次留下的孤儿：就绪文件里的 pid 正是这个可执行文件时停掉它', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('At startup, cleans up an orphan left from last time: stops the pid in the ready file when it is this very executable', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server, notes, readyFile } = make('b')
     // Simulates the shell having exited abnormally last time: launch a server directly and have it write the ready file where the shell
     // will read it.
     const orphan = spawn(bin, [], { env: { ...process.env, LOOP_NOW_LISTEN_ADDR: '127.0.0.1:0', LOOP_NOW_READY_FILE: readyFile }, stdio: 'ignore', windowsHide: true })
     const orphanExit = new Promise<void>((resolve) => orphan.once('exit', () => resolve()))
     for (let i = 0; i < 100 && !existsSync(readyFile); i++) await sleep(100)
-    assert.ok(existsSync(readyFile), '孤儿应写出就绪文件')
+    assert.ok(existsSync(readyFile), 'the orphan should write its ready file')
     assert.equal(alive(orphan.pid!), true)
 
     const ready = untilReady(server)
@@ -160,8 +160,8 @@ describe('服务端进程', () => {
     await server.stop()
   })
 
-  test('就绪文件里的 pid 是别的程序时不动它', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('Leaves the pid in the ready file alone when it belongs to another program', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server, notes, readyFile } = make('c')
     // This process (node) is itself "another program".
     mkdirSync(join(readyFile, '..'), { recursive: true })
@@ -173,8 +173,8 @@ describe('服务端进程', () => {
     await server.stop()
   })
 
-  test('就绪前退出：退出码 2 算配置错误，不重启', async (t) => {
-    if (!available) return t.skip('没有 go')
+  test('Exiting before ready: exit code 2 is a configuration error and is not restarted', async (t) => {
+    if (!available) return t.skip('go is not installed')
     const { server } = make('d', { LOOP_NOW_FAKE_EXIT_CODE: '2' })
     const failed = untilState(server, 'failed')
     await server.start()

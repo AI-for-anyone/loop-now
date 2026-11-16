@@ -10,7 +10,7 @@ function withPath(content: string, relativePath: string) {
 }
 
 describe('zipDirectory', () => {
-  it('去掉最外层目录名，保留其余目录结构与内容', async () => {
+  it('drops the outermost directory name and keeps the rest of the directory structure and content', async () => {
     const files = pickedFiles([withPath('---\nname: demo\n---', 'demo/SKILL.md'), withPath('echo hi', 'demo/scripts/run.sh')])
     const blob = await zipDirectory(files)
     const entries = unzipSync(new Uint8Array(await blob.arrayBuffer()))
@@ -19,7 +19,7 @@ describe('zipDirectory', () => {
     expect(totalSize(files)).toBe('---\nname: demo\n---'.length + 'echo hi'.length)
   })
 
-  it('排除服务端会忽略的 .DS_Store 与 __MACOSX/ 条目', async () => {
+  it('leaves out the .DS_Store and __MACOSX/ entries the server would ignore', async () => {
     const files = pickedFiles([
       withPath('---\nname: demo\n---', 'demo/SKILL.md'),
       withPath('finder', 'demo/.DS_Store'),

@@ -57,7 +57,7 @@ describe('original task action recovery without inferred participants', () => {
     server.use(http.get(endpoint + '/:id', () => HttpResponse.json(larkSwitchReceipt('failed'))))
     renderRecovery(switchActionId, false)
     await screen.findByText(copy.rejected)
-    expect(screen.getByRole('alert')).toHaveTextContent('凭证交接没有发布新绑定，原任务成果保留')
+    expect(screen.getByRole('alert')).toHaveTextContent('The credential handoff didn\'t publish a new binding; the task\'s results are kept')
     expect(screen.queryByText('Synthetic conflict')).toBeNull()
   })
 })

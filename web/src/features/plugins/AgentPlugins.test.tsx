@@ -10,9 +10,9 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
-const agentPlugin = (overrides: Partial<Schemas['AgentPlugin']>): Schemas['AgentPlugin'] => ({ pluginId: 'webhook', displayName: 'Webhook 通知', available: true, granted: false, accountIds: [], accountKinds: [], ...overrides })
+const agentPlugin = (overrides: Partial<Schemas['AgentPlugin']>): Schemas['AgentPlugin'] => ({ pluginId: 'webhook', displayName: 'Webhook notifications', available: true, granted: false, accountIds: [], accountKinds: [], ...overrides })
 const bot = makeAccount({ projectId: defaultProject.id, pluginId: 'lark-notify' })
-const personal = makeAccount({ id: '72000000-0000-7000-8000-000000000002', projectId: defaultProject.id, pluginId: 'lark-notify', name: '个人测试' })
+const personal = makeAccount({ id: '72000000-0000-7000-8000-000000000002', projectId: defaultProject.id, pluginId: 'lark-notify', name: 'Personal test' })
 
 function renderAgent(plugins: Schemas['AgentPlugin'][], agent = makeAgent(), path = defaultAgentPath(agent.id, 'config')) {
   const fake = fakePlugins({ agents: { [agent.id]: plugins }, accounts: [bot, personal] })
@@ -20,90 +20,90 @@ function renderAgent(plugins: Schemas['AgentPlugin'][], agent = makeAgent(), pat
   return { ...renderRoutes(routes, path), fake, agent }
 }
 
-const section = () => screen.findByRole('region', { name: '插件权限' })
+const section = () => screen.findByRole('region', { name: 'Plugin grants' })
 
-describe('Agent 配置页的插件段', () => {
-  it('每个可授权的插件一行，摘要写授权与选用的账号；项目未启用的收在末尾，附项目插件页入口', async () => {
+describe('Plugin section of the Agent config page', () => {
+  it('one row per grantable plugin with a summary of the grant and chosen accounts; plugins the project has not enabled are tucked at the end with a link to the project plugin page', async () => {
     renderAgent([
-      agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', granted: true, accountIds: [bot.id], accountKinds: [larkAccountKind] }),
-      agentPlugin({ pluginId: 'playwright', displayName: '专用浏览器' }),
-      agentPlugin({ pluginId: 'git-commit', displayName: 'Git 自动提交', available: false }),
+      agentPlugin({ pluginId: 'lark-notify', displayName: 'Lark notifications', granted: true, accountIds: [bot.id], accountKinds: [larkAccountKind] }),
+      agentPlugin({ pluginId: 'playwright', displayName: 'Dedicated browser' }),
+      agentPlugin({ pluginId: 'git-commit', displayName: 'Git auto-commit', available: false }),
     ])
     const plugins = await section()
-    const lark = await within(plugins).findByRole('button', { name: /飞书通知/ })
-    await waitFor(() => expect(lark).toHaveTextContent('飞书通知已授权· 账号：研发群机器人'))
-    expect(within(plugins).getByRole('button', { name: /专用浏览器/ })).toHaveTextContent('专用浏览器未授权')
-    const group = within(plugins).getByRole('button', { name: '项目未启用（1）' })
-    expect(within(plugins).getByRole('link', { name: '去项目插件页启用' })).toHaveAttribute('href', `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
+    const lark = await within(plugins).findByRole('button', { name: /Lark notifications/ })
+    await waitFor(() => expect(lark).toHaveTextContent('Lark notificationsGranted· Accounts: Dev group bot'))
+    expect(within(plugins).getByRole('button', { name: /Dedicated browser/ })).toHaveTextContent('Dedicated browserNot granted')
+    const group = within(plugins).getByRole('button', { name: 'Not enabled in project (1)' })
+    expect(within(plugins).getByRole('link', { name: 'Enable on the project\'s plugin page' })).toHaveAttribute('href', `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
     await userEvent.setup().click(group)
-    expect(within(plugins).getByRole('listitem', { name: 'Git 自动提交' })).toHaveTextContent('项目未启用')
+    expect(within(plugins).getByRole('listitem', { name: 'Git auto-commit' })).toHaveTextContent('Not enabled in project')
   })
 
-  it('展开一行：勾选授权并选账号后保存，这一行标出已保存', async () => {
+  it('expanding a row: check the grant, pick an account and save; the row is marked as saved', async () => {
     const user = userEvent.setup()
-    const { fake, agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', accountKinds: [larkAccountKind] })])
+    const { fake, agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: 'Lark notifications', accountKinds: [larkAccountKind] })])
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /飞书通知/ }))
-    const form = within(plugins).getByRole('region', { name: '飞书通知' })
-    await user.click(within(form).getByRole('checkbox', { name: '授权 飞书通知' }))
-    await user.click(await within(form).findByRole('checkbox', { name: '个人测试' }))
-    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await user.click(await within(plugins).findByRole('button', { name: /Lark notifications/ }))
+    const form = within(plugins).getByRole('region', { name: 'Lark notifications' })
+    await user.click(within(form).getByRole('checkbox', { name: 'Grant Lark notifications' }))
+    await user.click(await within(form).findByRole('checkbox', { name: 'Personal test' }))
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/agents/${agent.id}/plugins/lark-notify`, query: {}, body: { granted: true, accountIds: [personal.id] } }]))
-    expect(await within(plugins).findByText('已保存', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+    expect(await within(plugins).findByText('Saved', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
   })
 
-  it('授权保存后，模型选择用的目录（带 agentId）重新读取，插件提供方能不能选随之更新', async () => {
+  it('after a grant is saved, the model picker catalog (with agentId) is read again, so whether plugin providers can be chosen updates with it', async () => {
     const user = userEvent.setup()
-    const { agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', accountKinds: [larkAccountKind] })])
+    const { agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: 'Lark notifications', accountKinds: [larkAccountKind] })])
     const reads: string[] = []
     server.use(http.get(apiUrl('/model-providers'), ({ request }) => {
       reads.push(new URL(request.url).searchParams.get('agentId') ?? '')
       return HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [] })
     }))
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /飞书通知/ }))
-    const form = within(plugins).getByRole('region', { name: '飞书通知' })
-    await user.click(within(form).getByRole('checkbox', { name: '授权 飞书通知' }))
+    await user.click(await within(plugins).findByRole('button', { name: /Lark notifications/ }))
+    const form = within(plugins).getByRole('region', { name: 'Lark notifications' })
+    await user.click(within(form).getByRole('checkbox', { name: 'Grant Lark notifications' }))
     const before = reads.length
-    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(reads.length).toBeGreaterThan(before))
     expect(reads.at(-1)).toBe(agent.id)
   })
 
-  it('有未保存的修改时切到别的插件先确认', async () => {
+  it('switching to another plugin with unsaved changes asks for confirmation first', async () => {
     const user = userEvent.setup()
-    renderAgent([agentPlugin({}), agentPlugin({ pluginId: 'playwright', displayName: '专用浏览器' })])
+    renderAgent([agentPlugin({}), agentPlugin({ pluginId: 'playwright', displayName: 'Dedicated browser' })])
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /Webhook 通知/ }))
-    await user.click(within(plugins).getByRole('checkbox', { name: '授权 Webhook 通知' }))
-    await user.click(within(plugins).getByRole('button', { name: /专用浏览器/ }))
-    const dialog = await screen.findByRole('alertdialog', { name: '放弃未保存的授权修改？' })
-    await user.click(within(dialog).getByRole('button', { name: '放弃修改' }))
-    expect(within(plugins).getByRole('checkbox', { name: '授权 专用浏览器' })).not.toBeChecked()
+    await user.click(await within(plugins).findByRole('button', { name: /Webhook notifications/ }))
+    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook notifications' }))
+    await user.click(within(plugins).getByRole('button', { name: /Dedicated browser/ }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Discard unsaved grant changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(within(plugins).getByRole('checkbox', { name: 'Grant Dedicated browser' })).not.toBeChecked()
   })
 
-  it('保存时项目已停用这个插件（409 plugin_not_enabled）：说明要先在项目里启用', async () => {
+  it('the project disabled the plugin before saving (409 plugin_not_enabled): explains it must be enabled in the project first', async () => {
     const user = userEvent.setup()
     const { fake, agent } = renderAgent([agentPlugin({})])
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /Webhook 通知/ }))
+    await user.click(await within(plugins).findByRole('button', { name: /Webhook notifications/ }))
     fake.state.agents[agent.id] = [agentPlugin({ available: false })]
-    await user.click(within(plugins).getByRole('checkbox', { name: '授权 Webhook 通知' }))
-    await user.click(within(plugins).getByRole('button', { name: '保存' }))
-    expect(await within(plugins).findByText('这个插件还没在项目里启用，启用后才能授权。')).toBeInTheDocument()
+    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook notifications' }))
+    await user.click(within(plugins).getByRole('button', { name: 'Save' }))
+    expect(await within(plugins).findByText('This plugin isn\'t enabled in the project yet; enable it there before granting.')).toBeInTheDocument()
   })
 
-  it('Claude Code 的 Agent：说明下次启动生效（不提 Pi）；Agent 侧只有 Pi 扩展的插件标出对 Claude Code 不起作用', async () => {
+  it('Claude Code Agent: says grants take effect on the next start (without mentioning Pi); plugins whose Agent side is only Pi extensions are marked as having no effect on Claude Code', async () => {
     const withParts = (id: string, components: Partial<Schemas['PluginComponents']>) => {
       const plugin = makePlugin({ id, displayName: id })
       return makeDetail(plugin, makeManifest({ id, displayName: id, components: makeComponents(components) }))
     }
     const plugins = [
-      agentPlugin({ pluginId: 'pi-only', displayName: '只有扩展' }),
-      agentPlugin({ pluginId: 'with-skills', displayName: '带技能' }),
-      agentPlugin({ pluginId: 'with-mcp', displayName: '带 MCP' }),
-      agentPlugin({ pluginId: 'with-bin', displayName: '带命令' }),
-      agentPlugin({ pluginId: 'platform-only', displayName: '只有平台侧' }),
+      agentPlugin({ pluginId: 'pi-only', displayName: 'Extension only' }),
+      agentPlugin({ pluginId: 'with-skills', displayName: 'With skills' }),
+      agentPlugin({ pluginId: 'with-mcp', displayName: 'With MCP' }),
+      agentPlugin({ pluginId: 'with-bin', displayName: 'With CLI' }),
+      agentPlugin({ pluginId: 'platform-only', displayName: 'Platform only' }),
     ]
     const details = [
       withParts('pi-only', { agentExtensions: 2 }),
@@ -117,31 +117,31 @@ describe('Agent 配置页的插件段', () => {
       server.use(...fake.handlers, ...baseHandlers([agent]))
       return renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
     }
-    const hint = 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用'
+    const hint = 'Its Agent side is only Pi extensions, which have no effect on Claude Code'
 
     const claude = render(makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' }))
     let region = await section()
-    expect(region).toHaveTextContent('授权后下次启动生效，不打断当前回合。')
-    await waitFor(() => expect(within(region).getByRole('button', { name: /只有扩展/ })).toHaveTextContent(`只有扩展未授权· ${hint}`))
-    for (const name of [/带技能/, /带 MCP/, /带命令/, /只有平台侧/]) expect(within(region).getByRole('button', { name })).not.toHaveTextContent(hint)
+    expect(region).toHaveTextContent('Grants take effect the next time the Agent starts; the current turn isn\'t interrupted.')
+    await waitFor(() => expect(within(region).getByRole('button', { name: /Extension only/ })).toHaveTextContent(`Extension onlyNot granted· ${hint}`))
+    for (const name of [/With skills/, /With MCP/, /With CLI/, /Platform only/]) expect(within(region).getByRole('button', { name })).not.toHaveTextContent(hint)
     claude.unmount()
 
     render(makeAgent())
     region = await section()
-    expect(region).toHaveTextContent('授权后下次启动 Pi 生效，不打断当前回合。')
-    expect(await within(region).findByRole('button', { name: /只有扩展/ })).toHaveTextContent(/^只有扩展未授权$/)
+    expect(region).toHaveTextContent('Grants take effect the next time Pi starts; the current turn isn\'t interrupted.')
+    expect(await within(region).findByRole('button', { name: /Extension only/ })).toHaveTextContent(/^Extension onlyNot granted$/)
   })
 
-  it('平台 Agent 没有账号可选，只勾选授权', async () => {
+  it('a platform Agent has no accounts to choose, only the grant checkbox', async () => {
     const user = userEvent.setup()
     const agent = makeAgent({ scope: 'platform', projectId: null })
-    const { fake } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', accountKinds: [larkAccountKind] })], agent, `/platform/agents/${agent.id}/config`)
+    const { fake } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: 'Lark notifications', accountKinds: [larkAccountKind] })], agent, `/platform/agents/${agent.id}/config`)
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /飞书通知/ }))
-    const form = within(plugins).getByRole('region', { name: '飞书通知' })
-    expect(within(form).queryByRole('group', { name: '账号 · 飞书应用' })).toBeNull()
-    await user.click(within(form).getByRole('checkbox', { name: '授权 飞书通知' }))
-    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await user.click(await within(plugins).findByRole('button', { name: /Lark notifications/ }))
+    const form = within(plugins).getByRole('region', { name: 'Lark notifications' })
+    expect(within(form).queryByRole('group', { name: 'Accounts · Lark app' })).toBeNull()
+    await user.click(within(form).getByRole('checkbox', { name: 'Grant Lark notifications' }))
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes().map((r) => r.body)).toEqual([{ granted: true, accountIds: [] }]))
     expect(fake.requests.some((r) => r.path.includes('/accounts'))).toBe(false)
   })

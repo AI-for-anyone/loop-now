@@ -3,7 +3,7 @@ import { it } from 'node:test'
 
 import type { PluginEvent, RunOrigin } from '../src/events.ts'
 
-it('RunOrigin 接受 api/openapi.yaml 的 console_compact', () => {
+it('RunOrigin accepts console_compact from api/openapi.yaml', () => {
   const origin: RunOrigin = 'console_compact'
   const event: PluginEvent<'run.before_start'> = {
     id: '01TEST',

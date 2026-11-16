@@ -17,9 +17,9 @@ import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 // the node input; whether a question can be answered follows the question state that the task provides.
 function setup(canAnswer = true, notExecuted: Schemas['TaskNodeInboxNotExecuted'] | null = null) {
   const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
-  const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `测试项目/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }
-  const question = makeInboxMessage({ from, to: consoleParty, text: '验收要 12 个用例全过吗？', whenBusy: null, task: { taskId, nodeRunId: nodeId, runtimeId: node.runtimeId } })
-  question.question = { options: [{ id: '1', label: '全过' }, { id: '2', label: '允许 1 个已知失败' }], expiresAt: '2099-01-01T00:00:00Z', state: 'open', answer: null }
+  const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `test-project/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }
+  const question = makeInboxMessage({ from, to: consoleParty, text: 'Do all 12 cases have to pass for acceptance?', whenBusy: null, task: { taskId, nodeRunId: nodeId, runtimeId: node.runtimeId } })
+  question.question = { options: [{ id: '1', label: 'All pass' }, { id: '2', label: 'Allow 1 known failure' }], expiresAt: '2099-01-01T00:00:00Z', state: 'open', answer: null }
   node.question = { id: question.id, threadId: question.threadId, messageId: question.id, text: question.text, status: 'open', canAnswer }
   const inbox = fakeInbox({ messages: [question] })
   let nodePosts = 0
@@ -41,53 +41,53 @@ const item = (question: Schemas['InboxMessage']) => {
   return el
 }
 
-it('节点的问题显示为“发给你”，点选项提交到这条原题；状态栏的问题块只提供跳到对话，不再链接收件箱', async () => {
+it('a node question shows as “For you” and clicking an option answers that original question; the question block in the status bar only jumps to the conversation and no longer links to the inbox', async () => {
   const { question, inbox } = setup()
   const user = userEvent.setup()
   const message = await waitFor(() => item(question))
-  expect(within(message).getByText('发给你')).toBeVisible()
-  expect(within(message).getByText('验收要 12 个用例全过吗？')).toBeVisible()
+  expect(within(message).getByText('For you')).toBeVisible()
+  expect(within(message).getByText('Do all 12 cases have to pass for acceptance?')).toBeVisible()
   expect(document.querySelector('a[href^="/inbox"]')).toBeNull()
-  expect(screen.getByRole('button', { name: '在对话中回答' })).toBeInTheDocument()
-  await user.click(within(message).getByRole('button', { name: '允许 1 个已知失败' }))
+  expect(screen.getByRole('button', { name: 'Answer in the conversation' })).toBeInTheDocument()
+  await user.click(within(message).getByRole('button', { name: 'Allow 1 known failure' }))
   await waitFor(() => expect(inbox.sent).toEqual([{ optionId: '2', whenBusy: 'queue', replyTo: question.id }]))
 })
 
-it('任务说当前身份不能回答时只显示状态，没有可点的选项与回复入口', async () => {
+it('when the task says the current identity cannot answer, only the state shows, with no clickable options and no way to reply', async () => {
   const { question, inbox } = setup(false)
   const message = await waitFor(() => item(question))
-  expect(within(message).getByText('这个问题现在不能回答，请检查任务的最新状态。')).toBeVisible()
-  expect(within(message).getByRole('button', { name: '全过' })).toBeDisabled()
-  expect(within(message).queryByRole('button', { name: '回复这个问题' })).toBeNull()
+  expect(within(message).getByText('This question can\'t be answered right now. Check the task\'s latest state.')).toBeVisible()
+  expect(within(message).getByRole('button', { name: 'All pass' })).toBeDisabled()
+  expect(within(message).queryByRole('button', { name: 'Reply to this question' })).toBeNull()
   expect(inbox.sent).toEqual([])
 })
 
-it('查看期间任务把问题关闭，选项随之不可点', async () => {
+it('when the task closes the question while you are viewing it, the options become unclickable', async () => {
   const { question, detail } = setup()
   const message = await waitFor(() => item(question))
-  expect(within(message).getByRole('button', { name: '全过' })).toBeEnabled()
+  expect(within(message).getByRole('button', { name: 'All pass' })).toBeEnabled()
   detail.nodes[1].question = { ...detail.nodes[1].question!, status: 'closed', canAnswer: false }
   const es = FakeEventSource.instances.find((s) => s.url.endsWith(`/tasks/${taskId}/events`))!
   act(() => es.emit('node.updated', { node: detail.nodes[1] }, '5'))
-  await waitFor(() => expect(within(item(question)).getByRole('button', { name: '全过' })).toBeDisabled())
+  await waitFor(() => expect(within(item(question)).getByRole('button', { name: 'All pass' })).toBeDisabled())
 })
 
-it('“回复这个问题”让节点输入框进入回复模式：文字作为原题的回答发出，不发节点消息', async () => {
+it('“Reply to this question” puts the node input in reply mode: the text goes out as the answer to the original question, not as a node message', async () => {
   const { question, inbox, nodePosts } = setup()
   const user = userEvent.setup()
-  await user.click(within(await waitFor(() => item(question))).getByRole('button', { name: '回复这个问题' }))
-  expect(screen.getByText('回复 任务检查员 的问题')).toBeVisible()
-  await user.type(screen.getByRole('textbox', { name: '消息草稿' }), '允许一个，写进结论{Enter}')
-  await waitFor(() => expect(inbox.sent).toEqual([{ text: '允许一个，写进结论', whenBusy: 'queue', replyTo: question.id }]))
-  await waitFor(() => expect(screen.queryByText('回复 任务检查员 的问题')).toBeNull())
+  await user.click(within(await waitFor(() => item(question))).getByRole('button', { name: 'Reply to this question' }))
+  expect(screen.getByText("Replying to task-checker's question")).toBeVisible()
+  await user.type(screen.getByRole('textbox', { name: 'Message draft' }), 'Allow one, note it in the conclusion{Enter}')
+  await waitFor(() => expect(inbox.sent).toEqual([{ text: 'Allow one, note it in the conclusion', whenBusy: 'queue', replyTo: question.id }]))
+  await waitFor(() => expect(screen.queryByText("Replying to task-checker's question")).toBeNull())
   expect(nodePosts()).toBe(0)
 })
 
 it.each([
-  ['task_ended', '原节点消息未执行 · 任务已经结束'],
-  ['cancelled', '原节点消息未执行 · 已取消'],
-  ['some_new_reason', '原节点消息未执行 · some_new_reason'],
-])('a message that did not run says why in Chinese (%s); an unknown reason code is shown as is', async (reason, text) => {
+  ['task_ended', "The original node message didn't run · The task has ended"],
+  ['cancelled', "The original node message didn't run · Cancelled"],
+  ['some_new_reason', "The original node message didn't run · some_new_reason"],
+])('a message that did not run says why in English (%s); an unknown reason code is shown as is', async (reason, text) => {
   const { question } = setup(true, { reason, at: '2026-10-18T00:02:00Z' })
   const message = await waitFor(() => item(question))
   expect(within(message).getByText(text)).toHaveAttribute('role', 'status')

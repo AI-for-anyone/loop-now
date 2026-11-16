@@ -16,7 +16,7 @@ describe('Lark fixed official public authorization URI', () => {
     base.replace('https:', 'http:'), base.replace('accounts.feishu.cn', 'accounts.feishu.cn.evil.test'),
     base.replace('https://', 'https://user@'), base.replace('.cn/', '.cn:443/'),
     `${base}#fragment`, `${base}?flow_id=a&flow_id=b`, `${base}?flow_id=%0a`, `${base}?flow_id=%ZZ`,
-    `${base}?flow_id=`, `${base}?user_code=${'界'.repeat(67)}`, `${base}?flow_id=a;user_code=b`, `${base}/extra`,
+    `${base}?flow_id=`, `${base}?user_code=${'界'.repeat(67)}`, `${base}?flow_id=a;user_code=b`, `${base}/extra`, // check-english: zh (multibyte user code just over the 200-byte limit)
   ])('rejects invalid issuer/query/path boundary %s', value => {
     expect(larkAuthorizationUrl(value, 'feishu')).toBe(false)
   })

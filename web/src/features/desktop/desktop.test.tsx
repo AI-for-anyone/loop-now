@@ -13,13 +13,13 @@ import type { DesktopBridge } from './desktop'
 
 // Inside the desktop shell's window: inbox events are handed to the shell to show the Dock unread count and system notifications, and
 // when a notification is clicked the shell hands the address back to the page; the top of the page leaves room for dragging the window.
-const agent = makeAgent({ name: '审查员' })
+const agent = makeAgent({ name: 'Reviewer' })
 const question = (overrides: Partial<Schemas['InboxMessage']> = {}) =>
   summaryOf(
     makeInboxMessage({
       from: agentParty(agent),
       to: consoleParty,
-      text: '要合并这个 PR 吗？',
+      text: 'Merge this PR?',
       question: { options: [], expiresAt: '2026-12-01T00:00:00Z', state: 'open', answer: null },
       ...overrides,
     }),
@@ -50,79 +50,79 @@ async function start() {
   await openInboxStream(2)
 }
 
-describe('桌面壳的通知与 Dock 未读数', () => {
-  it('每个收件箱事件都更新 Dock 未读数', async () => {
+describe('Desktop shell notifications and the Dock unread count', () => {
+  it('every inbox event updates the Dock unread count', async () => {
     await start()
     expect(bridge.setBadge).toHaveBeenLastCalledWith(2)
     await emitInbox('inbox.message.read', { id: crypto.randomUUID(), threadId: crypto.randomUUID(), to: consoleParty, readAt: '2026-11-03T00:00:00Z', unreadTotal: 1 })
     expect(bridge.setBadge).toHaveBeenLastCalledWith(1)
   })
 
-  it('窗口没有焦点时，Agent 发给你的新问题发一条"待你回复"，点开去它的对话；同一条只通知一次', async () => {
+  it('when the window has no focus, a new question an Agent sends you gives a "waiting for your reply" notification that opens its chat; the same message notifies only once', async () => {
     await start()
     const message = question()
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     expect(bridge.notify).toHaveBeenCalledTimes(1)
-    expect(bridge.notify).toHaveBeenCalledWith({ id: message.id, title: '待你回复：审查员', body: '要合并这个 PR 吗？', path: `/agents/${agent.id}/chat` })
+    expect(bridge.notify).toHaveBeenCalledWith({ id: message.id, title: 'Waiting for your reply: Reviewer', body: 'Merge this PR?', path: `/agents/${agent.id}/chat` })
     expect(bridge.setBadge).toHaveBeenLastCalledWith(3)
   })
 
-  it('任务实例发给你的消息发一条"任务等待"，点开去任务里这条消息所属的节点', async () => {
+  it('a message a task instance sends you gives a "task waiting" notification that opens the node of the task the message belongs to', async () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
     server.use(http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })))
     await start()
-    const message = summaryOf(makeInboxMessage({ from: agentParty({ ...agent, name: '任务检查员' }), to: consoleParty, text: '检查完了，等你确认', task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } }))
+    const message = summaryOf(makeInboxMessage({ from: agentParty({ ...agent, name: 'task-checker' }), to: consoleParty, text: 'Check done, waiting for your confirmation', task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } }))
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     await waitFor(() => expect(bridge.notify).toHaveBeenCalledTimes(1))
     expect(bridge.notify).toHaveBeenCalledWith({
       id: message.id,
-      title: '任务等待：通用任务验收',
-      body: '任务检查员：检查完了，等你确认',
+      title: 'Task waiting: General task acceptance',
+      body: 'task-checker: Check done, waiting for your confirmation',
       path: `/p/${encodeURIComponent(defaultProject.name)}/tasks/${taskId}?record=${nodeId}`,
     })
   })
 
-  it('任务实例提的问题也是"待你回复"，正文带任务名称', async () => {
+  it('a question from a task instance is also "waiting for your reply", with the task name in the body', async () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
     server.use(http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })))
     await start()
-    const message = question({ from: agentParty({ ...agent, name: '任务检查员' }), task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } })
+    const message = question({ from: agentParty({ ...agent, name: 'task-checker' }), task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } })
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     await waitFor(() => expect(bridge.notify).toHaveBeenCalledTimes(1))
-    expect(bridge.notify.mock.calls[0][0]).toMatchObject({ title: '待你回复：任务检查员', body: '任务「通用任务验收」：要合并这个 PR 吗？' })
+    expect(bridge.notify.mock.calls[0][0]).toMatchObject({ title: 'Waiting for your reply: task-checker', body: 'Task "General task acceptance": Merge this PR?' })
   })
 
-  it('不通知：窗口可见且有焦点时、Agent 发给你的普通消息、已不是 open 的问题、发给 Agent 的消息', async () => {
+  it('no notification: while the window is visible and focused, for a plain message an Agent sends you, for a question no longer open, for a message sent to an Agent', async () => {
     await start()
     focused = true
     await emitInbox('inbox.message.created', { message: question(), unreadTotal: 3 })
     focused = false
-    await emitInbox('inbox.message.created', { message: summaryOf(makeInboxMessage({ from: agentParty(agent), to: consoleParty, text: '做完了' })), unreadTotal: 3 })
+    await emitInbox('inbox.message.created', { message: summaryOf(makeInboxMessage({ from: agentParty(agent), to: consoleParty, text: 'Done.' })), unreadTotal: 3 })
     await emitInbox('inbox.message.created', { message: question({ question: { options: [], expiresAt: '2026-12-01T00:00:00Z', state: 'answered', answer: null } }), unreadTotal: 3 })
-    await emitInbox('inbox.message.created', { message: summaryOf(makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: '继续' })), unreadTotal: 3 })
+    await emitInbox('inbox.message.created', { message: summaryOf(makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: 'Go on.' })), unreadTotal: 3 })
     expect(bridge.notify).not.toHaveBeenCalled()
   })
 
-  it('窗口没有系统标题栏：左侧栏顶部一条、窄屏的蓝色顶栏可以拖动窗口；浏览器里打开时都没有', async () => {
+  it('the window has no system title bar: a strip at the top of the sidebar and the blue top bar on narrow screens drag the window; neither exists when opened in a browser', async () => {
     server.use(...baseHandlers([agent]))
     const { unmount } = renderRoutes(routes, defaultAgentsPath)
     await openInboxStream(0)
-    const nav = screen.getByRole('navigation', { name: '主导航' })
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' })
     expect(nav.firstElementChild).toHaveClass('window-drag')
     expect(nav.firstElementChild).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByRole('button', { name: '打开导航' }).closest('header')).toHaveClass('window-drag')
+    expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).toHaveClass('window-drag')
     unmount()
 
     delete window.loopNowDesktop
     renderRoutes(routes, defaultAgentsPath)
     await openInboxStream(0)
-    expect(screen.getByRole('navigation', { name: '主导航' }).firstElementChild).not.toHaveClass('window-drag')
-    expect(screen.getByRole('button', { name: '打开导航' }).closest('header')).not.toHaveClass('window-drag')
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).firstElementChild).not.toHaveClass('window-drag')
+    expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).not.toHaveClass('window-drag')
     expect(document.querySelector('.window-drag')).toBeNull()
   })
 
-  it('点了通知：桌面壳把地址交回页面，控制台跳过去', async () => {
+  it('a clicked notification: the desktop shell hands the address back to the page and the console goes there', async () => {
     server.use(...baseHandlers([agent]))
     const { router } = renderRoutes(routes, defaultAgentsPath)
     await openInboxStream(0)

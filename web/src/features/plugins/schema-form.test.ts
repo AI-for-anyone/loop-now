@@ -6,19 +6,19 @@ const schema = {
   type: 'object',
   required: ['url', 'token'],
   properties: {
-    url: { type: 'string', format: 'uri', title: '回调地址', 'x-scope': 'project' },
-    token: { type: 'string', title: '令牌', 'x-secret': true },
-    retries: { type: 'integer', title: '重试上限', minimum: 0, maximum: 10, default: 5 },
-    ratio: { type: 'number', title: '比例' },
-    verbose: { type: 'boolean', title: '详细日志', 'x-scope': 'project' },
-    level: { enum: ['low', 'high', 3], title: '级别' },
-    mode: { oneOf: [{ const: 'a', title: '模式 A' }, { const: 'b', title: '模式 B' }] },
-    nested: { type: 'object', title: '高级' },
+    url: { type: 'string', format: 'uri', title: 'Callback URL', 'x-scope': 'project' },
+    token: { type: 'string', title: 'Token', 'x-secret': true },
+    retries: { type: 'integer', title: 'Retry limit', minimum: 0, maximum: 10, default: 5 },
+    ratio: { type: 'number', title: 'Ratio' },
+    verbose: { type: 'boolean', title: 'Verbose logs', 'x-scope': 'project' },
+    level: { enum: ['low', 'high', 3], title: 'Level' },
+    mode: { oneOf: [{ const: 'a', title: 'Mode A' }, { const: 'b', title: 'Mode B' }] },
+    nested: { type: 'object', title: 'Advanced' },
   },
 }
 
-describe('按 JSON Schema 生成的配置表单', () => {
-  it('按 properties 顺序列出字段，认出各种类型、必填、密钥与项目级覆盖', () => {
+describe('Config form generated from JSON Schema', () => {
+  it('lists fields in properties order and recognizes types, required fields, secrets and project overrides', () => {
     const fields = fieldsOf(schema)
     expect(fields.map((f) => [f.name, f.kind, f.required, f.secret, f.projectScope])).toEqual([
       ['url', 'uri', true, false, true],
@@ -30,12 +30,12 @@ describe('按 JSON Schema 生成的配置表单', () => {
       ['mode', 'enum', false, false, false],
       ['nested', 'unsupported', false, false, false],
     ])
-    expect(fields.find((f) => f.name === 'mode')!.options).toEqual([{ value: 'a', label: '模式 A' }, { value: 'b', label: '模式 B' }])
+    expect(fields.find((f) => f.name === 'mode')!.options).toEqual([{ value: 'a', label: 'Mode A' }, { value: 'b', label: 'Mode B' }])
     expect(fieldsOf({})).toEqual([])
     expect(fieldsOf(null)).toEqual([])
   })
 
-  it('项目覆盖只留 x-scope: project 的字段，而且都可以留空沿用全局值', () => {
+  it('project overrides keep only x-scope: project fields, and all of them can be left empty to use the global value', () => {
     const fields = fieldsOf(schema, 'project')
     expect(fields.map((f) => [f.name, f.required])).toEqual([
       ['url', false],
@@ -43,7 +43,7 @@ describe('按 JSON Schema 生成的配置表单', () => {
     ])
   })
 
-  it('还没保存过的全局配置用默认值；已保存的值按类型写进输入框，enum 记选项序号', () => {
+  it('a global config never saved uses the defaults; saved values go into the inputs by type, and an enum stores the option index', () => {
     const fields = fieldsOf(schema)
     expect(initialDraft(fields, { values: {}, secretsSet: [], revision: 0 }).values.retries).toBe('5')
     const draft = initialDraft(fields, { values: { url: 'https://a.example/x', retries: 2, verbose: true, level: 3 }, secretsSet: ['token'], revision: 4 })
@@ -53,19 +53,19 @@ describe('按 JSON Schema 生成的配置表单', () => {
     expect(initialDraft(fieldsOf(schema, 'project'), { values: {}, secretsSet: [], revision: 0 }, 'project').values).toEqual({ url: '', verbose: '' })
   })
 
-  it('校验必填、数字、整数、范围与地址；从未设置的必填密钥要填，已设置的可以不动', () => {
+  it('validates required fields, numbers, integers, ranges and URLs; a required secret never set must be filled in, one already set can be left alone', () => {
     const fields = fieldsOf(schema)
     const draft = initialDraft(fields, { values: {}, secretsSet: [], revision: 1 })
-    expect(validate(fields, draft)).toEqual({ url: '必填', token: '必填' })
+    expect(validate(fields, draft)).toEqual({ url: 'Required', token: 'Required' })
     const bad = { ...draft, values: { ...draft.values, url: 'hooks.example.com', retries: '2.5', ratio: 'abc' } }
-    expect(validate(fields, bad)).toEqual({ url: '请填完整地址，例如 https://…', token: '必填', retries: '请填整数', ratio: '请填数字' })
+    expect(validate(fields, bad)).toEqual({ url: 'Enter a full URL, e.g. https://…', token: 'Required', retries: 'Enter a whole number', ratio: 'Enter a number' })
     const range = { ...draft, values: { ...draft.values, url: 'https://ok.example', retries: '11' }, secrets: { token: { mode: 'keep' as const, value: '' } } }
-    expect(validate(fields, range, ['token'])).toEqual({ retries: '不能大于 10' })
+    expect(validate(fields, range, ['token'])).toEqual({ retries: 'Must be at most 10' })
     // A required secret cannot be cleared.
-    expect(validate(fields, { ...range, values: { ...range.values, retries: '1' }, secrets: { token: { mode: 'clear', value: '' } } }, ['token'])).toEqual({ token: '必填' })
+    expect(validate(fields, { ...range, values: { ...range.values, retries: '1' }, secrets: { token: { mode: 'clear', value: '' } } }, ['token'])).toEqual({ token: 'Required' })
   })
 
-  it('请求体：数字、布尔、enum 还原成原来的类型；没填的可选项不发送；编辑不了的字段原样带回', () => {
+  it('request body: numbers, booleans and enums get their original types back; empty optional fields are not sent; fields that cannot be edited are sent back unchanged', () => {
     const fields = fieldsOf(schema)
     const draft = initialDraft(fields, { values: { nested: { a: 1 } }, secretsSet: [], revision: 1 })
     draft.values = { ...draft.values, url: ' https://ok.example/hook ', retries: '3', ratio: '0.5', verbose: 'false', level: '2', mode: '1' }
@@ -76,7 +76,7 @@ describe('按 JSON Schema 生成的配置表单', () => {
     })
   })
 
-  it('密钥只带要改的：没动的不发送，清除发 null；点了“更换”没填不算改动', () => {
+  it('secrets carry only changes: untouched ones are not sent and cleared ones send null; clicking "Replace" without typing is not a change', () => {
     const fields = fieldsOf(webhookSchema)
     const initial = initialDraft(fields, { values: { url: 'https://a.example' }, secretsSet: ['secret'], revision: 2 })
     expect(toPayload(fields, initial, {})).toEqual({ values: { url: 'https://a.example' } })
@@ -87,7 +87,7 @@ describe('按 JSON Schema 生成的配置表单', () => {
     expect(toPayload(fields, cleared, {})).toEqual({ values: { url: 'https://a.example' }, secrets: { secret: null } })
   })
 
-  it('服务端 422 的字段错误按字段名（可带 values. 或 secrets. 前缀）对上表单项', () => {
+  it('server 422 field errors are matched to form fields by name (with an optional values. or secrets. prefix)', () => {
     const fields = fieldsOf(webhookSchema)
     expect(serverFieldErrors(fields, [{ field: 'values.url', message: 'The address is unreachable' }, { field: 'secrets.secret', message: 'Too short' }, { field: 'other', message: 'x' }])).toEqual({
       url: 'The address is unreachable',

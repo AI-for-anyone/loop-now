@@ -12,41 +12,41 @@ import { TaskRunRecord } from './TaskRunRecord'
 const dto = taskRunTimeline(), endpoint = apiUrl(`/tasks/${dto.taskId}/nodes/${dto.nodeRunId}/runs/${dto.run.id}/timeline`)
 const tool = (state: Schemas['ToolState']): Schemas['TimelineTool'] => ({ type: 'tool', at: '2026-10-18T00:00:02Z', toolCallId: 'actual-call', toolName: 'fixture_tool', state, endedAt: state === 'started' ? null : '2026-10-18T00:00:03Z', durationMs: null })
 function renderRecord() { return renderWithQuery(<TaskRunRecord taskId={dto.taskId} nodeRunId={dto.nodeRunId} runId={dto.run.id} agentId={dto.agentId} runtimeId={dto.runtimeId} />) }
-it('任务记录复用命令文本显示，不改走常态接口', async () => {
+it('the task record reuses the command text display and does not switch to the regular API', async () => {
   const command = 'printf "task"\npwd'
   server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ entries: [{ ...tool('succeeded'), toolName: 'bash', command }] }))))
   const user = userEvent.setup()
   renderRecord()
   await screen.findByText('bash')
-  await user.click(screen.getByRole('button', { name: /^运行记录/ }))
-  const row = screen.getByText('工具 bash').closest('li')!
+  await user.click(screen.getByRole('button', { name: /^Run log/ }))
+  const row = screen.getByText('Tool bash').closest('li')!
   expect(row.querySelector('code')?.textContent).toBe(command)
   expect(row).toHaveAttribute('data-tone', 'ok')
   expect(screen.queryByText(/tools\[/)).toBeNull()
 })
-it('任务工具按独立cursor加载且不累加每页全量usage，不调用常态API', async () => {
+it('task tools load with their own cursor without adding up the full usage of each page, and the regular API is not called', async () => {
   const user = userEvent.setup(), cursors: (string | null)[] = []
   server.use(http.get(endpoint, ({ request }) => { const cursor = new URL(request.url).searchParams.get('cursor'); cursors.push(cursor); return HttpResponse.json(taskRunTimeline({ entries: [tool(cursor ? 'succeeded' : 'started')], nextCursor: cursor ? null : 'page-two' })) }))
-  renderRecord(); await screen.findByText('fixture_tool'); expect(screen.getByText('运行记录尚未加载完整；当前仅显示已加载部分。')).toBeVisible()
-  await user.click(screen.getByRole('button', { name: /^运行记录/ })); await user.click(screen.getByRole('button', { name: '加载后续运行记录' }))
-  expect(cursors).toEqual([null, 'page-two']); expect(screen.getByRole('list', { name: '工具调用' }).children).toHaveLength(1)
-  expect(within(screen.getByRole('list', { name: '工具调用' })).getByText('成功')).toBeVisible()
-  expect(screen.getByRole('button', { name: /^运行记录/ })).toHaveTextContent('3 token')
-  expect(screen.queryByText('运行记录尚未加载完整；当前仅显示已加载部分。')).toBeNull()
+  renderRecord(); await screen.findByText('fixture_tool'); expect(screen.getByText('The run log hasn\'t fully loaded; showing what has loaded so far.')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: /^Run log/ })); await user.click(screen.getByRole('button', { name: 'Load more of the run log' }))
+  expect(cursors).toEqual([null, 'page-two']); expect(screen.getByRole('list', { name: 'Tool calls' }).children).toHaveLength(1)
+  expect(within(screen.getByRole('list', { name: 'Tool calls' })).getByText('Succeeded')).toBeVisible()
+  expect(screen.getByRole('button', { name: /^Run log/ })).toHaveTextContent('3 tokens')
+  expect(screen.queryByText('The run log hasn\'t fully loaded; showing what has loaded so far.')).toBeNull()
 })
-it.each(['taskId', 'nodeRunId', 'agentId', 'runtimeId'] as const)('timeline %s跨scope响应拒绝，不把缺少数据伪报无工具', async field => {
+it.each(['taskId', 'nodeRunId', 'agentId', 'runtimeId'] as const)('a timeline whose %s is from another scope is rejected, and missing data is not misreported as no tools', async field => {
   server.use(http.get(endpoint, () => HttpResponse.json({ ...dto, [field]: 'foreign-id' })))
-  renderRecord(); expect(await screen.findByRole('alert')).toHaveTextContent('原任务、执行、Agent 或实例不匹配'); expect(screen.queryByRole('list', { name: '工具调用' })).toBeNull()
+  renderRecord(); expect(await screen.findByRole('alert')).toHaveTextContent("The task, run, Agent, or instance returned by the Inbox or run log didn't match"); expect(screen.queryByRole('list', { name: 'Tool calls' })).toBeNull()
 })
+// The no-code case with an old Chinese errorMessage is in src/zh-CN/features/tasks/TaskRunRecord.zh.test.tsx.
 it.each([
-  ['pi_exited', 'The Pi process exited while replying.', 'Agent 进程异常退出'],
-  ['user_stopped', 'Stopped by a person.', '已停止'],
-  ['some_new_code', 'The task turn failed.', '执行错误 · The task turn failed.'],
-  [null, '旧数据：任务回合执行失败', '执行错误 · 旧数据：任务回合执行失败'],
+  ['pi_exited', 'The Pi process exited while replying.', 'Agent process exited unexpectedly'],
+  ['user_stopped', 'Stopped by a person.', 'Stopped'],
+  ['some_new_code', 'The task turn failed.', 'Run error · The task turn failed.'],
 ])('the run summary error (%s) shows the code copy, the server text only as a fallback', async (errorCode, errorMessage, text) => {
   server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ run: { ...dto.run, status: errorCode === 'user_stopped' ? 'interrupted' : 'failed', errorCode, errorMessage } }))))
   const user = userEvent.setup()
   renderRecord()
-  await user.click(await screen.findByRole('button', { name: /^运行记录/ }))
+  await user.click(await screen.findByRole('button', { name: /^Run log/ }))
   expect(await screen.findByText(text)).toBeInTheDocument()
 })

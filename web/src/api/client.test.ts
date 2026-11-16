@@ -5,12 +5,12 @@ import { server } from '@/test/server'
 import { api, ApiError, call, rawBody, reachability, toApiError } from './client'
 
 describe('call', () => {
-  it('成功时返回数据', async () => {
+  it('returns the data on success', async () => {
     server.use(http.get(apiUrl('/skills'), () => HttpResponse.json({ skills: [] })))
     await expect(call(api.GET('/skills'))).resolves.toEqual({ skills: [] })
   })
 
-  it('把统一错误结构转换为 ApiError，保留字段级错误', async () => {
+  it('turns the common error body into an ApiError, keeping field-level errors', async () => {
     server.use(
       http.post(apiUrl('/projects/p1/agents'), () =>
         HttpResponse.json(errorBody('validation_failed', 'name: Must not be empty', { fields: [{ field: 'name', message: 'Must not be empty' }] }), { status: 422 }),
@@ -29,7 +29,7 @@ describe('call', () => {
     expect(toApiError(409, errorBody(code, 'conflict'))).toMatchObject({ status: 409, code, serverMessage: 'conflict' })
   })
 
-  it('agent_busy 带上当前执行与排队数量', async () => {
+  it('agent_busy carries the current run and the queued counts', async () => {
     const details = { currentRunId: 'run-1', queued: { interrupt: 1, normal: 2 } }
     server.use(http.post(apiUrl('/agents/a1/messages'), () => HttpResponse.json(errorBody('agent_busy', 'The Agent is replying; interrupt it or queue the message', { details }), { status: 409 })))
     const error = await call(api.POST('/agents/{agentId}/messages', { params: { path: { agentId: 'a1' } }, body: { text: 'x' } })).catch((e) => e)
@@ -39,7 +39,7 @@ describe('call', () => {
   it.each([
     [412, 'precondition_failed'],
     [413, 'payload_too_large'],
-  ] as const)('%i 归为 %s', async (status, code) => {
+  ] as const)('%i maps to %s', async (status, code) => {
     server.use(http.put(apiUrl('/agents/a1/folder/content'), () => HttpResponse.json(errorBody(code), { status })))
     const error = await call(
       api.PUT('/agents/{agentId}/folder/content', {
@@ -50,17 +50,17 @@ describe('call', () => {
     expect(error).toMatchObject({ status, code })
   })
 
-  it('非契约格式的错误归为 unknown', async () => {
+  it('an error outside the contract format maps to unknown', async () => {
     server.use(http.get(apiUrl('/skills'), () => new HttpResponse('Forbidden', { status: 403 })))
     await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 403, code: 'unknown', serverMessage: 'Forbidden' })
   })
 
-  it('网络错误归为 unreachable', async () => {
+  it('a network error maps to unreachable', async () => {
     server.use(http.get(apiUrl('/skills'), () => HttpResponse.error()))
     await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 0, code: 'unreachable', requestId: null })
   })
 
-  it('错误带上响应头中的请求编号；没有这个响应头时为 null', async () => {
+  it('the error carries the request ID from the response header; null without that header', async () => {
     const requestId = '01890a5d-ac96-774b-bcce-b302099a8057'
     server.use(
       http.get(apiUrl('/usage'), () => HttpResponse.json(errorBody('internal_error'), { status: 500, headers: { 'Loop-Now-Request-Id': requestId } })),
@@ -80,7 +80,7 @@ describe('reachability', () => {
     return (fail: boolean) => release(fail)
   }
 
-  it('请求没有到达服务端时为不可达，之后任一请求收到响应即恢复', async () => {
+  it('unreachable when a request does not reach the server; back as soon as any later request gets a response', async () => {
     server.use(http.get(apiUrl('/skills'), () => HttpResponse.error()), http.get(apiUrl('/projects'), () => HttpResponse.json({ projects: [] })))
     await api.GET('/skills').catch(() => {})
     expect(reachability.isReachable()).toBe(false)
@@ -88,7 +88,7 @@ describe('reachability', () => {
     expect(reachability.isReachable()).toBe(true)
   })
 
-  it('断连时发出的请求在恢复后才失败：已过时，不再变回不可达', async () => {
+  it('a request sent while disconnected that fails only after recovery is stale and does not turn back to unreachable', async () => {
     const releaseOld = heldHandler('/skills')
     const old = api.GET('/skills').catch(() => {})
     server.use(http.get(apiUrl('/projects'), () => HttpResponse.json({ projects: [] })))
@@ -99,7 +99,7 @@ describe('reachability', () => {
     expect(reachability.isReachable()).toBe(true)
   })
 
-  it('较早发出的请求在较新的失败之后才成功：同样过时，仍为不可达', async () => {
+  it('an earlier request that succeeds after a newer one failed is stale too: still unreachable', async () => {
     const releaseOld = heldHandler('/skills')
     const old = api.GET('/skills')
     server.use(http.get(apiUrl('/projects'), () => HttpResponse.error()))
@@ -110,7 +110,7 @@ describe('reachability', () => {
     expect(reachability.isReachable()).toBe(false)
   })
 
-  it('请求到达服务端后被主动取消：不改变可达性', async () => {
+  it('a request aborted after it reached the server does not change reachability', async () => {
     let arrive: () => void = () => {}
     const arrived = new Promise<void>((resolve) => (arrive = resolve))
     const releaseOld = heldHandler('/skills')
@@ -126,7 +126,7 @@ describe('reachability', () => {
 })
 
 describe('rawBody', () => {
-  it('以原始字节发送', async () => {
+  it('sends the raw bytes', async () => {
     let received: { type: string | null; body: string } | null = null
     server.use(
       http.put(apiUrl('/agents/a1/folder/content'), async ({ request }) => {

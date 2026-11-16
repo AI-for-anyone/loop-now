@@ -7,34 +7,34 @@ import { initialLiveState, isBusy, liveReducer, queuedCounts, type LiveState } f
 const apply = (state: LiveState, ...events: AgentEvent[]) => events.reduce((s, event) => liveReducer(s, { type: 'event', event }), state)
 
 describe('liveReducer', () => {
-  it('快照整体替换实时部分，并以已收文字为准', () => {
+  it('a snapshot replaces the live part as a whole and its received text wins', () => {
     const run = makeRun({ status: 'running' })
     const queued = makeRun({ status: 'queued', whenBusy: 'queue' })
     const state = apply(
-      { ...initialLiveState, current: { run: makeRun({ status: 'running' }), text: '旧的' } },
-      { type: 'snapshot', id: '5-0', data: { status: makeStatus('a', { busy: true, currentRun: run }), currentText: '已经产生的', queuedRuns: [queued], queueItems: [] } },
+      { ...initialLiveState, current: { run: makeRun({ status: 'running' }), text: 'old' } },
+      { type: 'snapshot', id: '5-0', data: { status: makeStatus('a', { busy: true, currentRun: run }), currentText: 'produced so far', queuedRuns: [queued], queueItems: [] } },
     )
-    expect(state.current).toEqual({ run, text: '已经产生的' })
+    expect(state.current).toEqual({ run, text: 'produced so far' })
     expect(state.queued).toEqual([queued])
     expect(state.snapshots).toBe(1)
     expect(state.lastEventId).toBe('5-0')
     expect(isBusy(state)).toBe(true)
   })
 
-  it('追加文字增量，忽略重复投递的事件', () => {
+  it('appends text deltas and ignores events delivered twice', () => {
     const run = makeRun({ status: 'running' })
     const state = apply(
       initialLiveState,
       { type: 'run.updated', id: '1-0', data: { run } },
-      { type: 'run.text', id: '2-0', data: { runId: run.id, delta: '你' } },
-      { type: 'run.text', id: '3-0', data: { runId: run.id, delta: '好' } },
-      { type: 'run.text', id: '3-0', data: { runId: run.id, delta: '好' } },
-      { type: 'run.text', id: '2-0', data: { runId: run.id, delta: '你' } },
+      { type: 'run.text', id: '2-0', data: { runId: run.id, delta: 'Hel' } },
+      { type: 'run.text', id: '3-0', data: { runId: run.id, delta: 'lo' } },
+      { type: 'run.text', id: '3-0', data: { runId: run.id, delta: 'lo' } },
+      { type: 'run.text', id: '2-0', data: { runId: run.id, delta: 'Hel' } },
     )
-    expect(state.current?.text).toBe('你好')
+    expect(state.current?.text).toBe('Hello')
   })
 
-  it('按 toolCallId 更新工具状态', () => {
+  it('updates tool state by toolCallId', () => {
     const run = makeRun({ status: 'running' })
     const at = '2026-10-12T00:00:00Z'
     const state = apply(
@@ -46,7 +46,7 @@ describe('liveReducer', () => {
     expect(state.current?.run.tools).toEqual([{ toolCallId: 't1', toolName: 'bash', state: 'succeeded', at }])
   })
 
-  it('打断消息排在已有打断消息之后、所有普通排队消息之前', () => {
+  it('an interrupt message goes after existing interrupt messages and before all normal queued messages', () => {
     const normal1 = makeRun({ status: 'queued', whenBusy: 'queue' })
     const normal2 = makeRun({ status: 'queued', whenBusy: 'queue' })
     const interrupt1 = makeRun({ status: 'queued', whenBusy: 'interrupt' })
@@ -62,7 +62,7 @@ describe('liveReducer', () => {
     expect(queuedCounts(state)).toEqual({ interrupt: 2, normal: 2 })
   })
 
-  it('排队执行开始后离开队列，结束后清除当前执行', () => {
+  it('a queued run leaves the queue when it starts, and the current run is cleared when it ends', () => {
     const run = makeRun({ status: 'queued', whenBusy: 'queue' })
     let state = apply(initialLiveState, { type: 'message.created', id: '1-0', data: { message: makeMessage({ run }) } })
     state = apply(state, { type: 'run.updated', id: '2-0', data: { run: { ...run, status: 'starting', phase: 'waiting_slot' } } })
@@ -77,7 +77,7 @@ describe('liveReducer', () => {
     expect(isBusy(state)).toBe(false)
   })
 
-  it('执行状态只前进不倒退：结束后晚到的打断中更新不让它重新成为当前执行', () => {
+  it('run state only moves forward: a late aborting update after the end does not make it the current run again', () => {
     // Interrupt and send: the end event and the start of the next run are emitted by the driver
     // loop, while the aborting update is emitted by the send request and may arrive late.
     const a = makeRun({ status: 'running', startedAt: '2026-10-12T08:00:00Z', endedAt: null })
@@ -89,9 +89,9 @@ describe('liveReducer', () => {
       { type: 'run.ended', id: '10-0', data: { run: { ...a, status: 'interrupted', endReason: 'user_interrupt' }, message: makeMessage({ role: 'assistant', run: a }) } },
       { type: 'run.updated', id: '11-0', data: { run: bStarting } },
       { type: 'run.updated', id: '12-0', data: { run: { ...a, status: 'aborting' } } },
-      { type: 'run.text', id: '13-0', data: { runId: b.id, delta: 'B 的回复' } },
+      { type: 'run.text', id: '13-0', data: { runId: b.id, delta: 'Reply from B' } },
     )
-    expect(state.current).toEqual({ run: bStarting, text: 'B 的回复' })
+    expect(state.current).toEqual({ run: bStarting, text: 'Reply from B' })
     expect(state.queued).toEqual([])
     state = apply(state, {
       type: 'run.ended',
@@ -102,7 +102,7 @@ describe('liveReducer', () => {
     expect(isBusy(state)).toBe(false)
   })
 
-  it('开始执行后晚到的排队更新不让它回到队列', () => {
+  it('a late queued update after the run started does not put it back in the queue', () => {
     const run = makeRun({ status: 'queued', whenBusy: 'queue', startedAt: null })
     const starting = { ...run, status: 'starting' as const, phase: 'waiting_slot' as const, startedAt: '2026-10-12T08:00:01Z' }
     const state = apply(
@@ -116,7 +116,7 @@ describe('liveReducer', () => {
     expect(queuedCounts(state)).toEqual({ interrupt: 0, normal: 0 })
   })
 
-  it('快照之后晚到的旧执行更新不替换快照中的当前执行', () => {
+  it('a late update of an old run after a snapshot does not replace the current run from the snapshot', () => {
     const old = makeRun({ status: 'running', startedAt: '2026-10-12T08:00:00Z', endedAt: null })
     const current = makeRun({ status: 'starting', phase: 'launching', startedAt: '2026-10-12T08:00:10Z', endedAt: null })
     const state = apply(
@@ -127,7 +127,7 @@ describe('liveReducer', () => {
     expect(state.current?.run.id).toBe(current.id)
   })
 
-  it('不认识的旧执行先成为当前执行时，较晚开始的执行仍能接替它', () => {
+  it('when an unknown old run becomes the current run first, a run that started later can still take over', () => {
     // A run that had already ended at snapshot time: its aborting update arrives after the
     // snapshot, and its end event came before the snapshot, so it will not come again.
     const old = makeRun({ status: 'aborting', startedAt: '2026-10-12T08:00:00Z', endedAt: null })
@@ -143,7 +143,7 @@ describe('liveReducer', () => {
     expect(state.queued).toEqual([])
   })
 
-  it('记下事件与发送结果中的消息和执行，快照不清除它们', () => {
+  it('records messages and runs from events and send results, and a snapshot does not clear them', () => {
     const run = makeRun({ status: 'running', endedAt: null })
     const question = makeMessage({ run })
     const ended = { ...run, status: 'completed' as const }
@@ -166,12 +166,12 @@ describe('liveReducer', () => {
     expect(state.queued).toEqual([])
   })
 
-  it('更新会话状态', () => {
+  it('updates the session state', () => {
     const state = apply(initialLiveState, { type: 'session.updated', id: '1-0', data: { state: 'missing', epoch: 1 } })
     expect(state.session).toEqual({ state: 'missing', epoch: 1 })
   })
 
-  it('queue.updated 整体替换排队列表，执行的已知状态随之更新', () => {
+  it('queue.updated replaces the queue as a whole and updates the known run state with it', () => {
     const a = makeRun({ status: 'queued', whenBusy: 'queue' })
     const b = makeRun({ status: 'queued', whenBusy: 'queue' })
     const promoted = { ...b, whenBusy: 'interrupt' as const }
@@ -186,10 +186,10 @@ describe('liveReducer', () => {
     expect(queuedCounts(state)).toEqual({ interrupt: 1, normal: 1 })
   })
 
-  it('快照与 queue.updated 整体替换逐条排队列表；动作回执只在之后没有收到新列表时采用', () => {
+  it('a snapshot and queue.updated replace the queue item list as a whole; an action receipt is used only when no newer list arrived after it', () => {
     const a = makeRun({ status: 'queued', whenBusy: 'queue' })
     const b = makeRun({ status: 'queued', whenBusy: 'queue' })
-    const itemA = makeQueueItem({ runId: a.id, text: '甲' }), itemB = makeQueueItem({ runId: b.id, text: '乙' })
+    const itemA = makeQueueItem({ runId: a.id, text: 'Alpha' }), itemB = makeQueueItem({ runId: b.id, text: 'Beta' })
     let state = apply(initialLiveState, { type: 'snapshot', id: '1-0', data: { status: makeStatus('a', { busy: true }), currentText: null, queuedRuns: [a, b], queueItems: [itemA, itemB] } })
     expect(state.queueItems).toEqual([itemA, itemB])
     const seq = state.queueSeq
@@ -197,12 +197,12 @@ describe('liveReducer', () => {
     const receipt = (queue: typeof state.queueItems): Schemas['AgentQueueActionReceipt'] => ({ actionId: 'action', agentId: 'a', operation: 'promote_run', status: 'accepted', item: itemB, run: promoted, queue })
     // The receipt arrives first: use the list in the receipt, and update the run status accordingly.
     const next = liveReducer(state, { type: 'queueAction', receipt: receipt([{ ...itemB, whenBusy: 'interrupt' }, itemA]), seq })
-    expect(next.queueItems.map((item) => item.text)).toEqual(['乙', '甲'])
+    expect(next.queueItems.map((item) => item.text)).toEqual(['Beta', 'Alpha'])
     expect(next.runs[b.id]).toEqual(promoted)
     // A newer list (a has started) was received before the receipt: the older list in the receipt does not overwrite it.
     state = apply(state, { type: 'queue.updated', id: '2-0', data: { queuedRuns: [promoted], items: [{ ...itemB, whenBusy: 'interrupt' }] } })
     state = liveReducer(state, { type: 'queueAction', receipt: receipt([{ ...itemB, whenBusy: 'interrupt' }, itemA]), seq })
-    expect(state.queueItems.map((item) => item.text)).toEqual(['乙'])
+    expect(state.queueItems.map((item) => item.text)).toEqual(['Beta'])
   })
 })
 

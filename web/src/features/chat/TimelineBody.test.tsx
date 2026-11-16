@@ -6,15 +6,15 @@ import { renderWithQuery } from '@/test/render'
 import { TimelineSteps } from './TimelineBody'
 import { buildSteps } from './timeline-steps'
 
-it('只提供任务真实时间线条目时不伪造常态入队/开始步骤，工具终态独立可读', () => {
+it('with only real task timeline entries does not fake the usual queued/started steps; the final tool state reads on its own', () => {
   const entry: Schemas['TimelineTool'] = { type: 'tool', at: '2026-10-18T00:00:00Z', toolCallId: 'fixture-tool', toolName: 'fixture-tool', state: 'failed', endedAt: '2026-10-18T00:00:00Z', durationMs: null }
   const steps = buildSteps(null, [entry])
   expect(steps).toHaveLength(1); expect(steps[0].tone).toBe('fail'); expect(steps[0].duration).toBeNull()
   renderWithQuery(<TimelineSteps steps={steps} />)
-  expect(screen.getByText(/fixture-tool/)).toBeVisible(); expect(screen.queryByText('消息入队')).toBeNull()
+  expect(screen.getByText(/fixture-tool/)).toBeVisible(); expect(screen.queryByText('Queued')).toBeNull()
 })
 
-it('命令按代码文本渲染，保留多行并允许长命令换行，不解析 HTML', () => {
+it('renders the command as code text, keeps multiple lines and lets long commands wrap, does not parse HTML', () => {
   const entry: Schemas['TimelineTool'] = { type: 'tool', at: '2026-10-22T00:00:00Z', toolCallId: 'bash-one', toolName: 'bash', state: 'started', endedAt: null, durationMs: null }
   const command = `printf '<img src=x onerror=alert(1)>'\n${'long-path/'.repeat(80)}`
   const steps = buildSteps(null, [{ ...entry, command }])
@@ -23,27 +23,27 @@ it('命令按代码文本渲染，保留多行并允许长命令换行，不解�
   expect(code.textContent).toBe(command)
   expect(code).toHaveClass('whitespace-pre-wrap', '[overflow-wrap:anywhere]', 'max-w-full', 'min-w-0')
   expect(container.querySelector('img')).toBeNull()
-  expect(screen.getByText('工具 bash').closest('li')).toHaveAttribute('data-tone', 'warn')
+  expect(screen.getByText('Tool bash').closest('li')).toHaveAttribute('data-tone', 'warn')
   expect(screen.queryByText(/tools\[/)).toBeNull()
 })
 
-it('不把其他工具的字段伪装成 bash 命令', () => {
+it('does not pass off another tool\'s field as a bash command', () => {
   const entry: Schemas['TimelineTool'] = { type: 'tool', at: '2026-10-22T00:00:00Z', toolCallId: 'read-one', toolName: 'read', command: 'not a bash command', state: 'succeeded', endedAt: null, durationMs: null }
   const { container } = renderWithQuery(<TimelineSteps steps={buildSteps(null, [entry])} />)
   expect(container.querySelector('code')).toBeNull()
-  expect(screen.queryByText(/未记录命令/)).toBeNull()
+  expect(screen.queryByText(/Command not recorded/)).toBeNull()
 })
 
-it.each(['started', 'succeeded', 'failed'] as const)('旧 bash 记录缺命令时如实提示，保留 %s 状态', state => {
+it.each(['started', 'succeeded', 'failed'] as const)('an old bash record without a command says so plainly and keeps the %s state', state => {
   const entry: Schemas['TimelineTool'] = { type: 'tool', at: '2026-10-22T00:00:00Z', toolCallId: 'old-bash', toolName: 'bash', state, endedAt: null, durationMs: null }
   const { container } = renderWithQuery(<TimelineSteps steps={buildSteps(null, [entry])} />)
-  expect(screen.getByText(/未记录命令/)).toBeVisible()
+  expect(screen.getByText(/Command not recorded/)).toBeVisible()
   expect(container.querySelector('code')).toBeNull()
-  expect(screen.getByText('工具 bash').closest('li')).toHaveAttribute('data-tone', state === 'succeeded' ? 'ok' : state === 'failed' ? 'fail' : 'warn')
+  expect(screen.getByText('Tool bash').closest('li')).toHaveAttribute('data-tone', state === 'succeeded' ? 'ok' : state === 'failed' ? 'fail' : 'warn')
   expect(screen.queryByText(/tools\[/)).toBeNull()
 })
 
-it('转为打断显示为一步，带时间与 whenBusy 的变化；没有这一条的旧记录照常显示', () => {
+it('promotion to interrupt shows as a step with its time and the whenBusy change; old records without it show as usual', () => {
   const run = { queuedAt: '2026-10-24T08:00:00Z', whenBusy: 'interrupt' as const }
   const entries: Schemas['TimelineEntry'][] = [
     { type: 'queued', at: '2026-10-24T08:00:00Z', whenBusy: 'queue' },
@@ -51,18 +51,18 @@ it('转为打断显示为一步，带时间与 whenBusy 的变化；没有这一
     { type: 'dispatched', at: '2026-10-24T08:00:06Z' },
   ]
   const steps = buildSteps(run, entries)
-  expect(steps.map(step => step.label)).toEqual(['入队', '已转为打断', '派发'])
+  expect(steps.map(step => step.label)).toEqual(['Queued', 'Promoted to interrupt', 'Dispatched'])
   // The enqueue step keeps the queueing mode chosen when the message was sent.
-  expect(steps[0].detail).toBe('Agent 正忙，排在普通排队消息末尾。')
+  expect(steps[0].detail).toBe('The Agent was busy; queued after the other normal messages.')
   renderWithQuery(<TimelineSteps steps={steps} />)
-  const promoted = screen.getByText('已转为打断').closest('li')!
+  const promoted = screen.getByText('Promoted to interrupt').closest('li')!
   expect(promoted).toHaveAttribute('data-tone', 'hot')
   expect(promoted).toHaveTextContent('whenBusy=queue → interrupt')
   expect(promoted).toHaveTextContent(t.timeline.clock('2026-10-24T08:00:05Z'))
-  expect(buildSteps(run, [entries[0], entries[2]]).map(step => step.label)).toEqual(['入队', '派发'])
+  expect(buildSteps(run, [entries[0], entries[2]]).map(step => step.label)).toEqual(['Queued', 'Dispatched'])
 })
 
-it('Inbox 消息被取消、逐条转为打断（带消息 ID）与被人停止各显示为一步', () => {
+it('an Inbox message cancelled, promoted to interrupt one by one (with the message ID) and stopped by a person each show as a step', () => {
   const messageId = '58000000-0000-7000-8000-000000000001'
   const entries: Schemas['TimelineEntry'][] = [
     { type: 'promoted', at: '2026-10-25T08:00:01Z', from: 'queue', to: 'interrupt', messageId },
@@ -71,7 +71,7 @@ it('Inbox 消息被取消、逐条转为打断（带消息 ID）与被人停止�
     { type: 'abort_requested', at: '2026-10-25T08:00:04Z', byRunId: null },
   ]
   const steps = buildSteps(null, entries)
-  expect(steps.map(step => step.label)).toEqual(['已转为打断', '一条 Inbox 消息被取消', '被人停止', '收到打断消息'])
+  expect(steps.map(step => step.label)).toEqual(['Promoted to interrupt', 'An Inbox message was cancelled', 'Stopped by a person', 'Interrupt received'])
   expect(steps.map(step => step.field)).toEqual([`whenBusy=queue → interrupt · messageId=${messageId}`, `messageId=${messageId}`, 'abortRequestedAt · stop=true', 'abortRequestedAt · status=aborting'])
   expect(steps[2].tone).not.toBe('hot')
 })

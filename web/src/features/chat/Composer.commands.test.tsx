@@ -26,112 +26,112 @@ function commandResult(overrides: Partial<Schemas['ConsoleCommandResult']> = {})
 }
 
 function renderComposer(onCommand = vi.fn()) {
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} onCommand={onCommand} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} onCommand={onCommand} />)
   return onCommand
 }
 
-it('/new 发送前必须确认，确认后才调用接口并显示结果', async () => {
+it('/new must be confirmed before sending; only after confirming does it call the API and show the result', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json(commandResult({ command: 'new', resetSession: { state: 'none', epoch: 2 } }))
   }))
   const onCommand = renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/new')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('alertdialog')).toHaveTextContent('确认重开会话')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  expect(await screen.findByRole('alertdialog')).toHaveTextContent('Start a new session')
   expect(sent).toEqual([])
   expect(onCommand).not.toHaveBeenCalled()
-  await userEvent.click(screen.getByRole('button', { name: '重开会话' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Start new session' }))
   await waitFor(() => expect(sent).toEqual([{ text: '/new' }]))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(onCommand.mock.calls[0][0].resetSession?.epoch).toBe(2)
   expect(box).toHaveValue('')
 })
 
-it('/resume 带 ID 时取消不发请求，确认说明不回滚配置与工作区', async () => {
+it('/resume with an ID sends no request when cancelled, and the confirmation says configuration and workspace are not rolled back', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json(commandResult({ command: 'resume', resumedSession: { state: 'active', epoch: 3 } }))
   }))
   const onCommand = renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/resume full-session-id')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('alertdialog')).toHaveTextContent('不会回滚工作区、模型配置、Prompt、Skills 或权限')
-  await userEvent.click(screen.getByRole('button', { name: '取消' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  expect(await screen.findByRole('alertdialog')).toHaveTextContent('The workspace, model configuration, Prompt, Skills, and permissions are not rolled back')
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(sent).toEqual([])
   expect(onCommand).not.toHaveBeenCalled()
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  await userEvent.click(await screen.findByRole('button', { name: '恢复会话' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Resume session' }))
   await waitFor(() => expect(sent).toEqual([{ text: '/resume full-session-id' }]))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(onCommand.mock.calls[0][0].resumedSession?.epoch).toBe(3)
 })
 
-it('/resume 列表不需要确认', async () => {
+it('the /resume list needs no confirmation', async () => {
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), () => HttpResponse.json(commandResult({ command: 'resume', resumeSessions: [] }))))
   const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/resume')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), '/resume')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 })
 
 // A platform command rejected because the Agent is busy always gets 409 agent_not_idle (without details):
 // explain why, do not retry, do not turn it into a queued message, and leave the command in the input.
-it.each(['/reload', '/resume', '/new'])('%s 遇到 agent_not_idle：说明 Agent 不空闲，不重试也不排队', async (command) => {
+it.each(['/reload', '/resume', '/new'])('%s hitting agent_not_idle: says the Agent is not idle, neither retries nor queues', async (command) => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json({ error: { code: 'agent_not_idle', message: 'agent is not idle' } }, { status: 409 })
   }))
   const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), command)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), command)
   await userEvent.keyboard('{Escape}{Enter}')
   // /new asks for confirmation first.
-  if (command === '/new') await userEvent.click(await screen.findByRole('button', { name: '重开会话' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Agent 不空闲：还有进行中的回复或排队消息')
+  if (command === '/new') await userEvent.click(await screen.findByRole('button', { name: 'Start new session' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('The Agent isn\'t idle: a reply is in progress or messages are queued')
   expect(sent).toEqual([{ text: command }])
   expect(onCommand).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('消息')).toHaveValue(command)
+  expect(screen.getByLabelText('Message')).toHaveValue(command)
 })
 
 
-it('/copy 先写剪贴板再显示结果；没有回复时不写剪贴板', async () => {
+it('/copy writes the clipboard before showing the result; with no reply it does not write the clipboard', async () => {
   const writeText = vi.fn(() => Promise.resolve())
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-  let copyText: string | null = '最近一条成功回复'
+  let copyText: string | null = 'Latest successful reply'
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), () => HttpResponse.json(commandResult({ command: 'copy', copyText }))))
   const onCommand = renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/copy')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
-  expect(writeText).toHaveBeenCalledWith('最近一条成功回复')
+  expect(writeText).toHaveBeenCalledWith('Latest successful reply')
   expect(writeText.mock.invocationCallOrder[0]).toBeLessThan(onCommand.mock.invocationCallOrder[0])
   copyText = null
   await userEvent.type(box, '/copy')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2))
   expect(writeText).toHaveBeenCalledTimes(1)
   expect(onCommand.mock.calls[1][0].copyText).toBeNull()
 })
 
 it.each([
-  ['浏览器拒绝写入（已不在按键手势内）', { writeText: () => Promise.reject(new DOMException('denied', 'NotAllowedError')) }],
-  ['用 http 的局域网地址打开，没有 navigator.clipboard', undefined],
-])('/copy 写剪贴板失败（%s）：不报错、不丢内容，结果交给对话页并标明要手动复制，输入框里的命令照常清掉', async (_name, clipboard) => {
+  ['the browser refuses the write (no longer within the key gesture)', { writeText: () => Promise.reject(new DOMException('denied', 'NotAllowedError')) }],
+  ['opened at a LAN http address, with no navigator.clipboard', undefined],
+])('/copy fails to write the clipboard (%s): no error and no lost content; the result goes to the chat page marked for manual copying, and the command in the input is cleared as usual', async (_name, clipboard) => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })
-  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), () => HttpResponse.json(commandResult({ command: 'copy', copyText: '最近一条成功回复' }))))
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), () => HttpResponse.json(commandResult({ command: 'copy', copyText: 'Latest successful reply' }))))
   const onCommand = renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/copy')
   await userEvent.keyboard('{Escape}{Enter}')
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
-  expect(onCommand.mock.calls[0][0].copyText).toBe('最近一条成功回复')
+  expect(onCommand.mock.calls[0][0].copyText).toBe('Latest successful reply')
   expect(onCommand.mock.calls[0][1]).toBe('/copy')
   expect(onCommand.mock.calls[0][2]).toEqual({ copyFailed: true })
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -142,12 +142,12 @@ it.each([
 // it should not open the command menu, and so should not read the command list for it.
 // (Even if the menu did open, it would close when the confirmation dialog takes focus, so it can't be
 // seen; here "was the command list read" is used to confirm that the menu was never asked to open at all.)
-it('从会话列表点“恢复”：弹出确认框，不打开命令菜单', async () => {
+it('clicking “Resume” in the session list opens the confirmation dialog, not the command menu', async () => {
   let reads = 0
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(commandList()) }))
   const handle = createRef<ComposerHandle>()
-  renderWithQuery(<Composer ref={handle} agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} />)
-  const box = screen.getByRole('textbox', { name: '消息' })
+  renderWithQuery(<Composer ref={handle} agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} />)
+  const box = screen.getByRole('textbox', { name: 'Message' })
   act(() => handle.current!.resume('12345678-1234-1234-1234-123456789abc'))
   expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
   expect(box).toHaveValue('/resume 12345678-1234-1234-1234-123456789abc')
@@ -157,7 +157,7 @@ it('从会话列表点“恢复”：弹出确认框，不打开命令菜单', a
   expect(box).toHaveAttribute('aria-expanded', 'false')
 })
 
-it('/export 取得文件并触发下载后才显示命令结果', async () => {
+it('/export shows the command result only after fetching the file and starting the download', async () => {
   const createObjectURL = vi.fn(() => 'blob:session')
   const revokeObjectURL = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
@@ -173,8 +173,8 @@ it('/export 取得文件并触发下载后才显示命令结果', async () => {
     }),
   )
   const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/export')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), '/export')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(createObjectURL).toHaveBeenCalledTimes(1)
   expect(click).toHaveBeenCalledTimes(1)
@@ -183,22 +183,24 @@ it('/export 取得文件并触发下载后才显示命令结果', async () => {
   expect(click.mock.invocationCallOrder[0]).toBeLessThan(onCommand.mock.invocationCallOrder[0])
 })
 
-it('输入 / 显示全部内置命令，过滤后用键盘填入，再次回车才发送', async () => {
+it('typing / shows all built-in commands; after filtering, the keyboard fills one in, and only a second Enter sends', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json(commandResult({ command: 'resume', resumeSessions: [] }))
   }))
   renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/')
-  expect(screen.getByRole('listbox', { name: '命令' })).toBeInTheDocument()
+  expect(screen.getByRole('listbox', { name: 'Commands' })).toBeInTheDocument()
   expect(screen.getAllByRole('option')).toHaveLength(7)
   for (const usage of ['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [session-id]']) {
     expect(screen.getByText(usage)).toBeInTheDocument()
   }
   await userEvent.type(box, 're')
-  expect(screen.getAllByRole('option')).toHaveLength(2)
+  // In English “re” also matches the descriptions of /session, /compact, /copy and /export (“current”, “reply”); the two name
+  // matches come first.
+  expect(screen.getAllByRole('option')).toHaveLength(6)
   expect(screen.getByRole('option', { name: /\/reload/ })).toHaveAttribute('aria-selected', 'true')
   await userEvent.keyboard('{ArrowDown}')
   expect(screen.getByRole('option', { name: /\/resume/ })).toHaveAttribute('aria-selected', 'true')
@@ -210,9 +212,9 @@ it('输入 / 显示全部内置命令，过滤后用键盘填入，再次回车�
   await waitFor(() => expect(sent).toEqual([{ text: '/resume' }]))
 })
 
-it('鼠标选择命令只填入输入框，不直接发送', async () => {
+it('choosing a command with the mouse only fills the input and does not send', async () => {
   renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/')
   await userEvent.click(screen.getByRole('option', { name: /\/export/ }))
   expect(box).toHaveValue('/export')
@@ -220,14 +222,14 @@ it('鼠标选择命令只填入输入框，不直接发送', async () => {
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 })
 
-it('Esc 关闭提示后保留命令，回车仍可直接发送', async () => {
+it('Esc closes the suggestions and keeps the command; Enter still sends directly', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json(commandResult({ command: 'reload' }))
   }))
   renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await userEvent.type(box, '/reload')
   expect(screen.getByRole('listbox')).toBeInTheDocument()
   await userEvent.keyboard('{Escape}')
@@ -237,10 +239,10 @@ it('Esc 关闭提示后保留命令，回车仍可直接发送', async () => {
   await waitFor(() => expect(sent).toEqual([{ text: '/reload' }]))
 })
 
-it('会话丢失时命令提示只开放 /resume', async () => {
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+it('when the session is missing, the command suggestions offer only /resume', async () => {
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
   // The input is enabled only after the command list has been fetched and confirms that /resume is available right now.
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   expect(box).toBeDisabled()
   await waitFor(() => expect(box).toBeEnabled())
   await userEvent.type(box, '/')
@@ -249,18 +251,18 @@ it('会话丢失时命令提示只开放 /resume', async () => {
   expect(screen.queryByRole('option', { name: /\/new/ })).not.toBeInTheDocument()
 })
 
-it('会话丢失而 /resume 不可用（Claude Code 的 Agent）时输入框保持禁用，不留只能输入一条必被拒绝的命令的死路', async () => {
+it('when the session is missing and /resume is unavailable (a Claude Code Agent), the input stays disabled, leaving no dead end where the only thing to type is a command sure to be rejected', async () => {
   let reads = 0
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(claudeCodeList()) }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
   await waitFor(() => expect(reads).toBe(1))
   await new Promise((resolve) => setTimeout(resolve, 30))
-  expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 })
 
-it('命令列表取不到时，/new 仍然先确认再发', async () => {
+it('when the command list cannot be fetched, /new is still confirmed before sending', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(
     http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })),
@@ -270,16 +272,16 @@ it('命令列表取不到时，/new 仍然先确认再发', async () => {
     }),
   )
   const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/new')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), '/new')
   await userEvent.keyboard('{Escape}{Enter}')
   expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
   expect(sent).toEqual([])
-  await userEvent.click(screen.getByRole('button', { name: '重开会话' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Start new session' }))
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(sent).toEqual([{ text: '/new' }])
 })
 
-it('没在服务端列表里的 "/" 开头文字是普通消息：正忙时照常排队重发', async () => {
+it('text starting with "/" that is not in the server list is a normal message: when busy it is queued and sent again as usual', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
@@ -288,38 +290,38 @@ it('没在服务端列表里的 "/" 开头文字是普通消息：正忙时照�
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))
   renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/usr/bin 是什么')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), '/usr/bin, what is it?')
   await userEvent.keyboard('{Enter}')
-  await waitFor(() => expect(sent).toEqual([{ text: '/usr/bin 是什么' }, { text: '/usr/bin 是什么', whenBusy: 'queue' }]))
+  await waitFor(() => expect(sent).toEqual([{ text: '/usr/bin, what is it?' }, { text: '/usr/bin, what is it?', whenBusy: 'queue' }]))
 })
 
-it('补全平台命令时保留已经写好的参数', async () => {
+it('completing a platform command keeps the arguments already written', async () => {
   renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
-  await userEvent.type(box, '/comp 保留关键决定')
+  const box = screen.getByRole('textbox', { name: 'Message' })
+  await userEvent.type(box, '/comp Keep the key decisions')
   await userEvent.keyboard('{Home}{ArrowRight}')
   await userEvent.click(screen.getByRole('option', { name: /\/compact/ }))
-  expect(box).toHaveValue('/compact 保留关键决定')
+  expect(box).toHaveValue('/compact Keep the key decisions')
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 })
 
-it('会话丢失时读不到命令列表：不把输入框锁死，仍放行 /resume（由服务端判断），并在菜单里说明读不到', async () => {
+it('when the session is missing and the command list cannot be read: does not lock the input, still lets /resume through (the server decides), and says in the menu that the list could not be read', async () => {
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  const box = screen.getByRole('textbox', { name: '消息' })
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  const box = screen.getByRole('textbox', { name: 'Message' })
   await waitFor(() => expect(box).toBeEnabled())
   await userEvent.type(box, '/res')
-  expect(await screen.findByRole('status')).toHaveTextContent(/^读不到命令列表：/)
+  expect(await screen.findByRole('status')).toHaveTextContent(/^Couldn't load the command list: /)
   await userEvent.clear(box)
   await userEvent.type(box, '/resume')
   await userEvent.keyboard('{Escape}')
-  expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   await userEvent.clear(box)
-  await userEvent.type(box, '你好')
-  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  await userEvent.type(box, 'Hello')
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
 })
 
-it('发送前还要现取命令列表时，发送按钮先变成不可点，表示正在处理', async () => {
+it('when the command list still has to be fetched before sending, the send button is disabled first to show it is working', async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => { release = resolve })
   const sent: Schemas['SendMessageInput'][] = []
@@ -331,13 +333,13 @@ it('发送前还要现取命令列表时，发送按钮先变成不可点，表�
     }),
   )
   const onCommand = renderComposer()
-  const box = screen.getByRole('textbox', { name: '消息' })
+  const box = screen.getByRole('textbox', { name: 'Message' })
   // A pasted command did not go through the "/" menu, so the list has not been fetched yet.
   await userEvent.click(box)
   await userEvent.paste('/reload')
   await userEvent.keyboard('{Escape}')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeDisabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled())
   expect(sent).toEqual([])
   release()
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
