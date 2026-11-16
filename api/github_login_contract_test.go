@@ -200,7 +200,7 @@ func TestGitHubLoginFormalContract(t *testing.T) {
 			t.Fatalf("management operations=%d", found)
 		}
 		list := doc.Paths.Value("/projects/{projectId}/cli-auth/operations").Get
-		for _, rule := range []string{"POST前", "项目+CLI", "仅GET原ID", "已终态", "不自动新建", "不重试POST", "不换ID", "仅活动"} {
+		for _, rule := range []string{"before the POST", "scoped to the project and CLI", "only GETs the original ID", "already reached a terminal state", "without automatically creating a new one", "retrying the POST", "switching IDs", "active operations only"} {
 			if !strings.Contains(list.Description, rule) {
 				t.Fatalf("missing unknown-start contract: %s", rule)
 			}

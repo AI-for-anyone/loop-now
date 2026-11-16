@@ -150,10 +150,6 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 	return b.String()
 }
 
-// loginsPrompt returns the "Local logins" item (with a trailing newline): when
-// “用本机的登录状态” ("Use local logins") is on, it tells the Agent that it uses local tools as the user, and that it
-// should not keep retrying tools that need interactive authorization (Pi has no terminal, so a popup or password prompt
-// just waits until it times out); empty when the setting is off.
 // providerLoginPrompt explains, when “用本机的登录状态” ("Use local logins") is on and the model provider comes from a
 // plugin whose state follows the account, that the extension's own local login is what is used.
 func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
@@ -163,6 +159,10 @@ func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
 	return "- Model subscription: your model provider " + snap.Provider + " uses the extension's own login in the user's home directory on this machine, not the subscription account configured in the project.\n"
 }
 
+// loginsPrompt returns the "Local logins" item (with a trailing newline): when
+// “用本机的登录状态” ("Use local logins") is on, it tells the Agent that it uses local tools as the user, and that it
+// should not keep retrying tools that need interactive authorization (Pi has no terminal, so a popup or password prompt
+// just waits until it times out); empty when the setting is off.
 func loginsPrompt(home string) string {
 	if home == "" {
 		return ""

@@ -417,8 +417,9 @@ func (c *Coord) PublishInterrupt(_ context.Context, agentID, runID string) error
 }
 
 // SubscribeInterrupts subscribes to the Agent's interrupt commands and returns the run IDs received. The subscription
-// is in effect when it returns, so commands published afterwards are not lost; when ctx ends the subscription is
-// cancelled and the channel closed.
+// is in effect when it returns, so commands published afterwards reach it, unless its backlog of 16 is full:
+// PublishInterrupt then drops the command, and the driver's periodic database check still finds the interrupt. When
+// ctx ends the subscription is cancelled and the channel closed.
 func (c *Coord) SubscribeInterrupts(ctx context.Context, agentID string) (<-chan string, error) {
 	ch := make(chan string, 16)
 	c.mu.Lock()

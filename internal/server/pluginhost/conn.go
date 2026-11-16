@@ -180,8 +180,9 @@ func (c *conn) readStdout(r io.Reader, onMessage func(*conn, Message)) {
 	}
 }
 
-// readLine reads one line (without the newline); a line longer than MaxLine is discarded and an error is returned,
-// and reading continues.
+// readLine reads one line (without the newline); the rest of a line longer than MaxLine is read and discarded, and an
+// error is returned. readStdout stops on any error from readLine, this one included, so after one over-long line the
+// plugin host's stdout is no longer read.
 func readLine(br *bufio.Reader) ([]byte, error) {
 	var buf []byte
 	for {
@@ -316,7 +317,8 @@ func (c *conn) stop(grace time.Duration) {
 	<-c.done
 }
 
-// kill ends the plugin host process group immediately (ready timeout, stuck writes).
+// kill ends the plugin host process group immediately (when it is not ready in time, or speaks another protocol
+// version).
 func (c *conn) kill() {
 	_ = procgroup.Kill(c.cmd.Process.Pid)
 	<-c.done

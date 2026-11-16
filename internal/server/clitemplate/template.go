@@ -266,7 +266,6 @@ func checkPlaceholders(s string, names map[string]bool) error {
 	return nil
 }
 
-// Get looks up a template by name.
 // ReservedEnvBy returns the name of the template that lists name as reserved; it returns false when no template
 // reserves it.
 // Reserved names include the exact names and prefixes each template declares, plus the variable names the template
@@ -293,6 +292,7 @@ func (t *Template) reservesEnv(name string) bool {
 	return slices.ContainsFunc(t.ReservedEnvPrefixes, func(p string) bool { return strings.HasPrefix(name, p) })
 }
 
+// Get looks up a template by name.
 func (c *Catalog) Get(name string) (*Template, bool) {
 	t, ok := c.byName[name]
 	return t, ok

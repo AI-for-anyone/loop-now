@@ -90,7 +90,7 @@ func TestAcquire(t *testing.T) {
 	const agent = "agent-1"
 	ownerA := coord.LockValue("run-a", "inst")
 
-	// Free: succeeds, with a TTL.
+	// Free: succeeds (busy locks do not expire).
 	if !must[bool](t)(c.Acquire(ctx, agent, ownerA)) {
 		t.Fatal("空闲时应拿到锁")
 	}
@@ -191,7 +191,7 @@ func TestSwap(t *testing.T) {
 		}
 		assertOwner(t, c, agent, owner)
 	}
-	// Hand over to the next run: swap the lock and restart the TTL.
+	// Hand over to the next run: swap the lock holder.
 	next := coord.LockValue("run-1", "inst")
 	if !must[bool](t)(c.Swap(ctx, agent, owner, next)) {
 		t.Fatal("应换锁")

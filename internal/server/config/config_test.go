@@ -227,8 +227,8 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
-// The console origins can be set to none (no cross-origin access at all); the console directory and the ready file
-// are taken as given.
+// TestStopOnStdinClose: stopping on stdin close is off by default, the usual true/false spellings are accepted, and an
+// invalid value is an error that names the variable.
 func TestStopOnStdinClose(t *testing.T) {
 	env := requiredEnv()
 	if c, err := Load(envOf(env)); err != nil || c.StopOnStdinClose {
@@ -247,6 +247,8 @@ func TestStopOnStdinClose(t *testing.T) {
 	}
 }
 
+// The console origins can be set to none (no cross-origin access at all); the console directory and the ready file
+// are taken as given.
 func TestConsoleSettings(t *testing.T) {
 	env := requiredEnv()
 	c, err := Load(envOf(env))

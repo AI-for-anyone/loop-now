@@ -40,7 +40,8 @@ type Deliverer interface {
 	InboxRead(ctx context.Context, eff store.InboxReadEffect)
 }
 
-// Service is the Inbox service.
+// TaskRouter resolves and delivers Inbox messages addressed to task instances (implemented by the task service).
+// Service, declared right below it, is the Inbox service.
 type TaskRouter interface {
 	ResolveTaskRecipient(context.Context, uuid.UUID, uuid.UUID) (store.Party, bool, error)
 	DeliverInbox(context.Context, store.NewInboxMessage) error

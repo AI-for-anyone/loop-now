@@ -54,8 +54,9 @@ func (r *sourceRoot) open(name string, directory bool) (*os.File, error) {
 		}
 		return nil, fail("source_unreadable", "source")
 	}
-	// Intermediate segments must be directories: os.Root already resolves them as directories when opening; checking
-	// the type of the last segment is left to the caller.
+	// Intermediate segments must be directories, which os.Root enforces while resolving the path. The type of the last
+	// segment is not checked here (directory is unused on Windows); Reader.openPath checks it with Stat after open. A
+	// backslash would act as a separator on Windows, so names containing one are rejected.
 	if strings.Contains(name, "\\") {
 		f.Close()
 		return nil, fail("unsupported", "source_reference")

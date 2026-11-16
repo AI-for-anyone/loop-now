@@ -126,8 +126,6 @@ func (s *Store) CurrentPluginProviders(ctx context.Context) ([]PluginProviders, 
 	})
 }
 
-// InstallPlugin registers a newly installed plugin and its first version; returns name_conflict when the id already
-// exists.
 // PluginVersionExtras are the things stored with a version that are only obtained at install time
 // (plugins/SPEC.md §13): the model providers read (JSON of modelcatalog.Capture), the reason the whole read failed,
 // and the effective providerState declaration (a JSON object).
@@ -148,6 +146,8 @@ func (x PluginVersionExtras) values() (json.RawMessage, *string, json.RawMessage
 	return providers, x.ProvidersError, state
 }
 
+// InstallPlugin registers a newly installed plugin and its first version; returns name_conflict when the id already
+// exists.
 func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string, extra PluginVersionExtras) error {
 	providers, providersError, state := extra.values()
 	err := s.inTx(ctx, func(tx *db.Tx) error {

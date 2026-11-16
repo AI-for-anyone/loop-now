@@ -1,5 +1,5 @@
 // Package admincli implements the admin subcommands of the server command line: managing external identities and
-// external tokens, manual backups, and printing the version.
+// external tokens, manual backups, the one-off import from PostgreSQL, and printing the version.
 // Subcommands read and write the database directly (the same data directory as the server; SQLite supports short
 // writes from several processes); state-changing operations are audited with cli as the actor.
 //
@@ -11,6 +11,7 @@
 //	loop-server token list <identity name>
 //	loop-server token revoke <token ID>
 //	loop-server backup <directory>
+//	loop-server import-postgres
 package admincli
 
 import (

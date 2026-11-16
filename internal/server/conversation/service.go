@@ -434,8 +434,8 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 		publish := s.finish(ctx, run, res, command)
 		next, ok, err := s.handoff(ctx, agentID, owner)
 		if err == nil && !ok {
-			// The lock is no longer held by this run (e.g. the lock passed its TTL): hand off directly if the lock is
-			// free.
+			// The lock is no longer held by this run (busy locks do not expire, but the lock can have been released
+			// elsewhere, as the lost-lock test simulates): hand off directly if the lock is free.
 			next, ok, err = s.handoff(ctx, agentID, "")
 		}
 		publish()

@@ -1143,7 +1143,6 @@ func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req
 	return true, "插件 " + o.Plugin + " 阻止了这一轮：" + reason, nil
 }
 
-// Process implements executor.Executor.
 // FreezeForFork is called by the task preparer that holds the regular dispatch gate: it stops the idle Pi once the
 // current turn ends, so the source session is stable. It is the same thing as the platform commands' StopIdle, only
 // with the stop reason fork_snapshot. While another maintenance operation is running, the error wraps ErrRuntimeBusy;
@@ -1153,6 +1152,7 @@ func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
 	return err
 }
 
+// Process implements executor.Executor.
 func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {
 	e.mu.Lock()
 	defer e.mu.Unlock()

@@ -348,7 +348,7 @@ func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待迟到的打断交给执行器超时")
 	}
-	time.Sleep(200 * time.Millisecond) // the renewal goroutine may deliver it once more; give it time
+	time.Sleep(200 * time.Millisecond) // the abort-poll loop may deliver it once more; give it time
 	e.ex.signal(e.agent, "release")    // B ends normally
 	e.waitIdle()
 
@@ -396,7 +396,8 @@ func TestLockLoss(t *testing.T) {
 	e.waitStarted("block 当前")
 	e.mustSend("排队1", "queue")
 	e.mustSend("排队2", "queue")
-	// The busy lock is lost (e.g. it was not renewed and passed its TTL).
+	// The busy lock is lost (simulated by releasing it directly; busy locks do not expire, but the driver must cope
+	// with a missing lock).
 	ctx := context.Background()
 	owner, _ := e.co.LockOwner(ctx, e.agent.String())
 	if _, err := e.co.Release(ctx, e.agent.String(), owner); err != nil {
