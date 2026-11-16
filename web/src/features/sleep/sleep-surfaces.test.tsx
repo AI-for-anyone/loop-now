@@ -7,7 +7,7 @@ import { initialLiveState, isBusy, liveReducer } from '@/features/chat/live-stat
 import { buildSteps } from '@/features/chat/timeline-steps'
 import { TaskInstanceSleeps } from './TaskInstanceSleeps'
 
-it('normal live 新 sleep 不受旧 null/重连/任务 scope 影响，已登记仍 busy 由原状态决定', () => {
+it('a new normal live sleep is not affected by an old null, a reconnect or a task scope; whether a registered sleep is still busy follows the original status', () => {
   const sleep = makeSleep()
   let state = liveReducer(initialLiveState, { type: 'reset', agentId: sleep.agentId })
   const event = (id: string, data: ReturnType<typeof sleepEvent>) => ({ type: 'event' as const, event: { type: 'sleep.updated' as const, id, data } })
@@ -23,26 +23,26 @@ it('normal live 新 sleep 不受旧 null/重连/任务 scope 影响，已登记�
   expect(state.sleep?.id).toBe('new')
 })
 
-it('blocked 普通会话沿用历史 nodeRunId 仍独立展示；节点投影不重复显示', () => {
+it('a blocked normal conversation that keeps a historical nodeRunId is still shown on its own; the node projection is not shown twice', () => {
   const detail = makeTaskDetail('project'), node = detail.nodes[1]
   const sleep = makeSleep({ scopeKind: 'task', agentId: node.agentId, taskId: detail.task.id, runtimeId: node.runtimeId, nodeRunId: node.id })
   detail.sleepingInstances = [sleep]
   const view = render(<TaskInstanceSleeps detail={detail} />)
-  expect(screen.getByRole('region', { name: '任务内普通对话 sleep' })).toBeVisible()
-  expect(screen.getByText(`运行实例 ${node.runtimeId}`)).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Sleeping task conversations' })).toBeVisible()
+  expect(screen.getByText(`Instance ${node.runtimeId}`)).toBeVisible()
   detail.nodes[1] = { ...node, sleep, sleepRevision: sleep.revision }
   view.rerender(<TaskInstanceSleeps detail={detail} />)
-  expect(screen.queryByRole('region', { name: '任务内普通对话 sleep' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Sleeping task conversations' })).not.toBeInTheDocument()
 })
 
-it('sleep Timeline 展示真实生命周期，未运行的计时器失效不显示成人工打断', () => {
+it('the sleep Timeline shows the real lifecycle; an invalidated timer that never ran is not shown as a manual interrupt', () => {
   const sleep = makeSleep({ state: 'woken', endReason: 'deadline', wakeRunId: 'wake-run' })
   const steps = buildSteps(makeRun(), [
     { type: 'sleep', at: sleep.requestedAt, sleep },
     { type: 'ended', at: sleep.requestedAt, status: 'interrupted', endReason: 'sleep_superseded', errorCode: null },
   ])
-  expect(steps[1].lines).toContain('到期唤醒')
+  expect(steps[1].lines).toContain('Woke on schedule')
   expect(steps[1].field).toContain(sleep.id)
   expect(steps[2].tone).toBe('neutral')
-  expect(steps[2].label).not.toContain('用户打断')
+  expect(steps[2].label).not.toContain('Interrupted')
 })
