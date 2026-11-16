@@ -11,6 +11,7 @@ export const inbox = {
   loadMore: 'Load more',
   openAgent: 'Open Agent',
   kind: { agent: 'Agent', external: 'External identity', console: 'Console', platform: 'Platform', plugin: 'Plugin' },
+  deletedParty: { agent: 'Deleted Agent', external: 'Deleted identity' } as Record<string, string>,
   question: {
     title: 'Original question',
     options: 'Options',

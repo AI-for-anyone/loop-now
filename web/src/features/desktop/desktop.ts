@@ -5,6 +5,7 @@ import { api, call, type Schemas } from '@/api/client'
 import type { InboxEvent } from '@/api/events'
 import { keys } from '@/api/queries'
 import { tasksPath } from '@/api/tasks'
+import { partyName } from '@/features/inbox/participants'
 import { t } from '@/i18n'
 
 // The interface the desktop shell (desktop/src/preload.ts) provides in its windows; absent when the console is opened in a browser.
@@ -72,14 +73,14 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
   if (notified.size > notifiedLimit) notified.delete(notified.values().next().value as string)
   const text = t.consoleInbox.desktop
   if (!message.task) {
-    bridge.notify({ id: message.id, title: text.question(message.from.name), body: message.preview, path: senderPath(message) })
+    bridge.notify({ id: message.id, title: text.question(partyName(message.from)), body: message.preview, path: senderPath(message) })
     return
   }
   const task = await taskTarget(client, message.task)
   bridge.notify(
     kind === 'question'
-      ? { id: message.id, title: text.question(message.from.name), body: text.inTask(task.title, message.preview), path: task.path }
-      : { id: message.id, title: text.task(task.title), body: text.from(message.from.name, message.preview), path: task.path },
+      ? { id: message.id, title: text.question(partyName(message.from)), body: text.inTask(task.title, message.preview), path: task.path }
+      : { id: message.id, title: text.task(task.title), body: text.from(partyName(message.from), message.preview), path: task.path },
   )
 }
 

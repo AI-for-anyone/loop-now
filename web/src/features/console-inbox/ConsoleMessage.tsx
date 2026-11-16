@@ -7,6 +7,7 @@ import { AgentChatReply } from '@/features/chat/ChatBubble'
 import { Markdown } from '@/features/chat/Markdown'
 import { MessageImages } from '@/features/images/MessageImages'
 import { InboxNotice } from '@/features/inbox/InboxNotice'
+import { partyName } from '@/features/inbox/participants'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useAnswerQuestion, useReadOnView } from './useAnswerQuestion'
@@ -135,7 +136,7 @@ function QuestionCaption({ message, question, answerable }: { message: Message; 
   const result = question.answer
   if (question.state === 'answered' && result) {
     const time = t.inbox.time(result.at)
-    if (result.by.kind !== 'console') return <span>{text.answeredBy(result.by.name, time)}</span>
+    if (result.by.kind !== 'console') return <span>{text.answeredBy(partyName(result.by), time)}</span>
     return <span>{result.optionLabel ? text.chosen(time, result.optionLabel) : text.answeredByText(time, result.textPreview)}</span>
   }
   return <span>{t.inbox.question.state[question.state]}{question.state === 'expired' && ` ${t.chat.metaSeparator} ${t.inbox.question.expires(question.expiresAt)}`}</span>

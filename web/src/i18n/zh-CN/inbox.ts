@@ -13,6 +13,8 @@ export const inbox = {
   loadMore: '加载更多',
   openAgent: '打开 Agent',
   kind: { agent: 'Agent', external: '外部身份', console: '控制台', platform: '平台', plugin: '插件' } satisfies Record<S['InboxParticipant']['kind'], string>,
+  // The mark of a deleted Agent or external identity (the server's own name for them is only a fallback).
+  deletedParty: { agent: '已删除 Agent', external: '已删除身份' } as Record<string, string>,
   question: {
     title: '原问题', options: '问题选项', answer: '回答原问题', text: '补充回答', choose: '请选择选项或填写回答',
     state: { open: '待回答', answered: '已回答', expired: '已到期', closed: '已关闭', cancelled: '已取消' } satisfies Record<S['InboxQuestion']['state'], string>,

@@ -9,6 +9,7 @@ import { tasksPath, useTask } from '@/api/tasks'
 import { Badge } from '@/components/ui/badge'
 import { ScopeTag } from '@/features/projects/OverviewScope'
 import { dayLabel } from '@/features/overview/day-label'
+import { partyName } from '@/features/inbox/participants'
 import { t } from '@/i18n'
 import type { ScopeQuery } from '@/lib/scope'
 
@@ -60,7 +61,7 @@ function PendingRow({ item }: { item: Item }) {
       <span className="flex min-w-0 flex-col gap-[3px]">
         <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <Badge variant="stamp" tone={item.kind === 'question' ? 'busy' : 'info'} className="[--stamp-tilt:0deg]">{text.pendingKind[item.kind]}</Badge>
-          {message.from.kind === 'plugin' ? <PluginSenderChip participant={message.from} /> : <span className="text-[14.5px] font-black [overflow-wrap:anywhere]">{message.from.name}</span>}
+          {message.from.kind === 'plugin' ? <PluginSenderChip participant={message.from} /> : <span className="text-[14.5px] font-black [overflow-wrap:anywhere]">{partyName(message.from)}</span>}
           {message.from.kind === 'agent' && <ScopeTag scope={item.projectId ? 'project' : 'platform'} projectId={item.projectId} />}
           {field && <span className="text-[12px] [overflow-wrap:anywhere] text-ink-500">{field}</span>}
         </span>
