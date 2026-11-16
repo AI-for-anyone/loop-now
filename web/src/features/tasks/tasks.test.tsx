@@ -25,7 +25,7 @@ function setup(initial?: Schemas['TaskDetail']) {
   const calls: { node: string; cursor: string | null }[] = []
   server.use(...baseHandlers([]), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
     http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks: [detail.task], nextCursor: null })),
-    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: '原任务实例暂不可用', handlingHint: '请检查当前状态' })),
+    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: 'The task instance is unavailable right now', handlingHint: 'Check the current state' })),
     http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params, request }) => {
       const node = String(params.node); calls.push({ node, cursor: new URL(request.url).searchParams.get('cursor') })
@@ -169,13 +169,13 @@ describe('节点记录与更新', () => {
 describe('控制动作', () => {
   it('重试保留说明，陈旧目标不改投新节点，写动作不自动重试', async () => {
     const { env, user } = await renderDetail(); const bodies: Schemas['TaskRetryInput'][] = []
-    server.use(http.post(apiUrl(`/tasks/${taskId}/retry`), async ({ request }) => { bodies.push(await request.json() as Schemas['TaskRetryInput']); return HttpResponse.json(errorBody('task_conflict', '旧记录已变化'), { status: 409 }) }))
+    server.use(http.post(apiUrl(`/tasks/${taskId}/retry`), async ({ request }) => { bodies.push(await request.json() as Schemas['TaskRetryInput']); return HttpResponse.json(errorBody('task_conflict', 'The old record has changed'), { status: 409 }) }))
     await user.click(screen.getByRole('button', { name: '重试当前节点' })); const dialog = screen.getByRole('alertdialog')
     await user.type(within(dialog).getByRole('textbox'), '保留这段说明')
     env.detail = { ...env.detail, task: { ...env.detail.task, currentNodeRunId: oldNodeId, version: 3 } }
     env.emit('task.updated', { task: env.detail.task }, '3')
     await user.click(within(dialog).getByRole('button', { name: '重试当前节点' }))
-    await within(dialog).findByText(/旧记录已变化/)
+    await within(dialog).findByText(/The old record has changed/)
     expect(within(dialog).getByRole('textbox')).toHaveValue('保留这段说明')
     expect(bodies).toHaveLength(1); expect(bodies[0].expectedNodeRunId).toBe(nodeId); expect(bodies[0].note).toBe('保留这段说明')
   })
@@ -296,17 +296,17 @@ it('同一Agent执行另一个节点时切换消息范围，不沿用前一节�
 })
 
 it('消息可选错误字段显示服务端脱敏失败原因，兼容旧消息省略字段', async () => {
-  const env = setup(); env.message = { ...env.message, status: 'failed', errorCode: 'pi_error', errorMessage: '服务端脱敏后的失败原因' }
+  const env = setup(); env.message = { ...env.message, status: 'failed', errorCode: 'pi_error', errorMessage: 'Failure reason redacted by the server' }
   renderRoutes(routes, detailPath())
-  expect(await screen.findByText('Agent 报告错误 · 服务端脱敏后的失败原因')).toBeVisible()
+  expect(await screen.findByText('Agent 报告错误 · Failure reason redacted by the server')).toBeVisible()
 })
 
 it.each([
   [404, 'not_found', '接口不存在', true],
-  [404, 'not_found', '节点记录不存在', false],
-  [401, 'unauthenticated', '需要控制台身份', false],
-  [403, 'forbidden', '没有节点操作权限', false],
-  [500, 'internal_error', '暂时无法检查目标', false],
+  [404, 'not_found', 'Node run not found', false],
+  [401, 'unauthenticated', 'A console identity is required', false],
+  [403, 'forbidden', 'No permission to act on this node', false],
+  [500, 'internal_error', 'Cannot check the target right now', false],
 ] as const)('capability失败%s/%s安全禁发并保留草稿，只有接口缺失是旧服务', async (status, code, message, unsupported) => {
   const env = setup(); let gets = 0
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message), { status }) }))
@@ -437,11 +437,11 @@ it('等待状态保留平台事实、固定原因和原题权限，不显示历�
 it('旧后端能力缺失后窗口focus重新取同一正式GET，可恢复而不改草稿或目标', async () => {
   setup(); let ready = false, count = 0
   const detail = makeTaskDetail(defaultProject.id)
-  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => { count++; return ready ? HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: '原会话不可用', handlingHint: '请检查任务实例' }) : HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 }) }))
+  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => { count++; return ready ? HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: 'The original session is unavailable', handlingHint: 'Check the task instance' }) : HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 }) }))
   renderRoutes(routes, detailPath()); await screen.findByText('当前服务尚未启用节点消息')
   await userEvent.type(screen.getByRole('textbox', { name: '消息草稿' }), '升级前草稿')
   ready = true; act(() => window.dispatchEvent(new Event('focus')))
-  expect(await screen.findByText('原会话不可用 · 请检查任务实例')).toBeVisible()
+  expect(await screen.findByText('The original session is unavailable · Check the task instance')).toBeVisible()
   expect(screen.queryByText('当前服务尚未启用节点消息')).not.toBeInTheDocument()
   expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('升级前草稿')
   expect(count).toBe(2)
@@ -452,7 +452,7 @@ it('未知发送结果跨节点查看保留原动作，回原执行手动确认�
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: env.detail.nodes[1].agentId, runtimeId: env.detail.nodes[1].runtimeId, canSend: true, reason: null, handlingHint: null })),
     http.post(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-messages`), async ({ request }) => {
       const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body)
-      return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', '回执不可确认'), { status: 500 }) : HttpResponse.json(taskInboxReceipt(body), { status: 201 })
+      return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed'), { status: 500 }) : HttpResponse.json(taskInboxReceipt(body), { status: 201 })
     }))
   renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复'); env.open()
   await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeEnabled())

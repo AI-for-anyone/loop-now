@@ -191,11 +191,11 @@ describe('创建 Agent', () => {
 
   it('服务端按命名规则拒绝时，在名称旁显示原因', async () => {
     const { user } = setup(() =>
-      HttpResponse.json(errorBody('validation_failed', 'bad', { fields: [{ field: 'name', message: '名称不能是 UUID 格式' }] }), { status: 422 }),
+      HttpResponse.json(errorBody('validation_failed', 'bad', { fields: [{ field: 'name', message: 'Name must not be a UUID' }] }), { status: 422 }),
     )
     const dialog = await fill(user, '看起来正常')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
-    expect(await within(dialog).findByText('名称不能是 UUID 格式')).toBeInTheDocument()
+    expect(await within(dialog).findByText('Name must not be a UUID')).toBeInTheDocument()
     expect(within(dialog).getByLabelText('显示名称')).toHaveValue('看起来正常')
   })
 
@@ -204,8 +204,8 @@ describe('创建 Agent', () => {
       HttpResponse.json(
         errorBody('validation_failed', 'bad', {
           fields: [
-            { field: 'name', message: '名称不能是 UUID 格式' },
-            { field: 'model.modelId', message: '提供方 anthropic 下没有模型 claude-sonnet-5-5' },
+            { field: 'name', message: 'Name must not be a UUID' },
+            { field: 'model.modelId', message: 'Provider anthropic has no model claude-sonnet-5-5' },
           ],
         }),
         { status: 422 },
@@ -213,8 +213,8 @@ describe('创建 Agent', () => {
     )
     const dialog = await fill(user, '看起来正常')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
-    expect(await within(dialog).findByText('名称不能是 UUID 格式')).toBeInTheDocument()
-    expect(within(dialog).getByText('提供方 anthropic 下没有模型 claude-sonnet-5-5')).toBeInTheDocument()
+    expect(await within(dialog).findByText('Name must not be a UUID')).toBeInTheDocument()
+    expect(within(dialog).getByText('Provider anthropic has no model claude-sonnet-5-5')).toBeInTheDocument()
     expect(within(dialog).queryByRole('alert')).toBeNull()
   })
 

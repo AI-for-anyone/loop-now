@@ -60,13 +60,13 @@ describe('五工具手动验证正式HTTP fixture', () => {
   })
   it('412 UUID版本冲突不改投新版本、不重POST', async () => {
     const user = userEvent.setup(), env = setup()
-    server.use(http.post(apiUrl(base), () => HttpResponse.json({ error: { code: 'precondition_failed', message: '版本已变', details: { projectId: account.projectId, accountId: account.id, expectedVersionId: account.currentVersionId, currentVersionId: '20000000-0000-7000-8000-000000000002' } } }, { status: 412 })))
+    server.use(http.post(apiUrl(base), () => HttpResponse.json({ error: { code: 'precondition_failed', message: 'The account version has changed', details: { projectId: account.projectId, accountId: account.id, expectedVersionId: account.currentVersionId, currentVersionId: '20000000-0000-7000-8000-000000000002' } } }, { status: 412 })))
     renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
     await screen.findByText(t.credentials.verification.changed); expect(screen.getByRole('button', { name: t.credentials.verification.test })).toBeDisabled(); expect(env.posts).toHaveLength(0)
   })
   it('409活动冲突按details读取原operation，不取消或重发', async () => {
     const user = userEvent.setup(), env = setup(); let posts = 0
-    server.use(http.post(apiUrl(base), () => { posts++; env.set(verificationOperation()); return HttpResponse.json({ error: { code: 'verification_in_progress', message: '已有操作', details: { projectId: account.projectId, accountId: account.id, operationId: verificationOperation().id, versionId: account.currentVersionId } } }, { status: 409 }) }))
+    server.use(http.post(apiUrl(base), () => { posts++; env.set(verificationOperation()); return HttpResponse.json({ error: { code: 'verification_in_progress', message: 'A verification is already running', details: { projectId: account.projectId, accountId: account.id, operationId: verificationOperation().id, versionId: account.currentVersionId } } }, { status: 409 }) }))
     renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
     await screen.findByText(t.credentials.verification.phase.preparing_tool); expect(env.reads).toContain(verificationOperation().id); expect(posts).toBe(1)
   })

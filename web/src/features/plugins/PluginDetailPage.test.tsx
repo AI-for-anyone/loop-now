@@ -284,9 +284,9 @@ describe('插件详情的模型提供方', () => {
   })
 
   it('整次读取失败时说明原因，不再说"没有读出"', async () => {
-    renderDetail('/plugins/grok', { details: [withProviders({ providersError: 'Pi 不可用：超时' })] })
+    renderDetail('/plugins/grok', { details: [withProviders({ providersError: 'Pi unavailable: timed out' })] })
     const panel = await screen.findByRole('region', { name: '模型提供方' })
-    expect(within(panel).getByRole('alert')).toHaveTextContent('读取失败：Pi 不可用：超时')
+    expect(within(panel).getByRole('alert')).toHaveTextContent('读取失败：Pi unavailable: timed out')
     expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
   })
 

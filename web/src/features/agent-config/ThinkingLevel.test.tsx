@@ -25,7 +25,7 @@ async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail
     http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
     http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
       const body = await request.json() as Schemas['AgentUpdate']; writes.push(body)
-      if (fail) return HttpResponse.json(errorBody('validation_failed', '不支持的等级', { fields: [{ field: 'thinkingLevel', message: '当前模型不支持该等级' }] }), { status: 422 })
+      if (fail) return HttpResponse.json(errorBody('validation_failed', 'thinkingLevel: The current model does not support this level', { fields: [{ field: 'thinkingLevel', message: 'The current model does not support this level' }] }), { status: 422 })
       current = { ...current, ...body }; return HttpResponse.json(current)
     }),
   ] })
@@ -63,7 +63,7 @@ it('切换模型恢复默认，避免将旧模型的等级带入新模型', asyn
 it('等级校验失败在字段旁提示并保留草稿', async () => {
   const { user, writes } = await setup(null, true)
   await chooseThinking(user, basic(), '高'); await user.click(save())
-  expect(await within(basic()).findByText('当前模型不支持该等级')).toBeInTheDocument()
+  expect(await within(basic()).findByText('The current model does not support this level')).toBeInTheDocument()
   expect(thinkingChoice(basic())).toBe('高'); expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
 })
 

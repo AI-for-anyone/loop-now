@@ -13,15 +13,15 @@ describe('call', () => {
   it('把统一错误结构转换为 ApiError，保留字段级错误', async () => {
     server.use(
       http.post(apiUrl('/projects/p1/agents'), () =>
-        HttpResponse.json(errorBody('validation_failed', '校验失败', { fields: [{ field: 'name', message: '不能为空' }] }), { status: 422 }),
+        HttpResponse.json(errorBody('validation_failed', 'name: Must not be empty', { fields: [{ field: 'name', message: 'Must not be empty' }] }), { status: 422 }),
       ),
     )
     const error = await call(
       api.POST('/projects/{projectId}/agents', { params: { path: { projectId: 'p1' } }, body: { name: '', model: { provider: 'p', modelId: 'm' } } }),
     ).catch((e) => e)
     expect(error).toBeInstanceOf(ApiError)
-    expect(error).toMatchObject({ status: 422, code: 'validation_failed', serverMessage: '校验失败' })
-    expect((error as ApiError).fieldMessage('name')).toBe('不能为空')
+    expect(error).toMatchObject({ status: 422, code: 'validation_failed', serverMessage: 'name: Must not be empty' })
+    expect((error as ApiError).fieldMessage('name')).toBe('Must not be empty')
   })
 
   // Every code in the contract must survive parsing; these two were once missing and fell back to 'unknown'.
@@ -31,7 +31,7 @@ describe('call', () => {
 
   it('agent_busy 带上当前执行与排队数量', async () => {
     const details = { currentRunId: 'run-1', queued: { interrupt: 1, normal: 2 } }
-    server.use(http.post(apiUrl('/agents/a1/messages'), () => HttpResponse.json(errorBody('agent_busy', '正忙', { details }), { status: 409 })))
+    server.use(http.post(apiUrl('/agents/a1/messages'), () => HttpResponse.json(errorBody('agent_busy', 'The Agent is replying; interrupt it or queue the message', { details }), { status: 409 })))
     const error = await call(api.POST('/agents/{agentId}/messages', { params: { path: { agentId: 'a1' } }, body: { text: 'x' } })).catch((e) => e)
     expect(error).toMatchObject({ status: 409, code: 'agent_busy', details })
   })

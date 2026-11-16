@@ -17,10 +17,10 @@ describe('CLI 凭证的校验', () => {
       handlers: [
         http.put(apiUrl(`/agents/${agent.id}/clis/lark-cli/credential`), () =>
           HttpResponse.json(
-            errorBody('validation_failed', 'fields.appId：App ID 格式不对', {
+            errorBody('validation_failed', 'fields.appId: Invalid App ID format', {
               fields: [
-                { field: 'fields.appId', message: 'App ID 格式不对' },
-                { field: 'fields.extra', message: '模板中没有这个录入项' },
+                { field: 'fields.appId', message: 'Invalid App ID format' },
+                { field: 'fields.extra', message: 'The template has no such field' },
               ],
             }),
             { status: 422 },
@@ -35,10 +35,10 @@ describe('CLI 凭证的校验', () => {
     await user.type(within(dialog).getByLabelText('App ID'), 'bad')
     await user.type(within(dialog).getByLabelText('App Secret'), 'secret')
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
-    const message = await within(dialog).findByText('App ID 格式不对')
+    const message = await within(dialog).findByText('Invalid App ID format')
     expect(within(dialog).getByLabelText('App ID').parentElement).toContainElement(message)
     const alert = within(dialog).getByRole('alert')
-    expect(alert).toHaveTextContent('fields.extra：模板中没有这个录入项')
+    expect(alert).toHaveTextContent('fields.extra：The template has no such field')
     expect(alert).not.toHaveTextContent('fields.appId')
   })
 })

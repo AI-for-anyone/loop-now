@@ -38,7 +38,7 @@ function gatedSend(sent: Schemas['SendMessageInput'][], { fail = false } = {}) {
     const body = (await request.json()) as Schemas['SendMessageInput']
     sent.push(body)
     await gate
-    if (fail) return HttpResponse.json(errorBody('internal_error', '出错了'), { status: 500 })
+    if (fail) return HttpResponse.json(errorBody('internal_error', 'Something went wrong'), { status: 500 })
     const run = makeRun({ status: body.whenBusy ? 'queued' : 'starting', whenBusy: body.whenBusy ?? null, endedAt: null })
     return HttpResponse.json({ message: makeMessage({ text: body.text, run }), run }, { status: 202 })
   })
@@ -205,7 +205,7 @@ describe('发送消息', () => {
 
   it('服务端拒绝超长消息时显示原因并保留内容', async () => {
     const { user } = await renderChat({
-      handlers: [http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(errorBody('payload_too_large', '消息超过 64 KiB'), { status: 413 }))],
+      handlers: [http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(errorBody('payload_too_large', 'The message exceeds 64 KiB'), { status: 413 }))],
     })
     await user.type(screen.getByLabelText('消息'), '很长的消息')
     await user.click(screen.getByRole('button', { name: '发送' }))
@@ -352,14 +352,14 @@ describe('排队显示与回复状态', () => {
 
   it('显示服务端重启中断、失败原因与等待名额', async () => {
     const restarted = turn('问一', '说到一半', { status: 'interrupted', endReason: 'server_restart' })
-    const failed = turn('问二', '', { status: 'failed', errorCode: 'credential_unavailable', errorMessage: 'gh 凭证无法解密' })
+    const failed = turn('问二', '', { status: 'failed', errorCode: 'credential_unavailable', errorMessage: 'Cannot decrypt the gh credential' })
     const interrupted = turn('问三', '半截', { status: 'interrupted', endReason: 'user_interrupt' })
     const waiting = makeRun({ status: 'starting', phase: 'waiting_slot' })
     const { agent, emit } = await renderChat({ messages: [...restarted, ...failed, ...interrupted, makeMessage({ text: '问四', run: waiting })] })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: waiting }, ''))
     expect(await screen.findByText('服务端重启中断')).toBeInTheDocument()
     expect(screen.getByText('说到一半')).toBeInTheDocument()
-    expect(screen.getByText('失败：凭证不可用（gh 凭证无法解密）')).toBeInTheDocument()
+    expect(screen.getByText('失败：凭证不可用（Cannot decrypt the gh credential）')).toBeInTheDocument()
     expect(screen.getByText('已打断')).toBeInTheDocument()
     expect(screen.getByText('半截')).toBeInTheDocument()
     // The header also shows the current phase; here we only look at the turn in the conversation.

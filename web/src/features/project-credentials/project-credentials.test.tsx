@@ -129,7 +129,7 @@ describe('项目账号正式HTTP fixture', () => {
         bodies.push(await request.json())
         if (bodies.length === 1) {
           data = { ...data, configVersion: 2 }
-          return HttpResponse.json(errorBody('precondition_failed', '配置已修改'), { status: 412 })
+          return HttpResponse.json(errorBody('precondition_failed', 'The configuration has changed'), { status: 412 })
         }
         data = { ...data, configVersion: 3, selections: [{ ...data.selections[0], mode: 'explicit', selectedAccountId: a.id, resolvedAccountId: a.id, status: 'resolved' }] }
         return HttpResponse.json(data)

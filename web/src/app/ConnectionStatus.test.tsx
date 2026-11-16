@@ -14,7 +14,7 @@ import { routes } from './routes'
 const topStatus = () => screen.getByRole('status', { name: '连接状态' })
 const banner = () => screen.queryByText(/控制台访问的服务端地址是/)
 
-const degraded = () => HttpResponse.json({ ok: false, database: { ok: false, error: '无法打开数据库文件' } }, { status: 503 })
+const degraded = () => HttpResponse.json({ ok: false, database: { ok: false, error: 'unable to open database file' } }, { status: 503 })
 
 describe('顶栏连接状态', () => {
   it('首次健康查询还没有结果时显示检查中，并显示服务端的主机和端口', async () => {

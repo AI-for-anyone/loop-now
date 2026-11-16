@@ -79,7 +79,7 @@ describe('Agent 对话里发给你的消息', () => {
     let calls = 0
     const closed = http.post(apiUrl(`/inbox/messages/${question.id}/reply`), () => {
       calls++
-      return HttpResponse.json({ error: { code: 'question_closed', message: '原题已关闭', details: { question: { ...question.question!, state: 'closed' } } } }, { status: 409 })
+      return HttpResponse.json({ error: { code: 'question_closed', message: 'The question is closed', details: { question: { ...question.question!, state: 'closed' } } } }, { status: 409 })
     })
     const { user } = await renderChat({ agent, messages: turn, handlers: [closed, ...inbox.handlers] })
     const item = await waitFor(() => consoleItem(question))

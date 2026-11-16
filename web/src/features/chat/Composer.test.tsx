@@ -28,7 +28,7 @@ it('空闲发送与真正busy竞争时不弹选择，直接以queue再发一次'
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
-    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: makeRun().id, queued: { interrupt: 0, normal: 1 } } } }, { status: 409 })
+    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'The Agent is replying; interrupt it or queue the message', details: { currentRunId: makeRun().id, queued: { interrupt: 0, normal: 1 } } } }, { status: 409 })
     const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))
@@ -46,7 +46,7 @@ it('忙时发送出错不再重发，保留文字并显示错误', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
-    return HttpResponse.json({ error: { code: 'internal_error', message: '出错了' } }, { status: 500 })
+    return HttpResponse.json({ error: { code: 'internal_error', message: 'Something went wrong' } }, { status: 500 })
   }))
   renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '忙时的工作')
@@ -60,7 +60,7 @@ it('忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；空闲时才发�
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
-    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: makeRun().id, queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
+    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'The Agent is replying; interrupt it or queue the message', details: { currentRunId: makeRun().id, queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
     const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))

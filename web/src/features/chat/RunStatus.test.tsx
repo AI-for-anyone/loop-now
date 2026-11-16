@@ -72,8 +72,8 @@ describe('回复的结局印章', () => {
 
   it.each([
     ['runtime_unavailable', 'claude: command not found', '失败：本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude（claude: command not found）'],
-    ['runtime_login_required', '未登录', '失败：本机的 Claude Code 没有登录：在本机终端运行 claude 并登录（未登录）'],
-    ['runtime_start_failed', 'claude 2.1.0：exit status 1', '失败：Claude Code 没能启动（claude 2.1.0：exit status 1）'],
+    ['runtime_login_required', 'Not logged in', '失败：本机的 Claude Code 没有登录：在本机终端运行 claude 并登录（Not logged in）'],
+    ['runtime_start_failed', 'claude 2.1.0: exit status 1', '失败：Claude Code 没能启动（claude 2.1.0: exit status 1）'],
     ['runtime_exited', 'signal: killed', '失败：Claude Code 进程在这一轮中意外退出（signal: killed）'],
     ['runtime_error', 'usage limit reached', '失败：Claude Code 报告这一轮出错（usage limit reached）'],
   ] as const)('Claude Code 运行时的失败 %s：说明怎么处理或发生了什么，带上服务端的说明', (errorCode, errorMessage, text) => {

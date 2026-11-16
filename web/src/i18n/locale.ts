@@ -56,7 +56,3 @@ export function chooseLocale(next: Locale) {
   page.reload()
 }
 
-// Explanatory text returned by the server (error descriptions, field validation, reasons a run failed) is
-// only in Chinese. When the UI isn't Chinese, places that have error-code copy show only the description from
-// the copy table, without appending the server's original text; places without error-code copy show it as is.
-export const showServerText = locale === 'zh-CN'

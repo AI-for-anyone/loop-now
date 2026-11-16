@@ -47,10 +47,10 @@ it('pure image stays on strict task Inbox; unknown action recovery clears only i
 })
 it('upload failure keeps original file and text and never posts an Inbox action', async () => {
   let posts = 0
-  server.use(http.put(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/message-images/:imageId`), () => HttpResponse.json(errorBody('payload_too_large', '图片大小超限'), { status: 413 })), http.post(endpoint, () => { posts++; return new HttpResponse(null, { status: 500 }) }))
+  server.use(http.put(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/message-images/:imageId`), () => HttpResponse.json(errorBody('payload_too_large', 'The image is too large'), { status: 413 })), http.post(endpoint, () => { posts++; return new HttpResponse(null, { status: 500 }) }))
   renderWithQuery(<Harness />); await userEvent.type(screen.getByRole('textbox'), '请保留'); await userEvent.upload(screen.getByLabelText('选择图片文件'), file('保留.png'))
   await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('图片大小超限')
+  expect(await screen.findByRole('alert')).toHaveTextContent('The image is too large')
   expect(screen.getByRole('textbox')).toHaveValue('请保留'); expect(screen.getByRole('button', { name: '移除图片 1' })).toBeInTheDocument(); expect(posts).toBe(0)
   const border = screen.getByRole('textbox').closest('[data-node-composer]') as HTMLElement
   expect(border.firstElementChild).toContainElement(screen.getByRole('list', { name: '待发送图片' }))

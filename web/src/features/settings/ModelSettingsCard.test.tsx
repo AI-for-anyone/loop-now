@@ -28,7 +28,7 @@ describe('ModelSettingsCard', () => {
       http.put(apiUrl('/model-settings'), async ({ request }) => {
         const body = await request.json() as { modelsJson: string; expectedRevision: number }
         writes.push(body)
-        if (body.expectedRevision !== settings.revision) return HttpResponse.json(errorBody('precondition_failed', '配置已修改'), { status: 412 })
+        if (body.expectedRevision !== settings.revision) return HttpResponse.json(errorBody('precondition_failed', 'The configuration has changed'), { status: 412 })
         settings = { modelsJson: body.modelsJson, revision: settings.revision + 1 }
         return HttpResponse.json(settings)
       }),
@@ -76,7 +76,7 @@ describe('ModelSettingsCard', () => {
   it('在编辑器旁展示服务端校验错误且保留草稿', async () => {
     server.use(
       http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),
-      http.put(apiUrl('/model-settings'), () => HttpResponse.json(errorBody('validation_failed', '保存失败', { fields: [{ field: 'modelsJson', message: 'Pi 拒绝了模型配置' }] }), { status: 422 })),
+      http.put(apiUrl('/model-settings'), () => HttpResponse.json(errorBody('validation_failed', 'modelsJson: Pi rejected the model configuration', { fields: [{ field: 'modelsJson', message: 'Pi rejected the model configuration' }] }), { status: 422 })),
     )
     const user = userEvent.setup()
     renderCard()
@@ -85,7 +85,7 @@ describe('ModelSettingsCard', () => {
     await user.click(screen.getByRole('button', { name: '保存模型配置' }))
     await screen.findByText('配置未保存，草稿已保留。')
     await user.click(screen.getByText('查看校验详情'))
-    expect(screen.getByText(/Pi 拒绝了模型配置/)).toBeInTheDocument()
+    expect(screen.getByText(/Pi rejected the model configuration/)).toBeInTheDocument()
     expect(editor.textContent).toBe('{"providers":{"draft":{}}}')
   })
 

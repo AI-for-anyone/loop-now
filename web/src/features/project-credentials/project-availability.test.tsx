@@ -52,7 +52,7 @@ describe('旧后台项目凭证兼容', () => {
     const user = userEvent.setup()
     let gone = false
     server.use(
-      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => gone ? HttpResponse.json(errorBody('not_found', '项目不存在'), { status: 404 }) : HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] })),
+      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => gone ? HttpResponse.json(errorBody('not_found', 'Project not found'), { status: 404 }) : HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] })),
       http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
       http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
     )

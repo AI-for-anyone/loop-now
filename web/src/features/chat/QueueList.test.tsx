@@ -182,10 +182,10 @@ describe('输入框上方的排队托盘', () => {
           return HttpResponse.json(makeStatus(String(params.agentId), { busy: true, currentRun: current }))
         }),
         http.post(apiUrl('/agents/:agentId/runs/:runId/promote-to-interrupt'), ({ params }) =>
-          HttpResponse.json(errorBody('run_not_queued', '已开始', { details: { runId: String(params.runId), status: 'starting', whenBusy: 'queue' } }), { status: 409 }),
+          HttpResponse.json(errorBody('run_not_queued', 'The run has already started', { details: { runId: String(params.runId), status: 'starting', whenBusy: 'queue' } }), { status: 409 }),
         ),
         http.post(apiUrl('/agents/:agentId/inbox-messages/:messageId/cancel'), ({ params }) =>
-          HttpResponse.json(errorBody('run_not_queued', '已读', { details: { runId: null, status: null, whenBusy: 'queue', messageId: String(params.messageId), messageState: 'read' } }), { status: 409 }),
+          HttpResponse.json(errorBody('run_not_queued', 'The message has already been read', { details: { runId: null, status: null, whenBusy: 'queue', messageId: String(params.messageId), messageState: 'read' } }), { status: 409 }),
         ),
       ],
     })
@@ -212,7 +212,7 @@ describe('输入框上方的排队托盘', () => {
         http.post(apiUrl('/agents/:agentId/runs/:runId/cancel'), async ({ request, params }) => {
           const body = (await request.json()) as Schemas['AgentQueueActionInput']
           bodies.push(body)
-          if (bodies.length === 1) return HttpResponse.json(errorBody('internal_error', '回执暂不可确认'), { status: 500 })
+          if (bodies.length === 1) return HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 })
           const cancelled = { ...runA, status: 'interrupted' as const, endReason: 'user_cancelled' as const, endedAt: '2026-10-12T08:01:00Z' }
           return HttpResponse.json(receipt(String(params.agentId), body.actionId, 'cancel_run', a, [b], cancelled))
         }),
@@ -265,7 +265,7 @@ describe('输入框上方的排队托盘', () => {
         http.post(apiUrl('/agents/:agentId/runs/:runId/stop'), async ({ request, params }) => {
           const body = (await request.json()) as Schemas['AgentQueueActionInput']
           bodies.push({ runId: String(params.runId), body })
-          if (bodies.length > 1) return HttpResponse.json(errorBody('run_not_active', '已结束', { details: { runId: String(params.runId), status: 'completed' } }), { status: 409 })
+          if (bodies.length > 1) return HttpResponse.json(errorBody('run_not_active', 'The run has already ended', { details: { runId: String(params.runId), status: 'completed' } }), { status: 409 })
           return HttpResponse.json(receipt(String(params.agentId), body.actionId, 'stop_run', null, [], { ...current, status: 'aborting' }))
         }),
       ],

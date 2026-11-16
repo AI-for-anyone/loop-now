@@ -360,7 +360,7 @@ describe('连接与错误展示', () => {
         HttpResponse.json({ providerId: 'anthropic', models: [{ id: 'm1', name: 'M1', reasoning: false, contextWindow: 1, maxTokens: 1, input: [] }] }),
       ),
       http.post(agentsUrl, () =>
-        HttpResponse.json(errorBody('validation_failed', 'bad', { fields: [{ field: 'name', message: '名称过长' }] }), { status: 422 }),
+        HttpResponse.json(errorBody('validation_failed', 'bad', { fields: [{ field: 'name', message: 'Name is too long' }] }), { status: 422 }),
       ),
       ...baseHandlers([]),
     )
@@ -372,7 +372,7 @@ describe('连接与错误展示', () => {
     await user.selectOptions(await screen.findByLabelText('模型提供方'), 'anthropic')
     await chooseModel(user, document.body, 'm1')
     await user.click(screen.getByRole('button', { name: '创建' }))
-    expect(await screen.findByText('名称过长')).toBeInTheDocument()
+    expect(await screen.findByText('Name is too long')).toBeInTheDocument()
     expect(screen.getByLabelText('显示名称')).toHaveValue('很长的名字')
   })
 })
@@ -380,11 +380,11 @@ describe('连接与错误展示', () => {
 describe('全局设置页', () => {
   it('显示默认组织与项目、连接状态与 CLI 模板，服务端信息没有修改操作；全局文件夹可以编辑', async () => {
     server.use(
-      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: false, database: { ok: false, error: '无法打开数据库文件' } }, { status: 503 })),
+      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: false, database: { ok: false, error: 'unable to open database file' } }, { status: 503 })),
       http.get(apiUrl('/cli-templates'), () =>
         HttpResponse.json({
           templates: [
-            { name: 'gh', version: '2.100.0', fields: [], injection: 'env', install: { status: 'failed', error: '摘要不符' }, warnings: [] },
+            { name: 'gh', version: '2.100.0', fields: [], injection: 'env', install: { status: 'failed', error: 'checksum mismatch' }, warnings: [] },
             {
               name: 'lark-cli',
               version: '1.0.94',
@@ -405,10 +405,10 @@ describe('全局设置页', () => {
     // The connection status in the sidebar also shows “数据库不可用” (Database unavailable), so scope this to the page body.
     const page = screen.getByRole('main')
     expect(await within(page).findByText('数据库不可用')).toBeInTheDocument()
-    expect(within(page).getByText('数据库：无法打开数据库文件')).toBeInTheDocument()
+    expect(within(page).getByText('数据库：unable to open database file')).toBeInTheDocument()
     const gh = await screen.findByRole('region', { name: 'gh' })
     expect(within(gh).getByText('安装失败')).toBeInTheDocument()
-    expect(within(gh).getByText('摘要不符')).toBeInTheDocument()
+    expect(within(gh).getByText('checksum mismatch')).toBeInTheDocument()
     const lark = screen.getByRole('region', { name: 'lark-cli' })
     expect(within(lark).getByRole('note')).toHaveTextContent('钥匙串')
     // The sidebar has the scope switcher and search, so "no editing actions"

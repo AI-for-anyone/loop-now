@@ -18,7 +18,7 @@ it('真实Inbox记录SSE直接合并，通知/已读/回复分开，工作输出
   let records = [root], reads = 0, readPosts = 0
   server.use(...baseHandlers([]), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
     http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
-    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: params.node, agentId: node.agentId, runtimeId: node.runtimeId, canSend: false, reason: '读取验证', handlingHint: null })),
+    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: params.node, agentId: node.agentId, runtimeId: node.runtimeId, canSend: false, reason: 'Read-only check', handlingHint: null })),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), () => HttpResponse.json({ messages: [], nextCursor: null })),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), ({ params }) => { reads++; return HttpResponse.json({ items: params.node === nodeId ? records : [], nextCursor: null }) }),
     http.post(apiUrl('/inbox/messages/:id/read'), () => { readPosts++; return HttpResponse.json({}) }))

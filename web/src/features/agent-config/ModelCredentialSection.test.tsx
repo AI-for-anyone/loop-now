@@ -54,7 +54,7 @@ describe('按正式提供方接口认证', () => {
     const agent = codex()
     const { user } = await renderConfig({ agent, handlers: [directory,
       http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: makeModelLogin(agent.id, { status: 'succeeded', authorizationUrl: null }) })),
-      http.post(apiUrl(`/agents/${agent.id}/model-auth/operations`), () => HttpResponse.json(errorBody('internal_error', '认证组件暂不可用'), { status: 503 })),
+      http.post(apiUrl(`/agents/${agent.id}/model-auth/operations`), () => HttpResponse.json(errorBody('internal_error', 'The auth helper is unavailable'), { status: 503 })),
     ] })
     vi.spyOn(window, 'open').mockReturnValue(null)
     await user.click(await within(area()).findByRole('button', { name: '重新登录' }))
@@ -83,7 +83,7 @@ describe('按正式提供方接口认证', () => {
     expect(await within(area()).findByRole('button', { name: '正在取消…' })).toBeDisabled()
     expect(within(area()).queryByText('本次登录已取消')).toBeNull()
     await user.click(within(area()).getByRole('button', { name: '正在取消…' })); expect(cancelCalls).toBe(1)
-    await act(async () => finish?.(HttpResponse.json(errorBody('internal_error', '取消未完成'), { status: 500 })))
+    await act(async () => finish?.(HttpResponse.json(errorBody('internal_error', 'The cancellation did not finish'), { status: 500 })))
     await within(area()).findByRole('alert')
     expect(within(area()).getByText('等待浏览器授权')).toBeInTheDocument()
     expect(within(area()).getByText(/fixture-old@example.test/)).toBeInTheDocument()

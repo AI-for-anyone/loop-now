@@ -116,7 +116,7 @@ describe('插件提供方的项目登录', () => {
     const prompt: Schemas['ProjectModelLoginPrompt'] = { id: 'p2', kind: 'manual_code', message: '', options: [] }
     let reject = true
     const { begin, user, answers, client } = setup(grokOp({ prompt }), {
-      answer: () => (reject ? HttpResponse.json(errorBody('validation_failed', 'value：回调地址不对', { fields: [{ field: 'value', message: '回调地址不对' }] }), { status: 422 }) : undefined),
+      answer: () => (reject ? HttpResponse.json(errorBody('validation_failed', 'value: Invalid callback URL', { fields: [{ field: 'value', message: 'Invalid callback URL' }] }), { status: 422 }) : undefined),
     })
     await begin()
     const input = await screen.findByLabelText('浏览器回调到不了时，把浏览器地址栏里的回调地址，或页面上显示的授权码粘贴到这里。')
@@ -124,7 +124,7 @@ describe('插件提供方的项目登录', () => {
     expect(screen.getByText('请填写回答')).toBeInTheDocument()
     await user.type(input, 'http://localhost:56122/callback?code=secret-code-1')
     await user.click(screen.getByRole('button', { name: '提交' }))
-    expect(await screen.findByText(/回调地址不对/)).toBeInTheDocument()
+    expect(await screen.findByText(/Invalid callback URL/)).toBeInTheDocument()
     expect(input).toHaveValue('')
     reject = false
     await user.type(input, 'http://localhost:56122/callback?code=secret-code-2')
@@ -165,7 +165,7 @@ describe('插件提供方的项目登录', () => {
     await begin()
     expect(await screen.findByText('插件的扩展加载失败，或者没有注册这个提供方的登录，本次登录未完成。')).toBeInTheDocument()
     unmount()
-    server.use(http.post(apiUrl('/projects/:projectId/model-auth/operations'), () => HttpResponse.json(errorBody('plugin_not_enabled', '插件 grok 没有在这个项目启用'), { status: 409 })))
+    server.use(http.post(apiUrl('/projects/:projectId/model-auth/operations'), () => HttpResponse.json(errorBody('plugin_not_enabled', 'Plugin grok is not enabled in this project'), { status: 409 })))
     renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={grok} /></DraftNavigationGuard> }], '/')
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('新 Grok CLI 账号名称'), 'Grok 账号')

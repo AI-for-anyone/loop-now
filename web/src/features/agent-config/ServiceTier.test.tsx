@@ -21,7 +21,7 @@ async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
     http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
     http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
       const body = await request.json() as Schemas['AgentUpdate']; writes.push(body)
-      if (fail) return HttpResponse.json(errorBody('validation_failed', '速度不可用', { fields: [{ field: 'serviceTier', message: '此账号暂不可用该速度' }] }), { status: 422 })
+      if (fail) return HttpResponse.json(errorBody('validation_failed', 'serviceTier: This speed is not available for this account', { fields: [{ field: 'serviceTier', message: 'This speed is not available for this account' }] }), { status: 422 })
       current = { ...current, ...body }; return HttpResponse.json(current)
     }),
   ] })
@@ -69,7 +69,7 @@ it('422字段错误保留速度与其他草稿，不自动回退', async () => {
   const { user, writes } = await setup(null, true)
   await user.type(within(basic()).getByLabelText('显示名称'), '2')
   await user.selectOptions(picker(), 'ultrafast'); await user.click(save())
-  expect(await within(basic()).findByText('此账号暂不可用该速度')).toBeInTheDocument()
+  expect(await within(basic()).findByText('This speed is not available for this account')).toBeInTheDocument()
   expect(picker()).toHaveValue('ultrafast')
   expect(within(basic()).getByLabelText('显示名称')).toHaveValue('开发助手2')
   expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)

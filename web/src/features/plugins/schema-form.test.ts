@@ -89,9 +89,9 @@ describe('按 JSON Schema 生成的配置表单', () => {
 
   it('服务端 422 的字段错误按字段名（可带 values. 或 secrets. 前缀）对上表单项', () => {
     const fields = fieldsOf(webhookSchema)
-    expect(serverFieldErrors(fields, [{ field: 'values.url', message: '地址不可达' }, { field: 'secrets.secret', message: '太短' }, { field: 'other', message: 'x' }])).toEqual({
-      url: '地址不可达',
-      secret: '太短',
+    expect(serverFieldErrors(fields, [{ field: 'values.url', message: 'The address is unreachable' }, { field: 'secrets.secret', message: 'Too short' }, { field: 'other', message: 'x' }])).toEqual({
+      url: 'The address is unreachable',
+      secret: 'Too short',
     })
   })
 })
