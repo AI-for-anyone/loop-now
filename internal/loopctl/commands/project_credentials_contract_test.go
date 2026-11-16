@@ -184,7 +184,7 @@ func TestProjectCredentialErrorDetails(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			s, e := credentialStub(t)
-			body := map[string]any{"code": tc.code, "message": "安全错误"}
+			body := map[string]any{"code": tc.code, "message": "sanitized error"}
 			if tc.details != nil {
 				body["details"] = tc.details
 			}
@@ -270,7 +270,7 @@ func TestProjectCredentialOAuthStatesTransparent(t *testing.T) {
 			}
 			if status == "failed" {
 				op["errorCode"] = "auth_failed"
-				op["errorMessage"] = "授权失败"
+				op["errorMessage"] = "authorization failed"
 			}
 			s.On("GET /projects/{projectId}/model-auth/operations/{operationId}", clitest.Sample{Status: 200, Body: state})
 			got := e.run("project", "model-account", "login-status", credentialProjectID, actionUUID).ok(t)

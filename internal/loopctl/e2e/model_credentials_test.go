@@ -45,7 +45,7 @@ func TestModelCredentialCLIWithApp(t *testing.T) {
 	_, _, token := s.issueToken("", "credential-cli", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	provider, model := cliKeyProvider(t, ext)
-	created := ext.run("agent", "create", "--platform", "--name", "凭证验证", "--provider", provider, "--model", model).ok(t)
+	created := ext.run("agent", "create", "--platform", "--name", "Credential check", "--provider", provider, "--model", model).ok(t)
 	id := created["id"].(string)
 	agentID := uuid.MustParse(id)
 	version := created["configVersion"].(float64)

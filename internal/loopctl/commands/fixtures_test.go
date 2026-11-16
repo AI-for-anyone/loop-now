@@ -13,11 +13,11 @@ var (
 
 const (
 	projectUUID  = "0192f1a2-0000-7000-8000-0000000000a1"
-	agentAddress = "默认组织/默认项目/dev"
+	agentAddress = "Default org/Default project/dev"
 )
 
 func project() map[string]any {
-	return map[string]any{"id": projectUUID, "organizationId": "0192f1a2-0000-7000-8000-0000000000a0", "name": "默认项目",
+	return map[string]any{"id": projectUUID, "organizationId": "0192f1a2-0000-7000-8000-0000000000a0", "name": "Default project",
 		"isDefault": true, "managerAgentId": nil, "agentCount": 1, "createdAt": now, "updatedAt": now}
 }
 
@@ -71,7 +71,7 @@ func usageTotals() map[string]any {
 
 func run() map[string]any {
 	return map[string]any{"id": runUUID, "status": "failed", "phase": nil, "endReason": nil,
-		"errorCode": "pi_error", "errorMessage": "模型返回错误", "configVersion": 1, "whenBusy": nil, "queuedAt": now, "startedAt": now,
+		"errorCode": "pi_error", "errorMessage": "model returned an error", "configVersion": 1, "whenBusy": nil, "queuedAt": now, "startedAt": now,
 		"runningAt": now, "abortRequestedAt": nil, "endedAt": now, "tools": []any{}, "usage": usageTotals(), "model": modelRef}
 }
 
@@ -94,7 +94,7 @@ func usagePage() map[string]any {
 
 func anomalyPage(next any) map[string]any {
 	item := map[string]any{"runId": runUUID, "kind": "run_failed", "at": now, "agentId": agentUUID, "agentName": "dev", "scope": "project", "projectId": projectUUID,
-		"errorCode": "pi_error", "errorMessage": "模型返回错误", "endReason": nil, "compaction": nil}
+		"errorCode": "pi_error", "errorMessage": "model returned an error", "endReason": nil, "compaction": nil}
 	return map[string]any{"items": []any{item}, "total": 2, "nextCursor": next}
 }
 
@@ -139,7 +139,7 @@ const (
 )
 
 func consoleParticipant() map[string]any {
-	return map[string]any{"kind": "console", "id": nil, "address": "@console", "name": "控制台", "deleted": false, "pluginId": nil, "channelId": nil}
+	return map[string]any{"kind": "console", "id": nil, "address": "@console", "name": "Console", "deleted": false, "pluginId": nil, "channelId": nil}
 }
 
 func agentParticipant() map[string]any {
@@ -152,7 +152,7 @@ func externalParticipant() map[string]any {
 
 func inboxSummary(from, to map[string]any, read bool) map[string]any {
 	m := map[string]any{"id": messageUUID, "threadId": threadUUID, "inReplyTo": nil, "from": from, "to": to,
-		"preview": "构建完成", "whenBusy": "queue", "createdAt": now, "readAt": nil, "cancelledAt": nil, "question": nil, "answerTo": nil, "notice": nil, "task": nil}
+		"preview": "Build done", "whenBusy": "queue", "createdAt": now, "readAt": nil, "cancelledAt": nil, "question": nil, "answerTo": nil, "notice": nil, "task": nil}
 	if read {
 		m["readAt"] = now
 	}
@@ -164,7 +164,7 @@ func inboxSummary(from, to map[string]any, read bool) map[string]any {
 
 func inboxMessage(from, to map[string]any) map[string]any {
 	m := inboxSummary(from, to, true)
-	m["text"] = "构建完成"
+	m["text"] = "Build done"
 	return m
 }
 
@@ -194,15 +194,15 @@ func thread() map[string]any {
 }
 
 func inboxQuestion(state string) map[string]any {
-	q := map[string]any{"options": []any{map[string]any{"id": "1", "label": "合并"}, map[string]any{"id": "2", "label": "暂缓"}}, "expiresAt": now, "state": state, "answer": nil}
+	q := map[string]any{"options": []any{map[string]any{"id": "1", "label": "Merge"}, map[string]any{"id": "2", "label": "Hold off"}}, "expiresAt": now, "state": state, "answer": nil}
 	if state == "answered" {
-		q["answer"] = map[string]any{"messageId": messageUUID, "optionId": "2", "optionLabel": "暂缓", "textPreview": "选择：暂缓", "by": consoleParticipant(), "at": now}
+		q["answer"] = map[string]any{"messageId": messageUUID, "optionId": "2", "optionLabel": "Hold off", "textPreview": "Selected: Hold off", "by": consoleParticipant(), "at": now}
 	}
 	return q
 }
 
 func platformParticipant() map[string]any {
-	return map[string]any{"kind": "platform", "id": nil, "address": "@platform", "name": "平台", "deleted": false, "pluginId": nil, "channelId": nil}
+	return map[string]any{"kind": "platform", "id": nil, "address": "@platform", "name": "Platform", "deleted": false, "pluginId": nil, "channelId": nil}
 }
 
 func pluginSource() map[string]any {
@@ -210,13 +210,13 @@ func pluginSource() map[string]any {
 }
 
 func pluginSample() map[string]any {
-	return map[string]any{"id": "hello", "displayName": "Hello", "description": "示例", "version": "1.0.0", "source": pluginSource(), "status": "installed",
+	return map[string]any{"id": "hello", "displayName": "Hello", "description": "Example", "version": "1.0.0", "source": pluginSource(), "status": "installed",
 		"lastError": nil, "hasPlatform": true, "enabledProjects": 0, "grantedAgents": 0, "installedAt": now, "updatedAt": now}
 }
 
 func pluginPreviewSample() map[string]any {
-	manifest := map[string]any{"id": "hello", "name": "@loop-now/hello", "version": "1.0.0", "displayName": "Hello", "description": "示例", "minPlatformVersion": nil,
+	manifest := map[string]any{"id": "hello", "name": "@loop-now/hello", "version": "1.0.0", "displayName": "Hello", "description": "Example", "minPlatformVersion": nil,
 		"events": []any{"inbox.received"}, "permissions": []any{"state"}, "failClosed": false, "configSchema": map[string]any{}, "accounts": []any{},
-		"components": map[string]any{"agentExtensions": 1, "skills": []any{}, "mcpServers": []any{}, "bin": []any{}, "platform": true, "actions": []any{map[string]any{"id": "resend", "label": "重发", "where": []any{"identity"}, "fields": map[string]any{}}}, "channels": []any{}, "http": false, "schedules": []any{}}}
+		"components": map[string]any{"agentExtensions": 1, "skills": []any{}, "mcpServers": []any{}, "bin": []any{}, "platform": true, "actions": []any{map[string]any{"id": "resend", "label": "Resend", "where": []any{"identity"}, "fields": map[string]any{}}}, "channels": []any{}, "http": false, "schedules": []any{}}}
 	return map[string]any{"previewId": actionUUID, "expiresAt": now, "source": pluginSource(), "trusted": true, "manifest": manifest, "installedVersion": nil}
 }

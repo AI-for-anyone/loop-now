@@ -21,7 +21,7 @@ func TestDBConnectionsCLIWithApp(t *testing.T) {
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()
 	provider, model := cliKeyProvider(t, ext)
-	agent := ext.run("agent", "create", "--project", project, "--name", "DB集合 CLI", "--provider", provider, "--model", model).ok(t)["id"].(string)
+	agent := ext.run("agent", "create", "--project", project, "--name", "DB connections CLI", "--provider", provider, "--model", model).ok(t)["id"].(string)
 	for _, name := range []string{"psql", "mysql"} {
 		t.Run(name, func(t *testing.T) {
 			show := func() map[string]any { return ext.run("agent", "db-connections", "show", agent, "--cli", name).ok(t) }
@@ -37,7 +37,7 @@ func TestDBConnectionsCLIWithApp(t *testing.T) {
 				}
 				b, _ := json.Marshal(map[string]any{"type": "cli", "fields": map[string]string{"host": "127.0.0.1", "user": "synthetic-user", "password": password, "database": "synthetic-db", "sslMode": mode}})
 				ext.stdin = string(b)
-				r := ext.run("project", "cli-account", "create", project, "--cli", name, "--name", "同名DB连接", "--from-file", "-")
+				r := ext.run("project", "cli-account", "create", project, "--cli", name, "--name", "Same-name DB connection", "--from-file", "-")
 				data := r.ok(t)
 				if strings.Contains(r.Stdout, password) || r.Meta.RequestID == "" {
 					t.Fatal("secret leaked or no actual request ID")

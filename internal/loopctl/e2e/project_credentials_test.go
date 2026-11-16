@@ -29,7 +29,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()
 	provider, model := cliKeyProvider(t, ext)
-	agent := ext.run("agent", "create", "--project", project, "--name", "共享凭证 CLI 验证", "--provider", provider, "--model", model).ok(t)["id"].(string)
+	agent := ext.run("agent", "create", "--project", project, "--name", "Shared credential CLI check", "--provider", provider, "--model", model).ok(t)["id"].(string)
 	selection := func() map[string]any { return ext.run("agent", "credential-selection", "get", agent).ok(t) }
 	version := func() string { return fmt.Sprintf("%.0f", selection()["configVersion"]) }
 	modelSelection := func() map[string]any {
@@ -45,7 +45,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	create := func(key string) map[string]any {
 		b, _ := json.Marshal(map[string]any{"type": "api_key", "key": key})
 		ext.stdin = string(b)
-		r := ext.run("project", "model-account", "create", project, "--provider", provider, "--name", "同名显示标签", "--from-file", "-")
+		r := ext.run("project", "model-account", "create", project, "--provider", provider, "--name", "Same display label", "--from-file", "-")
 		data := r.ok(t)
 		if r.Meta.RequestID == "" || strings.Contains(r.Stdout, key) {
 			t.Fatal("missing real request ID or exposed key")
@@ -85,7 +85,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	if _, err := s.a.Store.GetModelAuthVersion(context.Background(), uuid.MustParse(oldVersion)); err != nil {
 		t.Fatal("replacement removed historical version")
 	}
-	ext.run("project", "model-account", "rename", project, account, "--name", "新标签", "--expected-revision", fmt.Sprintf("%.0f", replaced["revision"])).ok(t)
+	ext.run("project", "model-account", "rename", project, account, "--name", "New label", "--expected-revision", fmt.Sprintf("%.0f", replaced["revision"])).ok(t)
 	renamed := ext.run("project", "model-account", "get", project, account).ok(t)
 	ext.run("project", "model-account", "delete", project, account, "--expected-revision", fmt.Sprintf("%.0f", renamed["revision"]), "--yes").ok(t)
 	if v := modelSelection(); v["status"] != "account_deleted" || v["selectedAccountId"] != account || v["resolvedAccountId"] != nil {

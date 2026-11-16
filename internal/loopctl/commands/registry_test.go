@@ -48,7 +48,7 @@ func newRecorder(t *testing.T, tlsOn bool) *recorder {
 		if status == 200 {
 			io.WriteString(w, `{"agents":[{"id":"`+agentUUID+`"}]}`)
 		} else {
-			io.WriteString(w, `{"error":{"code":"x","message":"拒绝"}}`)
+			io.WriteString(w, `{"error":{"code":"x","message":"denied"}}`)
 		}
 	})
 	if tlsOn {
@@ -175,11 +175,11 @@ func sampleArg(name string) string {
 	case "path":
 		return "docs/a.md"
 	case "address":
-		return "默认项目/dev#0192f1a2"
+		return "Default project/dev#0192f1a2"
 	case "profile":
 		return "default"
 	case "name":
-		return "新项目"
+		return "New project"
 	case "source":
 		return "builtin:hello"
 	case "plugin":
@@ -216,7 +216,7 @@ func sampleFlag(t *testing.T, c *cli.Command, f cli.Flag) string {
 	case "account-id", "operation-id", "run", "run-id", "node-run", "action-id", "expected-node-run":
 		return actionUUID
 	case "reason-file", "note-file":
-		return writeFile(t, "note.txt", "继续当前节点")
+		return writeFile(t, "note.txt", "Continue the current node")
 	case "file":
 		return writeFile(t, "artifact.txt", "abc")
 	case "skill-md", "prompt-file", "text-file", "from":
@@ -302,19 +302,19 @@ func TestDestructiveRequiresYes(t *testing.T) {
 		}
 		after, _ := os.ReadFile(filepath.Join(e.home, ".config", "loopctl", "config.json"))
 		if !bytes.Equal(before, after) {
-			t.Errorf("%s：缺少 --yes 时改动了配置文件", c.Name())
+			t.Errorf("%s: changed the config file without --yes", c.Name())
 		}
 		if got := append(ext.take(), ag.take()...); len(got) != 0 {
-			t.Errorf("%s：缺少 --yes 时发出了请求 %v", c.Name(), got)
+			t.Errorf("%s: sent requests without --yes %v", c.Name(), got)
 		}
 	}
 	for _, name := range []string{"agent session reset", "config delete", "agent delete", "project delete", "skill replace", "agent skill recopy"} {
 		if c := commands.Registry().Find(strings.Fields(name)...); c == nil || !c.Destructive {
-			t.Errorf("%s 应标为删除或覆盖类", name)
+			t.Errorf("%s should be marked destructive", name)
 		}
 	}
 	if n == 0 {
-		t.Fatal("没有删除类命令")
+		t.Fatal("no destructive commands")
 	}
 }
 
@@ -341,7 +341,7 @@ func TestAgentIdentityRestrictions(t *testing.T) {
 			e.run(argv...).fails(t, output.CodeCommandNotAllowed, 2)
 		}
 		if e.dialCount() != 0 {
-			t.Errorf("%s：Agent 身份被拒绝时仍发出了请求", c.Name())
+			t.Errorf("%s: sent a request although the Agent identity was refused", c.Name())
 		}
 	}
 	want := map[string]bool{"agent status": true, "inbox list": true, "inbox read": true, "inbox send": true, "inbox reply": true, "project list": true, "whoami": true, "version": true, "schema": true}
@@ -350,7 +350,7 @@ func TestAgentIdentityRestrictions(t *testing.T) {
 			want[c.Name()] = true
 		}
 		if c.AllowedFor(cli.IdentityAgent) != want[c.Name()] {
-			t.Errorf("%s：Agent 身份可用为 %v，与规格不符", c.Name(), c.AllowedFor(cli.IdentityAgent))
+			t.Errorf("%s: available to the Agent identity is %v, which does not match the spec", c.Name(), c.AllowedFor(cli.IdentityAgent))
 		}
 	}
 }
@@ -372,7 +372,7 @@ func TestLocalCommandsDoNotUseNetwork(t *testing.T) {
 			r.ok(t)
 			s := e.run(append([]string{"schema"}, c.Path...)...)
 			if string(r.Env.Data) != string(s.Env.Data) {
-				t.Errorf("%s --help 与 schema 输出不同", c.Name())
+				t.Errorf("%s --help differs from the schema output", c.Name())
 			}
 		}
 	}
@@ -381,7 +381,7 @@ func TestLocalCommandsDoNotUseNetwork(t *testing.T) {
 	e.run("config", "list").ok(t)
 	e.run("config", "delete", "default", "--yes").ok(t)
 	if e.dialCount() != 0 {
-		t.Fatalf("本地命令发出了网络请求：%v", e.dials)
+		t.Fatalf("a local command made network requests: %v", e.dials)
 	}
 }
 
@@ -404,12 +404,12 @@ func TestRetryOnlyReads(t *testing.T) {
 				want = 2
 			}
 			if len(reqs) != want {
-				t.Errorf("%s：503 时请求了 %d 次，应为 %d 次", c.Name(), len(reqs), want)
+				t.Errorf("%s: made %d requests on 503, want %d", c.Name(), len(reqs), want)
 			}
 			for _, r := range reqs {
 				isRead := r.method == http.MethodGet || (r.method == http.MethodPost && strings.HasSuffix(strings.Split(r.url, "?")[0], "/read"))
 				if c.Retry != isRead {
-					t.Errorf("%s：可重试为 %v，但请求是 %s %s", c.Name(), c.Retry, r.method, r.url)
+					t.Errorf("%s: retry is %v, but the request is %s %s", c.Name(), c.Retry, r.method, r.url)
 				}
 			}
 		}
@@ -441,15 +441,15 @@ func TestTokenNeverLeaks(t *testing.T) {
 				for _, argv := range sampleArgv(t, c) {
 					r := e.run(argv...)
 					if strings.Contains(r.Stdout, tokenSecret) {
-						t.Errorf("%s（HTTP %d）：输出中出现了令牌：%s", c.Name(), status, r.Stdout)
+						t.Errorf("%s (HTTP %d): the token appears in the output: %s", c.Name(), status, r.Stdout)
 					}
 				}
 				for _, req := range append(ext.take(), ag.take()...) {
 					if strings.Contains(req.url, tokenSecret) || bytes.Contains(req.body, []byte(tokenSecret)) {
-						t.Errorf("%s：URL 或请求体中出现了令牌", c.Name())
+						t.Errorf("%s: the token appears in the URL or request body", c.Name())
 					}
 					if !strings.HasPrefix(req.auth, "Bearer ") || !strings.HasSuffix(req.auth, tokenSecret) {
-						t.Errorf("%s：Authorization 头不对", c.Name())
+						t.Errorf("%s: wrong Authorization header", c.Name())
 					}
 				}
 			}
@@ -460,7 +460,7 @@ func TestTokenNeverLeaks(t *testing.T) {
 	e.stdin = extToken + "\n"
 	for _, argv := range [][]string{{"config", "set", "default", "--token-stdin"}, {"config", "list"}, {"schema"}} {
 		if r := e.run(argv...); strings.Contains(r.Stdout, tokenSecret) {
-			t.Errorf("%v：输出中出现了令牌：%s", argv, r.Stdout)
+			t.Errorf("%v: the token appears in the output: %s", argv, r.Stdout)
 		}
 	}
 }
@@ -483,12 +483,12 @@ func TestDeclaredFlagsAreUsed(t *testing.T) {
 			inv = nil
 			e.run(argv...)
 			if inv == nil {
-				t.Errorf("%v：命令没有执行", argv)
+				t.Errorf("%v: the command did not run", argv)
 				continue
 			}
 			for _, a := range argv {
 				if name, ok := strings.CutPrefix(a, "--"); ok && !inv.Accessed()[name] {
-					t.Errorf("%s：选项 --%s 声明了但执行时没有读取", c.Name(), name)
+					t.Errorf("%s: flag --%s is declared but not read when running", c.Name(), name)
 				}
 			}
 		}
@@ -507,7 +507,7 @@ func TestNoForbiddenCommands(t *testing.T) {
 		for _, f := range c.Flags {
 			switch f.Name {
 			case "status", "state", "session-state", "run-status", "read-at", "mark-read", "set-status":
-				t.Errorf("%s：选项 --%s 会直接设置状态", c.Name(), f.Name)
+				t.Errorf("%s: flag --%s sets state directly", c.Name(), f.Name)
 			}
 		}
 		if !c.Network {
@@ -521,11 +521,11 @@ func TestNoForbiddenCommands(t *testing.T) {
 			path := strings.Split(r.url, "?")[0]
 			for _, f := range forbidden {
 				if strings.Contains(path, f) {
-					t.Errorf("%s 调用了只限控制台的接口 %s %s", c.Name(), r.method, path)
+					t.Errorf("%s calls a console-only endpoint %s %s", c.Name(), r.method, path)
 				}
 			}
 			if strings.HasSuffix(path, "/agents/"+agentUUID+"/messages") && r.method != http.MethodGet {
-				t.Errorf("%s 向 Agent 发送对话消息", c.Name())
+				t.Errorf("%s sends a chat message to an Agent", c.Name())
 			}
 			// Project write operations are limited to this allowlist: creating, renaming and deleting a project and
 			// its Manager, plus writing shared accounts/OAuth.
@@ -534,10 +534,10 @@ func TestNoForbiddenCommands(t *testing.T) {
 			credentialWrite := credentialPath == "/credential-accounts" || credentialPath == "/credential-accounts/"+sampleArg("accountId") || credentialPath == "/credential-accounts/"+sampleArg("accountId")+"/credential" || credentialPath == "/model-auth/operations" || credentialPath == "/model-auth/operations/"+sampleArg("operationId")+"/cancel"
 			credentialWrite = credentialWrite || credentialPath == "/cli-auth/operations" || credentialPath == "/cli-auth/operations/"+sampleArg("operationId")+"/cancel"
 			if strings.Contains(path, "/projects") && r.method != http.MethodGet && !strings.HasSuffix(path, "/agents") && !credentialWrite && !governance {
-				t.Errorf("%s 调用了只限控制台的项目接口 %s %s", c.Name(), r.method, path)
+				t.Errorf("%s calls a console-only project endpoint %s %s", c.Name(), r.method, path)
 			}
 			if governance && r.method != http.MethodGet && c.Path[0] != "project" {
-				t.Errorf("%s 调用了项目治理接口 %s %s", c.Name(), r.method, path)
+				t.Errorf("%s calls a project governance endpoint %s %s", c.Name(), r.method, path)
 			}
 		}
 	}

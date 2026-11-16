@@ -84,8 +84,8 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	_, manager := newTaskManager(t, s, "隔离Manager")
-	worker := s.createAgent("共享执行者")
+	_, manager := newTaskManager(t, s, "Isolation Manager")
+	worker := s.createAgent("Shared worker")
 	// Build up regular history and files in the folder: when a task starts, the whole Agent folder is copied; after
 	// that they are independent, and the sessions are not shared either.
 	s.console(202, "POST", "/agents/"+worker+"/messages", map[string]any{"text": "normal baseline"})
@@ -168,11 +168,11 @@ func TestTaskCLIAdvancesFixedFlowAndRejectsStaleDispatch(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	_, manager := newTaskManager(t, s, "流转Manager")
-	worker := s.createAgent("节点执行者")
+	_, manager := newTaskManager(t, s, "Flow Manager")
+	worker := s.createAgent("Node worker")
 	in := taskTextRequest(worker, "!sleep=2s")
-	in.Workflow.Steps = append(in.Workflow.Steps, workflow.Step{ID: "next", Title: "下一步", Description: " !sleep=2s", AgentID: uuid.MustParse(worker), InputFields: []workflow.Field{{Name: "previous", Type: "string", Required: true}}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{"previous": {Kind: "node", NodeID: ptr("work"), Field: "result"}}})
-	in.Workflow.Edges = []workflow.Edge{{ID: "continue", From: "work", To: "next", Label: "继续"}}
+	in.Workflow.Steps = append(in.Workflow.Steps, workflow.Step{ID: "next", Title: "Next step", Description: " !sleep=2s", AgentID: uuid.MustParse(worker), InputFields: []workflow.Field{{Name: "previous", Type: "string", Required: true}}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{"previous": {Kind: "node", NodeID: ptr("work"), Field: "result"}}})
+	in.Workflow.Edges = []workflow.Edge{{ID: "continue", From: "work", To: "next", Label: "Continue"}}
 	created := taskCLIInput(t, manager, in, "task", "create")
 	id := created["task"].(map[string]any)["id"].(string)
 	first := currentCLINode(t, waitRunningCLITask(t, s, id))
@@ -221,8 +221,8 @@ func TestTaskCLISubmittedFailureAndCurrentManagerTakeover(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	_, oldManager := newTaskManager(t, s, "原Manager")
-	worker := s.createAgent("异常执行者")
+	_, oldManager := newTaskManager(t, s, "Original Manager")
+	worker := s.createAgent("Failing worker")
 	created := taskCLIInput(t, oldManager, taskTextRequest(worker, "!sleep=2s !text=stream_before_failure !error=controlled_failure"), "task", "create")
 	id := created["task"].(map[string]any)["id"].(string)
 	node := currentCLINode(t, waitRunningCLITask(t, s, id))
@@ -243,7 +243,7 @@ func TestTaskCLISubmittedFailureAndCurrentManagerTakeover(t *testing.T) {
 	if !found {
 		t.Fatal("failed reply lost R3 error fields")
 	}
-	newID := s.createAgent("接管Manager")
+	newID := s.createAgent("Takeover Manager")
 	s.console(200, "PUT", "/projects/"+s.defaultProject()+"/manager", map[string]any{"agentId": newID})
 	newManager := testTaskClient(t, s, newID)
 	oldManager.run("task", "list").fails(t, "forbidden", 6)
@@ -256,7 +256,7 @@ func TestTaskCLISubmittedFailureAndCurrentManagerTakeover(t *testing.T) {
 	newManager.run("task", "list").ok(t)
 	newManager.run("task", "get", id).ok(t)
 	note := filepath.Join(t.TempDir(), "note")
-	os.WriteFile(note, []byte("检查保留结果后继续"), 0o600)
+	os.WriteFile(note, []byte("Check the saved result, then continue"), 0o600)
 	retried := newManager.run("task", "retry", id, "--action-id", uuid.NewString(), "--expected-node-run", node.ID.String(), "--note-file", note, "--yes").ok(t)
 	newNodeID := retried["task"].(map[string]any)["currentNodeRunId"].(string)
 	if newNodeID == node.ID.String() {
@@ -271,7 +271,7 @@ func TestTaskCLISubmittedFailureAndCurrentManagerTakeover(t *testing.T) {
 	noteSeen := false
 	for _, v := range page["messages"].([]any) {
 		m := v.(map[string]any)
-		if m["role"] == "user" && strings.Contains(m["text"].(string), "检查保留结果后继续") {
+		if m["role"] == "user" && strings.Contains(m["text"].(string), "Check the saved result, then continue") {
 			noteSeen = true
 		}
 	}

@@ -33,15 +33,15 @@ func TestConfigCommands(t *testing.T) {
 	want := map[string]any{"name": "default", "server": "https://loop.example.com:8781", "caFile": ca, "tokenSet": true,
 		"tokenId": "0192f1a2-b3c4-7d8e-9f0a-1b2c3d4e5f60", "tokenPrefix": "lne_0192f1a2"}
 	if !reflect.DeepEqual(d, want) {
-		t.Fatalf("摘要 %v", d)
+		t.Fatalf("summary %v", d)
 	}
 	path := config.Path(e.home)
 	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // on Windows it is an ACL
-		t.Fatalf("权限 %o", info.Mode().Perm())
+		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	f, _, _ := config.Load(path)
 	if f.Profiles["default"].Token != extToken {
-		t.Fatal("令牌应去掉首尾空白后保存")
+		t.Fatal("the token should be saved with surrounding whitespace trimmed")
 	}
 
 	e.run("config", "set", "staging", "--server", "https://staging.example").ok(t)
@@ -63,7 +63,7 @@ func TestConfigCommands(t *testing.T) {
 	e.run("config", "set", "default", "--clear-ca").ok(t)
 	f, _, _ = config.Load(path)
 	if f.Profiles["default"].CAFile != "" || f.Profiles["default"].Token != extToken {
-		t.Fatalf("--clear-ca 只应清除 CA：%+v", f.Profiles["default"])
+		t.Fatalf("--clear-ca should clear only the CA: %+v", f.Profiles["default"])
 	}
 
 	before, _ := os.ReadFile(path)
@@ -79,7 +79,7 @@ func TestConfigCommands(t *testing.T) {
 	e.run("config", "set", "default").fails(t, output.CodeMissingArgument, 2)
 	e.run("config", "set", "default", "--ca-file", ca, "--clear-ca").fails(t, output.CodeInvalidArgument, 2)
 	if after, _ := os.ReadFile(path); string(before) != string(after) {
-		t.Fatal("失败的 config set 改动了配置文件")
+		t.Fatal("a failed config set changed the config file")
 	}
 
 	e.run("config", "delete", "staging", "--yes").ok(t)
@@ -118,7 +118,7 @@ func TestProfileSelection(t *testing.T) {
 	}
 	e.run("skill", "list", "--profile", "prod").fails(t, output.CodeProfileNotFound, 3)
 	if len(s.Requests()) != 1 {
-		t.Fatal("profile 不存在时不应发出请求")
+		t.Fatal("no request should be sent when the profile does not exist")
 	}
 	// Environment variables take precedence over the profile.
 	e.vars[conn.EnvProfile] = "default"
@@ -143,7 +143,7 @@ func TestConnectionErrors(t *testing.T) {
 	e.vars[conn.EnvAgentToken] = agentToken
 	e.run("inbox", "list", "--server", "https://x.example").fails(t, output.CodeIdentityConflict, 3)
 	if e.dialCount() != 0 {
-		t.Fatal("配置错误时不应发出请求")
+		t.Fatal("no request should be sent on a config error")
 	}
 
 	s := clitest.NewExternal(t)
@@ -166,10 +166,10 @@ func TestTimeoutFlag(t *testing.T) {
 	defer close(block)
 	e := newEnv(t).agent(srv.URL)
 	start := time.Now()
-	r := e.run("inbox", "send", "@console", "--text", "构建完成", "--timeout", "200ms")
+	r := e.run("inbox", "send", "@console", "--text", "Build done", "--timeout", "200ms")
 	r.fails(t, output.CodeTimeout, 4)
 	if r.Env.Meta.Attempts != 1 || time.Since(start) > 5*time.Second {
-		t.Fatalf("发送不应重试：%+v", r.Env.Meta)
+		t.Fatalf("sending should not be retried: %+v", r.Env.Meta)
 	}
 }
 
@@ -197,7 +197,7 @@ func TestVersionComparison(t *testing.T) {
 	}
 	// Failed requests compare the version too.
 	s.Version = "9.9.9"
-	s.On("GET /agents/{agentId}", clitest.Sample{Status: 404, Body: apiError("not_found", "Agent 不存在")})
+	s.On("GET /agents/{agentId}", clitest.Sample{Status: 404, Body: apiError("not_found", "Agent not found")})
 	r = e.run("agent", "get", agentUUID)
 	r.fails(t, "not_found", 7)
 	if len(r.Env.Warnings) != 1 || r.Env.Meta.ServerVersion != "9.9.9" {
@@ -213,7 +213,7 @@ func TestObservabilityCommands(t *testing.T) {
 		q, _ := url.ParseQuery(reqs[len(reqs)-1].RawQuery)
 		return q
 	}
-	t.Run("定位到一条失败的回复", func(t *testing.T) {
+	t.Run("locate a failed reply", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /agents/{agentId}/messages", clitest.Sample{Status: 200, Body: messagePage()})
 		s.On("GET /agents/{agentId}/runs/{runId}/timeline", clitest.Sample{Status: 200, Body: runTimeline()})
@@ -232,10 +232,10 @@ func TestObservabilityCommands(t *testing.T) {
 		n := len(s.Requests())
 		e.run("agent", "history", agentUUID, "--before", runUUID, "--after", runUUID).fails(t, output.CodeInvalidArgument, 2)
 		if len(s.Requests()) != n {
-			t.Fatal("同时指定两种位置时不应发出请求")
+			t.Fatal("no request should be sent when both positions are given")
 		}
 	})
-	t.Run("查看今天的用量", func(t *testing.T) {
+	t.Run("view today's usage", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /usage", clitest.Sample{Status: 200, Body: usagePage()})
 		d := e.run("usage", "list", "--from", "2026-10-13T00:00:00+08:00").ok(t)
@@ -250,12 +250,12 @@ func TestObservabilityCommands(t *testing.T) {
 			t.Fatalf("%v", q)
 		}
 		n := len(s.Requests())
-		e.run("usage", "list", "--from", "昨天").fails(t, output.CodeInvalidArgument, 2)
+		e.run("usage", "list", "--from", "yesterday").fails(t, output.CodeInvalidArgument, 2)
 		if len(s.Requests()) != n {
-			t.Fatal("时间格式不对时不应发出请求")
+			t.Fatal("no request should be sent for a bad time format")
 		}
 	})
-	t.Run("翻看异常", func(t *testing.T) {
+	t.Run("page through anomalies", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /anomalies", clitest.Sample{Status: 200, Body: anomalyPage("c2")}, clitest.Sample{Status: 200, Body: anomalyPage(nil)})
 		first := e.run("anomaly", "list", "--limit", "20", "--from", "2026-10-12T00:00:00Z").ok(t)
@@ -270,7 +270,7 @@ func TestObservabilityCommands(t *testing.T) {
 			t.Fatalf("%v %v", first, second)
 		}
 	})
-	t.Run("健康状态", func(t *testing.T) {
+	t.Run("health status", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /health", clitest.Sample{Status: 200, Body: health(true)}, clitest.Sample{Status: 503, Body: health(false)})
 		if d := e.run("health").ok(t); d["ok"] != true {
@@ -295,7 +295,7 @@ func TestHealthEdgeCases(t *testing.T) {
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(conn.HeaderVersion, testVersion)
 		w.WriteHeader(503)
-		io.WriteString(w, `{"error":{"code":"internal_error","message":"网关"}}`)
+		io.WriteString(w, `{"error":{"code":"internal_error","message":"gateway"}}`)
 	}))
 	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
 	srv.StartTLS()
@@ -319,7 +319,7 @@ func TestProjectScope(t *testing.T) {
 		reqs := s.Requests()
 		return reqs[len(reqs)-1]
 	}
-	t.Run("没有指定范围", func(t *testing.T) {
+	t.Run("no scope given", func(t *testing.T) {
 		s, e := stub(t)
 		for _, args := range [][]string{
 			{"agent", "list"},
@@ -328,19 +328,19 @@ func TestProjectScope(t *testing.T) {
 			r := e.run(args...)
 			r.fails(t, output.CodeMissingArgument, 2)
 			if !strings.Contains(r.Env.Error.Message, "loopctl project list") {
-				t.Fatalf("说明中应提示 project list：%s", r.Env.Error.Message)
+				t.Fatalf("the message should point to project list: %s", r.Env.Error.Message)
 			}
 		}
-		e.run("agent", "list", "--project", "默认项目", "--platform").fails(t, output.CodeInvalidArgument, 2)
+		e.run("agent", "list", "--project", "Default project", "--platform").fails(t, output.CodeInvalidArgument, 2)
 		if len(s.Requests()) != 0 {
-			t.Fatal("没有指定范围时不应发出请求")
+			t.Fatal("no request should be sent without a scope")
 		}
 	})
-	t.Run("按项目名列出", func(t *testing.T) {
+	t.Run("list by project name", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /projects", clitest.Sample{Status: 200, Body: map[string]any{"projects": []any{project()}}})
 		s.On("GET /projects/{projectId}/agents", clitest.Sample{Status: 200, Body: map[string]any{"agents": []any{agentListItem()}}})
-		d := e.run("agent", "list", "--project", "默认项目").ok(t)
+		d := e.run("agent", "list", "--project", "Default project").ok(t)
 		if got := ops(s); !reflect.DeepEqual(got, []string{"GET /projects", "GET /projects/{projectId}/agents"}) {
 			t.Fatalf("%v", got)
 		}
@@ -349,15 +349,15 @@ func TestProjectScope(t *testing.T) {
 		}
 		item := d["agents"].([]any)[0].(map[string]any)
 		if item["scope"] != "project" || item["projectId"] != projectUUID || item["isManager"] != false {
-			t.Fatalf("新字段应原样透传：%v", item)
+			t.Fatalf("new fields should pass through unchanged: %v", item)
 		}
-		r := e.run("agent", "list", "--project", "不存在的项目")
+		r := e.run("agent", "list", "--project", "Missing project")
 		r.fails(t, output.CodeNotFound, 7)
 		if r.Env.Error.HTTPStatus != 0 || len(s.Requests()) != 3 {
-			t.Fatalf("项目名解析不到时不应再请求 Agent 列表：%s", r.Stdout)
+			t.Fatalf("an unresolved project name should not lead to an Agent list request: %s", r.Stdout)
 		}
 	})
-	t.Run("在平台下创建", func(t *testing.T) {
+	t.Run("create on the platform", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("POST /platform/agents", clitest.Sample{Status: 201, Body: agentDetail()})
 		e.run("agent", "create", "--platform", "--name", "reviewer", "--provider", "anthropic", "--model", "claude-x").ok(t)
@@ -365,19 +365,19 @@ func TestProjectScope(t *testing.T) {
 			t.Fatalf("%v", got)
 		}
 		if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"name": "reviewer", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}}) {
-			t.Fatalf("请求体中不应带范围：%v", b)
+			t.Fatalf("the request body should not carry the scope: %v", b)
 		}
 	})
-	t.Run("按名称查看项目", func(t *testing.T) {
+	t.Run("get a project by name", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /projects", clitest.Sample{Status: 200, Body: map[string]any{"projects": []any{project()}}})
 		s.On("GET /projects/{projectId}", clitest.Sample{Status: 200, Body: project()})
-		if d := e.run("project", "get", "默认项目").ok(t); d["isDefault"] != true || d["managerAgentId"] != nil {
+		if d := e.run("project", "get", "Default project").ok(t); d["isDefault"] != true || d["managerAgentId"] != nil {
 			t.Fatalf("%v", d)
 		}
-		e.run("project", "get", "不存在的项目").fails(t, output.CodeNotFound, 7)
+		e.run("project", "get", "Missing project").fails(t, output.CodeNotFound, 7)
 	})
-	t.Run("用量与异常的范围", func(t *testing.T) {
+	t.Run("scope of usage and anomalies", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("GET /projects", clitest.Sample{Status: 200, Body: map[string]any{"projects": []any{project()}}})
 		s.On("GET /usage", clitest.Sample{Status: 200, Body: usagePage()})
@@ -386,24 +386,24 @@ func TestProjectScope(t *testing.T) {
 		if q := last(s).RawQuery; q != "platform=true" {
 			t.Fatal(q)
 		}
-		e.run("anomaly", "list", "--project", "默认项目").ok(t)
+		e.run("anomaly", "list", "--project", "Default project").ok(t)
 		if q := last(s).RawQuery; q != "projectId="+projectUUID {
 			t.Fatal(q)
 		}
 		e.run("usage", "list").ok(t)
 		if q := last(s).RawQuery; q != "" {
-			t.Fatalf("不指定范围时为全部：%s", q)
+			t.Fatalf("no scope means everything: %s", q)
 		}
 		n := len(s.Requests())
 		e.run("usage", "list", "--project", projectUUID, "--platform").fails(t, output.CodeInvalidArgument, 2)
 		if len(s.Requests()) != n {
-			t.Fatal("同时指定两种范围时不应发出请求")
+			t.Fatal("no request should be sent when both scopes are given")
 		}
 	})
-	t.Run("项目 ID 不存在", func(t *testing.T) {
+	t.Run("project ID not found", func(t *testing.T) {
 		s, e := stub(t)
-		s.On("GET /usage", clitest.Sample{Status: 404, Body: apiError("not_found", "项目不存在")})
-		s.On("GET /anomalies", clitest.Sample{Status: 404, Body: apiError("not_found", "项目不存在")})
+		s.On("GET /usage", clitest.Sample{Status: 404, Body: apiError("not_found", "project not found")})
+		s.On("GET /anomalies", clitest.Sample{Status: 404, Body: apiError("not_found", "project not found")})
 		for _, cmd := range []string{"usage", "anomaly"} {
 			r := e.run(cmd, "list", "--project", "0192f1a2-0000-7000-8000-0000000000ff")
 			r.fails(t, "not_found", 7)

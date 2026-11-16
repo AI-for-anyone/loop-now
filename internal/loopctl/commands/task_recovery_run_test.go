@@ -19,7 +19,7 @@ func TestTaskRecoveryRunExplicitSinglePost(t *testing.T) {
 	if got := lastBody(t, s)["runId"]; got != artifactUUID || len(s.Requests()) != 2 {
 		t.Fatal("fail implicit GET/retry", got, len(s.Requests()))
 	}
-	s.On("POST /tasks/{taskId}/nodes/{nodeRunId}/submit", clitest.Sample{Status: 409, Body: apiError("task_conflict", "原run已失效")})
+	s.On("POST /tasks/{taskId}/nodes/{nodeRunId}/submit", clitest.Sample{Status: 409, Body: apiError("task_conflict", "original run is no longer valid")})
 	e.run("task", "submit", taskUUID, nodeUUID, "--from-file", file, "--run", artifactUUID).fails(t, "task_conflict", 8)
 	if len(s.Requests()) != 3 {
 		t.Fatal("conflict triggered re-read/retry")
@@ -55,7 +55,7 @@ func TestTaskRecoveryQuestionExplicitRunSinglePost(t *testing.T) {
 	if len(s.Requests()) != 1 || lastBody(t, s)["runId"] != artifactUUID || lastBody(t, s)["nodeRunId"] != nodeUUID {
 		t.Fatal("question inferred/retried run")
 	}
-	s.On("POST /inbox/messages", clitest.Sample{Status: 409, Body: apiError("task_conflict", "恢复run失效")})
+	s.On("POST /inbox/messages", clitest.Sample{Status: 409, Body: apiError("task_conflict", "recovery run is no longer valid")})
 	e.run("inbox", "send", "@console", "--text", "continue?", "--option", "yes", "--node-run", nodeUUID, "--run", artifactUUID).fails(t, "task_conflict", 8)
 	if len(s.Requests()) != 2 {
 		t.Fatal("question write retried")

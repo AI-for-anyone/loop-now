@@ -54,20 +54,20 @@ func TestReadCommands(t *testing.T) {
 			r.ok(t)
 			reqs := s.Requests()
 			if len(reqs) != 1 || reqs[0].Op != c.op || reqs[0].RawQuery != c.query {
-				t.Fatalf("请求 %+v", reqs)
+				t.Fatalf("requests %+v", reqs)
 			}
 			var want, got any
 			b, _ := jsonMarshal(c.sample)
 			jsonUnmarshal(b, &want)
 			jsonUnmarshal(r.Env.Data, &got)
 			if !reflect.DeepEqual(got, want) {
-				t.Fatalf("data 应为服务端响应体\n得到 %s", r.Env.Data)
+				t.Fatalf("data should be the server's response body\ngot %s", r.Env.Data)
 			}
 			if r.Env.Meta.Identity != "external" || r.Env.Meta.ServerVersion != testVersion || r.Env.Meta.RequestID == "" || r.Env.Meta.Attempts != 1 {
 				t.Fatalf("meta %+v", r.Env.Meta)
 			}
 			if len(r.Env.Warnings) != 0 {
-				t.Fatalf("版本一致时不应有警告：%v", r.Env.Warnings)
+				t.Fatalf("matching versions should give no warnings: %v", r.Env.Warnings)
 			}
 		})
 	}
@@ -77,22 +77,22 @@ func TestAgentCreateAndUpdate(t *testing.T) {
 	s, e := stub(t)
 	s.On("POST /projects/{projectId}/agents", clitest.Sample{Status: 201, Body: agentDetail()})
 	s.On("PATCH /agents/{agentId}", clitest.Sample{Status: 200, Body: agentDetail()})
-	e.stdin = "你是开发助手"
+	e.stdin = "You are a dev assistant"
 	e.run("agent", "create", "--project", projectUUID, "--name", "dev", "--provider", "anthropic", "--model", "claude-x", "--prompt-file", "-").ok(t)
-	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"name": "dev", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}, "prompt": "你是开发助手"}) {
-		t.Fatalf("创建请求体 %v", b)
+	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"name": "dev", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}, "prompt": "You are a dev assistant"}) {
+		t.Fatalf("create request body %v", b)
 	}
 	e.run("agent", "update", agentUUID, "--name", "dev2").ok(t)
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"name": "dev2"}) {
-		t.Fatalf("只改名称时请求体 %v", b)
+		t.Fatalf("request body when only the name changes %v", b)
 	}
-	e.run("agent", "update", agentUUID, "--provider", "anthropic", "--model", "claude-y", "--prompt-file", writeFile(t, "p.txt", "新 Prompt"), "--expected-prompt-version", "1").ok(t)
-	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"model": map[string]any{"provider": "anthropic", "modelId": "claude-y"}, "prompt": "新 Prompt", "expectedPromptVersion": float64(1)}) {
-		t.Fatalf("改模型时请求体 %v", b)
+	e.run("agent", "update", agentUUID, "--provider", "anthropic", "--model", "claude-y", "--prompt-file", writeFile(t, "p.txt", "New prompt"), "--expected-prompt-version", "1").ok(t)
+	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"model": map[string]any{"provider": "anthropic", "modelId": "claude-y"}, "prompt": "New prompt", "expectedPromptVersion": float64(1)}) {
+		t.Fatalf("request body when the model changes %v", b)
 	}
 	e.run("agent", "update", agentUUID, "--provider", "anthropic", "--model", "claude-z").ok(t)
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"model": map[string]any{"provider": "anthropic", "modelId": "claude-z"}}) {
-		t.Fatalf("仅改模型不应增加 Prompt 条件：%v", b)
+		t.Fatalf("changing only the model should not add a prompt condition: %v", b)
 	}
 	e.run("agent", "update", agentUUID, "--provider", "anthropic").fails(t, output.CodeInvalidArgument, 2)
 	e.run("agent", "update", agentUUID).fails(t, output.CodeMissingArgument, 2)
@@ -100,11 +100,11 @@ func TestAgentCreateAndUpdate(t *testing.T) {
 
 func TestAgentDeleteAndSessionReset(t *testing.T) {
 	s, e := stub(t)
-	s.On("DELETE /agents/{agentId}", clitest.Sample{Status: 204}, clitest.Sample{Status: 409, Body: apiError("agent_not_idle", "Agent 正忙")})
+	s.On("DELETE /agents/{agentId}", clitest.Sample{Status: 204}, clitest.Sample{Status: 409, Body: apiError("agent_not_idle", "Agent is busy")})
 	r := e.run("agent", "delete", agentUUID, "--yes")
 	r.ok(t)
 	if string(r.Env.Data) != "null" {
-		t.Fatalf("删除成功时 data 应为 null：%s", r.Env.Data)
+		t.Fatalf("data should be null after a successful delete: %s", r.Env.Data)
 	}
 	r = e.run("agent", "delete", agentUUID, "--yes")
 	r.fails(t, "agent_not_idle", 8)
@@ -113,7 +113,7 @@ func TestAgentDeleteAndSessionReset(t *testing.T) {
 	}
 
 	s.On("POST /agents/{agentId}/session/reset", clitest.Sample{Status: 200, Body: map[string]any{"state": "active", "epoch": 2}},
-		clitest.Sample{Status: 409, Body: apiError("agent_not_idle", "Agent 正忙")})
+		clitest.Sample{Status: 409, Body: apiError("agent_not_idle", "Agent is busy")})
 	if d := e.run("agent", "session", "reset", agentUUID, "--yes").ok(t); d["epoch"] != float64(2) {
 		t.Fatalf("%v", d)
 	}
@@ -142,7 +142,7 @@ func TestCliAndCredentials(t *testing.T) {
 		t.Fatalf("%v", b)
 	}
 	if strings.Contains(r.Stdout, ghSecret) {
-		t.Fatal("输出中出现了凭证值")
+		t.Fatal("the output contains the credential value")
 	}
 	e.run("agent", "credential", "set-model", agentUUID, "--from-file", writeFile(t, "model.json", `{"provider":"anthropic","key":"sk-MODEL"}`)).ok(t)
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"provider": "anthropic", "key": "sk-MODEL"}) {
@@ -156,7 +156,7 @@ func TestCliAndCredentials(t *testing.T) {
 	r = e.run("agent", "credential", "set-cli", agentUUID, "gh", "--from-file", "-")
 	r.fails(t, output.CodeInvalidArgument, 2)
 	if strings.Contains(r.Stdout, "SECRET") || len(s.Requests()) != n {
-		t.Fatalf("格式错误时不应带出内容，也不应发出请求：%s", r.Stdout)
+		t.Fatalf("malformed input should neither leak content nor send a request: %s", r.Stdout)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestAgentSkills(t *testing.T) {
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"templateId": "0192f1a2-0000-7000-8000-0000000000c1"}) {
 		t.Fatalf("%v", b)
 	}
-	e.stdin = "---\nname: review\ndescription: d\n---\n正文\n"
+	e.stdin = "---\nname: review\ndescription: d\n---\nBody\n"
 	e.run("agent", "skill", "edit", agentUUID, sk, "--skill-md", "-").ok(t)
 	if b := lastBody(t, s); b["content"] != e.stdin {
 		t.Fatalf("%v", b)
@@ -183,7 +183,7 @@ func TestAgentSkills(t *testing.T) {
 
 func TestSkillLibrary(t *testing.T) {
 	id := "0192f1a2-0000-7000-8000-0000000000c1"
-	t.Run("从目录创建", func(t *testing.T) {
+	t.Run("create from a directory", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("POST /skills", clitest.Sample{Status: 201, Body: skillTemplate()})
 		dir := t.TempDir()
@@ -193,20 +193,20 @@ func TestSkillLibrary(t *testing.T) {
 		e.run("skill", "create", "--dir", dir).ok(t)
 		files := archiveFiles(t, s.Requests()[0])
 		if !reflect.DeepEqual(files, map[string]string{"SKILL.md": "---\nname: review\n---\n", "scripts/lib/run.sh": "echo hi"}) {
-			t.Fatalf("压缩包内容 %v", files)
+			t.Fatalf("archive contents %v", files)
 		}
 	})
-	t.Run("目录中有符号链接", func(t *testing.T) {
+	t.Run("symlink in the directory", func(t *testing.T) {
 		s, e := stub(t)
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("x"), 0o644)
 		os.Symlink("/etc/passwd", filepath.Join(dir, "link"))
 		e.run("skill", "create", "--dir", dir).fails(t, output.CodeSymlinkNotSupported, 2)
 		if len(s.Requests()) != 0 {
-			t.Fatal("不应发出请求")
+			t.Fatal("no request should be sent")
 		}
 	})
-	t.Run("从 zip 与 SKILL.md 创建", func(t *testing.T) {
+	t.Run("create from a zip and from SKILL.md", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("POST /skills", clitest.Sample{Status: 201, Body: skillTemplate()})
 		var buf bytes.Buffer
@@ -225,7 +225,7 @@ func TestSkillLibrary(t *testing.T) {
 		}
 		e.run("skill", "create").fails(t, output.CodeMissingArgument, 2)
 	})
-	t.Run("替换、编辑与删除", func(t *testing.T) {
+	t.Run("replace, edit and delete", func(t *testing.T) {
 		s, e := stub(t)
 		s.On("PUT /skills/{skillId}", clitest.Sample{Status: 200, Body: skillTemplate()})
 		s.On("PUT /skills/{skillId}/skill-md", clitest.Sample{Status: 200, Body: skillTemplate()})
@@ -255,7 +255,7 @@ func archiveFiles(t *testing.T, req clitest.Recorded) map[string]string {
 	mr := multipart.NewReader(bytes.NewReader(req.Body), params["boundary"])
 	part, err := mr.NextPart()
 	if err != nil || part.FormName() != "archive" {
-		t.Fatalf("没有 archive 字段：%v", err)
+		t.Fatalf("no archive field: %v", err)
 	}
 	data, _ := io.ReadAll(part)
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -272,7 +272,7 @@ func archiveFiles(t *testing.T, req clitest.Recorded) map[string]string {
 		names = append(names, f.Name)
 	}
 	if !sort.StringsAreSorted(names) {
-		t.Errorf("条目没有按路径排序：%v", names)
+		t.Errorf("entries are not sorted by path: %v", names)
 	}
 	return out
 }

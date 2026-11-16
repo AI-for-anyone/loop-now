@@ -33,21 +33,21 @@ func TestExternalIdentitySelfSigned(t *testing.T) {
 	for {
 		if b, err := os.ReadFile(readyFile); err == nil {
 			if err := json.Unmarshal(b, &ready); err != nil {
-				t.Fatalf("就绪文件不是 JSON：%v", err)
+				t.Fatalf("ready file is not JSON: %v", err)
 			}
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("服务端没有写出就绪文件")
+			t.Fatal("server did not write the ready file")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	if ready.ExternalURL != s.ext {
-		t.Fatalf("就绪文件里的对外地址 %q 应为 %q", ready.ExternalURL, s.ext)
+		t.Fatalf("external address in the ready file is %q, want %q", ready.ExternalURL, s.ext)
 	}
 	caFile := filepath.Join(tlsDir, selfsigned.CertFile)
 	if _, err := os.Stat(caFile); err != nil {
-		t.Fatalf("服务端应在目录里生成证书：%v", err)
+		t.Fatalf("server should generate a certificate in the directory: %v", err)
 	}
 
 	_, _, secret := s.issueToken("", "desktop-user", nil)

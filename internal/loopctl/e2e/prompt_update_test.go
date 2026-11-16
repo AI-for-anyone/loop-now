@@ -15,7 +15,7 @@ func TestAgentPromptCLIWithApp(t *testing.T) {
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	provider, model := cliKeyProvider(t, ext)
 	ext.stdin = "initial"
-	created := ext.run("agent", "create", "--project", "默认项目", "--name", "Prompt验证", "--provider", provider, "--model", model, "--prompt-file", "-").ok(t)
+	created := ext.run("agent", "create", "--project", "Default project", "--name", "Prompt check", "--provider", provider, "--model", model, "--prompt-file", "-").ok(t)
 	id := created["id"].(string)
 	if created["prompt"] != "initial" || created["promptVersion"] != float64(1) {
 		t.Fatal("creation did not initialize Prompt without a precondition")
@@ -41,7 +41,7 @@ func TestAgentPromptCLIWithApp(t *testing.T) {
 		t.Fatal("matching Prompt version not saved")
 	}
 	// Unrelated fields retain their old CLI input contract and do not move the Prompt baseline.
-	named := ext.run("agent", "update", id, "--name", "Prompt已改名").ok(t)
+	named := ext.run("agent", "update", id, "--name", "Prompt renamed").ok(t)
 	if named["promptVersion"] != float64(2) || named["prompt"] != "saved" {
 		t.Fatal("name change altered Prompt baseline")
 	}
@@ -67,7 +67,7 @@ func TestAgentPromptCLIWithApp(t *testing.T) {
 		}
 	}
 	current := ext.run("agent", "get", id).ok(t)
-	if current["name"] != "Prompt已改名" || current["prompt"] != "saved" || current["promptVersion"] != float64(2) {
+	if current["name"] != "Prompt renamed" || current["prompt"] != "saved" || current["promptVersion"] != float64(2) {
 		t.Fatal("conflicting mixed PATCH partially saved")
 	}
 	// Clearing is an explicit Prompt write, then another same-empty save remains idempotent.
