@@ -49,17 +49,17 @@ func (st *pluginLoginState) answer(in cm.LoginInput) error {
 	defer st.mu.Unlock()
 	q := st.prompt
 	if q == nil || q.ID != in.PromptID {
-		return apperr.Invalid("promptId", "没有这个待回答的问题，请刷新后重试")
+		return apperr.Invalid("promptId", "There is no such pending question. Refresh and try again.")
 	}
 	if q.Kind == "select" && !slices.ContainsFunc(q.Options, func(o cm.LoginPromptOption) bool { return o.ID == in.Value }) {
-		return apperr.Invalid("value", "请从选项中选择")
+		return apperr.Invalid("value", "Choose one of the options.")
 	}
 	select {
 	case st.replies <- in:
 		st.prompt = nil
 		return nil
 	default:
-		return apperr.Invalid("promptId", "回答正在处理，请稍后重试")
+		return apperr.Invalid("promptId", "An answer is already being processed. Try again later.")
 	}
 }
 
@@ -173,7 +173,7 @@ func (p *ProjectService) checkPluginLogin(ctx context.Context, project uuid.UUID
 		return err
 	}
 	if !on {
-		return apperr.Conflict(apperr.CodePluginNotEnabled, "插件 "+plugin+" 没有在这个项目里启用，先启用再登录")
+		return apperr.Conflict(apperr.CodePluginNotEnabled, "Plugin "+plugin+" is not enabled in this project. Enable it first, then log in.")
 	}
 	return nil
 }
@@ -277,7 +277,7 @@ func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work 
 	}
 }
 
-var errPluginUnavailable = errors.New("插件不可用")
+var errPluginUnavailable = errors.New("the plugin is unavailable")
 
 // publishPluginLogin turns the state directory of a successful login into a final version, under the same lock as the
 // database commit.
@@ -320,11 +320,11 @@ func (p *ProjectService) Input(ctx context.Context, project, id uuid.UUID, in cm
 		return cm.LoginState{}, err
 	}
 	if len(in.Value) > 4096 {
-		return cm.LoginState{}, apperr.Invalid("value", "回答不能超过 4096 字节")
+		return cm.LoginState{}, apperr.Invalid("value", "Must be at most 4096 bytes.")
 	}
 	st := p.pluginState(id)
 	if terminal(o.Status) || st == nil {
-		return cm.LoginState{}, apperr.Invalid("promptId", "这次登录没有在等回答")
+		return cm.LoginState{}, apperr.Invalid("promptId", "This login is not waiting for an answer.")
 	}
 	if err := st.answer(in); err != nil {
 		return cm.LoginState{}, err

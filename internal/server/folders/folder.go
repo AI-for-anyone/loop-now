@@ -78,7 +78,7 @@ func (f Folder) open() (*os.Root, error) {
 	return os.OpenRoot(f.Dir)
 }
 
-func notFound() error { return apperr.NotFound("文件或目录") }
+func notFound() error { return apperr.NotFound("File or directory") }
 
 // mapErr turns file system errors into API errors: not found is 404, escaping the folder (through a symlink or ..) is
 // 422.
@@ -89,9 +89,9 @@ func mapErr(field string, err error) error {
 	case errors.Is(err, fs.ErrNotExist):
 		return notFound()
 	case privatefs.IsNotDir(err):
-		return apperr.Invalid(field, "路径中的某一段不是目录")
+		return apperr.Invalid(field, "A segment of the path is not a directory.")
 	case strings.Contains(err.Error(), "path escapes from parent"):
-		return apperr.Invalid(field, "路径经由软链接指向了文件夹之外")
+		return apperr.Invalid(field, "The path leads outside the folder through a symlink.")
 	}
 	return err
 }
@@ -153,7 +153,7 @@ func (f Folder) List(dir, cursor string, limit int) (Page, error) {
 	if cursor != "" {
 		b, err := base64.RawURLEncoding.DecodeString(cursor)
 		if err != nil {
-			return Page{}, apperr.Invalid("cursor", "游标无效")
+			return Page{}, apperr.Invalid("cursor", "The cursor is invalid.")
 		}
 		after = string(b)
 	}
@@ -170,7 +170,7 @@ func (f Folder) List(dir, cursor string, limit int) (Page, error) {
 	if info, err := d.Stat(); err != nil {
 		return Page{}, err
 	} else if !info.IsDir() {
-		return Page{}, apperr.Invalid("path", "不是目录")
+		return Page{}, apperr.Invalid("path", "The path is not a directory.")
 	}
 	list, err := d.ReadDir(-1)
 	if err != nil {
@@ -225,7 +225,7 @@ func (f Folder) Open(file string) (*os.File, fs.FileInfo, error) {
 	}
 	info, err := h.Stat()
 	if err == nil && !info.Mode().IsRegular() {
-		err = apperr.Invalid("path", "只能下载文件")
+		err = apperr.Invalid("path", "Only files can be downloaded.")
 	}
 	if err != nil {
 		h.Close()
@@ -252,11 +252,11 @@ func (f Folder) Write(file string, body io.Reader, max int64, create bool) (Entr
 	if info, err := root.Lstat(rel); err == nil {
 		switch {
 		case create:
-			return Entry{}, apperr.Conflict(apperr.CodePathConflict, "已存在同名文件或目录")
+			return Entry{}, apperr.Conflict(apperr.CodePathConflict, "A file or directory with the same name already exists.")
 		case info.Mode()&fs.ModeSymlink != 0:
-			return Entry{}, apperr.Invalid("path", "目标是软链接，不能写入")
+			return Entry{}, apperr.Invalid("path", "The target is a symlink and cannot be written.")
 		case !info.Mode().IsRegular():
-			return Entry{}, apperr.Invalid("path", "目标不是普通文件")
+			return Entry{}, apperr.Invalid("path", "The target is not a regular file.")
 		}
 		mode = info.Mode().Perm()
 	} else if !errors.Is(err, fs.ErrNotExist) {
@@ -273,7 +273,7 @@ func (f Folder) Write(file string, body io.Reader, max int64, create bool) (Entr
 	}
 	n, err := io.Copy(out, io.LimitReader(body, max+1))
 	if err == nil && n > max {
-		err = apperr.TooLarge("文件超过上传上限")
+		err = apperr.TooLarge("The file exceeds the upload size limit.")
 	}
 	if cerr := out.Close(); err == nil {
 		err = cerr
@@ -297,7 +297,7 @@ func mkdirAll(root *os.Root, dir string) error {
 	}
 	if err := root.MkdirAll(dir, 0o755); err != nil {
 		if errors.Is(err, fs.ErrExist) || privatefs.IsNotDir(err) {
-			return apperr.Conflict(apperr.CodePathConflict, "上级路径中有同名文件")
+			return apperr.Conflict(apperr.CodePathConflict, "A file with the same name exists in the parent path.")
 		}
 		return mapErr("path", err)
 	}
@@ -317,7 +317,7 @@ func (f Folder) Mkdir(dir string) (Entry, error) {
 	}
 	defer root.Close()
 	if info, err := root.Lstat(rel); err == nil && !info.IsDir() {
-		return Entry{}, apperr.Conflict(apperr.CodePathConflict, "已存在同名文件")
+		return Entry{}, apperr.Conflict(apperr.CodePathConflict, "A file with the same name already exists.")
 	}
 	if err := mkdirAll(root, rel); err != nil {
 		return Entry{}, err
@@ -337,7 +337,7 @@ func (f Folder) Move(from, to string) (Entry, error) {
 		return Entry{}, err
 	}
 	if dst == src || strings.HasPrefix(dst, src+"/") {
-		return Entry{}, apperr.Invalid("to", "不能移到自身或自身之下")
+		return Entry{}, apperr.Invalid("to", "An item cannot be moved onto itself or under itself.")
 	}
 	root, err := f.open()
 	if err != nil {
@@ -348,7 +348,7 @@ func (f Folder) Move(from, to string) (Entry, error) {
 		return Entry{}, mapErr("from", err)
 	}
 	if _, err := root.Lstat(dst); err == nil {
-		return Entry{}, apperr.Conflict(apperr.CodePathConflict, "目标已存在")
+		return Entry{}, apperr.Conflict(apperr.CodePathConflict, "The target already exists.")
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return Entry{}, mapErr("to", err)
 	}

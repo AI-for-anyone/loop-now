@@ -82,7 +82,7 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 			// Unloaded or plugin host stopped: not the plugin's fault, so put it back in the queue right away and
 			// redeliver after the next load.
 			now := time.Now()
-			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, "投递中断："+err.Error(), &now)
+			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, "Delivery interrupted: "+err.Error(), &now)
 		default:
 			reason := err.Error()
 			var pe *PluginError
@@ -91,7 +91,7 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 			}
 			retry := s.retryAt(d.Attempts)
 			if retry == nil {
-				s.enqueueLog(id, "error", "事件 "+d.Type+" "+d.ID+" 投递失败，不再重试："+reason)
+				s.enqueueLog(id, "error", "Could not deliver event "+d.Type+" "+d.ID+"; it will not be retried: "+reason)
 			}
 			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, reason, retry)
 		}
@@ -118,7 +118,7 @@ func (s *Supervisor) schedule(ctx context.Context, c *conn, lp *loadedPlugin, wg
 	for _, sc := range lp.spec.Schedules {
 		cron, err := pluginmanifest.ParseCron(sc.Cron)
 		if err != nil {
-			s.enqueueLog(id, "error", "定时任务 "+sc.ID+" 的 cron 不合法："+err.Error())
+			s.enqueueLog(id, "error", "Scheduled job "+sc.ID+" has an invalid cron: "+err.Error())
 			continue
 		}
 		entries = append(entries, &entry{Schedule: sc, cron: cron, last: s.o.Now().Truncate(time.Minute)})
@@ -138,7 +138,7 @@ func (s *Supervisor) schedule(ctx context.Context, c *conn, lp *loadedPlugin, wg
 			}
 			e.last = minute
 			if !e.running.CompareAndSwap(false, true) {
-				s.enqueueLog(id, "warn", "定时任务 "+e.ID+" 上一次还没有结束，跳过 "+minute.Format("2006-01-02 15:04"))
+				s.enqueueLog(id, "warn", "Scheduled job "+e.ID+" has not finished its previous run; skipped the run at "+minute.Format("2006-01-02 15:04"))
 				continue
 			}
 			wg.Go(func() {
@@ -151,7 +151,7 @@ func (s *Supervisor) schedule(ctx context.Context, c *conn, lp *loadedPlugin, wg
 					if errors.As(err, &pe) {
 						reason = pe.Message
 					}
-					s.enqueueLog(id, "error", "定时任务 "+e.ID+" 失败："+reason)
+					s.enqueueLog(id, "error", "Scheduled job "+e.ID+" failed: "+reason)
 				}
 			})
 		}

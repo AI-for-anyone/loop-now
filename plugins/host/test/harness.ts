@@ -90,7 +90,7 @@ export class HostHarness {
     const p = m.payload ?? {}
     const reply = (ok: boolean, value?: unknown, error?: string) =>
       this.send({ id: m.id, type: 'result', plugin, payload: ok ? { ok, ...(value === undefined ? {} : { value }) } : { ok, error } })
-    if (!(this.permissions.get(plugin) ?? []).includes('state')) return reply(false, undefined, '清单没有声明 state 权限')
+    if (!(this.permissions.get(plugin) ?? []).includes('state')) return reply(false, undefined, 'the manifest does not declare the state permission')
     const scope = `${plugin}\u0000${p.projectId ?? ''}\u0000`
     switch (m.type) {
       case 'state_get':
@@ -118,10 +118,10 @@ export class HostHarness {
     const p = m.payload ?? {}
     const reply = (ok: boolean, value?: unknown, error?: string) =>
       this.send({ id: m.id, type: 'result', plugin, payload: ok ? { ok, value } : { ok, error } })
-    if (!(this.permissions.get(plugin) ?? []).includes('accounts.read')) return reply(false, undefined, '清单没有声明 accounts.read 权限')
-    if (!(this.kinds.get(plugin) ?? []).includes(p.kind)) return reply(false, undefined, `清单没有声明账号种类 ${p.kind}`)
-    if (typeof p.projectId !== 'string' || !/^[0-9a-f-]{36}$/.test(p.projectId)) return reply(false, undefined, 'projectId 无效')
-    if (!this.enabledIn.has(`${plugin}/${p.projectId}`)) return reply(false, undefined, '插件没有在这个项目里启用')
+    if (!(this.permissions.get(plugin) ?? []).includes('accounts.read')) return reply(false, undefined, 'the manifest does not declare the accounts.read permission')
+    if (!(this.kinds.get(plugin) ?? []).includes(p.kind)) return reply(false, undefined, `the manifest does not declare account kind ${p.kind}`)
+    if (typeof p.projectId !== 'string' || !/^[0-9a-f-]{36}$/.test(p.projectId)) return reply(false, undefined, 'projectId is invalid')
+    if (!this.enabledIn.has(`${plugin}/${p.projectId}`)) return reply(false, undefined, 'the plugin is not enabled in this project')
     reply(true, this.accounts.get(`${plugin}/${p.projectId}/${p.kind}`) ?? [])
   }
 
@@ -149,7 +149,7 @@ export class HostHarness {
       }
       const timer = setTimeout(() => {
         this.waiters.splice(this.waiters.indexOf(w), 1)
-        reject(new Error(`等待消息超时；已收到：${JSON.stringify(this.messages.slice(-5))}；stderr：${this.stderr.slice(-5).join(' | ')}`))
+        reject(new Error(`Timed out waiting for a message; received: ${JSON.stringify(this.messages.slice(-5))}; stderr: ${this.stderr.slice(-5).join(' | ')}`))
       }, timeoutMs)
       this.waiters.push(w)
     })
@@ -170,7 +170,7 @@ export class HostHarness {
       }
       const timer = setTimeout(() => {
         this.stderrWaiters.splice(this.stderrWaiters.indexOf(check), 1)
-        reject(new Error(`等待标准错误超时；已收到：${this.stderr.slice(-5).join(' | ')}`))
+        reject(new Error(`Timed out waiting for stderr; received: ${this.stderr.slice(-5).join(' | ')}`))
       }, timeoutMs)
       this.stderrWaiters.push(check)
     })

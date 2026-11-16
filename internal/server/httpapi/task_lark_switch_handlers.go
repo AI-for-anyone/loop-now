@@ -10,11 +10,11 @@ import (
 
 func (s *Server) switchTaskLarkAccount(w http.ResponseWriter, r *http.Request) {
 	if principal(r).Kind != auth.KindConsole {
-		s.fail(w, r, apperr.Forbidden("任务凭证切换仅限控制台"))
+		s.fail(w, r, apperr.Forbidden("Only the console can switch task credentials."))
 		return
 	}
 	if s.Tasks == nil {
-		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "任务凭证交接服务尚未装配"})
+		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The task credential handover service is not set up on this server."})
 		return
 	}
 	task, err := pathUUID(r, "taskId")
@@ -36,11 +36,11 @@ func (s *Server) switchTaskLarkAccount(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) getTaskLarkAccountSwitch(w http.ResponseWriter, r *http.Request) {
 	if principal(r).Kind != auth.KindConsole {
-		s.fail(w, r, apperr.Forbidden("任务凭证切换仅限控制台"))
+		s.fail(w, r, apperr.Forbidden("Only the console can switch task credentials."))
 		return
 	}
 	if s.Tasks == nil {
-		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "任务凭证交接服务尚未装配"})
+		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The task credential handover service is not set up on this server."})
 		return
 	}
 	task, err := pathUUID(r, "taskId")

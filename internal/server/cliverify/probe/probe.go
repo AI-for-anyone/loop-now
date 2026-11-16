@@ -44,7 +44,7 @@ type Outcome struct {
 
 type Error struct{ Code string }
 
-func (*Error) Error() string { return "CLI验证配置无效或不受支持" }
+func (*Error) Error() string { return "CLI verification configuration is invalid or unsupported" }
 
 func Build(r Request) (Plan, error) {
 	if !filepath.IsAbs(r.Executable) {

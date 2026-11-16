@@ -18,10 +18,10 @@ import (
 func (s *Service) ReserveLarkSwitch(ctx context.Context, p auth.Principal, in store.TaskLarkFenceReservation) (store.TaskLarkActionState, bool, error) {
 	var state store.TaskLarkActionState
 	if p.Kind != auth.KindConsole {
-		return state, false, apperr.Forbidden("任务凭证切换仅限控制台")
+		return state, false, apperr.Forbidden("Only the console can switch task credentials.")
 	}
 	if in.ActionID == uuid.Nil || in.TaskID == uuid.Nil || in.NodeRunID == uuid.Nil || in.ExpectedTaskVersion < 1 || in.Capture == nil || len(in.Members) != 2 || len(in.Capture.Members) != 2 {
-		return state, false, apperr.Invalid("switch", "必须提供原任务、节点、两个成员及固定目标版本")
+		return state, false, apperr.Invalid("switch", "The original task, the node, two members and the pinned target version are required.")
 	}
 	// Only explicit CAS locators belong to request identity. Runtime metadata,
 	// session paths and server-observed identity are recaptured, never trusted.
@@ -37,14 +37,14 @@ func (s *Service) ReserveLarkSwitch(ctx context.Context, p auth.Principal, in st
 		for _, expected := range in.Capture.Members {
 			if member.AgentID == expected.AgentID && member.RuntimeID == expected.RuntimeID && member.Role == expected.Role {
 				if matched || expected.PreviousRevision < 0 {
-					return state, false, apperr.Invalid("members", "原成员期望值无效")
+					return state, false, apperr.Invalid("members", "The expected member values are invalid: a member matches more than once or has a negative revision.")
 				}
 				members = append(members, expectedMember{member.AgentID, member.RuntimeID, member.Role, expected.PreviousRevision, expected.BaseSnapshotSHA})
 				matched = true
 			}
 		}
 		if !matched {
-			return state, false, apperr.Invalid("members", "原成员期望值不匹配")
+			return state, false, apperr.Invalid("members", "A member does not match the captured expected members.")
 		}
 	}
 	slices.SortFunc(members, func(a, b expectedMember) int { return bytes.Compare(a.RuntimeID[:], b.RuntimeID[:]) })
@@ -72,7 +72,7 @@ func (s *Service) ReserveLarkSwitch(ctx context.Context, p auth.Principal, in st
 				return nil, err
 			}
 			if expected.BaseSnapshotSHA != "" && actual.BaseSnapshotSHA != expected.BaseSnapshotSHA || actual.PreviousRevision != expected.PreviousRevision {
-				return nil, conflict("原任务实例绑定或快照已变化")
+				return nil, conflict("The original task instance binding or snapshot has changed.")
 			}
 			capture.Members = append(capture.Members, actual)
 		}

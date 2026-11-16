@@ -105,4 +105,9 @@ describe('Lark login presentation, injected actions only', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(p.onStart).not.toHaveBeenCalled()
   })
+  it('a failed login says why from its error code', () => {
+    const p = props(); render(<LarkUserLogin {...p} phase="failed" operationId="one" errorCode="oauth_failed" />)
+    expect(screen.getByText(copy.failed)).toBeInTheDocument()
+    expect(screen.getByText('飞书授权未完成。')).toHaveAttribute('role', 'status')
+  })
 })

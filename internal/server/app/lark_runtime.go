@@ -85,7 +85,7 @@ func configureLarkExecution(ctx context.Context, cfg *config.Config, workRoot st
 func (l *larkExecution) open(ctx context.Context, request local.LarkRuntimeRequest) (local.LarkRuntime, error) {
 	if l == nil || l.manager == nil || l.grants == nil || ctx == nil || ctx.Err() != nil || request.RuntimeID == uuid.Nil || !request.Binding.Valid() ||
 		!filepath.IsAbs(request.Home) || !filepath.IsAbs(request.Workspace) || request.Home != filepath.Clean(request.Home) || request.Workspace != filepath.Clean(request.Workspace) {
-		return nil, errors.New("Lark运行作用域不可用")
+		return nil, errors.New("the Lark runtime scope is unavailable")
 	}
 	source, err := l.grants.TokenSource(request.Binding)
 	if err != nil {
@@ -107,7 +107,7 @@ func (l *larkExecution) open(ctx context.Context, request local.LarkRuntimeReque
 // registry. Only the exact requested runtimes are fenced; no project-wide gate.
 func (l *larkExecution) Acquire(ctx context.Context, ids []uuid.UUID) (tasks.TaskLarkNativeLease, error) {
 	if l == nil || l.manager == nil {
-		return nil, errors.New("Lark运行交接未装配")
+		return nil, errors.New("the Lark runtime handoff is not configured")
 	}
 	gate, err := l.manager.AcquireRuntimeGate(ctx, slices.Clone(ids))
 	if err != nil {
@@ -125,7 +125,7 @@ func (l *larkExecution) Acquire(ctx context.Context, ids []uuid.UUID) (tasks.Tas
 // Even an error may return a held gate, which must not be discarded/released.
 func (l *larkExecution) RecoverPendingHandoff(ctx context.Context, action uuid.UUID, ids [2]uuid.UUID, raw json.RawMessage, consumePreCommit func(context.Context) error) (tasks.TaskLarkNativeLease, error) {
 	if l == nil || l.manager == nil {
-		return nil, errors.New("Lark运行恢复未装配")
+		return nil, errors.New("the Lark runtime recovery is not configured")
 	}
 	var record larksidecar.NativeRecoveryRecord
 	if err := json.Unmarshal(raw, &record); err != nil {

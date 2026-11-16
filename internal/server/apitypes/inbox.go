@@ -25,8 +25,8 @@ const (
 
 // Display names of deleted participants.
 const (
-	DeletedIdentityName = "已删除身份"
-	DeletedAgentName    = "已删除 Agent"
+	DeletedIdentityName = "Deleted identity"
+	DeletedAgentName    = "Deleted Agent"
 )
 
 // Whoami mirrors the Whoami schema.
@@ -70,7 +70,7 @@ func FromParty(v store.PartyView) InboxParticipant {
 	case "platform":
 		addr := "@platform"
 		out.Address = &addr
-		out.Name = "平台"
+		out.Name = "Platform"
 	case "console":
 		addr := auth.ConsoleAddress
 		out.Address, out.Name = &addr, auth.ConsoleName
@@ -391,11 +391,11 @@ type InboxOptions []string
 
 func (o *InboxOptions) UnmarshalJSON(data []byte) error {
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return errors.New("options须为字符串数组")
+		return errors.New("options must be an array of strings")
 	}
 	var values []string
 	if json.Unmarshal(data, &values) != nil {
-		return errors.New("options须为字符串数组")
+		return errors.New("options must be an array of strings")
 	}
 	*o = values
 	return nil
@@ -408,12 +408,12 @@ func validateQuestionInputPresence(data []byte) error {
 	}
 	for key := range fields {
 		if strings.EqualFold(key, "runId") && key != "runId" {
-			return errors.New("runId字段名称无效")
+			return errors.New("the runId field name has the wrong case (field names are case-sensitive)")
 		}
 	}
 	for _, field := range []string{"optionId", "nodeRunId", "runId"} {
 		if value, exists := fields[field]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			return errors.New(field + "不能为null")
+			return errors.New(field + " must not be null")
 		}
 	}
 	return nil
@@ -431,7 +431,7 @@ func (in *InboxSendInput) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if in.RunID != nil && *in.RunID == uuid.Nil {
-		return errors.New("runId必须为非零UUID")
+		return errors.New("runId must be a non-zero UUID")
 	}
 	return nil
 }
@@ -446,7 +446,7 @@ func (in *InboxReplyInput) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if in.RunID != nil && *in.RunID == uuid.Nil {
-		return errors.New("runId必须为非零UUID")
+		return errors.New("runId must be a non-zero UUID")
 	}
 	return nil
 }
@@ -459,10 +459,10 @@ type InboxReadInput struct {
 func (in *InboxReadInput) UnmarshalJSON(data []byte) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
-		return errors.New("Inbox读取请求须为对象")
+		return errors.New("the Inbox read request must be a JSON object")
 	}
 	if raw, ok := fields["runId"]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return errors.New("runId不能为null")
+		return errors.New("runId must not be null")
 	}
 	type wire InboxReadInput
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -471,7 +471,7 @@ func (in *InboxReadInput) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if in.RunID != nil && *in.RunID == uuid.Nil {
-		return errors.New("runId必须为非零UUID")
+		return errors.New("runId must be a non-zero UUID")
 	}
 	return nil
 }

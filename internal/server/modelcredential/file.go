@@ -8,7 +8,7 @@ import (
 	"loop-now/internal/privatefs"
 )
 
-var ErrFile = errors.New("模型凭证缓存写入失败")
+var ErrFile = errors.New("could not write the model credential cache")
 
 // WriteAuthFile atomically seeds/rebuilds a runtime cache. Pi's native later
 // writes are not claimed to be atomic; the database remains the credential authority.

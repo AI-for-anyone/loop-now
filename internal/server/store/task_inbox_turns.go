@@ -13,7 +13,7 @@ import (
 // EnqueueTaskInboxTurn queues an Inbox turn for a non-current or blocked instance, without starting a workflow node.
 func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst TaskInstance, text string, priority int, trigger *uuid.UUID) (TaskTurn, error) {
 	if m.Record.Ended() || inst.TaskID != m.Record.View.Task.ID {
-		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "任务已结束")
+		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "The task has ended.")
 	}
 	old, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND origin='inbox_reminder' AND inbox_scope_node_id IS NULL AND priority=$2`, inst.ID, priority))
 	if e == nil {

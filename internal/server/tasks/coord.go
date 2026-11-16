@@ -18,7 +18,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 		return executor.Result{}, guardErr
 	}
 	if !valid {
-		return executor.Result{Outcome: executor.OutcomeInterrupted, ErrorCode: "task_conflict", ErrorMessage: "原节点或执行条件已变化，该消息未执行"}, nil
+		return executor.Result{Outcome: executor.OutcomeInterrupted, ErrorCode: "task_conflict", ErrorMessage: "The original node or its run conditions have changed. This message was not run."}, nil
 	}
 	inst, e := s.Store.TaskInstance(ctx, turn.RuntimeID)
 	if e != nil {
@@ -96,7 +96,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 	key := turn.RuntimeID.String()
 	ok, e := s.Coord.Hold(ctx, key, owner)
 	if e != nil || !ok {
-		return executor.Result{}, errors.New("任务实例忙闲锁不可用")
+		return executor.Result{}, errors.New("the task instance busy lock is not available")
 	}
 	child, cancel := context.WithCancel(ctx)
 	defer cancel()

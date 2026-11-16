@@ -34,21 +34,21 @@ func (v *DBConnectionsPut) UnmarshalJSON(b []byte) error {
 		Expected   *int64          `json:"expectedConfigVersion"`
 	}
 	if strict(b, &raw) != nil || raw.Expected == nil || len(raw.AccountIDs) == 0 || string(raw.AccountIDs) == "null" {
-		return errors.New("数据库连接集合字段无效")
+		return errors.New("invalid database connection set fields")
 	}
 	var ids []json.RawMessage
 	if json.Unmarshal(raw.AccountIDs, &ids) != nil || ids == nil {
-		return errors.New("数据库连接集合字段无效")
+		return errors.New("invalid database connection set fields")
 	}
 	out := make([]uuid.UUID, 0, len(ids))
 	for _, item := range ids {
 		var value string
 		if json.Unmarshal(item, &value) != nil {
-			return errors.New("数据库连接ID无效")
+			return errors.New("invalid database connection ID")
 		}
 		id, err := uuid.Parse(value)
 		if err != nil || id == uuid.Nil {
-			return errors.New("数据库连接ID无效")
+			return errors.New("invalid database connection ID")
 		}
 		out = append(out, id)
 	}

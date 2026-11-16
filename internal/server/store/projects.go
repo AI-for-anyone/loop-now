@@ -44,7 +44,7 @@ func (s *Store) ListProjects(ctx context.Context, orgID uuid.UUID) ([]Project, e
 // GetProject returns a non-deleted project.
 func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
 	p, err := scanProject(s.Pool.QueryRow(ctx, `SELECT `+projectColumns+` FROM projects p WHERE p.id = $1 AND p.deleted_at IS NULL`, id))
-	return p, notFoundIfNoRows(err, "项目")
+	return p, notFoundIfNoRows(err, "Project")
 }
 
 // CreateProject creates a project in an organization.
@@ -83,10 +83,10 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var isDefault bool
 		if err := tx.QueryRow(ctx, `SELECT is_default FROM projects WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&isDefault); err != nil {
-			return notFoundIfNoRows(err, "项目")
+			return notFoundIfNoRows(err, "Project")
 		}
 		if isDefault {
-			return apperr.Invalid("projectId", "默认项目不能删除")
+			return apperr.Invalid("projectId", "The default project cannot be deleted.")
 		}
 		var taskActive bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_records WHERE project_id=$1 AND ended_at IS NULL)`, id).Scan(&taskActive); err != nil {
@@ -109,7 +109,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 			if e != nil {
 				return e
 			}
-			conflict := apperr.Conflict(apperr.CodeTaskNotIdle, "项目中存在未结束任务，不能删除")
+			conflict := apperr.Conflict(apperr.CodeTaskNotIdle, "The project has tasks that have not ended, so it cannot be deleted.")
 			conflict.Details = struct {
 				ProjectID uuid.UUID    `json:"projectId"`
 				Tasks     []activeTask `json:"tasks"`
@@ -140,7 +140,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 			return err
 		}
 		if len(busy) > 0 {
-			e := apperr.Conflict(apperr.CodeAgentNotIdle, "项目中还有 Agent 正在回复或有排队消息，请等它们空闲后再删除项目")
+			e := apperr.Conflict(apperr.CodeAgentNotIdle, "Agents in the project are replying or have queued messages. Wait until they are idle, then delete the project.")
 			e.Details = ProjectNotIdleDetails{Agents: busy}
 			return e
 		}
@@ -198,7 +198,7 @@ func (s *Store) SetProjectManager(ctx context.Context, projectID, agentID uuid.U
 		err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL`, agentID, projectID).Scan(&ok)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {
-				return apperr.Invalid("agentId", "Manager 必须是本项目内未删除的 Agent")
+				return apperr.Invalid("agentId", "The Manager must be an Agent in this project that has not been deleted.")
 			}
 			return err
 		}
@@ -231,14 +231,14 @@ func (s *Store) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (P
 func requireLiveProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var ok bool
 	err := tx.QueryRow(ctx, `SELECT true FROM projects WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&ok)
-	return notFoundIfNoRows(err, "项目")
+	return notFoundIfNoRows(err, "Project")
 }
 
 // projectNameConflict turns a unique constraint violation for a duplicate name within an organization into
 // name_conflict.
 func projectNameConflict(err error, name string) error {
 	if isUniqueViolation(err, "projects_name_live") {
-		return apperr.Conflict(apperr.CodeNameConflict, "已有名为 "+name+" 的项目")
+		return apperr.Conflict(apperr.CodeNameConflict, "A project named \""+name+"\" already exists.")
 	}
 	return err
 }

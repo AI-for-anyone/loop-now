@@ -158,7 +158,7 @@ func (s *Service) Daily(ctx context.Context) error {
 	var errs []error
 	results, err := s.st.Pool.Checkpoint(ctx, db.CheckpointTruncate)
 	if err != nil {
-		errs = append(errs, fmt.Errorf("截断检查点：%w", err))
+		errs = append(errs, fmt.Errorf("truncate checkpoint: %w", err))
 	}
 	for _, r := range results {
 		if r.Busy {
@@ -166,20 +166,20 @@ func (s *Service) Daily(ctx context.Context) error {
 		}
 	}
 	if err := s.st.Pool.Optimize(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("optimize：%w", err))
+		errs = append(errs, fmt.Errorf("optimize: %w", err))
 	}
 	before := s.o.Now().Add(-s.o.LogRetention)
 	if n, err := s.st.PruneEventLogs(ctx, before, s.o.PruneBatch); err != nil {
-		errs = append(errs, fmt.Errorf("清理旧日志：%w", err))
+		errs = append(errs, fmt.Errorf("prune old logs: %w", err))
 	} else if n > 0 {
 		s.log.Info("pruned old logs", "rows", n, "before", before)
 	}
 	if path, err := Backup(ctx, s.st.Pool, s.o.BackupDir, s.o.Now()); err != nil {
-		errs = append(errs, fmt.Errorf("备份：%w", err))
+		errs = append(errs, fmt.Errorf("back up the databases: %w", err))
 	} else {
 		s.log.Info("backed up the database", "dir", path)
 		if err := prune(s.o.BackupDir, s.o.BackupKeep); err != nil {
-			errs = append(errs, fmt.Errorf("清理旧备份：%w", err))
+			errs = append(errs, fmt.Errorf("prune old backups: %w", err))
 		}
 	}
 	s.warnWAL()
@@ -196,7 +196,7 @@ func Backup(ctx context.Context, d *db.DB, dir string, now time.Time) (string, e
 	name := now.UTC().Format(backupLayout)
 	final := filepath.Join(dir, name)
 	if _, err := os.Stat(final); err == nil {
-		return "", fmt.Errorf("备份 %s 已存在", final)
+		return "", fmt.Errorf("backup %s already exists", final)
 	}
 	partial := filepath.Join(dir, partialPrefix+name)
 	if err := os.Mkdir(partial, 0o700); err != nil {

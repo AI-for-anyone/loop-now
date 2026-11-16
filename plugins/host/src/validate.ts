@@ -63,30 +63,30 @@ async function dryRun(root: string, m: Manifest): Promise<Finding[]> {
   })
   const rt = new PluginRuntime(payload, {
     request: async (type) => {
-      throw new Error(`校验时不连接平台（${type}）；状态读写请放到 lifecycle start 或处理函数里`)
+      throw new Error(`Validation does not connect to the platform (${type}); read and write state in lifecycle start or in handlers instead`)
     },
     log: (plugin, level, message) => process.stderr.write(`[${plugin}] ${level}: ${message}\n`),
   })
   const error = (message: string) => findings.push({ level: 'error', path: 'loopNow.platform', message })
   const warn = (p: string, message: string) => findings.push({ level: 'warning', path: p, message })
   try {
-    const mod = await withTimeout(runAs(m.id, () => importEntry(entry)), `加载 ${m.platform}`)
+    const mod = await withTimeout(runAs(m.id, () => importEntry(entry)), `load ${m.platform}`)
     const register = pickRegister(mod)
     if (!register) {
-      error(`${m.platform} 没有默认导出 register 函数`)
+      error(`${m.platform} does not export a default register function.`)
       return findings
     }
     await withTimeout(runAs(m.id, async () => register(rt.api)), 'register')
   } catch (err) {
-    if (rt.violations.length === 0) error(`加载平台侧失败：${describeError(err)}`)
+    if (rt.violations.length === 0) error(`Could not load the platform side: ${describeError(err)}`)
   }
   for (const v of rt.violations) error(v)
   const got = rt.registrations()
-  for (const e of m.events) if (!got.events.includes(e)) warn('loopNow.events', `声明了 ${e}，但 register 里没有订阅（可能在 start 里订阅）`)
-  for (const a of m.actions) if (!got.actions.includes(a)) warn('loopNow.actions', `声明了操作按钮 ${a}，但 register 里没有注册`)
-  for (const s of m.schedules) if (!got.schedules.includes(s)) warn('loopNow.schedule', `声明了定时任务 ${s}，但 register 里没有注册`)
-  for (const c of m.channels) if (!got.channels.includes(c)) warn('loopNow.channels', `声明了渠道 ${c}，但 register 里没有注册`)
-  if (m.http && !got.http) warn('loopNow.http', '声明了 http，但 register 里没有注册 HTTP 处理函数')
+  for (const e of m.events) if (!got.events.includes(e)) warn('loopNow.events', `${e} is declared, but register does not subscribe to it (the plugin may subscribe in start).`)
+  for (const a of m.actions) if (!got.actions.includes(a)) warn('loopNow.actions', `Action button ${a} is declared, but register does not register a handler for it.`)
+  for (const s of m.schedules) if (!got.schedules.includes(s)) warn('loopNow.schedule', `Scheduled job ${s} is declared, but register does not register a handler for it.`)
+  for (const c of m.channels) if (!got.channels.includes(c)) warn('loopNow.channels', `Channel ${c} is declared, but register does not register handlers for it.`)
+  if (m.http && !got.http) warn('loopNow.http', 'http is declared, but register does not register an HTTP handler.')
   await rt.stop(1_000)
   return findings
 }
@@ -97,7 +97,7 @@ async function withTimeout<T>(work: Promise<T>, what: string): Promise<T> {
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what}超过 ${LOAD_TIMEOUT} 毫秒`)), LOAD_TIMEOUT)
+        timer = setTimeout(() => reject(new Error(`${what} timed out after ${LOAD_TIMEOUT} ms`)), LOAD_TIMEOUT)
       }),
     ])
   } finally {

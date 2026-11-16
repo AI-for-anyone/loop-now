@@ -50,7 +50,7 @@ type prepared struct {
 func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, larkShim string) (prepared, error) {
 	var p prepared
 	if snap.LarkBinding != nil && larkShim == "" {
-		return p, fail(executor.ErrCredentialUnavailable, "Lark 用户运行通道尚未装配")
+		return p, fail(executor.ErrCredentialUnavailable, "The Lark user runtime channel is not wired up yet.")
 	}
 	if err := d.ensure(); err != nil {
 		return p, err
@@ -75,7 +75,7 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 			e.event(snap.AgentID, &runID, store.EventCLIInstall, data)
 		}
 		if err != nil {
-			return p, fail(executor.ErrCLIInstallFailed, "%s：%v", cli, err)
+			return p, fail(executor.ErrCLIInstallFailed, "%s: %v", cli, err)
 		}
 		p.cliBinDirs = append(p.cliBinDirs, dir)
 		p.cliBins = append(p.cliBins, filepath.Join(dir, t.Binary))
@@ -132,7 +132,7 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	loginHome := ""
 	if snap.Local.Logins || claude {
 		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
-			return fail(executor.ErrInternal, "读取服务端用户的主目录失败（“用本机的登录状态”需要它）")
+			return fail(executor.ErrInternal, "Could not read the server user's home directory (\"Use local logins\" needs it).")
 		}
 	}
 	prompt, err := e.appendedPrompt(snap, d, loginHome)
@@ -149,7 +149,7 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	// 3. Model credentials go into a separate Pi cache; CLI credentials keep the template rules. A plugin provider's
 	// subscription account is instead linked to the account's state directory (the previous links are removed first).
 	if err := clearProviderLinks(d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "清理订阅账号的旧链接失败：%v", err)
+		return fail(executor.ErrCredentialUnavailable, "Could not remove the old links of the subscription account: %v", err)
 	}
 	switch {
 	case claude:
@@ -160,12 +160,12 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 		}
 	default:
 		if err := seedModelAuth(snap, d); err != nil {
-			return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
+			return fail(executor.ErrCredentialUnavailable, "Could not write the model credential cache.")
 		}
 	}
 	if !claude {
 		if err := syncModelsJSON(snap, d); err != nil {
-			return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+			return fail(executor.ErrCredentialUnavailable, "Could not write the model configuration cache.")
 		}
 	}
 	// CLI credential files are deleted first, then written.
@@ -321,7 +321,7 @@ func (e *Executor) syncCredentialFiles(snap agentconfig.Snapshot, d agentDirs) e
 	}
 	for _, p := range e.tmpl.AllCredentialFilePaths() {
 		if err := root.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("删除旧凭证文件 %s 失败：%w", p, err)
+			return fmt.Errorf("delete the old credential file %s: %w", p, err)
 		}
 	}
 	for _, cli := range snap.CLIs {
@@ -333,7 +333,7 @@ func (e *Executor) syncCredentialFiles(snap agentconfig.Snapshot, d agentDirs) e
 				return err
 			}
 			if err := root.WriteFile(f.Path, f.Content, 0o600); err != nil {
-				return fmt.Errorf("写入凭证文件 %s 失败：%w", f.Path, err)
+				return fmt.Errorf("write the credential file %s: %w", f.Path, err)
 			}
 		}
 	}
@@ -369,7 +369,7 @@ func (e *Executor) syncSources(ctx context.Context, snap agentconfig.Snapshot, d
 			if err := e.syncFilesSource(ctx, root, src, exists, &o); err != nil {
 				o.outcome, o.err = "failed", err.Error()
 				*outcomes = append(*outcomes, o)
-				return fail(executor.ErrWorkspaceSyncFailed, "来源 %s：%v", src.Path, err)
+				return fail(executor.ErrWorkspaceSyncFailed, "Source %s: %v", src.Path, err)
 			}
 			o.outcome = "files_synced"
 		}
@@ -462,15 +462,15 @@ func (e *Executor) cloneRepo(ctx context.Context, root *os.Root, d agentDirs, sr
 	}
 	failed := func(reason string) error {
 		if ctx.Err() != nil {
-			return fail(executor.ErrWorkspaceSyncFailed, "来源 %s：克隆超时（%s）", src.Path, e.o.CloneTimeout)
+			return fail(executor.ErrWorkspaceSyncFailed, "Source %s: the clone timed out after %s.", src.Path, e.o.CloneTimeout)
 		}
-		return fail(executor.ErrWorkspaceSyncFailed, "来源 %s：%s", src.Path, reason)
+		return fail(executor.ErrWorkspaceSyncFailed, "Source %s: %s", src.Path, reason)
 	}
 	if src.GitCommit != "" {
 		// Only full object IDs are accepted: a branch/ref expression must never
 		// turn a captured task commit into a later branch head.
 		if _, err := hex.DecodeString(src.GitCommit); err != nil || (len(src.GitCommit) != 40 && len(src.GitCommit) != 64) {
-			return failed("冻结版本无效")
+			return failed("the pinned commit is invalid")
 		}
 		initArgs := []string{"init", "--quiet"}
 		if len(src.GitCommit) == 64 {
@@ -484,24 +484,24 @@ func (e *Executor) cloneRepo(ctx context.Context, root *os.Root, d agentDirs, sr
 			{"-C", tmpAbs, "checkout", "--detach", "FETCH_HEAD"},
 		} {
 			if _, err := run(args...); err != nil {
-				return failed("冻结版本不可用（精确浅获取失败）")
+				return failed("the pinned commit is not available (the exact shallow fetch failed)")
 			}
 		}
 		head, err := run("-C", tmpAbs, "rev-parse", "HEAD")
 		if err != nil || !strings.EqualFold(strings.TrimSpace(string(head)), src.GitCommit) {
-			return failed("冻结版本校验失败")
+			return failed("the pinned commit failed verification")
 		}
 	} else {
 		out, err := run("clone", "--depth=1", "--single-branch", "--no-local", "--branch", src.GitBranch, "--", src.GitURL, tmpAbs)
 		if err != nil {
-			return failed("克隆失败：" + tail(string(out), 2000))
+			return failed("clone failed: " + tail(string(out), 2000))
 		}
 	}
 	if err := root.MkdirAll(path.Dir(src.Path), 0o755); err != nil {
 		return err
 	}
 	if err := root.Rename(tmpName, src.Path); err != nil {
-		return fail(executor.ErrWorkspaceSyncFailed, "来源 %s：%v", src.Path, err)
+		return fail(executor.ErrWorkspaceSyncFailed, "Source %s: %v", src.Path, err)
 	}
 	return nil
 }

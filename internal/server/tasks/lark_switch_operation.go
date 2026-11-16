@@ -47,7 +47,7 @@ type taskLarkHeld struct {
 }
 
 func larkUnavailable() error {
-	return &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "任务凭证交接暂不可确认，请仅查询原动作ID"}
+	return &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The task credential handoff cannot be confirmed right now. Only query the original actionId."}
 }
 func (s *Service) larkRecordTimeout() time.Duration {
 	if s.Options.RecordTimeout > 0 {
@@ -72,22 +72,22 @@ func (s *Service) larkDispatchPaused(runtime uuid.UUID) bool {
 
 func validateLarkSwitch(in taskmodel.TaskLarkSwitchInput) error {
 	if in.ActionID == uuid.Nil || in.ExpectedNodeRunID == uuid.Nil || in.ExpectedAgentID == uuid.Nil || in.ExpectedRuntimeID == uuid.Nil || in.TargetAccountID == uuid.Nil || in.TargetVersionID == uuid.Nil || in.ExpectedTaskVersion < 1 || in.ExpectedAccountRevision < 1 || in.ExpectedLarkBindingRevision < 0 || len(in.ExpectedMembers) != 2 {
-		return apperr.Invalid("switch", "原任务、固定目标版本或成员CAS无效")
+		return apperr.Invalid("switch", "actionId, expectedNodeRunId, expectedAgentId, expectedRuntimeId, targetAccountId and targetVersionId must be non-zero UUIDs; expectedTaskVersion and expectedAccountRevision must be at least 1; expectedLarkBindingRevision must not be negative; expectedMembers must have exactly 2 items.")
 	}
 	publisher := 0
 	for i, m := range in.ExpectedMembers {
 		if m.AgentID == uuid.Nil || m.RuntimeID == uuid.Nil || m.ExpectedBindingRevision < 0 {
-			return apperr.Invalid("expectedMembers", "成员标识或版本无效")
+			return apperr.Invalid("expectedMembers", "Each member needs a non-zero agentId and runtimeId and an expectedBindingRevision that is not negative.")
 		}
 		if i == 1 && (m.AgentID == in.ExpectedMembers[0].AgentID || m.RuntimeID == in.ExpectedMembers[0].RuntimeID) {
-			return apperr.Invalid("expectedMembers", "必须明确两个不同成员")
+			return apperr.Invalid("expectedMembers", "Must list two different members, with different agentId and runtimeId values.")
 		}
 		if m.AgentID == in.ExpectedAgentID && m.RuntimeID == in.ExpectedRuntimeID {
 			publisher++
 		}
 	}
 	if publisher != 1 {
-		return apperr.Invalid("expectedMembers", "清单必须精确包含当前执行实例")
+		return apperr.Invalid("expectedMembers", "Must include the current executing instance (expectedAgentId and expectedRuntimeId) exactly once.")
 	}
 	return nil
 }
@@ -95,10 +95,10 @@ func validateLarkSwitch(in taskmodel.TaskLarkSwitchInput) error {
 func (s *Service) SwitchLarkAccount(ctx context.Context, p auth.Principal, task uuid.UUID, in taskmodel.TaskLarkSwitchInput) (taskmodel.TaskLarkSwitchReceipt, error) {
 	var zero taskmodel.TaskLarkSwitchReceipt
 	if p.Kind != auth.KindConsole {
-		return zero, apperr.Forbidden("任务凭证切换仅限控制台")
+		return zero, apperr.Forbidden("Only the console can switch task credentials.")
 	}
 	if task == uuid.Nil {
-		return zero, apperr.Invalid("taskId", "任务ID无效")
+		return zero, apperr.Invalid("taskId", "Must not be the zero UUID.")
 	}
 	if err := validateLarkSwitch(in); err != nil {
 		return zero, err
@@ -166,7 +166,7 @@ func (s *Service) SwitchLarkAccount(ctx context.Context, p auth.Principal, task 
 				return zero, e
 			}
 			if errors.Is(err, ErrTaskLarkNativeBusy) {
-				return zero, conflict("原实例存在活动native工作，未切换账号")
+				return zero, conflict("The original instance has active native work. The account was not switched.")
 			}
 			return zero, larkUnavailable()
 		}
@@ -181,7 +181,7 @@ func (s *Service) SwitchLarkAccount(ctx context.Context, p auth.Principal, task 
 				return zero, e
 			}
 			if errors.Is(err, local.ErrRuntimeBusy) {
-				return zero, conflict("原实例正在执行或交接，未切换账号")
+				return zero, conflict("The original instance is running or in a handoff. The account was not switched.")
 			}
 			return zero, larkUnavailable()
 		}
@@ -189,7 +189,7 @@ func (s *Service) SwitchLarkAccount(ctx context.Context, p auth.Principal, task 
 			if e := s.abortLarkSwitch(h, "session_unavailable"); e != nil {
 				return zero, e
 			}
-			return zero, conflict("原会话不可接续，未创建替代会话")
+			return zero, conflict("The original session cannot be continued. No replacement session was created.")
 		}
 		return s.LarkSwitchAction(ctx, p, task, in.ActionID)
 	}
@@ -298,7 +298,7 @@ func (s *Service) confirmLarkSwitch(h *taskLarkHeld) error {
 func (s *Service) LarkSwitchAction(ctx context.Context, p auth.Principal, task, action uuid.UUID) (taskmodel.TaskLarkSwitchReceipt, error) {
 	var out taskmodel.TaskLarkSwitchReceipt
 	if p.Kind != auth.KindConsole {
-		return out, apperr.Forbidden("任务凭证切换仅限控制台")
+		return out, apperr.Forbidden("Only the console can switch task credentials.")
 	}
 	_, err := s.Store.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		m.Unchanged()
@@ -316,7 +316,7 @@ func (s *Service) larkSwitchReceiptTx(ctx context.Context, m *store.TaskMutation
 	err := m.Tx.QueryRow(ctx, `SELECT task_id,action_id,node_run_id,status,reservation_task_version,captured_request,receipt,failure_reason,created_at,finished_at FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action).Scan(&out.TaskID, &out.ActionID, &out.SourceNodeRunID, &out.Status, &out.ReservationTaskVersion, &captureRaw, &receiptRaw, &failure, &out.CreatedAt, &out.FinishedAt)
 	if err != nil {
 		if errors.Is(err, db.ErrNoRows) {
-			return out, apperr.NotFound("Lark切换动作")
+			return out, apperr.NotFound("Lark switch action")
 		}
 		return out, err
 	}
@@ -345,7 +345,7 @@ func (s *Service) larkSwitchReceiptTx(ctx context.Context, m *store.TaskMutation
 		out.DispatchStatus = &status
 	}
 	if out.Status == "failed" || failure != nil {
-		code, message := "task_conflict", "任务凭证交接未发布新绑定，原任务成果保留"
+		code, message := "task_conflict", "The task credential handoff did not publish a new binding. The original task's results are kept."
 		out.ErrorCode, out.ErrorMessage = &code, &message
 	}
 	return out, nil

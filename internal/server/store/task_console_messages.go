@@ -141,7 +141,7 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 }
 
 func TaskConsoleConflict(m *TaskMutation, target TaskConsoleLineage, reason string) error {
-	e := apperr.Conflict(apperr.CodeTaskConflict, "原任务节点或运行条件已变化，请保留原草稿并核对目标")
+	e := apperr.Conflict(apperr.CodeTaskConflict, "The original task node or its run conditions have changed. Keep your draft and check the target.")
 	e.Details = taskmodel.TaskNodeMessageConflictDetails{TaskID: target.TaskID, ExpectedNodeRunID: target.NodeRunID, CurrentNodeRunID: m.Record.View.Task.CurrentNodeRunID, ExpectedAgentID: target.AgentID, ExpectedRuntimeID: target.RuntimeID, TaskVersion: m.Record.View.Task.Version, Reason: reason}
 	return e
 }
@@ -151,7 +151,7 @@ func TaskConsoleConflict(m *TaskMutation, target TaskConsoleLineage, reason stri
 func (s *Store) RecordTaskConsoleEligibilityTx(ctx context.Context, m *TaskMutation, source uuid.UUID) error {
 	n := m.Record.Current()
 	if n == nil || n.Status != "blocked" || m.Record.Ended() || source == uuid.Nil {
-		return apperr.Conflict(apperr.CodeTaskConflict, "执行异常来源不匹配")
+		return apperr.Conflict(apperr.CodeTaskConflict, "The source of the run failure does not match.")
 	}
 	tag, err := m.Tx.Exec(ctx, `INSERT INTO task_console_chat_eligibility(task_id,node_run_id,source_run_id)
  SELECT task_id,node_run_id,id FROM task_turns t WHERE id=$1 AND task_id=$2 AND node_run_id=$3 AND runtime_id=$4 AND execution_mode='task_node' AND status IN ('failed','interrupted')
@@ -161,7 +161,7 @@ func (s *Store) RecordTaskConsoleEligibilityTx(ctx context.Context, m *TaskMutat
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return apperr.Conflict(apperr.CodeTaskConflict, "执行异常来源不匹配")
+		return apperr.Conflict(apperr.CodeTaskConflict, "The source of the run failure does not match.")
 	}
 	return nil
 }
@@ -188,7 +188,7 @@ func (s *Store) TaskConsoleLineageTx(ctx context.Context, tx *db.Tx, run uuid.UU
 
 func (s *Store) AttachTaskConsoleLineageTx(ctx context.Context, m *TaskMutation, turn TaskTurn, agent uuid.UUID, mode string) error {
 	if mode != "task_node" && mode != "task_conversation" {
-		return apperr.Conflict(apperr.CodeTaskConflict, "节点对话模式不匹配")
+		return apperr.Conflict(apperr.CodeTaskConflict, "The node conversation mode does not match.")
 	}
 	tag, err := m.Tx.Exec(ctx, `INSERT INTO task_console_message_lineage(run_id,task_id,node_run_id,agent_id,runtime_id,execution_mode)
  SELECT t.id,t.task_id,t.node_run_id,i.agent_id,t.runtime_id,$6 FROM task_turns t JOIN task_instances i ON i.id=t.runtime_id
@@ -198,7 +198,7 @@ func (s *Store) AttachTaskConsoleLineageTx(ctx context.Context, m *TaskMutation,
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return apperr.Conflict(apperr.CodeTaskConflict, "节点对话来源不匹配")
+		return apperr.Conflict(apperr.CodeTaskConflict, "The node conversation source does not match.")
 	}
 	return nil
 }
@@ -302,7 +302,7 @@ func (s *Store) GuardTaskConsoleTurnTx(ctx context.Context, m *TaskMutation, tur
 		return true, true, nil
 	}
 	if current.Status == "queued" || current.Status == "starting" || current.Status == "running" || current.Status == "aborting" {
-		code, message := apperr.CodeTaskConflict, "原节点或执行条件已变化，未向其他节点执行该消息"
+		code, message := apperr.CodeTaskConflict, "The original node or its run conditions have changed. The message was not run on another node."
 		if _, e = s.UpdateTaskTurnTx(ctx, m, current.ID, "interrupted", current.Reply, &code, &message); e != nil {
 			return true, false, e
 		}

@@ -20,11 +20,11 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 	// callers. No secret data is part of this canonical request fingerprint.
 	b, e := json.Marshal(in)
 	if e != nil {
-		return out, false, apperr.Invalid("body", "Lark登录字段无效")
+		return out, false, apperr.Invalid("body", "The Lark login fields are invalid.")
 	}
 	var checked cm.CLIAuthStart
 	if json.Unmarshal(b, &checked) != nil || checked.CLI != "lark-cli" {
-		return out, false, apperr.Invalid("body", "Lark登录字段无效")
+		return out, false, apperr.Invalid("body", "The Lark login fields are invalid.")
 	}
 	sum := sha256.Sum256(b)
 	hash := hex.EncodeToString(sum[:])
@@ -57,7 +57,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 				return projectAccountDeleted(project, r.View.ID)
 			}
 			if r.View.Purpose != PurposeCLI || r.View.CLI == nil || *r.View.CLI != "lark-cli" || r.CLI == nil || r.View.AuthMethod != nil {
-				return apperr.Invalid("sourceAccountId", "必须选择同项目已有Lark应用配置")
+				return apperr.Invalid("sourceAccountId", "Must be an existing Lark app configuration in the same project.")
 			}
 			if e = credentialCAS("account", r.View.ID, *in.ExpectedSourceRevision, r.View.Revision); e != nil {
 				return e
@@ -72,7 +72,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 				return projectAccountDeleted(project, r.View.ID)
 			}
 			if r.View.LarkIdentity == nil {
-				return apperr.Invalid("accountId", "必须选择已有Lark用户账号")
+				return apperr.Invalid("accountId", "Must be an existing Lark user account.")
 			}
 			if e = credentialCAS("account", r.View.ID, *in.ExpectedRevision, r.View.Revision); e != nil {
 				return e
@@ -91,7 +91,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 			return e
 		}
 		if exists {
-			return apperr.NotFound("CLI登录操作")
+			return apperr.NotFound("CLI login operation")
 		}
 		_, e = tx.Exec(ctx, `INSERT INTO project_cli_auth_operations(id,project_id,cli_name,auth_type,request_hash,target_account_id,target_revision,expires_at,source_account_id,source_version_id,source_revision)VALUES($1,$2,'lark-cli','lark_user',$3,$4,$5,$6,$7,$8,$9)`, in.OperationID, project, hash, in.AccountID, in.ExpectedRevision, expires, in.SourceAccountID, sourceVersion, in.ExpectedSourceRevision)
 		if e != nil {
@@ -117,12 +117,12 @@ func (s *Store) GetProjectLarkAuthSource(ctx context.Context, project, id uuid.U
 			return e
 		}
 		if op.CLI != "lark-cli" || cliOperationTerminal(op.Status) {
-			return apperr.Conflict("cli_auth_in_progress", "Lark操作已结束")
+			return apperr.Conflict("cli_auth_in_progress", "The Lark operation has already ended.")
 		}
 		var version, account uuid.UUID
 		if op.TargetAccountID == nil {
 			if op.SourceVersionID == nil || op.SourceAccountID == nil {
-				return apperr.Invalid("sourceAccountId", "应用来源缺失")
+				return apperr.Invalid("sourceAccountId", "The app source is missing.")
 			}
 			version, account = *op.SourceVersionID, *op.SourceAccountID
 		} else {
@@ -131,7 +131,7 @@ func (s *Store) GetProjectLarkAuthSource(ctx context.Context, project, id uuid.U
 				return e
 			}
 			if r.View.DeletedAt != nil || op.TargetRevision == nil || r.View.Revision != *op.TargetRevision || r.View.LarkIdentity == nil || r.CLI == nil {
-				return apperr.PreconditionFailed("Lark目标已改变")
+				return apperr.PreconditionFailed("The Lark target account has changed.")
 			}
 			row = *r.CLI
 			return nil
@@ -149,7 +149,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 	// URL safety is checked by the fixed-brand protocol adapter before this
 	// internal write; there is no public endpoint accepting a provider URL.
 	if url == "" || expires.IsZero() || code != nil && (*code == "" || len(*code) > 200) {
-		return out, apperr.Invalid("authorization", "Lark授权交互无效")
+		return out, apperr.Invalid("authorization", "The Lark authorization exchange is invalid.")
 	}
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
@@ -164,7 +164,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 			return e
 		}
 		if out.CLI != "lark-cli" {
-			return apperr.Invalid("cli", "Lark授权操作类型不匹配")
+			return apperr.Invalid("cli", "The operation is not a Lark authorization.")
 		}
 		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=min(expires_at,$4) WHERE id=$1 AND $4>clock_timestamp()`, id, url, code, expires); e != nil {
 			return e

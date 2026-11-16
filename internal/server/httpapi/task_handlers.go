@@ -20,7 +20,7 @@ import (
 
 func (s *Server) taskReady(w http.ResponseWriter, r *http.Request) bool {
 	if s.Tasks == nil {
-		s.fail(w, r, apperr.NotFound("任务服务"))
+		s.fail(w, r, apperr.NotFound("Task service"))
 		return false
 	}
 	return true
@@ -29,26 +29,26 @@ func (s *Server) taskBody(w http.ResponseWriter, r *http.Request, out any) error
 	r.Body = http.MaxBytesReader(w, r.Body, s.Tasks.Options.MaxRequest)
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return apperr.TooLarge("任务请求超限")
+		return apperr.TooLarge("The task request exceeds the size limit.")
 	}
 	if _, ok := out.(*taskmodel.SubmitInput); ok {
 		var fields map[string]json.RawMessage
 		if json.Unmarshal(data, &fields) != nil {
-			return apperr.Invalid("body", "任务请求正文无效")
+			return apperr.Invalid("body", "The task request body must be a JSON object.")
 		}
 		if _, present := fields["edgeId"]; !present {
-			return apperr.Invalid("edgeId", "须显式提交出口，最后节点提交null")
+			return apperr.Invalid("edgeId", "Required. Give the ID of the edge to leave by, or null at the last node.")
 		}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(out); err != nil {
-		return apperr.Invalid("body", "任务请求正文无效或超限")
+		return apperr.Invalid("body", "The task request body is not valid JSON, has unknown fields or exceeds a limit.")
 	}
 	var extra any
 	if decoder.Decode(&extra) != io.EOF {
-		return apperr.Invalid("body", "只能提交一个JSON对象")
+		return apperr.Invalid("body", "The request body must contain a single JSON object.")
 	}
 	return nil
 }
@@ -90,7 +90,7 @@ func (s *Server) getCurrentTask(w http.ResponseWriter, r *http.Request) {
 	}
 	p := principal(r)
 	if p.Kind != auth.KindAgent || p.TaskID == uuid.Nil {
-		s.fail(w, r, apperr.NotFound("当前任务"))
+		s.fail(w, r, apperr.NotFound("Current task"))
 		return
 	}
 	d, e := s.Tasks.Get(r.Context(), p, p.TaskID)
@@ -120,7 +120,7 @@ func (s *Server) taskNode(w http.ResponseWriter, r *http.Request) (taskmodel.Nod
 			return n, true
 		}
 	}
-	s.fail(w, r, apperr.NotFound("节点运行"))
+	s.fail(w, r, apperr.NotFound("Node run"))
 	return taskmodel.NodeRun{}, false
 }
 func (s *Server) getTaskNode(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +159,7 @@ func taskLimit(r *http.Request) (int, error) {
 	}
 	n, e := strconv.Atoi(v)
 	if e != nil || n < 1 || n > 100 {
-		return 0, apperr.Invalid("limit", "必须在1到100之间")
+		return 0, apperr.Invalid("limit", "Must be an integer between 1 and 100.")
 	}
 	return n, nil
 }
@@ -343,21 +343,21 @@ func (s *Server) publishTaskArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 	action, e := uuid.Parse(r.URL.Query().Get("actionId"))
 	if e != nil {
-		s.fail(w, r, apperr.Invalid("actionId", "无效UUID"))
+		s.fail(w, r, apperr.Invalid("actionId", "Must be a valid UUID."))
 		return
 	}
 	node, e := uuid.Parse(r.URL.Query().Get("nodeRunId"))
 	if e != nil {
-		s.fail(w, r, apperr.Invalid("nodeRunId", "无效UUID"))
+		s.fail(w, r, apperr.Invalid("nodeRunId", "Must be a valid UUID."))
 		return
 	}
 	if r.Header.Get("Content-Type") != "application/octet-stream" {
-		s.fail(w, r, apperr.Invalid("Content-Type", "须为application/octet-stream"))
+		s.fail(w, r, apperr.Invalid("Content-Type", "Must be application/octet-stream."))
 		return
 	}
 	data, e := io.ReadAll(http.MaxBytesReader(w, r.Body, s.Tasks.Options.MaxArtifact))
 	if e != nil {
-		s.fail(w, r, apperr.TooLarge("成果超限"))
+		s.fail(w, r, apperr.TooLarge("The artifact exceeds the size limit."))
 		return
 	}
 	out, e := s.Tasks.Publish(r.Context(), principal(r), id, node, action, r.URL.Query().Get("name"), r.URL.Query().Get("contentType"), data)

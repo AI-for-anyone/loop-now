@@ -28,17 +28,17 @@ func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uui
 		}
 		n := m.Record.Current()
 		if m.Record.Ended() || n.Status == "blocked" || n.Output != nil {
-			return nil, conflict("当前节点不能发起问题")
+			return nil, conflict("The current node cannot ask a question: the task has ended, the node is blocked, or it has already submitted.")
 		}
 		if n.Question != nil && n.Question.Status == "open" {
-			return nil, conflict("当前节点已有未回答的问题")
+			return nil, conflict("The current node already has an unanswered question.")
 		}
 		q, e := create(m.Tx)
 		if e != nil {
 			return nil, e
 		}
 		if q.ID == uuid.Nil || q.ThreadID == uuid.Nil || q.MessageID == uuid.Nil || q.Status != "open" {
-			return nil, apperr.Invalid("question", "统一问题服务返回的原题引用无效")
+			return nil, apperr.Invalid("question", "The question service returned an invalid reference to the original question.")
 		}
 		q.CanAnswer = false // computed per reader on read; never cache the creator's or console's permissions for others
 		n.Question = &q
@@ -50,7 +50,7 @@ func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uui
 // question only updates the history; it does not wake a newer node or end the task.
 func (s *Service) QuestionChanged(ctx context.Context, taskID, questionID uuid.UUID, status string) error {
 	if status != "answered" && status != "expired" && status != "closed" {
-		return apperr.Invalid("status", "问题终态无效")
+		return apperr.Invalid("status", "Must be answered, expired or closed.")
 	}
 	_, err := s.Store.MutateTask(ctx, taskID, nil, func(m *store.TaskMutation) (any, error) {
 		var node *taskmodel.NodeRun
@@ -109,14 +109,14 @@ func (s *Service) QuestionView(ctx context.Context, p auth.Principal, q taskmode
 		return q, e
 	}
 	if view.ID != q.ID || view.ThreadID != q.ThreadID || view.MessageID != q.MessageID {
-		return q, errors.New("统一问题引用不匹配")
+		return q, errors.New("the question service reference does not match")
 	}
 	switch view.Status {
 	case "open":
 	case "answered", "expired", "closed":
 		view.CanAnswer = false
 	default:
-		return q, errors.New("统一问题状态无效")
+		return q, errors.New("the question service returned an invalid status")
 	}
 	return view, nil
 }

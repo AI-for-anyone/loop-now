@@ -30,7 +30,7 @@ func scanImage(row db.Scanner) (StoredImage, error) {
 		v.NodeRunID = *node
 		v.RuntimeID = *runtime
 	}
-	return v, notFoundIfNoRows(e, "图片")
+	return v, notFoundIfNoRows(e, "Image")
 }
 
 const imageColumns = `id,agent_id,task_id,node_run_id,runtime_id,blob_sha,mime_type,size,width,height,conversation_message_id,inbox_message_id`
@@ -57,7 +57,7 @@ func (s *Store) SaveMessageImage(ctx context.Context, id uuid.UUID, owner ImageO
 			return e
 		}
 		if v.ImageOwner != owner || v.BlobSHA != sha {
-			return apperr.Conflict(apperr.CodeTaskConflict, "图片ID已被其它内容或作用域使用")
+			return apperr.Conflict(apperr.CodeTaskConflict, "This image ID is already used for other content or another scope.")
 		}
 		result = v.Ref
 		return nil
@@ -94,13 +94,13 @@ func (s *Store) lockMessageImagesTx(ctx context.Context, tx *db.Tx, owner ImageO
 		maxCount = messageimage.DefaultCount
 	}
 	if len(ids) > maxCount {
-		return nil, apperr.TooLarge("图片数量超限")
+		return nil, apperr.TooLarge("Too many images.")
 	}
 	seen := map[uuid.UUID]bool{}
 	ordered := append([]uuid.UUID(nil), ids...)
 	for _, id := range ids {
 		if id == uuid.Nil || seen[id] {
-			return nil, apperr.Invalid("imageIds", "图片ID为空或重复")
+			return nil, apperr.Invalid("imageIds", "Image IDs must not be empty or repeated.")
 		}
 		seen[id] = true
 	}
@@ -112,10 +112,10 @@ func (s *Store) lockMessageImagesTx(ctx context.Context, tx *db.Tx, owner ImageO
 			return nil, e
 		}
 		if v.ImageOwner != owner {
-			return nil, apperr.NotFound("图片")
+			return nil, apperr.NotFound("Image")
 		}
 		if v.ConversationID != nil || v.InboxID != nil {
-			return nil, apperr.Conflict(apperr.CodeTaskConflict, "图片已属于另一条消息")
+			return nil, apperr.Conflict(apperr.CodeTaskConflict, "The image already belongs to another message.")
 		}
 		byID[id] = v.Ref
 	}

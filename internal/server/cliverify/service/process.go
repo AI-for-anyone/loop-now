@@ -21,7 +21,7 @@ type CommandSpec struct {
 func (CommandSpec) String() string   { return "[private CLI verification command]" }
 func (CommandSpec) GoString() string { return "[private CLI verification command]" }
 func (CommandSpec) MarshalJSON() ([]byte, error) {
-	return nil, errors.New("验证执行环境不可序列化")
+	return nil, errors.New("the verification execution environment cannot be serialized")
 }
 
 type CommandFactory func(context.Context, CommandSpec) (*exec.Cmd, error)

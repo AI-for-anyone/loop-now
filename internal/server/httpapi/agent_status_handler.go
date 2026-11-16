@@ -16,7 +16,7 @@ import (
 func (s *Server) getProjectAgentStatus(w http.ResponseWriter, r *http.Request) {
 	p := principal(r)
 	if p.Kind != auth.KindAgent {
-		s.fail(w, r, apperr.Forbidden("仅 Agent 可查询同项目状态"))
+		s.fail(w, r, apperr.Forbidden("Only an Agent can query the status of Agents in its project."))
 		return
 	}
 	caller, err := s.Store.GetAddressableAgent(r.Context(), p.ID)
@@ -25,17 +25,17 @@ func (s *Server) getProjectAgentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if caller.ProjectID == nil {
-		s.fail(w, r, apperr.Forbidden("平台 Agent 不能查询项目 Agent 状态"))
+		s.fail(w, r, apperr.Forbidden("A platform Agent cannot query the status of project Agents."))
 		return
 	}
 	refs, present := r.URL.Query()["agent"]
 	if !present || len(refs) != 1 || refs[0] == "" {
-		s.fail(w, r, apperr.Invalid("agent", "必须提供一个 Agent UUID 或同项目地址"))
+		s.fail(w, r, apperr.Invalid("agent", "Give exactly one Agent UUID or an address in your project."))
 		return
 	}
 	ref := refs[0]
 	if strings.Contains(ref, "#") {
-		s.fail(w, r, apperr.Invalid("agent", "这里只查询常态 Agent，不接受任务地址"))
+		s.fail(w, r, apperr.Invalid("agent", "Only regular Agents can be queried here. Task addresses (with #) are not accepted."))
 		return
 	}
 	var target store.Agent
@@ -45,11 +45,11 @@ func (s *Server) getProjectAgentStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		parts := strings.Split(ref, "/")
 		if len(parts) > 3 {
-			s.fail(w, r, apperr.Invalid("agent", "Agent 地址格式无效"))
+			s.fail(w, r, apperr.Invalid("agent", "The Agent address is invalid. Use agent, project/agent or org/project/agent."))
 			return
 		}
 		for _, part := range parts {
-			if reason := naming.Validate("地址", part); reason != "" {
+			if reason := naming.Validate("Each address segment", part); reason != "" {
 				s.fail(w, r, apperr.Invalid("agent", reason))
 				return
 			}
@@ -70,7 +70,7 @@ func (s *Server) getProjectAgentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if target.ProjectID == nil || *target.ProjectID != *caller.ProjectID {
-		s.fail(w, r, apperr.Forbidden("只能查看同项目常态 Agent 状态"))
+		s.fail(w, r, apperr.Forbidden("You can only view the status of regular Agents in your own project."))
 		return
 	}
 	status, err := s.Conv.Status(r.Context(), target.ID)

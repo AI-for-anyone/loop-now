@@ -30,7 +30,7 @@ const pendingPrefix = ".pending-"
 
 // ErrNotSaved means the login result was not saved (the operation has ended, or the account has changed); the state
 // directory is deleted along with it.
-var ErrNotSaved = errors.New("登录结果没有保存")
+var ErrNotSaved = errors.New("the login result was not saved")
 
 // Manager manages state directories. The zero value is not usable; Root must be set.
 type Manager struct {
@@ -78,7 +78,7 @@ func (m *Manager) Publish(version uuid.UUID, provider string, entry []byte, comm
 	}
 	var obj map[string]json.RawMessage
 	if json.Unmarshal(entry, &obj) != nil || len(obj) == 0 || provider == "" || strings.ContainsAny(provider, "/\\\x00") {
-		return fail(errors.New("登录结果不是有效的认证条目"))
+		return fail(errors.New("the login result is not a valid auth entry"))
 	}
 	data, err := json.Marshal(map[string]json.RawMessage{provider: entry})
 	if err != nil {
@@ -87,7 +87,7 @@ func (m *Manager) Publish(version uuid.UUID, provider string, entry []byte, comm
 	defer clear(data)
 	path := filepath.Join(staging, AuthFile)
 	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
-		return fail(errors.New("状态目录里的 auth.json 不是普通文件"))
+		return fail(errors.New("auth.json in the state directory is not a regular file"))
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fail(err)

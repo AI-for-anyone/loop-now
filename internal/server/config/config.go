@@ -350,7 +350,7 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	c.LogLevel = p.logLevel(EnvLogLevel, "info")
 	if c.LogFormat != "text" && c.LogFormat != "json" {
-		p.fail(EnvLogFormat, "只能是 text 或 json（当前 %q）", c.LogFormat)
+		p.fail(EnvLogFormat, "Must be text or json (got %q).", c.LogFormat)
 	}
 	p.cliImport(c)
 	c.DataDir = p.str(EnvDataDir, "")
@@ -358,35 +358,35 @@ func Load(getenv func(string) string) (*Config, error) {
 		c.DataDir = DefaultDataDir(getenv)
 	}
 	if !filepath.IsAbs(c.DataDir) || filepath.Clean(c.DataDir) != c.DataDir || c.DataDir == string(filepath.Separator) {
-		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时按平台取默认目录）", c.DataDir)
+		p.fail(EnvDataDir, "Must be a clean absolute path (got %q; when unset, the platform's default directory is used).", c.DataDir)
 	}
 	c.BackupDir = p.str(EnvBackupDir, "")
 	if c.BackupDir == "" && c.DataDir != "" {
 		c.BackupDir = filepath.Join(c.DataDir, "backups")
 	}
 	if !filepath.IsAbs(c.BackupDir) || filepath.Clean(c.BackupDir) != c.BackupDir || c.BackupDir == string(filepath.Separator) {
-		p.fail(EnvBackupDir, "须为规范的绝对路径（当前 %q；未设置时取数据根下的 backups）", c.BackupDir)
+		p.fail(EnvBackupDir, "Must be a clean absolute path (got %q; when unset, backups under the data root is used).", c.BackupDir)
 	}
 	c.BackupKeep = p.integer(EnvBackupKeep, 7)
 	if c.BackupKeep < 1 {
-		p.fail(EnvBackupKeep, "必须至少为 1")
+		p.fail(EnvBackupKeep, "Must be at least 1.")
 	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
 		c.ContextDir = DefaultDataDir(getenv) // the same directory as the data root (.loop_now under HOME on Unix)
 	}
 	if !filepath.IsAbs(c.ContextDir) || filepath.Clean(c.ContextDir) != c.ContextDir || c.ContextDir == string(filepath.Separator) {
-		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时与数据根的默认目录相同）", c.ContextDir)
+		p.fail(EnvContextDir, "Must be a clean absolute path (got %q; when unset, the same default directory as the data root is used).", c.ContextDir)
 	}
 
 	if c.LoopctlDistDir == "" {
-		p.fail(EnvLoopctlDistDir, "必需配置，未设置（发布包里默认取 loop-server 旁边的 %s）", BundledLoopctlDist)
+		p.fail(EnvLoopctlDistDir, "Required but not set (release packages default to %s next to loop-server).", BundledLoopctlDist)
 	}
 	c.PluginHostEntry = p.str(EnvPluginHostEntry, bundled(BundledPluginHost, ""))
 	c.PluginOfficialDir = p.str(EnvPluginOfficialDir, bundled(BundledPluginOfficial, ""))
 	for env, v := range map[string]string{EnvPluginHostEntry: c.PluginHostEntry, EnvPluginOfficialDir: c.PluginOfficialDir} {
 		if v != "" && (!filepath.IsAbs(v) || filepath.Clean(v) != v) {
-			p.fail(env, "须为规范的绝对路径（当前 %q）", v)
+			p.fail(env, "Must be a clean absolute path (got %q).", v)
 		}
 	}
 	c.PluginMarketURL = p.str(EnvPluginMarketURL, DefaultPluginMarketURL)
@@ -403,18 +403,18 @@ func Load(getenv func(string) string) (*Config, error) {
 	p.checkOrigins(c.ConsoleOrigins)
 	for env, v := range map[string]string{EnvWebDir: c.WebDir, EnvReadyFile: c.ReadyFile} {
 		if v != "" && (!filepath.IsAbs(v) || filepath.Clean(v) != v) {
-			p.fail(env, "须为规范的绝对路径（当前 %q）", v)
+			p.fail(env, "Must be a clean absolute path (got %q).", v)
 		}
 	}
 	c.TextEditExtensions = p.normalizeExtensions(c.TextEditExtensions)
 	if c.MaxMessageImages < 1 || c.MaxMessageImages > 8 {
-		p.fail(EnvMaxMessageImages, "须为1到8")
+		p.fail(EnvMaxMessageImages, "Must be between 1 and 8.")
 	}
 	if c.MaxMessageImageBytes < 1 || c.MaxMessageImageBytes > 10<<20 || int64(c.MaxMessageImages)*c.MaxMessageImageBytes > 24<<20 {
-		p.fail(EnvMaxMessageImageBytes, "单图须<=10MiB且每消息合计<=24MiB")
+		p.fail(EnvMaxMessageImageBytes, "Must be between 1 byte and 10MiB per image, and this value times LOOP_NOW_MAX_MESSAGE_IMAGES must be at most 24MiB.")
 	}
 	if c.MaxMessageImagePixels < 1 || c.MaxMessageImagePixels > 40_000_000 {
-		p.fail(EnvMaxMessageImagePixels, "须为1到40000000")
+		p.fail(EnvMaxMessageImagePixels, "Must be between 1 and 40000000.")
 	}
 	p.checkConstraints(c)
 
@@ -521,7 +521,7 @@ func (p *parser) logLevel(name, def string) slog.Level {
 	case "error":
 		return slog.LevelError
 	}
-	p.fail(name, "只能是 debug、info、warn 或 error（当前 %q）", v)
+	p.fail(name, "Must be debug, info, warn or error (got %q).", v)
 	return slog.LevelInfo
 }
 
@@ -584,7 +584,7 @@ func (p *parser) integer(name string, def int) int {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		p.fail(name, "不是整数：%q", v)
+		p.fail(name, "Not an integer: %q", v)
 		return def
 	}
 	return n
@@ -603,7 +603,7 @@ func (p *parser) boolean(name string, def bool) bool {
 	case "0", "false", "no", "off":
 		return false
 	}
-	p.fail(name, "须为 1/true/yes/on 或 0/false/no/off（当前 %q）", v)
+	p.fail(name, "Must be 1/true/yes/on or 0/false/no/off (got %q).", v)
 	return def
 }
 
@@ -611,11 +611,11 @@ func (p *parser) duration(name, def string) time.Duration {
 	v := p.str(name, def)
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		p.fail(name, "不是合法的时长（例如 30s、10m）：%q", v)
+		p.fail(name, "Not a valid duration (for example 30s or 10m): %q", v)
 		return 0
 	}
 	if d <= 0 {
-		p.fail(name, "必须大于 0")
+		p.fail(name, "Must be greater than 0.")
 	}
 	return d
 }
@@ -628,7 +628,7 @@ func (p *parser) size(name, def string) int64 {
 		return 0
 	}
 	if n <= 0 {
-		p.fail(name, "必须大于 0")
+		p.fail(name, "Must be greater than 0.")
 	}
 	return n
 }
@@ -648,7 +648,7 @@ func ParseSize(v string) (int64, error) {
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("不是合法的大小（例如 10MiB、65536）：%q", v)
+		return 0, fmt.Errorf("not a valid size (for example 10MiB or 65536): %q", v)
 	}
 	return n * mult, nil
 }
@@ -659,22 +659,22 @@ func (p *parser) checkURL(name, raw string, schemes ...string) {
 	}
 	u, err := url.Parse(raw)
 	if err != nil || !slices.Contains(schemes, u.Scheme) || u.Host == "" {
-		p.fail(name, "不是合法的连接串，需以 %s:// 开头并包含主机", schemes[0])
+		p.fail(name, "Not a valid URL. It must start with %s:// and include a host.", schemes[0])
 	}
 }
 
 func (p *parser) checkListenAddr(addr string) []string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		p.fail(EnvListenAddr, "不是合法的 host:port：%q", addr)
+		p.fail(EnvListenAddr, "Not a valid host:port: %q", addr)
 		return nil
 	}
 	if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
-		p.fail(EnvListenAddr, "端口不合法：%q", port)
+		p.fail(EnvListenAddr, "Invalid port: %q", port)
 		return nil
 	}
 	if host == "" || !IsLoopbackHost(host) {
-		return []string{fmt.Sprintf("监听地址 %s 不是本机回环地址：控制台没有登录，任何能访问该地址的人都能操作服务端，Agent 凭证也会经此服务端下发；请确认这是有意为之，并同时配置 %s", addr, EnvAllowedHosts)}
+		return []string{fmt.Sprintf("The listen address %s is not a loopback address. The console has no login, so anyone who can reach this address can operate the server, and Agent credentials are also handed out through this server. Make sure this is intended, and set %s as well.", addr, EnvAllowedHosts)}
 	}
 	return nil
 }
@@ -684,28 +684,28 @@ func (p *parser) checkListenAddr(addr string) []string {
 func (p *parser) checkExternal(c *Config) {
 	if c.ExternalTLSSelfSigned != "" {
 		if !filepath.IsAbs(c.ExternalTLSSelfSigned) || filepath.Clean(c.ExternalTLSSelfSigned) != c.ExternalTLSSelfSigned {
-			p.fail(EnvExternalTLSSelfSigned, "须为规范的绝对路径（当前 %q）", c.ExternalTLSSelfSigned)
+			p.fail(EnvExternalTLSSelfSigned, "Must be a clean absolute path (got %q).", c.ExternalTLSSelfSigned)
 		}
 		if c.ExternalTLSCert != "" || c.ExternalTLSKey != "" {
-			p.fail(EnvExternalTLSSelfSigned, "与 %s、%s 不能同时设置", EnvExternalTLSCert, EnvExternalTLSKey)
+			p.fail(EnvExternalTLSSelfSigned, "Must not be set together with %s or %s.", EnvExternalTLSCert, EnvExternalTLSKey)
 		}
 	}
 	if c.ExternalListenAddr == "" {
 		return
 	}
 	if _, port, err := net.SplitHostPort(c.ExternalListenAddr); err != nil {
-		p.fail(EnvExternalListenAddr, "不是合法的 host:port：%q", c.ExternalListenAddr)
+		p.fail(EnvExternalListenAddr, "Not a valid host:port: %q", c.ExternalListenAddr)
 	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
-		p.fail(EnvExternalListenAddr, "端口不合法：%q", port)
+		p.fail(EnvExternalListenAddr, "Invalid port: %q", port)
 	}
 	if c.ExternalTLSSelfSigned != "" {
 		return
 	}
 	if c.ExternalTLSCert == "" {
-		p.fail(EnvExternalTLSCert, "开启对外端口时必需（%s 已设置；或改设 %s 用自签证书）", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
+		p.fail(EnvExternalTLSCert, "Required when the external port is enabled (%s is set). Alternatively, set %s to use a self-signed certificate.", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
 	}
 	if c.ExternalTLSKey == "" {
-		p.fail(EnvExternalTLSKey, "开启对外端口时必需（%s 已设置；或改设 %s 用自签证书）", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
+		p.fail(EnvExternalTLSKey, "Required when the external port is enabled (%s is set). Alternatively, set %s to use a self-signed certificate.", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
 	}
 }
 
@@ -714,7 +714,7 @@ func (p *parser) normalizeHosts(hosts []string) []string {
 	for _, h := range hosts {
 		h = strings.ToLower(h)
 		if strings.ContainsAny(h, "/ ") {
-			p.fail(EnvAllowedHosts, "不是合法的主机名：%q", h)
+			p.fail(EnvAllowedHosts, "Not a valid host name: %q", h)
 			continue
 		}
 		// Allowed hosts compare only the host part; strip a port if one was written.
@@ -724,7 +724,7 @@ func (p *parser) normalizeHosts(hosts []string) []string {
 		out = append(out, strings.TrimSuffix(strings.TrimPrefix(h, "["), "]"))
 	}
 	if len(out) == 0 {
-		p.fail(EnvAllowedHosts, "至少需要一个主机名")
+		p.fail(EnvAllowedHosts, "At least one host name is required.")
 	}
 	return out
 }
@@ -733,7 +733,7 @@ func (p *parser) checkOrigins(origins []string) {
 	for _, o := range origins {
 		u, err := url.Parse(o)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
-			p.fail(EnvConsoleOrigins, "不是合法的来源（形如 http://localhost:5173）：%q", o)
+			p.fail(EnvConsoleOrigins, "Not a valid origin (expected a form like http://localhost:5173): %q", o)
 		}
 	}
 }
@@ -753,79 +753,79 @@ func (p *parser) normalizeExtensions(exts []string) []string {
 func (p *parser) checkConstraints(c *Config) {
 	for name, value := range map[string]time.Duration{EnvAuthLoginTimeout: c.AuthLoginTimeout, EnvAuthRefreshTimeout: c.AuthRefreshTimeout, EnvAuthRecordTimeout: c.AuthRecordTimeout, EnvAuthIPCTimeout: c.AuthIPCTimeout} {
 		if value <= 0 {
-			p.fail(name, "必须为正")
+			p.fail(name, "Must be positive.")
 		}
 	}
 	if c.AuthIPCTimeout.Milliseconds() > 2147483647 {
-		p.fail(EnvAuthIPCTimeout, "超过私有IPC客户端计时范围")
+		p.fail(EnvAuthIPCTimeout, "Exceeds the timer range of the private IPC client (at most 2147483647 milliseconds).")
 	}
 	if c.SleepScanInterval <= 0 {
-		p.fail(EnvSleepScanInterval, "必须为正")
+		p.fail(EnvSleepScanInterval, "Must be positive.")
 	}
 	if c.SleepScanBatch <= 0 {
-		p.fail(EnvSleepScanBatch, "必须为正")
+		p.fail(EnvSleepScanBatch, "Must be positive.")
 	}
 	if c.TaskRecordTimeout <= 0 {
-		p.fail(EnvTaskRecordTimeout, "必须为正")
+		p.fail(EnvTaskRecordTimeout, "Must be positive.")
 	}
 	if c.TaskEventPoll <= 0 {
-		p.fail(EnvTaskEventPoll, "必须为正")
+		p.fail(EnvTaskEventPoll, "Must be positive.")
 	}
 	if c.CLIProbeConcurrency <= 0 {
-		p.fail(EnvCLIProbeConcurrency, "必须为正")
+		p.fail(EnvCLIProbeConcurrency, "Must be positive.")
 	}
 	if c.CLIProbeTimeout <= 0 {
-		p.fail(EnvCLIProbeTimeout, "必须为正")
+		p.fail(EnvCLIProbeTimeout, "Must be positive.")
 	}
 	if c.TaskReconcileInterval <= 0 {
-		p.fail(EnvTaskReconcileInterval, "必须为正")
+		p.fail(EnvTaskReconcileInterval, "Must be positive.")
 	}
 	if c.TaskMaxSession <= 0 {
-		p.fail(EnvTaskMaxSession, "必须为正")
+		p.fail(EnvTaskMaxSession, "Must be positive.")
 	}
 	if c.TaskMaxArtifact <= 0 {
-		p.fail(EnvTaskMaxArtifact, "必须为正")
+		p.fail(EnvTaskMaxArtifact, "Must be positive.")
 	}
 	if c.TaskMaxRequest <= 0 {
-		p.fail(EnvTaskMaxRequest, "必须为正")
+		p.fail(EnvTaskMaxRequest, "Must be positive.")
 	}
 	if c.TaskMaxVisits <= 0 {
-		p.fail(EnvTaskMaxVisits, "必须为正")
+		p.fail(EnvTaskMaxVisits, "Must be positive.")
 	}
 	if c.TaskMaxEdges <= 0 {
-		p.fail(EnvTaskMaxEdges, "必须为正")
+		p.fail(EnvTaskMaxEdges, "Must be positive.")
 	}
 	if c.TaskMaxSteps <= 0 {
-		p.fail(EnvTaskMaxSteps, "必须为正")
+		p.fail(EnvTaskMaxSteps, "Must be positive.")
 	}
-	if msg := naming.Validate("默认组织名", c.DefaultOrgName); msg != "" {
+	if msg := naming.Validate("Default organization name", c.DefaultOrgName); msg != "" {
 		p.fail(EnvDefaultOrgName, "%s", msg)
 	}
-	if msg := naming.Validate("默认项目名", c.DefaultProjectName); msg != "" {
+	if msg := naming.Validate("Default project name", c.DefaultProjectName); msg != "" {
 		p.fail(EnvDefaultProjectName, "%s", msg)
 	}
 	if c.PiMaxProcesses < 0 {
-		p.fail(EnvPiMaxProcesses, "不能为负数；0 表示不限")
+		p.fail(EnvPiMaxProcesses, "Must not be negative. 0 means no limit.")
 	}
 	if c.MaxSkillEntries < 1 {
-		p.fail(EnvMaxSkillEntries, "必须至少为 1")
+		p.fail(EnvMaxSkillEntries, "Must be at least 1.")
 	}
 	if c.EventStreamMaxLen < 1 {
-		p.fail(EnvEventStreamMaxLen, "必须至少为 1")
+		p.fail(EnvEventStreamMaxLen, "Must be at least 1.")
 	}
 	if c.OverviewMaxLen < 1 {
-		p.fail(EnvOverviewMaxLen, "必须至少为 1")
+		p.fail(EnvOverviewMaxLen, "Must be at least 1.")
 	}
 	if c.PiStderrTailBytes < 1 {
-		p.fail(EnvPiStderrTail, "必须至少为 1")
+		p.fail(EnvPiStderrTail, "Must be at least 1.")
 	}
 	if c.InboxPreviewChars < 1 {
-		p.fail(EnvInboxPreviewChars, "必须至少为 1")
+		p.fail(EnvInboxPreviewChars, "Must be at least 1.")
 	}
 	if c.InboxPageMax < 1 {
-		p.fail(EnvInboxPageMax, "必须至少为 1")
+		p.fail(EnvInboxPageMax, "Must be at least 1.")
 	}
 	if c.TextEditMax > 0 && c.MaxUploadFile > 0 && c.TextEditMax > c.MaxUploadFile {
-		p.fail(EnvTextEditMax, "不能大于 %s", EnvMaxUploadFile)
+		p.fail(EnvTextEditMax, "Must not be greater than %s.", EnvMaxUploadFile)
 	}
 }

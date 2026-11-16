@@ -8,29 +8,29 @@ func PublicError(code, message *string) *string {
 	if message == nil {
 		return nil
 	}
-	safe := "任务回合执行失败"
+	safe := "The task turn failed."
 	if code != nil {
 		switch *code {
 		case "session_missing":
-			safe = "任务会话文件缺失，未创建替代会话"
+			safe = "The task session file is missing. No replacement session was created."
 		case "pi_error":
-			safe = "Pi 返回执行错误"
+			safe = "Pi returned an error."
 		case "pi_exited":
-			safe = "Pi 进程在回复期间退出"
+			safe = "The Pi process exited while replying."
 		case "pi_start_failed":
-			safe = "Pi 进程启动失败"
+			safe = "The Pi process failed to start."
 		case "credential_unavailable":
-			safe = "任务冻结凭证不可用"
+			safe = "The task's captured credentials are not available."
 		case "cli_install_failed":
-			safe = "任务 CLI 安装失败"
+			safe = "Could not install the task's CLIs."
 		case "workspace_sync_failed":
-			safe = "任务工作目录同步失败"
+			safe = "Could not sync the task working directory."
 		case "server_restarted":
-			safe = "服务重启，未重放该轮"
+			safe = "The server restarted. The turn was not replayed."
 		case "internal_error":
-			safe = "执行基础设施失败"
+			safe = "The execution infrastructure failed."
 		case "user_stopped":
-			safe = "已被人停止"
+			safe = "Stopped by a person."
 		}
 	}
 	return &safe

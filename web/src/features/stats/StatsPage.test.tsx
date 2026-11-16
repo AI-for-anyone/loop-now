@@ -108,6 +108,26 @@ describe('统计页', () => {
     expect(card).toHaveTextContent('失败 25 次里有 12 次是模型服务报错，重试后仍失败。')
   })
 
+  it('task-turn codes and sleep end reasons are named too', async () => {
+    renderStats({
+      report: (refs) => {
+        const report = statsFixture(refs)
+        const reasons = [
+          { kind: 'interrupted' as const, code: 'task_conflict', count: 4 },
+          { kind: 'interrupted' as const, code: 'server_restarted', count: 3 },
+          { kind: 'interrupted' as const, code: 'sleep_superseded', count: 2 },
+        ]
+        return { ...report, outcomes: { ...report.outcomes, reasons } }
+      },
+    })
+    const card = await screen.findByRole('region', { name: '没完成的原因' })
+    expect(within(card).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '打断节点或执行条件已变化，消息没有执行4',
+      '打断服务重启，这一轮没有重放3',
+      '打断sleep 到期安排被新工作承接2',
+    ])
+  })
+
   it('估算花费只算有单价的模型，没有单价的在说明里列出', async () => {
     renderStats({
       report: (refs) => {

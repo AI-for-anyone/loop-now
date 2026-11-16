@@ -86,7 +86,7 @@ func (i *Installer) installed(t *Template) bool {
 // Status returns the install state and the failure reason.
 func (i *Installer) Status(t *Template) (string, string) {
 	if _, ok := t.Asset(); !ok {
-		return StateUnsupportedPlatform, "模板没有当前平台（" + Platform() + "）的安装包；环境里已有的同名命令不受影响，可直接使用"
+		return StateUnsupportedPlatform, "The template has no install package for the current platform (" + Platform() + "). A command with the same name already in the environment is not affected and can be used directly."
 	}
 	if i.installed(t) {
 		return StateInstalled, ""
@@ -119,7 +119,7 @@ func (i *Installer) EnsureReport(ctx context.Context, t *Template) (dir string, 
 	i.mu.Lock()
 	if i.closed {
 		i.mu.Unlock()
-		return "", false, errors.New("CLI安装器已停止")
+		return "", false, errors.New("CLI installer has stopped")
 	}
 	if c, ok := i.inflight[k]; ok {
 		i.mu.Unlock()
@@ -143,7 +143,7 @@ func (i *Installer) EnsureReport(ctx context.Context, t *Template) (dir string, 
 	attempted = !i.installed(t)
 	if !supported {
 		attempted = true
-		c.err = fmt.Errorf("%s 模板没有当前平台（%s）的安装包；可直接使用环境中已安装的同名命令", t.Name, Platform())
+		c.err = fmt.Errorf("template %s has no install package for the current platform (%s); a command with the same name already installed in the environment can be used directly", t.Name, Platform())
 	} else if attempted {
 		installCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), i.timeout)
 		c.err = i.install(installCtx, t, asset)
@@ -201,7 +201,7 @@ func (i *Installer) install(ctx context.Context, t *Template, a Asset) error {
 	defer archive.Close()
 
 	if err := download(ctx, i.client, a.URL, archive, a.SHA256); err != nil {
-		return fmt.Errorf("下载 %s %s 失败：%w", t.Name, t.Version, err)
+		return fmt.Errorf("download %s %s: %w", t.Name, t.Version, err)
 	}
 
 	stage := filepath.Join(tmpDir, fmt.Sprintf("%s-%s-%s", t.Name, t.Version, randHex()))
@@ -223,7 +223,7 @@ func (i *Installer) install(ctx context.Context, t *Template, a Asset) error {
 		}
 	}
 	if err != nil {
-		return fmt.Errorf("解压 %s 失败：%w", t.Name, err)
+		return fmt.Errorf("extract %s: %w", t.Name, err)
 	}
 	final := filepath.Join(i.toolsDir, t.Name, t.Version)
 	if err := os.MkdirAll(filepath.Dir(final), 0o755); err != nil {
@@ -256,7 +256,7 @@ func download(ctx context.Context, client *http.Client, url string, dst *os.File
 		return err
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != wantSHA {
-		return fmt.Errorf("摘要不符：期望 %s，实际 %s", wantSHA, got)
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", wantSHA, got)
 	}
 	return nil
 }
@@ -273,7 +273,7 @@ func writeBinary(dst string, r io.Reader) error {
 		err = cerr
 	}
 	if err == nil && n > maxBinarySize {
-		err = errors.New("二进制文件过大")
+		err = errors.New("binary file is too large")
 	}
 	return err
 }
@@ -289,7 +289,7 @@ func extractZip(archive, want, dst string) error {
 			continue
 		}
 		if !f.Mode().IsRegular() {
-			return fmt.Errorf("%s 不是普通文件", want)
+			return fmt.Errorf("%s is not a regular file", want)
 		}
 		rc, err := f.Open()
 		if err != nil {
@@ -298,7 +298,7 @@ func extractZip(archive, want, dst string) error {
 		defer rc.Close()
 		return writeBinary(dst, rc)
 	}
-	return fmt.Errorf("安装包中找不到 %s", want)
+	return fmt.Errorf("install package does not contain %s", want)
 }
 
 func extractTarGz(archive, want, dst string) error {
@@ -316,7 +316,7 @@ func extractTarGz(archive, want, dst string) error {
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			return fmt.Errorf("安装包中找不到 %s", want)
+			return fmt.Errorf("install package does not contain %s", want)
 		}
 		if err != nil {
 			return err
@@ -325,7 +325,7 @@ func extractTarGz(archive, want, dst string) error {
 			continue
 		}
 		if h.Typeflag != tar.TypeReg {
-			return fmt.Errorf("%s 不是普通文件", want)
+			return fmt.Errorf("%s is not a regular file", want)
 		}
 		return writeBinary(dst, tr)
 	}

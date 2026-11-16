@@ -67,7 +67,7 @@ var (
 // ---- Agent ----
 
 func (s *Service) validateName(name string) *apperr.FieldError {
-	if msg := naming.Validate("Agent 名称", name); msg != "" {
+	if msg := naming.Validate("Agent name", name); msg != "" {
 		f := apperr.Field("name", msg)
 		return &f
 	}
@@ -76,11 +76,11 @@ func (s *Service) validateName(name string) *apperr.FieldError {
 
 func (s *Service) validateModel(provider, modelID string) *apperr.FieldError {
 	if _, ok := s.Models.Provider(provider); !ok {
-		f := apperr.Field("model.provider", "模型目录中没有提供方 "+provider)
+		f := apperr.Field("model.provider", "The model catalog has no provider "+provider)
 		return &f
 	}
 	if !s.Models.HasModel(provider, modelID) {
-		f := apperr.Field("model.modelId", "提供方 "+provider+" 下没有模型 "+modelID)
+		f := apperr.Field("model.modelId", "Provider "+provider+" has no model "+modelID)
 		return &f
 	}
 	return nil
@@ -120,7 +120,7 @@ func (s *Service) validatePluginProvider(ctx context.Context, agent *uuid.UUID, 
 		return nil
 	}
 	if agent == nil {
-		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先建好 Agent、把该插件授权给它（项目 Agent 还要在项目里启用该插件），再选这个提供方")
+		return apperr.Invalid("model.provider", "Model provider "+provider+" comes from plugin "+plugin+". Create the Agent first and grant it the plugin (a project Agent also needs the plugin enabled in its project), then choose this provider.")
 	}
 	_, reason, err := s.PluginProviderUnusable(ctx, *agent, provider)
 	if err != nil {
@@ -128,9 +128,9 @@ func (s *Service) validatePluginProvider(ctx context.Context, agent *uuid.UUID, 
 	}
 	switch reason {
 	case store.PluginUnusableNotEnabled:
-		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先在项目里启用该插件")
+		return apperr.Invalid("model.provider", "Model provider "+provider+" comes from plugin "+plugin+". Enable the plugin in the project first.")
 	case store.PluginUnusableNotGranted:
-		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先把该插件授权给这个 Agent")
+		return apperr.Invalid("model.provider", "Model provider "+provider+" comes from plugin "+plugin+". Grant the plugin to this Agent first.")
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func (s *Service) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (
 		errs = append(errs, s.validateName(*p.Name))
 	}
 	if (p.Provider == nil) != (p.ModelID == nil) {
-		f := apperr.Field("model", "提供方与模型 ID 必须一起修改")
+		f := apperr.Field("model", "Change provider and modelId together.")
 		errs = append(errs, &f)
 	} else if p.Provider != nil {
 		errs = append(errs, s.validateModel(*p.Provider, *p.ModelID))
@@ -387,7 +387,7 @@ func nonNil(s []string) []string {
 
 func validateCLIName(name string) error {
 	if !cliNamePattern.MatchString(name) {
-		return apperr.Invalid("cli", "CLI 名称只能由小写字母、数字、点、下划线和连字符组成，最长 64 个字符")
+		return apperr.Invalid("cli", "A CLI name may contain only lowercase letters, digits, dots, underscores and hyphens, must start with a letter or digit, and must be at most 64 characters.")
 	}
 	return nil
 }
@@ -409,7 +409,7 @@ func (s *Service) AddCLI(ctx context.Context, agentID uuid.UUID, name string) (C
 			return c, nil
 		}
 	}
-	return CLIView{}, apperr.NotFound("可用 CLI " + name)
+	return CLIView{}, apperr.NotFound("Allowed CLI " + name)
 }
 
 // RemoveCLI removes a CLI from the available list and deletes its credential.
@@ -427,7 +427,7 @@ func (s *Service) PutCLICredential(ctx context.Context, agentID uuid.UUID, cli s
 	}
 	t, ok := s.Templates.Get(cli)
 	if !ok {
-		return nil, apperr.Invalid("cli", cli+" 没有内置模板，只作标记，不能录入凭证")
+		return nil, apperr.Invalid("cli", cli+" has no built-in template. It is only a marker and cannot take credentials.")
 	}
 	payload, names, err := t.Render(fields)
 	if err != nil {
@@ -440,18 +440,18 @@ func (s *Service) PutCLICredential(ctx context.Context, agentID uuid.UUID, cli s
 // PutModelCredential saves a model account credential (environment variables).
 func (s *Service) PutModelCredential(ctx context.Context, agentID uuid.UUID, env map[string]string) (*CredentialView, error) {
 	if len(env) == 0 {
-		return nil, apperr.Invalid("env", "至少需要一个环境变量")
+		return nil, apperr.Invalid("env", "At least one environment variable is required.")
 	}
 	var errs []apperr.FieldError
 	for k, v := range env {
 		if !envNamePattern.MatchString(k) {
-			errs = append(errs, apperr.Field("env."+k, "环境变量名不合法"))
+			errs = append(errs, apperr.Field("env."+k, "Must be a valid environment variable name (letters, digits and underscores, not starting with a digit)."))
 		} else if executor.IsReservedEnv(k) {
-			errs = append(errs, apperr.Field("env."+k, k+" 由执行器控制，不能作为凭证"))
+			errs = append(errs, apperr.Field("env."+k, k+" is controlled by the executor and cannot be a credential."))
 		} else if tmpl, ok := s.Templates.ReservedEnvBy(k); ok {
-			errs = append(errs, apperr.Field("env."+k, k+" 会被 CLI "+tmpl+" 读取，不能作为模型账号凭证"))
+			errs = append(errs, apperr.Field("env."+k, k+" is read by the CLI "+tmpl+" and cannot be a model account credential."))
 		} else if v == "" {
-			errs = append(errs, apperr.Field("env."+k, "值不能为空"))
+			errs = append(errs, apperr.Field("env."+k, "The value must not be empty."))
 		}
 	}
 	if len(errs) > 0 {
@@ -469,7 +469,7 @@ func (s *Service) putCredential(ctx context.Context, agentID uuid.UUID, purpose,
 	}
 	defer clear(plain)
 	if int64(len(plain)) > s.Limits.MaxCredential {
-		return nil, apperr.TooLarge("凭证内容超过上限")
+		return nil, apperr.TooLarge("The credential exceeds the size limit.")
 	}
 	row, err := s.Store.PutCredential(ctx, agentID, purpose, cli, meta, plain)
 	if err != nil {

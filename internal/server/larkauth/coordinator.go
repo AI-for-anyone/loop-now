@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-var ErrUnavailable = errors.New("Lark CLI授权不可用")
+var ErrUnavailable = errors.New("Lark CLI authorization is unavailable")
 
 type SafeError struct {
 	Code       string
 	HTTPStatus int
 }
 
-func (e *SafeError) Error() string { return "Lark CLI认证失败" }
+func (e *SafeError) Error() string { return "Lark CLI authentication failed" }
 
 type Refresher interface {
 	Refresh(context.Context, clicredential.Lark) (clicredential.Lark, error)

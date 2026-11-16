@@ -201,11 +201,11 @@ describe('模型选择', () => {
       handlers: [
         http.patch(apiUrl(`/agents/${agent.id}`), () =>
           HttpResponse.json(
-            errorBody('validation_failed', 'model.modelId：提供方 anthropic 下没有模型 claude-haiku-5-5', {
+            errorBody('validation_failed', 'model.modelId: Provider anthropic has no model claude-haiku-5-5', {
               fields: [
-                { field: 'model.modelId', message: '提供方 anthropic 下没有模型 claude-haiku-5-5' },
-                { field: 'prompt', message: 'Prompt 太长' },
-                { field: 'other', message: '其他问题' },
+                { field: 'model.modelId', message: 'Provider anthropic has no model claude-haiku-5-5' },
+                { field: 'prompt', message: 'Prompt is too long' },
+                { field: 'other', message: 'Unknown field' },
               ],
             }),
             { status: 422 },
@@ -216,10 +216,10 @@ describe('模型选择', () => {
     const basic = region('基本信息')
     await chooseModel(user, basic, 'claude-haiku-5-5')
     await user.click(saveButton())
-    expect(await within(basic).findByText('提供方 anthropic 下没有模型 claude-haiku-5-5')).toBeInTheDocument()
+    expect(await within(basic).findByText('Provider anthropic has no model claude-haiku-5-5')).toBeInTheDocument()
     const alert = within(basic).getByRole('alert')
-    expect(alert).toHaveTextContent('prompt：Prompt 太长')
-    expect(alert).toHaveTextContent('other：其他问题')
+    expect(alert).toHaveTextContent('prompt：Prompt is too long')
+    expect(alert).toHaveTextContent('other：Unknown field')
     expect(alert).not.toHaveTextContent('model.modelId')
   })
 })
@@ -310,7 +310,7 @@ describe('插件提供方', () => {
         grokModels,
         http.patch(apiUrl(`/agents/${agent.id}`), () => {
           granted = false
-          return HttpResponse.json(errorBody('validation_failed', '插件 grok 没有授权给这个 Agent', { fields: [{ field: 'model.provider', message: '插件 grok 没有授权给这个 Agent' }] }), { status: 422 })
+          return HttpResponse.json(errorBody('validation_failed', 'Plugin grok is not granted to this Agent', { fields: [{ field: 'model.provider', message: 'Plugin grok is not granted to this Agent' }] }), { status: 422 })
         }),
       ],
     })
@@ -321,7 +321,7 @@ describe('插件提供方', () => {
     await chooseModel(user, basic, 'grok-4')
     const before = reads
     await user.click(saveButton())
-    expect(await within(basic).findByText('插件 grok 没有授权给这个 Agent')).toBeInTheDocument()
+    expect(await within(basic).findByText('Plugin grok is not granted to this Agent')).toBeInTheDocument()
     await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
     expect(reads).toBeGreaterThan(before)
     expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。')).toHaveAttribute('role', 'note')

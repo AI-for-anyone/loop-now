@@ -9,7 +9,7 @@ import (
 
 func (s *Server) modelSettings() (*modelconfig.Service, *apperr.Error) {
 	if s.ModelSettings == nil {
-		return nil, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "模型配置组件尚未装配"}
+		return nil, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The model settings component is not set up on this server."}
 	}
 	return s.ModelSettings, nil
 }

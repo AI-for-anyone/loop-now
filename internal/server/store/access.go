@@ -44,7 +44,7 @@ func scanIdentity(row db.Scanner) (ExternalIdentity, error) {
 func (s *Store) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *IdentityManager) (ExternalIdentity, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := requireLiveIdentity(ctx, tx, identity); err != nil {
-			return notFoundAs(err, "外部身份")
+			return notFoundAs(err, "External identity")
 		}
 		if m == nil {
 			_, err := tx.Exec(ctx, `DELETE FROM identity_managers WHERE identity_id=$1`, identity)
@@ -83,7 +83,7 @@ func (s *Store) CreateExternalIdentity(ctx context.Context, name string) (Extern
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `INSERT INTO external_identities (id, name) VALUES ($1, $2) RETURNING `+identityColumns,
 		uuid.Must(uuid.NewV7()), name))
 	if isUniqueViolation(err, "external_identities_name_live") {
-		return x, apperr.Conflict(apperr.CodeNameConflict, "已有名为 "+name+" 的外部身份")
+		return x, apperr.Conflict(apperr.CodeNameConflict, "An external identity named \""+name+"\" already exists.")
 	}
 	return x, err
 }
@@ -100,13 +100,13 @@ func (s *Store) ListExternalIdentities(ctx context.Context) ([]ExternalIdentity,
 // GetExternalIdentity returns an external identity, including a deleted one.
 func (s *Store) GetExternalIdentity(ctx context.Context, id uuid.UUID) (ExternalIdentity, error) {
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `SELECT `+identityColumns+` FROM external_identities WHERE id = $1`, id))
-	return x, notFoundIfNoRows(err, "外部身份")
+	return x, notFoundIfNoRows(err, "External identity")
 }
 
 // GetLiveExternalIdentityByName returns the non-deleted external identity with this name.
 func (s *Store) GetLiveExternalIdentityByName(ctx context.Context, name string) (ExternalIdentity, error) {
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `SELECT `+identityColumns+` FROM external_identities WHERE name = $1 AND deleted_at IS NULL`, name))
-	return x, notFoundIfNoRows(err, "外部身份")
+	return x, notFoundIfNoRows(err, "External identity")
 }
 
 // DeleteExternalIdentity soft-deletes an external identity and revokes all of its tokens; returns not_found when it is
@@ -118,7 +118,7 @@ func (s *Store) DeleteExternalIdentity(ctx context.Context, id uuid.UUID) (Exter
 		x, err = scanIdentity(tx.QueryRow(ctx, `UPDATE external_identities SET deleted_at = now()
 			WHERE id = $1 AND deleted_at IS NULL RETURNING `+identityColumns, id))
 		if err != nil {
-			return notFoundIfNoRows(err, "外部身份")
+			return notFoundIfNoRows(err, "External identity")
 		}
 		_, err = tx.Exec(ctx, `UPDATE external_tokens SET revoked_at = now() WHERE identity_id = $1 AND revoked_at IS NULL`, id)
 		return err
@@ -152,7 +152,7 @@ func scanToken(row db.Scanner) (ExternalToken, error) {
 func requireLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var one int
 	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&one)
-	return notFoundIfNoRows(err, "外部身份")
+	return notFoundIfNoRows(err, "External identity")
 }
 
 // InsertExternalToken stores a token for a non-deleted external identity; returns not_found when the identity is
@@ -200,7 +200,7 @@ func (s *Store) RevokeExternalToken(ctx context.Context, identityID, tokenID uui
 		var err error
 		t, err = scanToken(tx.QueryRow(ctx, `UPDATE external_tokens SET revoked_at = coalesce(revoked_at, now())
 			WHERE id = $1 AND identity_id = $2 RETURNING `+tokenColumns, tokenID, identityID))
-		return notFoundIfNoRows(err, "令牌")
+		return notFoundIfNoRows(err, "Token")
 	})
 	return t, err
 }
@@ -222,7 +222,7 @@ func (s *Store) LookupExternalToken(ctx context.Context, tokenID uuid.UUID) (Ext
 		FROM external_tokens t JOIN external_identities i ON i.id = t.identity_id WHERE t.id = $1`, tokenID).
 		Scan(&t.ID, &t.IdentityID, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt, &a.Hash,
 			&x.ID, &x.Name, &x.CreatedAt, &x.DeletedAt)
-	return a, notFoundIfNoRows(err, "令牌")
+	return a, notFoundIfNoRows(err, "Token")
 }
 
 // TouchExternalToken records when the token was last used, updating it at most once a minute.
@@ -242,7 +242,7 @@ func (s *Store) InsertAgentToken(ctx context.Context, tokenID, agentID, instance
 	}
 	if err == nil {
 		if inst.Retired {
-			return apperr.Forbidden("任务实例已经回收")
+			return apperr.Forbidden("The task instance has been retired.")
 		}
 		_, err = s.Pool.Exec(ctx, `INSERT INTO agent_tokens(id,agent_id,instance_id,secret_hash,runtime_id,task_id) VALUES($1,$2,$3,$4,$5,$6)`, tokenID, inst.AgentID, instanceID, hash, inst.ID, inst.TaskID)
 		return err
@@ -278,7 +278,7 @@ func (s *Store) LookupAgentToken(ctx context.Context, tokenID uuid.UUID) (AgentT
 	var a AgentTokenAuth
 	err := s.Pool.QueryRow(ctx, `SELECT t.agent_id,t.instance_id,t.secret_hash,(t.revoked_at IS NOT NULL OR coalesce(i.retired,false)),t.runtime_id,t.task_id FROM agent_tokens t LEFT JOIN task_instances i ON i.id=t.runtime_id WHERE t.id=$1`, tokenID).
 		Scan(&a.AgentID, &a.InstanceID, &a.Hash, &a.Revoked, &a.RuntimeID, &a.TaskID)
-	return a, notFoundIfNoRows(err, "令牌")
+	return a, notFoundIfNoRows(err, "Token")
 }
 
 // ---------- Audit ----------
@@ -327,7 +327,7 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]AuditEntry, error) 
 			return e, err
 		}
 		if err := json.Unmarshal(target, &e.Target); err != nil {
-			return e, errors.Join(errors.New("审计目标不是 JSON"), err)
+			return e, errors.Join(errors.New("audit target is not JSON"), err)
 		}
 		return e, nil
 	})

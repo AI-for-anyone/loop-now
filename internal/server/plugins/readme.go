@@ -49,12 +49,12 @@ func (s *Service) PreviewReadme(id uuid.UUID, locale string) (Readme, error) {
 	pv := s.previews[id]
 	s.mu.Unlock()
 	if pv == nil {
-		return Readme{}, apperr.NotFound("预览")
+		return Readme{}, apperr.NotFound("Preview")
 	}
 	r, err := ReadReadme(pv.dir, locale)
 	if errors.Is(err, fs.ErrNotExist) {
 		// The preview was installed or expired while we were reading, and its staging directory is already gone.
-		return Readme{}, apperr.NotFound("预览")
+		return Readme{}, apperr.NotFound("Preview")
 	}
 	return r, err
 }

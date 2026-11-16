@@ -17,7 +17,7 @@ import { cliBinary, cliInstallMode, current as platform, serverBinary } from './
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
-import { strings } from './strings'
+import { errorText, strings } from './strings'
 import { StatusTray } from './tray'
 import { releasePage, UpdateChecker } from './updates'
 import { MainWindow, type StatusView } from './window'
@@ -26,7 +26,8 @@ import { MainWindow, type StatusView } from './window'
 // The packaged app uses the default profile when nothing is chosen; in development one must be chosen explicitly, because the default profile
 // in development is the very one the installed app itself uses. desktop.json can also specify directories for a profile.
 let profile: Profile | undefined
-let profileError: string | undefined
+// Shown on the status page once the language is known (a LocalizedError from profile.ts, or a system error such as mkdir failing).
+let profileError: Error | undefined
 const desktopFile = join(app.getPath('userData'), 'desktop.json')
 const chosen = profileArg(process.argv, process.env) ?? profileFromFile(desktopFile)
 const requested = chosen ?? (app.isPackaged ? defaultProfile : undefined)
@@ -36,7 +37,7 @@ if (requested !== undefined) {
     mkdirSync(profile.shellDir, { recursive: true })
     app.setPath('userData', profile.shellDir)
   } catch (err) {
-    profileError = (err as Error).message
+    profileError = err as Error
   }
 }
 
@@ -55,8 +56,9 @@ function run(): void {
   const settings = new SettingsFile(join(userData, 'settings.json'))
   const externalTLSDir = join(userData, 'tls')
   const note = (text: string) => shellLog.line(text)
-  // The first line of every start: which profile is used and the three directories handed to the server.
-  const which = profile ? profileSummary(profile) : profileError ? `profile unusable (${profileError})` : 'no profile chosen'
+  // The first line of every start: which profile is used and the three directories handed to the server. An unusable profile is logged with
+  // the error's message, which is English (this runs before the app is ready, when the UI language is not known yet).
+  const which = profile ? profileSummary(profile) : profileError ? `profile unusable (${profileError.message})` : 'no profile chosen'
   note(`Shell started: ${which}; Electron ${process.versions.electron}${background ? ', background start' : ''}`)
 
   let quitting = false // quit confirmed: closing the window no longer just hides it
@@ -70,7 +72,7 @@ function run(): void {
   // only happens in development when none was chosen.
   const blocked = (): StatusView | undefined => {
     const s = strings().page
-    if (profileError) return { title: s.badProfileTitle, body: profileError }
+    if (profileError) return { title: s.badProfileTitle, body: errorText(profileError, strings()) }
     if (!bin) return { title: s.noServerTitle, body: s.noServerBody }
     if (!profile) return { title: s.noProfileTitle, body: s.noProfileBody }
     return undefined
@@ -191,7 +193,7 @@ function run(): void {
     const result = await addToUserPath(dir)
     if (result instanceof Error) {
       note(`Adding loopctl to PATH failed: ${result.message}`)
-      return void (await info(s.failed, result.message, 'warning'))
+      return void (await info(s.failed, errorText(result, strings()), 'warning'))
     }
     note(`Added ${dir} to the user PATH`)
     await info(s.pathDone, `${s.pathDoneDetail(dir)}\n\n${s.external}`)

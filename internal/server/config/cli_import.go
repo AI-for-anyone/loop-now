@@ -26,7 +26,7 @@ func (p *parser) cliImport(c *Config) {
 		v time.Duration
 	}{{EnvCLIImportScanTTL, c.CLIImportScanTTL}, {EnvCLIImportTimeout, c.CLIImportTimeout}, {EnvCLIImportRecordTimeout, c.CLIImportRecordTimeout}} {
 		if v.v <= 0 {
-			p.fail(v.k, "必须为正")
+			p.fail(v.k, "Must be positive.")
 		}
 	}
 	for _, v := range []struct {
@@ -34,11 +34,11 @@ func (p *parser) cliImport(c *Config) {
 		v int
 	}{{EnvCLIImportMaxBatch, c.CLIImportMaxBatch}, {EnvCLIImportMaxActive, c.CLIImportMaxActive}, {EnvCLIImportMaxScans, c.CLIImportMaxScans}} {
 		if v.v <= 0 {
-			p.fail(v.k, "必须为正")
+			p.fail(v.k, "Must be positive.")
 		}
 	}
 	if c.CLIImportMaxBatch > 20 {
-		p.fail(EnvCLIImportMaxBatch, "不得大于20")
+		p.fail(EnvCLIImportMaxBatch, "Must be at most 20.")
 	}
 }
 func (c *Config) cliImportLog() slog.Attr {

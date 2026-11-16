@@ -24,7 +24,7 @@ func (s *Service) BindQuestionTx(ctx context.Context, m *store.TaskMutation, p a
 	}
 	n := m.Record.Current()
 	if m.Record.Ended() || n.Status == "blocked" || n.Output != nil {
-		return conflict("当前节点不能发起问题")
+		return conflict("The current node cannot ask a question: the task has ended, the node is blocked, or it has already submitted.")
 	}
 	if n.Question != nil && n.Question.Status == "open" {
 		old, err := store.GetQuestionTx(ctx, m.Tx, n.Question.ID, true, 0)
@@ -32,7 +32,7 @@ func (s *Service) BindQuestionTx(ctx context.Context, m *store.TaskMutation, p a
 			return err
 		}
 		if old == nil {
-			return conflict("当前节点已有未回答的问题")
+			return conflict("The current node already has an unanswered question.")
 		}
 		if old.State == "open" && !old.ExpiresAt.After(time.Now()) {
 			if _, err = m.Tx.Exec(ctx, `UPDATE inbox_questions SET state='expired',expired_reason='deadline',notice_state='pending' WHERE message_id=$1`, n.Question.ID); err != nil {
@@ -44,7 +44,7 @@ func (s *Service) BindQuestionTx(ctx context.Context, m *store.TaskMutation, p a
 			old.State = "expired"
 		}
 		if old.State == "open" {
-			return conflict("当前节点已有未回答的问题")
+			return conflict("The current node already has an unanswered question.")
 		}
 		n.Question.Status = old.State
 		n.Question.CanAnswer = false

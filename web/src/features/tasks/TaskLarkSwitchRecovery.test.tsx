@@ -53,4 +53,11 @@ describe('original task action recovery without inferred participants', () => {
     expect(screen.queryByRole('button', { name: copy.recover })).not.toBeInTheDocument()
     expect(new URLSearchParams(env.router.state.location.search).get(key)).toBe('invalid')
   })
+  it('a failed switch names the receipt error code in the UI language instead of echoing the server text', async () => {
+    server.use(http.get(endpoint + '/:id', () => HttpResponse.json(larkSwitchReceipt('failed'))))
+    renderRecovery(switchActionId, false)
+    await screen.findByText(copy.rejected)
+    expect(screen.getByRole('alert')).toHaveTextContent('凭证交接没有发布新绑定，原任务成果保留')
+    expect(screen.queryByText('Synthetic conflict')).toBeNull()
+  })
 })

@@ -18,7 +18,7 @@ func (s *Store) TaskLarkEffectiveBindingTx(ctx context.Context, m *TaskMutation,
 	if fenced, err := s.TaskLarkRuntimeFencedTx(ctx, m, member.RuntimeID); err != nil {
 		return nil, 0, err
 	} else if fenced {
-		return nil, 0, apperr.Conflict("task_conflict", "任务实例正在凭证交接")
+		return nil, 0, apperr.Conflict("task_conflict", "The task instance is in a credential handoff.")
 	}
 	var binding clicredential.LarkBinding
 	var revision int64
@@ -31,7 +31,7 @@ func (s *Store) TaskLarkEffectiveBindingTx(ctx context.Context, m *TaskMutation,
 		return nil, 0, err
 	}
 	if binding.ProjectID != m.Record.View.Task.ProjectID || binding.AgentID != member.AgentID || sha != member.BaseSnapshotSHA || !binding.Valid() {
-		return nil, 0, apperr.Conflict("task_conflict", "任务覆盖与原授权作用域不匹配")
+		return nil, 0, apperr.Conflict("task_conflict", "The task override does not match the original grant scope.")
 	}
 	return &binding, revision, nil
 }

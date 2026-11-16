@@ -146,7 +146,7 @@ func TestShallowCloneFrozenFailureNoFallback(t *testing.T) {
 			} else if strings.Count(string(calls), " fetch ") != 1 || !strings.Contains(string(calls), "fetch --depth=1 --no-tags origin "+commit) || strings.Contains(string(calls), " clone ") {
 				t.Fatalf("unexpected retry/history fallback: %s", calls)
 			}
-			if mode == "timeout" && !strings.Contains(err.Error(), "超时") {
+			if mode == "timeout" && !strings.Contains(err.Error(), "timed out") {
 				t.Fatalf("timeout lost: %v", err)
 			}
 			entries, err := os.ReadDir(d.workspace)

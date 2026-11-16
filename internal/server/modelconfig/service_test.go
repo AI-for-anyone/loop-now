@@ -93,7 +93,7 @@ func TestPutRejectsPlaintextAndCommandSecrets(t *testing.T) {
 	}
 	_, err = service.Put(ctx, `{"providers":{"broken":{"models":[]}}}`, 1)
 	apiErr := new(apperr.Error)
-	if !errors.As(err, &apiErr) || len(apiErr.Fields) != 1 || strings.Contains(apiErr.Fields[0].Message, "loopnow-catalog-") || !strings.Contains(apiErr.Fields[0].Message, "Pi 校验") {
+	if !errors.As(err, &apiErr) || len(apiErr.Fields) != 1 || strings.Contains(apiErr.Fields[0].Message, "loopnow-catalog-") || !strings.Contains(apiErr.Fields[0].Message, "Pi validation") {
 		t.Fatal("raw Pi error leaked to field message", err)
 	}
 }

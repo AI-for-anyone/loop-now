@@ -199,7 +199,7 @@ func TestPlatformAgentPluginLoginRefusalsAndFailures(t *testing.T) {
 	ctx := context.Background()
 
 	ungranted := e.platformAgent(t, "没授权", "fake-oauth", false)
-	if _, err := e.svc.Start(ctx, ungranted.ID, LoginInput{Provider: "fake-oauth", ExpectedConfigVersion: ungranted.ConfigVersion}); !apperr.Is(err, apperr.CodePluginNotEnabled) || !strings.Contains(err.Error(), "没有授权") {
+	if _, err := e.svc.Start(ctx, ungranted.ID, LoginInput{Provider: "fake-oauth", ExpectedConfigVersion: ungranted.ConfigVersion}); !apperr.Is(err, apperr.CodePluginNotEnabled) || !strings.Contains(err.Error(), "is not granted") {
 		t.Fatalf("没授权：%v", err)
 	}
 	a := e.platformAgent(t, "平台助手", "fake-oauth", true)

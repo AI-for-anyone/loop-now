@@ -20,7 +20,7 @@ type Settings struct {
 	LoadError  string `json:"loadError,omitempty"`
 }
 
-const fallbackLoadError = "保存的 models.json 未通过当前 Pi 校验，已临时使用内置模型目录；请修正后重新保存。"
+const fallbackLoadError = "The saved models.json did not pass validation by the current Pi, so the built-in model catalog is in use for now. Fix it and save again."
 
 // Store is the narrow persistence interface the settings service needs; the production implementation is store.Store.
 type Store interface {
@@ -51,7 +51,7 @@ func (s *Service) Reload(ctx context.Context) (Settings, error) {
 	if loadErr != nil {
 		catalog, err = modelcatalog.Load(ctx, s.Options)
 		if err != nil {
-			return Settings{}, fmt.Errorf("回退内置模型目录失败：%w", err)
+			return Settings{}, fmt.Errorf("fall back to the built-in model catalog: %w", err)
 		}
 		settings.LoadError = fallbackLoadError
 	}
@@ -74,20 +74,20 @@ func (s *Service) Put(ctx context.Context, modelsJSON string, expected int64) (S
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if expected < 1 {
-		return Settings{}, apperr.Invalid("expectedRevision", "必须提供正整数版本")
+		return Settings{}, apperr.Invalid("expectedRevision", "Must be a positive integer.")
 	}
 	current, err := s.Store.GetModelSettings(ctx)
 	if err != nil {
 		return Settings{}, err
 	}
 	if current.Revision != expected {
-		return Settings{}, apperr.PreconditionFailed("模型配置已被修改，请重新读取后再保存")
+		return Settings{}, apperr.PreconditionFailed("The model configuration was changed elsewhere. Reload it, then save again.")
 	}
 	catalog, err := s.load(ctx, modelsJSON, current.Revision+1)
 	if err != nil {
 		message, safe := validationMessage(err)
 		if !safe {
-			message = "配置未通过 Pi 校验，请检查 Provider、模型与字段值"
+			message = "The config did not pass Pi validation. Check the providers, models and field values."
 		}
 		return Settings{}, apperr.Invalid("modelsJson", message)
 	}

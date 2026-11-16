@@ -28,13 +28,13 @@ type GoogleCLIGrant struct {
 func googleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.Binding, write, finishClaim bool) (GoogleCLIGrant, error) {
 	out := GoogleCLIGrant{Binding: b}
 	if !b.Valid() {
-		return out, errors.New("CLI授权绑定无效")
+		return out, errors.New("invalid CLI grant binding")
 	}
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return out, e
 	}
 	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id JOIN project_credential_accounts a ON a.id=v.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND g.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='gcloud' AND v.auth_method='oauth' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5) `, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finishClaim).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
-	return out, notFoundIfNoRows(e, "CLI授权")
+	return out, notFoundIfNoRows(e, "CLI grant")
 }
 func (s *Store) GetGoogleCLIGrant(ctx context.Context, b clicredential.Binding) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
@@ -71,15 +71,15 @@ func (s *Store) CommitGoogleCLIRefresh(ctx context.Context, b clicredential.Bind
 			return e
 		}
 		if r.Generation != generation || r.RefreshState != "refreshing" || r.LeaseID == nil || *r.LeaseID != lease || r.LeaseAgentID == nil || *r.LeaseAgentID != b.AgentID {
-			return errors.New("CLI刷新租约不匹配")
+			return errors.New("CLI refresh lease mismatch")
 		}
 		// Lease expiration is checked with the database clock before writing the credential.
 		var live bool
 		if e = tx.QueryRow(ctx, `SELECT lease_until>clock_timestamp() FROM google_cli_grants WHERE version_id=$1`, b.VersionID).Scan(&live); e != nil || !live {
-			return errors.New("CLI刷新租约已结束")
+			return errors.New("the CLI refresh lease has ended")
 		}
 		if secret == nil {
-			return errors.New("缺少CLI凭证回写")
+			return errors.New("missing CLI credential write-back")
 		}
 		if _, e = tx.Exec(ctx, `UPDATE project_cli_versions SET secret=$2,updated_at=clock_timestamp() WHERE id=$1 AND account_id=$3`, b.VersionID, secret, b.AccountID); e != nil {
 			return e

@@ -75,10 +75,10 @@ func Load(t testing.TB, file string) *openapi3.T {
 	t.Helper()
 	doc, err := openapi3.NewLoader().LoadFromFile(filepath.Join(testenv.RepoRoot(), "api", file))
 	if err != nil {
-		t.Fatalf("加载契约 %s 失败：%v", file, err)
+		t.Fatalf("Could not load contract %s: %v", file, err)
 	}
 	if err := doc.Validate(context.Background()); err != nil {
-		t.Fatalf("契约 %s 本身不合法：%v", file, err)
+		t.Fatalf("Contract %s is itself invalid: %v", file, err)
 	}
 	return doc
 }
@@ -105,12 +105,12 @@ func newStub(t testing.TB, file, base string, tlsOn bool) *Stub {
 	s.doc.Servers = openapi3.Servers{{URL: s.Server.URL + s.base}}
 	router, err := legacy.NewRouter(s.doc)
 	if err != nil {
-		t.Fatalf("创建契约路由失败：%v", err)
+		t.Fatalf("Could not create the contract router: %v", err)
 	}
 	s.router = router
 	t.Cleanup(func() {
 		if f := s.Failures(); len(f) > 0 {
-			t.Errorf("契约桩发现 %d 处问题：\n%s", len(f), strings.Join(f, "\n"))
+			t.Errorf("The contract stub found %d problems:\n%s", len(f), strings.Join(f, "\n"))
 		}
 	})
 	return s
@@ -147,7 +147,7 @@ func (s *Stub) On(op string, samples ...Sample) {
 	s.t.Helper()
 	for _, smp := range samples {
 		if err := s.checkSample(op, smp); err != nil {
-			s.record("样例 %s → %d 不符合契约：%v", op, smp.Status, err)
+			s.record("Sample %s → %d does not match the contract: %v", op, smp.Status, err)
 		}
 	}
 	s.mu.Lock()
@@ -159,22 +159,22 @@ func (s *Stub) On(op string, samples ...Sample) {
 func (s *Stub) checkSample(op string, smp Sample) error {
 	method, path, ok := strings.Cut(op, " ")
 	if !ok {
-		return fmt.Errorf("操作应写作 \"METHOD /path\"")
+		return fmt.Errorf("operation must be written as \"METHOD /path\"")
 	}
 	item := s.doc.Paths.Find(path)
 	if item == nil || item.GetOperation(method) == nil {
-		return fmt.Errorf("契约中没有这个操作")
+		return fmt.Errorf("the operation is not in the contract")
 	}
 	ref := item.GetOperation(method).Responses.Status(smp.Status)
 	if ref == nil || ref.Value == nil {
-		return fmt.Errorf("契约中没有状态码 %d", smp.Status)
+		return fmt.Errorf("the contract has no status code %d", smp.Status)
 	}
 	if smp.Raw != nil || smp.Body == nil {
 		return nil
 	}
 	mt := ref.Value.Content.Get("application/json")
 	if mt == nil || mt.Schema == nil {
-		return fmt.Errorf("契约中这个状态码没有 JSON 响应体")
+		return fmt.Errorf("the contract has no JSON response body for this status code")
 	}
 	b, _ := json.Marshal(smp.Body)
 	var v any
@@ -226,7 +226,7 @@ func (s *Stub) serve(w http.ResponseWriter, r *http.Request) {
 	r.URL.Scheme, r.URL.Host = s.scheme, r.Host
 	route, params, err := s.router.FindRoute(r)
 	if err != nil {
-		s.record("%s %s：契约中没有这个操作：%v", r.Method, r.URL.Path, err)
+		s.record("%s %s: the operation is not in the contract: %v", r.Method, r.URL.Path, err)
 		s.append(rec)
 		http.Error(w, "not in contract", http.StatusNotFound)
 		return
@@ -236,11 +236,11 @@ func (s *Stub) serve(w http.ResponseWriter, r *http.Request) {
 	opts := &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SchemaValidationOptions: schemaOpts(), MultiError: true}
 	in := &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route, Options: opts}
 	if err := openapi3filter.ValidateRequest(r.Context(), in); err != nil {
-		s.record("%s：请求不符合契约：%v", rec.Op, err)
+		s.record("%s: the request does not match the contract: %v", rec.Op, err)
 	}
 	smp, ok := s.next(rec.Op)
 	if !ok {
-		s.record("%s：测试没有为这个操作设置样例响应", rec.Op)
+		s.record("%s: the test set no sample response for this operation.", rec.Op)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -267,7 +267,7 @@ func (s *Stub) serve(w http.ResponseWriter, r *http.Request) {
 	opts.IncludeResponseStatus = true
 	resp := &openapi3filter.ResponseValidationInput{RequestValidationInput: in, Status: smp.Status, Header: h.Clone(), Body: io.NopCloser(bytes.NewReader(out)), Options: opts}
 	if err := openapi3filter.ValidateResponse(r.Context(), resp); err != nil {
-		s.record("%s → %d：响应不符合契约：%v", rec.Op, smp.Status, err)
+		s.record("%s → %d: the response does not match the contract: %v", rec.Op, smp.Status, err)
 	}
 	w.WriteHeader(smp.Status)
 	w.Write(out)

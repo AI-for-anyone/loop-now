@@ -108,7 +108,7 @@ describe('安装插件：读取清单 → 确认 → 安装', () => {
     const user = userEvent.setup()
     handlers({
       preview: makePreview({ manifest: makeManifest({ id: 'grok', displayName: 'Grok 订阅', components: makeComponents({ agentExtensions: 1 }) }) }),
-      install: () => HttpResponse.json(errorBody('name_conflict', '插件 grok-old 已注册模型提供方 grok-cli，不能再由插件 grok 注册'), { status: 409 }),
+      install: () => HttpResponse.json(errorBody('name_conflict', 'Plugin grok-old already registers model provider grok-cli, so plugin grok cannot register it'), { status: 409 }),
     })
     renderInstall()
     await user.click(screen.getByRole('radio', { name: 'git 仓库' }))
@@ -116,7 +116,7 @@ describe('安装插件：读取清单 → 确认 → 安装', () => {
     await user.click(screen.getByRole('button', { name: '读取清单' }))
     const dialog = await screen.findByRole('dialog', { name: /安装 Grok 订阅/ })
     await user.click(within(dialog).getByRole('button', { name: '安装' }))
-    expect(await within(dialog).findByText('没有安装：这个插件 id 已经装过，或者它注册的模型提供方与另一个已安装插件的同 id：插件 grok-old 已注册模型提供方 grok-cli，不能再由插件 grok 注册')).toBeInTheDocument()
+    expect(await within(dialog).findByText('没有安装：这个插件 id 已经装过，或者它注册的模型提供方与另一个已安装插件的同 id：Plugin grok-old already registers model provider grok-cli, so plugin grok cannot register it')).toBeInTheDocument()
     expect(within(dialog).queryByText(/名称已被占用/)).toBeNull()
   })
 

@@ -121,41 +121,41 @@ func (in *StartInput) UnmarshalJSON(data []byte) error {
 	type plain StartInput
 	var v plain
 	if strictInput(data, &v) != nil {
-		return errors.New("导入请求字段或格式无效")
+		return errors.New("invalid import request fields or format")
 	}
 	*in = StartInput(v)
 	return in.Validate()
 }
 func (in StartInput) Validate() error {
 	if in.OperationID == uuid.Nil || in.ScanID == uuid.Nil || in.ExpectedCredentialsRevision < 1 || len(in.CandidateIDs) < 1 || len(in.CandidateIDs) > 20 {
-		return apperr.Invalid("operationId", "导入输入无效")
+		return apperr.Invalid("operationId", "The import input is invalid. operationId and scanId are required, expectedCredentialsRevision must be at least 1, and candidateIds must have 1 to 20 items.")
 	}
 	ids := map[uuid.UUID]bool{}
 	for _, id := range in.CandidateIDs {
 		if id == uuid.Nil || ids[id] {
-			return apperr.Invalid("candidateIds", "候选无效或重复")
+			return apperr.Invalid("candidateIds", "Contains an invalid or duplicate candidate ID.")
 		}
 		ids[id] = true
 	}
 	seen := map[uuid.UUID]bool{}
 	if len(in.Supplements) > 20 {
-		return apperr.Invalid("supplements", "补项过多")
+		return apperr.Invalid("supplements", "Must have at most 20 items.")
 	}
 	for _, s := range in.Supplements {
 		if s.CandidateID == uuid.Nil || !ids[s.CandidateID] || seen[s.CandidateID] || (s.Database == nil && s.SSLMode == nil && s.CACert == nil) {
-			return apperr.Invalid("supplements", "补项无效")
+			return apperr.Invalid("supplements", "A supplement is invalid. Each supplement must refer to a different selected candidate and set at least one field.")
 		}
 		seen[s.CandidateID] = true
 		for _, v := range []*string{s.Database, s.SSLMode, s.CACert} {
 			if v != nil && (*v == "" || len(*v) > 65536) {
-				return apperr.Invalid("supplements", "补项无效")
+				return apperr.Invalid("supplements", "A supplement value is empty or longer than 65536 bytes.")
 			}
 		}
 		if s.Database != nil && len(*s.Database) > 1024 || s.SSLMode != nil && len(*s.SSLMode) > 32 {
-			return apperr.Invalid("supplements", "补项超限")
+			return apperr.Invalid("supplements", "A supplement value is too long. database must be at most 1024 bytes and sslMode at most 32 bytes.")
 		}
 		if s.CACert != nil && !publicCA(*s.CACert) {
-			return apperr.Invalid("supplements.caCert", "仅接受有效公开证书PEM")
+			return apperr.Invalid("supplements.caCert", "Must be a valid public certificate in PEM format.")
 		}
 	}
 	return nil

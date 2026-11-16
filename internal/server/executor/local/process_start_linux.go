@@ -21,11 +21,11 @@ func processStart(pid int) (string, error) {
 	// closing parenthesis, starting at field 3.
 	i := bytes.LastIndexByte(raw, ')')
 	if i < 0 {
-		return "", errors.New("无法解析进程状态")
+		return "", errors.New("cannot parse the process status")
 	}
 	fields := strings.Fields(string(raw[i+1:]))
 	if len(fields) < 20 {
-		return "", errors.New("无法解析进程状态")
+		return "", errors.New("cannot parse the process status")
 	}
 	return fields[19], nil
 }

@@ -138,7 +138,7 @@ func TestLocalizedText(t *testing.T) {
 				p["loopNow"].(map[string]any)["displayName"] = bad
 			}
 			_, err := pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
-			if err == nil || !strings.Contains(err.Error(), field+" 须是字符串，或以语言标签") {
+			if err == nil || !strings.Contains(err.Error(), field+" must be a string, or an object with language tags") {
 				t.Fatalf("%s=%v 应拒绝：%v", field, bad, err)
 			}
 		}
@@ -160,15 +160,15 @@ func TestReadManifestRejects(t *testing.T) {
 		files []string
 		want  string
 	}{
-		{"没有两段", func(p map[string]any) { delete(p, "pi"); delete(p, "loopNow") }, nil, "不是插件"},
+		{"没有两段", func(p map[string]any) { delete(p, "pi"); delete(p, "loopNow") }, nil, "not a plugin"},
 		{"id", func(p map[string]any) { p["loopNow"].(map[string]any)["id"] = "Web_Hook" }, nil, "loopNow.id"},
 		{"version", func(p map[string]any) { p["version"] = "" }, nil, "version"},
-		{"事件", func(p map[string]any) { p["loopNow"].(map[string]any)["events"] = []any{"inbox.recieved"} }, nil, "不是平台的事件"},
-		{"权限", func(p map[string]any) { p["loopNow"].(map[string]any)["permissions"] = []any{"db.write"} }, nil, "不是可用的范围"},
-		{"越界路径", func(p map[string]any) { p["pi"].(map[string]any)["extensions"] = []any{"../evil.ts"} }, nil, "相对路径"},
-		{"不存在的文件", func(p map[string]any) { p["pi"].(map[string]any)["skills"] = []any{"./missing"} }, nil, "不存在"},
+		{"事件", func(p map[string]any) { p["loopNow"].(map[string]any)["events"] = []any{"inbox.recieved"} }, nil, "is not a platform event"},
+		{"权限", func(p map[string]any) { p["loopNow"].(map[string]any)["permissions"] = []any{"db.write"} }, nil, "is not an available scope"},
+		{"越界路径", func(p map[string]any) { p["pi"].(map[string]any)["extensions"] = []any{"../evil.ts"} }, nil, "relative path"},
+		{"不存在的文件", func(p map[string]any) { p["pi"].(map[string]any)["skills"] = []any{"./missing"} }, nil, "does not exist"},
 		{"订阅却没有平台侧", func(p map[string]any) { delete(p["loopNow"].(map[string]any), "platform") }, nil, "loopNow.platform"},
-		{"平台版本", func(p map[string]any) { p["loopNow"].(map[string]any)["minPlatformVersion"] = "2027.1" }, nil, "不低于 2027.1"},
+		{"平台版本", func(p map[string]any) { p["loopNow"].(map[string]any)["minPlatformVersion"] = "2027.1" }, nil, "2027.1 or later"},
 		{"配置 schema", func(p map[string]any) {
 			p["loopNow"].(map[string]any)["configSchema"] = map[string]any{"type": "object", "properties": 3}
 		}, nil, "configSchema"},
@@ -219,18 +219,18 @@ func TestMCPServerEntries(t *testing.T) {
 		{"两者都有按 url", map[string]any{"command": "node", "url": "https://example.com/mcp"}, ""},
 		{"type stdio 按 command", map[string]any{"type": "stdio", "command": "node", "url": "ftp://x"}, ""},
 		{"sse", map[string]any{"type": "sse", "url": "https://example.com/sse"}, "SSE"},
-		{"未知 type", map[string]any{"type": "websocket", "url": "https://example.com/mcp"}, "type 只能是"},
-		{"type 不是字符串", map[string]any{"type": nil, "command": "node"}, "type 只能是"},
-		{"url 不是 http", map[string]any{"url": "ftp://example.com/mcp"}, "须是带 command"},
+		{"未知 type", map[string]any{"type": "websocket", "url": "https://example.com/mcp"}, "must have type"},
+		{"type 不是字符串", map[string]any{"type": nil, "command": "node"}, "must have type"},
+		{"url 不是 http", map[string]any{"url": "ftp://example.com/mcp"}, "must be a stdio entry with a command"},
 		{"url 大写协议", map[string]any{"url": "HTTPS://mcp.figma.com/mcp"}, ""},
-		{"url 没有主机", map[string]any{"url": "http:foo"}, "须是带 command"},
-		{"url 没有主机 2", map[string]any{"url": "http:///mcp"}, "须是带 command"},
-		{"url 端口越界", map[string]any{"url": "http://127.0.0.1:99999/mcp"}, "须是带 command"},
-		{"http 却只有 command", map[string]any{"type": "http", "command": "node"}, "须是带 command"},
-		{"stdio 却只有 url", map[string]any{"type": "stdio", "url": "https://example.com/mcp"}, "须是带 command"},
-		{"空 command", map[string]any{"command": ""}, "须是带 command"},
-		{"都没有", map[string]any{"args": []any{}}, "须是带 command"},
-		{"不是对象", "node", "须是带 command"},
+		{"url 没有主机", map[string]any{"url": "http:foo"}, "must be a stdio entry with a command"},
+		{"url 没有主机 2", map[string]any{"url": "http:///mcp"}, "must be a stdio entry with a command"},
+		{"url 端口越界", map[string]any{"url": "http://127.0.0.1:99999/mcp"}, "must be a stdio entry with a command"},
+		{"http 却只有 command", map[string]any{"type": "http", "command": "node"}, "must be a stdio entry with a command"},
+		{"stdio 却只有 url", map[string]any{"type": "stdio", "url": "https://example.com/mcp"}, "must be a stdio entry with a command"},
+		{"空 command", map[string]any{"command": ""}, "must be a stdio entry with a command"},
+		{"都没有", map[string]any{"args": []any{}}, "must be a stdio entry with a command"},
+		{"不是对象", "node", "must be a stdio entry with a command"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -261,7 +261,7 @@ func TestValidate(t *testing.T) {
 	if err := pluginmanifest.Validate(schema, true, map[string]any{"n": 3}); err == nil {
 		t.Fatal("查 required 时应拒绝")
 	}
-	if err := pluginmanifest.Validate(schema, false, map[string]any{"n": "x"}); err == nil || !strings.Contains(err.Error(), "不符合") {
+	if err := pluginmanifest.Validate(schema, false, map[string]any{"n": "x"}); err == nil || !strings.Contains(err.Error(), "Does not match") {
 		t.Fatalf("类型不对：%v", err)
 	}
 }

@@ -349,11 +349,11 @@ func TestClaudeFailures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(h.realHome, ".fakeclaude-logged-out"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ = h.exec(id, "fake:notloggedin"); res.ErrorCode != executor.ErrRuntimeLoginRequired || !strings.Contains(res.ErrorMessage, "没有登录") {
+	if res, _ = h.exec(id, "fake:notloggedin"); res.ErrorCode != executor.ErrRuntimeLoginRequired || !strings.Contains(res.ErrorMessage, "not logged in") {
 		t.Fatalf("未登录：%+v", res)
 	}
 	res, _ = h.exec(id, "fake:exit")
-	if res.ErrorCode != executor.ErrRuntimeExited || !strings.Contains(res.ErrorMessage, "Claude Code 9.9.9 进程异常退出") || !strings.Contains(res.ErrorMessage, "crashing on purpose") {
+	if res.ErrorCode != executor.ErrRuntimeExited || !strings.Contains(res.ErrorMessage, "Claude Code 9.9.9 process exited unexpectedly") || !strings.Contains(res.ErrorMessage, "crashing on purpose") {
 		t.Fatalf("崩溃：%+v", res)
 	}
 	if res, _ = h.exec(id, "after crash"); res.Text != "echo: after crash" {

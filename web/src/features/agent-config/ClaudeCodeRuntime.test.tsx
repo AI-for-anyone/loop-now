@@ -115,7 +115,7 @@ describe('选择 Claude Code', () => {
       agent,
       handlers: [
         catalog,
-        http.patch(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('agent_not_idle', 'Agent 正在回复，请等这次回复结束后再切换运行时'), { status: 409 })),
+        http.patch(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('agent_not_idle', 'The Agent is replying; wait for the reply to finish before switching runtimes'), { status: 409 })),
       ],
     })
     const basic = region('基本信息')

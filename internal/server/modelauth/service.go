@@ -160,7 +160,7 @@ func (s *Service) PutKey(ctx context.Context, agentID uuid.UUID, input KeyInput)
 	}
 	p, ok := s.Models.Provider(input.Provider)
 	if !ok {
-		return Metadata{}, apperr.Invalid("provider", "未知提供方")
+		return Metadata{}, apperr.Invalid("provider", "Unknown provider.")
 	}
 	supported := false
 	for _, method := range p.AuthMethods {
@@ -169,19 +169,19 @@ func (s *Service) PutKey(ctx context.Context, agentID uuid.UUID, input KeyInput)
 		}
 	}
 	if !supported {
-		return Metadata{}, apperr.Invalid("provider", "该提供方不支持API Key录入，请使用控制台登录")
+		return Metadata{}, apperr.Invalid("provider", "This provider does not accept API keys. Log in from the console instead.")
 	}
 	credential, e := modelcredential.APIKey(input.Key)
 	if e != nil {
-		return Metadata{}, apperr.Invalid("key", "模型key不能为空或格式不符")
+		return Metadata{}, apperr.Invalid("key", "The model key must not be empty and must have a valid format.")
 	}
 	plain, e := credential.Encode()
 	if e != nil {
-		return Metadata{}, apperr.Invalid("key", "模型key格式无效")
+		return Metadata{}, apperr.Invalid("key", "The model key has an invalid format.")
 	}
 	defer clear(plain)
 	if int64(len(plain)) > s.Options.MaxCredential {
-		return Metadata{}, apperr.TooLarge("模型凭证超过上限")
+		return Metadata{}, apperr.TooLarge("The model credential exceeds the size limit.")
 	}
 	v, e := s.Store.PutModelAuthKey(ctx, agentID, input.Provider, input.ExpectedConfigVersion, plain)
 	if e != nil {
@@ -204,13 +204,13 @@ func (s *Service) Start(ctx context.Context, agentID uuid.UUID, input LoginInput
 		return Operation{}, e
 	}
 	if input.ExpectedConfigVersion < 1 {
-		return Operation{}, apperr.Invalid("expectedConfigVersion", "须提供已保存的配置版本")
+		return Operation{}, apperr.Invalid("expectedConfigVersion", "Must be the Agent's saved config version (at least 1).")
 	}
 	plugin := ""
 	if input.Provider != "openai-codex" {
 		var ok bool
 		if plugin, ok = s.pluginProvider(input.Provider); !ok {
-			return Operation{}, apperr.Invalid("provider", "只支持openai-codex与插件提供方的控制台登录")
+			return Operation{}, apperr.Invalid("provider", "Console login supports only openai-codex and plugin providers.")
 		}
 		if e := s.checkPluginLogin(ctx, agentID, plugin); e != nil {
 			return Operation{}, e
@@ -225,7 +225,7 @@ func (s *Service) Start(ctx context.Context, agentID uuid.UUID, input LoginInput
 	}
 	op, e := s.Store.NewModelAuthOperation(ctx, agentID, input.Provider, input.ExpectedConfigVersion, time.Now().UTC().Add(s.Options.LoginTimeout))
 	if errors.Is(e, store.ErrModelAuthBusy) {
-		return Operation{}, apperr.Conflict("model_auth_busy", "该Agent已有登录操作，请先取消或等待")
+		return Operation{}, apperr.Conflict("model_auth_busy", "This Agent already has a login in progress. Cancel it or wait for it to finish.")
 	}
 	if e != nil {
 		return Operation{}, e
@@ -365,9 +365,9 @@ func operationView(op store.ModelAuthOperation) Operation {
 	}
 	var message *string
 	if op.ErrorCode != nil {
-		safe := map[string]string{"auth_failed": "Codex授权未完成", "auth_port_busy": "认证回调端口1455已被占用，请结束自己的其他登录后重试", "auth_timeout": "登录操作已到期", "auth_unavailable": "模型账号认证不可用", "configuration_changed": "Agent配置已更改，请重新登录", "server_restarted": "服务已重启，请重新登录", "invalid_authorization_url": "授权地址无效", "helper_unavailable": "认证辅助组件不可用"}[*op.ErrorCode]
+		safe := map[string]string{"auth_failed": "Codex authorization did not complete.", "auth_port_busy": "The login callback port 1455 is already in use. Finish your other logins and try again.", "auth_timeout": "The login operation has expired.", "auth_unavailable": "Model account authentication is unavailable.", "configuration_changed": "The Agent config changed. Log in again.", "server_restarted": "The server restarted. Log in again.", "invalid_authorization_url": "The authorization URL is invalid.", "helper_unavailable": "The login helper is not available."}[*op.ErrorCode]
 		if safe == "" {
-			safe = "模型账号认证未完成"
+			safe = "Model account authentication did not complete."
 		}
 		message = &safe
 	}

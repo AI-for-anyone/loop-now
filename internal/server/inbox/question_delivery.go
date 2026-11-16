@@ -18,7 +18,7 @@ import (
 // ViewQuestion never trusts the persisted task reference as an authorization.
 func (s *Service) ViewQuestion(ctx context.Context, p auth.Principal, ref taskmodel.Question) (taskmodel.Question, error) {
 	if ref.ID != ref.MessageID {
-		return ref, apperr.NotFound("原问题引用")
+		return ref, apperr.NotFound("Original question reference")
 	}
 	msg, err := s.St.GetInboxMessage(ctx, ref.MessageID, s.O.PreviewChars)
 	if err != nil {
@@ -29,7 +29,7 @@ func (s *Service) ViewQuestion(ctx context.Context, p auth.Principal, ref taskmo
 		return ref, err
 	}
 	if msg.ThreadID != ref.ThreadID || msg.Question == nil || binding == nil || msg.From.RuntimeID != binding.RuntimeID {
-		return ref, apperr.NotFound("原问题引用")
+		return ref, apperr.NotFound("Original question reference")
 	}
 	if p.Kind == auth.KindAgent && p.RuntimeID != uuid.Nil && p.RuntimeID != binding.RuntimeID && p.RuntimeID != msg.To.RuntimeID {
 		ref.CanAnswer = false
@@ -58,7 +58,7 @@ func (s *Service) SystemNotice(ctx context.Context, _ uuid.UUID, messageID uuid.
 			return err
 		}
 		if hint == nil {
-			return apperr.Conflict("task_conflict", "项目未指定Manager")
+			return apperr.Conflict("task_conflict", "The project has no Manager. Set a project Manager first.")
 		}
 		to := store.AgentParty(*hint)
 		err := s.St.InboxTransaction(ctx, store.InboxLockPlan{Projects: []uuid.UUID{project}, Parties: []store.Party{to}, MessageID: messageID}, func(scope *store.InboxTransaction) error {
@@ -98,7 +98,7 @@ func (s *Service) SystemNotice(ctx context.Context, _ uuid.UUID, messageID uuid.
 	return errManagerChanged
 }
 
-var errManagerChanged = fmt.Errorf("任务通知Manager已改变，稍后重试")
+var errManagerChanged = fmt.Errorf("the project Manager that receives task notifications changed; try again later")
 
 func (s *Service) ReconcileQuestions(ctx context.Context) error {
 	if err := s.St.ExpireInboxQuestions(ctx); err != nil {
@@ -169,13 +169,13 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 			return err
 		}
 		if q == nil {
-			return apperr.NotFound("原问题")
+			return apperr.NotFound("Original question")
 		}
 		wake := false
 		if binding != nil {
 			bridge, ok := s.Tasks.(taskQuestionBridge)
 			if !ok {
-				return apperr.Conflict("task_conflict", "任务问题服务未装配")
+				return apperr.Conflict("task_conflict", "The task question service is not set up on this server.")
 			}
 			wake, err = bridge.SyncQuestionTx(ctx, scope.Tasks[binding.TaskID], qid, state)
 			if err != nil {

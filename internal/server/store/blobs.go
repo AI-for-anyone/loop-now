@@ -18,7 +18,7 @@ func putBlob(ctx context.Context, tx *db.Tx, data []byte) (string, error) {
 func (s *Store) ReadBlob(ctx context.Context, sha string) ([]byte, error) {
 	var data []byte
 	err := s.Pool.QueryRow(ctx, `SELECT data FROM blobs WHERE sha256 = $1`, sha).Scan(&data)
-	return data, notFoundIfNoRows(err, "内容")
+	return data, notFoundIfNoRows(err, "Content")
 }
 
 // PutBlob writes content outside a transaction (used by tests and tools).

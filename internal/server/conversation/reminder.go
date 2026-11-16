@@ -39,7 +39,7 @@ func ReminderText(c store.ReminderCarried) string {
 // message is saved and no reminder is scheduled; remindUnread adds it after a person confirms reopening the session.
 func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) error {
 	if msg.To.Kind != "agent" {
-		return errors.New("DeliverInbox 只用于发给 Agent 的消息")
+		return errors.New("DeliverInbox only handles messages to Agents")
 	}
 	return s.scheduleReminder(ctx, msg.To.ID, msg.ID, msg.WhenBusy, &msg)
 }
@@ -61,7 +61,7 @@ func (s *Service) remindUnread(ctx context.Context, agentID uuid.UUID) {
 // transaction.
 func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.UUID, whenBusy string, msg *store.NewInboxMessage) error {
 	if s.ctx.Err() != nil {
-		return errors.New("服务端正在停止")
+		return errors.New("the server is shutting down")
 	}
 	runID := uuid.Must(uuid.NewV7())
 	owner := coord.LockValue(runID.String(), s.o.InstanceID.String())

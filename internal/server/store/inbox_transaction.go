@@ -42,7 +42,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 				if p.RuntimeID != uuid.Nil {
 					var task uuid.UUID
 					if err := tx.QueryRow(ctx, `SELECT task_id FROM task_instances WHERE id=$1 AND agent_id=$2`, p.RuntimeID, p.ID).Scan(&task); err != nil {
-						return notFoundIfNoRows(err, "任务实例")
+						return notFoundIfNoRows(err, "Task instance")
 					}
 					tasks = append(tasks, task)
 				} else {
@@ -59,14 +59,14 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 				identities = append(identities, p.ID)
 			case "console", "platform", "plugin":
 			default:
-				return apperr.Invalid("identity", "不支持的Inbox身份")
+				return apperr.Invalid("identity", "This Inbox identity is not supported.")
 			}
 		}
 		tasks = sortedIDs(tasks)
 		for _, id := range tasks {
 			var pid uuid.UUID
 			if err := tx.QueryRow(ctx, `SELECT project_id FROM task_records WHERE id=$1`, id).Scan(&pid); err != nil {
-				return notFoundIfNoRows(err, "任务")
+				return notFoundIfNoRows(err, "Task")
 			}
 			projects = append(projects, pid)
 		}
@@ -76,7 +76,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 			var name string
 			var manager *uuid.UUID
 			if err := tx.QueryRow(ctx, `SELECT name,manager_agent_id FROM projects WHERE id=$1 AND (deleted_at IS NULL OR $2)`, pid, plan.AllowEndedTaskHistory).Scan(&name, &manager); err != nil {
-				return notFoundIfNoRows(err, "项目")
+				return notFoundIfNoRows(err, "Project")
 			}
 			names[pid] = name
 			managers[pid] = manager
@@ -102,7 +102,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 				return err
 			}
 			if plan.AllowEndedTaskHistory && !record.Ended() {
-				return apperr.Conflict("task_conflict", "仅允许读取已结束任务的问题历史")
+				return apperr.Conflict("task_conflict", "Only the question history of an ended task can be read.")
 			}
 			record.View.Task.Link = taskLink(names[record.View.Task.ProjectID], id)
 			scope.Tasks[id] = &TaskMutation{Tx: tx, Record: &record, ManagerID: managers[record.View.Task.ProjectID], unchanged: true}

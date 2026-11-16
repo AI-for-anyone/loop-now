@@ -36,11 +36,11 @@ func (piDriver) identity(agentconfig.Snapshot) string { return "" }
 func (piDriver) refresh(snap agentconfig.Snapshot, d agentDirs) error {
 	if snap.ProviderState == nil {
 		if err := seedModelAuth(snap, d); err != nil {
-			return fail(executor.ErrCredentialUnavailable, "模型凭证缓存重建失败")
+			return fail(executor.ErrCredentialUnavailable, "Could not rebuild the model credential cache.")
 		}
 	}
 	if err := syncModelsJSON(snap, d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "模型配置缓存重建失败")
+		return fail(executor.ErrCredentialUnavailable, "Could not rebuild the model configuration cache.")
 	}
 	return nil
 }
@@ -53,7 +53,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	if snap.ServiceTier != nil {
 		resolved, tierErr := agentconfig.ResolveServiceTier(snap.Provider, snap.ServiceTier)
 		if tierErr != nil || resolved == nil || !authhelper.ValidateServiceTierEntry(e.o.CodexServiceTierExtension) {
-			return started{}, fail(executor.ErrPiStartFailed, "Codex速度配置或内置扩展不可用")
+			return started{}, fail(executor.ErrPiStartFailed, "The Codex speed setting or its built-in extension is not available.")
 		}
 		args = append(args, "-e", e.o.CodexServiceTierExtension)
 		env = append(env, "LOOP_NOW_CODEX_SERVICE_TIER="+*resolved)
@@ -61,12 +61,12 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	var bridge *modelauth.RuntimeBridge
 	if snap.ModelCredential.Kind() == "oauth" {
 		if snap.ModelBinding == nil || !modelauth.ValidateEntry(e.o.AuthExtension) {
-			return started{}, fail(executor.ErrCredentialUnavailable, "任务授权刷新通道未配置")
+			return started{}, fail(executor.ErrCredentialUnavailable, "The task authorization refresh channel is not configured.")
 		}
 		var err error
 		bridge, err = modelauth.NewRuntimeBridge(*snap.ModelBinding, e.o.AuthResolver, e.o.AuthIPCTimeout)
 		if err != nil {
-			return started{}, fail(executor.ErrCredentialUnavailable, "任务授权刷新通道不可用")
+			return started{}, fail(executor.ErrCredentialUnavailable, "The task authorization refresh channel is not available.")
 		}
 		args = append(args, "-e", e.o.AuthExtension)
 		ipcTimeout := e.o.AuthIPCTimeout
@@ -83,7 +83,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	if snap.ModelCredential.NeedsLegacyAnthropic() {
 		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) || !filepath.IsAbs(e.o.PiAIDir) {
 			closeBridge()
-			return started{}, fail(executor.ErrCredentialUnavailable, "旧认证适配未配置")
+			return started{}, fail(executor.ErrCredentialUnavailable, "The legacy authentication adapter is not configured.")
 		}
 		args = append(args, "-e", e.o.LegacyAuthExtension)
 		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot, "LOOP_NOW_PI_AI_DIR="+e.o.PiAIDir)
@@ -103,7 +103,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	client, err := pirpc.Start(cmd)
 	if err != nil {
 		closeBridge()
-		return started{}, fail(executor.ErrPiStartFailed, "启动 Pi 失败：%v", err)
+		return started{}, fail(executor.ErrPiStartFailed, "Could not start Pi: %v", err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
 		e.snapshotLog(snap).Warn("Pi process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
@@ -130,7 +130,7 @@ func (pd piDriver) ready(ctx context.Context, p *proc, _ startSpec) error {
 	st, err := p.client.GetState(stateCtx)
 	cancel()
 	if err != nil {
-		return fail(executor.ErrPiStartFailed, "Pi 启动后未就绪：%v %s", err, tail(p.client.Stderr(), e.o.StderrTailBytes))
+		return fail(executor.ErrPiStartFailed, "Pi started but did not become ready: %v %s", err, tail(p.client.Stderr(), e.o.StderrTailBytes))
 	}
 	p.sessionFile = st.SessionFile
 	go e.cacheCommands(p)
@@ -146,15 +146,15 @@ func (pd piDriver) beforeTurn(ctx context.Context, p *proc, snap agentconfig.Sna
 	err := p.client.SetThinkingLevel(thinkingCtx, *snap.ThinkingLevel)
 	cancel()
 	if err != nil {
-		return fail(executor.ErrPiError, "无法应用本轮思考等级")
+		return fail(executor.ErrPiError, "Could not apply the thinking level for this turn.")
 	}
 	return nil
 }
 
 func (piDriver) afterTurn(_ *proc, tr runturn.Result) runturn.Result { return tr }
 
-func (piDriver) exited() (string, string) { return executor.ErrPiExited, "Pi 进程已退出" }
+func (piDriver) exited() (string, string) { return executor.ErrPiExited, "The Pi process exited." }
 
 func (piDriver) crashMessage(_ *proc, stderrTail string) string {
-	return "Pi 进程异常退出 " + stderrTail
+	return "The Pi process exited unexpectedly. " + stderrTail
 }

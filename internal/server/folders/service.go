@@ -119,7 +119,7 @@ type GitPullInput struct {
 func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPullInput) (store.FolderGitPull, error) {
 	var errs []apperr.FieldError
 	if in.ActionID == uuid.Nil {
-		errs = append(errs, apperr.Field("actionId", "必须提供有效动作ID"))
+		errs = append(errs, apperr.Field("actionId", "A valid actionId is required."))
 	}
 	if err := content.ValidateGitURL(in.URL); err != nil {
 		errs = append(errs, apperr.Field("url", err.Error()))
@@ -144,7 +144,7 @@ func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPul
 		return store.FolderGitPull{}, err
 	} else if ok {
 		if prior.URL != in.URL || prior.Branch != in.Branch || prior.Path != target {
-			return store.FolderGitPull{}, apperr.Conflict(apperr.CodeActionConflict, "动作ID已用于其他请求")
+			return store.FolderGitPull{}, apperr.Conflict(apperr.CodeActionConflict, "This actionId was already used for a different request.")
 		}
 		return prior, nil
 	}
@@ -201,7 +201,7 @@ func (f Folder) checkEmptyTarget(rel string) error {
 			return nil
 		}
 	}
-	return apperr.Conflict(apperr.CodePathConflict, "目标子目录已存在且不为空")
+	return apperr.Conflict(apperr.CodePathConflict, "The target subdirectory already exists and is not empty.")
 }
 
 func (s *Service) gitPullTemp(agentID, id uuid.UUID) string {
@@ -240,7 +240,7 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 	if s.Git != nil {
 		var err error
 		if access, err = s.Git(ctx, p.AgentID); err != nil {
-			return "clone_failed", "准备拉取环境失败：" + err.Error()
+			return "clone_failed", "Could not prepare the pull environment: " + err.Error()
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.O.CloneTimeout)
@@ -255,9 +255,9 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 	if err != nil {
 		switch {
 		case s.ctx.Err() != nil:
-			return "server_restart", "服务停止时仍在进行，已中止"
+			return "server_restart", "The pull was still running when the server stopped, so it was aborted."
 		case ctx.Err() != nil:
-			return "timeout", fmt.Sprintf("超过克隆时限（%s）", s.O.CloneTimeout)
+			return "timeout", fmt.Sprintf("The clone exceeded the time limit (%s).", s.O.CloneTimeout)
 		}
 		return classifyCloneFailure(p.URL, string(out))
 	}
@@ -280,10 +280,10 @@ func classifyCloneFailure(url, out string) (code, message string) {
 		strings.Contains(lower, "host key is known for"):
 		target := sshTarget(url)
 		if target == "" {
-			target = "git@<主机>"
+			target = "git@<host>"
 		}
-		return "host_key_unverified", tail(fmt.Sprintf("SSH 无法确认这台主机的身份：known_hosts 里没有它，或它的指纹已经变了。"+
-			"从 Git 拉取不会替你确认主机指纹，请先在本机终端运行 ssh -T %s，核对指纹无误后确认，再重新拉取。\n\n%s", target, strings.TrimSpace(out)), 2000)
+		return "host_key_unverified", tail(fmt.Sprintf("SSH cannot confirm the identity of this host: it is not in known_hosts, or its fingerprint has changed. "+
+			"Pulling from Git does not confirm host fingerprints for you. Run ssh -T %s in a terminal on this computer, check the fingerprint and accept it, then pull again.\n\n%s", target, strings.TrimSpace(out)), 2000)
 	case containsAny(lower, "could not read username", "could not read password", "terminal prompts disabled", "authentication failed",
 		"permission denied (publickey", "invalid username or password", "http basic: access denied", "bad credentials",
 		"the requested url returned error: 401", "the requested url returned error: 403"):

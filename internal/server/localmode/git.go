@@ -28,7 +28,7 @@ import (
 func GitIdentityEnv(ctx context.Context, gitBin, basePath string, userPath []string, dir string) ([]string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("读取服务端进程用户的主目录失败：%w", err)
+		return nil, fmt.Errorf("read the home directory of the server process user: %w", err)
 	}
 	dirs := filepath.SplitList(basePath)
 	seen := map[string]bool{}

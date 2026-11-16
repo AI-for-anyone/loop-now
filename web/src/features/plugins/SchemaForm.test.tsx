@@ -79,11 +79,11 @@ describe('插件配置表单的保存', () => {
   it('422 的字段错误标到对应的项', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm()
-    onSave.mockRejectedValueOnce(new ApiError({ status: 422, code: 'validation_failed', serverMessage: 'invalid', fields: [{ field: 'values.url', message: '地址不可达' }] }))
+    onSave.mockRejectedValueOnce(new ApiError({ status: 422, code: 'validation_failed', serverMessage: 'invalid', fields: [{ field: 'values.url', message: 'The address is unreachable' }] }))
     await user.clear(screen.getByLabelText('重试上限'))
     await user.type(screen.getByLabelText('重试上限'), '1')
     await user.click(screen.getByRole('button', { name: '保存' }))
-    expect(await screen.findByText('地址不可达')).toBeInTheDocument()
+    expect(await screen.findByText('The address is unreachable')).toBeInTheDocument()
     expect(screen.getByLabelText('回调地址')).toHaveAttribute('aria-invalid', 'true')
   })
 

@@ -163,13 +163,13 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// Dependency checks.
 	dbDir := config.DBDir(cfg.DataDir)
 	if err = os.MkdirAll(dbDir, 0o700); err != nil {
-		return a, fmt.Errorf("创建数据目录失败：%w", err)
+		return a, fmt.Errorf("create the data directory: %w", err)
 	}
 	// One data directory serves only one server process: background maintenance, migrations and the in-memory
 	// coordination state all assume this process is the only writer.
 	if a.dirLock, err = db.LockDir(dbDir); err != nil {
 		if errors.Is(err, db.ErrLocked) {
-			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）：%w", dbDir, config.EnvDataDir, err)
+			return a, fmt.Errorf("data directory %s is already used by another server process (%s): %w", dbDir, config.EnvDataDir, err)
 		}
 		return a, err
 	}
@@ -185,7 +185,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// the database, so a rejected instance does not leave a new database in its own data directory.
 	if a.workLock, err = db.LockPath(filepath.Join(res.WorkRoot, WorkRootLockFile)); err != nil {
 		if errors.Is(err, db.ErrLocked) {
-			return a, fmt.Errorf("工作根 %s 已被另一个服务进程使用（%s）：%w", res.WorkRoot, config.EnvWorkRoot, err)
+			return a, fmt.Errorf("work root %s is already used by another server process (%s): %w", res.WorkRoot, config.EnvWorkRoot, err)
 		}
 		return a, err
 	}
@@ -203,7 +203,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	loopctlBin, err := dist.Install(res.WorkRoot)
 	if err != nil {
-		return a, fmt.Errorf("安装 loopctl 失败：%w", err)
+		return a, fmt.Errorf("install loopctl: %w", err)
 	}
 	log.Info("loopctl installed", "version", dist.Manifest.Version, "binDir", loopctlBin)
 	var extTLS *tls.Config
@@ -215,14 +215,14 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			host, _, _ := net.SplitHostPort(cfg.ExternalListenAddr)
 			c, certPath, generated, err := selfsigned.Load(cfg.ExternalTLSSelfSigned, []string{host}, time.Now())
 			if err != nil {
-				return a, fmt.Errorf("准备对外端口的自签证书失败：%w", err)
+				return a, fmt.Errorf("prepare the self-signed certificate for the external port: %w", err)
 			}
 			log.Info("external port uses a self-signed certificate", "cert", certPath, "generated", generated)
 			cert = c
 		} else {
 			c, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
 			if err != nil {
-				return a, fmt.Errorf("读取对外端口的 TLS 证书失败：%w", err)
+				return a, fmt.Errorf("read the TLS certificate for the external port: %w", err)
 			}
 			cert = c
 		}
@@ -251,7 +251,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
 	settings, reloadErr := a.ModelSettings.Reload(ctx)
 	if reloadErr != nil {
-		return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
+		return a, fmt.Errorf("read the custom model config: %w", reloadErr)
 	}
 	if settings.LoadError != "" {
 		log.Warn("custom model configuration is invalid; fell back to the built-in catalog", "error", settings.LoadError)
@@ -270,7 +270,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.listener = o.Listener
 	if a.listener == nil {
 		if a.listener, err = net.Listen("tcp", cfg.ListenAddr); err != nil {
-			return a, fmt.Errorf("监听 %s 失败：%w", cfg.ListenAddr, err)
+			return a, fmt.Errorf("listen on %s: %w", cfg.ListenAddr, err)
 		}
 	}
 
@@ -344,7 +344,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	projectCredentials.LocalLogin = a.providerLocalLogin
 	projectCredentials.Plugins = &modelauth.PluginLogins{Helper: pluginLogin, States: a.ProviderStates, Extensions: func(ctx context.Context, plugin string) ([]string, error) {
 		if a.Plugins == nil {
-			return nil, apperr.NotFound("插件")
+			return nil, apperr.NotFound("Plugin")
 		}
 		return a.Plugins.Extensions(ctx, plugin)
 	}}
@@ -379,7 +379,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.CLIAuth.LarkCoordinator = larkauth.NewCoordinator(a.Store, larkRefresh, larkauth.CoordinatorOptions{RefreshTimeout: cfg.AuthRefreshTimeout, RecordTimeout: cfg.AuthRecordTimeout, WaitTimeout: cfg.AuthIPCTimeout}, log)
 	larkRuntime, err := configureLarkExecution(ctx, cfg, res.WorkRoot, a.CLIAuth.LarkCoordinator, o.LarkHTTPTransport)
 	if err != nil {
-		return a, fmt.Errorf("Lark用户运行组件不可用: %w", err)
+		return a, fmt.Errorf("Lark user runtime is unavailable: %w", err)
 	}
 	var larkFactory func(context.Context, local.LarkRuntimeRequest) (local.LarkRuntime, error)
 	if larkRuntime != nil {
@@ -525,7 +525,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	legacy, err := a.Folders.ApplyLegacyFolderSources(ctx)
 	if err != nil {
-		return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
+		return a, fmt.Errorf("replay retired folder sources: %w", err)
 	}
 	if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
 		log.Info("replayed retired folder sources", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
@@ -556,7 +556,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		ln := o.ExternalListener
 		if ln == nil {
 			if ln, err = net.Listen("tcp", cfg.ExternalListenAddr); err != nil {
-				return a, fmt.Errorf("监听对外端口 %s 失败：%w", cfg.ExternalListenAddr, err)
+				return a, fmt.Errorf("listen on external port %s: %w", cfg.ExternalListenAddr, err)
 			}
 		}
 		a.extListener = tls.NewListener(ln, extTLS)
@@ -590,7 +590,7 @@ func (a *App) Serve() error {
 	if a.PluginHost != nil {
 		settings, err := a.Store.GetPluginSettings(context.Background())
 		if err != nil {
-			return fmt.Errorf("读取插件设置失败：%w", err)
+			return fmt.Errorf("read plugin settings: %w", err)
 		}
 		a.PluginHost.Start(settings.Disabled)
 		a.Plugins.WakeOnCommit()
@@ -604,7 +604,7 @@ func (a *App) Serve() error {
 			ready.ExternalURL = "https://" + a.ExternalAddr()
 		}
 		if err := writeReadyFile(a.Cfg.ReadyFile, ready); err != nil {
-			return fmt.Errorf("写就绪文件 %s 失败：%w", a.Cfg.ReadyFile, err)
+			return fmt.Errorf("write the ready file %s: %w", a.Cfg.ReadyFile, err)
 		}
 		a.readyWritten = true
 	}

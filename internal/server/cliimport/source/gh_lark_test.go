@@ -191,10 +191,10 @@ func TestLarkPlainBotIndependentOfUserState(t *testing.T) {
 				t.Fatal("user login selected")
 			}
 		}
-		if c.Label == "Lark 应用/Bot cli_alpha" {
+		if c.Label == "Lark app/Bot cli_alpha" {
 			alpha = c
 		}
-		if c.Label == "Lark 应用/Bot cli_beta" {
+		if c.Label == "Lark app/Bot cli_beta" {
 			beta = c
 		}
 	}

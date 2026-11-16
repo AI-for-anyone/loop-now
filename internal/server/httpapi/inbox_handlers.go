@@ -29,7 +29,7 @@ func (s *Server) whoami(w http.ResponseWriter, r *http.Request) {
 func (s *Server) findAgents(w http.ResponseWriter, r *http.Request) {
 	addr := r.URL.Query().Get("address")
 	if addr == "" {
-		s.fail(w, r, apperr.Invalid("address", "必须提供地址"))
+		s.fail(w, r, apperr.Invalid("address", "Give the address of the Agent to look up."))
 		return
 	}
 	out := apitypes.AgentList{Agents: []apitypes.AgentListItem{}}
@@ -60,7 +60,7 @@ func (s *Server) inboxQuery(r *http.Request) (store.InboxListQuery, error) {
 	if v := q.Get("unread"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return store.InboxListQuery{}, apperr.Invalid("unread", "只能是 true 或 false")
+			return store.InboxListQuery{}, apperr.Invalid("unread", "Must be true or false.")
 		}
 		unread = b
 	}
@@ -68,7 +68,7 @@ func (s *Server) inboxQuery(r *http.Request) (store.InboxListQuery, error) {
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return store.InboxListQuery{}, apperr.Invalid("limit", "必须是至少为 1 的整数")
+			return store.InboxListQuery{}, apperr.Invalid("limit", "Must be an integer of at least 1.")
 		}
 		limit = n
 	}
@@ -208,19 +208,19 @@ func (s *Server) replyInbox(w http.ResponseWriter, r *http.Request) {
 func (s *Server) replyAs(r *http.Request, p auth.Principal, as *uuid.UUID) (auth.Principal, error) {
 	if as == nil {
 		if p.Kind == auth.KindPlugin && !slices.Contains(p.Scopes, "inbox.send") {
-			return p, apperr.Forbidden("插件清单没有声明 inbox.send 范围")
+			return p, apperr.Forbidden("The plugin manifest does not declare the inbox.send scope.")
 		}
 		return p, nil
 	}
 	if p.Kind != auth.KindPlugin {
-		return p, apperr.Invalid("asIdentityId", "只有插件令牌可以代表外部身份回复")
+		return p, apperr.Invalid("asIdentityId", "Only a plugin token can reply on behalf of an external identity.")
 	}
 	if err := s.checkManaged(r.Context(), p, *as); err != nil {
 		return p, err
 	}
 	x, err := s.Store.GetExternalIdentity(r.Context(), *as)
 	if err == nil && x.DeletedAt != nil {
-		err = apperr.NotFound("外部身份")
+		err = apperr.NotFound("External identity")
 	}
 	if err != nil {
 		return p, err
@@ -252,7 +252,7 @@ func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	var run uuid.UUID
 	if raw, ok := r.URL.Query()["runId"]; ok {
 		if len(raw) != 1 {
-			s.fail(w, r, apperr.Invalid("runId", "仅接受单值UUID"))
+			s.fail(w, r, apperr.Invalid("runId", "Must be given once, as a single UUID."))
 			return
 		}
 		var err error
@@ -533,7 +533,7 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 		dec := json.NewDecoder(bytes.NewReader(body))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&in); err != nil {
-			s.fail(w, r, apperr.Invalid("body", "请求体不是合法的 JSON 或包含未知字段："+err.Error()))
+			s.fail(w, r, apperr.Invalid("body", "The request body is not valid JSON or contains unknown fields: "+err.Error()))
 			return
 		}
 	}
@@ -581,7 +581,7 @@ func (s *Server) setIdentityManager(w http.ResponseWriter, r *http.Request) {
 	case s.Plugins != nil:
 		x, err = s.Plugins.SetIdentityManager(r.Context(), id, in.ManagedBy)
 	case in.ManagedBy != nil:
-		err = apperr.Invalid("managedBy.pluginId", "插件 "+in.ManagedBy.PluginID+" 没有安装")
+		err = apperr.Invalid("managedBy.pluginId", "Plugin "+in.ManagedBy.PluginID+" is not installed.")
 	default:
 		x, err = s.Store.SetIdentityManager(r.Context(), id, nil)
 	}

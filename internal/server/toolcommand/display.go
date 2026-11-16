@@ -9,7 +9,7 @@ import (
 )
 
 const MaxChars = 4096
-const Hidden = "[含敏感凭证的命令已隐藏]"
+const Hidden = "[Command hidden because it contains credentials]"
 
 // Conservative display guard, not a shell parser. Hiding the whole command
 // avoids leaking quoted/multiline values through partial regex replacement.

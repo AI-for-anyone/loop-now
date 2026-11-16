@@ -44,11 +44,11 @@ func provider(d *db.DB, logger *slog.Logger) (*goose.Provider, error) {
 func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 	p, err := provider(d, logger)
 	if err != nil {
-		return fmt.Errorf("准备数据库迁移失败：%w", err)
+		return fmt.Errorf("prepare database migrations: %w", err)
 	}
 	results, err := p.Up(ctx)
 	if err != nil {
-		return fmt.Errorf("执行数据库迁移失败：%w", err)
+		return fmt.Errorf("run database migrations: %w", err)
 	}
 	for _, r := range results {
 		logger.Info("applied database migrations", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
@@ -61,11 +61,11 @@ func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 func MigrateTo(ctx context.Context, d *db.DB, logger *slog.Logger, version int64) error {
 	p, err := provider(d, logger)
 	if err != nil {
-		return fmt.Errorf("准备数据库迁移失败：%w", err)
+		return fmt.Errorf("prepare database migrations: %w", err)
 	}
 	results, err := p.UpTo(ctx, version)
 	if err != nil {
-		return fmt.Errorf("执行数据库迁移失败：%w", err)
+		return fmt.Errorf("run database migrations: %w", err)
 	}
 	for _, r := range results {
 		logger.Info("applied database migrations", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)

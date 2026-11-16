@@ -70,7 +70,7 @@ func TestAdminCommands(t *testing.T) {
 	}
 	// With no database in the data directory it reports an error instead of creating an empty one.
 	empty := cli{t: t, dataDir: t.TempDir()}
-	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "没有库") {
+	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "no database") {
 		t.Fatalf("数据目录里没有库时应报用法错误：%d %q", code, errs)
 	}
 	if _, err := os.Stat(filepath.Join(config.DBDir(empty.dataDir), "data.db")); !os.IsNotExist(err) {
@@ -100,7 +100,7 @@ func TestAdminCommands(t *testing.T) {
 	}
 	forever, _ := c.ok("token", "issue", "--expires-in", "0s", "ci-bot")
 	list, _ := c.ok("token", "list", "ci-bot")
-	if strings.Contains(list, tok[12:]) || !strings.Contains(list, tok[:12]) || !strings.Contains(list, "永不过期") {
+	if strings.Contains(list, tok[12:]) || !strings.Contains(list, tok[:12]) || !strings.Contains(list, "never") {
 		t.Fatalf("令牌列表只有元数据：%s", list)
 	}
 	_, id, _, _ := auth.ParseToken(tok)

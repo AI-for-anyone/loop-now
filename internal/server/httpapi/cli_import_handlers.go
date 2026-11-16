@@ -25,7 +25,7 @@ func (s *Server) cliImportReady(w http.ResponseWriter, r *http.Request) bool {
 	if s.CLIImport != nil {
 		return true
 	}
-	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "本机导入组件尚未装配"})
+	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The local import component is not set up on this server."})
 	return false
 }
 func importUUID(r *http.Request, name string) (uuid.UUID, error) {
@@ -34,7 +34,7 @@ func importUUID(r *http.Request, name string) (uuid.UUID, error) {
 		return id, e
 	}
 	if id == uuid.Nil {
-		return id, apperr.Invalid(name, "UUID不能为零")
+		return id, apperr.Invalid(name, "Must not be the zero UUID.")
 	}
 	return id, nil
 }
@@ -47,7 +47,7 @@ func readImportJSON(w http.ResponseWriter, r *http.Request, out any) error {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(out) != nil || d.Decode(new(any)) != io.EOF {
-		return apperr.Invalid("body", "导入请求格式或字段无效")
+		return apperr.Invalid("body", "The import request must be a single JSON object with only the documented fields.")
 	}
 	return nil
 }
@@ -57,7 +57,7 @@ func readImportEmpty(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if body == nil || len(body) != 0 {
-		return apperr.Invalid("body", "此操作只接受空对象")
+		return apperr.Invalid("body", "This operation only accepts an empty JSON object ({}).")
 	}
 	return nil
 }

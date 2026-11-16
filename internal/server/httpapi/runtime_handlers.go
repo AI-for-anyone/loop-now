@@ -14,7 +14,7 @@ func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("refresh"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			s.fail(w, r, apperr.Invalid("refresh", "只能是 true 或 false"))
+			s.fail(w, r, apperr.Invalid("refresh", "Must be true or false."))
 			return
 		}
 		refresh = b

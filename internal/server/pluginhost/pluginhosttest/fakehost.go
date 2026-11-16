@@ -185,10 +185,10 @@ func Run() {
 			case "intercept":
 				switch cfg.Intercept {
 				case "block":
-					reply(m.ID, "result", m.Plugin, true, map[string]any{"block": true, "reason": "被 " + m.Plugin + " 阻止"}, "")
+					reply(m.ID, "result", m.Plugin, true, map[string]any{"block": true, "reason": "Blocked by " + m.Plugin + "."}, "")
 				case "hang":
 				case "error":
-					reply(m.ID, "result", m.Plugin, false, nil, "检查出错")
+					reply(m.ID, "result", m.Plugin, false, nil, "check failed")
 				default:
 					reply(m.ID, "result", m.Plugin, true, map[string]any{}, "")
 				}
@@ -221,10 +221,10 @@ func Run() {
 			}
 			switch p.Input["mode"] {
 			case "fail":
-				reply(m.ID, "result", m.Plugin, false, nil, "操作失败")
+				reply(m.ID, "result", m.Plugin, false, nil, "action failed")
 			case "hang":
 			default:
-				reply(m.ID, "result", m.Plugin, true, map[string]any{"notice": "已执行 " + p.ActionID, "url": "https://example.test/" + p.ActionID}, "")
+				reply(m.ID, "result", m.Plugin, true, map[string]any{"notice": "Ran " + p.ActionID, "url": "https://example.test/" + p.ActionID}, "")
 			}
 		case "http":
 			var p struct {
@@ -240,7 +240,7 @@ func Run() {
 			switch p.Path {
 			case "/hang":
 			case "/fail":
-				reply(m.ID, "result", m.Plugin, false, nil, "处理失败")
+				reply(m.ID, "result", m.Plugin, false, nil, "handling failed")
 			default:
 				echo, _ := json.Marshal(map[string]any{"via": p.Via, "method": p.Method, "path": p.Path, "query": p.Query, "body": string(p.Body),
 					"signature": p.Headers["x-signature"], "authorization": p.Headers["authorization"]})

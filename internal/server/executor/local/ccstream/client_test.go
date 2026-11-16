@@ -255,7 +255,7 @@ func TestStartFailures(t *testing.T) {
 	}
 	slow := start(t, ccstream.Options{InitTimeout: 300 * time.Millisecond}, "FAKECLAUDE_NO_INIT=1")
 	res, err = slow.Prompt(ctx(t), "hi", nil)
-	if err != nil || res.ErrorCode != executor.ErrRuntimeStartFailed || !strings.Contains(res.ErrorMessage, "启动超时") {
+	if err != nil || res.ErrorCode != executor.ErrRuntimeStartFailed || !strings.Contains(res.ErrorMessage, "timed out while starting") {
 		t.Fatalf("启动超时：%+v %v", res, err)
 	}
 	select {

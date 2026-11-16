@@ -71,6 +71,6 @@ Ask the Agent, for example: "Open https://example.com, tell me what the page say
 
   If something is wrong, it exits at once with a message starting with `[playwright]` that says what to do, usually to run `setup.mjs` again. If it keeps running, it is fine; stop it with Ctrl-C. Once fixed, the tools appear the next time the Agent's Pi starts.
 - **No window appears:** the window opens on the Loop Now machine's desktop, only when the Agent calls a browser tool.
-- **`[playwright] 配置目录 … 正被另一个浏览器使用，这次使用临时配置`** ("the profile is in use by another browser, using a temporary profile this time"): another run of this Agent has its browser open. This run does not see the saved cookies and sign-ins.
+- **`[playwright] Profile … is in use by another browser; using a temporary profile this time`**: another run of this Agent has its browser open. This run does not see the saved cookies and sign-ins.
 - **Start an Agent's browser from scratch:** while the Agent is not using the browser, delete `data/profiles/<Agent id>/`.
 - Uninstalling the plugin keeps the data folder (the browser and every profile) unless you tick **Also delete the data folder** in the uninstall dialog.

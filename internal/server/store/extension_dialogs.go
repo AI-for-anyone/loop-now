@@ -46,7 +46,7 @@ func (s *Store) GetDialogState(ctx context.Context, question uuid.UUID) (DialogS
 	var d DialogState
 	err := s.Pool.QueryRow(ctx, `SELECT q.state,q.expires_at,q.answer_option_id,coalesce(a.text,'') FROM inbox_questions q
 		LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=$1`, question).Scan(&d.State, &d.ExpiresAt, &d.OptionID, &d.Text)
-	return d, notFoundIfNoRows(err, "提问")
+	return d, notFoundIfNoRows(err, "Question")
 }
 
 // EndExtensionDialog expires an extension dialog question that is still unanswered when this turn ends (or Pi stops

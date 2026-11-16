@@ -35,7 +35,7 @@ func GoogleSelfContained(runtimeRoot string) (bool, error) {
 	}
 	var ready googleReady
 	if err := json.Unmarshal(raw, &ready); err != nil {
-		return false, errors.New("Google安装完成标记无效")
+		return false, errors.New("Google install completion marker is invalid")
 	}
 	return ready.PythonSHA256 == "", nil
 }
@@ -47,7 +47,7 @@ func googleDependency(a Asset) (dep Asset, hasDep bool, err error) {
 		return Asset{}, false, nil
 	}
 	if len(a.Dependencies) != 1 || a.Dependencies[0].Layout != "python_framework" || a.Dependencies[0].Format != "tar.gz" || a.Dependencies[0].Path != "python-3.13.7-macos11.pkg" {
-		return Asset{}, false, errors.New("Google私有Python安装清单无效")
+		return Asset{}, false, errors.New("Google private Python install manifest is invalid")
 	}
 	return a.Dependencies[0], true, nil
 }
@@ -67,7 +67,7 @@ func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) er
 	defer os.RemoveAll(home)
 	sdk := filepath.Join(root, "runtime/google-cloud-sdk")
 	if _, e := os.Stat(filepath.Join(sdk, "bin", t.Binary)); e != nil {
-		return errors.New("Google SDK 启动入口缺失")
+		return errors.New("Google SDK entry point is missing")
 	}
 	env := []string{"HOME=" + home, "CLOUDSDK_CONFIG=" + home, "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true"}
 	if p := ResolveGooglePython(); p != "" {
@@ -82,7 +82,7 @@ func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) er
 	ok := err == nil && strings.Contains(string(out), "Google Cloud SDK "+t.Version)
 	clear(out)
 	if !ok {
-		return errors.New("Google SDK 自包含安装验证失败")
+		return errors.New("Google SDK self-contained install failed verification")
 	}
 	return nil
 }
@@ -113,7 +113,7 @@ func verifyGoogle(ctx context.Context, t *Template, root string) error {
 		}
 		clear(out)
 		if !ok {
-			return errors.New("Google SDK或私有Python依赖版本验证失败")
+			return errors.New("Google SDK or private Python dependency version failed verification")
 		}
 	}
 	return nil
@@ -165,7 +165,7 @@ func (i *Installer) installGoogle(ctx context.Context, t *Template, a Asset, arc
 		out, err := cmd.CombinedOutput()
 		clear(out)
 		if err != nil {
-			return errors.New("私有Python包解包失败")
+			return errors.New("cannot unpack the private Python package")
 		}
 		// expand-full extracts payload only; no installer scripts are executed.
 		source := filepath.Join(expanded, "Python_Framework.pkg/Payload")
@@ -188,7 +188,7 @@ func (i *Installer) installGoogle(ctx context.Context, t *Template, a Asset, arc
 func copyPrivateTree(source, dest string) error {
 	info, e := os.Lstat(source)
 	if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("私有Python运行树缺失")
+		return errors.New("private Python runtime tree is missing")
 	}
 	links := []string{}
 	e = filepath.WalkDir(source, func(p string, d fs.DirEntry, walkErr error) error {
@@ -210,13 +210,13 @@ func copyPrivateTree(source, dest string) error {
 		if info.Mode()&os.ModeSymlink != 0 {
 			link, e := os.Readlink(p)
 			if e != nil || filepath.IsAbs(link) {
-				return errors.New("私有Python链接无效")
+				return errors.New("private Python symlink is invalid")
 			}
 			links = append(links, rel)
 			return os.Symlink(link, target)
 		}
 		if !info.Mode().IsRegular() {
-			return errors.New("私有Python文件类型无效")
+			return errors.New("private Python file has an invalid type")
 		}
 		in, e := os.Open(p)
 		if e != nil {

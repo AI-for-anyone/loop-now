@@ -36,7 +36,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		layer := &prompts.Layers{Format: prompts.FormatV1, ProjectID: projectID}
 		if projectID != nil {
 			if err = tx.QueryRow(ctx, `SELECT prompt,prompt_version FROM projects WHERE id=$1 AND deleted_at IS NULL`, *projectID).Scan(&layer.ProjectPrompt, &layer.ProjectVersion); err != nil {
-				return notFoundIfNoRows(err, "项目")
+				return notFoundIfNoRows(err, "Project")
 			}
 		}
 		out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agentID))
@@ -44,7 +44,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 			return notFoundIfNoRows(err, "Agent")
 		}
 		if (out.Agent.ProjectID == nil) != (projectID == nil) || (projectID != nil && *out.Agent.ProjectID != *projectID) {
-			return apperr.NotFound("Agent归属已变化")
+			return apperr.NotFound("Agent in the expected scope")
 		}
 		layer.AgentPrompt = out.Agent.Prompt
 		layer.AgentVersion = out.Agent.PromptVersion
@@ -82,7 +82,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 				return err
 			}
 			if provider != out.Agent.ModelProvider {
-				return apperr.Invalid("credentials", "模型授权与当前提供方不匹配")
+				return apperr.Invalid("credentials", "The model credential does not match the current provider.")
 			}
 			out.ModelAuth = &modelcredential.Binding{VersionID: *version, AgentID: agentID, Provider: provider}
 		}

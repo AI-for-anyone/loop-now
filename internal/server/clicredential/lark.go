@@ -44,7 +44,7 @@ type Lark struct {
 
 func (Lark) String() string               { return "[Lark CLI credential]" }
 func (Lark) GoString() string             { return "[Lark CLI credential]" }
-func (Lark) MarshalJSON() ([]byte, error) { return nil, errors.New("Lark秘密仅可显式编码") }
+func (Lark) MarshalJSON() ([]byte, error) { return nil, errors.New("use Encode for a Lark secret") }
 func larkSecret(s string) bool {
 	return s != "" && len(s) <= 8192 && strings.IndexFunc(s, unicode.IsSpace) < 0 && strings.IndexFunc(s, unicode.IsControl) < 0
 }
@@ -53,12 +53,12 @@ func (c Lark) Valid() bool {
 }
 func (c Lark) Encode() ([]byte, error) {
 	if !c.Valid() {
-		return nil, errors.New("Lark授权格式无效")
+		return nil, errors.New("invalid Lark authorization format")
 	}
 	type wire Lark
 	b, e := json.Marshal(wire(c))
 	if e != nil || len(b) > MaxBytes {
-		return nil, errors.New("Lark授权格式无效")
+		return nil, errors.New("invalid Lark authorization format")
 	}
 	return b, nil
 }
@@ -68,7 +68,7 @@ func DecodeLark(b []byte) (Lark, error) {
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	if len(b) > MaxBytes || d.Decode((*wire)(&c)) != nil || d.Decode(new(any)) != io.EOF || !c.Valid() {
-		return Lark{}, errors.New("Lark授权格式无效")
+		return Lark{}, errors.New("invalid Lark authorization format")
 	}
 	return c, nil
 }

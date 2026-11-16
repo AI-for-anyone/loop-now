@@ -20,7 +20,7 @@ import (
 
 // ErrCredentialUnavailable means at least one credential of the Agent cannot be used right now (it must be entered
 // again or has expired).
-var ErrCredentialUnavailable = errors.New("凭证不可用")
+var ErrCredentialUnavailable = errors.New("credentials are unavailable")
 
 // Snapshot is the config snapshot the executor needs to start Pi, including credential contents. It is used only in
 // memory.

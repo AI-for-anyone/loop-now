@@ -166,7 +166,7 @@ func (s *Store) cancelSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r
 	if m == nil {
 		reasonSQL = ",end_reason='sleep_invalidated'"
 	} else {
-		reasonSQL = ",error_code=CASE WHEN EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN '原节点已结束或不再有效，该消息未执行' ELSE error_message END"
+		reasonSQL = ",error_code=CASE WHEN EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'The original node has ended or is no longer valid. This message was not run.' ELSE error_message END"
 	}
 
 	if _, e := tx.Exec(ctx, `UPDATE `+table+` SET status='interrupted',ended_at=now()`+reasonSQL+` WHERE id=$1 AND status='queued'`, r.TimerRunID); e != nil {

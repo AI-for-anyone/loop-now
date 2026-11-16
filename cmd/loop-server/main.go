@@ -24,7 +24,7 @@ func main() {
 	}
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "配置有误，拒绝启动：")
+		fmt.Fprintln(os.Stderr, "The configuration is invalid, so the server will not start:")
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}

@@ -26,17 +26,17 @@ type LarkCLIGrant struct {
 func larkGrantTx(ctx context.Context, tx *db.Tx, b clicredential.LarkBinding, write, finish bool) (LarkCLIGrant, error) {
 	var r LarkCLIGrant
 	if !b.Valid() {
-		return r, errors.New("Lark授权绑定无效")
+		return r, errors.New("invalid Lark grant binding")
 	}
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return r, e
 	}
 	e := tx.QueryRow(ctx, `SELECT i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_until,g.error_code FROM lark_cli_grants g JOIN lark_cli_identities i ON i.version_id=g.version_id JOIN project_cli_versions v ON v.id=i.version_id AND v.account_id=i.account_id JOIN project_credential_accounts a ON a.id=i.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND i.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='lark-cli' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5)`, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finish).Scan(&r.Identity.Brand, &r.Identity.AppID, &r.Identity.OpenID, &r.Identity.DisplayName, &r.Identity.GrantedScopes, &r.Identity.VerifiedAt, &r.RuntimeVariantVersion, &r.Secret, &r.Generation, &r.RefreshState, &r.LeaseID, &r.LeaseAgentID, &r.LeaseUntil, &r.ErrorCode)
 	if e != nil {
-		return r, notFoundIfNoRows(e, "Lark授权")
+		return r, notFoundIfNoRows(e, "Lark grant")
 	}
 	if !r.Identity.Valid() || r.Identity.Brand != b.Brand || r.Identity.AppID != b.AppID || r.Identity.OpenID != b.OpenID || r.RuntimeVariantVersion != b.RuntimeVariantVersion {
-		return LarkCLIGrant{}, errors.New("Lark授权身份不匹配")
+		return LarkCLIGrant{}, errors.New("Lark grant identity mismatch")
 	}
 	return r, nil
 }
@@ -76,14 +76,14 @@ func (s *Store) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBi
 			return e
 		}
 		if generation == math.MaxInt64 || r.Generation != generation || r.RefreshState != "refreshing" || r.LeaseID == nil || *r.LeaseID != lease || r.LeaseAgentID == nil || *r.LeaseAgentID != b.AgentID {
-			return errors.New("Lark刷新租约不匹配")
+			return errors.New("Lark refresh lease mismatch")
 		}
 		var live bool
 		if e = tx.QueryRow(ctx, `SELECT lease_until>clock_timestamp() FROM lark_cli_grants WHERE version_id=$1`, b.VersionID).Scan(&live); e != nil {
 			return e
 		}
 		if !live || secret == nil {
-			return errors.New("Lark刷新租约已结束")
+			return errors.New("the Lark refresh lease has ended")
 		}
 		if _, e = tx.Exec(ctx, `UPDATE project_cli_versions SET secret=$2,updated_at=clock_timestamp() WHERE id=$1`, b.VersionID, secret); e != nil {
 			return e
@@ -93,7 +93,7 @@ func (s *Store) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBi
 			return e
 		}
 		if tag.RowsAffected() != 1 {
-			return errors.New("Lark刷新提交期限已过")
+			return errors.New("the Lark refresh commit deadline has passed")
 		}
 		return nil
 	})
@@ -113,7 +113,7 @@ func (s *Store) FailLarkCLIRefresh(ctx context.Context, b clicredential.LarkBind
 			return e
 		}
 		if tag.RowsAffected() != 1 {
-			return errors.New("Lark刷新失败租约不匹配")
+			return errors.New("Lark refresh failure lease mismatch")
 		}
 		return nil
 	})

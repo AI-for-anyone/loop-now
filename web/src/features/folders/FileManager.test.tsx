@@ -179,7 +179,7 @@ describe('文件管理器', () => {
     const list = source.list.bind(source), read = source.read.bind(source)
     const outside = { name: 'outside.txt', path: 'outside.txt', type: 'symlink' as const, size: null, modifiedAt: '2026-10-25T08:00:00Z', symlinkTarget: '/etc/hosts' }
     vi.spyOn(source, 'list').mockImplementation(async (path, cursor) => { const page = await list(path, cursor); return path === '' ? { ...page, entries: [...page.entries, outside] } : page })
-    vi.spyOn(source, 'read').mockImplementation((path) => (path === 'outside.txt' ? Promise.reject(new ApiError({ status: 422, code: 'validation_failed', serverMessage: '路径经由软链接指向了文件夹之外' })) : read(path)))
+    vi.spyOn(source, 'read').mockImplementation((path) => (path === 'outside.txt' ? Promise.reject(new ApiError({ status: 422, code: 'validation_failed', serverMessage: 'The path leads outside the folder through a symlink' })) : read(path)))
     const { user } = setup('workspace', { source })
     await user.click(await findRow('outside.txt'))
     expect(await screen.findByText('这个软链接指向文件夹之外，不能打开。')).toBeInTheDocument()

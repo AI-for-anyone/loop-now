@@ -57,7 +57,7 @@ func TestExtensionDialogQuestions(t *testing.T) {
 	confirm := ask(ctx, inbox.Dialog{RequestID: "c", Method: "confirm", Title: "继续部署？", Message: "会覆盖线上", Timeout: time.Minute})
 	q := question("c")
 	if q.From.Kind != "agent" || *q.From.ID != agent.ID || q.To.Kind != "console" || q.Text != "继续部署？\n会覆盖线上" || q.Question == nil ||
-		len(q.Question.Options) != 2 || q.Question.Options[0].Label != "是" || time.Until(q.Question.ExpiresAt) > time.Minute || time.Until(q.Question.ExpiresAt) < 50*time.Second {
+		len(q.Question.Options) != 2 || q.Question.Options[0].Label != "Yes" || time.Until(q.Question.ExpiresAt) > time.Minute || time.Until(q.Question.ExpiresAt) < 50*time.Second {
 		t.Fatalf("确认提问：%+v %+v", q, q.Question)
 	}
 	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"optionId": "2"}))
@@ -80,7 +80,7 @@ func TestExtensionDialogQuestions(t *testing.T) {
 
 	input := ask(ctx, inbox.Dialog{RequestID: "i", Method: "input", Title: "版本号", Placeholder: "例如 1.2.0"})
 	q = question("i")
-	if q.Text != "版本号\n直接回复文字作答（例如 1.2.0）" || q.Question.Options[0].Label != "取消" {
+	if q.Text != "版本号\nReply with text to answer (例如 1.2.0)" || q.Question.Options[0].Label != "Cancel" {
 		t.Fatalf("输入提问：%q %+v", q.Text, q.Question)
 	}
 	e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "1.4.0"})

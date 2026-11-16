@@ -34,7 +34,7 @@ func (s *Server) sendTaskNodeInboxMessage(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(in.ImageIDs) > s.O.Limits.MaxMessageImages {
-		s.fail(w, r, apperr.TooLarge("图片数量超限"))
+		s.fail(w, r, apperr.TooLarge("Too many images."))
 		return
 	}
 	if len(in.ImageIDs) > 0 {
@@ -161,11 +161,11 @@ func (s *Server) getTaskNodeInboxAction(w http.ResponseWriter, r *http.Request) 
 }
 func (s *Server) getTaskNodeRunTimeline(w http.ResponseWriter, r *http.Request) {
 	if principal(r).Kind != auth.KindConsole {
-		s.fail(w, r, apperr.Forbidden("仅控制台可读任务运行记录"))
+		s.fail(w, r, apperr.Forbidden("Only the console can read task run records."))
 		return
 	}
 	if s.Records == nil {
-		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "任务运行记录组件尚未装配"})
+		s.fail(w, r, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The task run record component is not set up on this server."})
 		return
 	}
 	task, e := pathUUID(r, "taskId")
@@ -202,7 +202,7 @@ func taskInboxLimit(r *http.Request, def, max int) (int, error) {
 	}
 	n, e := strconv.Atoi(v)
 	if e != nil || n < 1 || n > max {
-		return 0, apperr.Invalid("limit", "分页条数无效")
+		return 0, apperr.Invalid("limit", "Must be an integer from 1 to the maximum page size.")
 	}
 	return n, nil
 }
@@ -212,7 +212,7 @@ func parseExplicitInboxRun(raw json.RawMessage) (uuid.UUID, error) {
 	}
 	var id uuid.UUID
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &id) != nil || id == uuid.Nil {
-		return uuid.Nil, apperr.Invalid("runId", "必须为非零运行UUID")
+		return uuid.Nil, apperr.Invalid("runId", "Must be a non-zero run UUID.")
 	}
 	return id, nil
 }

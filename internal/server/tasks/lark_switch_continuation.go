@@ -17,7 +17,7 @@ func newTaskLarkContinuation(record *taskmodel.Record, action, run uuid.UUID, re
 	var next taskmodel.NodeRun
 	old := record.Current()
 	if old == nil || record.Ended() || record.View.Task.Status != "blocked" || old.Status != "blocked" || action == uuid.Nil || run == uuid.Nil || revision < 1 || confirmedAt.IsZero() {
-		return next, "", errors.New("原阻塞节点或恢复来源无效")
+		return next, "", errors.New("the original blocked node or the resume source is invalid")
 	}
 	// Keep independent copies of captured input facts; old output, question,
 	// sleep and execution results cannot qualify the new continuation.
@@ -41,7 +41,7 @@ func newTaskLarkContinuation(record *taskmodel.Record, action, run uuid.UUID, re
 	prompt.WriteString("Below are references to the original task's persisted artifacts; they do not mean this turn has re-executed or verified anything:\n")
 	for _, artifact := range record.View.Artifacts {
 		if artifact.TaskID != record.View.Task.ID {
-			return taskmodel.NodeRun{}, "", errors.New("原产物作用域不匹配")
+			return taskmodel.NodeRun{}, "", errors.New("an original artifact belongs to a different task")
 		}
 		ref, err := json.Marshal(struct {
 			ID, NodeRunID uuid.UUID

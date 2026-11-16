@@ -41,24 +41,24 @@ func NewProjectService(auth *Service, templates *clitemplate.Catalog, max int64)
 }
 func validateAccountName(name string) error {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(name) != name || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 200 || strings.IndexFunc(name, unicode.IsControl) >= 0 {
-		return apperr.Invalid("name", "名称须为1–200字符，首尾无空白或控制字符")
+		return apperr.Invalid("name", "Must be between 1 and 200 characters, with no leading or trailing whitespace and no control characters.")
 	}
 	return nil
 }
 func (p *ProjectService) ValidateSlot(purpose string, provider, cli *string) (string, error) {
 	if purpose == store.PurposeModel && provider != nil && cli == nil && *provider != "" {
 		if _, ok := p.Auth.Models.Provider(*provider); !ok {
-			return "", apperr.Invalid("provider", "未知模型提供方")
+			return "", apperr.Invalid("provider", "Unknown model provider.")
 		}
 		return *provider, nil
 	}
 	if purpose == store.PurposeCLI && cli != nil && provider == nil && *cli != "" {
 		if _, ok := p.Templates.Get(*cli); !ok {
-			return "", apperr.Invalid("cli", "没有可录入凭证的CLI模板")
+			return "", apperr.Invalid("cli", "There is no CLI template that accepts credentials for this CLI.")
 		}
 		return *cli, nil
 	}
-	return "", apperr.Invalid("purpose", "用途与provider/cli定位不匹配")
+	return "", apperr.Invalid("purpose", "purpose does not match provider/cli: a model account takes only provider, and a CLI account takes only cli.")
 }
 func (p *ProjectService) prepare(ctx context.Context, purpose, slot string, input cm.CredentialInput) (store.ProjectCredentialWrite, func(), error) {
 	var plain []byte
@@ -66,32 +66,32 @@ func (p *ProjectService) prepare(ctx context.Context, purpose, slot string, inpu
 	release := func() { clear(plain) }
 	if purpose == store.PurposeModel {
 		if input.Type != "api_key" {
-			return w, release, apperr.Invalid("credential.type", "模型录入只接受API Key")
+			return w, release, apperr.Invalid("credential.type", "A model account accepts only an API key.")
 		}
 		provider, ok := p.Auth.Models.Provider(slot)
 		if !ok || !slices.Contains(provider.AuthMethods, "api_key") {
-			return w, release, apperr.Invalid("provider", "该提供方不支持API Key录入")
+			return w, release, apperr.Invalid("provider", "This provider does not accept API keys.")
 		}
 		credential, err := modelcredential.APIKey(input.Key)
 		if err != nil {
-			return w, release, apperr.Invalid("credential.key", "模型key格式无效")
+			return w, release, apperr.Invalid("credential.key", "The model key has an invalid format.")
 		}
 		plain, err = credential.Encode()
 		if err != nil {
-			return w, release, apperr.Invalid("credential.key", "模型key格式无效")
+			return w, release, apperr.Invalid("credential.key", "The model key has an invalid format.")
 		}
 		w.AuthMethod = "api_key"
 	} else {
 		if input.Type != "cli" {
-			return w, release, apperr.Invalid("credential.type", "CLI须提供模板字段")
+			return w, release, apperr.Invalid("credential.type", "A CLI account requires type cli with template fields.")
 		}
 		template, ok := p.Templates.Get(slot)
 		if !ok {
-			return w, release, apperr.Invalid("cli", "没有CLI模板")
+			return w, release, apperr.Invalid("cli", "There is no template for this CLI.")
 		}
 		for key := range input.Fields {
 			if !slices.ContainsFunc(template.Fields, func(f clitemplate.Field) bool { return f.Name == key }) {
-				return w, release, apperr.Invalid("credential.fields", "包含模板未声明的录入项")
+				return w, release, apperr.Invalid("credential.fields", "Contains fields that the template does not declare.")
 			}
 		}
 		payload, names, err := template.Render(input.Fields)
@@ -100,7 +100,7 @@ func (p *ProjectService) prepare(ctx context.Context, purpose, slot string, inpu
 		}
 		plain, err = json.Marshal(payload)
 		if err != nil {
-			return w, release, apperr.Invalid("credential.fields", "模板凭证格式无效")
+			return w, release, apperr.Invalid("credential.fields", "The template credential has an invalid format.")
 		}
 		w.Meta = store.CredentialMeta{TemplateVersion: template.CredentialFormat(), FieldNames: names, EnvNames: payload.EnvNames(), FilePaths: payload.FilePaths()}
 		w.TemplateSource = "builtin"
@@ -110,7 +110,7 @@ func (p *ProjectService) prepare(ctx context.Context, purpose, slot string, inpu
 	}
 	if int64(len(plain)) > p.MaxCredential {
 		release()
-		return w, func() {}, apperr.TooLarge("凭证内容超过上限")
+		return w, func() {}, apperr.TooLarge("The credential exceeds the size limit.")
 	}
 	w.Secret = plain
 	return w, release, nil

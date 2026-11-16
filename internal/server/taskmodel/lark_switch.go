@@ -34,24 +34,24 @@ func (in *TaskLarkSwitchInput) UnmarshalJSON(raw []byte) error {
 	fields := []string{"actionId", "expectedTaskVersion", "expectedNodeRunId", "expectedAgentId", "expectedRuntimeId", "expectedLarkBindingRevision", "expectedMembers", "targetAccountId", "targetVersionId", "expectedAccountRevision"}
 	var m map[string]json.RawMessage
 	if json.Unmarshal(raw, &m) != nil || len(m) != len(fields) {
-		return errors.New("任务切换输入字段无效")
+		return errors.New("the task switch input must have exactly the expected fields")
 	}
 	for _, key := range fields {
 		if v, ok := m[key]; !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-			return errors.New("任务切换输入缺失或为空")
+			return errors.New("a task switch input field is missing or null")
 		}
 	}
 	var members []map[string]json.RawMessage
 	if json.Unmarshal(m["expectedMembers"], &members) != nil || len(members) != 2 {
-		return errors.New("必须明确两个任务成员")
+		return errors.New("expectedMembers must list exactly two task members")
 	}
 	for _, member := range members {
 		if len(member) != 3 {
-			return errors.New("任务成员字段无效")
+			return errors.New("a task member must have exactly agentId, runtimeId and expectedBindingRevision")
 		}
 		for _, key := range []string{"agentId", "runtimeId", "expectedBindingRevision"} {
 			if v, ok := member[key]; !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-				return errors.New("任务成员字段缺失或为空")
+				return errors.New("a task member field is missing or null")
 			}
 		}
 	}

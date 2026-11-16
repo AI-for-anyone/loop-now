@@ -63,18 +63,18 @@ func Load(path string) (f *File, exists bool, e *output.Error) {
 		return empty, false, nil
 	}
 	if err != nil {
-		return nil, false, output.Errorf(output.CodeConfigInvalid, "无法读取配置文件 %s：%v", path, pathErr(err))
+		return nil, false, output.Errorf(output.CodeConfigInvalid, "Could not read config file %s: %v", path, pathErr(err))
 	}
 	if !info.Mode().IsRegular() {
-		return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 不是普通文件", path)
+		return nil, true, output.Errorf(output.CodeConfigInvalid, "Config file %s is not a regular file.", path)
 	}
 	if !privatefs.IsPrivate(path, info) {
 		return nil, true, output.Errorf(output.CodeConfigInsecurePermissions,
-			"配置文件 %s 的权限为 %04o，组或其他用户可以访问；请把它改为只有当前用户可访问（Unix 上 chmod 600 %s）后重试", path, info.Mode().Perm(), path)
+			"Config file %s has permissions %04o, so the group or other users can access it. Make it accessible only to the current user (chmod 600 %s on Unix) and try again.", path, info.Mode().Perm(), path)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, true, output.Errorf(output.CodeConfigInvalid, "无法读取配置文件 %s：%v", path, pathErr(err))
+		return nil, true, output.Errorf(output.CodeConfigInvalid, "Could not read config file %s: %v", path, pathErr(err))
 	}
 	var out File
 	dec := json.NewDecoder(bytes.NewReader(b))
@@ -82,17 +82,17 @@ func Load(path string) (f *File, exists bool, e *output.Error) {
 	// A parse error could quote fragments of the file (which contains tokens), so only report a message that does
 	// not depend on the position.
 	if err := dec.Decode(&out); err != nil || dec.More() {
-		return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 不是合法的 JSON，或含有未知字段", path)
+		return nil, true, output.Errorf(output.CodeConfigInvalid, "Config file %s is not valid JSON or has unknown fields.", path)
 	}
 	if out.SchemaVersion != SchemaVersion {
-		return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 的 schemaVersion 为 %d，本版本只支持 %d", path, out.SchemaVersion, SchemaVersion)
+		return nil, true, output.Errorf(output.CodeConfigInvalid, "Config file %s has schemaVersion %d; this version of loopctl supports only %d.", path, out.SchemaVersion, SchemaVersion)
 	}
 	if out.Profiles == nil {
 		out.Profiles = map[string]Profile{}
 	}
 	for name := range out.Profiles {
 		if !ValidProfileName(name) {
-			return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 中的 profile 名称 %q 不合法", path, name)
+			return nil, true, output.Errorf(output.CodeConfigInvalid, "Config file %s has an invalid profile name %q.", path, name)
 		}
 	}
 	return &out, true, nil

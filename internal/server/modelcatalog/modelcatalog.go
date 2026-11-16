@@ -90,7 +90,7 @@ func Load(ctx context.Context, o Options) (*Catalog, error) {
 	args := []string{scriptPath, o.PiAIDir}
 	if len(o.ModelsJSON) > 0 {
 		if o.PiPackageDir == "" {
-			return nil, fmt.Errorf("读取自定义模型目录需要 Pi 主程序目录")
+			return nil, fmt.Errorf("reading a custom model catalog requires the Pi package directory")
 		}
 		modelsPath := filepath.Join(tmp, "models.json")
 		if err := os.WriteFile(modelsPath, o.ModelsJSON, 0o600); err != nil {
@@ -108,7 +108,7 @@ func Load(ctx context.Context, o Options) (*Catalog, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("读取 Pi 模型目录失败：%w：%s", err, bytes.TrimSpace(stderr.Bytes()))
+		return nil, fmt.Errorf("read the Pi model catalog: %w: %s", err, bytes.TrimSpace(stderr.Bytes()))
 	}
 
 	var raw struct {
@@ -118,18 +118,18 @@ func Load(ctx context.Context, o Options) (*Catalog, error) {
 		ProviderConfig map[string]json.RawMessage `json:"providerConfigs"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
-		return nil, fmt.Errorf("解析 Pi 模型目录失败：%w", err)
+		return nil, fmt.Errorf("parse the Pi model catalog: %w", err)
 	}
 	if raw.PiAIVersion != o.PiVersion {
-		return nil, fmt.Errorf("pi-ai 版本 %s 与期望的 Pi 版本 %s 不一致（%s）", raw.PiAIVersion, o.PiVersion, o.PiAIDir)
+		return nil, fmt.Errorf("pi-ai version %s does not match the expected Pi version %s (%s)", raw.PiAIVersion, o.PiVersion, o.PiAIDir)
 	}
 	if len(raw.Providers) == 0 {
-		return nil, fmt.Errorf("Pi 模型目录为空（%s）", o.PiAIDir)
+		return nil, fmt.Errorf("the Pi model catalog is empty (%s)", o.PiAIDir)
 	}
 	for _, p := range raw.Providers {
 		for _, m := range p.Models {
 			if len(m.ThinkingLevels) == 0 || !slices.Contains(m.ThinkingLevels, m.DefaultThinkingLevel) {
-				return nil, fmt.Errorf("Pi 模型思考等级元数据无效：%s/%s", p.ID, m.ID)
+				return nil, fmt.Errorf("invalid thinking level metadata in the Pi model catalog: %s/%s", p.ID, m.ID)
 			}
 		}
 	}
@@ -202,7 +202,7 @@ func ConfigIdentity(data []byte) string {
 
 func (c *Catalog) ResolveThinking(provider, modelID string, selected *string) (string, error) {
 	if c == nil {
-		return "", fmt.Errorf("模型目录未配置")
+		return "", fmt.Errorf("the model catalog is not configured")
 	}
 	if p, ok := c.Provider(provider); ok {
 		for _, m := range p.Models {
@@ -214,11 +214,11 @@ func (c *Catalog) ResolveThinking(provider, modelID string, selected *string) (s
 				if level != "" && slices.Contains(m.ThinkingLevels, level) {
 					return level, nil
 				}
-				return "", fmt.Errorf("模型 %s/%s 不支持该思考等级", provider, modelID)
+				return "", fmt.Errorf("model %s/%s does not support this thinking level", provider, modelID)
 			}
 		}
 	}
-	return "", fmt.Errorf("模型目录中没有模型 %s/%s", provider, modelID)
+	return "", fmt.Errorf("the model catalog has no model %s/%s", provider, modelID)
 }
 
 // Provider looks up a provider by ID.

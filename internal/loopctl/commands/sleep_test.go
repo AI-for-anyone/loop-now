@@ -210,7 +210,7 @@ func TestSleepRetryAndErrors(t *testing.T) {
 			if calls.Load() != 1 || r.Env.Meta.Attempts != 1 {
 				t.Fatalf("write retried: %s calls=%d", r.Stdout, calls.Load())
 			}
-			if tc.status <= 0 && !strings.Contains(r.Env.Error.Message, "可能已登记") {
+			if tc.status <= 0 && !strings.Contains(r.Env.Error.Message, "may already be registered") {
 				t.Fatal(r.Stdout)
 			}
 			if tc.status == 409 && !strings.Contains(string(r.Env.Error.Details), `"runId":"old"`) {
@@ -251,7 +251,7 @@ func TestSleepTimeoutNoRetry(t *testing.T) {
 	e.vars[conn.EnvTimeout] = "50ms"
 	r := e.run(sleepArgs()...)
 	r.fails(t, "timeout", 4)
-	if calls.Load() != 1 || r.Env.Meta.Attempts != 1 || !strings.Contains(r.Env.Error.Message, "可能已登记") {
+	if calls.Load() != 1 || r.Env.Meta.Attempts != 1 || !strings.Contains(r.Env.Error.Message, "may already be registered") {
 		t.Fatalf("timeout changed identity or retried: %s calls=%d", r.Stdout, calls.Load())
 	}
 }

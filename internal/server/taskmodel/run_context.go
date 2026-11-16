@@ -22,7 +22,7 @@ func decodeRunContext(data []byte, out any) error {
 		}
 		var id uuid.UUID
 		if key != "runId" || bytes.Equal(bytes.TrimSpace(value), []byte("null")) || json.Unmarshal(value, &id) != nil || id == uuid.Nil {
-			return errors.New("runId必须是非空运行ID")
+			return errors.New("runId must be a non-zero run ID")
 		}
 	}
 	d := json.NewDecoder(bytes.NewReader(data))

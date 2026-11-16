@@ -217,7 +217,7 @@ func (s *Service) gcLocked(now time.Time) {
 }
 func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 	if project == uuid.Nil {
-		return Scan{}, apperr.Invalid("projectId", "UUID不能为零")
+		return Scan{}, apperr.Invalid("projectId", "Must not be the zero UUID.")
 	}
 	_, rev, err := s.st.ListProjectCredentials(ctx, project, "cli", "")
 	if err != nil {
@@ -242,7 +242,7 @@ func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 	}
 	if count >= s.o.MaxScansPerProject {
 		s.mu.Unlock()
-		return Scan{}, apperr.Conflict("import_in_progress", "扫描数量达到上限")
+		return Scan{}, apperr.Conflict("import_in_progress", "The project has reached the scan limit. Wait for an earlier scan to expire, then try again.")
 	}
 	work, cancel := context.WithTimeout(ctx, s.o.OperationTimeout)
 	discoveryID := uuid.New()
@@ -260,7 +260,7 @@ func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 	}()
 	r, err := s.o.ReaderFactory(work)
 	if err != nil {
-		return Scan{}, apperr.Invalid("source", "本机来源不可读")
+		return Scan{}, apperr.Invalid("source", "Could not read the sources on this machine.")
 	}
 	keep := false
 	defer func() {
@@ -270,7 +270,7 @@ func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 	}()
 	raw, err := r.Discover(work)
 	if err != nil {
-		return Scan{}, apperr.Invalid("source", "本机来源不可读")
+		return Scan{}, apperr.Invalid("source", "Could not read the sources on this machine.")
 	}
 	view := Scan{ScanID: uuid.New(), ProjectID: project, ExpiresAt: time.Now().Add(s.o.ScanTTL), CredentialsRevision: rev, Candidates: []Candidate{}, Sources: []SourceSummary{}}
 	for _, c := range raw {
@@ -281,7 +281,7 @@ func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 		if v.Status == "may_import" || v.Status == "needs_fields" {
 			sel, e := r.Select(c.ID)
 			if e != nil {
-				return Scan{}, apperr.Invalid("source", "候选不可读")
+				return Scan{}, apperr.Invalid("source", "Could not read one of the candidates.")
 			}
 			var mac []byte
 			e = sel.WithOrigin(func(b []byte) error { var err error; mac, err = s.o.Hasher.Origin(project, b); return err })
@@ -328,7 +328,7 @@ func (s *Service) Scan(ctx context.Context, project uuid.UUID) (Scan, error) {
 		}
 	}
 	if s.closed || count >= s.o.MaxScansPerProject {
-		return Scan{}, apperr.Conflict("import_in_progress", "扫描数量达到上限")
+		return Scan{}, apperr.Conflict("import_in_progress", "The project has reached the scan limit. Wait for an earlier scan to expire, then try again.")
 	}
 	entry := &scanEntry{view: copyScan(view), reader: r}
 	entry.timer = time.AfterFunc(time.Until(view.ExpiresAt), func() { s.mu.Lock(); defer s.mu.Unlock(); s.gcLocked(time.Now()) })
@@ -353,13 +353,13 @@ func fingerprint(in StartInput) []byte {
 }
 func (s *Service) Start(ctx context.Context, project uuid.UUID, in StartInput) (Operation, error) {
 	if project == uuid.Nil {
-		return Operation{}, apperr.Invalid("projectId", "UUID不能为零")
+		return Operation{}, apperr.Invalid("projectId", "Must not be the zero UUID.")
 	}
 	if err := in.Validate(); err != nil {
 		return Operation{}, err
 	}
 	if len(in.CandidateIDs) > s.o.MaxBatch {
-		return Operation{}, apperr.Invalid("candidateIds", "批次超限")
+		return Operation{}, apperr.Invalid("candidateIds", "Too many candidates for one import.")
 	}
 	hash := fingerprint(in)
 	defer clear(hash)
@@ -386,11 +386,11 @@ func (s *Service) Start(ctx context.Context, project uuid.UUID, in StartInput) (
 	}
 	if e == nil || e.view.ProjectID != project || !time.Now().Before(e.view.ExpiresAt) {
 		s.mu.Unlock()
-		return Operation{}, apperr.Conflict("import_scan_expired", "请重新扫描")
+		return Operation{}, apperr.Conflict("import_scan_expired", "The scan has expired. Scan again.")
 	}
 	if len(s.jobs) >= s.o.MaxActive {
 		s.mu.Unlock()
-		return Operation{}, apperr.Conflict("import_in_progress", "导入数量达到上限")
+		return Operation{}, apperr.Conflict("import_in_progress", "Too many imports are running. Wait for one to finish, then try again.")
 	}
 	candidates := map[uuid.UUID]Candidate{}
 	for _, v := range e.view.Candidates {
@@ -402,11 +402,11 @@ func (s *Service) Start(ctx context.Context, project uuid.UUID, in StartInput) (
 		v, ok := candidates[id]
 		if !ok {
 			s.mu.Unlock()
-			return Operation{}, apperr.NotFound("候选")
+			return Operation{}, apperr.NotFound("Candidate")
 		}
 		if v.Status != "may_import" && v.Status != "needs_fields" {
 			s.mu.Unlock()
-			return Operation{}, apperr.Invalid("candidateIds", "候选不支持导入")
+			return Operation{}, apperr.Invalid("candidateIds", "A selected candidate cannot be imported.")
 		}
 		selected = append(selected, v)
 		safeItems = append(safeItems, store.CLIImportItem{CandidateID: id, CLI: v.CLI, Label: v.Label, Status: "pending"})
@@ -416,7 +416,7 @@ func (s *Service) Start(ctx context.Context, project uuid.UUID, in StartInput) (
 		for key, p := range map[string]*string{"database": sup.Database, "sslMode": sup.SSLMode, "caCert": sup.CACert} {
 			if p != nil && !slices.Contains(v.SupplementableFields, key) {
 				s.mu.Unlock()
-				return Operation{}, apperr.Invalid("supplements", "不能补充源已有或不允许的字段")
+				return Operation{}, apperr.Invalid("supplements", "Cannot supplement a field that the source already has or that is not allowed.")
 			}
 		}
 	}
@@ -483,7 +483,7 @@ func (s *Service) Get(ctx context.Context, project, id uuid.UUID) (Operation, er
 }
 func (s *Service) Cancel(ctx context.Context, project, id uuid.UUID) (Operation, error) {
 	if project == uuid.Nil || id == uuid.Nil {
-		return Operation{}, apperr.Invalid("operationId", "UUID不能为零")
+		return Operation{}, apperr.Invalid("operationId", "Must not be the zero UUID.")
 	}
 	record, end := s.recordContext()
 	defer end()
@@ -513,7 +513,7 @@ func (s *Service) Recover(ctx context.Context) error {
 // It only cancels this project's contexts/leases; it does not mutate DB history.
 func (s *Service) CancelProject(ctx context.Context, project uuid.UUID) error {
 	if project == uuid.Nil {
-		return apperr.Invalid("projectId", "UUID不能为零")
+		return apperr.Invalid("projectId", "Must not be the zero UUID.")
 	}
 	s.mu.Lock()
 	jobs := []*job{}

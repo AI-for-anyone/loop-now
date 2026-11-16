@@ -58,15 +58,15 @@ it('发送中继续编辑，原回执不会清掉新草稿', async () => {
 })
 it('409只发送一次、保原草稿且不降级旧接口或重新发', async () => {
   let posts = 0
-  server.use(http.post(endpoint, () => { posts++; return HttpResponse.json(errorBody('task_conflict', '原节点已不是当前执行'), { status: 409 }) }))
+  server.use(http.post(endpoint, () => { posts++; return HttpResponse.json(errorBody('task_conflict', 'The node is no longer the current run'), { status: 409 }) }))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
   await userEvent.type(box, '保留在旧节点'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByText(/原节点已不是当前执行/)).toBeVisible(); expect(box).toHaveValue('保留在旧节点')
+  expect(await screen.findByText(/The node is no longer the current run/)).toBeVisible(); expect(box).toHaveValue('保留在旧节点')
   await new Promise(resolve => setTimeout(resolve, 100)); expect(posts).toBe(1)
 })
 it('结果未知不自动新动作，明确手动重试沿用原action/内容/目标，期间新草稿不清', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
-  server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', '回执暂不可确认'), { status: 500 }) : HttpResponse.json(receipt(body), { status: 201 }) }))
+  server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 }) : HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
   await userEvent.type(box, '原动作内容'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
   await screen.findByRole('button', { name: '重试确认原消息' }); expect(bodies).toHaveLength(1)
@@ -93,7 +93,7 @@ it('错误目标回执不清稿、不宣称接收或自动改投', async () => {
 it('未知结果按原action GET恢复，404不重POST/换ID；历史仍可读原回执', async () => {
   const user = userEvent.setup(), bodies: Schemas['TaskNodeInboxInput'][] = []; let found = false
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(errorBody('internal_error'), { status: 503 }) }),
-    http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-actions/:actionId`), ({ params }) => { expect(params.actionId).toBe(bodies[0].actionId); return found ? HttpResponse.json(receipt(bodies[0])) : HttpResponse.json(errorBody('not_found', '原动作尚不可见'), { status: 404 }) }))
+    http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-actions/:actionId`), ({ params }) => { expect(params.actionId).toBe(bodies[0].actionId); return found ? HttpResponse.json(receipt(bodies[0])) : HttpResponse.json(errorBody('not_found', 'The action is not visible yet'), { status: 404 }) }))
   const env = renderWithQuery(<Harness />); await user.type(screen.getByRole('textbox'), '保持原动作'); await user.click(screen.getByRole('button', { name: '发送' })); await screen.findByRole('button', { name: '读取原发送结果' })
   await user.click(screen.getByRole('button', { name: '读取原发送结果' })); await screen.findByText(copy.notFound); expect(bodies).toHaveLength(1)
   env.rerender(<Harness current={false} />); found = true

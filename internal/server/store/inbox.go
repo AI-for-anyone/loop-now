@@ -243,7 +243,7 @@ func DecodeInboxCursor(s string) (*InboxCursor, error) {
 	if s == "" {
 		return nil, nil
 	}
-	bad := apperr.Invalid("cursor", "游标无效")
+	bad := apperr.Invalid("cursor", "The cursor is invalid.")
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return nil, bad
@@ -359,7 +359,7 @@ func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unr
 // GetInboxMessage returns the full text of one message; returns not_found when it does not exist.
 func (s *Store) GetInboxMessage(ctx context.Context, id uuid.UUID, preview int) (InboxMessage, error) {
 	m, err := scanInbox(s.Pool.QueryRow(ctx, inboxSelect(preview)+` WHERE m.id = $1`, id))
-	return m, notFoundIfNoRows(err, "消息")
+	return m, notFoundIfNoRows(err, "Message")
 }
 
 // NewInboxMessage holds the parameters for writing a message. An empty ThreadID starts a new thread.
@@ -393,15 +393,15 @@ func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) erro
 				return err
 			}
 			if !exists {
-				return apperr.NotFound("任务内Agent")
+				return apperr.NotFound("Agent in this task")
 			}
 		} else if _, err := lockAgent(ctx, tx, in.To.ID); err != nil {
-			return notFoundAs(err, "收件人")
+			return notFoundAs(err, "Recipient")
 		}
 
 	case "external":
 		if err := requireLiveIdentity(ctx, tx, in.To.ID); err != nil {
-			return notFoundAs(err, "收件人")
+			return notFoundAs(err, "Recipient")
 		}
 	}
 	if in.Images == nil {
@@ -448,7 +448,7 @@ func (s *Store) ThreadParties(ctx context.Context, threadID uuid.UUID) (from, to
 			coalesce(from_runtime_id,'00000000-0000-0000-0000-000000000000'),coalesce(to_runtime_id,'00000000-0000-0000-0000-000000000000')
 		FROM inbox_messages WHERE id = $1 AND thread_id = id`, threadID).Scan(&from.Kind, &fa, &fi, &fp, &to.Kind, &ta, &ti, &tp, &from.RuntimeID, &to.RuntimeID)
 	if err != nil {
-		return from, to, notFoundIfNoRows(err, "线索")
+		return from, to, notFoundIfNoRows(err, "Thread")
 	}
 	from.ID, to.ID = partyID(fa, fi, fp), partyID(ta, ti, tp)
 	return from, to, nil
@@ -471,7 +471,7 @@ func (s *Store) EnsurePluginParty(ctx context.Context, plugin string) (Party, er
 		SELECT $1,id,display_name FROM plugins WHERE id=$2
 		ON CONFLICT (plugin_id) DO UPDATE SET display_name=EXCLUDED.display_name`, p.ID, plugin)
 	if err == nil && tag.RowsAffected() == 0 {
-		err = apperr.NotFound("插件")
+		err = apperr.NotFound("Plugin")
 	}
 	return p, err
 }
@@ -486,7 +486,7 @@ func (s *Store) MarkInboxRead(ctx context.Context, id uuid.UUID, p Party) (chang
 	}
 	var one int
 	err = s.Pool.QueryRow(ctx, `SELECT 1 FROM inbox_messages m WHERE m.id = $2 AND `+p.cond("m", "to", 1), p.ID, id).Scan(&one)
-	return false, eff, notFoundIfNoRows(err, "消息")
+	return false, eff, notFoundIfNoRows(err, "Message")
 }
 
 // ReadReceipt is a message just marked as read.
@@ -525,7 +525,7 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 	case p.Kind == "agent" && p.RuntimeID != uuid.Nil:
 		var task uuid.UUID
 		if err := s.Pool.QueryRow(ctx, `SELECT task_id FROM task_instances WHERE id=$1`, p.RuntimeID).Scan(&task); err != nil {
-			return nil, eff, notFoundIfNoRows(err, "消息")
+			return nil, eff, notFoundIfNoRows(err, "Message")
 		}
 		_, err := s.MutateTask(ctx, task, nil, func(m *TaskMutation) (any, error) {
 			m.Unchanged()
@@ -558,7 +558,7 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 		err := s.inTx(ctx, func(tx *db.Tx) error {
 			eff.QueueChanged, eff.Voided = false, nil
 			if err := requireLiveAgent(ctx, tx, p.ID); err != nil {
-				return notFoundAs(err, "消息")
+				return notFoundAs(err, "Message")
 			}
 			var err error
 			if out, links, err = markReadTx(ctx, tx, p, column, id); err != nil {
@@ -801,5 +801,5 @@ func IsNotFound(err error) bool {
 
 func GetInboxMessageTx(ctx context.Context, tx *db.Tx, id uuid.UUID, preview int) (InboxMessage, error) {
 	m, err := scanInbox(tx.QueryRow(ctx, inboxSelect(preview)+` WHERE m.id=$1`, id))
-	return m, notFoundIfNoRows(err, "消息")
+	return m, notFoundIfNoRows(err, "Message")
 }

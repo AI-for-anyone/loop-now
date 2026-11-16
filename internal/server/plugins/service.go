@@ -262,13 +262,13 @@ func (s *Service) SetIdentityManager(ctx context.Context, identity uuid.UUID, m 
 	if m != nil {
 		_, manifest, err := s.get(ctx, m.PluginID)
 		if store.IsNotFound(err) {
-			return store.ExternalIdentity{}, apperr.Invalid("managedBy.pluginId", "插件 "+m.PluginID+" 没有安装")
+			return store.ExternalIdentity{}, apperr.Invalid("managedBy.pluginId", "Plugin "+m.PluginID+" is not installed.")
 		}
 		if err != nil {
 			return store.ExternalIdentity{}, err
 		}
 		if !slices.Contains(manifest.ManagingChannels(), m.ChannelID) {
-			return store.ExternalIdentity{}, apperr.Invalid("managedBy.channelId", "插件 "+m.PluginID+" 的渠道 "+m.ChannelID+" 没有声明能代管外部身份")
+			return store.ExternalIdentity{}, apperr.Invalid("managedBy.channelId", "Plugin "+m.PluginID+"'s channel "+m.ChannelID+" does not declare that it can manage external identities.")
 		}
 	}
 	return s.Store.SetIdentityManager(ctx, identity, m)
@@ -338,7 +338,7 @@ type PreviewRequest struct {
 func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, error) {
 	s.expirePreviews()
 	if (req.Source == nil) == (req.PluginID == "") {
-		return Preview{}, apperr.Invalid("source", "source 与 pluginId 须给出且只给出一个")
+		return Preview{}, apperr.Invalid("source", "Give exactly one of source and pluginId.")
 	}
 	src := req.Source
 	if req.PluginID != "" {
@@ -367,7 +367,7 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		declared = entry.ProviderState
 		market = &src.Market
 	case src.Location == "":
-		return Preview{}, apperr.Invalid("source.location", "须给出来源位置")
+		return Preview{}, apperr.Invalid("source.location", "A source location is required.")
 	}
 	id := uuid.Must(uuid.NewV7())
 	staging := filepath.Join(s.Root, ".staging", id.String())
@@ -387,9 +387,9 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 			}
 			switch {
 			case req.PluginID != "" && m.ID != req.PluginID:
-				err = apperr.Invalid("manifest", "来源里的插件 id 已变为 "+m.ID+"，不能作为 "+req.PluginID+" 的更新")
+				err = apperr.Invalid("manifest", "The plugin id in the source has changed to "+m.ID+", so it cannot be an update of "+req.PluginID+".")
 			case market != nil && m.ID != src.ID:
-				err = apperr.Invalid("manifest", "市场条目 "+src.ID+" 的来源里是插件 "+m.ID)
+				err = apperr.Invalid("manifest", "Market entry "+src.ID+" has a source that contains plugin "+m.ID)
 			default:
 				return s.keepPreview(ctx, id, staging, dir, resolved, m, trusted, declared)
 			}
@@ -450,10 +450,10 @@ func (s *Service) Install(ctx context.Context, in InstallInput, update string) (
 	defer s.mu.Unlock()
 	pv := s.previews[in.PreviewID]
 	if pv == nil {
-		return View{}, apperr.NotFound("预览")
+		return View{}, apperr.NotFound("Preview")
 	}
 	if !pv.view.Trusted && !in.Confirm {
-		return View{}, apperr.Conflict(apperr.CodePluginConfirmationRequired, "插件来自非官方来源，确认后再安装")
+		return View{}, apperr.Conflict(apperr.CodePluginConfirmationRequired, "The plugin comes from an unofficial source. Confirm before installing.")
 	}
 	defer func() {
 		if pv.staging != "" {
@@ -471,9 +471,9 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	case err != nil && !store.IsNotFound(err):
 		return View{}, err
 	case update == "" && err == nil:
-		return View{}, apperr.Conflict(apperr.CodeNameConflict, "插件 "+m.ID+" 已安装，请用更新")
+		return View{}, apperr.Conflict(apperr.CodeNameConflict, "Plugin "+m.ID+" is already installed. Update it instead.")
 	case update != "" && update != m.ID:
-		return View{}, apperr.Invalid("previewId", "预览的插件是 "+m.ID+"，不是 "+update)
+		return View{}, apperr.Invalid("previewId", "The previewed plugin is "+m.ID+", not "+update)
 	case update != "" && err != nil:
 		return View{}, err
 	}
@@ -491,7 +491,7 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 			}
 			for _, v := range versions {
 				if v.Version == m.Version && v.Digest != sum {
-					return View{}, apperr.Conflict(apperr.CodePluginVersionConflict, "插件 "+m.ID+" 已装过版本 "+m.Version+"，内容不同；请改版本号")
+					return View{}, apperr.Conflict(apperr.CodePluginVersionConflict, "Plugin "+m.ID+" already has version "+m.Version+" with different content. Use a different version number.")
 				}
 				reuse = reuse || v.Version == m.Version
 			}
@@ -545,7 +545,7 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 		for _, provider := range slices.Sorted(maps.Keys(declared)) {
 			if p, m, ok := pluginmanifest.OverlappingStatePath(declared[provider].Paths, managed); ok {
 				providers.Errors = append(providers.Errors, modelcatalog.CaptureError{Path: "providerState." + provider,
-					Error: "状态路径 " + p + " 与 CLI 模板的凭证文件 " + m + " 重叠，用这个提供方的 Agent 启动时会失败"})
+					Error: "State path " + p + " overlaps the credential file " + m + " of a CLI template. Agents that use this provider will fail to start."})
 			}
 		}
 		captured, _ = json.Marshal(providers)
@@ -881,7 +881,7 @@ func (s *Service) CreateAccount(ctx context.Context, project uuid.UUID, id strin
 	}
 	k, ok := accountKind(m, in.Kind)
 	if !ok {
-		return AccountView{}, apperr.Invalid("kind", "插件没有声明这个账号种类")
+		return AccountView{}, apperr.Invalid("kind", "The plugin does not declare this account kind.")
 	}
 	secrets := secretFields(k.Fields)
 	if err := checkValueFields(in.Values, secrets, nil, "values"); err != nil {
@@ -924,7 +924,7 @@ func (s *Service) UpdateAccount(ctx context.Context, project uuid.UUID, id strin
 	a, err := s.Store.UpdatePluginAccount(ctx, project, id, account, in.ExpectedRevision, func(cur store.PluginAccount) (store.PluginAccount, error) {
 		k, ok := accountKind(m, cur.Kind)
 		if !ok {
-			return cur, apperr.Invalid("kind", "插件已不再声明这个账号种类")
+			return cur, apperr.Invalid("kind", "The plugin no longer declares this account kind.")
 		}
 		kind = k
 		secrets := secretFields(k.Fields)
@@ -1012,7 +1012,7 @@ func (s *Service) PutAgentPlugin(ctx context.Context, agent uuid.UUID, id string
 			return it, nil
 		}
 	}
-	return AgentView{}, apperr.NotFound("插件")
+	return AgentView{}, apperr.NotFound("Plugin")
 }
 
 // ---- Settings and plugin host ----
@@ -1026,7 +1026,7 @@ func (s *Service) Settings(ctx context.Context) (store.PluginSettings, error) {
 func (s *Service) PutSettings(ctx context.Context, v store.PluginSettings) (store.PluginSettings, error) {
 	for _, m := range v.Markets {
 		if strings.TrimSpace(m) == "" {
-			return v, apperr.Invalid("markets", "市场地址不能为空")
+			return v, apperr.Invalid("markets", "A market URL must not be empty.")
 		}
 	}
 	if err := s.Store.PutPluginSettings(ctx, v); err != nil {
@@ -1067,14 +1067,14 @@ func (s *Service) HostStatus(ctx context.Context) (HostView, error) {
 // RestartHost restarts the plugin host on manual request.
 func (s *Service) RestartHost(ctx context.Context) (HostView, error) {
 	if s.Host == nil {
-		return HostView{}, apperr.Conflict(apperr.CodePluginNotEnabled, "服务端没有配置插件宿主")
+		return HostView{}, apperr.Conflict(apperr.CodePluginNotEnabled, "The server has no plugin host configured.")
 	}
 	st, err := s.Store.GetPluginSettings(ctx)
 	if err != nil {
 		return HostView{}, err
 	}
 	if st.Disabled {
-		return HostView{}, apperr.Conflict(apperr.CodePluginNotEnabled, "已停用全部插件，先在全局设置里恢复")
+		return HostView{}, apperr.Conflict(apperr.CodePluginNotEnabled, "All plugins are disabled. Turn them back on in the global settings first.")
 	}
 	s.Host.Restart()
 	return s.HostStatus(ctx)

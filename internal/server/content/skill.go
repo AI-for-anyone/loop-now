@@ -32,7 +32,7 @@ type SkillMeta struct {
 var skillNamePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // ErrTooLarge means the size or entry count limit was exceeded.
-var ErrTooLarge = errors.New("超过上限")
+var ErrTooLarge = errors.New("limit exceeded")
 
 // ParseSkillMarkdown parses the YAML frontmatter at the start of SKILL.md and validates name and description.
 // It only parses top-level scalar fields, which is enough for name and description in the Agent Skills spec; other
@@ -41,12 +41,12 @@ func ParseSkillMarkdown(md []byte) (SkillMeta, error) {
 	text := strings.ReplaceAll(string(md), "\r\n", "\n")
 	text = strings.TrimPrefix(text, "\uFEFF")
 	if !strings.HasPrefix(text, "---\n") {
-		return SkillMeta{}, errors.New("SKILL.md 必须以 --- 开头的 frontmatter 开始")
+		return SkillMeta{}, errors.New("SKILL.md must start with frontmatter that opens with ---")
 	}
 	body := text[len("---\n"):]
 	end := strings.Index(body, "\n---")
 	if end < 0 {
-		return SkillMeta{}, errors.New("SKILL.md 的 frontmatter 没有结束标记 ---")
+		return SkillMeta{}, errors.New("SKILL.md frontmatter has no closing ---")
 	}
 	fields := parseTopLevelScalars(body[:end])
 	meta := SkillMeta{Name: strings.TrimSpace(fields["name"]), Description: strings.TrimSpace(fields["description"])}
@@ -58,13 +58,13 @@ func ParseSkillMarkdown(md []byte) (SkillMeta, error) {
 		missing = append(missing, "description")
 	}
 	if len(missing) > 0 {
-		return meta, fmt.Errorf("SKILL.md 的 frontmatter 缺少 %s", strings.Join(missing, "、"))
+		return meta, fmt.Errorf("SKILL.md frontmatter is missing %s", strings.Join(missing, " and "))
 	}
 	if len(meta.Name) > 64 || !skillNamePattern.MatchString(meta.Name) {
-		return meta, errors.New("Skill 名称只能由小写字母、数字和单个连字符组成，最长 64 个字符")
+		return meta, errors.New("Skill name must consist of lowercase letters, digits and single hyphens, at most 64 characters")
 	}
 	if len(meta.Description) > 1024 {
-		return meta, errors.New("Skill 描述不能超过 1024 个字符")
+		return meta, errors.New("Skill description must be at most 1024 characters")
 	}
 	return meta, nil
 }
@@ -175,7 +175,7 @@ type SkillArchiveLimits struct {
 func ExtractSkillZip(data []byte, lim SkillArchiveLimits) ([]File, SkillMeta, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, SkillMeta{}, errors.New("不是合法的 zip 压缩包")
+		return nil, SkillMeta{}, errors.New("not a valid zip archive")
 	}
 	var files []File
 	seen := map[string]bool{}
@@ -189,32 +189,32 @@ func ExtractSkillZip(data []byte, lim SkillArchiveLimits) ([]File, SkillMeta, er
 			continue
 		}
 		if f.Mode()&fs.ModeType != 0 {
-			return nil, SkillMeta{}, fmt.Errorf("压缩包中只能包含普通文件，不能有符号链接等特殊文件：%s", name)
+			return nil, SkillMeta{}, fmt.Errorf("archive may contain only regular files, not symlinks or other special files: %s", name)
 		}
 		clean, err := CleanRelPath(name)
 		if err != nil {
-			return nil, SkillMeta{}, fmt.Errorf("压缩包中的路径 %q 不合法：%v", name, err)
+			return nil, SkillMeta{}, fmt.Errorf("invalid path %q in the archive: %v", name, err)
 		}
 		if seen[clean] {
-			return nil, SkillMeta{}, fmt.Errorf("压缩包中有重复路径：%s", clean)
+			return nil, SkillMeta{}, fmt.Errorf("duplicate path in the archive: %s", clean)
 		}
 		seen[clean] = true
 		if len(files)+1 > lim.MaxEntries {
-			return nil, SkillMeta{}, fmt.Errorf("%w：文件数超过 %d", ErrTooLarge, lim.MaxEntries)
+			return nil, SkillMeta{}, fmt.Errorf("%w: more than %d files", ErrTooLarge, lim.MaxEntries)
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, SkillMeta{}, fmt.Errorf("读取压缩包条目 %s 失败", clean)
+			return nil, SkillMeta{}, fmt.Errorf("cannot read archive entry %s", clean)
 		}
 		// Count the bytes actually read, so a zip bomb cannot lie about its size.
 		b, err := io.ReadAll(io.LimitReader(rc, lim.MaxTotal-total+1))
 		rc.Close()
 		if err != nil {
-			return nil, SkillMeta{}, fmt.Errorf("读取压缩包条目 %s 失败", clean)
+			return nil, SkillMeta{}, fmt.Errorf("cannot read archive entry %s", clean)
 		}
 		total += int64(len(b))
 		if total > lim.MaxTotal {
-			return nil, SkillMeta{}, fmt.Errorf("%w：解压后超过 %d 字节", ErrTooLarge, lim.MaxTotal)
+			return nil, SkillMeta{}, fmt.Errorf("%w: more than %d bytes after extraction", ErrTooLarge, lim.MaxTotal)
 		}
 		files = append(files, File{Path: clean, Data: b})
 	}
@@ -227,7 +227,7 @@ func ExtractSkillZip(data []byte, lim SkillArchiveLimits) ([]File, SkillMeta, er
 		}
 	}
 	if md == nil {
-		return nil, SkillMeta{}, errors.New("压缩包中没有 SKILL.md（需要在根目录或唯一的顶层目录中）")
+		return nil, SkillMeta{}, errors.New("archive has no SKILL.md (it must be at the root or in the only top-level directory)")
 	}
 	meta, err := ParseSkillMarkdown(md)
 	if err != nil {

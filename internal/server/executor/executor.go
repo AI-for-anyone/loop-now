@@ -87,12 +87,12 @@ type SessionExport struct {
 var (
 	// ErrMaintenanceBusy: the runtime still has a run in progress, or is doing another maintenance operation (such as a
 	// task fork or a runtime handover).
-	ErrMaintenanceBusy = errors.New("运行时正忙")
+	ErrMaintenanceBusy = errors.New("the runtime is busy")
 	// ErrNoSession: there is no session to operate on.
-	ErrNoSession = errors.New("当前没有可操作的会话")
+	ErrNoSession = errors.New("there is no session to operate on")
 	// ErrUnsupportedRuntime: this Agent's runtime does not support the command (for example, Claude Code has no Pi
 	// session).
-	ErrUnsupportedRuntime = errors.New("当前运行时不支持这个命令")
+	ErrUnsupportedRuntime = errors.New("the current runtime does not support this command")
 )
 
 // IdleProcessStopper is implemented by local executors that support maintenance operations.

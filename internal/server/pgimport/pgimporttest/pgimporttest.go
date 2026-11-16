@@ -42,7 +42,7 @@ func URL(t testing.TB) string {
 	t.Helper()
 	u := testenv.Get(EnvTestDatabaseURL)
 	if u == "" {
-		t.Skipf("未设置 %s（也没有 .env.local），跳过需要 PostgreSQL 的测试", EnvTestDatabaseURL)
+		t.Skipf("%s is not set (and there is no .env.local); skipping tests that need PostgreSQL", EnvTestDatabaseURL)
 	}
 	return u
 }
@@ -54,7 +54,7 @@ func NewSchema(t testing.TB) string {
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, url)
 	if err != nil {
-		t.Fatalf("连接测试库失败：%v", err)
+		t.Fatalf("connect to the test database: %v", err)
 	}
 	defer conn.Close(ctx)
 
@@ -64,17 +64,17 @@ func NewSchema(t testing.TB) string {
 	_, _ = rand.Read(b[:])
 	name := fmt.Sprintf("%s%d_%s", schemaPrefix, time.Now().Unix(), hex.EncodeToString(b[:]))
 	if _, err := conn.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{name}.Sanitize()); err != nil {
-		t.Fatalf("创建测试 schema 失败：%v", err)
+		t.Fatalf("create the test schema: %v", err)
 	}
 	t.Cleanup(func() {
 		c, err := pgx.Connect(context.Background(), url)
 		if err != nil {
-			t.Errorf("清理测试 schema 时连接失败：%v", err)
+			t.Errorf("connect to clean up the test schema: %v", err)
 			return
 		}
 		defer c.Close(context.Background())
 		if _, err := c.Exec(context.Background(), "DROP SCHEMA "+pgx.Identifier{name}.Sanitize()+" CASCADE"); err != nil {
-			t.Errorf("删除测试 schema %s 失败：%v", name, err)
+			t.Errorf("drop test schema %s: %v", name, err)
 		}
 	})
 	return name
@@ -88,18 +88,18 @@ func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 	schema := NewSchema(t)
 	cfg, err := pgxpool.ParseConfig(URL(t))
 	if err != nil {
-		t.Fatalf("解析测试库连接串失败：%v", err)
+		t.Fatalf("parse the test database URL: %v", err)
 	}
 	cfg.ConnConfig.RuntimeParams["search_path"] = schema
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		t.Fatalf("打开测试库失败：%v", err)
+		t.Fatalf("open the test database: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 	if err := pgschema.Migrate(ctx, sqlDB, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatalf("迁移测试 schema 失败：%v", err)
+		t.Fatalf("migrate the test schema: %v", err)
 	}
 	return pool
 }
@@ -108,7 +108,7 @@ func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 func sweepStale(ctx context.Context, t testing.TB, conn *pgx.Conn) {
 	rows, err := conn.Query(ctx, `SELECT nspname FROM pg_namespace WHERE nspname LIKE 't\_%'`)
 	if err != nil {
-		t.Logf("查询遗留测试 schema 失败：%v", err)
+		t.Logf("list leftover test schemas: %v", err)
 		return
 	}
 	names, err := pgx.CollectRows(rows, pgx.RowTo[string])
@@ -125,7 +125,7 @@ func sweepStale(ctx context.Context, t testing.TB, conn *pgx.Conn) {
 			continue
 		}
 		if _, err := conn.Exec(ctx, "DROP SCHEMA "+pgx.Identifier{n}.Sanitize()+" CASCADE"); err != nil {
-			t.Logf("删除遗留测试 schema %s 失败：%v", n, err)
+			t.Logf("drop leftover test schema %s: %v", n, err)
 		}
 	}
 }

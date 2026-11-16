@@ -46,7 +46,7 @@ func Migrate(ctx context.Context, sqlDB *sql.DB, logger *slog.Logger) error {
 		return err
 	}
 	if _, err := provider.Up(ctx); err != nil {
-		return fmt.Errorf("PostgreSQL 迁移失败：%w", err)
+		return fmt.Errorf("run PostgreSQL migrations: %w", err)
 	}
 	return nil
 }

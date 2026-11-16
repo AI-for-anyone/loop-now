@@ -69,15 +69,15 @@ func parseGroup(r *Registry, p *parsed, rest []string) *output.Error {
 	}
 	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
 		if len(p.path) == 0 {
-			return output.Errorf(output.CodeUnknownCommand, "未知命令 %q，运行 loopctl schema 查看全部命令", rest[0])
+			return output.Errorf(output.CodeUnknownCommand, "Unknown command %q. Run loopctl schema to see all commands.", rest[0])
 		}
-		return output.Errorf(output.CodeUnknownCommand, "%q 不是 %s 的子命令", rest[0], strings.Join(p.path, " ")).
+		return output.Errorf(output.CodeUnknownCommand, "%q is not a subcommand of %s. See details.subcommands for the available ones.", rest[0], strings.Join(p.path, " ")).
 			WithDetails(map[string]any{"subcommands": r.children(p.path)})
 	}
 	if len(p.path) == 0 {
-		return output.Errorf(output.CodeInvalidArgument, "选项必须写在命令路径之后，运行 loopctl schema 查看全部命令")
+		return output.Errorf(output.CodeInvalidArgument, "Options must come after the command path. Run loopctl schema to see all commands.")
 	}
-	return output.Errorf(output.CodeUnknownCommand, "%s 是命令组，需要指定子命令", strings.Join(p.path, " ")).
+	return output.Errorf(output.CodeUnknownCommand, "%s is a command group. Specify one of its subcommands (listed in details.subcommands).", strings.Join(p.path, " ")).
 		WithDetails(map[string]any{"subcommands": r.children(p.path)})
 }
 
@@ -106,22 +106,22 @@ func parseCommand(p *parsed, rest []string) *output.Error {
 			continue
 		}
 		if !strings.HasPrefix(tok, "--") {
-			fail(output.Errorf(output.CodeInvalidArgument, "未知选项 %s：选项写作 --名称", tok))
+			fail(output.Errorf(output.CodeInvalidArgument, "Unknown option %s. Options are written as --name.", tok))
 			continue
 		}
 		name, value, hasValue := strings.Cut(tok[2:], "=")
 		f, ok := known[name]
 		if !ok {
-			fail(output.Errorf(output.CodeInvalidArgument, "未知选项 --%s", name))
+			fail(output.Errorf(output.CodeInvalidArgument, "Unknown option --%s. Run the command with --help to see its options.", name))
 			continue
 		}
 		if _, dup := p.flags[name]; dup && !f.Repeatable {
-			fail(output.Errorf(output.CodeInvalidArgument, "选项 --%s 重复出现", name))
+			fail(output.Errorf(output.CodeInvalidArgument, "Option --%s is given more than once.", name))
 			continue
 		}
 		if f.Type == TypeBool {
 			if hasValue {
-				fail(output.Errorf(output.CodeInvalidArgument, "选项 --%s 不带值", name))
+				fail(output.Errorf(output.CodeInvalidArgument, "Option --%s does not take a value.", name))
 				continue
 			}
 			p.flags[name] = "true"
@@ -135,7 +135,7 @@ func parseCommand(p *parsed, rest []string) *output.Error {
 		}
 		if !hasValue {
 			if i+1 >= len(rest) {
-				fail(output.Errorf(output.CodeMissingArgument, "选项 --%s 缺少值", name))
+				fail(output.Errorf(output.CodeMissingArgument, "Option --%s needs a value.", name))
 				continue
 			}
 			i++
@@ -163,16 +163,16 @@ func validate(c *Command, p *parsed) *output.Error {
 		min, variadic = n-1, true
 	}
 	if len(p.args) < min {
-		return output.Errorf(output.CodeMissingArgument, "缺少参数 <%s>", c.Args[len(p.args)].Name)
+		return output.Errorf(output.CodeMissingArgument, "Argument <%s> is required.", c.Args[len(p.args)].Name)
 	}
 	if !variadic && len(p.args) > min {
-		return output.Errorf(output.CodeInvalidArgument, "多余的参数 %q", p.args[min])
+		return output.Errorf(output.CodeInvalidArgument, "Too many arguments: %q is not expected.", p.args[min])
 	}
 	for _, f := range effectiveFlags(c) {
 		v, set := p.flags[f.Name]
 		if !set {
 			if f.Required {
-				return output.Errorf(output.CodeMissingArgument, "缺少选项 --%s", f.Name)
+				return output.Errorf(output.CodeMissingArgument, "Option --%s is required.", f.Name)
 			}
 			continue
 		}
@@ -193,20 +193,20 @@ func validate(c *Command, p *parsed) *output.Error {
 				n++
 			}
 		}
-		list := "--" + strings.Join(k.Flags, "、--")
+		list := "--" + strings.Join(k.Flags, ", --")
 		hint := ""
 		if k.Hint != "" {
-			hint = "；" + k.Hint
+			hint = " " + k.Hint
 		}
 		switch {
 		case k.Kind == ExactlyOne && n == 0:
-			return output.Errorf(output.CodeMissingArgument, "需要提供 %s 中的一个%s", list, hint)
+			return output.Errorf(output.CodeMissingArgument, "Exactly one of %s is required.%s", list, hint)
 		case (k.Kind == ExactlyOne || k.Kind == AtMostOne) && n > 1:
-			return output.Errorf(output.CodeInvalidArgument, "%s 只能提供一个%s", list, hint)
+			return output.Errorf(output.CodeInvalidArgument, "Only one of %s can be given.%s", list, hint)
 		case k.Kind == AtLeastOne && n == 0:
-			return output.Errorf(output.CodeMissingArgument, "至少需要提供 %s 中的一个%s", list, hint)
+			return output.Errorf(output.CodeMissingArgument, "At least one of %s is required.%s", list, hint)
 		case k.Kind == Together && n != 0 && n != len(k.Flags):
-			return output.Errorf(output.CodeInvalidArgument, "%s 必须同时提供%s", list, hint)
+			return output.Errorf(output.CodeInvalidArgument, "%s must be given together.%s", list, hint)
 		}
 	}
 	return nil
@@ -214,28 +214,28 @@ func validate(c *Command, p *parsed) *output.Error {
 
 func checkValue(f Flag, v string) *output.Error {
 	if v == "" {
-		return output.Errorf(output.CodeInvalidArgument, "选项 --%s 的值不能为空", f.Name)
+		return output.Errorf(output.CodeInvalidArgument, "Option --%s must not be empty.", f.Name)
 	}
 	switch f.Type {
 	case TypeInt:
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return output.Errorf(output.CodeInvalidArgument, "选项 --%s 需要整数", f.Name)
+			return output.Errorf(output.CodeInvalidArgument, "Option --%s must be an integer.", f.Name)
 		}
 		if f.Min != nil && n < *f.Min {
-			return output.Errorf(output.CodeInvalidArgument, "选项 --%s 不能小于 %d", f.Name, *f.Min)
+			return output.Errorf(output.CodeInvalidArgument, "Option --%s must be at least %d.", f.Name, *f.Min)
 		}
 		if f.Max != nil && n > *f.Max {
-			return output.Errorf(output.CodeInvalidArgument, "选项 --%s 不能大于 %d", f.Name, *f.Max)
+			return output.Errorf(output.CodeInvalidArgument, "Option --%s must be at most %d.", f.Name, *f.Max)
 		}
 	case TypeDuration:
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			return output.Errorf(output.CodeInvalidArgument, "选项 --%s 需要正的时长，例如 30s", f.Name)
+			return output.Errorf(output.CodeInvalidArgument, "Option --%s must be a positive duration, for example 30s.", f.Name)
 		}
 	case TypeTime:
 		if _, err := time.Parse(time.RFC3339, v); err != nil {
-			return output.Errorf(output.CodeInvalidArgument, "选项 --%s 需要 RFC 3339 时间，例如 2026-10-13T00:00:00+08:00", f.Name)
+			return output.Errorf(output.CodeInvalidArgument, "Option --%s must be an RFC 3339 time, for example 2026-10-13T00:00:00+08:00.", f.Name)
 		}
 	case TypeEnum:
 		for _, x := range f.Values {
@@ -243,7 +243,7 @@ func checkValue(f Flag, v string) *output.Error {
 				return nil
 			}
 		}
-		return output.Errorf(output.CodeInvalidArgument, "选项 --%s 只能取 %s", f.Name, strings.Join(f.Values, "、"))
+		return output.Errorf(output.CodeInvalidArgument, "Option --%s must be one of: %s", f.Name, strings.Join(f.Values, ", "))
 	}
 	return nil
 }

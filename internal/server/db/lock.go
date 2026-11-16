@@ -14,7 +14,7 @@ import (
 const LockFile = "loop-now.lock"
 
 // ErrLocked means another process holds this instance lock (of the data directory or the work root).
-var ErrLocked = errors.New("db: 实例锁正被另一个 Loop Now 进程持有")
+var ErrLocked = errors.New("db: the instance lock is held by another Loop Now process")
 
 // DirLock is a directory's instance lock: the server and the importer hold it for their whole lifetime, so that only
 // one process schedules runs, migrates and imports on a given data directory (and, for the server, work root). The
@@ -35,14 +35,14 @@ func LockDir(dir string) (*DirLock, error) {
 func LockPath(path string) (*DirLock, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("db: 打开实例锁文件失败：%w", err)
+		return nil, fmt.Errorf("db: open the instance lock file: %w", err)
 	}
 	if err := filelock.TryLock(f); err != nil {
 		f.Close()
 		if errors.Is(err, filelock.ErrWouldBlock) {
 			return nil, ErrLocked
 		}
-		return nil, fmt.Errorf("db: 取得实例锁失败：%w", err)
+		return nil, fmt.Errorf("db: acquire the instance lock: %w", err)
 	}
 	if err := f.Truncate(0); err == nil {
 		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)

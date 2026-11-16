@@ -64,17 +64,17 @@ type EnvDoc struct {
 // EnvDocs returns every environment variable loopctl reads.
 func EnvDocs() []EnvDoc {
 	return []EnvDoc{
-		{EnvAgentURL, IdentityAgent, "", "Agent 接口的基址，由服务端注入，例如 http://127.0.0.1:<端口>/agent/v1"},
-		{EnvAgentToken, IdentityAgent, "", "Agent 令牌（lna_ 开头），由服务端注入；不为空时使用 Agent 身份，且不读取配置文件"},
-		{EnvProfile, IdentityExternal, config.DefaultProfile, "选择配置文件中的 profile"},
-		{EnvURL, IdentityExternal, "", "对外端口的根地址（https://），优先于 profile"},
-		{EnvToken, IdentityExternal, "", "外部令牌（lne_ 开头），优先于 profile"},
-		{EnvCAFile, IdentityExternal, "", "PEM 格式的 CA 证书，指定后只信任其中的 CA，优先于 profile"},
-		{EnvTimeout, "", DefaultTimeout.String(), "单次请求的超时"},
-		{EnvMaxResponse, "", "64MiB", "JSON 响应的大小上限；下载文件不受此限制"},
-		{EnvRetryMax, "", strconv.Itoa(DefaultRetryMax), "读请求遇到连接失败、超时或 502/503/504 时的最多重试次数，0 表示不重试"},
-		{EnvRetryInitial, "", DefaultRetryInitial.String(), "首次重试前的等待，之后逐次加倍"},
-		{EnvRetryMaxInterval, "", DefaultRetryMaxInterval.String(), "两次重试之间的最长等待"},
+		{EnvAgentURL, IdentityAgent, "", "Base address of the Agent API, injected by the server, for example http://127.0.0.1:<port>/agent/v1"},
+		{EnvAgentToken, IdentityAgent, "", "Agent token (starting with lna_), injected by the server; when set, the Agent identity is used and the config file is not read"},
+		{EnvProfile, IdentityExternal, config.DefaultProfile, "Choose a profile from the config file"},
+		{EnvURL, IdentityExternal, "", "Root address of the external port (https://); takes precedence over the profile"},
+		{EnvToken, IdentityExternal, "", "External token (starting with lne_); takes precedence over the profile"},
+		{EnvCAFile, IdentityExternal, "", "CA certificate in PEM format; when set, only the CAs in it are trusted; takes precedence over the profile"},
+		{EnvTimeout, "", DefaultTimeout.String(), "Timeout for a single request"},
+		{EnvMaxResponse, "", "64MiB", "Size limit for JSON responses; file downloads are not subject to it"},
+		{EnvRetryMax, "", strconv.Itoa(DefaultRetryMax), "Maximum number of retries for read requests after a connection failure, a timeout or 502/503/504; 0 means no retries"},
+		{EnvRetryInitial, "", DefaultRetryInitial.String(), "Wait before the first retry; it doubles for each later retry"},
+		{EnvRetryMaxInterval, "", DefaultRetryMaxInterval.String(), "Longest wait between two retries"},
 	}
 }
 
@@ -154,16 +154,16 @@ func resolveAgent(o Options, s *Settings) *output.Error {
 	}
 	if len(conflicts) > 0 {
 		sortStrings(conflicts)
-		return output.Errorf(output.CodeIdentityConflict, "环境中有 %s，使用 Agent 身份；Agent 身份不能同时使用外部身份的参数：%s", EnvAgentToken, strings.Join(conflicts, "、")).
+		return output.Errorf(output.CodeIdentityConflict, "%s is set in the environment, so the Agent identity is used. The Agent identity cannot also use external identity parameters: %s", EnvAgentToken, strings.Join(conflicts, ", ")).
 			WithDetails(map[string]any{"conflicts": conflicts})
 	}
 	tok := strings.TrimSpace(o.Getenv(EnvAgentToken))
 	if !strings.HasPrefix(tok, AgentTokenPrefix) {
-		return output.Errorf(output.CodeTokenKindMismatch, "%s 中不是 Agent 令牌（应以 %s 开头）", EnvAgentToken, AgentTokenPrefix)
+		return output.Errorf(output.CodeTokenKindMismatch, "%s does not hold an Agent token (it should start with %s).", EnvAgentToken, AgentTokenPrefix)
 	}
 	raw := strings.TrimSpace(o.Getenv(EnvAgentURL))
 	if raw == "" {
-		return output.Errorf(output.CodeConnectionNotConfigured, "有 %s 但没有 %s", EnvAgentToken, EnvAgentURL)
+		return output.Errorf(output.CodeConnectionNotConfigured, "%s is set, but %s is not.", EnvAgentToken, EnvAgentURL)
 	}
 	u, e := ParseServerURL(raw, false)
 	if e != nil {
@@ -187,7 +187,7 @@ func resolveExternal(o Options, s *Settings) *output.Error {
 	}
 	p, ok := f.Profiles[name]
 	if !ok && explicit != "" {
-		return output.Errorf(output.CodeProfileNotFound, "配置文件中没有 profile %q（由 %s 指定）", name, explicit)
+		return output.Errorf(output.CodeProfileNotFound, "The config file has no profile %q (chosen with %s).", name, explicit)
 	}
 	if ok {
 		s.Profile = name
@@ -197,13 +197,13 @@ func resolveExternal(o Options, s *Settings) *output.Error {
 	ca := firstNonEmpty(o.CAFile, o.Getenv(EnvCAFile), p.CAFile)
 	if tok == "" {
 		return output.Errorf(output.CodeConnectionNotConfigured,
-			"没有可用的令牌：平台内 Agent 需要 %s；外部身份需要 %s，或用 loopctl config set <profile> --token-stdin 保存到配置文件", EnvAgentToken, EnvToken)
+			"No token is available. An Agent running in the platform needs %s; an external identity needs %s or a token saved to the config file with loopctl config set <profile> --token-stdin.", EnvAgentToken, EnvToken)
 	}
 	if !strings.HasPrefix(tok, ExternalTokenPrefix) {
-		return output.Errorf(output.CodeTokenKindMismatch, "外部身份的令牌应以 %s 开头", ExternalTokenPrefix)
+		return output.Errorf(output.CodeTokenKindMismatch, "An external identity's token must start with %s.", ExternalTokenPrefix)
 	}
 	if server == "" {
-		return output.Errorf(output.CodeConnectionNotConfigured, "没有服务端地址：用 --server、%s 或 profile 的 server 指定", EnvURL)
+		return output.Errorf(output.CodeConnectionNotConfigured, "No server address is set. Set it with --server, %s or the profile's server.", EnvURL)
 	}
 	root, e := ParseServerURL(server, true)
 	if e != nil {
@@ -231,7 +231,7 @@ func runtimeParams(o Options, s *Settings) *output.Error {
 	} else if v := o.Getenv(EnvTimeout); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			return output.Errorf(output.CodeConfigInvalid, "%s 需要正的时长，例如 30s", EnvTimeout)
+			return output.Errorf(output.CodeConfigInvalid, "%s must be a positive duration, for example 30s.", EnvTimeout)
 		}
 		s.Timeout = d
 	}
@@ -239,7 +239,7 @@ func runtimeParams(o Options, s *Settings) *output.Error {
 	if v := o.Getenv(EnvMaxResponse); v != "" {
 		n, ok := ParseSize(v)
 		if !ok || n <= 0 {
-			return output.Errorf(output.CodeConfigInvalid, "%s 需要正的字节数，例如 64MiB", EnvMaxResponse)
+			return output.Errorf(output.CodeConfigInvalid, "%s must be a positive number of bytes, for example 64MiB.", EnvMaxResponse)
 		}
 		s.MaxResponse = n
 	}
@@ -247,7 +247,7 @@ func runtimeParams(o Options, s *Settings) *output.Error {
 	if v := o.Getenv(EnvRetryMax); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return output.Errorf(output.CodeConfigInvalid, "%s 需要不小于 0 的整数", EnvRetryMax)
+			return output.Errorf(output.CodeConfigInvalid, "%s must be an integer of at least 0.", EnvRetryMax)
 		}
 		s.Retry.Max = n
 	}
@@ -258,7 +258,7 @@ func runtimeParams(o Options, s *Settings) *output.Error {
 		if v := o.Getenv(x.name); v != "" {
 			d, err := time.ParseDuration(v)
 			if err != nil || d <= 0 {
-				return output.Errorf(output.CodeConfigInvalid, "%s 需要正的时长，例如 500ms", x.name)
+				return output.Errorf(output.CodeConfigInvalid, "%s must be a positive duration, for example 500ms.", x.name)
 			}
 			*x.dst = d
 		}
@@ -291,25 +291,25 @@ func ParseSize(v string) (int64, bool) {
 func ParseServerURL(raw string, requireHTTPS bool) (*url.URL, *output.Error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" || u.Opaque != "" {
-		return nil, output.Errorf(output.CodeInvalidServerURL, "服务端地址不是合法的 http(s) 地址")
+		return nil, output.Errorf(output.CodeInvalidServerURL, "The server address is not a valid http(s) address.")
 	}
 	if u.User != nil {
-		return nil, output.Errorf(output.CodeInvalidServerURL, "服务端地址中不能含有用户名或密码")
+		return nil, output.Errorf(output.CodeInvalidServerURL, "The server address must not contain a user name or secret.")
 	}
 	if u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
-		return nil, output.Errorf(output.CodeInvalidServerURL, "服务端地址中不能含有查询参数或片段")
+		return nil, output.Errorf(output.CodeInvalidServerURL, "The server address must not contain query parameters or a fragment.")
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "https":
 	case "http":
 		if requireHTTPS {
-			return nil, output.Errorf(output.CodeInvalidServerURL, "外部身份必须使用 https:// 地址（对外端口只提供 TLS）")
+			return nil, output.Errorf(output.CodeInvalidServerURL, "An external identity must use an https:// address (the external port serves only TLS).")
 		}
 		if !IsLoopbackHost(u.Hostname()) {
-			return nil, output.Errorf(output.CodeInvalidServerURL, "http:// 只允许回环地址，%s 不是回环地址", u.Hostname())
+			return nil, output.Errorf(output.CodeInvalidServerURL, "http:// is allowed only for loopback addresses, and %s is not a loopback address.", u.Hostname())
 		}
 	default:
-		return nil, output.Errorf(output.CodeInvalidServerURL, "服务端地址必须以 https:// 开头")
+		return nil, output.Errorf(output.CodeInvalidServerURL, "The server address must be an https:// address.")
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Path = strings.TrimRight(u.Path, "/")
@@ -330,11 +330,11 @@ func IsLoopbackHost(host string) bool {
 func LoadCA(path string) (*x509.CertPool, *output.Error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, output.Errorf(output.CodeCAFileUnreadable, "无法读取 CA 文件 %s：%v", path, unwrapPath(err))
+		return nil, output.Errorf(output.CodeCAFileUnreadable, "Could not read CA file %s: %v", path, unwrapPath(err))
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(b) {
-		return nil, output.Errorf(output.CodeCAFileUnreadable, "CA 文件 %s 中没有 PEM 格式的证书", path)
+		return nil, output.Errorf(output.CodeCAFileUnreadable, "CA file %s contains no certificate in PEM format.", path)
 	}
 	return pool, nil
 }

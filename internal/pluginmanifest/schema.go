@@ -46,7 +46,7 @@ func toSchemaValue(v any) (any, error) {
 func Validate(schema map[string]any, required bool, value map[string]any) error {
 	sch, err := CompileSchema(schema, required)
 	if err != nil {
-		return invalid("插件声明的 JSON Schema 无法使用：" + err.Error())
+		return invalid("The JSON Schema declared by the plugin cannot be used: " + err.Error())
 	}
 	inst, err := toSchemaValue(value)
 	if err != nil {
@@ -58,7 +58,7 @@ func Validate(schema map[string]any, required bool, value map[string]any) error 
 		if errors.As(err, &ve) {
 			msg = strings.TrimSpace(strings.TrimPrefix(ve.Error(), "jsonschema validation failed with 'plugin.json#'"))
 		}
-		return invalid("不符合插件的配置规则：" + msg)
+		return invalid("Does not match the plugin's config schema: " + msg)
 	}
 	return nil
 }

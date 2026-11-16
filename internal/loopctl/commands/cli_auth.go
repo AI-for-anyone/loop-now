@@ -49,12 +49,12 @@ func cliAuthCommand(action string) cli.RunFunc {
 			}
 		}
 		if inv.Has("name") && (strings.TrimSpace(inv.String("name")) == "" || utf8.RuneCountInString(inv.String("name")) > 200) {
-			return nil, output.Errorf(output.CodeInvalidArgument, "账号名称须非空白且不超过200字符")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The account name (--name) must not be blank and must be at most 200 characters.")
 		}
 		if action == "login" {
 			yes := inv.Bool("yes")
 			if inv.Has("account-id") && !yes {
-				return nil, output.Errorf(output.CodeConfirmationRequired, "重登覆盖账号需 --yes 确认；失败保留原版本")
+				return nil, output.Errorf(output.CodeConfirmationRequired, "Logging in again to replace an existing account needs confirmation with --yes. If the login fails, the existing version is kept.")
 			}
 		}
 		id, err := projectID(ctx, inv, inv.Args[0])

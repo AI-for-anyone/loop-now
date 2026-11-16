@@ -31,7 +31,7 @@ func Path(t testing.TB) string {
 		cmd := exec.Command("go", "build", "-o", path, "./internal/server/executor/local/fakepi")
 		cmd.Dir = testenv.RepoRoot()
 		if out, e := cmd.CombinedOutput(); e != nil {
-			err = fmt.Errorf("构建 fakepi 失败：%v\n%s", e, out)
+			err = fmt.Errorf("build fakepi: %v\n%s", e, out)
 			return
 		}
 		// The first time a freshly built binary runs, the system checks it first (on macOS that is 10 to 25 times
@@ -39,7 +39,7 @@ func Path(t testing.TB) string {
 		// parallel). Run it once right after building so this one-time cost is paid here, instead of counting
 		// against the readiness deadline of the first test that starts Pi.
 		if out, e := exec.Command(path, "--version").CombinedOutput(); e != nil {
-			err = fmt.Errorf("预先执行 fakepi 失败：%v\n%s", e, out)
+			err = fmt.Errorf("pre-run fakepi: %v\n%s", e, out)
 		}
 	})
 	if err != nil {

@@ -20,7 +20,7 @@ type Cron struct {
 func ParseCron(expr string) (Cron, error) {
 	f := strings.Fields(expr)
 	if len(f) != 5 {
-		return Cron{}, fmt.Errorf("cron 须是五段（分 时 日 月 周）：%q", expr)
+		return Cron{}, fmt.Errorf("cron must have five fields (minute hour day-of-month month day-of-week): %q", expr)
 	}
 	var c Cron
 	var err error
@@ -47,7 +47,7 @@ func cronField(field string, min, max int) (uint64, error) {
 		if r, s, ok := strings.Cut(item, "/"); ok {
 			n, err := strconv.Atoi(s)
 			if err != nil || n < 1 {
-				return 0, fmt.Errorf("cron 步长不合法：%q", item)
+				return 0, fmt.Errorf("invalid cron step: %q", item)
 			}
 			rng, step = r, n
 		}
@@ -56,19 +56,19 @@ func cronField(field string, min, max int) (uint64, error) {
 			a, b, isRange := strings.Cut(rng, "-")
 			var err error
 			if lo, err = strconv.Atoi(a); err != nil {
-				return 0, fmt.Errorf("cron 字段不合法：%q", item)
+				return 0, fmt.Errorf("invalid cron field: %q", item)
 			}
 			hi = lo
 			if isRange {
 				if hi, err = strconv.Atoi(b); err != nil {
-					return 0, fmt.Errorf("cron 字段不合法：%q", item)
+					return 0, fmt.Errorf("invalid cron field: %q", item)
 				}
 			} else if step > 1 {
 				hi = max
 			}
 		}
 		if lo < min || hi > max || lo > hi {
-			return 0, fmt.Errorf("cron 字段超出范围 %d-%d：%q", min, max, item)
+			return 0, fmt.Errorf("cron field out of range %d-%d: %q", min, max, item)
 		}
 		for v := lo; v <= hi; v += step {
 			bits |= 1 << v

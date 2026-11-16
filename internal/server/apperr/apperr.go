@@ -83,14 +83,14 @@ func Is(err error, code string) bool {
 
 // NotFound returns a 404.
 func NotFound(what string) *Error {
-	return &Error{Status: http.StatusNotFound, Code: CodeNotFound, Message: what + "不存在"}
+	return &Error{Status: http.StatusNotFound, Code: CodeNotFound, Message: what + " not found."}
 }
 
 // Validation returns a 422 carrying field-level errors.
 func Validation(fields ...FieldError) *Error {
-	msg := "校验失败"
+	msg := "Validation failed."
 	if len(fields) > 0 {
-		msg = fields[0].Field + "：" + fields[0].Message
+		msg = fields[0].Field + ": " + fields[0].Message
 	}
 	return &Error{Status: http.StatusUnprocessableEntity, Code: CodeValidationFailed, Message: msg, Fields: fields}
 }

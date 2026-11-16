@@ -28,7 +28,7 @@ type AgentAction struct {
 // recorded.
 func (s *Store) AgentQueueAction(ctx context.Context, agentID uuid.UUID, a AgentAction, fn func(tx *db.Tx) (any, error)) (json.RawMessage, bool, error) {
 	if a.ID == uuid.Nil || a.ActorKey == "" || a.Operation == "" {
-		return nil, false, apperr.Invalid("actionId", "必须提供有效动作ID")
+		return nil, false, apperr.Invalid("actionId", "A valid actionId is required.")
 	}
 	hash := sha256.Sum256(append(append([]byte(nil), a.Body...), agentID.String()...))
 	var out json.RawMessage
@@ -41,7 +41,7 @@ func (s *Store) AgentQueueAction(ctx context.Context, agentID uuid.UUID, a Agent
 		switch {
 		case err == nil:
 			if op != a.Operation || !bytes.Equal(stored, hash[:]) {
-				return apperr.Conflict(apperr.CodeActionConflict, "动作ID已用于其他请求")
+				return apperr.Conflict(apperr.CodeActionConflict, "This actionId was already used for a different request.")
 			}
 			out, replayed = response, true
 			return nil
@@ -68,7 +68,7 @@ func lockAgentRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UUID) (R
 		return Run{}, err
 	}
 	r, err := scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1 AND agent_id = $2`, runID, agentID))
-	return r, notFoundIfNoRows(err, "执行")
+	return r, notFoundIfNoRows(err, "Run")
 }
 
 func runNotQueued(r Run) error {
@@ -84,7 +84,7 @@ func (s *Store) PromoteQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runI
 		return r, QueueItem{}, false, err
 	}
 	if r.Origin != "console" {
-		return r, QueueItem{}, false, apperr.Invalid("runId", "只有控制台发出的排队消息可以整条转为打断；Inbox 消息请逐条转换")
+		return r, QueueItem{}, false, apperr.Invalid("runId", "Only a queued message sent from the console can be turned into an interrupt as a whole. Convert Inbox messages one at a time.")
 	}
 	item, err := consoleRunItem(ctx, tx, r)
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *Store) CancelQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runID
 		return r, QueueItem{}, false, err
 	}
 	if r.Origin != "console" {
-		return r, QueueItem{}, false, apperr.Invalid("runId", "只有控制台发出的排队消息可以撤回；Inbox 消息请逐条取消")
+		return r, QueueItem{}, false, apperr.Invalid("runId", "Only a queued message sent from the console can be withdrawn. Cancel Inbox messages one at a time.")
 	}
 	item, err := consoleRunItem(ctx, tx, r)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Store) StopRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UU
 		return r, false, nil
 	case "starting", "running":
 	default:
-		e := apperr.Conflict(apperr.CodeRunNotActive, "这次回复已经结束，不能再停止")
+		e := apperr.Conflict(apperr.CodeRunNotActive, "This reply has already ended and can no longer be stopped.")
 		e.Details = RunNotActiveDetails{RunID: r.ID, Status: r.Status}
 		return r, false, e
 	}
@@ -162,7 +162,7 @@ func (s *Store) StopRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UU
 // needed); returns not_found when it does not exist or was not sent to this Agent.
 func lockAgentInboxTx(ctx context.Context, tx *db.Tx, agentID, messageID uuid.UUID) (InboxMessage, error) {
 	m, err := scanInbox(tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id = $1 AND m.to_kind = 'agent' AND m.to_agent_id = $2 AND m.to_runtime_id IS NULL`, messageID, agentID))
-	return m, notFoundIfNoRows(err, "消息")
+	return m, notFoundIfNoRows(err, "Message")
 }
 
 // queuedCarrierTx returns the still-queued reminder that carries this message; returns run_not_queued when the

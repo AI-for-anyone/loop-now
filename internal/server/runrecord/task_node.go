@@ -20,7 +20,7 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 		return out, e
 	}
 	if limit < 1 || limit > 200 {
-		return out, apperr.Invalid("limit", "必须为1..200")
+		return out, apperr.Invalid("limit", "Must be between 1 and 200.")
 	}
 	var after time.Time
 	var afterID uuid.UUID

@@ -31,14 +31,14 @@ func convertArgs(args []any) ([]any, error) {
 	for i, a := range args {
 		v, err := convertArg(a)
 		if err != nil {
-			return nil, fmt.Errorf("db: 第 %d 个参数：%w", i+1, err)
+			return nil, fmt.Errorf("db: argument %d: %w", i+1, err)
 		}
 		out[i] = v
 	}
 	return out, nil
 }
 
-var errDuration = errors.New("time.Duration 不能直接作参数，请换成微秒整数")
+var errDuration = errors.New("time.Duration cannot be used as an argument directly; convert it to integer microseconds")
 
 func convertArg(a any) (any, error) {
 	switch v := a.(type) {
@@ -81,7 +81,7 @@ func convertArg(a any) (any, error) {
 			return nil, err
 		}
 		if _, again := dv.(driver.Valuer); again {
-			return nil, fmt.Errorf("%T 的 Value 又返回了 Valuer", a)
+			return nil, fmt.Errorf("the Value method of %T returned another Valuer", a)
 		}
 		return convertArg(dv)
 	}
@@ -101,7 +101,7 @@ func convertArg(a any) (any, error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		u := rv.Uint()
 		if u > 1<<63-1 {
-			return nil, fmt.Errorf("无符号整数 %d 超出 int64", u)
+			return nil, fmt.Errorf("unsigned integer %d overflows int64", u)
 		}
 		return int64(u), nil
 	case reflect.Float32, reflect.Float64:
@@ -120,7 +120,7 @@ func convertArg(a any) (any, error) {
 		}
 		return marshalJSON(a)
 	}
-	return nil, fmt.Errorf("不支持的参数类型 %T", a)
+	return nil, fmt.Errorf("unsupported argument type %T", a)
 }
 
 func marshalJSON(a any) (any, error) {

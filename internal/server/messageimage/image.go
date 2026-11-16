@@ -40,21 +40,21 @@ func Inspect(data []byte, mime string, maxBytes, maxPixels int64) (Ref, error) {
 		maxPixels = DefaultPixels
 	}
 	if len(data) == 0 || int64(len(data)) > maxBytes {
-		return Ref{}, fmt.Errorf("图片字节超限")
+		return Ref{}, fmt.Errorf("image is empty or exceeds the size limit")
 	}
 	if mime != "image/png" && mime != "image/jpeg" && mime != "image/webp" {
-		return Ref{}, fmt.Errorf("仅支持PNG、JPEG、WebP")
+		return Ref{}, fmt.Errorf("only PNG, JPEG and WebP images are supported")
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return Ref{}, fmt.Errorf("图片内容无效")
+		return Ref{}, fmt.Errorf("invalid image content")
 	}
 	expected := map[string]string{"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp"}[format]
 	if expected != mime || cfg.Width < 1 || cfg.Height < 1 || int64(cfg.Width) > maxPixels/int64(cfg.Height) {
-		return Ref{}, fmt.Errorf("图片格式或像素超限")
+		return Ref{}, fmt.Errorf("image format does not match its MIME type, or the image has too many pixels")
 	}
 	if _, decodedFormat, e := image.Decode(bytes.NewReader(data)); e != nil || decodedFormat != format {
-		return Ref{}, fmt.Errorf("图片内容无效")
+		return Ref{}, fmt.Errorf("invalid image content")
 	}
 	return Ref{MimeType: mime, Size: int64(len(data)), Width: cfg.Width, Height: cfg.Height}, nil
 }

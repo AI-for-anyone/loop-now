@@ -37,13 +37,13 @@ type providerFields struct {
 // user-controlled configuration can be persisted or returned to the editor.
 func validateModelsJSON(text string) error {
 	if !json.Valid([]byte(text)) {
-		return invalid("models.json 必须是合法 JSON")
+		return invalid("models.json must be valid JSON.")
 	}
 	var document struct {
 		Providers map[string]providerFields `json:"providers"`
 	}
 	if err := json.Unmarshal([]byte(text), &document); err != nil {
-		return invalid("models.json 的 Provider 结构无效")
+		return invalid("The providers structure in models.json is invalid.")
 	}
 	for _, provider := range document.Providers {
 		if err := validateEnvironmentReference(provider.APIKey); err != nil {
@@ -81,7 +81,7 @@ func validateEnvironmentReference(raw json.RawMessage) error {
 	}
 	var value string
 	if json.Unmarshal(raw, &value) != nil || !environmentReference.MatchString(value) {
-		return invalid("apiKey 和 headers 只接受 $NAME 形式的环境变量引用，不接受明文或命令")
+		return invalid("apiKey and headers accept only environment variable references in the form $NAME, not plain text or commands.")
 	}
 	return nil
 }

@@ -128,13 +128,13 @@ func run(args []string) int {
 		return exportFile(o)
 	}
 	if o.mode != "rpc" {
-		fmt.Fprintln(os.Stderr, "fakepi: 只支持 --mode rpc")
+		fmt.Fprintln(os.Stderr, "fakepi: only --mode rpc is supported")
 		return 2
 	}
 	cwd, _ := os.Getwd()
 	if p := os.Getenv("FAKEPI_DUMP"); p != "" {
 		if err := dump(p, args, cwd); err != nil {
-			fmt.Fprintf(os.Stderr, "fakepi: 写入 FAKEPI_DUMP 失败：%v\n", err)
+			fmt.Fprintf(os.Stderr, "fakepi: write FAKEPI_DUMP: %v\n", err)
 			return 1
 		}
 	}
@@ -205,7 +205,7 @@ func openSession(o options, cwd string) (*session, error) {
 			return nil, err
 		}
 		if _, err := os.Stat(p); err != nil {
-			return nil, fmt.Errorf("会话文件不存在：%s", p)
+			return nil, fmt.Errorf("session file does not exist: %s", p)
 		}
 		s.file, s.flushed = p, true
 		if err := s.load(); err != nil {
@@ -235,11 +235,11 @@ func openSession(o options, cwd string) (*session, error) {
 		}
 		lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
 		if len(lines) == 0 {
-			return nil, fmt.Errorf("分叉源为空")
+			return nil, fmt.Errorf("the fork source is empty")
 		}
 		var head map[string]any
 		if json.Unmarshal(lines[0], &head) != nil || head["type"] != "session" {
-			return nil, fmt.Errorf("分叉源无效")
+			return nil, fmt.Errorf("the fork source is invalid")
 		}
 		head["id"] = s.id
 		head["cwd"] = cwd
@@ -453,7 +453,7 @@ type response struct {
 func (s *server) emit(v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fakepi: 编码输出失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "fakepi: encode output: %v\n", err)
 		return
 	}
 	s.outMu.Lock()
@@ -628,7 +628,7 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 		} else {
 			s.addUsage(*usage)
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false,
-				"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": before, "estimatedTokensAfter": after,
+				"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": before, "estimatedTokensAfter": after, // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 					"usage": usage.wire(), "details": map[string]any{}}})
 			s.emit(response{ID: id, Type: "response", Command: "compact", Success: true,
 				Data: map[string]any{"tokensBefore": before, "estimatedTokensAfter": after}})
@@ -656,7 +656,7 @@ func exportFile(o options) int {
 		}
 	}
 	if len(o.positional) == 0 {
-		fmt.Fprintln(os.Stderr, "fakepi: --export 需要输出路径")
+		fmt.Fprintln(os.Stderr, "fakepi: --export needs an output path")
 		return 2
 	}
 	content := os.Getenv("FAKEPI_EXPORT_CONTENT")
@@ -721,7 +721,7 @@ func (s *server) persist(d directives, msg map[string]any) {
 		return
 	}
 	if err := s.sess.append(msg); err != nil {
-		fmt.Fprintf(os.Stderr, "fakepi: 写入会话文件失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "fakepi: write the session file: %v\n", err)
 	}
 }
 
@@ -760,7 +760,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 			aborted = true
 			endAssistant(s.assistant(textContent(sent), "aborted", "Request was aborted"), nil)
 		} else {
-			retryErr := say("fakepi: 模拟可重试错误（529 overloaded）", "fakepi: simulated retryable error (529 overloaded)")
+			retryErr := say("fakepi: 模拟可重试错误（529 overloaded）", "fakepi: simulated retryable error (529 overloaded)") // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 			endAssistant(s.assistant(textContent(sent), "error", retryErr), nil)
 			s.emit(map[string]any{"type": "agent_end", "messages": produced, "willRetry": true})
 			s.emit(map[string]any{"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 0, "errorMessage": retryErr})
@@ -814,7 +814,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 	if !aborted && d.ask != "" {
 		// Extension dialog: send extension_ui_request, wait for the answer and write it into the reply text; give up
 		// waiting on abort.
-		req := map[string]any{"type": "extension_ui_request", "id": "ask-" + shortID(), "method": d.ask, "title": say("fakepi 问", "fakepi asks")}
+		req := map[string]any{"type": "extension_ui_request", "id": "ask-" + shortID(), "method": d.ask, "title": say("fakepi 问", "fakepi asks")} // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 		if d.ask == "select" {
 			req["options"] = []string{"staging", "production"}
 		}
@@ -839,7 +839,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 		s.emit(map[string]any{"type": "compaction_start", "reason": "threshold"})
 		s.addUsage(*d.compact)
 		s.emit(map[string]any{"type": "compaction_end", "reason": "threshold", "aborted": false, "willRetry": false,
-			"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": 1000, "estimatedTokensAfter": 200,
+			"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": 1000, "estimatedTokensAfter": 200, // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 				"usage": d.compact.wire(), "details": map[string]any{}}})
 	}
 	if !aborted && d.warm != nil {
@@ -903,7 +903,7 @@ func (s *server) countAssistant(m map[string]any) {
 func (s *server) streamText(r *turnRun, text string, d directives, crash bool) (string, bool) {
 	chunks := split3(text)
 	if crash && len(chunks) == 0 {
-		fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash"))
+		fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash")) // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 		os.Exit(3)
 	}
 	var sent strings.Builder
@@ -920,7 +920,7 @@ func (s *server) streamText(r *turnRun, text string, d directives, crash bool) (
 		s.emit(s.update(map[string]any{"type": "text_delta", "contentIndex": 0, "delta": c}))
 		sent.WriteString(c)
 		if crash && i == 0 {
-			fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash"))
+			fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash")) // check-english: zh (fakepi answers in Chinese unless FAKEPI_NEUTRAL is set)
 			os.Exit(3)
 		}
 	}
@@ -990,7 +990,7 @@ func parseUsage(v string) *usageSpec {
 	for i := 0; i < len(parts) && i < 5; i++ {
 		_, err := fmt.Sscanf(parts[i], "%d", &n[i])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "fakepi: 无效的用量：%s\n", v)
+			fmt.Fprintf(os.Stderr, "fakepi: invalid usage: %s\n", v)
 			return nil
 		}
 	}
@@ -1046,7 +1046,7 @@ func parseDirectives(msg string) directives {
 		case key == "!sleep" && hasVal:
 			dur, err := time.ParseDuration(val)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "fakepi: 无效的 !sleep：%s\n", val)
+				fmt.Fprintf(os.Stderr, "fakepi: invalid !sleep: %s\n", val)
 			}
 			d.sleep = dur
 		case key == "!error" && hasVal:
@@ -1101,7 +1101,7 @@ func (d directives) reply(msg string) string {
 		var lines []string
 		for _, line := range strings.Split(msg, "\n") {
 			// The run ID line the platform adds: English now, Chinese in old sessions; remove both.
-			if strings.HasPrefix(line, "Run ID for this turn: ") || strings.HasPrefix(line, "本轮运行ID：") {
+			if strings.HasPrefix(line, "Run ID for this turn: ") || strings.HasPrefix(line, "本轮运行ID：") { // check-english: zh (older sessions start with this line)
 				continue
 			}
 			var words []string

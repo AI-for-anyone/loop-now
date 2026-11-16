@@ -45,7 +45,7 @@ type ProjectCredentialWrite struct {
 func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool) (int64, error) {
 	var rev int64
 	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&rev)
-	return rev, notFoundIfNoRows(err, "项目")
+	return rev, notFoundIfNoRows(err, "Project")
 }
 func bumpCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE projects SET credentials_revision=credentials_revision+1 WHERE id=$1`, id)
@@ -53,17 +53,17 @@ func bumpCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 }
 func credentialCAS(kind string, id uuid.UUID, expected, current int64) error {
 	if expected < 1 {
-		return apperr.Invalid("expectedRevision", "必须提供正整数版本")
+		return apperr.Invalid("expectedRevision", "Must be a positive integer.")
 	}
 	if expected == current {
 		return nil
 	}
-	e := apperr.PreconditionFailed("凭证配置已更改，请重新读取")
+	e := apperr.PreconditionFailed("The credential configuration has changed. Read it again.")
 	e.Details = cm.PreconditionDetails{ResourceKind: kind, ResourceID: id, ExpectedVersion: expected, CurrentVersion: current}
 	return e
 }
 func projectAccountDeleted(project, id uuid.UUID) error {
-	e := apperr.Conflict(apperr.CodeCredentialAccountDeleted, "账号已删除，不会自动切换")
+	e := apperr.Conflict(apperr.CodeCredentialAccountDeleted, "The account was deleted. It is not switched automatically.")
 	e.Details = struct {
 		ProjectID uuid.UUID `json:"projectId"`
 		AccountID uuid.UUID `json:"accountId"`
@@ -71,7 +71,7 @@ func projectAccountDeleted(project, id uuid.UUID) error {
 	return e
 }
 func projectCredentialRequired(a Agent) error {
-	e := apperr.Conflict(apperr.CodeProjectCredentialRequired, "请使用项目凭证管理接口")
+	e := apperr.Conflict(apperr.CodeProjectCredentialRequired, "Use the project credential endpoints.")
 	e.Details = struct {
 		AgentID   uuid.UUID `json:"agentId"`
 		ProjectID uuid.UUID `json:"projectId"`
@@ -86,7 +86,7 @@ func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ b
 	a := &r.View
 	err := tx.QueryRow(ctx, `SELECT `+projectAccountColumns+` FROM project_credential_accounts WHERE id=$1 AND project_id=$2`, id, project).Scan(&a.ID, &a.ProjectID, &a.Purpose, &a.Provider, &a.CLI, &a.Name, &a.Revision, &a.CurrentVersionID, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt)
 	if err != nil {
-		return r, notFoundIfNoRows(err, "项目账号")
+		return r, notFoundIfNoRows(err, "Project account")
 	}
 	a.Status = "unavailable"
 	if a.CurrentVersionID != nil {
@@ -146,7 +146,7 @@ func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ b
 						return r, err
 					}
 					if !identity.Valid() {
-						return r, errors.New("Lark身份元数据无效")
+						return r, errors.New("invalid Lark identity metadata")
 					}
 					a.LarkIdentity = identity
 					a.LarkApplication = &cm.LarkApplication{Brand: identity.Brand, AppID: identity.AppID}
@@ -161,7 +161,7 @@ func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ b
 						return r, err
 					}
 					if !identity.Valid() {
-						return r, errors.New("GitHub身份元数据无效")
+						return r, errors.New("invalid GitHub identity metadata")
 					}
 					a.GitHubIdentity = identity
 					a.Status = "logged_in"
@@ -223,15 +223,15 @@ func (s *Store) GetProjectCredential(ctx context.Context, project, id uuid.UUID)
 }
 func insertProjectCredentialVersion(ctx context.Context, tx *db.Tx, account cm.Account, w ProjectCredentialWrite) (uuid.UUID, error) {
 	if w.Secret == nil {
-		return uuid.Nil, errors.New("缺少凭证内容")
+		return uuid.Nil, errors.New("missing credential content")
 	}
 	githubOAuth := account.Purpose == PurposeCLI && account.CLI != nil && *account.CLI == "gh" && w.AuthMethod == "oauth"
 	if githubOAuth && (w.GitHubIdentity == nil || !w.GitHubIdentity.Valid() || w.AccountLabel == nil || *w.AccountLabel != w.GitHubIdentity.Login) || !githubOAuth && w.GitHubIdentity != nil {
-		return uuid.Nil, apperr.Invalid("identity", "GitHub身份与凭证用途不匹配")
+		return uuid.Nil, apperr.Invalid("identity", "The GitHub identity does not match the credential purpose.")
 	}
 	larkOAuth := account.Purpose == PurposeCLI && account.CLI != nil && *account.CLI == "lark-cli" && w.AuthMethod == "oauth"
 	if larkOAuth && (w.LarkIdentity == nil || !w.LarkIdentity.Valid() || w.AccountLabel == nil || *w.AccountLabel != w.LarkIdentity.OpenID) || !larkOAuth && w.LarkIdentity != nil {
-		return uuid.Nil, apperr.Invalid("identity", "Lark身份与凭证用途不匹配")
+		return uuid.Nil, apperr.Invalid("identity", "The Lark identity does not match the credential purpose.")
 	}
 	id := w.VersionID
 	if id == uuid.Nil {
@@ -282,7 +282,7 @@ func insertProjectAccountTx(ctx context.Context, tx *db.Tx, project uuid.UUID, p
 	} else if purpose == PurposeCLI {
 		cli = &slot
 	} else {
-		return ProjectCredentialRecord{}, apperr.Invalid("purpose", "用途无效")
+		return ProjectCredentialRecord{}, apperr.Invalid("purpose", "Must be model or cli.")
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO project_credential_accounts(id,project_id,purpose,provider,cli_name,name)VALUES($1,$2,$3,$4,$5,$6)`, id, project, purpose, provider, cli, name); err != nil {
 		return ProjectCredentialRecord{}, err
@@ -376,7 +376,7 @@ func lockProjectCredentialAgent(ctx context.Context, tx *db.Tx, agent uuid.UUID,
 		return Agent{}, 0, notFoundIfNoRows(e, "Agent")
 	}
 	if project == nil {
-		return Agent{}, 0, apperr.Invalid("agentId", "平台Agent使用原私有凭证接口")
+		return Agent{}, 0, apperr.Invalid("agentId", "A platform Agent uses its own private credential endpoints.")
 	}
 	rev, e := lockCredentialProject(ctx, tx, *project, write)
 	if e != nil {
@@ -410,7 +410,7 @@ func resolveProjectCredentialTx(ctx context.Context, tx *db.Tx, a Agent, purpose
 		out.Mode = "explicit"
 		out.SelectedAccountID = selected
 		if selected == nil {
-			return out, nil, errors.New("明确选择缺少账号")
+			return out, nil, errors.New("explicit selection has no account")
 		}
 		r, e := projectAccountTx(ctx, tx, *a.ProjectID, *selected, false)
 		if e != nil {
@@ -465,15 +465,15 @@ func selectionResolutionError(a Agent, v cm.Selection) error {
 		code = apperr.CodeCredentialScopeMismatch
 		status = http.StatusUnprocessableEntity
 	case "unavailable", "requires_login":
-		return apperr.Invalid("credentials", "项目账号不可用，请检查账号状态")
+		return apperr.Invalid("credentials", "The project account is not available. Check the account status.")
 	}
 	ids := []uuid.UUID{}
 	for _, c := range v.Candidates {
 		ids = append(ids, c.ID)
 	}
-	result := &apperr.Error{Status: status, Code: code, Message: "项目账号取用需要核对，不会自动切换", Details: cm.ResolutionDetails{AgentID: a.ID, ProjectID: *a.ProjectID, Purpose: v.Purpose, Provider: v.Provider, CLI: v.CLI, AccountID: v.SelectedAccountID, CandidateAccountIDs: ids}}
+	result := &apperr.Error{Status: status, Code: code, Message: "The project account selection needs to be checked. It is not switched automatically.", Details: cm.ResolutionDetails{AgentID: a.ID, ProjectID: *a.ProjectID, Purpose: v.Purpose, Provider: v.Provider, CLI: v.CLI, AccountID: v.SelectedAccountID, CandidateAccountIDs: ids}}
 	if code == apperr.CodeCredentialScopeMismatch {
-		result.Fields = []apperr.FieldError{apperr.Field("accountId", "账号用途与提供方/CLI不匹配")}
+		result.Fields = []apperr.FieldError{apperr.Field("accountId", "The account purpose does not match the provider or CLI.")}
 	}
 	return result
 }
@@ -529,10 +529,10 @@ func (s *Store) PutCredentialSelection(ctx context.Context, agent uuid.UUID, in 
 				return e
 			}
 			if !allowed {
-				return apperr.Invalid("cli", "Agent未允许该CLI")
+				return apperr.Invalid("cli", "The Agent does not allow this CLI.")
 			}
 		} else {
-			return apperr.Invalid("purpose", "用途定位字段不匹配")
+			return apperr.Invalid("purpose", "The fields do not match the purpose. Give provider for model, or cli for cli.")
 		}
 		if in.Purpose == PurposeCLI && isDBCLI(slot) {
 			present, err := dbSetExistsTx(ctx, tx, a.ID, slot)
@@ -540,7 +540,7 @@ func (s *Store) PutCredentialSelection(ctx context.Context, agent uuid.UUID, in 
 				return err
 			}
 			if present {
-				return &apperr.Error{Status: 409, Code: apperr.CodeCredentialSelectionModeConflict, Message: "该CLI使用数据库连接集合，请先删除集合恢复单项模式", Details: cm.CredentialSelectionModeConflictDetails{AgentID: a.ID, CLI: slot, Mode: "explicit_set", ConfigVersion: a.ConfigVersion}}
+				return &apperr.Error{Status: 409, Code: apperr.CodeCredentialSelectionModeConflict, Message: "This CLI uses a database connection set. Delete the set first to return to legacy single-account mode.", Details: cm.CredentialSelectionModeConflictDetails{AgentID: a.ID, CLI: slot, Mode: "explicit_set", ConfigVersion: a.ConfigVersion}}
 			}
 		}
 		if in.AccountID != nil {
@@ -597,7 +597,7 @@ func (s *Store) ProjectCredentialImpact(ctx context.Context, project uuid.UUID, 
 				return e
 			}
 			if r.View.Purpose != purpose || (r.View.Provider != nil && *r.View.Provider != slot) || (r.View.CLI != nil && *r.View.CLI != slot) {
-				return apperr.Invalid("accountId", "账号用途定位不匹配")
+				return apperr.Invalid("accountId", "The account does not match the purpose and provider or CLI.")
 			}
 		}
 		rows, e := tx.Query(ctx, `SELECT `+agentColumns+` FROM agents WHERE project_id=$1 AND deleted_at IS NULL ORDER BY id`, project)
@@ -688,7 +688,7 @@ func captureProjectCredentialsTx(ctx context.Context, tx *db.Tx, a Agent, clis [
 						return nil, nil, nil, err
 					}
 					if rec.CLI == nil {
-						return nil, nil, nil, apperr.Invalid("credentials", "数据库凭证不可用")
+						return nil, nil, nil, apperr.Invalid("credentials", "The database credential is not available.")
 					}
 					row := *rec.CLI
 					row.AgentID = a.ID
@@ -715,7 +715,7 @@ func captureProjectCredentialsTx(ctx context.Context, tx *db.Tx, a Agent, clis [
 			if cli == "lark-cli" && r.View.AuthMethod != nil && *r.View.AuthMethod == "oauth" {
 				i := r.View.LarkIdentity
 				if i == nil || !i.Valid() {
-					return nil, nil, nil, apperr.Invalid("credentials", "Lark用户身份不可用")
+					return nil, nil, nil, apperr.Invalid("credentials", "The Lark user identity is not available.")
 				}
 				row.LarkBinding = &clicredential.LarkBinding{ProjectID: *a.ProjectID, AccountID: r.View.ID, VersionID: row.ID, AgentID: a.ID, Brand: i.Brand, AppID: i.AppID, OpenID: i.OpenID, RuntimeVariantVersion: clicredential.LarkUserVariant}
 			}
@@ -749,7 +749,7 @@ func projectCredentialIdentity(clis []string, selections []cm.Selection, rows []
 func (s *Store) ProjectCredentialRevisionTx(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64, error) {
 	var rev int64
 	e := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, project).Scan(&rev)
-	return rev, notFoundIfNoRows(e, "项目")
+	return rev, notFoundIfNoRows(e, "Project")
 }
 
 func lockAgentProjectTx(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
@@ -763,7 +763,7 @@ func (s *Store) GetProjectCLIVersion(ctx context.Context, account, id uuid.UUID)
 	c.Purpose = PurposeCLI
 	e := s.Pool.QueryRow(ctx, `SELECT id,cli_name,template_source,template_version,secret,field_names,env_names,file_paths,updated_at FROM project_cli_versions WHERE id=$1 AND account_id=$2`, id, account).Scan(&c.ID, &c.CLIName, &source, &c.TemplateVersion, &c.Secret, &c.FieldNames, &c.EnvNames, &c.FilePaths, &c.UpdatedAt)
 	c.TemplateSource = source
-	return c, source, notFoundIfNoRows(e, "CLI凭证版本")
+	return c, source, notFoundIfNoRows(e, "CLI credential version")
 }
 
 func (s *Store) RequirePrivateAgentCredentials(ctx context.Context, id uuid.UUID) error {

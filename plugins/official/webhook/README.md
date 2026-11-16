@@ -132,7 +132,7 @@ curl -sS -X POST "$ANSWER_URL" -H 'content-type: application/json' -H "x-loop-no
 
 ## Troubleshooting
 
-- **Nothing arrives:** check that the plugin is enabled in the project and that `url` is set, for all projects or for this one. With 只推给外部身份 (only external identities), messages to Agents are not sent. The **Logs** tab says so when the URL is not valid (`回调地址不是合法的地址`).
+- **Nothing arrives:** check that the plugin is enabled in the project and that `url` is set, for all projects or for this one. With 只推给外部身份 (only external identities), messages to Agents are not sent. The **Logs** tab says so when the URL is not valid (`Callback URL is invalid`).
 - **Deliveries show Failed:** your endpoint answered with a 4xx status other than 408, 425 or 429, or with a redirect. The **Deliveries** tab shows the status code.
 - **The signature does not match:** sign the raw body, with the timestamp and a dot in front, and use the secret that applies to this project. A project override of `secret` replaces the one on the **Config** tab.
 - **The same message arrives twice:** a retry can follow a delivery your endpoint processed but answered too late. Ignore repeats of the same `x-loop-now-delivery`.

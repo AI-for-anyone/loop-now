@@ -46,10 +46,10 @@ func LoadFile(t testing.TB, file string) *openapi3.T {
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile(filepath.Join(testenv.RepoRoot(), "api", file))
 	if err != nil {
-		t.Fatalf("加载契约 %s 失败：%v", file, err)
+		t.Fatalf("Could not load contract %s: %v", file, err)
 	}
 	if err := doc.Validate(context.Background()); err != nil {
-		t.Fatalf("契约 %s 本身不合法：%v", file, err)
+		t.Fatalf("Contract %s is itself invalid: %v", file, err)
 	}
 	return doc
 }
@@ -93,12 +93,12 @@ func NewFor(t testing.TB, baseURL, file, base string) *Validator {
 	doc.Servers = openapi3.Servers{{URL: baseURL + base}}
 	router, err := legacy.NewRouter(doc)
 	if err != nil {
-		t.Fatalf("创建契约路由失败：%v", err)
+		t.Fatalf("Could not create the contract router: %v", err)
 	}
 	v := &Validator{t: t, doc: doc, router: router}
 	t.Cleanup(func() {
 		if len(v.failed) > 0 {
-			t.Errorf("契约校验失败 %d 处：\n%s", len(v.failed), strings.Join(v.failed, "\n"))
+			t.Errorf("Contract validation found %d problems:\n%s", len(v.failed), strings.Join(v.failed, "\n"))
 		}
 	})
 	return v
@@ -138,7 +138,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	route, params, err := v.router.FindRoute(req)
 	if err != nil {
-		v.record("%s %s：契约中找不到该操作：%v", req.Method, req.URL.Path, err)
+		v.record("%s %s: operation not found in the contract: %v", req.Method, req.URL.Path, err)
 		return rt.base.RoundTrip(req)
 	}
 	opts := &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SchemaValidationOptions: schemaOpts(), MultiError: true}
@@ -146,7 +146,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Request validation only serves to find mistakes in the tests themselves; cases that deliberately send invalid
 	// requests would be reported here, so only problems with valid requests are recorded.
 	if err := openapi3filter.ValidateRequest(req.Context(), in); err != nil && req.Header.Get("X-Contract-Invalid-Request") == "" {
-		v.record("%s %s：请求不符合契约：%v", req.Method, req.URL.Path, err)
+		v.record("%s %s: request does not match the contract: %v", req.Method, req.URL.Path, err)
 	}
 	// A request without a body keeps having no body: replacing it with an empty reader would make the transport send it
 	// with an unknown length.
@@ -166,7 +166,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	opts.IncludeResponseStatus = true
 	out := &openapi3filter.ResponseValidationInput{RequestValidationInput: in, Status: resp.StatusCode, Header: resp.Header, Body: io.NopCloser(bytes.NewReader(body)), Options: opts}
 	if err := openapi3filter.ValidateResponse(req.Context(), out); err != nil {
-		v.record("%s %s → %d：响应不符合契约：%v\n响应：%s", req.Method, req.URL.Path, resp.StatusCode, err, truncate(body))
+		v.record("%s %s → %d: response does not match the contract: %v\nResponse: %s", req.Method, req.URL.Path, resp.StatusCode, err, truncate(body))
 	}
 	return resp, nil
 }
@@ -212,17 +212,17 @@ func (v *Validator) ValidateSSE(event string, data []byte) {
 func (v *Validator) ValidateStreamSSE(path, event string, data []byte) {
 	name, ok := v.StreamEventSchemas(path)[event]
 	if !ok {
-		v.record("SSE 事件 %q 不在 %s 的 x-sse-events 中", event, path)
+		v.record("SSE event %q is not listed in x-sse-events of %s", event, path)
 		return
 	}
 	ref := v.doc.Components.Schemas[name]
 	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
-		v.record("SSE 事件 %s 的数据不是 JSON：%v", event, err)
+		v.record("SSE event %s: data is not JSON: %v", event, err)
 		return
 	}
 	if err := ref.Value.VisitJSON(value, schemaOpts()...); err != nil {
-		v.record("SSE 事件 %s 不符合 %s：%v\n数据：%s", event, name, err, truncate(data))
+		v.record("SSE event %s does not match %s: %v\nData: %s", event, name, err, truncate(data))
 	}
 }
 

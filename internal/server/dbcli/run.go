@@ -77,7 +77,7 @@ func nativeConfig(cli, home string, c Connection) ([]string, []string, error) {
 	// libpq service values are not generic INI: no quoting or backslash decoding.
 	for _, v := range []string{f.Host, f.User, f.Database, dir} {
 		if strings.TrimRight(v, " \t") != v || strings.ContainsAny(v, "\r\n") {
-			return nil, nil, errors.New("配置值不能安全表达")
+			return nil, nil, errors.New("a configuration value cannot be expressed safely")
 		}
 	}
 	if e := privateWrite(filepath.Join(dir, "pgpass"), []byte(strings.Join([]string{pgEscape(f.Host), f.Port, pgEscape(f.Database), pgEscape(f.User), pgEscape(f.Password)}, ":")+"\n")); e != nil {
@@ -99,7 +99,7 @@ func nativeConfig(cli, home string, c Connection) ([]string, []string, error) {
 	return []string{"-X"}, env, nil
 }
 func parseArgs(cli string, args []string) (uuid.UUID, bool, []string, error) {
-	fail := errors.New("数据库CLI参数无效或试图覆盖连接配置")
+	fail := errors.New("invalid database CLI arguments, or the arguments try to override the connection configuration")
 	var id uuid.UUID
 	list := false
 	native := []string{}

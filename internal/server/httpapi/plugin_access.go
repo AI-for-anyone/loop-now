@@ -50,7 +50,7 @@ func (s *Server) consoleAuth(next http.Handler) http.Handler {
 		}
 		prefix, id, secret, ok := auth.ParseToken(tok)
 		if !ok || prefix != auth.PluginPrefix {
-			writeError(w, apperr.Forbidden("控制台接口不接受令牌：外部身份请使用对外端口，Agent 请使用 /agent/v1"))
+			writeError(w, apperr.Forbidden("The console API accepts only plugin tokens. External identities use the external port; Agents use /agent/v1."))
 			return
 		}
 		t, err := s.Store.LookupPluginToken(r.Context(), id)
@@ -73,7 +73,7 @@ func (s *Server) consoleAuth(next http.Handler) http.Handler {
 func (s *Server) pluginAllowed(r *http.Request, rt Route, p auth.Principal) error {
 	err := s.pluginGate(r, rt, p)
 	if err != nil && apperr.Is(err, apperr.CodeForbidden) {
-		if lerr := s.Store.AppendPluginHostLog(context.WithoutCancel(r.Context()), p.Plugin, "warn", "调用 "+rt.Op+" 被拒绝："+err.Error()); lerr != nil {
+		if lerr := s.Store.AppendPluginHostLog(context.WithoutCancel(r.Context()), p.Plugin, "warn", "Call to "+rt.Op+" was denied: "+err.Error()); lerr != nil {
 			s.Log.Warn("failed to write the plugin log", "plugin", p.Plugin, "err", lerr)
 		}
 	}
@@ -84,14 +84,14 @@ func (s *Server) pluginAllowed(r *http.Request, rt Route, p auth.Principal) erro
 // identities.manage scope; otherwise 403.
 func (s *Server) checkManaged(ctx context.Context, p auth.Principal, identity uuid.UUID) error {
 	if !slices.Contains(p.Scopes, "identities.manage") {
-		return apperr.Forbidden("插件清单没有声明 identities.manage 范围")
+		return apperr.Forbidden("The plugin manifest does not declare the identities.manage scope.")
 	}
 	ok, err := s.Store.IdentityManagedBy(ctx, identity, p.Plugin)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return apperr.Forbidden("插件没有代管这个外部身份")
+		return apperr.Forbidden("The plugin does not manage this external identity.")
 	}
 	return nil
 }
@@ -99,12 +99,12 @@ func (s *Server) checkManaged(ctx context.Context, p auth.Principal, identity uu
 func (s *Server) pluginGate(r *http.Request, rt Route, p auth.Principal) error {
 	scope := pluginScopes[rt.Op]
 	if scope == "" {
-		return apperr.Forbidden("插件令牌不能调用这个接口")
+		return apperr.Forbidden("Plugin tokens cannot call this endpoint.")
 	}
 	ctx := r.Context()
 	if !slices.Contains(p.Scopes, scope) {
 		if !managedIdentityOps[rt.Op] || !slices.Contains(p.Scopes, "identities.manage") {
-			return apperr.Forbidden("插件清单没有声明 " + scope + " 范围")
+			return apperr.Forbidden("The plugin manifest does not declare the " + scope + " scope.")
 		}
 		if r.PathValue("identityId") != "" {
 			identity, err := pathUUID(r, "identityId")
@@ -131,7 +131,7 @@ func (s *Server) pluginGate(r *http.Request, rt Route, p auth.Principal) error {
 		}
 		var pid uuid.UUID
 		if err := s.Store.Pool.QueryRow(ctx, `SELECT project_id FROM task_records WHERE id=$1`, id).Scan(&pid); err != nil {
-			return apperr.NotFound("任务")
+			return apperr.NotFound("Task")
 		}
 		project = &pid
 	case r.PathValue("agentId") != "":
@@ -153,7 +153,7 @@ func (s *Server) pluginGate(r *http.Request, rt Route, p auth.Principal) error {
 		return err
 	}
 	if !on {
-		return apperr.Forbidden("插件没有在这个项目启用")
+		return apperr.Forbidden("The plugin is not enabled in this project.")
 	}
 	return nil
 }

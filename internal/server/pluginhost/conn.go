@@ -19,10 +19,10 @@ import (
 )
 
 // ErrHostExited means the plugin host process exited while the request was waiting.
-var ErrHostExited = errors.New("插件宿主已退出")
+var ErrHostExited = errors.New("the plugin host exited")
 
 // ErrTimeout means the request got no response before the timeout.
-var ErrTimeout = errors.New("插件宿主没有在时限内回应")
+var ErrTimeout = errors.New("the plugin host did not respond in time")
 
 // writeTimeout is the time limit for writing one message line: a plugin host that does not read its standard input
 // for a long time is considered stuck.
@@ -61,7 +61,7 @@ type conn struct {
 // each line of standard error.
 func startConn(command []string, dir string, env []string, onMessage func(*conn, Message), onStderr func(string)) (*conn, error) {
 	if len(command) == 0 {
-		return nil, errors.New("插件宿主命令未配置")
+		return nil, errors.New("the plugin host command is not configured")
 	}
 	inR, inW, err := os.Pipe()
 	if err != nil {
@@ -145,7 +145,7 @@ func (c *conn) readStdout(r io.Reader, onMessage func(*conn, Message)) {
 		line, err := readLine(br)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) {
-				onMessage(c, Message{Type: TypeLog, Payload: mustJSON(logPayload{Level: "error", Message: "协议读取失败：" + err.Error()})})
+				onMessage(c, Message{Type: TypeLog, Payload: mustJSON(logPayload{Level: "error", Message: "Could not read the protocol stream: " + err.Error()})})
 			}
 			return
 		}
@@ -154,7 +154,7 @@ func (c *conn) readStdout(r io.Reader, onMessage func(*conn, Message)) {
 		}
 		var m Message
 		if json.Unmarshal(line, &m) != nil || m.Type == "" {
-			onMessage(c, Message{Type: TypeLog, Payload: mustJSON(logPayload{Level: "error", Message: "宿主写出了不合协议的一行：" + truncate(string(line), 200)})})
+			onMessage(c, Message{Type: TypeLog, Payload: mustJSON(logPayload{Level: "error", Message: "The host wrote a line that does not follow the protocol: " + truncate(string(line), 200)})})
 			continue
 		}
 		switch m.Type {
@@ -195,7 +195,7 @@ func readLine(br *bufio.Reader) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			return nil, fmt.Errorf("一行超过 %d 字节", MaxLine)
+			return nil, fmt.Errorf("a line is longer than %d bytes", MaxLine)
 		}
 		buf = append(buf, chunk...)
 		if errors.Is(err, bufio.ErrBufferFull) {
@@ -218,7 +218,7 @@ func (c *conn) send(m Message) error {
 		return err
 	}
 	if len(b)+1 > MaxLine {
-		return fmt.Errorf("消息超过 %d 字节", MaxLine)
+		return fmt.Errorf("the message is longer than %d bytes", MaxLine)
 	}
 	b = append(b, '\n')
 	c.writeMu.Lock()
@@ -256,7 +256,7 @@ func (c *conn) request(ctx context.Context, typ, plugin string, payload any, tim
 	}
 	if err := c.send(Message{ID: id, Type: typ, Plugin: plugin, Payload: raw}); err != nil {
 		forget()
-		return nil, fmt.Errorf("写入插件宿主失败：%w", err)
+		return nil, fmt.Errorf("write to the plugin host: %w", err)
 	}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -267,7 +267,7 @@ func (c *conn) request(ctx context.Context, typ, plugin string, payload any, tim
 		}
 		var r Reply
 		if err := json.Unmarshal(m.Payload, &r); err != nil {
-			return nil, fmt.Errorf("宿主的回应无法解析：%w", err)
+			return nil, fmt.Errorf("parse the plugin host response: %w", err)
 		}
 		if !r.OK {
 			return nil, &PluginError{Plugin: plugin, Message: r.Error}
@@ -330,7 +330,7 @@ type PluginError struct {
 	Message string
 }
 
-func (e *PluginError) Error() string { return fmt.Sprintf("插件 %s：%s", e.Plugin, e.Message) }
+func (e *PluginError) Error() string { return fmt.Sprintf("plugin %s: %s", e.Plugin, e.Message) }
 
 // stderrPrefix matches the [<id>] the plugin host puts before each line of plugin output.
 var stderrPrefix = regexp.MustCompile(`^\[([a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)\] ?(.*)$`)

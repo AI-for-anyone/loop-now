@@ -44,14 +44,14 @@ func canonicalSHA(s string) bool {
 func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string) (larksidecar.LaunchConfig, error) {
 	var zero larksidecar.LaunchConfig
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
-		return zero, errors.New("Lark用户CLI平台未验证")
+		return zero, errors.New("the Lark user CLI is not verified on this platform")
 	}
 	if ctx == nil || !filepath.IsAbs(bundle) || !filepath.IsAbs(workRoot) {
-		return zero, errors.New("Lark用户CLI安装参数无效")
+		return zero, errors.New("invalid Lark user CLI install parameters")
 	}
 	info, e := os.Lstat(bundle)
 	if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return zero, errors.New("Lark用户CLI发行包不可用")
+		return zero, errors.New("the Lark user CLI release bundle is unavailable")
 	}
 	root, e := os.OpenRoot(bundle)
 	if e != nil {
@@ -60,7 +60,7 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 	defer root.Close()
 	manifestInfo, e := root.Lstat("manifest.json")
 	if e != nil || !manifestInfo.Mode().IsRegular() || manifestInfo.Mode()&os.ModeSymlink != 0 || manifestInfo.Size() > 1<<20 {
-		return zero, errors.New("Lark用户CLI清单无效")
+		return zero, errors.New("invalid Lark user CLI manifest")
 	}
 	f, e := openLarkRegular(root, "manifest.json")
 	if e != nil {
@@ -69,16 +69,16 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 	raw, e := io.ReadAll(io.LimitReader(f, (1<<20)+1))
 	ce := f.Close()
 	if e != nil || ce != nil || len(raw) > 1<<20 {
-		return zero, errors.New("Lark用户CLI清单无效")
+		return zero, errors.New("invalid Lark user CLI manifest")
 	}
 	manifestDigest := sha256.Sum256(raw)
 	if !canonicalSHA(manifestSHA) || hex.EncodeToString(manifestDigest[:]) != manifestSHA {
-		return zero, errors.New("Lark用户CLI发行清单摘要不匹配")
+		return zero, errors.New("the Lark user CLI release manifest digest does not match")
 	}
 	var m larkAssetManifest
 	if json.Unmarshal(raw, &m) != nil || m.ArtifactVersion != clicredential.LarkUserVariant || m.SourceCommit != larkSourceCommit || m.SourceSHA256 != larkSourceSHA || m.Platform != runtime.GOOS+"-"+runtime.GOARCH || m.OfficialRelease == nil || *m.OfficialRelease || m.SourceModified == nil || *m.SourceModified || len(m.BuildTags) != 1 || m.BuildTags[0] != "authsidecar" ||
 		!canonicalSHA(m.BinarySHA256) || !canonicalSHA(m.Launcher.SHA256) || !canonicalSHA(m.SandboxProbe.SHA256) || m.Launcher.File != "lark-cli-launcher" || m.Launcher.EntryFile != "bin/lark-cli" || m.Launcher.Protocol != "loop-now-lark-exec-v1" || m.SandboxProbe.File != "lark-cli-sandbox-probe" || m.SandboxProbe.Protocol != "loop-now-lark-sandbox-probe-v2" {
-		return zero, errors.New("Lark用户CLI清单不匹配")
+		return zero, errors.New("the Lark user CLI manifest does not match")
 	}
 	files := map[string]string{"lark-cli": m.BinarySHA256, "lark-cli-launcher": m.Launcher.SHA256, "bin/lark-cli": m.Launcher.SHA256, "lark-cli-sandbox-probe": m.SandboxProbe.SHA256}
 	digest := sha256.Sum256(raw)
@@ -122,10 +122,10 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 	}
 	if fi, statErr := installed.Lstat(name); statErr == nil {
 		if !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
-			return zero, errors.New("Lark用户CLI安装路径无效")
+			return zero, errors.New("invalid Lark user CLI install path")
 		}
 		if !verified(name) {
-			return zero, errors.New("Lark用户CLI已安装内容校验失败")
+			return zero, errors.New("could not verify the installed Lark user CLI")
 		}
 	} else {
 		if !os.IsNotExist(statErr) {
@@ -152,12 +152,12 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 		}
 		licenseFile, e := openLarkRegular(root, "LICENSE")
 		if e != nil {
-			return zero, errors.New("Lark用户CLI许可证缺失")
+			return zero, errors.New("the Lark user CLI license is missing")
 		}
 		license, e := io.ReadAll(io.LimitReader(licenseFile, (1<<20)+1))
 		licenseFile.Close()
 		if e != nil || len(license) == 0 || len(license) > 1<<20 {
-			return zero, errors.New("Lark用户CLI许可证缺失")
+			return zero, errors.New("the Lark user CLI license is missing")
 		}
 		if e = stageRoot.WriteFile("LICENSE", license, 0600); e != nil {
 			return zero, e
@@ -166,7 +166,7 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 			return zero, e
 		}
 		if e = installed.Rename(stage, name); e != nil && !verified(name) {
-			return zero, errors.New("Lark用户CLI安装发布失败")
+			return zero, errors.New("could not publish the Lark user CLI installation")
 		}
 	}
 	host, e := os.UserHomeDir()
@@ -179,12 +179,12 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 func copyLarkAsset(ctx context.Context, root *os.Root, name, want string, dest *os.Root) error {
 	fi, e := root.Lstat(name)
 	if e != nil || !fi.Mode().IsRegular() || fi.Mode()&os.ModeSymlink != 0 || fi.Size() > 512<<20 || !privatefs.IsExecutable(name, fi) {
-		return errors.New("Lark用户CLI文件无效")
+		return errors.New("invalid Lark user CLI file")
 	}
 	if strings.Contains(name, "/") {
 		parent, e := root.Lstat(filepath.Dir(name))
 		if e != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
-			return errors.New("Lark用户CLI目录无效")
+			return errors.New("invalid Lark user CLI directory")
 		}
 	}
 	in, e := openLarkRegular(root, name)
@@ -211,7 +211,7 @@ func copyLarkAsset(ctx context.Context, root *os.Root, name, want string, dest *
 		if n > 0 {
 			total += int64(n)
 			if total > 512<<20 {
-				return errors.New("Lark用户CLI文件超限")
+				return errors.New("a Lark user CLI file exceeds the size limit")
 			}
 			h.Write(buf[:n])
 			if out != nil {
@@ -228,7 +228,7 @@ func copyLarkAsset(ctx context.Context, root *os.Root, name, want string, dest *
 		}
 	}
 	if hex.EncodeToString(h.Sum(nil)) != want {
-		return errors.New("Lark用户CLI文件摘要不匹配")
+		return errors.New("the Lark user CLI file digest does not match")
 	}
 	if out != nil {
 		if e = out.Sync(); e != nil {
@@ -247,7 +247,7 @@ func openLarkRegular(root *os.Root, name string) (*os.File, error) {
 	fi, e := f.Stat()
 	if e != nil || !fi.Mode().IsRegular() {
 		f.Close()
-		return nil, errors.New("Lark用户CLI须为普通文件")
+		return nil, errors.New("the Lark user CLI must be a regular file")
 	}
 	return f, nil
 }

@@ -24,7 +24,7 @@ type TaskLarkTarget struct {
 func (s *Store) CaptureTaskLarkTargetTx(ctx context.Context, m *TaskMutation, account, version uuid.UUID, expectedRevision int64) (TaskLarkTarget, error) {
 	var out TaskLarkTarget
 	if m.Record.Current() == nil {
-		return out, apperr.Conflict("task_conflict", "原任务节点不可用")
+		return out, apperr.Conflict("task_conflict", "The original task node is not available.")
 	}
 	var project uuid.UUID
 	var current *uuid.UUID
@@ -33,10 +33,10 @@ func (s *Store) CaptureTaskLarkTargetTx(ctx context.Context, m *TaskMutation, ac
 	var secret []byte
 	err := m.Tx.QueryRow(ctx, `SELECT a.project_id,a.purpose,a.cli_name,a.revision,a.current_cli_version_id,a.deleted_at,v.auth_method,i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,g.refresh_state,v.secret FROM project_credential_accounts a JOIN project_cli_versions v ON v.account_id=a.id AND v.id=$2 JOIN lark_cli_identities i ON i.version_id=v.id AND i.account_id=a.id JOIN lark_cli_grants g ON g.version_id=v.id WHERE a.id=$1`, account, version).Scan(&project, &purpose, &cli, &out.AccountRevision, &current, &deleted, &auth, &out.Identity.Brand, &out.Identity.AppID, &out.Identity.OpenID, &out.Identity.DisplayName, &out.Identity.GrantedScopes, &out.Identity.VerifiedAt, &out.RuntimeVariantVersion, &refreshState, &secret)
 	if err != nil {
-		return out, notFoundIfNoRows(err, "Lark用户账号版本")
+		return out, notFoundIfNoRows(err, "Lark user account version")
 	}
 	deny := func() (TaskLarkTarget, error) {
-		return TaskLarkTarget{}, apperr.Conflict("task_conflict", "所选Lark用户授权版本已变化或不可用")
+		return TaskLarkTarget{}, apperr.Conflict("task_conflict", "The selected Lark user grant version has changed or is not available.")
 	}
 	if account == uuid.Nil || version == uuid.Nil || project != m.Record.View.Task.ProjectID || purpose != "cli" || cli != "lark-cli" || auth != "oauth" || deleted != nil || current == nil || *current != version || out.AccountRevision != expectedRevision || refreshState == "unavailable" || out.RuntimeVariantVersion != clicredential.LarkUserVariant || !out.Identity.Valid() {
 		return deny()

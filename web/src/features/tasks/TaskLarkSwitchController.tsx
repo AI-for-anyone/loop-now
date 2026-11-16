@@ -96,7 +96,7 @@ function ParticipantForm({ detail, node, participants, disabled, stage, onConfir
     setSelected(p && f ? [p, f] : null)
   }
   const names = (member: Participant) => `${member.agentId} · ${member.runtimeId} · ${copy.frozenSteps} ${member.stepIds.join(', ')}`
-  const reason = (member: Participant) => member.larkAllowed === null ? copy.permissionUnknown : !member.larkAllowed ? copy.permissionDenied : member.unavailableReason ?? copy.unavailableMember
+  const reason = (member: Participant) => member.larkAllowed === null ? copy.permissionUnknown : !member.larkAllowed ? copy.permissionDenied : member.unavailableReason ? copy.participantReasons[member.unavailableReason] ?? member.unavailableReason : copy.unavailableMember
   const view = (member: Participant): LarkSwitchMemberView => ({ identity: { agentId: member.agentId, runtimeId: member.runtimeId, agentName: member.agentId }, title: member.runtimeId === node.runtimeId ? copy.publisher : copy.followupMember, originalPermission: copy.permissionAllowed, oldBinding: <>{copy.bindingRevision} {member.bindingRevision} · {copy.originalSnapshot} {member.baseSnapshotSHA}<br />{member.prepared ? copy.prepared : copy.unprepared} · {copy.frozenSteps} {member.stepIds.join(', ')}</> })
   return <div className="mt-3 grid min-w-0 gap-2 text-sm [overflow-wrap:anywhere]">
     {participants.length === 0 && <p role="status">{copy.noParticipants}</p>}

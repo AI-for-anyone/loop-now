@@ -89,13 +89,13 @@ type CredentialInput struct {
 func (CredentialInput) String() string   { return "[credential input]" }
 func (CredentialInput) GoString() string { return "[credential input]" }
 func (CredentialInput) MarshalJSON() ([]byte, error) {
-	return nil, errors.New("秘密只能通过显式凭证通道编码")
+	return nil, errors.New("secrets can only be encoded through the explicit credential channel")
 }
 func strict(data []byte, v any) error {
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
 	if d.Decode(v) != nil || d.Decode(new(any)) != io.EOF {
-		return errors.New("请求字段或格式无效")
+		return errors.New("invalid request fields or format")
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func (c *CredentialInput) UnmarshalJSON(data []byte) error {
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(data, &kind) != nil {
-		return errors.New("credential格式无效")
+		return errors.New("invalid credential format")
 	}
 	switch kind.Type {
 	case "api_key":
@@ -113,7 +113,7 @@ func (c *CredentialInput) UnmarshalJSON(data []byte) error {
 			Key  *string `json:"key"`
 		}
 		if strict(data, &v) != nil || v.Key == nil || *v.Key == "" {
-			return errors.New("credential API Key字段无效")
+			return errors.New("invalid credential API key fields")
 		}
 		*c = CredentialInput{Type: v.Type, Key: *v.Key}
 	case "cli":
@@ -122,18 +122,18 @@ func (c *CredentialInput) UnmarshalJSON(data []byte) error {
 			Fields map[string]*string `json:"fields"`
 		}
 		if strict(data, &v) != nil || len(v.Fields) == 0 {
-			return errors.New("credential CLI字段无效")
+			return errors.New("invalid credential CLI fields")
 		}
 		f := map[string]string{}
 		for k, v := range v.Fields {
 			if v == nil {
-				return errors.New("credential CLI字段无效")
+				return errors.New("invalid credential CLI fields")
 			}
 			f[k] = *v
 		}
 		*c = CredentialInput{Type: v.Type, Fields: f}
 	default:
-		return errors.New("credential用途无效")
+		return errors.New("invalid credential type")
 	}
 	return nil
 }
@@ -165,22 +165,22 @@ func (s *SelectionPut) UnmarshalJSON(data []byte) error {
 	type plain SelectionPut
 	var v plain
 	if strict(data, &v) != nil {
-		return errors.New("账号选择字段无效")
+		return errors.New("invalid account selection fields")
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil {
-		return errors.New("账号选择字段无效")
+		return errors.New("invalid account selection fields")
 	}
 	if _, ok := fields["accountId"]; !ok {
-		return errors.New("accountId必须显式提供")
+		return errors.New("accountId must be given explicitly")
 	}
 	for _, key := range []string{"purpose", "provider", "cli", "expectedConfigVersion"} {
 		if raw, ok := fields[key]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			return fmt.Errorf("%s不能为null", key)
+			return fmt.Errorf("%s must not be null", key)
 		}
 	}
 	if v.AccountID != nil && *v.AccountID == uuid.Nil {
-		return errors.New("accountId无效")
+		return errors.New("invalid accountId")
 	}
 	*s = SelectionPut(v)
 	return nil
@@ -272,19 +272,19 @@ func (c *Create) UnmarshalJSON(data []byte) error {
 	type plain Create
 	var v plain
 	if strict(data, &v) != nil {
-		return errors.New("账号请求字段或格式无效")
+		return errors.New("invalid account request fields or format")
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil {
-		return errors.New("账号请求格式无效")
+		return errors.New("invalid account request format")
 	}
 	if v.Purpose == "model" {
 		if _, ok := fields["cli"]; ok {
-			return errors.New("模型账号不能提供cli字段")
+			return errors.New("a model account must not have a cli field")
 		}
 	} else if v.Purpose == "cli" {
 		if _, ok := fields["provider"]; ok {
-			return errors.New("CLI账号不能提供provider字段")
+			return errors.New("a CLI account must not have a provider field")
 		}
 	}
 	*c = Create(v)
@@ -294,15 +294,15 @@ func (l *LoginStart) UnmarshalJSON(data []byte) error {
 	type plain LoginStart
 	var v plain
 	if strict(data, &v) != nil {
-		return errors.New("登录请求字段或格式无效")
+		return errors.New("invalid login request fields or format")
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil {
-		return errors.New("登录请求格式无效")
+		return errors.New("invalid login request format")
 	}
 	for _, raw := range fields {
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			return errors.New("登录输入字段不能为null")
+			return errors.New("login input fields must not be null")
 		}
 	}
 	*l = LoginStart(v)

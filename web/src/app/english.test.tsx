@@ -84,8 +84,10 @@ describe('English console', () => {
     expect(group).toHaveAccessibleDescription('Applies to this browser only. The page reloads when you switch.')
   })
 
-  it("known error codes drop the server's Chinese detail; unknown ones show it as is", () => {
-    expect(describeError(new ApiError({ status: 409, code: 'agent_busy', serverMessage: 'Agent 正忙，请稍后再试' }))).toBe('The Agent is busy')
-    expect(describeError(new ApiError({ status: 502, code: 'unknown', serverMessage: '上游错误' }))).toBe('上游错误')
+  it("known error codes add the server's detail unless it only repeats the code; unknown ones show it as is", () => {
+    expect(describeError(new ApiError({ status: 409, code: 'agent_busy', serverMessage: 'run 7f3a is still replying' }))).toBe('The Agent is busy: run 7f3a is still replying')
+    expect(describeError(new ApiError({ status: 409, code: 'agent_busy', serverMessage: 'Agent busy.' }))).toBe('The Agent is busy')
+    expect(describeError(new ApiError({ status: 409, code: 'agent_busy', serverMessage: 'Agent 正忙' }))).toBe('The Agent is busy')
+    expect(describeError(new ApiError({ status: 502, code: 'unknown', serverMessage: 'upstream gateway failed' }))).toBe('upstream gateway failed')
   })
 })

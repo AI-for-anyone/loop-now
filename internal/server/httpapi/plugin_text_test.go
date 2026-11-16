@@ -87,7 +87,7 @@ func TestPluginLocalizedText(t *testing.T) {
 	e.expect(200, "PUT", "/plugin-settings", map[string]any{"disabled": false, "markets": []any{market.URL + "/bad.json"}})
 	list := decode[map[string][]map[string]any](t, e.expect(200, "GET", "/plugin-markets", nil))["markets"]
 	same("市场条目", list[0]["plugins"].([]any)[0].(map[string]any))
-	if msg, _ := list[1]["error"].(string); !strings.Contains(msg, "displayName 须是字符串，或以语言标签") {
+	if msg, _ := list[1]["error"].(string); !strings.Contains(msg, "displayName must be a string, or an object with language tags") {
 		t.Fatalf("不合规则的市场条目：%v", list[1])
 	}
 }

@@ -12,7 +12,7 @@ const playwright = makeDetail(
   makeManifest({ id: 'playwright', displayName: '专用浏览器', version: '2.0.0', events: [], permissions: [], configSchema: {} as never, components: makeComponents({ platform: false, agentExtensions: 1, mcpServers: ['browser'], skills: ['skills/browse'] }) }),
 )
 const lark = makeDetail(
-  makePlugin({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1', source: makeResolvedSource({ kind: 'git', location: 'https://github.com/foo/lark' }), status: 'error', lastError: '订阅了清单里没有声明的事件 run.ended。' }),
+  makePlugin({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1', source: makeResolvedSource({ kind: 'git', location: 'https://github.com/foo/lark' }), status: 'error', lastError: 'Subscribed to run.ended, which the manifest does not declare.' }),
   makeManifest({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1', events: ['inbox.received', 'question.asked', 'run.ended'] }),
 )
 
@@ -37,7 +37,7 @@ describe('插件市场', () => {
     expect(browser).toHaveTextContent('1 个项目启用2 个 Agent 已授权')
     const failing = screen.getByRole('link', { name: '飞书通知' }).closest('li')!
     expect(failing).toHaveTextContent('git · 未审核')
-    expect(failing).toHaveTextContent('订阅了清单里没有声明的事件 run.ended。')
+    expect(failing).toHaveTextContent('Subscribed to run.ended, which the manifest does not declare.')
     expect(within(failing).getByRole('link', { name: '查看日志' })).toHaveAttribute('href', '/plugins/lark-notify/logs')
     const host = screen.getByRole('region', { name: '插件宿主' })
     expect(host).toHaveTextContent('宿主运行中')

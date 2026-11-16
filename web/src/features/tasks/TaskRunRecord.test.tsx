@@ -38,3 +38,15 @@ it.each(['taskId', 'nodeRunId', 'agentId', 'runtimeId'] as const)('timeline %s�
   server.use(http.get(endpoint, () => HttpResponse.json({ ...dto, [field]: 'foreign-id' })))
   renderRecord(); expect(await screen.findByRole('alert')).toHaveTextContent('原任务、执行、Agent 或实例不匹配'); expect(screen.queryByRole('list', { name: '工具调用' })).toBeNull()
 })
+it.each([
+  ['pi_exited', 'The Pi process exited while replying.', 'Agent 进程异常退出'],
+  ['user_stopped', 'Stopped by a person.', '已停止'],
+  ['some_new_code', 'The task turn failed.', '执行错误 · The task turn failed.'],
+  [null, '旧数据：任务回合执行失败', '执行错误 · 旧数据：任务回合执行失败'],
+])('the run summary error (%s) shows the code copy, the server text only as a fallback', async (errorCode, errorMessage, text) => {
+  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ run: { ...dto.run, status: errorCode === 'user_stopped' ? 'interrupted' : 'failed', errorCode, errorMessage } }))))
+  const user = userEvent.setup()
+  renderRecord()
+  await user.click(await screen.findByRole('button', { name: /^运行记录/ }))
+  expect(await screen.findByText(text)).toBeInTheDocument()
+})

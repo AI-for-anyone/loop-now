@@ -122,6 +122,10 @@ export const tasks = {
   loading: 'Loading task…',
   updating: 'Live',
   reconnecting: 'Connection lost, reconnecting…',
+  turnErrors: {
+    task_conflict: "The node or its conditions changed, so this message didn't run",
+    server_restarted: "The server restarted; this turn wasn't replayed",
+  } as Record<string, string>,
   messageError: 'Run error',
   user: 'Platform',
   assistant: 'Agent',

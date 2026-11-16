@@ -283,7 +283,7 @@ it('没在服务端列表里的 "/" 开头文字是普通消息：正忙时照�
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
-    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
+    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'The Agent is replying; interrupt it or queue the message', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
     const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))

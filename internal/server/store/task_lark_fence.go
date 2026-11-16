@@ -44,14 +44,14 @@ type TaskLarkSwitchCapture struct {
 // no nested transaction or late acquisition of an earlier action lock.
 func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in TaskLarkFenceReservation) (bool, error) {
 	if in.ActionID == uuid.Nil || in.TaskID != m.Record.View.Task.ID || in.ActorKey == "" || len(in.Members) != 2 {
-		return false, apperr.Invalid("members", "必须明确两个不同任务实例")
+		return false, apperr.Invalid("members", "Must name two different task instances.")
 	}
 	var existingTask uuid.UUID
 	var existingHash []byte
 	err := m.Tx.QueryRow(ctx, `SELECT task_id,request_hash FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID).Scan(&existingTask, &existingHash)
 	if err == nil {
 		if existingTask != in.TaskID || !bytes.Equal(existingHash, in.RequestHash[:]) {
-			return false, apperr.Conflict("task_conflict", "原动作与本次内容不一致")
+			return false, apperr.Conflict("task_conflict", "The original action differs from this request.")
 		}
 		return false, nil
 	}
@@ -60,7 +60,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 	}
 	n := m.Record.Current()
 	if m.Record.Ended() || m.Record.View.Task.Status != "blocked" || n == nil || n.ID != in.NodeRunID || n.Status != "blocked" || m.Record.View.Task.Version != in.ExpectedTaskVersion {
-		return false, apperr.Conflict("task_conflict", "原阻塞节点或任务版本已变化")
+		return false, apperr.Conflict("task_conflict", "The blocked node or the task version has changed.")
 	}
 	if in.Capture != nil {
 		var current int64
@@ -68,42 +68,42 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 			return false, err
 		}
 		if in.Capture.ExpectedBindingRevision != current {
-			return false, apperr.Conflict("task_conflict", "任务Lark覆盖版本已变化")
+			return false, apperr.Conflict("task_conflict", "The task Lark override revision has changed.")
 		}
 	}
 	members := slices.Clone(in.Members)
 	slices.SortFunc(members, func(a, b TaskLarkFenceMember) int { return bytes.Compare(a.RuntimeID[:], b.RuntimeID[:]) })
 	if members[0].RuntimeID == uuid.Nil || members[0].RuntimeID == members[1].RuntimeID || members[0].AgentID == members[1].AgentID {
-		return false, apperr.Invalid("members", "必须明确两个不同任务实例")
+		return false, apperr.Invalid("members", "Must name two different task instances.")
 	}
 	roles := map[string]bool{}
 	for _, member := range members {
 		if member.AgentID == uuid.Nil || (member.Role != "publisher" && member.Role != "followup") || roles[member.Role] {
-			return false, apperr.Invalid("members", "必须明确当前执行与结果跟进实例")
+			return false, apperr.Invalid("members", "Must name the instance running the current node (publisher) and the follow-up instance (followup).")
 		}
 		roles[member.Role] = true
 		if member.Role == "publisher" && (n.RuntimeID != member.RuntimeID || n.AgentID != member.AgentID) {
-			return false, apperr.Conflict("task_conflict", "当前执行实例不匹配")
+			return false, apperr.Conflict("task_conflict", "The instance running the current node does not match.")
 		}
 		var task, agent uuid.UUID
 		var retired bool
 		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,retired FROM task_instances WHERE id=$1`, member.RuntimeID).Scan(&task, &agent, &retired); err != nil {
-			return false, notFoundIfNoRows(err, "任务实例")
+			return false, notFoundIfNoRows(err, "Task instance")
 		}
 		if task != in.TaskID || agent != member.AgentID || retired {
-			return false, apperr.Conflict("task_conflict", "原任务实例不匹配或不可用")
+			return false, apperr.Conflict("task_conflict", "The original task instance does not match or is not available.")
 		}
 		if fenced, err := s.TaskLarkRuntimeFencedTx(ctx, m, member.RuntimeID); err != nil {
 			return false, err
 		} else if fenced {
-			return false, apperr.Conflict("task_conflict", "实例正在交接")
+			return false, apperr.Conflict("task_conflict", "The instance is in a handoff.")
 		}
 		var busy bool
 		if err := m.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns t WHERE runtime_id=$1 AND (status IN ('starting','running','aborting') OR (status='queued' AND NOT (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.timer_run_id=t.id AND z.state='sleeping')))))`, member.RuntimeID).Scan(&busy); err != nil {
 			return false, err
 		}
 		if busy {
-			return false, apperr.Conflict("task_conflict", "实例仍有执行或排队工作")
+			return false, apperr.Conflict("task_conflict", "The instance still has running or queued work.")
 		}
 	}
 	capture := in.Capture
@@ -166,7 +166,7 @@ func (s *Store) DeferTaskLarkInboxTx(ctx context.Context, m *TaskMutation, messa
 		return false, err
 	}
 	if !addressed {
-		return false, apperr.NotFound("消息")
+		return false, apperr.NotFound("Message")
 	}
 	_, err = m.Tx.Exec(ctx, `INSERT INTO task_lark_deferred_inbox(message_id,runtime_id,task_id,actor_key,action_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(message_id) DO NOTHING`, message, runtime, m.Record.View.Task.ID, actor, action)
 	return true, err

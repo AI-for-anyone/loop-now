@@ -88,7 +88,7 @@ func send(ctx context.Context, inv *cli.Invocation, method string, body any, pat
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, output.Errorf(output.CodeInternalError, "无法编码请求体：%v", err)
+			return nil, output.Errorf(output.CodeInternalError, "Could not encode the request body: %v", err)
 		}
 		r.Body, r.ContentType = b, "application/json"
 	}
@@ -116,15 +116,15 @@ func agentID(ctx context.Context, inv *cli.Invocation, ref string) (string, erro
 		} `json:"agents"`
 	}
 	if err := json.Unmarshal(resp.Data, &body); err != nil {
-		return "", output.Errorf(output.CodeUnexpectedResponse, "按地址查找 Agent 的响应无法解析")
+		return "", output.Errorf(output.CodeUnexpectedResponse, "Could not parse the response to the Agent lookup by address.")
 	}
 	switch len(body.Agents) {
 	case 0:
-		return "", output.Errorf(output.CodeNotFound, "找不到地址为 %q 的 Agent", ref)
+		return "", output.Errorf(output.CodeNotFound, "No Agent has the address %q.", ref)
 	case 1:
 		return body.Agents[0].ID, nil
 	default:
-		return "", output.Errorf(output.CodeUnexpectedResponse, "地址 %q 对应了 %d 个 Agent", ref, len(body.Agents))
+		return "", output.Errorf(output.CodeUnexpectedResponse, "The address %q matches %d Agents.", ref, len(body.Agents))
 	}
 }
 
@@ -134,7 +134,7 @@ func readInput(inv *cli.Invocation, flag string) ([]byte, error) {
 	if v == "-" {
 		b, err := io.ReadAll(inv.Sys.Stdin)
 		if err != nil {
-			return nil, output.Errorf(output.CodeInputUnreadable, "无法读取标准输入：%v", err)
+			return nil, output.Errorf(output.CodeInputUnreadable, "Could not read standard input: %v", err)
 		}
 		return b, nil
 	}
@@ -144,7 +144,7 @@ func readInput(inv *cli.Invocation, flag string) ([]byte, error) {
 func readFile(path string) ([]byte, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, output.Errorf(output.CodeInputUnreadable, "无法读取文件 %s：%v", path, cause(err))
+		return nil, output.Errorf(output.CodeInputUnreadable, "Could not read file %s: %v", path, cause(err))
 	}
 	return b, nil
 }
@@ -170,7 +170,7 @@ func text(inv *cli.Invocation) (string, error) {
 		s = string(b)
 	}
 	if strings.TrimSpace(s) == "" {
-		return "", output.Errorf(output.CodeInvalidArgument, "正文不能为空")
+		return "", output.Errorf(output.CodeInvalidArgument, "The text must not be empty.")
 	}
 	return s, nil
 }

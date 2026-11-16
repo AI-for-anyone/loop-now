@@ -22,7 +22,7 @@ func Configure(cmd *exec.Cmd) { configure(cmd) }
 // An error means the process could not be brought under group management, and the caller should end it.
 func Started(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
-		return errors.New("procgroup: 进程尚未启动")
+		return errors.New("procgroup: the process has not started")
 	}
 	return started(cmd)
 }
@@ -89,7 +89,7 @@ func Run(cmd *exec.Cmd) error {
 // process is started as a group.
 func Output(cmd *exec.Cmd) ([]byte, error) {
 	if cmd.Stdout != nil {
-		return nil, errors.New("procgroup: Stdout 已经设置")
+		return nil, errors.New("procgroup: Stdout already set")
 	}
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -111,7 +111,7 @@ func Output(cmd *exec.Cmd) ([]byte, error) {
 // CombinedOutput is like cmd.CombinedOutput, but the process is started as a group.
 func CombinedOutput(cmd *exec.Cmd) ([]byte, error) {
 	if cmd.Stdout != nil || cmd.Stderr != nil {
-		return nil, errors.New("procgroup: Stdout 或 Stderr 已经设置")
+		return nil, errors.New("procgroup: Stdout or Stderr already set")
 	}
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

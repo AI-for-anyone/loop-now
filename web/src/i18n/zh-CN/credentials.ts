@@ -1,3 +1,7 @@
+import type { components } from '@/api/schema.gen'
+
+type S = components['schemas']
+
 // Project accounts, CLI connections and authorization screens.
 export const credentials = {
   // Confirmation text when removing a CLI.
@@ -194,6 +198,8 @@ export const credentials = {
     sourcePrefix: "来源 ",
     formatPrefix: "· 格式 ",
     templateStatusPrefix: "· 模板状态 ",
+    // ProjectCredentialTemplate.status (set by the server when the account is read); unknown ones are shown as is.
+    templateStatuses: { available: "可用", template_removed: "模板已移除", incompatible: "格式与当前模板不兼容" } as Record<string, string>,
     fieldsPrefix: "· 字段：",
     fieldSeparator: "、",
     rename: "改名",
@@ -360,6 +366,14 @@ export const credentials = {
     conflict: '该账号已有验证操作，请读取该操作；未自动发起或取消其他测试。', invalidReceipt: '验证响应目标不一致，请查询原操作确认。',
     phase: { preparing_tool: '正在准备工具，尚未验证连接', resolving_credentials: '正在准备此版本凭证', probing: '正在执行固定在线检查', recording: '正在保存验证结果' },
     status: { pending: '等待验证', running: '验证中', succeeded: '本次验证通过', failed: '本次验证失败', cancelled: '本次验证已取消', expired: '本次验证已超时' },
+    // Why verification_unsupported was returned (VerificationUnsupportedDetails.reason).
+    unsupportedReasons: {
+      template_unavailable: '找不到这个 CLI 当前凭证格式的模板',
+      template_fingerprint_mismatch: '账号用的模板与平台内置的验证模板不一致',
+      tool_version_mismatch: '已安装的工具版本与验证模板不一致',
+      platform_unsupported: '这个 CLI 的固定版本没有当前系统可用的安装包',
+      adapter_unavailable: '平台还没有这个 CLI 的验证方式',
+    } satisfies Record<S['VerificationUnsupportedDetails']['reason'], string>,
     depth: { database_select1: '指定数据库连接与固定 SELECT 1 检查通过；不证明业务表、写入或 DDL 权限，TLS 仅按保存配置执行。', github_user: 'GitHub 接受此凭证的账号身份读取；不保证私有仓库、组织 SSO 或 PR 权限。', google_crm_read: '完成 Cloud Resource Manager 最小在线只读检查；不等同用户身份接口验证，也不保证部署或其他云资源权限。', lark_bot: '此版本应用的 bot 认证检查通过；不代表用户 OAuth、群、文档或消息发送权限。' },
     method: { static: '静态凭证', service_account: 'Google 服务账号', oauth: '浏览器授权账号' },
     errors: { tool_unsupported: '工具或模板不支持验证。', tool_prepare_failed: '工具准备失败，尚未证明账号连接状态。', credential_unavailable: '此版本凭证暂不可用。', configuration_invalid: '连接配置无效，请检查已保存配置。', tls_failed: 'TLS 校验失败，未降低安全设置。', authentication_failed: '本次认证失败。', database_unavailable: '指定数据库暂不可用。', permission_denied: '本次固定检查权限不足，不代表所有认证均无效。', provider_policy: '供应商策略拒绝本次固定检查。', rate_limited: '供应商限制请求频率，请稍后手动重试。', network_failed: '网络连接失败。', timeout: '本次验证超时，未自动重试。', requires_login: '此版本需要重新登录，未自动发起登录。', target_changed: '测试目标已变化，未改用其他版本。', server_restarted: '服务端重启，本次验证已结束，未自动重跑。', probe_failed: '固定检查未通过，无法进一步确定原因。', internal_error: '验证暂时失败，请查询或稍后手动重试。' },
@@ -396,6 +410,19 @@ export const credentials = {
   // Lark app and user identity.
   lark: {
     title: '飞书用户登录', bot: '应用身份 · bot', user: '用户身份 · user',
+    // Why a Lark user login failed (CLIAuthOperation.errorCode), shown under the failed status.
+    errors: { callback_unavailable: '授权暂不可用。', auth_cancelled: '本次授权已取消。', auth_timeout: '本次授权超时。', network_error: '授权网络请求失败。', oauth_failed: '飞书授权未完成。', invalid_response: '未取得符合契约的有效授权结果。', account_mismatch: '本次授权响应身份信息不一致，原账号保持。', requires_login: '此版本需要重新登录。', helper_unavailable: '飞书授权组件暂不可用。', version_conflict: '账号已在别处更新，本次未覆盖；请核对最新账号。', server_restarted: '服务已重启，本次授权结束，未自动重新发起。' } satisfies Record<S['CLIAuthErrorCode'], string>,
+    // Why a frozen task member can't take part in the switch (TaskLarkSwitchParticipant.unavailableReason); unknown ones are shown as is.
+    participantReasons: {
+      snapshot_unavailable: '原冻结快照无法核对',
+      lark_not_allowed: '原快照未允许 Lark',
+      binding_unavailable: '原 Lark 绑定已变化，无法核对',
+      runtime_unavailable: '任务已结束或实例已退役',
+      handoff_in_progress: '正在交接原有空闲进程',
+      session_unavailable: '实例的会话不可用',
+    } as Record<string, string>,
+    // TaskLarkSwitchReceipt.errorCode of a failed switch; unknown ones fall back to the server's errorMessage.
+    receiptErrors: { task_conflict: '凭证交接没有发布新绑定，原任务成果保留' } as Record<string, string>,
     application: '授权使用的项目应用', chooseApplication: '请明确选择已有应用账号',
     noApplication: '没有兼容的项目应用配置。请先通过原应用账号入口录入，再明确选择；不会自动注册应用。',
     prepareApplication: '准备应用账号', selected: (name: string, revision: number) => `${name} · 版本修订 ${revision}`,

@@ -47,7 +47,7 @@ func validText(s string) bool {
 	return utf8.ValidString(s) && strings.IndexFunc(s, unicode.IsControl) < 0
 }
 func Validate(cli string, f Fields) error {
-	fail := errors.New("数据库连接字段或TLS配置无效")
+	fail := errors.New("invalid database connection fields or TLS configuration")
 	if cli != "psql" && cli != "mysql" {
 		return fail
 	}
@@ -115,13 +115,13 @@ func Validate(cli string, f Fields) error {
 func ParseFields(cli string, values map[string]string) (Fields, error) {
 	b, e := json.Marshal(values)
 	if e != nil {
-		return Fields{}, errors.New("数据库字段无效")
+		return Fields{}, errors.New("invalid database fields")
 	}
 	var f Fields
 	d := json.NewDecoder(strings.NewReader(string(b)))
 	d.DisallowUnknownFields()
 	if d.Decode(&f) != nil {
-		return Fields{}, errors.New("数据库字段无效")
+		return Fields{}, errors.New("invalid database fields")
 	}
 	if f.Port == "" {
 		if cli == "psql" {

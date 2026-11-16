@@ -49,10 +49,10 @@ type DirectoryInput struct {
 // saving.
 func Validate(in []DirectoryInput) ([]store.LocalDirectoryEntry, error) {
 	if in == nil {
-		return nil, apperr.Invalid("directories", "必须提供清单（可以为空数组）")
+		return nil, apperr.Invalid("directories", "A list is required (it may be an empty array).")
 	}
 	if len(in) > MaxDirectories {
-		return nil, apperr.Invalid("directories", fmt.Sprintf("最多 %d 项", MaxDirectories))
+		return nil, apperr.Invalid("directories", fmt.Sprintf("Must have at most %d items.", MaxDirectories))
 	}
 	var errs []apperr.FieldError
 	out := make([]store.LocalDirectoryEntry, 0, len(in))
@@ -62,7 +62,7 @@ func Validate(in []DirectoryInput) ([]store.LocalDirectoryEntry, error) {
 		if msg := checkPath(d.Path); msg != "" {
 			errs = append(errs, apperr.Field(field+".path", msg))
 		} else if j, dup := seen[pathKey(d.Path)]; dup {
-			errs = append(errs, apperr.Field(field+".path", fmt.Sprintf("与第 %d 项重复", j+1)))
+			errs = append(errs, apperr.Field(field+".path", fmt.Sprintf("Duplicates item %d.", j+1)))
 		} else {
 			seen[pathKey(d.Path)] = i
 		}
@@ -84,21 +84,21 @@ func Validate(in []DirectoryInput) ([]store.LocalDirectoryEntry, error) {
 func checkPath(p string) string {
 	switch {
 	case p == "":
-		return "不能为空"
+		return "Must not be empty."
 	case len(p) > MaxPathBytes:
-		return fmt.Sprintf("最长 %d 字节", MaxPathBytes)
+		return fmt.Sprintf("Must be at most %d bytes.", MaxPathBytes)
 	case !utf8.ValidString(p):
-		return "不是合法的 UTF-8 文本"
+		return "Must be valid UTF-8 text."
 	case strings.ContainsFunc(p, unicode.IsControl):
-		return "不能含控制字符（换行、制表符等）"
+		return "Must not contain control characters (such as line breaks or tabs)."
 	case !filepath.IsAbs(p):
 		if runtime.GOOS == "windows" {
-			return `必须是绝对路径，带盘符（如 C:\Users\me\code）或 UNC（\\server\share\dir）`
+			return `Must be an absolute path with a drive letter (such as C:\Users\me\code) or a UNC path (such as \\server\share\dir).`
 		}
-		return "必须是绝对路径（以 / 开头）"
+		return "Must be an absolute path (starting with /)."
 	}
 	if clean := filepath.Clean(p); clean != p {
-		return "不是规范写法，应写作 " + clean
+		return "The path is not in canonical form. Write it as " + clean
 	}
 	return ""
 }
@@ -106,11 +106,11 @@ func checkPath(p string) string {
 func checkNote(note string) string {
 	switch {
 	case !utf8.ValidString(note):
-		return "不是合法的 UTF-8 文本"
+		return "Must be valid UTF-8 text."
 	case utf8.RuneCountInString(note) > MaxNoteRunes:
-		return fmt.Sprintf("最长 %d 个字符", MaxNoteRunes)
+		return fmt.Sprintf("Must be at most %d characters.", MaxNoteRunes)
 	case strings.ContainsFunc(note, unicode.IsControl):
-		return "不能含控制字符（换行、制表符等）"
+		return "Must not contain control characters (such as line breaks or tabs)."
 	}
 	return ""
 }

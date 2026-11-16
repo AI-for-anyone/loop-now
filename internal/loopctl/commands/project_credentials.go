@@ -103,10 +103,10 @@ func projectCredentialCommand(purpose, action string) cli.RunFunc {
 			locator = "cli"
 		}
 		if inv.Has(locator) && !credentialNamePattern.MatchString(inv.String(locator)) {
-			return nil, output.Errorf(output.CodeInvalidArgument, "提供方或 CLI 名称格式不合法")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The provider or CLI name may contain only lowercase letters, digits, . _ and -.")
 		}
 		if inv.Has("name") && strings.TrimSpace(inv.String("name")) == "" {
-			return nil, output.Errorf(output.CodeInvalidArgument, "账号名称不能为空白")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The account name (--name) must not be blank.")
 		}
 		var secret json.RawMessage
 		if action == "create" || action == "replace" {
@@ -185,12 +185,12 @@ func projectOAuthCommand(action string) cli.RunFunc {
 			return nil, credentialUUIDError("account-id")
 		}
 		if inv.Has("name") && strings.TrimSpace(inv.String("name")) == "" {
-			return nil, output.Errorf(output.CodeInvalidArgument, "账号名称不能为空白")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The account name (--name) must not be blank.")
 		}
 		if action == "login" {
 			yes := inv.Bool("yes")
 			if inv.Has("account-id") && !yes {
-				return nil, output.Errorf(output.CodeConfirmationRequired, "重登覆盖账号需 --yes 确认；失败保留原版本")
+				return nil, output.Errorf(output.CodeConfirmationRequired, "Logging in again to replace an existing account needs confirmation with --yes. If the login fails, the existing version is kept.")
 			}
 		}
 		id, err := projectID(ctx, inv, inv.Args[0])
@@ -253,7 +253,7 @@ func credentialSelectionCommand(action string) cli.RunFunc {
 			locator, purpose = "cli", "cli"
 		}
 		if action != "get" && !credentialNamePattern.MatchString(inv.String(locator)) {
-			return nil, output.Errorf(output.CodeInvalidArgument, "提供方或 CLI 名称格式不合法")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The provider or CLI name may contain only lowercase letters, digits, . _ and -.")
 		}
 		id, err := agentID(ctx, inv, inv.Args[0])
 		if err != nil {
@@ -270,7 +270,7 @@ func credentialSelectionCommand(action string) cli.RunFunc {
 	}
 }
 func credentialUUIDError(field string) error {
-	return output.Errorf(output.CodeInvalidArgument, "%s 必须为稳定 UUID，不能按显示名称操作", field)
+	return output.Errorf(output.CodeInvalidArgument, "%s must be a stable UUID; display names cannot be used.", field)
 }
 
 // projectCredentialFile strictly validates the single credential object; decoder errors, unknown keys and input
@@ -281,7 +281,7 @@ func projectCredentialFile(inv *cli.Invocation, purpose string) (json.RawMessage
 		return nil, err
 	}
 	fail := func() (json.RawMessage, error) {
-		return nil, output.Errorf(output.CodeInvalidArgument, "凭证文件只接受对应用途的 credential 对象；不允许 metadata、版本条件、重复字段或整份请求，秘密值必须为字符串")
+		return nil, output.Errorf(output.CodeInvalidArgument, "The credential file accepts only the credential object for this purpose, without metadata, version conditions, duplicate fields or a whole request; secret values must be strings.")
 	}
 	if !utf8.Valid(b) || !uniqueCredentialJSON(b) {
 		return fail()
@@ -360,7 +360,7 @@ func credentialWriteResult(data any, err error) (any, error) {
 	var e *output.Error
 	if errors.As(err, &e) && (e.Code == output.CodeConnectionFailed || e.Code == output.CodeTimeout || e.Code == output.CodeUnexpectedResponse) {
 		copy := *e
-		copy.Message += "；写入结果未知，未自动重发。请用账号 get/list 或 login-list/login-status 核对；显示名称可重名，不能据此认定提交成功"
+		copy.Message += " The write result is unknown, and the request was not resent automatically. Display names can repeat, so a matching name does not prove that the write succeeded. Check with the account get/list or login-list/login-status commands."
 		return nil, &copy
 	}
 	return data, err

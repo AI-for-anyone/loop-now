@@ -43,12 +43,12 @@ func loginShellPath(ctx context.Context) (string, string, error) {
 	cmd.WaitDelay = time.Second
 	out, err := procgroup.Output(cmd)
 	if ctx.Err() != nil {
-		return "", shell, errors.New("读取登录 shell 的 PATH 超时")
+		return "", shell, errors.New("timed out reading PATH from the login shell")
 	}
 	raw, ok := between(string(out), pathBegin+"\n", "\n"+pathEnd)
 	if !ok {
 		if err == nil {
-			err = errors.New("登录 shell 没有输出 PATH")
+			err = errors.New("the login shell did not print PATH")
 		}
 		return "", shell, err
 	}

@@ -24,7 +24,7 @@ var pluginIDPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$`)
 func pluginID(r *http.Request) (string, error) {
 	id := r.PathValue("pluginId")
 	if !pluginIDPattern.MatchString(id) {
-		return "", apperr.NotFound("插件")
+		return "", apperr.NotFound("Plugin")
 	}
 	return id, nil
 }
@@ -89,7 +89,7 @@ func readmeLocale(r *http.Request) (string, error) {
 	if l := q.Get("locale"); pluginmanifest.ValidLanguageTag(l) {
 		return l, nil
 	}
-	return "", apperr.Invalid("locale", "须是语言标签，如 zh-CN、en-US")
+	return "", apperr.Invalid("locale", "Must be a language tag, such as zh-CN or en-US.")
 }
 
 func (s *Server) getPluginReadme(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +162,7 @@ func (s *Server) uninstallPlugin(w http.ResponseWriter, r *http.Request) {
 	deleteData := false
 	if v := r.URL.Query().Get("deleteData"); v != "" {
 		if deleteData, err = strconv.ParseBool(v); err != nil {
-			s.fail(w, r, apperr.Invalid("deleteData", "只能是 true 或 false"))
+			s.fail(w, r, apperr.Invalid("deleteData", "Must be true or false."))
 			return
 		}
 	}
@@ -214,7 +214,7 @@ func queryLimit(r *http.Request, def, max int) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 1 || n > max {
-		return 0, apperr.Invalid("limit", "必须是 1 到 "+strconv.Itoa(max)+" 之间的整数")
+		return 0, apperr.Invalid("limit", "Must be an integer between 1 and "+strconv.Itoa(max)+".")
 	}
 	return n, nil
 }
@@ -233,7 +233,7 @@ func (s *Server) listPluginLogs(w http.ResponseWriter, r *http.Request) {
 	var before int64
 	if v := r.URL.Query().Get("before"); v != "" {
 		if before, err = strconv.ParseInt(v, 10, 64); err != nil || before < 1 {
-			s.fail(w, r, apperr.Invalid("before", "必须是正整数"))
+			s.fail(w, r, apperr.Invalid("before", "Must be a positive integer."))
 			return
 		}
 	}
@@ -286,13 +286,13 @@ func (s *Server) listPluginDeliveries(w http.ResponseWriter, r *http.Request) {
 	switch q.Status {
 	case "", "pending", "delivered", "failed":
 	default:
-		s.fail(w, r, apperr.Invalid("status", "只能是 pending、delivered 或 failed"))
+		s.fail(w, r, apperr.Invalid("status", "Must be pending, delivered or failed."))
 		return
 	}
 	if v := r.URL.Query().Get("projectId"); v != "" {
 		pid, err := uuid.Parse(v)
 		if err != nil {
-			s.fail(w, r, apperr.Invalid("projectId", "必须是 UUID"))
+			s.fail(w, r, apperr.Invalid("projectId", "Must be a valid UUID."))
 			return
 		}
 		q.Project = &pid
@@ -332,7 +332,7 @@ func (s *Server) listPluginState(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("projectId"); v != "" {
 		pid, err := uuid.Parse(v)
 		if err != nil {
-			s.fail(w, r, apperr.Invalid("projectId", "必须是 UUID"))
+			s.fail(w, r, apperr.Invalid("projectId", "Must be a valid UUID."))
 			return
 		}
 		project = &pid
@@ -623,18 +623,18 @@ func (s *Server) pluginIngress(via string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("pluginId")
 		if p, ok := auth.From(r.Context()); ok && p.Kind == auth.KindPlugin && p.Plugin != id {
-			s.fail(w, r, apperr.Forbidden("插件令牌只能调用自己的 HTTP 入口"))
+			s.fail(w, r, apperr.Forbidden("A plugin token can only call its own plugin's HTTP entry point."))
 			return
 		}
 		if s.Plugins == nil {
-			s.fail(w, r, apperr.NotFound("插件 HTTP 入口"))
+			s.fail(w, r, apperr.NotFound("Plugin HTTP entry point"))
 			return
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, plugins.MaxHTTPBody))
 		if err != nil {
 			var tooLarge *http.MaxBytesError
 			if errors.As(err, &tooLarge) {
-				err = apperr.TooLarge("请求正文超过 1 MiB")
+				err = apperr.TooLarge("The request body exceeds 1 MiB.")
 			}
 			s.fail(w, r, err)
 			return

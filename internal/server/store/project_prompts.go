@@ -16,21 +16,21 @@ type ProjectPrompt struct {
 func (s *Store) GetProjectPrompt(ctx context.Context, id uuid.UUID) (ProjectPrompt, error) {
 	var out ProjectPrompt
 	err := s.Pool.QueryRow(ctx, `SELECT prompt,prompt_version FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&out.Prompt, &out.PromptVersion)
-	return out, notFoundIfNoRows(err, "项目")
+	return out, notFoundIfNoRows(err, "Project")
 }
 func (s *Store) PutProjectPrompt(ctx context.Context, id uuid.UUID, prompt string, expected int64) (ProjectPrompt, error) {
 	if expected < 1 {
-		return ProjectPrompt{}, apperr.Invalid("expectedPromptVersion", "须提供正整数Prompt编辑版本")
+		return ProjectPrompt{}, apperr.Invalid("expectedPromptVersion", "Must be a positive integer.")
 	}
 	var out ProjectPrompt
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var current ProjectPrompt
 		err := tx.QueryRow(ctx, `SELECT prompt,prompt_version FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&current.Prompt, &current.PromptVersion)
 		if err != nil {
-			return notFoundIfNoRows(err, "项目")
+			return notFoundIfNoRows(err, "Project")
 		}
 		if current.PromptVersion != expected {
-			return apperr.PreconditionFailed("项目Prompt已改变，请读取最新文本并核对")
+			return apperr.PreconditionFailed("The project prompt has changed. Read the latest text and review it.")
 		}
 		if current.Prompt == prompt {
 			out = current

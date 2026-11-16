@@ -43,7 +43,7 @@ type AgentSkill struct {
 }
 
 func nameConflict(name string) error {
-	return apperr.Conflict(apperr.CodeNameConflict, "已有名为 "+name+" 的 Skill")
+	return apperr.Conflict(apperr.CodeNameConflict, "A Skill named \""+name+"\" already exists.")
 }
 
 func insertFiles(ctx context.Context, tx *db.Tx, table, idCol string, id uuid.UUID, files []content.File) error {
@@ -96,7 +96,7 @@ func (s *Store) ListSkillTemplates(ctx context.Context) ([]SkillTemplate, error)
 func (s *Store) GetSkillTemplate(ctx context.Context, id uuid.UUID) (SkillTemplate, error) {
 	t, err := scanTemplate(s.Pool.QueryRow(ctx, `SELECT `+templateColumns+` FROM skill_templates t WHERE t.id = $1`, id))
 	if err != nil {
-		return t, notFoundIfNoRows(err, "Skill 模板")
+		return t, notFoundIfNoRows(err, "Skill template")
 	}
 	t.Files, err = listSkillFiles(ctx, s.Pool, "skill_template_files", "template_id", id)
 	return t, err
@@ -161,7 +161,7 @@ func updateTemplateMeta(ctx context.Context, tx *db.Tx, id uuid.UUID, meta conte
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return apperr.NotFound("Skill 模板")
+		return apperr.NotFound("Skill template")
 	}
 	return nil
 }
@@ -184,7 +184,7 @@ func (s *Store) DeleteSkillTemplate(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return apperr.NotFound("Skill 模板")
+		return apperr.NotFound("Skill template")
 	}
 	return nil
 }
@@ -236,7 +236,7 @@ func agentSkillNameConflict(ctx context.Context, tx *db.Tx, agentID uuid.UUID, n
 		return err
 	}
 	if exists {
-		return apperr.Conflict(apperr.CodeNameConflict, "Agent 上已有名为 "+name+" 的 Skill，请先移除")
+		return apperr.Conflict(apperr.CodeNameConflict, "The Agent already has a Skill named \""+name+"\". Remove it first.")
 	}
 	return nil
 }
@@ -250,7 +250,7 @@ func (s *Store) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UUID
 		}
 		var name, desc string
 		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1`, templateID).Scan(&name, &desc); err != nil {
-			return notFoundIfNoRows(err, "Skill 模板")
+			return notFoundIfNoRows(err, "Skill template")
 		}
 		if err := agentSkillNameConflict(ctx, tx, agentID, name, uuid.Nil); err != nil {
 			return err
@@ -313,12 +313,12 @@ func (s *Store) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID
 			return err
 		}
 		if k.SourceTemplateID == nil {
-			return apperr.Conflict(apperr.CodeTemplateDeleted, "来源模板已删除，不能重新复制")
+			return apperr.Conflict(apperr.CodeTemplateDeleted, "The source template was deleted and cannot be copied again.")
 		}
 		var name, desc string
 		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1`, *k.SourceTemplateID).Scan(&name, &desc); err != nil {
 			if err == db.ErrNoRows {
-				return apperr.Conflict(apperr.CodeTemplateDeleted, "来源模板已删除，不能重新复制")
+				return apperr.Conflict(apperr.CodeTemplateDeleted, "The source template was deleted and cannot be copied again.")
 			}
 			return err
 		}

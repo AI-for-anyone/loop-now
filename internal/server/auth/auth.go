@@ -32,7 +32,7 @@ const (
 // ConsoleAddress and ConsoleName are the address and display name of the console operator.
 const (
 	ConsoleAddress = "@console"
-	ConsoleName    = "控制台"
+	ConsoleName    = "Console"
 )
 
 // Principal is the identity of one request.

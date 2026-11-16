@@ -87,10 +87,10 @@ describe('上传 Skill', () => {
 
   it('缺少 SKILL.md 时显示原因，没有新增模板', async () => {
     const { user, router } = setup('/skills', [
-      http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', '缺少 SKILL.md'), { status: 422 })),
+      http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'SKILL.md is missing'), { status: 422 })),
     ])
     await user.upload(await screen.findByLabelText('上传目录'), [withPath('echo hi', 'x/run.sh')])
-    expect(await screen.findByText(/缺少 SKILL.md/)).toBeInTheDocument()
+    expect(await screen.findByText(/SKILL.md is missing/)).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/skills')
   })
 
@@ -120,14 +120,14 @@ describe('在线新建 Skill', () => {
 
   it('缺少描述时显示原因并保留内容', async () => {
     const { user } = setup('/skills/new', [
-      http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'frontmatter 缺少 description'), { status: 422 })),
+      http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'The frontmatter is missing description'), { status: 422 })),
     ])
     const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
     const editor = within(sheet).getByLabelText('SKILL.md')
     await user.clear(editor)
     await user.type(editor, '---{Enter}name: x{Enter}---')
     await user.click(within(sheet).getByRole('button', { name: '创建' }))
-    expect(await within(sheet).findByText(/缺少 description/)).toBeInTheDocument()
+    expect(await within(sheet).findByText(/missing description/)).toBeInTheDocument()
     expect(editor).toHaveValue('---\nname: x\n---')
   })
 })

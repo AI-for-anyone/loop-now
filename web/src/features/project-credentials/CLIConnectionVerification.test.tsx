@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { verificationKeys } from '@/api/cli-verification'
-import { apiUrl, errorBody } from '@/test/api'
+import { apiUrl, errorBody, unknownEndpointBody } from '@/test/api'
 import { verificationAccount, verificationOperation, verificationPassed } from '@/test/cli-verification'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
@@ -60,13 +60,13 @@ describe('五工具手动验证正式HTTP fixture', () => {
   })
   it('412 UUID版本冲突不改投新版本、不重POST', async () => {
     const user = userEvent.setup(), env = setup()
-    server.use(http.post(apiUrl(base), () => HttpResponse.json({ error: { code: 'precondition_failed', message: '版本已变', details: { projectId: account.projectId, accountId: account.id, expectedVersionId: account.currentVersionId, currentVersionId: '20000000-0000-7000-8000-000000000002' } } }, { status: 412 })))
+    server.use(http.post(apiUrl(base), () => HttpResponse.json({ error: { code: 'precondition_failed', message: 'The account version has changed', details: { projectId: account.projectId, accountId: account.id, expectedVersionId: account.currentVersionId, currentVersionId: '20000000-0000-7000-8000-000000000002' } } }, { status: 412 })))
     renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
     await screen.findByText(t.credentials.verification.changed); expect(screen.getByRole('button', { name: t.credentials.verification.test })).toBeDisabled(); expect(env.posts).toHaveLength(0)
   })
   it('409活动冲突按details读取原operation，不取消或重发', async () => {
     const user = userEvent.setup(), env = setup(); let posts = 0
-    server.use(http.post(apiUrl(base), () => { posts++; env.set(verificationOperation()); return HttpResponse.json({ error: { code: 'verification_in_progress', message: '已有操作', details: { projectId: account.projectId, accountId: account.id, operationId: verificationOperation().id, versionId: account.currentVersionId } } }, { status: 409 }) }))
+    server.use(http.post(apiUrl(base), () => { posts++; env.set(verificationOperation()); return HttpResponse.json({ error: { code: 'verification_in_progress', message: 'A verification is already running', details: { projectId: account.projectId, accountId: account.id, operationId: verificationOperation().id, versionId: account.currentVersionId } } }, { status: 409 }) }))
     renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
     await screen.findByText(t.credentials.verification.phase.preparing_tool); expect(env.reads).toContain(verificationOperation().id); expect(posts).toBe(1)
   })
@@ -76,8 +76,11 @@ describe('五工具手动验证正式HTTP fixture', () => {
     await screen.findByRole('alert'); expect(screen.queryByText(t.credentials.verification.empty)).toBeNull(); expect(screen.queryByText(t.credentials.verification.unsupported)).toBeNull()
     expect(screen.getByRole('button', { name: t.credentials.verification.test })).toBeDisabled()
   })
-  it('仅旧路由固定接口不存在404提示不支持', async () => {
-    setup(); server.use(http.get(apiUrl(base), () => HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 })))
+  it.each([
+    ['the unknown_endpoint signal', unknownEndpointBody()],
+    ["an older server's fixed text", errorBody('not_found', '接口不存在')],
+  ])('仅旧路由固定接口不存在404提示不支持 (%s)', async (_, body) => {
+    setup(); server.use(http.get(apiUrl(base), () => HttpResponse.json(body, { status: 404 })))
     renderWithQuery(<CLIConnectionVerification account={account} />)
     await screen.findByText(t.credentials.verification.unsupported); expect(screen.queryByText(t.credentials.verification.empty)).toBeNull()
   })
@@ -146,4 +149,23 @@ describe('五工具手动验证正式HTTP fixture', () => {
     expect(reads).toBeGreaterThan(1); expect(env.posts).toHaveLength(1)
   })
 
+  it('verification_unsupported names its reason in the UI language', async () => {
+    const user = userEvent.setup(); setup()
+    server.use(http.post(apiUrl(base), () => HttpResponse.json(errorBody('verification_unsupported', 'Template does not support verification', { details: { cli: 'mysql', templateSource: 'builtin', reason: 'template_fingerprint_mismatch' } }), { status: 422 })))
+    renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('此工具或模板暂不支持连接验证：账号用的模板与平台内置的验证模板不一致')
+    expect(screen.queryByText(/Template does not support verification/)).toBeNull()
+  })
+  it('the account template status is named, not shown as a code', async () => {
+    setup()
+    const withTemplate = { ...account, template: { source: 'builtin', credentialFormat: '1', fieldNames: ['password'], warnings: [], status: 'incompatible' } }
+    server.use(
+      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ providers: [] })),
+      http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [{ name: 'mysql', version: '8.4.9', fields: [{ name: 'password', label: '密码', type: 'secret', required: true }], injection: 'files', install: { status: 'installed' }, warnings: [] }] })),
+      http.get(apiUrl(`/projects/${account.projectId}/credential-accounts`), () => HttpResponse.json({ projectId: account.projectId, credentialsRevision: 1, accounts: [withTemplate] })),
+    )
+    renderWithQuery(<DirtyContext.Provider value={() => {}}><ProjectAccounts projectId={account.projectId} purpose="cli" /></DirtyContext.Provider>)
+    expect(await screen.findByText(/模板状态 格式与当前模板不兼容/)).toBeInTheDocument()
+    expect(screen.queryByText(/模板状态 incompatible/)).toBeNull()
+  })
 })

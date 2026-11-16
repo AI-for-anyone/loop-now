@@ -15,7 +15,7 @@ import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 
 // Questions a task instance sends you are listed in the node chat, where you click an option or reply in
 // the node input; whether a question can be answered follows the question state that the task provides.
-function setup(canAnswer = true) {
+function setup(canAnswer = true, notExecuted: Schemas['TaskNodeInboxNotExecuted'] | null = null) {
   const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
   const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `测试项目/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }
   const question = makeInboxMessage({ from, to: consoleParty, text: '验收要 12 个用例全过吗？', whenBusy: null, task: { taskId, nodeRunId: nodeId, runtimeId: node.runtimeId } })
@@ -29,7 +29,7 @@ function setup(canAnswer = true) {
     http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: params.node, agentId: node.agentId, runtimeId: node.runtimeId, canSend: true, reason: null, handlingHint: null })),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), () => HttpResponse.json({ messages: [], nextCursor: null })),
-    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), ({ params }) => HttpResponse.json({ items: params.node === nodeId ? [{ taskId, nodeRunId: nodeId, agentId: node.agentId, runtimeId: node.runtimeId, message: inbox.messages.find((m) => m.id === question.id)!, runLinks: [], notExecuted: null }] : [], nextCursor: null })),
+    http.get(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), ({ params }) => HttpResponse.json({ items: params.node === nodeId ? [{ taskId, nodeRunId: nodeId, agentId: node.agentId, runtimeId: node.runtimeId, message: inbox.messages.find((m) => m.id === question.id)!, runLinks: [], notExecuted }] : [], nextCursor: null })),
     http.post(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), () => { nodePosts++; return HttpResponse.json({}, { status: 500 }) }),
   )
   const rendered = renderRoutes(routes, `${tasksPath(defaultProject.name)}/${taskId}?step=check&record=${nodeId}`)
@@ -81,4 +81,14 @@ it('“回复这个问题”让节点输入框进入回复模式：文字作为�
   await waitFor(() => expect(inbox.sent).toEqual([{ text: '允许一个，写进结论', whenBusy: 'queue', replyTo: question.id }]))
   await waitFor(() => expect(screen.queryByText('回复 任务检查员 的问题')).toBeNull())
   expect(nodePosts()).toBe(0)
+})
+
+it.each([
+  ['task_ended', '原节点消息未执行 · 任务已经结束'],
+  ['cancelled', '原节点消息未执行 · 已取消'],
+  ['some_new_reason', '原节点消息未执行 · some_new_reason'],
+])('a message that did not run says why in Chinese (%s); an unknown reason code is shown as is', async (reason, text) => {
+  const { question } = setup(true, { reason, at: '2026-10-18T00:02:00Z' })
+  const message = await waitFor(() => item(question))
+  expect(within(message).getByText(text)).toHaveAttribute('role', 'status')
 })

@@ -25,24 +25,24 @@ var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 // without empty, . or .. segments, and not under the platform's own .loop-now.
 func CheckProviderState(field string, decl map[string]ProviderState) error {
 	if len(decl) > 16 {
-		return invalid(field + " 最多声明 16 个提供方")
+		return invalid(field + " can declare at most 16 providers.")
 	}
 	for provider, s := range decl {
 		at := field + "." + provider
 		if !providerIDPattern.MatchString(provider) {
-			return invalid(at + "：提供方 id 不合法")
+			return invalid(at + ": The provider id is invalid.")
 		}
 		if len(s.Paths) == 0 || len(s.Paths) > MaxProviderStatePaths {
-			return invalid(fmt.Sprintf("%s.paths 须有 1 到 %d 个路径", at, MaxProviderStatePaths))
+			return invalid(fmt.Sprintf("%s.paths must have 1 to %d paths.", at, MaxProviderStatePaths))
 		}
 		seen := map[string]bool{}
 		for _, p := range s.Paths {
 			if err := checkStatePath(p); err != nil {
-				return invalid(at + ".paths 中的 " + strconv.Quote(p) + " " + err.Error())
+				return invalid(at + ".paths: " + strconv.Quote(p) + " " + err.Error())
 			}
 			for q := range seen {
 				if q == p || strings.HasPrefix(p, q+"/") || strings.HasPrefix(q, p+"/") {
-					return invalid(at + ".paths 中的 " + strconv.Quote(p) + " 与 " + strconv.Quote(q) + " 重复或互相包含")
+					return invalid(at + ".paths: " + strconv.Quote(p) + " and " + strconv.Quote(q) + " are the same or one contains the other.")
 				}
 			}
 			seen[p] = true
@@ -53,15 +53,15 @@ func CheckProviderState(field string, decl map[string]ProviderState) error {
 
 func checkStatePath(p string) error {
 	if p == "" || len(p) > 200 || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\:") || strings.IndexFunc(p, unicode.IsControl) >= 0 {
-		return fmt.Errorf("须是 HOME 下的相对路径（用 / 分隔，不超过 200 字节）")
+		return fmt.Errorf("must be a path relative to HOME (separated by /, at most 200 bytes).")
 	}
 	for _, seg := range strings.Split(p, "/") {
 		if seg == "" || seg == "." || seg == ".." {
-			return fmt.Errorf("不能有空段、. 或 ..")
+			return fmt.Errorf("must not contain empty, . or .. segments.")
 		}
 	}
 	if p == ".loop-now" || strings.HasPrefix(p, ".loop-now/") {
-		return fmt.Errorf("落在平台自己的 .loop-now 目录下")
+		return fmt.Errorf("must not be inside the platform's own .loop-now directory.")
 	}
 	return nil
 }

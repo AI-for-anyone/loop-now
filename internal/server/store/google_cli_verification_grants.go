@@ -15,7 +15,7 @@ import (
 func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.VerificationGrantBinding, write, finish bool) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
 	if !b.Valid() {
-		return out, errors.New("管理验证授权绑定无效")
+		return out, errors.New("invalid management verification grant binding")
 	}
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return out, e
@@ -23,24 +23,24 @@ func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.V
 	var current *uuid.UUID
 	var deleted *time.Time
 	if e := tx.QueryRow(ctx, `SELECT current_cli_version_id,deleted_at FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND purpose='cli' AND cli_name='gcloud'`, b.AccountID, b.ProjectID).Scan(&current, &deleted); e != nil {
-		return out, notFoundIfNoRows(e, "管理验证账号")
+		return out, notFoundIfNoRows(e, "Management verification account")
 	}
 	var version uuid.UUID
 	var live *uuid.UUID
 	var status string
 	var unexpired bool
 	if e := tx.QueryRow(ctx, `SELECT version_id,live_version_id,status,expires_at>clock_timestamp() FROM cli_credential_verifications WHERE id=$1 AND project_id=$2 AND account_id=$3 AND cli_name='gcloud' AND auth_method='oauth'`, b.OperationID, b.ProjectID, b.AccountID).Scan(&version, &live, &status, &unexpired); e != nil {
-		return out, notFoundIfNoRows(e, "管理验证操作")
+		return out, notFoundIfNoRows(e, "Management verification operation")
 	}
 	if version != b.VersionID {
-		return out, errors.New("管理验证版本不匹配")
+		return out, errors.New("management verification version mismatch")
 	}
 	if !finish && (deleted != nil || current == nil || *current != version || live == nil || *live != version || (status != "pending" && status != "running") || !unexpired) {
-		return out, errors.New("管理验证操作已失效")
+		return out, errors.New("the management verification operation is no longer valid")
 	}
 	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id WHERE g.version_id=$1 AND g.account_id=$2 AND v.auth_method='oauth' `, b.VersionID, b.AccountID).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
 	if e != nil {
-		return out, notFoundIfNoRows(e, "管理验证授权")
+		return out, notFoundIfNoRows(e, "Management verification grant")
 	}
 	// The grant lock may have waited past the operation deadline. Operation
 	// identity is protected by its SHARE lock, but wall-clock validity is not.
@@ -52,7 +52,7 @@ func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.V
 			return out, e
 		}
 		if !unexpired {
-			return out, errors.New("管理验证操作已失效")
+			return out, errors.New("the management verification operation is no longer valid")
 		}
 	}
 	return out, nil
@@ -96,14 +96,14 @@ func (s *Store) CommitGoogleCLIVerificationRefresh(ctx context.Context, b clicre
 			return e
 		}
 		if r.Generation != generation || r.RefreshState != "refreshing" || r.LeaseID == nil || *r.LeaseID != lease || r.LeaseVerificationID == nil || *r.LeaseVerificationID != b.OperationID || r.LeaseAgentID != nil {
-			return errors.New("管理验证刷新租约不匹配")
+			return errors.New("management verification refresh lease mismatch")
 		}
 		var live bool
 		if e = tx.QueryRow(ctx, `SELECT lease_until>clock_timestamp() FROM google_cli_grants WHERE version_id=$1`, b.VersionID).Scan(&live); e != nil || !live {
-			return errors.New("管理验证刷新租约已结束")
+			return errors.New("the management verification refresh lease has ended")
 		}
 		if secret == nil {
-			return errors.New("缺少CLI凭证回写")
+			return errors.New("missing CLI credential write-back")
 		}
 		if _, e = tx.Exec(ctx, `UPDATE project_cli_versions SET secret=$2,updated_at=clock_timestamp() WHERE id=$1 AND account_id=$3`, b.VersionID, secret, b.AccountID); e != nil {
 			return e

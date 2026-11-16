@@ -66,7 +66,7 @@ func messageBody(inv *cli.Invocation, to string) (map[string]any, error) {
 	if inv.Has("node-run") {
 		node := inv.String("node-run")
 		if len(options) == 0 || !IsUUID(node) {
-			return nil, output.Errorf(output.CodeInvalidArgument, "--node-run 必须为 UUID，且仅随 --option 提出新题时提供；不自动读取当前节点")
+			return nil, output.Errorf(output.CodeInvalidArgument, "--node-run must be a UUID and may only be given with --option when asking a new question; the current node is not looked up automatically.")
 		}
 		body["nodeRunId"] = node
 	}
@@ -149,7 +149,7 @@ func addInbox(r *cli.Registry) {
 		Stdin:       true,
 		Args:        []cli.Arg{{Name: "messageId", Description: "The ID of any message in the thread"}},
 		Flags:       append(append(append([]cli.Flag(nil), textFlags...), questionFlags...), inboxRunFlag, cli.Flag{Name: "answer", Type: cli.TypeString, Description: "Option ID of the original question; with it the text can be omitted, or you can also add text or options for a new question"}),
-		Constraints: []cli.Constraint{{Kind: cli.AtMostOne, Flags: []string{"text", "text-file"}}, {Kind: cli.AtLeastOne, Flags: []string{"text", "text-file", "answer"}, Hint: "没有 --answer 时需要 --text 或 --text-file"}},
+		Constraints: []cli.Constraint{{Kind: cli.AtMostOne, Flags: []string{"text", "text-file"}}, {Kind: cli.AtLeastOne, Flags: []string{"text", "text-file", "answer"}, Hint: "Without --answer, --text or --text-file is required."}},
 		Output:      "InboxMessage",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			body, err := messageBody(inv, "")

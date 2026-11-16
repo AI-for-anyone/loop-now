@@ -48,12 +48,12 @@ func validateOptions(options []string) error {
 		return nil
 	}
 	if len(options) < 1 || len(options) > 10 {
-		return apperr.Invalid("options", "选项须为1至10个")
+		return apperr.Invalid("options", "Must contain 1 to 10 options.")
 	}
 	seen := map[string]bool{}
 	for _, label := range options {
 		if strings.TrimSpace(label) == "" || utf8.RuneCountInString(label) > 50 || seen[label] {
-			return apperr.Invalid("options", "选项须非空、不重复且不超过50字符")
+			return apperr.Invalid("options", "Each option must be non-empty, unique and at most 50 characters.")
 		}
 		seen[label] = true
 	}
@@ -69,14 +69,14 @@ func (s *Service) questionDeliver(ctx context.Context, p auth.Principal, msg sto
 			return store.InboxMessage{}, err
 		}
 		if !record.Ended() {
-			return store.InboxMessage{}, apperr.Conflict("task_conflict", "任务尚未结束")
+			return store.InboxMessage{}, apperr.Conflict("task_conflict", "The task has not ended yet.")
 		}
 		project, err := s.St.GetProject(ctx, record.View.Task.ProjectID)
 		if err != nil {
 			return store.InboxMessage{}, err
 		}
 		if project.ManagerAgentID == nil {
-			return store.InboxMessage{}, apperr.Conflict("task_conflict", "项目未指定Manager")
+			return store.InboxMessage{}, apperr.Conflict("task_conflict", "The project has no Manager. Set a project Manager first.")
 		}
 		msg.To = store.AgentParty(*project.ManagerAgentID)
 		saved, err := s.questionDeliverOnce(ctx, p, msg, input)
@@ -101,7 +101,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 	if input.Options != nil && p.TaskID != uuid.Nil {
 		plan.Tasks = append(plan.Tasks, p.TaskID)
 		if input.NodeRunID == uuid.Nil {
-			return store.InboxMessage{}, apperr.Invalid("nodeRunId", "任务实例提问须提供当前节点运行ID")
+			return store.InboxMessage{}, apperr.Invalid("nodeRunId", "Required when a task instance asks a question. Give the ID of the current node run.")
 		}
 	}
 	binding, err := s.St.QuestionBinding(ctx, input.ReplyTo)
@@ -117,7 +117,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 		if msg.ForwardTaskID != uuid.Nil {
 			m := scope.Tasks[msg.ForwardTaskID]
 			if m == nil || !m.Record.Ended() {
-				return apperr.Conflict("task_conflict", "任务尚未结束")
+				return apperr.Conflict("task_conflict", "The task has not ended yet.")
 			}
 			if m.ManagerID == nil || msg.To != store.AgentParty(*m.ManagerID) {
 				return errManagerChanged
@@ -139,7 +139,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			recipient := original.To.Party == msg.From
 			answerer = original.To
 			if input.OptionID != nil && (!recipient || q == nil) {
-				return apperr.Invalid("optionId", "只有原问题收件人可回答有效选项")
+				return apperr.Invalid("optionId", "Only the recipient of the original question can answer with an option.")
 			}
 			if q != nil && q.State == "open" && !q.ExpiresAt.After(time.Now()) {
 				if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_questions SET state='expired',expired_reason='deadline' WHERE message_id=$1`, input.ReplyTo); err != nil {
@@ -153,7 +153,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			if q != nil && recipient {
 				if q.State != "open" && (input.OptionID != nil || input.Options != nil) {
 					code := map[string]string{"answered": "already_answered", "expired": "question_expired", "closed": "question_closed", "cancelled": "question_closed"}[q.State]
-					return &apperr.Error{Status: 409, Code: code, Message: "原问题已结束", Details: map[string]any{"question": q}}
+					return &apperr.Error{Status: 409, Code: code, Message: "The original question is no longer open.", Details: map[string]any{"question": q}}
 				}
 				if q.State == "open" {
 					if input.OptionID != nil {
@@ -167,7 +167,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 							}
 						}
 						if !found {
-							return apperr.Invalid("optionId", "选项不存在")
+							return apperr.Invalid("optionId", "The question has no option with this ID.")
 						}
 					}
 					answered = true
@@ -179,16 +179,16 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 		}
 		if input.Options != nil {
 			if msg.From.Kind == "platform" {
-				return apperr.Forbidden("平台通知不能提出问题")
+				return apperr.Forbidden("Platform notifications cannot ask questions.")
 			}
 			if p.TaskID != uuid.Nil {
 				bridge, ok := s.Tasks.(taskQuestionBridge)
 				if !ok {
-					return apperr.Conflict("task_conflict", "任务问题服务未装配")
+					return apperr.Conflict("task_conflict", "The task question service is not set up on this server.")
 				}
 				m := scope.Tasks[p.TaskID]
 				if m == nil {
-					return apperr.NotFound("任务")
+					return apperr.NotFound("Task")
 				}
 				thread := msg.ID
 				if msg.ThreadID != nil {
@@ -312,7 +312,7 @@ func (s *Service) queueInsertedTx(ctx context.Context, scope *store.InboxTransac
 	}
 	bridge, ok := s.Tasks.(taskQuestionBridge)
 	if !ok {
-		return apperr.Conflict("task_conflict", "任务Inbox未装配")
+		return apperr.Conflict("task_conflict", "The task Inbox service is not set up on this server.")
 	}
 	return bridge.DeliverInboxTx(ctx, scope.Tx, scope.Tasks[taskID], msg)
 }

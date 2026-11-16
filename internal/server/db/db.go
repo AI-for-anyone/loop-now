@@ -115,7 +115,7 @@ var DetectNestedWrites atomic.Bool
 
 // ErrNestedWrite means a write was started through *DB inside a write transaction callback: there is only one write
 // connection, so the call would wait on itself.
-var ErrNestedWrite = errors.New("db: 写事务内又经 *DB 发起写入（应使用事务对象 tx）")
+var ErrNestedWrite = errors.New("db: write through *DB inside a write transaction (use the transaction object tx)")
 
 // busyTimeoutMS is the maximum wait when another process (an admin subcommand, a backup tool) holds the lock.
 // Writes inside the process are already serialized by the single write connection, so it is normally never hit.
@@ -142,10 +142,10 @@ const mainCacheKiB, eventsCacheKiB = 32000, 8000
 // importer) call LockDir separately.
 func Open(ctx context.Context, o Options) (*DB, error) {
 	if o.Dir == "" {
-		return nil, errors.New("db: 未指定数据目录")
+		return nil, errors.New("db: no data directory specified")
 	}
 	if st, err := os.Stat(o.Dir); err != nil || !st.IsDir() {
-		return nil, fmt.Errorf("db: 数据目录 %s 不存在或不是目录", o.Dir)
+		return nil, fmt.Errorf("db: data directory %s does not exist or is not a directory", o.Dir)
 	}
 	if o.ReadConns <= 0 {
 		o.ReadConns = 4
@@ -189,7 +189,7 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 	w.SetConnMaxIdleTime(0)
 	if err := w.PingContext(ctx); err != nil {
 		w.Close()
-		return nil, fmt.Errorf("db: 打开写连接失败：%w", err)
+		return nil, fmt.Errorf("db: open the write connection: %w", err)
 	}
 
 	r := sql.OpenDB(connector(data, events, "deferred", clock, clock, func(c sqlite.ExecQuerierContext) error {
@@ -201,7 +201,7 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 	if err := r.PingContext(ctx); err != nil {
 		w.Close()
 		r.Close()
-		return nil, fmt.Errorf("db: 打开只读连接失败：%w", err)
+		return nil, fmt.Errorf("db: open the read-only connections: %w", err)
 	}
 	d.w, d.r = w, r
 	return d, nil
@@ -242,7 +242,7 @@ func connector(data, events, txlock string, now, clock func() int64, hook func(s
 		case int64:
 			return time.UnixMicro(v).UTC().Format(time.RFC3339Nano), nil
 		}
-		return nil, fmt.Errorf("iso_time 需要整数微秒，得到 %T", args[0])
+		return nil, fmt.Errorf("iso_time needs integer microseconds, got %T", args[0])
 	}}); err != nil {
 		panic(err)
 	}
@@ -285,14 +285,14 @@ func (c *sqliteConnector) Driver() driver.Driver { return c.drv }
 func attachEvents(c sqlite.ExecQuerierContext, file string) error {
 	_, err := c.ExecContext(context.Background(), "ATTACH DATABASE ? AS "+EventsSchema, []driver.NamedValue{{Ordinal: 1, Value: file}})
 	if err != nil {
-		return fmt.Errorf("挂载 %s 失败：%w", EventsFile, err)
+		return fmt.Errorf("attach %s: %w", EventsFile, err)
 	}
 	return nil
 }
 
 func pragma(c sqlite.ExecQuerierContext, p string) error {
 	if _, err := c.ExecContext(context.Background(), "PRAGMA "+p, nil); err != nil {
-		return fmt.Errorf("PRAGMA %s 失败：%w", p, err)
+		return fmt.Errorf("PRAGMA %s: %w", p, err)
 	}
 	return nil
 }
@@ -388,7 +388,7 @@ func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 	if DetectNestedWrites.Load() {
 		gid = goid()
 		if h := d.holder.Load(); h != nil && h.goid == gid {
-			return nil, nil, fmt.Errorf("%w（持有者：%s）", ErrNestedWrite, h.caller)
+			return nil, nil, fmt.Errorf("%w (held by %s)", ErrNestedWrite, h.caller)
 		}
 	}
 	var warn *time.Timer

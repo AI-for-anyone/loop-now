@@ -27,7 +27,7 @@ type TaskLarkMemberCapture struct {
 func (s *Store) CaptureTaskLarkMemberTx(ctx context.Context, m *TaskMutation, member TaskLarkFenceMember) (TaskLarkMemberCapture, error) {
 	var out TaskLarkMemberCapture
 	if member.Role != "publisher" && member.Role != "followup" {
-		return out, apperr.Invalid("members", "任务成员角色无效")
+		return out, apperr.Invalid("members", "Each member role must be publisher or followup.")
 	}
 	var task, agent uuid.UUID
 	var snapshot []byte
@@ -36,10 +36,10 @@ func (s *Store) CaptureTaskLarkMemberTx(ctx context.Context, m *TaskMutation, me
 	var sessionState string
 	err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,snapshot_sha,prepared,retired,session_state,session_file FROM task_instances WHERE id=$1`, member.RuntimeID).Scan(&task, &agent, &snapshot, &snapshotSHA, &out.Prepared, &retired, &sessionState, &out.SessionFile)
 	if err != nil {
-		return out, notFoundIfNoRows(err, "任务实例")
+		return out, notFoundIfNoRows(err, "Task instance")
 	}
 	deny := func() (TaskLarkMemberCapture, error) {
-		return TaskLarkMemberCapture{}, apperr.Conflict("task_conflict", "原任务快照授权或会话不可用")
+		return TaskLarkMemberCapture{}, apperr.Conflict("task_conflict", "The grant or session in the original task snapshot is not available.")
 	}
 	if task != m.Record.View.Task.ID || agent != member.AgentID || retired {
 		return deny()

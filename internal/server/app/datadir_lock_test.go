@@ -31,7 +31,7 @@ func buildSecond(t *testing.T, cfg config.Config) error {
 func TestSecondInstanceOnSameDataDirRefused(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
-	if err := buildSecond(t, w.cfg); err == nil || !strings.Contains(err.Error(), "数据目录") || !strings.Contains(err.Error(), "已被另一个服务进程使用") || app.ExitCode(err) != app.ExitInstanceLocked {
+	if err := buildSecond(t, w.cfg); err == nil || !strings.Contains(err.Error(), "data directory") || !strings.Contains(err.Error(), "is already used by another server process") || app.ExitCode(err) != app.ExitInstanceLocked {
 		t.Fatalf("第二个实例应拒绝启动：%v", err)
 	}
 	s.createAgent("仍可用")
@@ -47,7 +47,7 @@ func TestSecondInstanceOnSameWorkRootRefused(t *testing.T) {
 	s := w.start(nil)
 	other := w.cfg
 	other.DataDir = filepath.Join(t.TempDir(), "other-data")
-	if err := buildSecond(t, other); err == nil || !strings.Contains(err.Error(), "工作根") || !strings.Contains(err.Error(), "已被另一个服务进程使用") || app.ExitCode(err) != app.ExitInstanceLocked {
+	if err := buildSecond(t, other); err == nil || !strings.Contains(err.Error(), "work root") || !strings.Contains(err.Error(), "is already used by another server process") || app.ExitCode(err) != app.ExitInstanceLocked {
 		t.Fatalf("第二个实例应拒绝启动：%v", err)
 	}
 	// Each instance creates its own directory here at startup and cleans up empty directories left by other instances.

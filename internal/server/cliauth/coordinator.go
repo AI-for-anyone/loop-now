@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-var ErrUnavailable = errors.New("Google CLI授权不可用")
+var ErrUnavailable = errors.New("Google CLI authorization is unavailable")
 
 type SafeError struct{ Code string }
 
-func (e *SafeError) Error() string { return "Google CLI认证失败" }
+func (e *SafeError) Error() string { return "Google CLI authentication failed" }
 
 type LoginHelper interface {
 	Login(context.Context, uuid.UUID, func(string) error) (clicredential.Google, error)

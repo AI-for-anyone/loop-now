@@ -40,7 +40,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 	switch {
 	case e == nil:
 		if task != target.TaskID || node != target.NodeRunID {
-			return out, apperr.NotFound("节点Inbox消息")
+			return out, apperr.NotFound("Node Inbox message")
 		}
 		if agent != target.AgentID || runtime != target.RuntimeID {
 			return out, TaskConsoleConflict(m, target, "target_mismatch")
@@ -50,12 +50,12 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 		return out, e
 	}
 	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1`, message)); e != nil {
-		return out, notFoundIfNoRows(e, "节点Inbox消息")
+		return out, notFoundIfNoRows(e, "Node Inbox message")
 	}
 	if !out.strict {
 		to := out.msg.To
 		if to.Kind != "agent" || to.RuntimeID == uuid.Nil {
-			return out, apperr.NotFound("节点Inbox消息")
+			return out, apperr.NotFound("Node Inbox message")
 		}
 		if to.ID != target.AgentID || to.RuntimeID != target.RuntimeID {
 			return out, TaskConsoleConflict(m, target, "target_mismatch")
@@ -68,7 +68,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 			return out, e
 		}
 		if !out.strict && t.NodeRunID != target.NodeRunID {
-			return out, apperr.NotFound("节点Inbox消息")
+			return out, apperr.NotFound("Node Inbox message")
 		}
 		out.turn = &t
 	}
@@ -252,7 +252,7 @@ func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target T
 	var out TaskNodeQueueResult
 	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3`, run, target.TaskID, target.NodeRunID))
 	if e != nil {
-		return out, notFoundIfNoRows(e, "任务轮次")
+		return out, notFoundIfNoRows(e, "Task turn")
 	}
 	if t.RuntimeID != target.RuntimeID {
 		return out, TaskConsoleConflict(m, target, "target_mismatch")

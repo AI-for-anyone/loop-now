@@ -151,16 +151,16 @@ func (r *Registry) Add(c *Command) {
 	name := c.Name()
 	for _, x := range r.commands {
 		if x.Name() == name {
-			panic("重复的命令：" + name)
+			panic("duplicate command: " + name)
 		}
 	}
 	if _, ok := r.groups[name]; ok {
-		panic("命令与命令组同名：" + name)
+		panic("command has the same name as a command group: " + name)
 	}
 	for i := 1; i < len(c.Path); i++ {
 		g := strings.Join(c.Path[:i], " ")
 		if _, ok := r.groups[g]; !ok && r.Find(c.Path[:i]...) == nil {
-			panic(fmt.Sprintf("命令 %s 缺少命令组 %s 的说明", name, g))
+			panic(fmt.Sprintf("command %s: command group %s has no summary", name, g))
 		}
 	}
 	if c.Destructive {

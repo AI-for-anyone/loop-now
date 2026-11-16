@@ -95,14 +95,14 @@ func QueueQuestionEventTx(ctx context.Context, tx *db.Tx, id uuid.UUID, state st
 }
 func CloseInboxQuestion(ctx context.Context, tx *db.Tx, id uuid.UUID, reason string) (string, error) {
 	if reason != "task_retry" && reason != "task_cancel" && reason != "node_completed" {
-		return "", apperr.Invalid("reason", "问题关闭原因无效")
+		return "", apperr.Invalid("reason", "Must be task_retry, task_cancel or node_completed.")
 	}
 	q, err := GetQuestionTx(ctx, tx, id, true)
 	if err != nil {
 		return "", err
 	}
 	if q == nil {
-		return "", apperr.NotFound("原问题")
+		return "", apperr.NotFound("Original question")
 	}
 	if q.State != "open" {
 		return q.State, nil

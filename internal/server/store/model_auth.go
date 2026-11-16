@@ -59,10 +59,10 @@ func modelAuthTerminal(status string) bool {
 }
 func validateModelAuthAgent(a Agent, provider string, expected *int64) error {
 	if expected != nil && a.ConfigVersion != *expected {
-		return apperr.PreconditionFailed("Agent 配置已更改，请重新读取")
+		return apperr.PreconditionFailed("The Agent configuration has changed. Read it again.")
 	}
 	if a.ModelProvider != provider {
-		return apperr.Invalid("provider", "提供方与 Agent 当前模型不一致")
+		return apperr.Invalid("provider", "Does not match the provider of the Agent's current model.")
 	}
 	return nil
 }
@@ -90,7 +90,7 @@ func (s *Store) NewModelAuthOperation(ctx context.Context, agentID uuid.UUID, pr
 }
 func (s *Store) GetModelAuthOperation(ctx context.Context, agentID, operationID uuid.UUID) (ModelAuthOperation, error) {
 	o, err := scanModelAuthOperation(s.Pool.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 AND agent_id=$2`, operationID, agentID))
-	return o, notFoundIfNoRows(err, "模型登录操作")
+	return o, notFoundIfNoRows(err, "Model login operation")
 }
 func (s *Store) LatestModelAuthOperation(ctx context.Context, agentID uuid.UUID) (*ModelAuthOperation, error) {
 	o, err := scanModelAuthOperation(s.Pool.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE agent_id=$1 ORDER BY started_at DESC,id DESC LIMIT 1`, agentID))
@@ -108,7 +108,7 @@ func (s *Store) SetModelAuthOperationURL(ctx context.Context, operationID uuid.U
 		var err error
 		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 		if err != nil {
-			return notFoundIfNoRows(err, "模型登录操作")
+			return notFoundIfNoRows(err, "Model login operation")
 		}
 		if modelAuthTerminal(o.Status) {
 			return nil
@@ -126,7 +126,7 @@ func (s *Store) MarkModelAuthOperationAwaiting(ctx context.Context, operationID 
 	if errors.Is(err, db.ErrNoRows) {
 		o, err = scanModelAuthOperation(s.Pool.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 	}
-	return o, notFoundIfNoRows(err, "模型登录操作")
+	return o, notFoundIfNoRows(err, "Model login operation")
 }
 
 // ClearPlatformModelLogins clears the model credential of every live platform Agent whose current login belongs to
@@ -167,14 +167,14 @@ func endModelAuthOperation(ctx context.Context, tx *db.Tx, id uuid.UUID, status,
 }
 func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID, status, code string) (ModelAuthOperation, error) {
 	if status != "failed" && status != "cancelled" && status != "expired" {
-		return ModelAuthOperation{}, apperr.Invalid("status", "非法登录终态")
+		return ModelAuthOperation{}, apperr.Invalid("status", "Must be failed, cancelled or expired.")
 	}
 	var o ModelAuthOperation
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 		if err != nil {
-			return notFoundIfNoRows(err, "模型登录操作")
+			return notFoundIfNoRows(err, "Model login operation")
 		}
 		if modelAuthTerminal(o.Status) {
 			return nil
@@ -212,7 +212,7 @@ func (s *Store) completeModelAuthOperation(ctx context.Context, operationID, ver
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT agent_id FROM model_auth_operations WHERE id=$1`, operationID).Scan(&agentID); err != nil {
-			return notFoundIfNoRows(err, "模型登录操作")
+			return notFoundIfNoRows(err, "Model login operation")
 		}
 		// Include soft-deleted Agents so a late completion can safely terminate without credentials.
 		var provider string
@@ -302,7 +302,7 @@ func (s *Store) CurrentModelAuthVersion(ctx context.Context, agentID uuid.UUID) 
 }
 func (s *Store) GetModelAuthVersion(ctx context.Context, versionID uuid.UUID) (ModelAuthVersion, error) {
 	v, err := scanModelAuthVersion(s.Pool.QueryRow(ctx, `SELECT `+modelAuthVersionColumns+` FROM model_auth_versions WHERE id=$1`, versionID))
-	return v, notFoundIfNoRows(err, "模型账号版本")
+	return v, notFoundIfNoRows(err, "Model account version")
 }
 func (s *Store) ClearModelAuthVersion(ctx context.Context, agentID uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {

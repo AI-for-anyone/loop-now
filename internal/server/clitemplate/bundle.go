@@ -39,14 +39,14 @@ func extractTree(archive, format, dest string) error {
 	add := func(name string, mode os.FileMode, size int64, link string, r io.Reader) error {
 		entries++
 		if entries > 100000 {
-			return errors.New("安装包条目过多")
+			return errors.New("install package has too many entries")
 		}
 		clean := path.Clean(name)
 		if clean == "." {
 			return nil
 		}
 		if strings.ContainsAny(name, "\\\x00") || path.IsAbs(name) || clean == ".." || strings.HasPrefix(clean, "../") {
-			return errors.New("安装包路径越界")
+			return errors.New("install package path escapes the install directory")
 		}
 		// Archive entries must not traverse a previously installed symlink.
 		// Lexical target checks alone do not model symlink/.. resolution.
@@ -54,7 +54,7 @@ func extractTree(archive, format, dest string) error {
 		for parent != "." {
 			fi, err := root.Lstat(parent)
 			if err == nil && fi.Mode()&os.ModeSymlink != 0 {
-				return errors.New("安装包父目录是链接")
+				return errors.New("install package parent directory is a symlink")
 			}
 			if err != nil && !os.IsNotExist(err) {
 				return err
@@ -65,7 +65,7 @@ func extractTree(archive, format, dest string) error {
 			if mode.IsDir() && directories[clean] {
 				return nil
 			}
-			return errors.New("安装包重复路径")
+			return errors.New("install package has a duplicate path")
 		}
 		seen[clean] = true
 		if mode.IsDir() {
@@ -78,17 +78,17 @@ func extractTree(archive, format, dest string) error {
 		if mode&os.ModeSymlink != 0 {
 			target := path.Clean(path.Join(path.Dir(clean), link))
 			if path.IsAbs(link) || strings.ContainsAny(link, "\\\x00") || target == ".." || strings.HasPrefix(target, "../") {
-				return errors.New("安装包链接越界")
+				return errors.New("install package symlink escapes the install directory")
 			}
 			links = append(links, clean)
 			return root.Symlink(filepath.FromSlash(link), filepath.FromSlash(clean))
 		}
 		if !mode.IsRegular() || size < 0 || size > maxBinarySize {
-			return errors.New("安装包文件类型或大小无效")
+			return errors.New("install package file has an invalid type or size")
 		}
 		total += size
 		if total > maxBundleSize {
-			return errors.New("安装包解压大小超限")
+			return errors.New("install package exceeds the extracted size limit")
 		}
 		f, e := root.OpenFile(clean, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600|mode.Perm()&0111)
 		if e != nil {
@@ -112,7 +112,7 @@ func extractTree(archive, format, dest string) error {
 			}
 			mode := h.FileInfo().Mode()
 			if h.Typeflag == tar.TypeLink {
-				return errors.New("安装包不支持硬链接")
+				return errors.New("install package contains a hard link, which is not supported")
 			}
 			if e = add(h.Name, mode, h.Size, h.Linkname, tr); e != nil {
 				return e
@@ -138,7 +138,7 @@ func extractTree(archive, format, dest string) error {
 				b, e := io.ReadAll(io.LimitReader(rd, 4097))
 				if e != nil || len(b) > 4096 {
 					rd.Close()
-					return errors.New("安装包链接无效")
+					return errors.New("install package has an invalid symlink")
 				}
 				link = string(b)
 			}
@@ -176,7 +176,7 @@ func extractTree(archive, format, dest string) error {
 			return e
 		}
 	default:
-		return errors.New("安装包格式无效")
+		return errors.New("invalid install package format")
 	}
 	base, err := filepath.EvalSymlinks(dest)
 	if err != nil {
@@ -210,7 +210,7 @@ func verifyNative(ctx context.Context, t *Template, stage string, a Asset) error
 	b, e := cmd.CombinedOutput()
 	defer clear(b)
 	if e != nil || !strings.Contains(string(b), t.Version) {
-		return errors.New("工具完整运行依赖或固定版本验证失败")
+		return errors.New("tool does not run with its bundled dependencies or does not report the pinned version")
 	}
 	return nil
 }
@@ -298,16 +298,16 @@ func validateLinkWithinRoot(base, name string) error {
 			candidate := filepath.Join(current, part)
 			info, err := os.Lstat(candidate)
 			if err != nil && !os.IsNotExist(err) && !privatefs.IsNotDir(err) {
-				return errors.New("安装包链接目标无效")
+				return errors.New("install package symlink target is invalid")
 			}
 			if err == nil && info.Mode()&os.ModeSymlink != 0 {
 				hops++
 				if hops > 64 {
-					return errors.New("安装包链接循环或过深")
+					return errors.New("install package symlink loops or is nested too deep")
 				}
 				target, err := os.Readlink(candidate)
 				if err != nil || filepath.IsAbs(target) {
-					return errors.New("安装包链接目标无效")
+					return errors.New("install package symlink target is invalid")
 				}
 				pending = append(strings.Split(target, string(filepath.Separator)), pending...)
 				continue
@@ -316,7 +316,7 @@ func validateLinkWithinRoot(base, name string) error {
 		}
 		relative, err := filepath.Rel(base, current)
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return errors.New("安装包链接实际目标越界")
+			return errors.New("install package symlink resolves outside the install directory")
 		}
 	}
 	return nil

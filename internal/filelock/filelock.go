@@ -9,7 +9,7 @@ import (
 )
 
 // ErrWouldBlock means the lock is held by another file description.
-var ErrWouldBlock = errors.New("filelock: 锁正被持有")
+var ErrWouldBlock = errors.New("filelock: the lock is held")
 
 // TryLock takes an exclusive lock on f without waiting; it returns ErrWouldBlock when the lock is already held.
 func TryLock(f *os.File) error { return tryLock(f) }

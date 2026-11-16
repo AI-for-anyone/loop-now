@@ -203,10 +203,10 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 		}
 		if p.Prompt != nil {
 			if p.ExpectedPromptVersion == nil || *p.ExpectedPromptVersion < 1 {
-				return apperr.Invalid("expectedPromptVersion", "须提供正整数Prompt编辑版本")
+				return apperr.Invalid("expectedPromptVersion", "Must be a positive integer.")
 			}
 			if *p.ExpectedPromptVersion != cur.PromptVersion {
-				return apperr.PreconditionFailed("Agent Prompt已改变，请读取最新文本并核对")
+				return apperr.PreconditionFailed("The Agent prompt has changed. Read the latest text and review it.")
 			}
 		}
 		next := cur
@@ -266,7 +266,7 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 		return err
 	}
 	if active {
-		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复，请等这次回复结束后再切换运行时")
+		return apperr.Conflict(apperr.CodeAgentNotIdle, "The Agent is replying. Wait for this reply to end before switching the runtime.")
 	}
 	if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
 		return err
@@ -307,7 +307,7 @@ func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 			return err
 		}
 		if taskActive {
-			return apperr.Conflict(apperr.CodeTaskNotIdle, "Agent参与的任务尚未结束，不能删除")
+			return apperr.Conflict(apperr.CodeTaskNotIdle, "The Agent takes part in tasks that have not ended, so it cannot be deleted.")
 		}
 		if err := purgeAgentCredentials(ctx, tx, []uuid.UUID{id}); err != nil {
 			return err
@@ -331,9 +331,9 @@ func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 func agentNameConflict(err error, name string) error {
 	switch {
 	case isUniqueViolation(err, "agents_name_per_project"):
-		return apperr.Conflict(apperr.CodeNameConflict, "项目内已有名为 "+name+" 的 Agent")
+		return apperr.Conflict(apperr.CodeNameConflict, "An Agent named \""+name+"\" already exists in this project.")
 	case isUniqueViolation(err, "agents_name_platform"):
-		return apperr.Conflict(apperr.CodeNameConflict, "平台中已有名为 "+name+" 的 Agent")
+		return apperr.Conflict(apperr.CodeNameConflict, "A platform Agent named \""+name+"\" already exists.")
 	}
 	return err
 }
@@ -352,7 +352,7 @@ func ensureIdle(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 		return err
 	}
 	if busy {
-		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
+		return apperr.Conflict(apperr.CodeAgentNotIdle, "The Agent is replying or has queued messages. Wait until it is idle, then try again.")
 	}
 	return nil
 }
@@ -372,7 +372,7 @@ func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSe
 	if file != nil {
 		sess.SessionFile = *file
 	}
-	return sess, notFoundIfNoRows(err, "Agent 会话")
+	return sess, notFoundIfNoRows(err, "Agent session")
 }
 
 // RecordSessionFile records a session file confirmed to be written to disk and sets the state to active.
@@ -450,7 +450,7 @@ func (s *Store) ResumeSession(ctx context.Context, agentID uuid.UUID, expectedFi
 		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = $3, state = 'active', epoch = epoch + 1, updated_at = $4
 			WHERE agent_id = $1 AND session_file IS $2 RETURNING session_file, state, epoch, updated_at`, agentID, expectedFileArg, targetFile, tx.Now()).
 			Scan(&sess.SessionFile, &sess.State, &sess.Epoch, &sess.UpdatedAt); errors.Is(err, db.ErrNoRows) {
-			return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前会话已变化，请重新列出后再恢复")
+			return apperr.Conflict(apperr.CodeConsoleCommandFailed, "The current session has changed. List the sessions again before resuming.")
 		} else if err != nil {
 			return err
 		}

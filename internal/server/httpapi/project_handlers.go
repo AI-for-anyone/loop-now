@@ -104,7 +104,7 @@ func (s *Server) setProjectManager(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.AgentID == nil {
-		s.fail(w, r, apperr.Invalid("agentId", "必填"))
+		s.fail(w, r, apperr.Invalid("agentId", "Required. Give the ID of the Agent to make the project Manager."))
 		return
 	}
 	p, err := s.Config.SetProjectManager(r.Context(), id, *in.AgentID)
@@ -200,14 +200,14 @@ func (s *Server) createAgentIn(w http.ResponseWriter, r *http.Request, scope sto
 	var thinking *string
 	if len(in.ThinkingLevel) > 0 {
 		if err := json.Unmarshal(in.ThinkingLevel, &thinking); err != nil {
-			s.fail(w, r, apperr.Invalid("thinkingLevel", "须为合法思考等级或null"))
+			s.fail(w, r, apperr.Invalid("thinkingLevel", "Must be a thinking level string or null."))
 			return
 		}
 	}
 	var tier *string
 	if len(in.ServiceTier) > 0 {
 		if err := json.Unmarshal(in.ServiceTier, &tier); err != nil {
-			s.fail(w, r, apperr.Invalid("serviceTier", "须为速度档位或null"))
+			s.fail(w, r, apperr.Invalid("serviceTier", "Must be a service tier string or null."))
 			return
 		}
 	}
@@ -229,17 +229,17 @@ func (s *Server) scopeFilter(r *http.Request) (store.ScopeFilter, error) {
 	if v := q.Get("platform"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return f, apperr.Invalid("platform", "必须是 true 或 false")
+			return f, apperr.Invalid("platform", "Must be true or false.")
 		}
 		f.Platform = b
 	}
 	if v := q.Get("projectId"); v != "" {
 		id, err := uuid.Parse(v)
 		if err != nil {
-			return f, apperr.Invalid("projectId", "不是有效的 UUID")
+			return f, apperr.Invalid("projectId", "Must be a valid UUID.")
 		}
 		if f.Platform {
-			return f, apperr.Invalid("projectId", "projectId 与 platform 只能指定一个")
+			return f, apperr.Invalid("projectId", "Give either projectId or platform=true, not both.")
 		}
 		if _, err := s.Store.GetProject(r.Context(), id); err != nil {
 			return f, err

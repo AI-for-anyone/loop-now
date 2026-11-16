@@ -65,7 +65,7 @@ func sameLarkBinding(a, b *clicredential.LarkBinding) bool {
 
 func (e *Executor) openLarkRuntime(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) (*larkResource, string, []string, error) {
 	reject := func() (*larkResource, string, []string, error) {
-		return nil, "", nil, fail(executor.ErrCredentialUnavailable, "Lark 用户运行通道不可用")
+		return nil, "", nil, fail(executor.ErrCredentialUnavailable, "The Lark user runtime channel is not available.")
 	}
 	if snap.LarkBinding == nil {
 		return nil, "", nil, nil

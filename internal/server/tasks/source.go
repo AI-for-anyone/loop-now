@@ -83,17 +83,17 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 		return agentconfig.Snapshot{}, err
 	}
 	if !active {
-		return agentconfig.Snapshot{}, errors.New("任务已结束，不能执行实例")
+		return agentconfig.Snapshot{}, errors.New("the task has ended; the instance cannot run")
 	}
 	if inst.Retired || !inst.Prepared {
-		return agentconfig.Snapshot{}, errors.New("任务实例尚未准备或已经回收")
+		return agentconfig.Snapshot{}, errors.New("the task instance is not prepared yet or has been retired")
 	}
 	snap, err := taskruntime.Decode(inst.Snapshot)
 	if err != nil {
 		return agentconfig.Snapshot{}, err
 	}
 	if snap.Scope().AgentID() != inst.AgentID || snap.Scope().TaskID() != inst.TaskID {
-		return agentconfig.Snapshot{}, errors.New("任务快照作用域不匹配")
+		return agentconfig.Snapshot{}, errors.New("the task snapshot scope does not match")
 	}
 	cfg := snap.Configuration()
 	creds, err := snap.Credentials()
@@ -247,14 +247,14 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 		return nil
 	}
 	if s.PauseNormal == nil || s.FreezeNormal == nil || s.MaxSessionBytes <= 0 {
-		return errors.New("任务分叉准备器未配置")
+		return errors.New("the task fork preparer is not configured")
 	}
 	snapshot, err := taskruntime.Decode(inst.Snapshot)
 	if err != nil {
 		return err
 	}
 	if snapshot.Scope().AgentID() != inst.AgentID || snapshot.Scope().TaskID() != inst.TaskID {
-		return errors.New("任务快照作用域不匹配")
+		return errors.New("the task snapshot scope does not match")
 	}
 	creds, err := snapshot.Credentials()
 	if err != nil {
@@ -279,7 +279,7 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 			return err
 		}
 		if session.State == "missing" {
-			return errors.New("常态会话文件丢失，不能建立任务分叉")
+			return errors.New("the regular session file is missing; cannot create the task fork")
 		}
 		if session.State == "active" && session.SessionFile != "" {
 			copyFn := s.copyBaseline
@@ -338,7 +338,7 @@ func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 		if s.Log != nil {
 			s.Log.Error("failed to copy the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "err", err)
 		}
-		return fmt.Errorf("任务工作目录复制失败：%w", err)
+		return fmt.Errorf("copy the task working directory: %w", err)
 	}
 	if s.Log != nil {
 		s.Log.Info("copied the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
@@ -350,29 +350,29 @@ func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, e
 	rootPath := filepath.Join(s.WorkRoot, "agents", inst.AgentID.String(), "sessions")
 	rel, err := filepath.Rel(rootPath, source)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", errors.New("常态会话不在该Agent的会话目录")
+		return "", errors.New("the regular session is not in the Agent's session directory")
 	}
 	root, err := os.OpenRoot(rootPath)
 	if err != nil {
-		return "", errors.New("常态会话目录不可读")
+		return "", errors.New("the regular session directory cannot be read")
 	}
 	defer root.Close()
 	info, err := root.Lstat(rel)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("常态会话必须是普通文件")
+		return "", errors.New("the regular session must be a plain file")
 	}
 	f, err := root.Open(rel)
 	if err != nil {
-		return "", errors.New("常态会话不可读")
+		return "", errors.New("the regular session cannot be read")
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
 	if err != nil || int64(len(data)) > s.MaxSessionBytes {
-		return "", errors.New("常态会话超限或读取失败")
+		return "", errors.New("the regular session exceeds the size limit or cannot be read")
 	}
 	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
 	if len(bytes.TrimSpace(data)) == 0 {
-		return "", errors.New("常态会话无有效记录")
+		return "", errors.New("the regular session has no valid records")
 	}
 	for i, line := range lines {
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -380,10 +380,10 @@ func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, e
 		}
 		var entry map[string]any
 		if json.Unmarshal(line, &entry) != nil {
-			return "", errors.New("常态会话包含不完整记录")
+			return "", errors.New("the regular session contains incomplete records")
 		}
 		if i == 0 && entry["type"] != "session" {
-			return "", errors.New("常态会话头无效")
+			return "", errors.New("the regular session header is invalid")
 		}
 	}
 	return s.writeBaseline(inst, data)
@@ -395,40 +395,40 @@ func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, e
 // directory, and the task instance forks from it on its first start.
 func (s *Source) copyClaudeBaseline(ctx context.Context, inst store.TaskInstance, source string) (string, error) {
 	if s.ClaudeProjects == nil {
-		return "", errors.New("Claude Code 的会话记录目录未配置")
+		return "", errors.New("the Claude Code session record directory is not configured")
 	}
 	projects := s.ClaudeProjects(ctx)
 	if !claudecli.InProjects(projects, source) {
-		return "", errors.New("常态会话不在 Claude Code 的会话记录目录")
+		return "", errors.New("the regular session is not in the Claude Code session record directory")
 	}
 	rel, _ := filepath.Rel(projects, source)
 	root, err := os.OpenRoot(projects)
 	if err != nil {
-		return "", errors.New("Claude Code 的会话记录目录不可读")
+		return "", errors.New("the Claude Code session record directory cannot be read")
 	}
 	defer root.Close()
 	info, err := root.Lstat(rel)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("常态会话必须是普通文件")
+		return "", errors.New("the regular session must be a plain file")
 	}
 	f, err := root.Open(rel)
 	if err != nil {
-		return "", errors.New("常态会话不可读")
+		return "", errors.New("the regular session cannot be read")
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
 	if err != nil || int64(len(data)) > s.MaxSessionBytes {
-		return "", errors.New("常态会话超限或读取失败")
+		return "", errors.New("the regular session exceeds the size limit or cannot be read")
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
-		return "", errors.New("常态会话无有效记录")
+		return "", errors.New("the regular session has no valid records")
 	}
 	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte{'\n'}) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
 		if !json.Valid(line) {
-			return "", errors.New("常态会话包含不完整记录")
+			return "", errors.New("the regular session contains incomplete records")
 		}
 	}
 	return s.writeBaseline(inst, data)
@@ -469,7 +469,7 @@ func (s *Source) writeBaseline(inst store.TaskInstance, data []byte) (string, er
 
 func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src store.FolderSource, creds taskruntime.Credentials) (string, error) {
 	if s.GitBin == "" || s.CloneTimeout <= 0 {
-		return "", errors.New("仓库解析器未配置")
+		return "", errors.New("the repository resolver is not configured")
 	}
 	home := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "home")
 	if err := os.MkdirAll(home, 0o700); err != nil {
@@ -479,20 +479,20 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	args := []string{"-c", "credential.helper="}
 	if p, ok := creds.CLI["gh"]; ok {
 		if s.Templates == nil || s.Installer == nil {
-			return "", errors.New("仓库CLI模板未配置")
+			return "", errors.New("the repository CLI templates are not configured")
 		}
 		template, ok := s.Templates.Get("gh")
 		if !ok {
-			return "", errors.New("仓库CLI模板不可用")
+			return "", errors.New("the repository CLI template is not available")
 		}
 		dir, err := s.Installer.Ensure(ctx, template)
 		if err != nil {
-			return "", errors.New("仓库CLI安装失败")
+			return "", errors.New("installing the repository CLI failed")
 		}
 		args = append(args, "-c", "credential.helper=!'"+strings.ReplaceAll(filepath.Join(dir, template.Binary), "'", "'\\''")+"' auth git-credential")
 		for k, v := range p.Env {
 			if executor.IsReservedEnv(k) || k == "GH_CONFIG_DIR" {
-				return "", errors.New("仓库凭证包含保留环境变量")
+				return "", errors.New("the repository credential sets a reserved environment variable")
 			}
 			env = append(env, k+"="+v)
 		}
@@ -507,7 +507,7 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	cmd.WaitDelay = s.CloneTimeout
 	out, err := procgroup.Output(cmd)
 	if err != nil {
-		return "", errors.New("仓库分支无法解析")
+		return "", errors.New("the repository branch cannot be resolved")
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Fields(line)
@@ -523,5 +523,5 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 			}
 		}
 	}
-	return "", errors.New("仓库分支不存在")
+	return "", errors.New("the repository branch does not exist")
 }

@@ -46,7 +46,7 @@ func OSSystem(version string) *System {
 func (s *System) ConfigPath() (string, *output.Error) {
 	home, err := s.HomeDir()
 	if err != nil || home == "" {
-		return "", output.Errorf(output.CodeConfigInvalid, "无法确定用户主目录，找不到本地连接配置")
+		return "", output.Errorf(output.CodeConfigInvalid, "Could not determine the user's home directory, so the local connection config cannot be found.")
 	}
 	return config.Path(home), nil
 }
@@ -133,7 +133,7 @@ func Run(ctx context.Context, r *Registry, argv []string, sys *System) (code int
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			code = fail(output.Errorf(output.CodeInternalError, "loopctl 内部错误：%v", p))
+			code = fail(output.Errorf(output.CodeInternalError, "loopctl internal error: %v", p))
 		}
 	}()
 
@@ -154,12 +154,12 @@ func Run(ctx context.Context, r *Registry, argv []string, sys *System) (code int
 	if len(c.Identities) > 0 {
 		inv.Identity = Identity(conn.DetectIdentity(sys.Getenv))
 		if !c.AllowedFor(inv.Identity) {
-			return fail(output.Errorf(output.CodeCommandNotAllowed, "%s 身份不能使用 %s", inv.Identity, c.Name()).
+			return fail(output.Errorf(output.CodeCommandNotAllowed, "The %s identity cannot use the %s command.", inv.Identity, c.Name()).
 				WithDetails(map[string]any{"identity": inv.Identity, "allowed": c.Identities}))
 		}
 	}
 	if c.Destructive && !inv.Bool(YesFlag.Name) {
-		return fail(output.Errorf(output.CodeConfirmationRequired, "%s 是删除或覆盖操作，需要带 --yes 确认；loopctl 不会交互询问", c.Name()))
+		return fail(output.Errorf(output.CodeConfirmationRequired, "%s deletes or overwrites data, and loopctl never asks interactively. Confirm with --yes.", c.Name()))
 	}
 	if c.Network {
 		s, e := resolve(inv)
@@ -186,7 +186,7 @@ func Run(ctx context.Context, r *Registry, argv []string, sys *System) (code int
 		warnings = clientMeta(client, &meta)
 	}
 	if err := output.WriteSuccess(jsonOutput, data, warnings, meta); err != nil {
-		return fail(output.Errorf(output.CodeInternalError, "无法编码输出：%v", err))
+		return fail(output.Errorf(output.CodeInternalError, "Could not encode the output: %v", err))
 	}
 	return 0
 }
@@ -199,10 +199,10 @@ func Check(r *Registry, argv []string, id Identity) *output.Error {
 		return e
 	}
 	if p.help || p.cmd == nil {
-		return output.Errorf(output.CodeUnknownCommand, "不是一条可执行的命令")
+		return output.Errorf(output.CodeUnknownCommand, "This is not a runnable command.")
 	}
 	if !p.cmd.AllowedFor(id) {
-		return output.Errorf(output.CodeCommandNotAllowed, "%s 身份不能使用 %s", id, p.cmd.Name())
+		return output.Errorf(output.CodeCommandNotAllowed, "The %s identity cannot use the %s command.", id, p.cmd.Name())
 	}
 	return nil
 }

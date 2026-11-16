@@ -70,7 +70,7 @@ func (s *Store) TaskNodeInboxThread(ctx context.Context, p Party, thread, run uu
 			return e
 		}
 		if len(out) == 0 {
-			return apperr.NotFound("线索")
+			return apperr.NotFound("Thread")
 		}
 		if !mark {
 			return nil

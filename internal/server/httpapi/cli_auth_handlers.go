@@ -13,7 +13,7 @@ func (s *Server) cliAuthReady(w http.ResponseWriter, r *http.Request) bool {
 	if s.CLIAuth != nil {
 		return true
 	}
-	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "CLI认证组件尚未装配"})
+	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The CLI login component is not set up on this server."})
 	return false
 }
 func (s *Server) startProjectCLIAuthOperation(w http.ResponseWriter, r *http.Request) {
@@ -47,12 +47,12 @@ func (s *Server) listProjectCLIAuthOperations(w http.ResponseWriter, r *http.Req
 	cli := "gcloud"
 	for key, values := range r.URL.Query() {
 		if (key != "accountId" && key != "cli") || len(values) != 1 {
-			s.fail(w, r, apperr.Invalid("query", "查询参数无效"))
+			s.fail(w, r, apperr.Invalid("query", "Only the accountId and cli query parameters are allowed, each at most once."))
 			return
 		}
 		if key == "cli" {
 			if values[0] != "gh" && values[0] != "gcloud" && values[0] != "lark-cli" {
-				s.fail(w, r, apperr.Invalid("cli", "CLI登录筛选无效"))
+				s.fail(w, r, apperr.Invalid("cli", "Must be gh, gcloud or lark-cli."))
 				return
 			}
 			cli = values[0]
@@ -60,7 +60,7 @@ func (s *Server) listProjectCLIAuthOperations(w http.ResponseWriter, r *http.Req
 		}
 		id, e := uuid.Parse(values[0])
 		if e != nil || id == uuid.Nil {
-			s.fail(w, r, apperr.Invalid("accountId", "UUID无效"))
+			s.fail(w, r, apperr.Invalid("accountId", "Must be a valid non-zero UUID."))
 			return
 		}
 		account = &id
@@ -104,7 +104,7 @@ func (s *Server) cancelProjectCLIAuthOperation(w http.ResponseWriter, r *http.Re
 	}
 	defer clear(raw)
 	if strings.TrimSpace(string(raw)) != "" {
-		s.fail(w, r, apperr.Invalid("body", "取消登录不接受请求体"))
+		s.fail(w, r, apperr.Invalid("body", "Cancelling a login does not take a request body."))
 		return
 	}
 	if !s.cliAuthReady(w, r) {

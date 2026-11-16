@@ -4,6 +4,16 @@ export const taskInbox = {
   readOriginal: '读取原发送结果', reading: '正在读取原动作…', notFound: '尚未找到原动作；结果仍待确认，不自动换动作或重新发送。',
   accepted: 'Inbox 已接收；读取、实际执行和回复以原记录为准。',
   links: '实际轮次关联', notification: '提醒轮次（不表示已读）', readLink: '实际读取轮次', replyLink: '实际回复轮次',
+  // Why a message to a task node did not run, or why a queue action on the node was refused (codes from the server's node guard).
+  targetReasons: {
+    task_ended: '任务已经结束',
+    node_changed: '任务已经不在这个节点上',
+    target_mismatch: '这个节点的 Agent 或实例已经换了',
+    instance_unavailable: '这个节点的 Agent 实例已不可用',
+    chat_unavailable: '现在不能给这个节点发消息',
+    action_conflict: '节点状态刚刚变了，这次操作没有生效',
+    cancelled: '已取消',
+  } as Record<string, string>,
   notExecuted: '原节点消息未执行', timelinePartial: '运行记录尚未加载完整；当前仅显示已加载部分。',
   timelineMore: '加载后续运行记录', workMode: '节点工作', chatMode: '任务内排查对话', unknownMode: '历史执行模式未记录',
   recordsLoading: '正在读取任务工具与运行记录…', message: 'Inbox 消息', reply: 'Inbox 回复', workOutput: 'Agent 工作输出',

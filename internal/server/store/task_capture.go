@@ -34,7 +34,7 @@ func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtim
 		return out, notFoundIfNoRows(err, "Agent")
 	}
 	if out.Agent.ProjectID == nil || *out.Agent.ProjectID != project.ID {
-		return out, apperr.Invalid("workflow.steps.agentId", "执行Agent必须属于本项目")
+		return out, apperr.Invalid("workflow.steps.agentId", "The Agent that runs the step must belong to this project.")
 	}
 	out.Configuration = taskruntime.Configuration{AgentID: agentID, ConfigVersion: out.Agent.ConfigVersion, Provider: out.Agent.ModelProvider, ModelID: out.Agent.ModelID, Prompt: out.Agent.Prompt, Prompts: &prompts.Layers{Format: prompts.FormatV1, ProjectID: &project.ID, ProjectPrompt: project.Prompt, ProjectVersion: project.Version, AgentPrompt: out.Agent.Prompt, AgentVersion: out.Agent.PromptVersion}, Skills: []taskruntime.Skill{}, CLIs: []string{}}
 	rows, err := tx.Query(ctx, `SELECT cli_name FROM agent_clis WHERE agent_id=$1 ORDER BY cli_name`, agentID)
@@ -122,7 +122,7 @@ func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskF
 			}
 		}
 	}
-	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(db.ErrNoRows, "任务来源")
+	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(db.ErrNoRows, "Task source")
 }
 func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uuid.UUID, files []SyncFile) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
@@ -158,5 +158,5 @@ func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uu
 func (s *Store) TaskRuntimeActive(ctx context.Context, runtime uuid.UUID) (bool, error) {
 	var active bool
 	e := s.Pool.QueryRow(ctx, `SELECT t.ended_at IS NULL FROM task_instances i JOIN task_records t ON t.id=i.task_id WHERE i.id=$1`, runtime).Scan(&active)
-	return active, notFoundIfNoRows(e, "任务实例")
+	return active, notFoundIfNoRows(e, "Task instance")
 }

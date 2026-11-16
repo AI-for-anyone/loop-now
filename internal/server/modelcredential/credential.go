@@ -16,8 +16,8 @@ import (
 
 const MaxBytes = 64 * 1024
 
-var ErrInvalid = errors.New("模型凭证格式无效")
-var ErrImplicitEncoding = errors.New("模型秘密只能通过显式认证通道编码")
+var ErrInvalid = errors.New("invalid model credential format")
+var ErrImplicitEncoding = errors.New("model secrets can only be encoded through the explicit auth channel")
 
 type Binding struct {
 	OwnerKind string     `json:"ownerKind,omitempty"`

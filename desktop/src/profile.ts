@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { current, defaultProgramData, pathOf, windowsWorkRootBase, type PlatformId } from './platform'
+import { LocalizedError } from './strings'
 
 // Profiles: chosen with --profile=<name or absolute path>, LOOP_NOW_DESKTOP_PROFILE, or the profile field of
 // ~/Library/Application Support/Loop Now/desktop.json (Windows: %APPDATA%\Loop Now\desktop.json, i.e. Electron's userData)
@@ -56,7 +57,8 @@ export function profileFromFile(file: string): string | undefined {
 // profiles.<profile> in desktop.json specifies directories for this profile, used to keep the original work root etc. when migrating from
 // a source install: {"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}. The key is the name or absolute path given to
 // --profile; only workRoot, dataDir and contextDir are accepted, and the values are absolute paths. Nothing is specified when the file cannot
-// be read, is not JSON or has no such entry; a malformed entry is an error rather than a silent fallback to the default directories.
+// be read, is not JSON or has no such entry; a malformed entry is an error rather than a silent fallback to the default directories
+// (a LocalizedError: it is thrown before the app is ready, and main.ts shows it on the status page).
 export function overridesFromFile(file: string, profile: string, p: PlatformId = current): DirOverrides {
   let profiles: unknown
   try {
@@ -66,13 +68,12 @@ export function overridesFromFile(file: string, profile: string, p: PlatformId =
   }
   if (typeof profiles !== 'object' || profiles === null || !Object.hasOwn(profiles, profile)) return {}
   const entry = (profiles as Record<string, unknown>)[profile]
-  const where = `desktop.json 的 profiles.${profile}`
-  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw new Error(`${where} 应是对象`)
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw new LocalizedError((s) => s.profile.notObject(profile))
   const overrides: DirOverrides = {}
   for (const [key, value] of Object.entries(entry)) {
     const dir = overridableDirs.find((name) => name === key)
-    if (!dir) throw new Error(`${where} 只能写 ${overridableDirs.join('、')}，不认识 ${key}`)
-    if (typeof value !== 'string' || !pathOf(p).isAbsolute(value)) throw new Error(`${where}.${key} 应是绝对路径：${JSON.stringify(value)}`)
+    if (!dir) throw new LocalizedError((s) => s.profile.unknownKey(profile, overridableDirs, key))
+    if (typeof value !== 'string' || !pathOf(p).isAbsolute(value)) throw new LocalizedError((s) => s.profile.notAbsolute(profile, key, JSON.stringify(value)))
     overrides[dir] = trimSlashes(value, p)
   }
   return overrides
@@ -84,7 +85,7 @@ export function overridesFromFile(file: string, profile: string, p: PlatformId =
 // %ProgramData%\loop-now-desktop\<name> (%LOCALAPPDATA% is inside %USERPROFILE%, which the server does not accept; see windowsWorkRootBase in platform.ts).
 // An absolute path: everything goes under that directory (the work root is its work subdirectory, and the directory itself must be outside
 // HOME), for integration testing in a temporary directory.
-// overrides (directories specified by desktop.json) replace the corresponding default locations.
+// overrides (directories specified by desktop.json) replace the corresponding default locations. A malformed name throws a LocalizedError.
 export function resolveProfile(value: string, home = homedir(), overrides: DirOverrides = {}, p: PlatformId = current, env: NodeJS.ProcessEnv = process.env): Profile {
   const { join, basename, isAbsolute } = pathOf(p)
   if (isAbsolute(value)) {
@@ -101,7 +102,7 @@ export function resolveProfile(value: string, home = homedir(), overrides: DirOv
       overrides,
     }
   }
-  if (!namePattern.test(value)) throw new Error(`配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：${value}`)
+  if (!namePattern.test(value)) throw new LocalizedError((s) => s.profile.badName(value))
   if (p === 'win32') {
     const localAppData = env.LOCALAPPDATA || join(home, 'AppData', 'Local')
     const root = join(localAppData, 'Loop Now', value)

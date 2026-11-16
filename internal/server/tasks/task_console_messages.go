@@ -19,13 +19,13 @@ func consoleNodeTarget(m *store.TaskMutation, id uuid.UUID) (store.TaskConsoleLi
 			return store.TaskConsoleLineage{TaskID: m.Record.View.Task.ID, NodeRunID: n.ID, AgentID: n.AgentID, RuntimeID: n.RuntimeID}, nil
 		}
 	}
-	return store.TaskConsoleLineage{}, apperr.NotFound("任务节点")
+	return store.TaskConsoleLineage{}, apperr.NotFound("Task node")
 }
 
 func (s *Service) ConsoleMessageCapability(ctx context.Context, p auth.Principal, task, node uuid.UUID) (taskmodel.TaskNodeMessageCapability, error) {
 	var out taskmodel.TaskNodeMessageCapability
 	if p.Kind != auth.KindConsole {
-		return out, apperr.Forbidden("只有控制台可查询节点消息能力")
+		return out, apperr.Forbidden("Only the console can check whether a node accepts messages.")
 	}
 	_, err := s.Store.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		m.Unchanged()
@@ -44,26 +44,26 @@ func (s *Service) ConsoleMessageCapability(ctx context.Context, p auth.Principal
 		}
 		out.CanSend = reason == ""
 		if !out.CanSend {
-			message := "原节点当前不能接收消息，可能已切换或原执行条件不可用"
-			hint := "保留原草稿，核对当前节点与原会话、捕获模型授权；不要改投或自动重试"
+			message := "The original node cannot receive messages right now. It may have changed, or its original run conditions are not available."
+			hint := "Keep the draft. Check the current node, the original session and the captured model login. Do not send it elsewhere or retry automatically."
 			switch reason {
 			case "task_ended":
-				message = "任务已结束，节点历史只读"
+				message = "The task has ended. The node history is read-only."
 			case "node_changed":
-				message = "所选执行已不是当前节点，历史只读"
+				message = "The selected run is no longer the current node. Its history is read-only."
 			case "instance_unavailable":
-				message = "原任务实例尚未准备完成或已经回收"
+				message = "The original task instance is not prepared yet or has been retired."
 			case "target_mismatch":
-				message = "原节点与运行实例的归属不匹配"
+				message = "The original node does not belong to this runtime instance."
 			case "chat_unavailable":
-				message = "原捕获的模型配置或授权当前不可用，请核对原执行资源"
+				message = "The originally captured model configuration or login is not available right now. Check the original run resources."
 				if m.Record.Current() != nil && m.Record.Current().Status == "blocked" {
 					eligible, e := s.Store.TaskConsoleEligibleTx(ctx, m, node)
 					if e != nil {
 						return nil, e
 					}
 					if !eligible {
-						message = "本次阻塞缺少可确认的执行异常来源，不能直接聊天排查"
+						message = "This block has no confirmed run failure as its source, so chatting with the node to investigate is not available."
 					} else {
 						var state string
 						var file *string
@@ -71,14 +71,14 @@ func (s *Service) ConsoleMessageCapability(ctx context.Context, p auth.Principal
 							return nil, e
 						}
 						if state != "active" || file == nil || *file == "" {
-							message = "原任务会话当前不可接续，不会自动重开或替换上下文"
+							message = "The original task session cannot be continued right now. Its context is not reopened or replaced automatically."
 						}
 					}
 				}
 			}
 			out.Reason = &message
 			if paused {
-				message = "原实例正在确认凭证交接，请等待原动作结果"
+				message = "The original instance is confirming a credential handoff. Wait for the result of the original action."
 			}
 			out.HandlingHint = &hint
 		}
@@ -89,22 +89,22 @@ func (s *Service) ConsoleMessageCapability(ctx context.Context, p auth.Principal
 
 func (s *Service) SendConsoleMessage(ctx context.Context, p auth.Principal, task, node uuid.UUID, in taskmodel.TaskNodeMessageInput, maxTextBytes int) (json.RawMessage, error) {
 	if in.ImageIDsPresent || len(in.ImageIDs) > 0 {
-		return nil, apperr.Invalid("imageIds", "图片仅支持当前节点Inbox发送入口")
+		return nil, apperr.Invalid("imageIds", "Images can only be sent through the current node's Inbox endpoint.")
 	}
 	if p.Kind != auth.KindConsole {
-		return nil, apperr.Forbidden("只有控制台可发送严格节点消息")
+		return nil, apperr.Forbidden("Only the console can send strict node messages.")
 	}
 	if in.ActionID == uuid.Nil || in.ExpectedAgentID == uuid.Nil || in.ExpectedRuntimeID == uuid.Nil || task == uuid.Nil || node == uuid.Nil || !utf8.ValidString(in.Text) || strings.TrimSpace(in.Text) == "" {
-		return nil, apperr.Invalid("body", "动作、目标及正文必须有效")
+		return nil, apperr.Invalid("body", "actionId, expectedAgentId and expectedRuntimeId must be non-zero UUIDs, and text must be valid UTF-8 and not blank.")
 	}
 	if maxTextBytes <= 0 || len(in.Text) > maxTextBytes {
-		return nil, apperr.TooLarge("节点消息正文超限")
+		return nil, apperr.TooLarge("The node message text exceeds the size limit.")
 	}
 	if in.WhenBusy == "" {
 		in.WhenBusy = "queue"
 	}
 	if in.WhenBusy != "queue" && in.WhenBusy != "interrupt" {
-		return nil, apperr.Invalid("whenBusy", "仅支持queue或interrupt")
+		return nil, apperr.Invalid("whenBusy", "Must be queue or interrupt.")
 	}
 	target := store.TaskConsoleLineage{TaskID: task, NodeRunID: node, AgentID: in.ExpectedAgentID, RuntimeID: in.ExpectedRuntimeID}
 	action := bodyAction(p, in.ActionID, "sendTaskNodeMessage", struct {

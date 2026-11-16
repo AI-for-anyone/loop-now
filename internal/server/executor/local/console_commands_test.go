@@ -295,7 +295,7 @@ func TestConsoleCommandsRespectClaudeRuntime(t *testing.T) {
 	}
 	ctx := context.Background()
 	res, err := h.e.Execute(ctx, executor.Request{AgentID: id, RunID: uuid.New(), Origin: executor.OriginConsoleCompact}, newSink())
-	if err != nil || res.Outcome != executor.OutcomeFailed || !strings.Contains(res.ErrorMessage, "不支持 Pi") {
+	if err != nil || res.Outcome != executor.OutcomeFailed || !strings.Contains(res.ErrorMessage, "does not support Pi") {
 		t.Fatalf("应拒绝 Pi compact：%+v %v", res, err)
 	}
 	stopped, err := h.e.StopIdle(ctx, id, "console_reload")

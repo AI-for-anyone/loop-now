@@ -57,16 +57,16 @@ func Resolve(ctx context.Context, o Options) (*Resolved, error) {
 	var err error
 
 	if r.NodeBin, err = lookPath(o.NodeBin); err != nil {
-		return nil, fmt.Errorf("找不到 node（%s）：%w", o.NodeBin, err)
+		return nil, fmt.Errorf("cannot find node (%s): %w", o.NodeBin, err)
 	}
 	if r.GitBin, err = lookPath("git"); err != nil {
-		return nil, fmt.Errorf("找不到 git：%w", err)
+		return nil, fmt.Errorf("cannot find git: %w", err)
 	}
 	if r.PiBin, err = lookPath(o.PiBin); err != nil {
-		return nil, fmt.Errorf("找不到 Pi（%s）：%w", o.PiBin, err)
+		return nil, fmt.Errorf("cannot find Pi (%s): %w", o.PiBin, err)
 	}
 	if r.PiRealPath, err = filepath.EvalSymlinks(r.PiBin); err != nil {
-		return nil, fmt.Errorf("解析 Pi 路径失败：%w", err)
+		return nil, fmt.Errorf("resolve the Pi path: %w", err)
 	}
 
 	r.ExecBasePath = o.ExecBasePath
@@ -173,11 +173,11 @@ func checkPiVersion(ctx context.Context, nodeBin, piBin, want, path string) erro
 	cmd.Env = append(execenv.Base(os.TempDir(), os.TempDir()), "PATH="+path, "PI_OFFLINE=1", "PI_SKIP_VERSION_CHECK=1", "HOME="+os.TempDir())
 	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("执行 %s --version 失败：%w", piBin, err)
+		return fmt.Errorf("run %s --version: %w", piBin, err)
 	}
 	got := strings.TrimSpace(string(out))
 	if got != want {
-		return fmt.Errorf("Pi 版本不符：期望 %s，实际 %s（可用 LOOP_NOW_PI_VERSION 或 LOOP_NOW_PI_BIN 调整）", want, got)
+		return fmt.Errorf("Pi version mismatch: expected %s, got %s (adjust with LOOP_NOW_PI_VERSION or LOOP_NOW_PI_BIN)", want, got)
 	}
 	return nil
 }
@@ -204,7 +204,7 @@ func findPackageRoot(start, pkgName string) string {
 
 func derivePiAIDir(piPackageDir string) (string, error) {
 	if piPackageDir == "" {
-		return "", errors.New("无法定位 Pi 安装包根目录，请用 LOOP_NOW_PI_AI_DIR 指定 pi-ai 目录")
+		return "", errors.New("cannot locate the root of the Pi package; set the pi-ai directory with LOOP_NOW_PI_AI_DIR")
 	}
 	for _, c := range []string{
 		filepath.Join(piPackageDir, "node_modules", "@earendil-works", "pi-ai"),
@@ -214,7 +214,7 @@ func derivePiAIDir(piPackageDir string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("在 %s 附近找不到 @earendil-works/pi-ai，请用 LOOP_NOW_PI_AI_DIR 指定", piPackageDir)
+	return "", fmt.Errorf("cannot find @earendil-works/pi-ai near %s; set its directory with LOOP_NOW_PI_AI_DIR", piPackageDir)
 }
 
 func currentHomes() []string {
@@ -249,14 +249,14 @@ func PrepareWorkRoot(workRoot string, homes []string) (string, error) {
 			continue
 		}
 		if within(real, hr) {
-			return "", fmt.Errorf("工作根目录 %s 位于用户 home（%s）之内：Pi 会加载工作目录及其所有上级目录中的 AGENTS.md/CLAUDE.md，请改用 home 之外的目录", real, hr)
+			return "", fmt.Errorf("work root %s is inside the user home (%s): Pi loads AGENTS.md/CLAUDE.md from the working directory and all its parent directories; use a directory outside home", real, hr)
 		}
 	}
 	for dir := real; ; dir = filepath.Dir(dir) {
 		for _, name := range ContextFileNames {
 			p := filepath.Join(dir, name)
 			if _, err := os.Stat(p); err == nil {
-				return "", fmt.Errorf("工作根目录的上级目录中有 %s：Pi 会把它加载进每个 Agent 的上下文，请移走该文件或更换工作根目录", p)
+				return "", fmt.Errorf("a parent directory of the work root contains %s: Pi would load it into the context of every Agent; move the file away or use another work root", p)
 			}
 		}
 		if dir == filepath.Dir(dir) {
@@ -264,18 +264,18 @@ func PrepareWorkRoot(workRoot string, homes []string) (string, error) {
 		}
 	}
 	if err := os.MkdirAll(real, 0o700); err != nil {
-		return "", fmt.Errorf("创建工作根目录失败：%w", err)
+		return "", fmt.Errorf("create the work root: %w", err)
 	}
 	fi, err := os.Stat(real)
 	if err != nil {
 		return "", err
 	}
 	if !fi.IsDir() {
-		return "", fmt.Errorf("工作根目录 %s 不是目录", real)
+		return "", fmt.Errorf("work root %s is not a directory", real)
 	}
 	if !privatefs.IsPrivate(real, fi) {
 		if err := privatefs.MakePrivate(real); err != nil {
-			return "", fmt.Errorf("把工作根目录设为只有当前用户可访问失败：%w", err)
+			return "", fmt.Errorf("make the work root accessible only to the current user: %w", err)
 		}
 	}
 	return real, nil
@@ -295,7 +295,7 @@ func resolveExisting(p string) (string, error) {
 		}
 		parent := filepath.Dir(p)
 		if parent == p {
-			return "", fmt.Errorf("无法解析路径 %s", p)
+			return "", fmt.Errorf("cannot resolve path %s", p)
 		}
 		rest = append(rest, filepath.Base(p))
 		p = parent

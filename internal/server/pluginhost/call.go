@@ -62,7 +62,7 @@ type claimResult struct {
 func (s *Supervisor) Call(ctx context.Context, kind Kind, event map[string]any, include func(plugin string) bool) (Outcome, error) {
 	typ, _ := event["type"].(string)
 	if typ == "" {
-		return Outcome{}, errors.New("事件缺少 type")
+		return Outcome{}, errors.New("the event has no type")
 	}
 	s.mu.Lock()
 	if s.disabled {
@@ -98,9 +98,9 @@ func (s *Supervisor) Call(ctx context.Context, kind Kind, event map[string]any, 
 			return out, ctx.Err()
 		}
 		if err != nil {
-			s.enqueueLog(t.spec.ID, "warn", fmt.Sprintf("%s 未得到回应，按%s处理：%v", typ, fallbackName(kind, t.spec.FailClosed), err))
+			s.enqueueLog(t.spec.ID, "warn", fmt.Sprintf("No response to %s; treated as %s: %v", typ, fallbackName(kind, t.spec.FailClosed), err))
 			if kind == Intercept && t.spec.FailClosed {
-				return Outcome{Blocked: true, Plugin: t.spec.ID, Reason: fmt.Sprintf("插件 %s 未能检查（%v）", t.spec.ID, err)}, nil
+				return Outcome{Blocked: true, Plugin: t.spec.ID, Reason: fmt.Sprintf("Plugin %s could not run its check (%v).", t.spec.ID, err)}, nil
 			}
 			continue
 		}
@@ -134,13 +134,13 @@ func (s *Supervisor) Call(ctx context.Context, kind Kind, event map[string]any, 
 func fallbackName(kind Kind, failClosed bool) string {
 	switch {
 	case kind == Intercept && failClosed:
-		return "阻止"
+		return "blocked"
 	case kind == Intercept:
-		return "放行"
+		return "allowed"
 	case kind == Modify:
-		return "跳过"
+		return "skipped"
 	default:
-		return "未处理"
+		return "not handled"
 	}
 }
 
@@ -167,7 +167,7 @@ func Event(typ string, project, agent, task, run *uuid.UUID, fields map[string]a
 func BlockedError(o Outcome) error {
 	reason := o.Reason
 	if reason == "" {
-		reason = "没有说明原因"
+		reason = "No reason given."
 	}
-	return apperr.Conflict(apperr.CodePluginBlocked, "插件 "+o.Plugin+" 阻止了这个操作："+reason)
+	return apperr.Conflict(apperr.CodePluginBlocked, "Plugin "+o.Plugin+" blocked this operation: "+reason)
 }

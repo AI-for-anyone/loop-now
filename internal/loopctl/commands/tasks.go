@@ -139,7 +139,7 @@ func addTasks(r *cli.Registry) {
 			}
 			node := inv.String("expected-node-run")
 			if !IsUUID(node) {
-				return nil, output.Errorf(output.CodeInvalidArgument, "--expected-node-run 必须是 UUID")
+				return nil, output.Errorf(output.CodeInvalidArgument, "--expected-node-run must be a UUID.")
 			}
 			body := map[string]any{"actionId": action, "expectedNodeRunId": node}
 			if inv.Has("note-file") {
@@ -202,7 +202,7 @@ func addTasks(r *cli.Registry) {
 			}
 			var detail map[string]json.RawMessage
 			if json.Unmarshal(resp.Data, &detail) != nil || len(detail["artifacts"]) == 0 || detail["artifacts"][0] != '[' {
-				return nil, output.Errorf(output.CodeUnexpectedResponse, "任务响应缺少 artifacts 数组")
+				return nil, output.Errorf(output.CodeUnexpectedResponse, "The task response has no artifacts array.")
 			}
 			return map[string]json.RawMessage{"artifacts": detail["artifacts"]}, nil
 		}})
@@ -219,7 +219,7 @@ func addTasks(r *cli.Registry) {
 func taskAction(inv *cli.Invocation) (string, error) {
 	id := inv.String("action-id")
 	if !IsUUID(id) {
-		return "", output.Errorf(output.CodeInvalidArgument, "--action-id 必须是 UUID")
+		return "", output.Errorf(output.CodeInvalidArgument, "--action-id must be a UUID.")
 	}
 	return id, nil
 }
@@ -230,7 +230,7 @@ func taskText(inv *cli.Invocation, flag string) (string, error) {
 		return "", err
 	}
 	if !utf8.Valid(b) || flag != "note-file" && strings.TrimSpace(string(b)) == "" {
-		return "", output.Errorf(output.CodeInvalidArgument, "--%s 须为非空 UTF-8 文本", flag)
+		return "", output.Errorf(output.CodeInvalidArgument, "--%s must be non-empty UTF-8 text.", flag)
 	}
 	return string(b), nil
 }
@@ -245,11 +245,11 @@ func taskJSON(ctx context.Context, inv *cli.Invocation, path ...string) (any, er
 	}
 	var obj map[string]json.RawMessage
 	if !utf8.Valid(b) || json.Unmarshal(b, &obj) != nil || obj == nil {
-		return nil, output.Errorf(output.CodeInvalidArgument, "--from-file 须包含一个 UTF-8 JSON 对象")
+		return nil, output.Errorf(output.CodeInvalidArgument, "--from-file must contain one UTF-8 JSON object.")
 	}
 	if id, present := explicitTaskRun(inv); present {
 		if _, exists := obj["runId"]; exists {
-			return nil, output.Errorf(output.CodeInvalidArgument, "运行参数与输入JSON的runId不能重复提供")
+			return nil, output.Errorf(output.CodeInvalidArgument, "Give the run with --run/--run-id or as runId in the input JSON, not both.")
 		}
 		obj["runId"], _ = json.Marshal(id)
 		b, _ = json.Marshal(obj)
@@ -259,10 +259,10 @@ func taskJSON(ctx context.Context, inv *cli.Invocation, path ...string) (any, er
 
 func taskRun(inv *cli.Invocation) error {
 	if inv.Has("run") && inv.Has("run-id") {
-		return output.Errorf(output.CodeInvalidArgument, "--run与--run-id不能同时提供")
+		return output.Errorf(output.CodeInvalidArgument, "--run and --run-id cannot be given together.")
 	}
 	if id, present := explicitTaskRun(inv); present && (!IsUUID(id) || id == "00000000-0000-0000-0000-000000000000") {
-		return output.Errorf(output.CodeInvalidArgument, "运行参数必须是本轮准确非零UUID")
+		return output.Errorf(output.CodeInvalidArgument, "--run/--run-id must be the exact, non-zero run UUID of this turn.")
 	}
 	return nil
 }
@@ -277,34 +277,34 @@ func explicitTaskRun(inv *cli.Invocation) (string, bool) {
 func taskArtifactGet(ctx context.Context, inv *cli.Invocation) (any, error) {
 	dest, err := filepath.Abs(inv.String("out"))
 	if err != nil {
-		return nil, output.Errorf(output.CodeOutputUnwritable, "无法确定输出路径")
+		return nil, output.Errorf(output.CodeOutputUnwritable, "Could not determine the output path.")
 	}
 	f, err := os.CreateTemp(filepath.Dir(dest), ".loopctl-artifact-*")
 	if err != nil {
-		return nil, output.Errorf(output.CodeOutputUnwritable, "无法创建成果临时文件：%v", cause(err))
+		return nil, output.Errorf(output.CodeOutputUnwritable, "Could not create a temporary file for the artifact: %v", cause(err))
 	}
 	defer func() { f.Close(); os.Remove(f.Name()) }()
 	var size int64
 	var sum string
 	consume := func(resp *http.Response) error {
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return output.Errorf(output.CodeOutputUnwritable, "无法重置临时文件：%v", err)
+			return output.Errorf(output.CodeOutputUnwritable, "Could not reset the temporary file: %v", err)
 		}
 		if err := f.Truncate(0); err != nil {
-			return output.Errorf(output.CodeOutputUnwritable, "无法重置临时文件：%v", err)
+			return output.Errorf(output.CodeOutputUnwritable, "Could not reset the temporary file: %v", err)
 		}
 		h := sha256.New()
 		w := &trackedWriter{w: f}
 		n, err := io.Copy(io.MultiWriter(w, h), resp.Body)
 		if w.err != nil {
-			return output.Errorf(output.CodeOutputUnwritable, "无法保存成果：%v", w.err)
+			return output.Errorf(output.CodeOutputUnwritable, "Could not save the artifact: %v", w.err)
 		}
 		if err != nil {
 			return err
 		}
 		size, sum = n, hex.EncodeToString(h.Sum(nil))
 		if !strings.EqualFold(resp.Header.Get("X-Content-SHA256"), sum) {
-			return output.Errorf(output.CodeUnexpectedResponse, "成果的 SHA-256 缺失或与内容不一致")
+			return output.Errorf(output.CodeUnexpectedResponse, "The artifact's SHA-256 is missing or does not match the content.")
 		}
 		return nil
 	}
@@ -314,13 +314,13 @@ func taskArtifactGet(ctx context.Context, inv *cli.Invocation) (any, error) {
 		return nil, e
 	}
 	if err := f.Sync(); err != nil {
-		return nil, output.Errorf(output.CodeOutputUnwritable, "无法保存成果：%v", err)
+		return nil, output.Errorf(output.CodeOutputUnwritable, "Could not save the artifact: %v", err)
 	}
 	if err := f.Close(); err != nil {
-		return nil, output.Errorf(output.CodeOutputUnwritable, "无法保存成果：%v", err)
+		return nil, output.Errorf(output.CodeOutputUnwritable, "Could not save the artifact: %v", err)
 	}
 	if err := os.Rename(f.Name(), dest); err != nil {
-		return nil, output.Errorf(output.CodeOutputUnwritable, "无法保存成果：%v", cause(err))
+		return nil, output.Errorf(output.CodeOutputUnwritable, "Could not save the artifact: %v", cause(err))
 	}
 	return map[string]any{"taskId": inv.Args[0], "artifactId": inv.Args[1], "size": size, "sha256": sum, "savedTo": dest}, nil
 }

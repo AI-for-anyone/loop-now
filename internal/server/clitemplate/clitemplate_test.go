@@ -152,7 +152,7 @@ func TestRenderLark(t *testing.T) {
 func TestTemplateEnvRejectsPlaceholders(t *testing.T) {
 	tmpl := &Template{Name: "x", Version: "1", Binary: "x", Injection: "env", Fields: []Field{{Name: "token", Label: "t", Type: "secret"}},
 		Env: map[string]string{"X_MODE": "{{token}}"}}
-	if err := tmpl.validate(); err == nil || !strings.Contains(err.Error(), "不能引用录入项") {
+	if err := tmpl.validate(); err == nil || !strings.Contains(err.Error(), "must not reference a field") {
 		t.Fatalf("固定环境变量引用录入项时应拒绝加载：%v", err)
 	}
 }
@@ -306,13 +306,13 @@ func TestInstallChecksumMismatch(t *testing.T) {
 	inst := NewInstaller(root, time.Minute, srv.Client())
 	tmpl := testTemplate(srv.URL, strings.Repeat("0", 64), "tar.gz", "demo")
 	_, err := inst.Ensure(context.Background(), tmpl)
-	if err == nil || !strings.Contains(err.Error(), "摘要不符") {
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("摘要不符应失败：%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "tools", "demo", "1.0.0")); !os.IsNotExist(err) {
 		t.Fatal("摘要不符时工具目录中不应出现该版本")
 	}
-	if st, msg := inst.Status(tmpl); st != StateFailed || !strings.Contains(msg, "摘要不符") {
+	if st, msg := inst.Status(tmpl); st != StateFailed || !strings.Contains(msg, "checksum mismatch") {
 		t.Fatalf("状态应为失败并带原因：%s %s", st, msg)
 	}
 }
@@ -325,5 +325,31 @@ func TestInstallUnsupportedPlatform(t *testing.T) {
 	}
 	if st, _ := inst.Status(tmpl); st != StateUnsupportedPlatform {
 		t.Fatalf("状态应为 unsupported_platform：%s", st)
+	}
+}
+
+// Field messages of a template do not repeat the field's label (labels come from the template files and are not
+// English): the error is already attached to fields.<name>.
+func TestRenderFieldMessagesOmitLabel(t *testing.T) {
+	c, _ := Load("")
+	gh, _ := c.Get("gh")
+	_, _, err := gh.Render(map[string]string{})
+	if e, ok := apperr.As(err); !ok || len(e.Fields) != 1 || e.Fields[0].Field != "fields.token" || e.Fields[0].Message != "Required." {
+		t.Fatalf("missing required field: %+v", err)
+	}
+	lark, _ := c.Get("lark-cli")
+	_, _, err = lark.Render(map[string]string{"brand": "other"})
+	e, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("invalid enum value: %v", err)
+	}
+	found := false
+	for _, f := range e.Fields {
+		if f.Field == "fields.brand" {
+			found = f.Message == "Must be one of: feishu, lark."
+		}
+	}
+	if !found {
+		t.Fatalf("invalid enum value: %+v", e.Fields)
 	}
 }

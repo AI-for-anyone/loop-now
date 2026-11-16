@@ -88,7 +88,7 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 	}
 	newID, newManager := newTaskManager(t, s, "接管通信Manager")
 	forwarded := sender.run("inbox", "send", address, "--text", "after task end").ok(t)
-	if forwarded["to"].(map[string]any)["id"] != newID || forwarded["to"].(map[string]any)["address"] != "默认组织/默认项目/接管通信Manager" || !strings.Contains(forwarded["text"].(string), "[原收件人："+address+"]") {
+	if forwarded["to"].(map[string]any)["id"] != newID || forwarded["to"].(map[string]any)["address"] != "默认组织/默认项目/接管通信Manager" || !strings.Contains(forwarded["text"].(string), "[Original recipient: "+address+"]") {
 		t.Fatal("ended recipient did not forward to current Manager with original address")
 	}
 	newManager.run("inbox", "read", forwarded["id"].(string)).ok(t)

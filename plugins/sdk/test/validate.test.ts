@@ -113,16 +113,16 @@ describe('validatePlugin', () => {
       r.findings.map((f) => [f.level, f.path]),
       Object.keys(bad).map((k) => ['error', `loopNow.mcpServers.${k}`]),
     )
-    assert.match(r.findings[0]!.message, /"sse" 不支持 SSE，请用 streamable HTTP 的 url/)
-    assert.match(r.findings[1]!.message, /"ws" 的 type 只能是 stdio、http 或 streamable-http/)
-    assert.match(r.findings[2]!.message, /"file_url" 须是带 command 的 stdio 条目或带 http\/https url 的 streamable HTTP 条目/)
+    assert.match(r.findings[0]!.message, /^"sse" uses SSE, which is not supported\. Use a streamable HTTP url instead\.$/)
+    assert.match(r.findings[1]!.message, /^"ws" must have type stdio, http or streamable-http\.$/)
+    assert.match(r.findings[2]!.message, /^"file_url" must be a stdio entry with a command or a streamable HTTP entry with an http or https url/)
   })
 
   it('不是插件的目录与坏 JSON', () => {
-    assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /不是插件/)
-    assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /不是合法的 JSON/)
-    assert.match(validatePlugin(path.join(tmp, 'absent')).findings[0]!.message, /不是目录/)
-    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /既没有 Agent 侧/)
+    assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /so it is not a plugin/)
+    assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /is not valid JSON/)
+    assert.match(validatePlugin(path.join(tmp, 'absent')).findings[0]!.message, /is not a directory/)
+    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /neither an Agent side/)
   })
 
   it('description 与 loopNow.displayName 可以是字符串或按语言的对象；对象须至少一项、键为语言标签、值非空', () => {
@@ -150,8 +150,8 @@ describe('validatePlugin', () => {
       assert.deepEqual(
         r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
         [
-          ['description', 'description 须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'],
-          ['loopNow.displayName', 'loopNow.displayName 须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'],
+          ['description', 'description must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'],
+          ['loopNow.displayName', 'loopNow.displayName must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'],
         ],
         label,
       )

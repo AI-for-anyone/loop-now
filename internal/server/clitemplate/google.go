@@ -27,7 +27,7 @@ type serviceAccountJSON struct {
 }
 
 func renderGoogleSA(values map[string]string) ([]PayloadFile, error) {
-	invalid := apperr.Invalid("credential.fields", "Google服务账号JSON或目标项目格式无效")
+	invalid := apperr.Invalid("credential.fields", "The Google service account JSON or the target project is not in a valid format. Use the service account key JSON downloaded from Google Cloud.")
 	raw := []byte(values["serviceAccountJson"])
 	defer clear(raw)
 	var c serviceAccountJSON

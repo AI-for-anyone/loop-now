@@ -51,11 +51,11 @@ type Artifact struct {
 var versionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
 
 func main() {
-	version := flag.String("version", "", "版本号；默认取 git describe --tags --always --dirty")
-	out := flag.String("out", "", "输出目录，产物写到 <out>/<版本>/")
+	version := flag.String("version", "", "Version number; defaults to the output of git describe --tags --always --dirty")
+	out := flag.String("out", "", "Output directory; the artifacts are written to <out>/<version>/")
 	flag.Parse()
 	if *out == "" {
-		fmt.Fprintln(os.Stderr, "loopctl-dist：需要 -out")
+		fmt.Fprintln(os.Stderr, "loopctl-dist: -out is required.")
 		os.Exit(2)
 	}
 	ctx := context.Background()
@@ -66,7 +66,7 @@ func main() {
 	if *version == "" {
 		b, err := exec.CommandContext(ctx, "git", "-C", root, "describe", "--tags", "--always", "--dirty").Output()
 		if err != nil {
-			fail(fmt.Errorf("无法用 git describe 确定版本号，请用 -version 指定：%w", err))
+			fail(fmt.Errorf("determine the version with git describe (set it with -version instead): %w", err))
 		}
 		*version = strings.TrimSpace(string(b))
 	}
@@ -74,11 +74,11 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	fmt.Printf("loopctl %s：%d 个平台的产物已写入 %s\n", m.Version, len(m.Artifacts), dir)
+	fmt.Printf("loopctl %s: wrote the artifacts for %d platforms to %s\n", m.Version, len(m.Artifacts), dir)
 }
 
 func fail(err error) {
-	fmt.Fprintln(os.Stderr, "loopctl-dist：", err)
+	fmt.Fprintln(os.Stderr, "loopctl-dist:", err)
 	os.Exit(1)
 }
 
@@ -89,7 +89,7 @@ func moduleRoot(ctx context.Context) (string, error) {
 	}
 	mod := strings.TrimSpace(string(b))
 	if mod == "" || mod == os.DevNull {
-		return "", errors.New("当前目录不在 Go module 中")
+		return "", errors.New("the current directory is not inside a Go module")
 	}
 	return filepath.Dir(mod), nil
 }
@@ -98,11 +98,11 @@ func moduleRoot(ctx context.Context) (string, error) {
 // output directory.
 func Build(ctx context.Context, root, version, out string) (*Manifest, string, error) {
 	if !versionPattern.MatchString(version) {
-		return nil, "", fmt.Errorf("版本号 %q 只能含字母、数字与 . _ + -", version)
+		return nil, "", fmt.Errorf("version %q may contain only letters, digits and . _ + -", version)
 	}
 	dir := filepath.Join(out, version)
 	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
-		return nil, "", fmt.Errorf("%s 已存在且不为空，请换一个输出目录或先清理", dir)
+		return nil, "", fmt.Errorf("%s already exists and is not empty; choose another output directory or clean it first", dir)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
@@ -123,7 +123,7 @@ func Build(ctx context.Context, root, version, out string) (*Manifest, string, e
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+p.OS, "GOARCH="+p.Arch)
 		if b, err := cmd.CombinedOutput(); err != nil {
-			return nil, "", fmt.Errorf("构建 %s/%s 失败：%v\n%s", p.OS, p.Arch, err, b)
+			return nil, "", fmt.Errorf("build %s/%s: %v\n%s", p.OS, p.Arch, err, b)
 		}
 		size, sum, err := digest(filepath.Join(dir, file))
 		if err != nil {

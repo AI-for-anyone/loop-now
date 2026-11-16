@@ -180,7 +180,7 @@ class DeliveryQueue implements Delivery {
 
   private stop(): void {
     this.stopped = true
-    this.stopController.abort(new Error('插件已停止'))
+    this.stopController.abort(new Error('Plugin has stopped'))
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
   }
@@ -193,7 +193,7 @@ class DeliveryQueue implements Delivery {
   }
 
   async deliver(request: DeliveryRequest): Promise<DeliveryRecord> {
-    if (this.stopped) throw new Error('插件已停止，不能再投递')
+    if (this.stopped) throw new Error('Plugin has stopped; cannot deliver')
     const stored = this.normalize(request)
     await this.ensureReady()
     return this.serialize(async () => {
@@ -233,10 +233,10 @@ class DeliveryQueue implements Delivery {
     await this.ensureReady()
     return this.serialize(async () => {
       const record = this.records.get(id)
-      if (!record) throw new Error(`没有投递记录 ${id}`)
+      if (!record) throw new Error(`No delivery record ${id}`)
       if (!isTerminal(record) || this.running.has(id)) return { ...record }
       const stored = await this.api.state.get<StoredRequest>(REQUEST_PREFIX + id)
-      if (!stored) throw new Error(`投递 ${id} 的请求内容已删除，无法重发`)
+      if (!stored) throw new Error(`Cannot resend delivery ${id}: its request was deleted`)
       await this.api.state.set(REQUEST_PREFIX + id, { ...stored, round: record.attempts })
       const now = Date.now()
       const next: DeliveryRecord = { ...record, status: 'pending', nextAttemptAt: iso(now), updatedAt: iso(now) }
@@ -263,14 +263,14 @@ class DeliveryQueue implements Delivery {
     try {
       url = new URL(request.target)
     } catch {
-      throw new Error(`投递目标不是合法的地址：${request.target}`)
+      throw new Error(`Delivery target is not a valid URL: ${request.target}`)
     }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('投递目标须是 http 或 https 地址')
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Delivery target must be an http or https URL')
     const method = (request.method ?? 'POST').toUpperCase()
-    if (!/^[A-Z]+$/.test(method)) throw new Error(`HTTP 方法无效：${request.method}`)
+    if (!/^[A-Z]+$/.test(method)) throw new Error(`Invalid HTTP method: ${request.method}`)
     const headers: Record<string, string> = {}
     for (const [k, v] of Object.entries(request.headers ?? {})) {
-      if (typeof v !== 'string') throw new Error(`请求头 ${k} 的值须是字符串`)
+      if (typeof v !== 'string') throw new Error(`Value of header ${k} must be a string`)
       headers[k.toLowerCase()] = v
     }
     let body: string | null = null
@@ -281,10 +281,10 @@ class DeliveryQueue implements Delivery {
         body = JSON.stringify(request.body)
         headers['content-type'] ??= 'application/json'
       }
-      if (Buffer.byteLength(body) > MAX_BODY_BYTES) throw new Error(`正文不能超过 ${MAX_BODY_BYTES} 字节`)
+      if (Buffer.byteLength(body) > MAX_BODY_BYTES) throw new Error(`Body must not exceed ${MAX_BODY_BYTES} bytes`)
     }
     const signing = request.signing ? { secretField: request.signing.secretField, projectId: request.signing.projectId ?? null } : null
-    if (signing && !signing.secretField) throw new Error('signing.secretField 不能为空')
+    if (signing && !signing.secretField) throw new Error('signing.secretField must not be empty')
     return {
       target: url.toString(),
       method,
@@ -335,7 +335,7 @@ class DeliveryQueue implements Delivery {
     }
     if (this.stopped) return
     if (!stored) {
-      await this.finish(record, { kind: 'fail', code: null, error: '请求内容已丢失' }, null, true)
+      await this.finish(record, { kind: 'fail', code: null, error: 'Stored request is missing' }, null, true)
       return
     }
     const outcome = await this.send(id, stored)
@@ -347,7 +347,7 @@ class DeliveryQueue implements Delivery {
     const headers: Record<string, string> = { 'user-agent': this.userAgent, ...stored.headers, [DELIVERY_HEADER]: id }
     if (stored.signing) {
       const secret = this.api.secrets.get(stored.signing.secretField, stored.signing.projectId)
-      if (!secret) return { kind: 'fail', code: null, error: `签名密钥 ${stored.signing.secretField} 没有设置` }
+      if (!secret) return { kind: 'fail', code: null, error: `Signing secret ${stored.signing.secretField} is not set` }
       const ts = Math.floor(Date.now() / 1000)
       headers[TIMESTAMP_HEADER] = String(ts)
       headers[SIGNATURE_HEADER] = signBody(secret, ts, stored.body ?? '')
@@ -364,15 +364,15 @@ class DeliveryQueue implements Delivery {
       const text = await res.text().catch(() => '')
       if (res.status >= 200 && res.status < 300) return { kind: 'delivered', code: res.status }
       const snippet = text.trim().slice(0, ERROR_SNIPPET)
-      const error = `HTTP ${res.status}${snippet ? `：${snippet}` : ''}`
-      if (res.status >= 300 && res.status < 400) return { kind: 'fail', code: res.status, error: `${error}（不跟随重定向）` }
+      const error = `HTTP ${res.status}${snippet ? `: ${snippet}` : ''}`
+      if (res.status >= 300 && res.status < 400) return { kind: 'fail', code: res.status, error: `${error} (redirects are not followed)` }
       return retryable(res.status) ? { kind: 'retry', code: res.status, error } : { kind: 'fail', code: res.status, error }
     } catch (err) {
       if (this.stopped) return null
-      if (timeout.aborted) return { kind: 'retry', code: null, error: `超时（${Math.round(this.timeoutMs / 1000)} 秒没有响应）` }
+      if (timeout.aborted) return { kind: 'retry', code: null, error: `Timed out: no response within ${Math.round(this.timeoutMs / 1000)} s` }
       const e = err as Error & { cause?: { code?: string; message?: string } }
       const detail = e.cause?.code ?? e.cause?.message ?? e.message
-      return { kind: 'retry', code: null, error: `请求失败：${detail}` }
+      return { kind: 'retry', code: null, error: `Request failed: ${detail}` }
     }
   }
 

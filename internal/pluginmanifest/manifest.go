@@ -206,22 +206,22 @@ type packageJSON struct {
 func ReadManifest(dir, platformVersion string) (Manifest, error) {
 	b, err := os.ReadFile(filepath.Join(dir, ManifestFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return Manifest{}, invalid("插件目录没有 " + ManifestFile)
+		return Manifest{}, invalid("The plugin folder has no " + ManifestFile)
 	}
 	if err != nil {
 		return Manifest{}, err
 	}
 	var pkg packageJSON
 	if err := json.Unmarshal(b, &pkg); err != nil {
-		return Manifest{}, invalid(ManifestFile + " 不是合法的 JSON：" + err.Error())
+		return Manifest{}, invalid(ManifestFile + " is not valid JSON: " + err.Error())
 	}
 	if pkg.Pi == nil && pkg.LoopNow == nil {
-		return Manifest{}, invalid(ManifestFile + " 既没有 pi 段也没有 loopNow 段，不是插件")
+		return Manifest{}, invalid(ManifestFile + " has neither a pi section nor a loopNow section, so it is not a plugin.")
 	}
 	m := Manifest{Name: pkg.Name, Version: pkg.Version, Description: pkg.Description, Events: []string{}, Permissions: []string{},
 		Accounts: []AccountKind{}, Extensions: []string{}, Skills: []string{}, Bin: []string{}, MCPServers: map[string]json.RawMessage{}}
 	if !versionPattern.MatchString(m.Version) {
-		return Manifest{}, invalid("version 必须是 1 到 64 个字母、数字、点、加号或连字符")
+		return Manifest{}, invalid("version must be 1 to 64 letters, digits, dots, plus signs or hyphens.")
 	}
 	if pkg.Pi != nil {
 		m.Extensions = nonNil(pkg.Pi.Extensions)
@@ -258,7 +258,7 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 		}
 	}
 	if !idPattern.MatchString(m.ID) {
-		return Manifest{}, invalid("loopNow.id 必须是 1 到 64 个小写字母、数字或连字符，不以连字符开头或结尾")
+		return Manifest{}, invalid("loopNow.id must be 1 to 64 lowercase letters, digits or hyphens, and must not start or end with a hyphen.")
 	}
 	if err := m.Description.Check("description"); err != nil {
 		return Manifest{}, err
@@ -297,28 +297,28 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 
 func (m *Manifest) validate(dir, platformVersion string) error {
 	if m.MinPlatformVersion != nil && !versionAtLeast(platformVersion, *m.MinPlatformVersion) {
-		return invalid(fmt.Sprintf("插件要求平台版本不低于 %s，当前为 %s", *m.MinPlatformVersion, platformVersion))
+		return invalid(fmt.Sprintf("The plugin requires platform version %s or later; the current version is %s.", *m.MinPlatformVersion, platformVersion))
 	}
 	if len(m.Extensions) == 0 && len(m.Skills) == 0 && m.Platform == "" && len(m.MCPServers) == 0 && len(m.Bin) == 0 {
-		return invalid("插件既没有 Agent 侧（扩展、Skill、MCP 服务器、CLI）也没有平台侧")
+		return invalid("The plugin has neither an Agent side (extensions, Skills, MCP servers, CLIs) nor a platform side.")
 	}
 	seen := map[string]bool{}
 	for _, e := range m.Events {
 		if _, ok := Events[e]; !ok {
-			return invalid("loopNow.events 中的 " + strconv.Quote(e) + " 不是平台的事件")
+			return invalid("In loopNow.events, " + strconv.Quote(e) + " is not a platform event.")
 		}
 		if seen[e] {
-			return invalid("loopNow.events 中的 " + strconv.Quote(e) + " 重复")
+			return invalid("In loopNow.events, " + strconv.Quote(e) + " appears more than once.")
 		}
 		seen[e] = true
 	}
 	for _, p := range m.Permissions {
 		if !slices.Contains(Permissions, p) {
-			return invalid("loopNow.permissions 中的 " + strconv.Quote(p) + " 不是可用的范围")
+			return invalid("In loopNow.permissions, " + strconv.Quote(p) + " is not an available scope.")
 		}
 	}
 	if (len(m.Events) > 0 || len(m.Components.Actions) > 0 || len(m.Components.Channels) > 0 || m.Components.HTTP || len(m.Components.Schedules) > 0) && m.Platform == "" {
-		return invalid("订阅事件、操作按钮、渠道、HTTP 与定时都由平台侧处理，须声明 loopNow.platform")
+		return invalid("Event subscriptions, action buttons, channels, HTTP and schedules are handled by the platform side, so loopNow.platform must be declared.")
 	}
 	if m.Platform != "" {
 		if err := checkPath(dir, m.Platform, "loopNow.platform", false); err != nil {
@@ -346,59 +346,59 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 		}
 	}
 	if t, ok := m.ConfigSchema.Map()["type"]; ok && t != "object" {
-		return invalid("loopNow.configSchema 的 type 须为 object")
+		return invalid("loopNow.configSchema must have type object.")
 	}
 	if _, err := CompileSchema(m.ConfigSchema.Map(), false); err != nil {
-		return invalid("loopNow.configSchema 不是合法的 JSON Schema：" + err.Error())
+		return invalid("loopNow.configSchema is not a valid JSON Schema: " + err.Error())
 	}
 	kinds := map[string]bool{}
 	for _, a := range m.Accounts {
 		if !kindPattern.MatchString(a.Kind) || kinds[a.Kind] {
-			return invalid("loopNow.accounts 的 kind 须唯一，由小写字母、数字或下划线组成，以字母开头")
+			return invalid("Each kind in loopNow.accounts must be unique, use only lowercase letters, digits or underscores, and start with a letter.")
 		}
 		kinds[a.Kind] = true
 		if a.Fields.IsZero() {
-			return invalid("loopNow.accounts 的 " + a.Kind + " 缺少 fields")
+			return invalid("loopNow.accounts entry " + a.Kind + " has no fields.")
 		}
 		if _, err := CompileSchema(a.Fields.Map(), true); err != nil {
-			return invalid("loopNow.accounts 的 " + a.Kind + " fields 不是合法的 JSON Schema：" + err.Error())
+			return invalid("loopNow.accounts entry " + a.Kind + " has fields that are not a valid JSON Schema: " + err.Error())
 		}
 	}
 	ids := map[string]bool{}
 	for _, a := range m.Components.Actions {
 		if !slugPattern.MatchString(a.ID) || ids[a.ID] || a.Label == "" || len(a.Where) == 0 {
-			return invalid("loopNow.actions 的每项须有唯一的 id、label 与 where")
+			return invalid("Each entry in loopNow.actions must have a unique id, a label and where.")
 		}
 		if !a.Fields.IsZero() {
 			if _, err := CompileSchema(a.Fields.Map(), true); err != nil {
-				return invalid("loopNow.actions 的 " + a.ID + " fields 不是合法的 JSON Schema：" + err.Error())
+				return invalid("loopNow.actions entry " + a.ID + " has fields that are not a valid JSON Schema: " + err.Error())
 			}
 		}
 		ids[a.ID] = true
 		for _, w := range a.Where {
 			if !slices.Contains([]string{"agent", "task", "project", "identity", "global"}, w) {
-				return invalid("loopNow.actions 的 where 只能是 agent、task、project、identity 或 global")
+				return invalid("In loopNow.actions, where can only contain agent, task, project, identity or global.")
 			}
 		}
 	}
 	channelIDs := map[string]bool{}
 	for _, c := range m.Components.Channels {
 		if !slugPattern.MatchString(c.ID) || c.Label == "" || channelIDs[c.ID] {
-			return invalid("loopNow.channels 的每项须有唯一的 id 与 label")
+			return invalid("Each entry in loopNow.channels must have a unique id and a label.")
 		}
 		channelIDs[c.ID] = true
 		if c.ManageIdentities && !slices.Contains(m.Permissions, "identities.manage") {
-			return invalid("loopNow.channels 的 " + c.ID + " 能代管外部身份，须在 permissions 里声明 identities.manage")
+			return invalid("loopNow.channels entry " + c.ID + " can manage external identities, so identities.manage must be declared in permissions.")
 		}
 	}
 	scheduleIDs := map[string]bool{}
 	for _, sc := range m.Components.Schedules {
 		if !slugPattern.MatchString(sc.ID) || scheduleIDs[sc.ID] {
-			return invalid("loopNow.schedule 的每项须有唯一的 id")
+			return invalid("Each entry in loopNow.schedule must have a unique id.")
 		}
 		scheduleIDs[sc.ID] = true
 		if _, err := ParseCron(sc.Cron); err != nil {
-			return invalid("loopNow.schedule 的 " + sc.ID + "：" + err.Error())
+			return invalid("loopNow.schedule entry " + sc.ID + ": " + err.Error())
 		}
 	}
 	return nil
@@ -409,14 +409,14 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 func checkPath(dir, rel, field string, allowDir bool) error {
 	clean := filepath.Clean(rel)
 	if rel == "" || filepath.IsAbs(rel) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return invalid(field + " 的 " + strconv.Quote(rel) + " 须是插件目录内的相对路径")
+		return invalid(field + ": " + strconv.Quote(rel) + " must be a relative path inside the plugin folder.")
 	}
 	info, err := os.Stat(filepath.Join(dir, clean))
 	if err != nil {
-		return invalid(field + " 的 " + strconv.Quote(rel) + " 不存在")
+		return invalid(field + ": " + strconv.Quote(rel) + " does not exist.")
 	}
 	if info.IsDir() && !allowDir {
-		return invalid(field + " 的 " + strconv.Quote(rel) + " 须是文件")
+		return invalid(field + ": " + strconv.Quote(rel) + " must be a file.")
 	}
 	return nil
 }
@@ -427,8 +427,8 @@ func checkPath(dir, rel, field string, allowDir bool) error {
 // have a non-empty command and a type that is not one of the http kinds. headers, args, env and the other fields are
 // passed to Pi as-is. The error texts are the same as the SDK's validate.
 func checkMCPServer(name string, raw json.RawMessage) error {
-	field := "loopNow.mcpServers 的 " + strconv.Quote(name)
-	bad := invalid(field + " 须是带 command 的 stdio 条目或带 http/https url 的 streamable HTTP 条目，名称为小写字母、数字、下划线或连字符")
+	field := "loopNow.mcpServers entry " + strconv.Quote(name)
+	bad := invalid(field + " must be a stdio entry with a command or a streamable HTTP entry with an http or https url, and its name must use only lowercase letters, digits, underscores or hyphens.")
 	var srv map[string]any
 	if !slugPattern.MatchString(name) || json.Unmarshal(raw, &srv) != nil || srv == nil {
 		return bad
@@ -436,9 +436,9 @@ func checkMCPServer(name string, raw json.RawMessage) error {
 	typ, _ := srv["type"].(string)
 	if v, ok := srv["type"]; ok && !slices.Contains([]string{"stdio", "http", "streamable-http"}, typ) {
 		if v == "sse" {
-			return invalid(field + " 不支持 SSE，请用 streamable HTTP 的 url")
+			return invalid(field + " uses SSE, which is not supported. Use a streamable HTTP url instead.")
 		}
-		return invalid(field + " 的 type 只能是 stdio、http 或 streamable-http")
+		return invalid(field + " must have type stdio, http or streamable-http.")
 	}
 	if u, ok := srv["url"].(string); ok && typ != "stdio" {
 		// Same as the SDK: it must be written as http:// or https:// plus a host (Pi's URL.canParse normalizes

@@ -140,26 +140,26 @@ func uploadArchive(ctx context.Context, inv *cli.Invocation, method string, path
 func ZipDir(root string) ([]byte, error) {
 	info, err := os.Stat(root)
 	if err != nil {
-		return nil, output.Errorf(output.CodeInputUnreadable, "无法读取目录 %s：%v", root, cause(err))
+		return nil, output.Errorf(output.CodeInputUnreadable, "Could not read directory %s: %v", root, cause(err))
 	}
 	if !info.IsDir() {
-		return nil, output.Errorf(output.CodeInvalidArgument, "%s 不是目录", root)
+		return nil, output.Errorf(output.CodeInvalidArgument, "%s is not a directory.", root)
 	}
 	var files []string
 	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return output.Errorf(output.CodeInputUnreadable, "无法读取 %s：%v", p, cause(err))
+			return output.Errorf(output.CodeInputUnreadable, "Could not read %s: %v", p, cause(err))
 		}
 		if p == root {
 			return nil
 		}
 		switch t := d.Type(); {
 		case t&fs.ModeSymlink != 0:
-			return output.Errorf(output.CodeSymlinkNotSupported, "%s 是符号链接，不能上传", p)
+			return output.Errorf(output.CodeSymlinkNotSupported, "%s is a symbolic link and cannot be uploaded.", p)
 		case d.IsDir():
 			return nil
 		case !t.IsRegular():
-			return output.Errorf(output.CodeSymlinkNotSupported, "%s 不是普通文件，不能上传", p)
+			return output.Errorf(output.CodeSymlinkNotSupported, "%s is not a regular file and cannot be uploaded.", p)
 		}
 		files = append(files, p)
 		return nil
@@ -173,20 +173,20 @@ func ZipDir(root string) ([]byte, error) {
 		rel, _ := filepath.Rel(root, p)
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: filepath.ToSlash(rel), Method: zip.Deflate})
 		if err != nil {
-			return nil, output.Errorf(output.CodeInternalError, "打包失败：%v", err)
+			return nil, output.Errorf(output.CodeInternalError, "Could not pack the Skill: %v", err)
 		}
 		f, err := os.Open(p)
 		if err != nil {
-			return nil, output.Errorf(output.CodeInputUnreadable, "无法读取 %s：%v", p, cause(err))
+			return nil, output.Errorf(output.CodeInputUnreadable, "Could not read %s: %v", p, cause(err))
 		}
 		_, err = io.Copy(w, f)
 		f.Close()
 		if err != nil {
-			return nil, output.Errorf(output.CodeInputUnreadable, "无法读取 %s：%v", p, err)
+			return nil, output.Errorf(output.CodeInputUnreadable, "Could not read %s: %v", p, err)
 		}
 	}
 	if err := zw.Close(); err != nil {
-		return nil, output.Errorf(output.CodeInternalError, "打包失败：%v", err)
+		return nil, output.Errorf(output.CodeInternalError, "Could not pack the Skill: %v", err)
 	}
 	return buf.Bytes(), nil
 }

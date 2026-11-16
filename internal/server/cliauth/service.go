@@ -63,22 +63,22 @@ func (s *Service) Start(ctx context.Context, project uuid.UUID, in cm.CLIAuthSta
 		return s.startLark(ctx, project, in)
 	}
 	if in.SourceAccountID != nil || in.ExpectedSourceRevision != nil {
-		return cm.CLIAuthState{}, apperr.Invalid("body", "该CLI不接受应用来源字段")
+		return cm.CLIAuthState{}, apperr.Invalid("body", "This CLI does not accept sourceAccountId or expectedSourceRevision.")
 	}
 	if in.OperationID == uuid.Nil || !(in.CLI == "gcloud" && in.AuthType == "google_user" || in.CLI == "gh" && in.AuthType == "github_user") {
-		return cm.CLIAuthState{}, apperr.Invalid("body", "CLI登录字段无效")
+		return cm.CLIAuthState{}, apperr.Invalid("body", "The CLI login fields are invalid. operationId is required, and cli and authType must be gcloud with google_user or gh with github_user.")
 	}
 	if in.AccountID == nil {
 		if in.ExpectedRevision != nil || in.CLI == "gh" && in.Name != nil || in.CLI == "gcloud" && (in.Name == nil || strings.TrimSpace(*in.Name) != *in.Name || *in.Name == "" || !utf8.ValidString(*in.Name) || utf8.RuneCountInString(*in.Name) > 200 || strings.IndexFunc(*in.Name, unicode.IsControl) >= 0) {
-			return cm.CLIAuthState{}, apperr.Invalid("name", "CLI登录名称无效")
+			return cm.CLIAuthState{}, apperr.Invalid("name", "The CLI login name is invalid. gcloud needs a name of 1 to 200 characters without surrounding spaces or control characters; gh takes no name. expectedRevision is only for an existing account.")
 		}
 	} else if *in.AccountID == uuid.Nil || in.ExpectedRevision == nil || *in.ExpectedRevision < 1 || in.Name != nil {
-		return cm.CLIAuthState{}, apperr.Invalid("accountId", "CLI登录目标无效")
+		return cm.CLIAuthState{}, apperr.Invalid("accountId", "The CLI login target is invalid. accountId must not be the zero UUID, expectedRevision must be at least 1, and name must not be set.")
 	}
 	s.mu.Lock()
 	if s.closed || in.CLI == "gcloud" && s.Helper == nil || in.CLI == "gh" && s.GitHub == nil {
 		s.mu.Unlock()
-		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "认证辅助组件暂不可用"}
+		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The login helper is not available right now. Try again later."}
 	}
 	op, created, e := s.Store.NewProjectCLIAuthOperation(ctx, project, in, time.Now().Add(s.Options.LoginTimeout))
 	if e != nil {

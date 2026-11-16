@@ -272,7 +272,7 @@ func TestFakeMissingSessionExits(t *testing.T) {
 	if !errors.As(p.ExitErr(), &ee) || ee.ExitCode() != 1 {
 		t.Fatalf("会话文件不存在应以 1 退出：%v", p.ExitErr())
 	}
-	if !strings.Contains(p.Stderr(), "会话文件不存在") {
+	if !strings.Contains(p.Stderr(), "session file does not exist") {
 		t.Fatalf("stderr 应包含原因：%q", p.Stderr())
 	}
 	if _, err := p.Prompt(testCtx(t), "x", nil); !errors.Is(err, ErrExited) {

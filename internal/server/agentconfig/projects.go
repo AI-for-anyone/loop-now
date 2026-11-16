@@ -93,7 +93,7 @@ func (s *Service) managerChanged(ctx context.Context, projectID uuid.UUID) {
 }
 
 func validateProjectName(name string) error {
-	if msg := naming.Validate("项目名称", name); msg != "" {
+	if msg := naming.Validate("Project name", name); msg != "" {
 		return apperr.Invalid("name", msg)
 	}
 	return nil

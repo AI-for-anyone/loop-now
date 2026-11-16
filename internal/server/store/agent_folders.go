@@ -47,7 +47,7 @@ func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (Folde
 		existing, err := scanGitPull(tx.QueryRow(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE agent_id = $1 AND action_id = $2`, p.AgentID, p.ActionID))
 		if err == nil {
 			if existing.URL != p.URL || existing.Branch != p.Branch || existing.Path != p.Path {
-				return apperr.Conflict(apperr.CodeActionConflict, "动作ID已用于其他请求")
+				return apperr.Conflict(apperr.CodeActionConflict, "This actionId was already used for a different request.")
 			}
 			out = existing
 			return nil
@@ -60,7 +60,7 @@ func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (Folde
 			return err
 		}
 		if busy {
-			return apperr.Conflict(apperr.CodePathConflict, "这个子目录已有进行中的拉取")
+			return apperr.Conflict(apperr.CodePathConflict, "A pull is already in progress for this subdirectory.")
 		}
 		out, err = scanGitPull(tx.QueryRow(ctx, `INSERT INTO agent_folder_git_pulls (id, agent_id, action_id, url, branch, path, status)
 			VALUES ($1, $2, $3, $4, $5, $6, 'queued') RETURNING `+gitPullColumns, p.ID, p.AgentID, p.ActionID, p.URL, p.Branch, p.Path))
@@ -82,7 +82,7 @@ func (s *Store) FindFolderGitPull(ctx context.Context, agentID, actionID uuid.UU
 // GetFolderGitPull returns one of the Agent's pulls; returns not_found when it does not exist.
 func (s *Store) GetFolderGitPull(ctx context.Context, agentID, id uuid.UUID) (FolderGitPull, error) {
 	p, err := scanGitPull(s.Pool.QueryRow(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE id = $1 AND agent_id = $2`, id, agentID))
-	return p, notFoundIfNoRows(err, "拉取操作")
+	return p, notFoundIfNoRows(err, "Pull operation")
 }
 
 // ListFolderGitPulls returns the Agent's most recent limit pulls, newest first.
@@ -114,7 +114,7 @@ func (s *Store) FinishFolderGitPull(ctx context.Context, id uuid.UUID, code, mes
 // FailInterruptedFolderGitPulls marks, at startup, the pulls interrupted by the previous run as failed
 // (server_restart) and returns them (so their temporary directories can be cleaned up).
 func (s *Store) FailInterruptedFolderGitPulls(ctx context.Context) ([]FolderGitPull, error) {
-	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = $1
+	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = 'The server restarted while the pull was in progress, so it was aborted.', finished_at = $1
 		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns, s.Pool.Now())
 	if err != nil {
 		return nil, err
