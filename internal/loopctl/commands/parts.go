@@ -19,7 +19,7 @@ var (
 )
 
 func addAgentParts(r *cli.Registry) {
-	// 可用 CLI 与凭证
+	// Available CLIs and credentials
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "cli", "add"},
 		Summary:    "Add a CLI to the Agent's available list (unchanged if already there)",
@@ -103,7 +103,7 @@ func addAgentParts(r *cli.Registry) {
 		}),
 	})
 
-	// Skill 副本
+	// Skill copies
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "skill", "list"},
 		Summary:    "List the Agent's Skill copies",
@@ -213,7 +213,8 @@ func modelCredentialFile(inv *cli.Invocation) (json.RawMessage, error) {
 	return json.RawMessage(b), nil
 }
 
-// credentialFile 读取凭证文件：JSON 对象，值为字符串。错误说明中不包含文件内容。
+// credentialFile reads a credential file: a JSON object whose values are strings. Error messages do not include the
+// file content.
 func credentialFile(inv *cli.Invocation) (map[string]string, error) {
 	b, err := readInput(inv, "from-file")
 	if err != nil {
@@ -244,7 +245,8 @@ func skillMarkdown(inv *cli.Invocation) (string, error) {
 	return string(b), nil
 }
 
-// trackedWriter 记录写入错误，用于区分“写本地文件失败”与“读取响应中断”。
+// trackedWriter records write errors, to tell "writing the local file failed" apart from "reading the response was
+// interrupted".
 type trackedWriter struct {
 	w   io.Writer
 	err error

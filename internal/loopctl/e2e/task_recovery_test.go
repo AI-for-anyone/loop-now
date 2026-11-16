@@ -59,7 +59,8 @@ func TestTaskCLIRecoveryDoesNotReplayAndReplacesProcessTokens(t *testing.T) {
 			if before != 1 {
 				t.Fatal("unexpected initial turn count", before)
 			}
-			// 只停止本测试的临时App，保持相同数据目录/地址/工作根，绝不操作8780旧服务。
+			// Only stop this test's temporary App, keeping the same data directory / address / work root; never
+			// touch the old service on port 8780.
 			s.stop()
 			active = nil
 			restarted := w.start(nil)
@@ -103,7 +104,8 @@ func TestTaskCLIRecoveryDoesNotReplayAndReplacesProcessTokens(t *testing.T) {
 				}
 				time.Sleep(w.cfg.TaskReconcileInterval)
 			}
-			// 只有本次明确的Manager retry才产生新node/turn；复用原runtime与会话。
+			// Only this explicit Manager retry produces a new node/turn; the original runtime and session are
+			// reused.
 			freshManager.run("task", "retry", id, "--action-id", uuid.NewString(), "--expected-node-run", n.ID.String(), "--yes").ok(t)
 			resumed := currentCLINode(t, waitRunningCLITask(t, restarted, id))
 			if resumed.ID == n.ID || resumed.RuntimeID != n.RuntimeID || resumed.Attempt != 2 {

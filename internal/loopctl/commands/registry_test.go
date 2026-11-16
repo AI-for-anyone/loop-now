@@ -21,7 +21,8 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// recorder 是不校验契约的服务，用于遍历全部命令的通用检查：按 status 响应，记录全部请求。
+// recorder is a server that does not check the contract, used for the generic checks that go over all commands: it
+// responds with status and records all requests.
 type recorder struct {
 	srv    *httptest.Server
 	status int
@@ -73,11 +74,12 @@ func (r *recorder) take() []recorded {
 	return out
 }
 
-// sampleArgv 为命令生成一组能通过解析的参数：每个互斥组取一个选项，并为互斥组中的每个选项各生成一组。
-// 可选选项都带上，以便检查它们都被实际使用。
+// sampleArgv generates argument lists for a command that pass parsing: one option is taken from each mutually
+// exclusive group, and one list is generated for each option in a mutually exclusive group.
+// All optional options are included so that it can be checked that they are all actually used.
 func sampleArgv(t *testing.T, c *cli.Command) [][]string {
 	t.Helper()
-	exclusive := map[string][]string{} // 选项 → 同一互斥组中的其他选项
+	exclusive := map[string][]string{} // option -> the other options in the same mutually exclusive group
 	var groups [][]string
 	for _, k := range c.Constraints {
 		if k.Kind == cli.ExactlyOne || k.Kind == cli.AtMostOne {
@@ -91,11 +93,12 @@ func sampleArgv(t *testing.T, c *cli.Command) [][]string {
 			}
 		}
 	}
-	// --run 与 --run-id 是同义选项，命令拒绝同时提供，按互斥组取样。
+	// --run and --run-id are synonyms and commands refuse both at once, so sample them as a mutually exclusive
+	// group.
 	if slices.ContainsFunc(c.Flags, func(f cli.Flag) bool { return f.Name == "run" }) && slices.ContainsFunc(c.Flags, func(f cli.Flag) bool { return f.Name == "run-id" }) {
 		groups = append(groups, []string{"run", "run-id"})
 	}
-	choices := [][]string{nil} // 每组的选择，nil 表示每组取第一个
+	choices := [][]string{nil} // the choice for each group; nil means take the first of each group
 	for _, g := range groups {
 		for _, alt := range g[1:] {
 			choices = append(choices, []string{alt})
@@ -120,7 +123,7 @@ func sampleArgv(t *testing.T, c *cli.Command) [][]string {
 				}
 			}
 		}
-		// 必须同时提供的选项：其中任何一个被排除时，整组都不提供。
+		// Options that must be given together: when any of them is excluded, none of the group is given.
 		for _, k := range c.Constraints {
 			if k.Kind != cli.Together {
 				continue
@@ -263,7 +266,8 @@ func writeCAFile(t *testing.T) string {
 	return writeFile(t, "ca.pem", string(caPEM))
 }
 
-// identityEnv 返回能运行该命令的身份环境：外部命令用外部身份，其余用 Agent 身份。
+// identityEnv returns an identity environment that can run the command: the external identity for external
+// commands, the Agent identity for the rest.
 func identityEnv(t *testing.T, c *cli.Command, ext, agent *recorder) *env {
 	e := newEnv(t)
 	if c.AllowedFor(cli.IdentityExternal) && (len(c.Identities) == 1 || !c.AllowedFor(cli.IdentityAgent)) {
@@ -277,7 +281,7 @@ func identityEnv(t *testing.T, c *cli.Command, ext, agent *recorder) *env {
 
 func all() []*cli.Command { return commands.Registry().Commands() }
 
-// 删除类与覆盖类命令缺少 --yes 时不发出请求、不改动配置文件。
+// Commands that delete or overwrite send no request and do not change the config file when --yes is missing.
 func TestDestructiveRequiresYes(t *testing.T) {
 	ext, ag := newRecorder(t, true), newRecorder(t, false)
 	n := 0
@@ -324,7 +328,7 @@ func without(argv []string, drop string) []string {
 	return out
 }
 
-// Agent 身份不能使用的命令，在本地拒绝且不发出请求。
+// Commands the Agent identity may not use are refused locally and send no request.
 func TestAgentIdentityRestrictions(t *testing.T) {
 	ag := newRecorder(t, false)
 	for _, c := range all() {
@@ -351,7 +355,7 @@ func TestAgentIdentityRestrictions(t *testing.T) {
 	}
 }
 
-// version、schema、--help 与 config 不需要连接配置，也不发出网络请求。
+// version, schema, --help and config need no connection config and send no network requests.
 func TestLocalCommandsDoNotUseNetwork(t *testing.T) {
 	e := newEnv(t)
 	e.block = true
@@ -381,7 +385,8 @@ func TestLocalCommandsDoNotUseNetwork(t *testing.T) {
 	}
 }
 
-// 只有读请求自动重试：标为可重试的命令只发 GET 或读取消息；其余命令遇到 503 只请求一次。
+// Only read requests are retried automatically: commands marked as retryable only send GET or read messages; other
+// commands send only one request when they get a 503.
 func TestRetryOnlyReads(t *testing.T) {
 	ext, ag := newRecorder(t, true), newRecorder(t, false)
 	ext.status, ag.status = 503, 503
@@ -411,7 +416,8 @@ func TestRetryOnlyReads(t *testing.T) {
 	}
 }
 
-// 令牌只出现在 Authorization 头中：成功与各种失败情况下，URL、请求体与输出中都没有令牌。
+// The token only appears in the Authorization header: on success and in all failure cases, the token is in neither
+// the URL, the request body nor the output.
 func TestTokenNeverLeaks(t *testing.T) {
 	for _, status := range []int{200, 401, 403, 500, 0} {
 		for _, fromFile := range []bool{false, true} {
@@ -449,7 +455,7 @@ func TestTokenNeverLeaks(t *testing.T) {
 			}
 		}
 	}
-	// 本地命令的输出中也没有令牌的密钥部分。
+	// The output of local commands does not contain the secret part of the token either.
 	e := newEnv(t)
 	e.stdin = extToken + "\n"
 	for _, argv := range [][]string{{"config", "set", "default", "--token-stdin"}, {"config", "list"}, {"schema"}} {
@@ -459,7 +465,7 @@ func TestTokenNeverLeaks(t *testing.T) {
 	}
 }
 
-// 已声明的选项在执行时都被读取：选项声明了却被忽略时测试失败。
+// Every declared option is read when the command runs: the test fails when an option is declared but ignored.
 func TestDeclaredFlagsAreUsed(t *testing.T) {
 	ext, ag := newRecorder(t, true), newRecorder(t, false)
 	var inv *cli.Invocation
@@ -491,10 +497,11 @@ func TestDeclaredFlagsAreUsed(t *testing.T) {
 	}
 }
 
-// 不提供对话、Agent 收件箱、身份管理与通用状态修改的命令。
+// There are no commands for conversations, Agent inboxes, identity management or generic state changes.
 func TestNoForbiddenCommands(t *testing.T) {
 	ext, ag := newRecorder(t, true), newRecorder(t, false)
-	// 对话消息只能读历史（GET）；事件流、Agent 与外部身份的收件箱、外部身份管理都只限控制台。
+	// For conversation messages only the history can be read (GET); the event stream, the inboxes of Agents and
+	// external identities, and external identity management are all console-only.
 	forbidden := []string{"/events", "/external-identities", "/agents/" + agentUUID + "/inbox"}
 	for _, c := range all() {
 		for _, f := range c.Flags {
@@ -520,7 +527,8 @@ func TestNoForbiddenCommands(t *testing.T) {
 			if strings.HasSuffix(path, "/agents/"+agentUUID+"/messages") && r.method != http.MethodGet {
 				t.Errorf("%s 向 Agent 发送对话消息", c.Name())
 			}
-			// 项目写操作只允许下列白名单：项目新建、改名、删除与 Manager，以及共享账号/OAuth 写入。
+			// Project write operations are limited to this allowlist: creating, renaming and deleting a project and
+			// its Manager, plus writing shared accounts/OAuth.
 			credentialPath := strings.TrimPrefix(path, "/api/v1/projects/"+sampleArg("project"))
 			governance := path == "/api/v1/projects" || credentialPath == "" || credentialPath == "/manager"
 			credentialWrite := credentialPath == "/credential-accounts" || credentialPath == "/credential-accounts/"+sampleArg("accountId") || credentialPath == "/credential-accounts/"+sampleArg("accountId")+"/credential" || credentialPath == "/model-auth/operations" || credentialPath == "/model-auth/operations/"+sampleArg("operationId")+"/cancel"

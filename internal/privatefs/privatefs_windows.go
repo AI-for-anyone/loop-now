@@ -21,12 +21,14 @@ const (
 )
 
 const (
-	errorDirectory     syscall.Errno = 267  // ERROR_DIRECTORY：路径中的一段不是目录
+	errorDirectory     syscall.Errno = 267  // ERROR_DIRECTORY: an element of the path is not a directory
 	errorNotSameDevice syscall.Errno = 0x11 // ERROR_NOT_SAME_DEVICE
 )
 
-// openNoFollow 经 os.Root 打开最后一段：os.Root 在 Windows 上以 O_NOFOLLOW_ANY 打开，最后一段是符号链接或 junction 时失败。
-// 上级目录按普通路径解析，与 Unix 的 O_NOFOLLOW 只管最后一段一致。
+// openNoFollow opens the last element through os.Root: on Windows os.Root opens with O_NOFOLLOW_ANY, so it fails
+// when the last element is a symbolic link or a junction.
+// The parent directories are resolved as an ordinary path, matching Unix O_NOFOLLOW, which only covers the last
+// element.
 func openNoFollow(path string, flag int, perm os.FileMode) (*os.File, error) {
 	dir, base := filepath.Split(filepath.Clean(path))
 	if dir == "" {
@@ -46,7 +48,7 @@ var currentUser struct {
 	err  error
 }
 
-// currentUserSID 返回本进程令牌的用户 SID（只取一次）。
+// currentUserSID returns the user SID of this process's token (looked up only once).
 func currentUserSID() (*windows.SID, error) {
 	currentUser.once.Do(func() {
 		token, err := windows.OpenCurrentProcessToken()
@@ -65,8 +67,9 @@ func currentUserSID() (*windows.SID, error) {
 	return currentUser.sid, currentUser.err
 }
 
-// makePrivate 给 path 设置受保护的 DACL（不再继承上级的 ACE），只含当前用户一条允许全部访问的 ACE；
-// 目录上的 ACE 标记为可继承，之后在目录里新建的文件与子目录自动只有当前用户能访问。
+// makePrivate gives path a protected DACL (no longer inheriting the parent's ACEs) containing a single ACE that
+// allows the current user full access; on a directory the ACE is marked inheritable, so files and subdirectories
+// created in it later are automatically accessible only to the current user.
 func makePrivate(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -92,10 +95,12 @@ func makePrivate(path string) error {
 	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
 }
 
-// onlyCurrentUser 报告安全描述符的 DACL 是否只把访问授予当前用户：没有 DACL（人人可访问）、
-// 有授予别人的 ACE、或有本包不认识的 ACE 类型都算不是。拒绝类 ACE 只会减少访问，忽略。
-// SYSTEM 与 BUILTIN\Administrators 的 ACE 不算"别人"：Windows 用户目录（含 %TEMP%、%LOCALAPPDATA%）天然带着这两条继承 ACE，
-// 它们对应 Unix 上本来就绕过权限位的 root；OpenSSH for Windows 的"权限过宽"检查也是同样的口径。
+// onlyCurrentUser reports whether the DACL of the security descriptor grants access only to the current user. No
+// DACL (everyone has access), an ACE granting access to someone else, or an ACE type this package does not know all
+// count as no. Deny ACEs can only reduce access and are ignored.
+// ACEs for SYSTEM and BUILTIN\Administrators do not count as "someone else": Windows user directories (including
+// %TEMP% and %LOCALAPPDATA%) naturally carry these two inherited ACEs, and they correspond to root on Unix, which
+// bypasses the permission bits anyway; OpenSSH for Windows uses the same rule in its "permissions too open" check.
 func onlyCurrentUser(sd *windows.SECURITY_DESCRIPTOR) bool {
 	me, err := currentUserSID()
 	if err != nil {

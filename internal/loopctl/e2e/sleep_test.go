@@ -19,7 +19,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// 手动驱动同版CLI通过实际App HTTP入口；fake Pi不自主调用CLI，不作为真实模型证明。
+// The CLI of the same version is driven by hand through the real App HTTP entry point; fake Pi does not call the
+// CLI on its own, so this is not proof of real model behavior.
 func sleepCLIState(t *testing.T, l *loopctl) sleepmodel.State {
 	t.Helper()
 	r := l.run("sleep", "status")
@@ -50,7 +51,8 @@ func waitSleepCLI(t *testing.T, l *loopctl, fn func(sleepmodel.State) bool) slee
 	return sleepmodel.State{}
 }
 
-// GET可以描述starting；fixture显式等running后再发送一次POST。
+// GET may describe a run that is still starting; the fixture explicitly waits for running and only then sends the
+// POST once.
 func waitRunningSleepCLI(t *testing.T, s *server, l *loopctl, task bool, exclude uuid.UUID) sleepmodel.State {
 	t.Helper()
 	return waitSleepCLI(t, l, func(st sleepmodel.State) bool {
@@ -97,7 +99,8 @@ func sleepFixtureConfig(c *config.Config) {
 
 func newSleepWorld(t *testing.T) *world {
 	t.Helper()
-	// Inbox摘要提醒不包含原正文directive；固定fake Pi本轮窗口，不改变生产超时。
+	// The Inbox summary reminder does not contain the directive from the original text; fix the fake Pi window for
+	// this turn without changing production timeouts.
 	t.Setenv("FAKEPI_PROMPT_DELAY", "800ms")
 	w := newWorld(t, false)
 	w.cfg.ExecEnvPassthrough = append(w.cfg.ExecEnvPassthrough, "FAKEPI_PROMPT_DELAY")

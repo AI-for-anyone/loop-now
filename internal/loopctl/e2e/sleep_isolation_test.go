@@ -11,7 +11,7 @@ import (
 
 func TestSleepCLIRealAppScopeIsolation(t *testing.T) {
 	w := newSleepWorld(t)
-	w.cfg.PiMaxProcesses = 4 // 常态、两个任务实例与Manager通知分别有名额。
+	w.cfg.PiMaxProcesses = 4 // the regular Agent, the two task instances and the Manager notification each get a slot.
 	s := w.start(sleepFixtureConfig)
 	defer s.stop()
 	_, manager := newTaskManager(t, s, "sleep隔离Manager")
@@ -45,7 +45,8 @@ func TestSleepCLIRealAppScopeIsolation(t *testing.T) {
 	if st := sleepCLIState(t, normal); st.Sleep == nil || st.Sleep.ID != ordinary.Sleep.ID || st.Sleep.TaskID != nil {
 		t.Fatal("task sleep replaced normal state")
 	}
-	// 真正消息只唤醒寻址的任务实例；该轮自行显式重新登记，不恢复旧计时。
+	// A real message only wakes the addressed task instance; that turn explicitly registers sleep again by itself,
+	// and the old timer is not restored.
 	s.console(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/sleep隔离Worker#" + ids[0], "text": "isolated work", "whenBusy": "queue"})
 	st := waitRunningSleepCLI(t, s, clients[0], true, receipts[0].Sleep.SourceRunID)
 	_, next := requestSleepCLI(t, clients[0], *st.CurrentRunID, 120, "")
@@ -66,7 +67,8 @@ func TestSleepCLIRealAppScopeIsolation(t *testing.T) {
 		t.Fatal("unexpected timer", timers, err)
 	}
 	sleepNativeTurns(t, waitCLISessionPath(t, w, uuid.MustParse(worker)), 1)
-	// 两份任务会话各继承常态已有的1个user turn；实际新增分别2、1轮。
+	// The two task sessions each inherit the 1 user turn the regular session already had; the turns actually added
+	// are 2 and 1 respectively.
 	sleepNativeTurns(t, waitCLISessionPath(t, w, *receipts[0].Sleep.RuntimeID), 3)
 	sleepNativeTurns(t, waitCLISessionPath(t, w, *receipts[1].Sleep.RuntimeID), 2)
 	for i, id := range ids {

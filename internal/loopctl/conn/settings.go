@@ -1,4 +1,5 @@
-// Package conn 负责 loopctl 的身份选择、连接参数解析与 HTTP 客户端（令牌、TLS、版本头、禁止重定向、读请求重试）。
+// Package conn handles loopctl's identity selection, connection settings and HTTP client (tokens, TLS, version
+// headers, no redirects, retries for read requests).
 package conn
 
 import (
@@ -16,7 +17,7 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// 环境变量。
+// Environment variables.
 const (
 	EnvAgentURL         = "LOOPCTL_AGENT_URL"
 	EnvAgentToken       = "LOOPCTL_AGENT_TOKEN"
@@ -31,19 +32,19 @@ const (
 	EnvRetryMaxInterval = "LOOPCTL_RETRY_MAX_INTERVAL"
 )
 
-// 身份。与 cli.Identity 的取值相同。
+// Identities. Same values as cli.Identity.
 const (
 	IdentityAgent    = "agent"
 	IdentityExternal = "external"
 )
 
-// 令牌前缀。
+// Token prefixes.
 const (
 	AgentTokenPrefix    = "lna_"
 	ExternalTokenPrefix = "lne_"
 )
 
-// 默认值。
+// Defaults.
 const (
 	DefaultTimeout          = 60 * time.Second
 	DefaultMaxResponse      = 64 << 20
@@ -52,15 +53,15 @@ const (
 	DefaultRetryMaxInterval = 5 * time.Second
 )
 
-// EnvDoc 描述一个环境变量，供 schema 输出。
+// EnvDoc describes one environment variable for the schema output.
 type EnvDoc struct {
 	Name        string `json:"name"`
-	Identity    string `json:"identity,omitempty"` // 为空表示两种身份都用
+	Identity    string `json:"identity,omitempty"` // empty means both identities use it
 	Default     string `json:"default,omitempty"`
 	Description string `json:"description"`
 }
 
-// EnvDocs 返回 loopctl 读取的全部环境变量。
+// EnvDocs returns every environment variable loopctl reads.
 func EnvDocs() []EnvDoc {
 	return []EnvDoc{
 		{EnvAgentURL, IdentityAgent, "", "Agent 接口的基址，由服务端注入，例如 http://127.0.0.1:<端口>/agent/v1"},
@@ -77,7 +78,8 @@ func EnvDocs() []EnvDoc {
 	}
 }
 
-// DetectIdentity 只按环境判断身份：有 Agent 令牌即为 Agent 身份，否则为外部身份。
+// DetectIdentity determines the identity from the environment alone: if there is an Agent token it is the Agent
+// identity, otherwise the external identity.
 func DetectIdentity(getenv func(string) string) string {
 	if strings.TrimSpace(getenv(EnvAgentToken)) != "" {
 		return IdentityAgent
@@ -85,29 +87,30 @@ func DetectIdentity(getenv func(string) string) string {
 	return IdentityExternal
 }
 
-// Options 是解析连接参数的输入。字符串为空表示未提供。
+// Options is the input for resolving connection settings. An empty string means not given.
 type Options struct {
 	Getenv     func(string) string
 	ConfigPath string
 	Profile    string        // --profile
 	Server     string        // --server
 	CAFile     string        // --ca-file
-	Timeout    time.Duration // --timeout，0 表示未提供
+	Timeout    time.Duration // --timeout; 0 means not given
 }
 
-// RetryPolicy 是读请求的重试参数。
+// RetryPolicy holds the retry parameters for read requests.
 type RetryPolicy struct {
 	Max         int
 	Initial     time.Duration
 	MaxInterval time.Duration
 }
 
-// Settings 是解析后的连接参数。令牌不导出，避免被意外写进输出。
+// Settings are the resolved connection settings. The token is not exported so that it cannot accidentally end up
+// in the output.
 type Settings struct {
 	Identity    string
-	Base        *url.URL // API 基址：Agent 为 LOOPCTL_AGENT_URL，外部为 <根地址>/api/v1
-	Root        *url.URL // 外部身份的服务端根地址
-	Profile     string   // 使用了配置文件中的 profile 时为其名称
+	Base        *url.URL // API base address: LOOPCTL_AGENT_URL for the Agent, <root address>/api/v1 for external
+	Root        *url.URL // root address of the server for the external identity
+	Profile     string   // name of the profile when one from the config file was used
 	CAFile      string
 	Timeout     time.Duration
 	MaxResponse int64
@@ -116,15 +119,15 @@ type Settings struct {
 	roots       *x509.CertPool
 }
 
-// String 隐去令牌，避免 Settings 被格式化输出时带出令牌。
+// String hides the token so that formatting Settings does not leak it.
 func (s *Settings) String() string {
 	return fmt.Sprintf("{Identity:%s Base:%v Profile:%s CAFile:%s Timeout:%s token:<hidden>}", s.Identity, s.Base, s.Profile, s.CAFile, s.Timeout)
 }
 
-// GoString 与 String 相同。
+// GoString is the same as String.
 func (s *Settings) GoString() string { return s.String() }
 
-// Resolve 选择身份并解析连接参数。
+// Resolve selects the identity and resolves the connection settings.
 func Resolve(o Options) (*Settings, *output.Error) {
 	s := &Settings{}
 	if e := runtimeParams(o, s); e != nil {
@@ -219,7 +222,8 @@ func resolveExternal(o Options, s *Settings) *output.Error {
 	return nil
 }
 
-// runtimeParams 解析超时、响应上限与重试参数，两种身份都适用。
+// runtimeParams resolves the timeout, the response size limit and the retry parameters; they apply to both
+// identities.
 func runtimeParams(o Options, s *Settings) *output.Error {
 	s.Timeout = DefaultTimeout
 	if o.Timeout > 0 {
@@ -264,7 +268,7 @@ func runtimeParams(o Options, s *Settings) *output.Error {
 
 var sizePattern = regexp.MustCompile(`^(\d+)(B|KiB|MiB|GiB)?$`)
 
-// ParseSize 解析字节数，支持 B、KiB、MiB、GiB 后缀。
+// ParseSize parses a byte count; the suffixes B, KiB, MiB and GiB are supported.
 func ParseSize(v string) (int64, bool) {
 	m := sizePattern.FindStringSubmatch(strings.TrimSpace(v))
 	if m == nil {
@@ -281,8 +285,9 @@ func ParseSize(v string) (int64, bool) {
 	return n << shift, true
 }
 
-// ParseServerURL 检查服务端地址：只允许 http 与 https；http 只允许回环主机；requireHTTPS 时只允许 https。
-// 错误说明中不回显原值，避免带出其中可能含有的凭据。
+// ParseServerURL checks a server address: only http and https are allowed; http is only allowed for loopback
+// hosts; with requireHTTPS only https is allowed.
+// Error messages do not echo the original value, so that any credentials it may contain are not leaked.
 func ParseServerURL(raw string, requireHTTPS bool) (*url.URL, *output.Error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" || u.Opaque != "" {
@@ -312,7 +317,7 @@ func ParseServerURL(raw string, requireHTTPS bool) (*url.URL, *output.Error) {
 	return u, nil
 }
 
-// IsLoopbackHost 判断主机名是否为回环地址。
+// IsLoopbackHost reports whether the host name is a loopback address.
 func IsLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
@@ -321,7 +326,7 @@ func IsLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// LoadCA 读取 PEM 格式的 CA 证书，至少要有一张。
+// LoadCA reads CA certificates in PEM format; there must be at least one.
 func LoadCA(path string) (*x509.CertPool, *output.Error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

@@ -90,7 +90,7 @@ func addLocal(r *cli.Registry) {
 	})
 }
 
-// profileSummary 是 profile 的对外摘要，只含令牌 ID 与显示前缀。
+// profileSummary is the public summary of a profile; it only contains the token ID and display prefix.
 type profileSummary struct {
 	Name        string  `json:"name"`
 	Server      string  `json:"server"`
@@ -140,7 +140,7 @@ func configSet(_ context.Context, inv *cli.Invocation) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 先检查全部输入，再读写配置文件，失败时文件保持不变。
+	// Check all input first and only then read and write the config file, so the file stays unchanged on failure.
 	var server, ca, token string
 	if inv.Has("server") {
 		u, e := conn.ParseServerURL(inv.String("server"), true)
@@ -188,7 +188,8 @@ func configSet(_ context.Context, inv *cli.Invocation) (any, error) {
 	return summarize(name, p), nil
 }
 
-// readToken 从标准输入读取第一行作为外部令牌。错误说明中不包含读到的内容。
+// readToken reads the first line of standard input as the external token. Error messages do not include what was
+// read.
 func readToken(inv *cli.Invocation) (string, error) {
 	line, err := bufio.NewReaderSize(inv.Sys.Stdin, 4096).ReadString('\n')
 	if err != nil && line == "" {

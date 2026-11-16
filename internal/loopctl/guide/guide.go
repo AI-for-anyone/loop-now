@@ -1,5 +1,7 @@
-// Package guide 生成服务端写给每个 Agent 的内置 Skill（loopctl 的用法说明）与 Inbox 提醒命令。
-// 内容由内嵌模板与命令注册表生成，只依赖代码，同一版本逐字节相同。
+// Package guide generates the built-in Skill the server writes for every Agent (instructions for using loopctl) and
+// the Inbox reminder commands.
+// The content is generated from an embedded template and the command registry; it depends only on code and is
+// byte-for-byte identical within a version.
 package guide
 
 import (
@@ -16,7 +18,8 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// SkillName 是内置 Skill 的名称；模板库与 Agent 的 Skill 副本不能使用这个名称。
+// SkillName is the name of the built-in Skill; the template library and an Agent's Skill copies may not use this
+// name.
 const SkillName = "loopctl"
 
 //go:embed skill.md.tmpl
@@ -25,12 +28,13 @@ var skillTemplate string
 var files = sync.OnceValue(func() map[string][]byte {
 	md, err := Render(buildinfo.Version())
 	if err != nil {
-		panic(err) // 内容只依赖代码，测试保证生成成功
+		panic(err) // the content depends only on code; tests make sure generation succeeds
 	}
 	return map[string][]byte{"SKILL.md": md}
 })
 
-// Files 返回内置 Skill 的文件：相对路径 → 内容。第一版只有 SKILL.md。调用方不应修改返回的内容。
+// Files returns the files of the built-in Skill: relative path -> content. The first version only has SKILL.md.
+// Callers must not modify the returned content.
 func Files() map[string][]byte {
 	out := map[string][]byte{}
 	for k, v := range files() {
@@ -39,7 +43,7 @@ func Files() map[string][]byte {
 	return out
 }
 
-// InboxReminderCommand 返回 Inbox 提醒文字中要求 Agent 运行的命令。
+// InboxReminderCommand returns the command the Inbox reminder text asks the Agent to run.
 func InboxReminderCommand() string {
 	c := commands.Registry().Find("inbox", "list")
 	if c == nil {
@@ -48,7 +52,8 @@ func InboxReminderCommand() string {
 	return "loopctl " + c.Name() + " --unread"
 }
 
-// InboxReadCommand 返回平台提醒点名消息时要求 Agent 逐条读取所用的命令（后接消息 ID）。
+// InboxReadCommand returns the command the Agent is asked to use to read messages one by one when a platform
+// reminder names specific messages (followed by the message ID).
 func InboxReadCommand() string {
 	c := commands.Registry().Find("inbox", "read")
 	if c == nil {
@@ -57,7 +62,7 @@ func InboxReadCommand() string {
 	return "loopctl " + c.Name()
 }
 
-// Render 按指定版本生成 SKILL.md。
+// Render generates SKILL.md for the given version.
 func Render(version string) ([]byte, error) {
 	r := commands.Registry()
 	funcs := template.FuncMap{
@@ -101,7 +106,8 @@ func exitCodes() string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// reference 列出 Agent 身份可用的全部命令：说明、参数、选项与一个可以直接解析的用法示例。
+// reference lists every command available to the Agent identity: summary, arguments, options and a usage example
+// that parses as is.
 func reference(r *cli.Registry) string {
 	var sections []string
 	for _, c := range r.Commands() {
@@ -151,7 +157,8 @@ func constraintText(k cli.ConstraintKind) string {
 	}
 }
 
-// usage 生成能被解析的最简用法：位置参数与必填选项用占位符，二选一的选项取第一个。
+// usage builds the simplest usage that parses: positional arguments and required options get placeholders, and for
+// options where one of two must be given, the first is used.
 func usage(c *cli.Command) string {
 	parts := []string{"loopctl", c.Name()}
 	for _, a := range c.Args {

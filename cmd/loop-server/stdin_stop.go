@@ -5,8 +5,10 @@ import (
 	"io"
 )
 
-// stopOnStdinClose 返回一个在 r 读到 EOF（或出错）时取消的 ctx：读到的内容一律丢弃，onClose 在取消前调用一次。
-// 父 ctx 结束时同样结束（读协程在进程退出时随之消失，不另外收尾）。
+// stopOnStdinClose returns a ctx that is canceled when reading r hits EOF (or an error): whatever is read is
+// discarded, and onClose is called once before the cancel.
+// It also ends when the parent ctx ends (the reader goroutine goes away when the process exits; there is no separate
+// cleanup).
 func stopOnStdinClose(parent context.Context, r io.Reader, onClose func()) context.Context {
 	ctx, cancel := context.WithCancel(parent)
 	go func() {

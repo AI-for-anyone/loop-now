@@ -1,4 +1,5 @@
-// loopctl 是 Loop Now 的命令行入口，平台内 Agent 与外部 Agent 共用；每次调用只向标准输出写一个 JSON 对象。
+// loopctl is the Loop Now command line entry point, shared by Agents on the platform and external Agents; each call
+// writes exactly one JSON object to standard output.
 package main
 
 import (

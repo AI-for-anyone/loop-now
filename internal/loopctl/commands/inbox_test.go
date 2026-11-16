@@ -9,7 +9,8 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// agentStub 启动 Agent 接口的契约桩，并返回以 Agent 身份连接它的环境。
+// agentStub starts a contract stub for the Agent API and returns an environment that connects to it with the Agent
+// identity.
 func agentStub(t *testing.T) (*clitest.Stub, *env) {
 	s := clitest.NewAgent(t)
 	return s, newEnv(t).agent(s.URL())
@@ -24,7 +25,8 @@ func lastReq(t *testing.T, s *clitest.Stub) clitest.Recorded {
 	return reqs[len(reqs)-1]
 }
 
-// 两种身份都用 Inbox 命令：Agent 身份走 /agent/v1（api/agent-openapi.yaml），外部身份走 /api/v1（api/openapi.yaml）。
+// Both identities use the Inbox commands: the Agent identity goes through /agent/v1 (api/agent-openapi.yaml), the
+// external identity through /api/v1 (api/openapi.yaml).
 func TestInboxBothIdentities(t *testing.T) {
 	for _, c := range []struct {
 		name  string
@@ -42,7 +44,8 @@ func TestInboxBothIdentities(t *testing.T) {
 			s.On("POST /inbox/messages/{messageId}/read", clitest.Sample{Status: 200, Body: inboxMessage(other, c.me)},
 				clitest.Sample{Status: 404, Body: apiError("not_found", "消息不存在")})
 
-			// 默认包含已读与未读；--unread 只列未读；--cursor 翻页。列出不会调用读取接口。
+			// By default both read and unread are included; --unread lists only unread; --cursor pages. Listing does
+			// not call the read endpoint.
 			d := e.run("inbox", "list").ok(t)
 			if len(d["messages"].([]any)) != 2 || lastReq(t, s).RawQuery != "" || lastReq(t, s).Path != c.base+"/inbox/messages" {
 				t.Fatalf("%v %+v", d, lastReq(t, s))
@@ -61,7 +64,7 @@ func TestInboxBothIdentities(t *testing.T) {
 				}
 			}
 
-			// 读取：返回全文与发件人；不是自己的消息时服务端返回 404。
+			// Read: returns the full text and the sender; for a message that is not one's own the server returns 404.
 			r := e.run("inbox", "read", messageUUID)
 			if d := r.ok(t); d["text"] != "构建完成" || d["from"].(map[string]any)["address"] != "@console" {
 				t.Fatalf("%v", d)
@@ -92,18 +95,19 @@ func TestInboxSendAndReply(t *testing.T) {
 		clitest.Sample{Status: 201, Body: inboxMessage(me, consoleParticipant())},
 		clitest.Sample{Status: 404, Body: apiError("not_found", "不是线索的参与方")})
 
-	// 发给任务内的 Agent：地址原样传递，包括 # 及其后的任务 ID；不带 --when-busy 时请求中没有 whenBusy。
+	// Sending to an Agent inside a task: the address is passed as is, including # and the task ID after it; without
+	// --when-busy the request has no whenBusy.
 	e.run("inbox", "send", "默认项目/dev#0192f1a2-task", "--text", "进度如何").ok(t)
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"to": "默认项目/dev#0192f1a2-task", "text": "进度如何"}) {
 		t.Fatalf("%v", b)
 	}
-	// 指定打断，正文来自标准输入。
+	// Interrupt specified, with the body text from standard input.
 	e.stdin = "立即处理\n"
 	e.run("inbox", "send", "默认项目/dev", "--when-busy", "interrupt", "--text-file", "-").ok(t)
 	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"to": "默认项目/dev", "text": "立即处理\n", "whenBusy": "interrupt"}) {
 		t.Fatalf("%v", b)
 	}
-	// 主动发给控制台操作者与外部身份。
+	// Sending to the console operator and to an external identity on one's own initiative.
 	if d := e.run("inbox", "send", "@console", "--text", "构建完成").ok(t); d["to"].(map[string]any)["kind"] != "console" {
 		t.Fatalf("%v", d)
 	}
@@ -111,7 +115,7 @@ func TestInboxSendAndReply(t *testing.T) {
 	if b := lastBody(t, s); b["to"] != "@ci-bot" {
 		t.Fatalf("%v", b)
 	}
-	// 地址解析不到：404；跨组织被拒绝：403。发送不重试。
+	// An address that cannot be resolved: 404; across organizations it is refused: 403. Sending is not retried.
 	r := e.run("inbox", "send", "默认项目/不存在", "--text", "x")
 	r.fails(t, "not_found", 7)
 	r = e.run("inbox", "send", "其他组织/项目/dev", "--text", "x")
@@ -120,7 +124,7 @@ func TestInboxSendAndReply(t *testing.T) {
 		t.Fatalf("%s", r.Stdout)
 	}
 
-	// 回复：请求体只有正文；不是线索参与方时 404。
+	// Reply: the request body only has the text; 404 when not a participant in the thread.
 	e.run("inbox", "reply", messageUUID, "--text", "收到").ok(t)
 	if req := lastReq(t, s); req.Op != "POST /inbox/messages/{messageId}/reply" {
 		t.Fatalf("%+v", req)
@@ -130,7 +134,7 @@ func TestInboxSendAndReply(t *testing.T) {
 	}
 	e.run("inbox", "reply", messageUUID, "--text", "x").fails(t, "not_found", 7)
 
-	// 参数错误时不发请求。
+	// No request is sent when the arguments are wrong.
 	n := len(s.Requests())
 	e.run("inbox", "send", "@console", "--text", "a", "--text-file", "-").fails(t, output.CodeInvalidArgument, 2)
 	e.run("inbox", "threads").fails(t, output.CodeCommandNotAllowed, 2)
@@ -139,7 +143,7 @@ func TestInboxSendAndReply(t *testing.T) {
 	}
 }
 
-// 外部身份按线索查看往来。
+// The external identity views the exchange by thread.
 func TestInboxThreads(t *testing.T) {
 	s, e := stub(t)
 	s.On("GET /inbox/threads", clitest.Sample{Status: 200, Body: threadPage()})
@@ -159,7 +163,7 @@ func TestInboxThreads(t *testing.T) {
 	}
 }
 
-// whoami：两种身份都能查询自己的地址。
+// whoami: both identities can look up their own address.
 func TestWhoami(t *testing.T) {
 	s, e := agentStub(t)
 	s.On("GET /whoami", clitest.Sample{Status: 200, Body: whoamiBody("agent", "默认组织/默认项目/dev", "dev")})
@@ -174,7 +178,7 @@ func TestWhoami(t *testing.T) {
 	}
 }
 
-// 令牌失效与越权：服务端的 401、403 按类别报告。
+// Invalid token and missing permission: the server's 401 and 403 are reported by category.
 func TestAuthErrors(t *testing.T) {
 	s, e := agentStub(t)
 	s.On("GET /whoami", clitest.Sample{Status: 401, Body: apiError("unauthenticated", "令牌已作废")})
@@ -184,7 +188,8 @@ func TestAuthErrors(t *testing.T) {
 	ex.run("skill", "list").fails(t, "forbidden", 6)
 }
 
-// 用地址引用 Agent：按 URL 规则编码后调用 GET /agents?address=，地址原样传递（tasks 6.1）。
+// Referring to an Agent by address: it is encoded following URL rules and GET /agents?address= is called, with the
+// address passed as is (tasks 6.1).
 func TestAgentAddressLookup(t *testing.T) {
 	s, e := stub(t)
 	s.On("GET /agents",

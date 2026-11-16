@@ -32,19 +32,21 @@ import (
 	"loop-now/internal/testutil/loopctlfake"
 )
 
-// world 是可在多次启动之间共享的外部状态：数据目录、工作根目录、证书与监听地址。
+// world is the outside state that can be shared across several server starts: data directory, work root,
+// certificates and listen addresses.
 type world struct {
 	t          *testing.T
 	cfg        config.Config
-	dump       string // FAKEPI_DUMP：Pi 启动时写入的环境
+	dump       string // FAKEPI_DUMP: the environment written when Pi starts
 	caFile     string
-	addr       string // 回环监听地址，重启时沿用
-	extAddr    string // 对外端口地址，重启时沿用
+	addr       string // loopback listen address, kept across restarts
+	extAddr    string // external port address, kept across restarts
 	external   bool
 	appOptions func(*app.Options) // isolated dependency injection only
 }
 
-// newWorld 按服务端 app 测试的做法准备配置；本机没有 Pi 1.4.0（读取模型目录需要）时跳过。
+// newWorld prepares the config the same way the server's app tests do; it skips when this machine does not have Pi
+// 1.4.0 (needed to read the model catalog).
 func newWorld(t *testing.T, external bool) *world {
 	t.Helper()
 	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
@@ -75,15 +77,16 @@ func newWorld(t *testing.T, external bool) *world {
 	return w
 }
 
-// server 是一次启动的服务端。
+// server is one started instance of the server.
 type server struct {
 	t   *testing.T
 	a   *app.App
-	api string // 回环上的控制台接口基址
-	ext string // 对外端口的根地址
+	api string // base address of the console API on loopback
+	ext string // root address of the external port
 }
 
-// start 启动服务端；重启时沿用上一次的监听地址，loopctl 的连接参数不用改。
+// start starts the server; on a restart it reuses the previous listen addresses, so loopctl's connection settings
+// do not need to change.
 func (w *world) start(mutate func(c *config.Config)) *server {
 	w.t.Helper()
 	cfg := w.cfg
@@ -96,7 +99,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 		}
 		var ln net.Listener
 		var err error
-		for i := 0; i < 50; i++ { // 刚关闭的端口可能需要片刻才能再次监听
+		for i := 0; i < 50; i++ { // a port that was just closed may take a moment before it can be listened on again
 			if ln, err = net.Listen("tcp", addr); err == nil {
 				return ln
 			}
@@ -134,7 +137,7 @@ func (s *server) stop() {
 	}
 }
 
-// console 以控制台身份调用回环上的接口。
+// console calls the API on loopback as the console.
 func (s *server) console(status int, method, path string, body any) map[string]any {
 	s.t.Helper()
 	var r io.Reader
@@ -160,7 +163,7 @@ func (s *server) console(status int, method, path string, body any) map[string]a
 	return m
 }
 
-// waitIdle 等到 Agent 没有进行中或排队的执行，且忙闲锁已释放。
+// waitIdle waits until the Agent has no running or queued runs and the busy lock has been released.
 func (s *server) waitIdle(agentID string) {
 	s.t.Helper()
 	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
@@ -174,12 +177,12 @@ func (s *server) waitIdle(agentID string) {
 	s.t.Fatal("等待 Agent 空闲超时")
 }
 
-// defaultProject 返回默认项目的 ID。
+// defaultProject returns the ID of the default project.
 func (s *server) defaultProject() string {
 	return s.console(200, "GET", "/context", nil)["project"].(map[string]any)["id"].(string)
 }
 
-// createAgent 用控制台接口在默认项目中创建 Agent，返回 ID。
+// createAgent creates an Agent in the default project through the console API and returns its ID.
 func (s *server) createAgent(name string) string {
 	s.t.Helper()
 	provider, model := s.firstModel()
@@ -194,7 +197,8 @@ func (s *server) firstModel() (string, string) {
 	return provider, model
 }
 
-// agentEnv 读取 fakepi 启动时写下的环境，取出服务端注入的 Agent 地址与令牌。
+// agentEnv reads the environment fakepi wrote when it started and extracts the Agent address and token the server
+// injected.
 func (w *world) agentEnv() map[string]string {
 	w.t.Helper()
 	b, err := os.ReadFile(w.dump)
@@ -213,7 +217,7 @@ func (w *world) agentEnv() map[string]string {
 	return map[string]string{"LOOPCTL_AGENT_URL": d.Env["LOOPCTL_AGENT_URL"], "LOOPCTL_AGENT_TOKEN": d.Env["LOOPCTL_AGENT_TOKEN"]}
 }
 
-// loopctl 在进程内运行 loopctl，环境只含给定的变量。
+// loopctl runs loopctl in-process with an environment containing only the given variables.
 type loopctl struct {
 	t     *testing.T
 	vars  map[string]string
@@ -256,7 +260,7 @@ func (l *loopctl) run(args ...string) result {
 	return r
 }
 
-// ok 断言成功、没有警告，并返回 data。
+// ok asserts success with no warnings and returns data.
 func (r result) ok(t *testing.T) map[string]any {
 	t.Helper()
 	if r.Code != 0 {
@@ -277,7 +281,8 @@ func (r result) fails(t *testing.T, code string, exit int) {
 	}
 }
 
-// selfSigned 生成对外端口用的自签证书，返回证书、私钥与 CA 文件（即证书本身）的路径。
+// selfSigned generates a self-signed certificate for the external port and returns the paths of the certificate,
+// the private key and the CA file (which is the certificate itself).
 func selfSigned(t *testing.T) (certFile, keyFile, caFile string) {
 	t.Helper()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -297,7 +302,8 @@ func selfSigned(t *testing.T) (certFile, keyFile, caFile string) {
 	return certFile, keyFile, certFile
 }
 
-// issueToken 用控制台接口创建外部身份（已存在时沿用）并签发令牌，返回身份 ID、令牌 ID 与令牌。
+// issueToken creates an external identity through the console API (reusing it if it already exists) and issues a
+// token, returning the identity ID, the token ID and the token.
 func (s *server) issueToken(identityID, name string, body any) (string, string, string) {
 	s.t.Helper()
 	if identityID == "" {

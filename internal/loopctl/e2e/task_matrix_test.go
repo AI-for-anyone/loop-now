@@ -43,7 +43,8 @@ func waitRunningCLITask(t *testing.T, s *server, id string) taskmodel.Detail {
 	})
 }
 
-// 执行器在结束轮次/停进程时才持久化SessionFile；忙时检查实际磁盘，不假设DB已记路径。
+// The executor only persists SessionFile when a turn ends or the process stops; while busy, check the actual disk
+// and do not assume the DB has recorded the path.
 func waitCLISessionPath(t *testing.T, w *world, runtimeID uuid.UUID) string {
 	t.Helper()
 	pattern := filepath.Join(w.cfg.WorkRoot, "agents", runtimeID.String(), "sessions", "*.jsonl")
@@ -85,7 +86,8 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	defer s.stop()
 	_, manager := newTaskManager(t, s, "隔离Manager")
 	worker := s.createAgent("共享执行者")
-	// 建立常态历史和文件夹里的文件：任务开始时复制整个 Agent 文件夹，之后各自独立，会话也不共用。
+	// Build up regular history and files in the folder: when a task starts, the whole Agent folder is copied; after
+	// that they are independent, and the sessions are not shared either.
 	s.console(202, "POST", "/agents/"+worker+"/messages", map[string]any{"text": "normal baseline"})
 	s.waitIdle(worker)
 	normal, err := s.a.Store.GetAgentSession(context.Background(), uuid.MustParse(worker))
@@ -144,7 +146,7 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	if err != nil || !bytes.Equal(after, baseline) {
 		t.Fatal("normal history changed by task execution", err)
 	}
-	// A 的令牌不能向 B 提交或上传，即便 Agent 配置 ID 相同。
+	// A's token cannot submit or upload to B, even though the Agent configuration ID is the same.
 	clients[0].stdin = `{"actionId":"` + uuid.NewString() + `","output":{"result":"wrong instance"},"edgeId":null}`
 	clients[0].run("task", "submit", ids[1], nodes[1].ID.String(), "--from-file", "-").fails(t, "forbidden", 6)
 	file := filepath.Join(t.TempDir(), "file")
@@ -202,7 +204,8 @@ func TestTaskCLIAdvancesFixedFlowAndRejectsStaleDispatch(t *testing.T) {
 	}
 	client.stdin = `{"actionId":"` + uuid.NewString() + `","output":{"result":"late"},"edgeId":"continue"}`
 	client.run("task", "submit", id, first.ID.String(), "--from-file", "-").fails(t, "task_conflict", 8)
-	// 同一旧动作的安全重放可返回缓存回执，但不能重新派发或改当前节点。
+	// A safe replay of the same old action may return the cached receipt, but must not dispatch again or change the
+	// current node.
 	taskCLIInput(t, client, body, "task", "submit", id, first.ID.String())
 	if manager.run("task", "get", id).ok(t)["task"].(map[string]any)["currentNodeRunId"] != next.ID.String() {
 		t.Fatal("idempotent replay moved task")

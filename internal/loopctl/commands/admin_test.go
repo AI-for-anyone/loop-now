@@ -22,7 +22,7 @@ func stub(t *testing.T) (*clitest.Stub, *env) {
 	return s, newEnv(t).external(s)
 }
 
-// 每个只读管理命令发出对应的 GET 请求，data 原样为服务端响应体。
+// Every read-only admin command sends the matching GET request, and data is the server's response body as is.
 func TestReadCommands(t *testing.T) {
 	cases := []struct {
 		args   []string
@@ -245,7 +245,7 @@ func TestSkillLibrary(t *testing.T) {
 	})
 }
 
-// archiveFiles 从 multipart 请求中取出 zip 并列出其中的文件。
+// archiveFiles takes the zip out of a multipart request and lists the files in it.
 func archiveFiles(t *testing.T, req clitest.Recorded) map[string]string {
 	t.Helper()
 	_, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))

@@ -12,8 +12,10 @@ import (
 	"loop-now/internal/server/selfsigned"
 )
 
-// 桌面版的开法：不给证书与私钥，只给自签证书目录（LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED），服务端自己生成并在就绪文件里
-// 写出对外端口的 https 地址；外部身份用目录里的 cert.pem 当 --ca-file 就能经 TLS 对外端口用 loopctl。
+// The desktop setup: no certificate or private key is given, only a self-signed certificate directory
+// (LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED); the server generates them itself and writes the https address of the
+// external port into the ready file; an external identity can then use loopctl through the TLS external port with
+// the cert.pem in that directory as --ca-file.
 func TestExternalIdentitySelfSigned(t *testing.T) {
 	w := newWorld(t, true)
 	tlsDir := filepath.Join(t.TempDir(), "tls")
@@ -25,7 +27,7 @@ func TestExternalIdentitySelfSigned(t *testing.T) {
 	})
 	defer s.stop()
 
-	// 就绪文件由 Serve 写出，等它出现。
+	// Serve writes the ready file; wait for it to appear.
 	var ready app.Ready
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -51,7 +53,7 @@ func TestExternalIdentitySelfSigned(t *testing.T) {
 	_, _, secret := s.issueToken("", "desktop-user", nil)
 	ext := newLoopctl(t, nil)
 	ext.stdin = secret + "\n"
-	// config set 不连服务端，没有 serverVersion，只看退出码。
+	// config set does not connect to the server and has no serverVersion, so only check the exit code.
 	if r := ext.run("config", "set", "default", "--server", ready.ExternalURL, "--ca-file", caFile, "--token-stdin"); r.Code != 0 {
 		t.Fatalf("%s", r.Stdout)
 	}
@@ -59,11 +61,11 @@ func TestExternalIdentitySelfSigned(t *testing.T) {
 	if d := ext.run("whoami").ok(t); d["kind"] != "external" || d["address"] != "@desktop-user" {
 		t.Fatalf("%v", d)
 	}
-	// 不带 CA 时校验失败，而不是被放行。
+	// Without the CA, verification fails instead of being let through.
 	bare := newLoopctl(t, map[string]string{"LOOPCTL_URL": ready.ExternalURL, "LOOPCTL_TOKEN": secret})
 	bare.run("whoami").fails(t, "tls_verify_failed", 3)
 
-	// 重启沿用同一张证书：loopctl 的配置不用改。
+	// A restart keeps the same certificate, so loopctl's config does not need to change.
 	s.stop()
 	s = w.start(func(c *config.Config) {
 		c.ExternalTLSCert, c.ExternalTLSKey = "", ""

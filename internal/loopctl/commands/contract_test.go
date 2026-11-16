@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/content"
 )
 
-// adminSamples 为契约中管理命令用到的每个操作给出一个成功样例。
+// adminSamples gives one success sample for every operation in the contract used by admin commands.
 func adminSamples() map[string]clitest.Sample {
 	ok := func(body any) clitest.Sample { return clitest.Sample{Status: 200, Body: body} }
 	created := func(body any) clitest.Sample { return clitest.Sample{Status: 201, Body: body} }
@@ -68,7 +68,7 @@ func adminSamples() map[string]clitest.Sample {
 	}
 }
 
-// agentSamples 为 Agent 契约（api/agent-openapi.yaml）中的每个操作给出一个成功样例。
+// agentSamples gives one success sample for every operation in the Agent contract (api/agent-openapi.yaml).
 func agentSamples() map[string]clitest.Sample {
 	me := agentParticipant()
 	samples := map[string]clitest.Sample{
@@ -88,7 +88,8 @@ func agentSamples() map[string]clitest.Sample {
 	return samples
 }
 
-// externalInboxSamples 为对外端口上 Inbox、whoami 与按地址查找的操作给出成功样例。
+// externalInboxSamples gives success samples for the Inbox, whoami and lookup-by-address operations on the external
+// port.
 func externalInboxSamples() map[string]clitest.Sample {
 	me := externalParticipant()
 	return map[string]clitest.Sample{
@@ -103,9 +104,10 @@ func externalInboxSamples() map[string]clitest.Sample {
 	}
 }
 
-// 每个连接服务端的命令（含全部选项组合），按它允许的身份分别发给对应的契约桩：
-// 请求都是契约中的操作并符合契约；外部身份只调用 x-access 为 console-and-external 的操作；
-// Agent 身份只调用 api/agent-openapi.yaml 中的操作（tasks 4.2、6.8）。
+// Every command that connects to the server (with all option combinations) is sent, for each identity it allows,
+// to the matching contract stub: every request is an operation in the contract and matches it; the external
+// identity only calls operations whose x-access is console-and-external; the Agent identity only calls operations
+// in api/agent-openapi.yaml (tasks 4.2, 6.8).
 func TestCommandsMatchContract(t *testing.T) {
 	external := adminSamples()
 	for op, smp := range cliAuthSamples() {
@@ -161,7 +163,8 @@ func TestCommandsMatchContract(t *testing.T) {
 	}
 }
 
-// loopctl 打出的包用服务端的解析逻辑解开后，目录结构与原目录一致。
+// After a package built by loopctl is unpacked with the server's parsing logic, the directory structure matches the
+// original directory.
 func TestZipDirMatchesServerParser(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{

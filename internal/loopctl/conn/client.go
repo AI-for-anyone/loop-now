@@ -20,25 +20,26 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// 响应头。
+// Response headers.
 const (
 	HeaderVersion   = "Loop-Now-Version"
 	HeaderRequestID = "Loop-Now-Request-Id"
 )
 
-// DialFunc 建立网络连接；测试可以替换它，确认某些命令不发出请求。
+// DialFunc opens a network connection; tests can replace it to confirm that certain commands send no request.
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
-// ClientOptions 是创建客户端的参数。
+// ClientOptions are the parameters for creating a client.
 type ClientOptions struct {
-	Version string // loopctl 版本
+	Version string // loopctl version
 	GOOS    string
 	GOARCH  string
-	Dial    DialFunc                                         // 为空时使用 net.Dialer
-	Sleep   func(ctx context.Context, d time.Duration) error // 为空时真实等待
+	Dial    DialFunc                                         // when nil, net.Dialer is used
+	Sleep   func(ctx context.Context, d time.Duration) error // when nil, really waits
 }
 
-// Client 是 loopctl 的 HTTP 客户端，记录最后一次响应的版本、请求 ID 与请求次数。
+// Client is loopctl's HTTP client. It records the version and request ID of the last response and the number of
+// attempts.
 type Client struct {
 	s     *Settings
 	hc    *http.Client
@@ -52,7 +53,8 @@ type Client struct {
 	attempts      int
 }
 
-// NewClient 按连接参数创建客户端：不跟随重定向；指定 CA 时只信任该 CA。
+// NewClient creates a client from the connection settings: it does not follow redirects, and when a CA is given
+// only that CA is trusted.
 func NewClient(s *Settings, o ClientOptions) *Client {
 	dial := o.Dial
 	if dial == nil {
@@ -63,7 +65,7 @@ func NewClient(s *Settings, o ClientOptions) *Client {
 		DialContext:         dial,
 		ForceAttemptHTTP2:   true,
 		TLSHandshakeTimeout: 10 * time.Second,
-		TLSClientConfig:     &tls.Config{RootCAs: s.roots}, // roots 为空时使用系统根证书
+		TLSClientConfig:     &tls.Config{RootCAs: s.roots}, // when roots is nil, the system root certificates are used
 		MaxIdleConns:        4,
 		IdleConnTimeout:     30 * time.Second,
 	}
@@ -92,10 +94,11 @@ func NewClient(s *Settings, o ClientOptions) *Client {
 	}
 }
 
-// Settings 返回连接参数。
+// Settings returns the connection settings.
 func (c *Client) Settings() *Settings { return c.s }
 
-// Request 描述一个请求。Path 为基址之后的路径段，每段单独转义。
+// Request describes one request. Path holds the path segments after the base address; each segment is escaped
+// separately.
 type Request struct {
 	Method      string
 	Path        []string
@@ -103,21 +106,23 @@ type Request struct {
 	Body        []byte
 	ContentType string
 	Accept      string
-	Header      http.Header // 其他请求头，例如 If-Match
+	Header      http.Header // other request headers, for example If-Match
 	Retry       bool
-	// Consume 处理 2xx 响应体（例如流式写入文件）；为空时按 JSON 读取。
-	// 返回 *output.Error 时直接失败；返回其他错误时视为读取中断，可按重试规则重试。
+	// Consume handles a 2xx response body (for example by streaming it into a file); when nil, the body is read as
+	// JSON. If it returns an *output.Error the request fails right away; any other error is treated as an
+	// interrupted read and may be retried under the retry rules.
 	Consume func(resp *http.Response) error
 }
 
-// Response 是成功的响应。Data 为压缩后的 JSON，响应体为空时为 null。
+// Response is a successful response. Data is the compacted JSON, or null when the response body is empty.
 type Response struct {
 	Status int
 	Header http.Header
 	Data   json.RawMessage
 }
 
-// Do 发出请求。只有 Retry 为 true 的请求，在连接失败、超时或 502/503/504 时按重试参数重试。
+// Do sends the request. Only requests with Retry set are retried, following the retry parameters, on connection
+// failures, timeouts or 502/503/504.
 func (c *Client) Do(ctx context.Context, r Request) (*Response, *output.Error) {
 	c.attempts = 0
 	delay := c.s.Retry.Initial
@@ -140,7 +145,7 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, *output.Error) {
 	}
 }
 
-// Retryable 判断错误是否属于可以重试的临时错误。
+// Retryable reports whether the error is a temporary error that may be retried.
 func Retryable(e *output.Error) bool {
 	switch e.Code {
 	case output.CodeConnectionFailed, output.CodeTimeout:
@@ -254,7 +259,8 @@ func (c *Client) readBody(ctx context.Context, resp *http.Response) ([]byte, *ou
 	return body, nil
 }
 
-// serverError 把非 2xx 响应转为输出错误：能解析为统一错误结构时保留服务端的错误码、说明、详情与字段错误。
+// serverError turns a non-2xx response into an output error. When the body parses as the common error structure,
+// the server's error code, message, details and field errors are kept.
 func serverError(status int, body []byte) *output.Error {
 	var env struct {
 		Error *struct {
@@ -281,7 +287,8 @@ func serverError(status int, body []byte) *output.Error {
 		Message:    fmt.Sprintf("服务端返回 HTTP %d，响应体不是统一的错误结构", status),
 		HTTPStatus: status,
 	}
-	// 响应体是 JSON 对象时原样放进 details（例如 /health 在 503 时返回的依赖状态）。
+	// When the response body is a JSON object, put it into details as is (for example the dependency status /health
+	// returns with a 503).
 	if t := bytes.TrimSpace(body); len(t) > 0 && t[0] == '{' {
 		if d, err := output.Raw(json.RawMessage(t)); err == nil {
 			e.Details = d
@@ -290,7 +297,8 @@ func serverError(status int, body []byte) *output.Error {
 	return e
 }
 
-// transportError 把网络层错误分为超时、证书校验失败与连接失败。
+// transportError classifies network-level errors as timeouts, certificate verification failures or connection
+// failures.
 func (c *Client) transportError(ctx context.Context, err error) *output.Error {
 	var (
 		verr  *tls.CertificateVerificationError
@@ -313,7 +321,7 @@ func isTimeout(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-// rootCause 去掉 *url.Error 的外层（其中重复了请求地址）。
+// rootCause strips the outer *url.Error (which repeats the request address).
 func rootCause(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {
@@ -322,12 +330,13 @@ func rootCause(err error) error {
 	return err
 }
 
-// Meta 返回最后一次响应的信息：服务端版本、请求 ID 与请求次数；没有收到响应时 responded 为 false。
+// Meta returns information about the last response: server version, request ID and number of attempts. responded
+// is false when no response was received.
 func (c *Client) Meta() (serverVersion, requestID string, attempts int, responded bool) {
 	return c.serverVersion, c.requestID, c.attempts, c.responded
 }
 
-// Warnings 按最后一次响应的版本头给出版本提示。
+// Warnings returns version warnings based on the version header of the last response.
 func (c *Client) Warnings() []output.Warning {
 	if !c.responded {
 		return nil
@@ -354,7 +363,7 @@ func (c *Client) Warnings() []output.Warning {
 	return []output.Warning{{Code: output.WarnVersionMismatch, Message: msg, Details: details}}
 }
 
-// DownloadPath 返回本平台安装包在服务端上的路径。
+// DownloadPath returns the path on the server of the package for this platform.
 func DownloadPath(root *url.URL, goos, goarch string) string {
 	return root.Path + "/downloads/loopctl/loopctl-" + goos + "-" + goarch
 }

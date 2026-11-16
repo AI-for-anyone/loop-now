@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/workflow"
 )
 
-// testTaskClient签发隔离测试schema中的手动测试令牌。不是Pi自主执行CLI的证据。
+// testTaskClient issues a manual test token in the isolated test schema. It is not evidence of Pi running the CLI
+// on its own.
 func testTaskClient(t *testing.T, s *server, agentOrRuntime string) *loopctl {
 	t.Helper()
 	tok, err := auth.NewToken(auth.AgentPrefix)
@@ -60,7 +61,8 @@ func waitCLITask(t *testing.T, s *server, id string, fn func(taskmodel.Detail) b
 }
 
 func taskCLIRequest(agent, description string) taskmodel.CreateInput {
-	// 留空格让fakepi按独立token识别!sleep，不与“节点说明：”连成一个token。
+	// Leave a space so fakepi recognizes !sleep as a separate token instead of joining it with “节点说明：”
+	// ("Node description:") into one token.
 	return taskmodel.CreateInput{ActionID: uuid.New(), Title: "CLI通用任务", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "执行", Description: " " + description, AgentID: uuid.MustParse(agent), InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}}
 }
 
@@ -75,7 +77,7 @@ func TestTaskCLIWithFakePi(t *testing.T) {
 	input := taskCLIRequest(agent, "!sleep=2s")
 	created := taskCLIInput(t, manager, input, "task", "create")
 	id := created["task"].(map[string]any)["id"].(string)
-	// 同一action/body重发返回同一任务，不额外创建。
+	// Resending the same action/body returns the same task instead of creating another one.
 	replayed := taskCLIInput(t, manager, input, "task", "create")
 	if replayed["task"].(map[string]any)["id"] != id {
 		t.Fatal("duplicate creation")
@@ -140,7 +142,8 @@ func TestTaskCLIBlockRetryCancel(t *testing.T) {
 	if nextID == n.ID.String() {
 		t.Fatal("retry reused node run ID")
 	}
-	// 旧节点的新提交必须拒绝，不能偷偷作用于刚重试的新节点。
+	// A new submit for the old node must be rejected; it must not silently apply to the new node that was just
+	// retried.
 	node.stdin = `{"actionId":"` + uuid.NewString() + `","output":{},"edgeId":null}`
 	r := node.run("task", "submit", id, n.ID.String(), "--from-file", "-")
 	if r.Code != 8 && r.Code != 5 {

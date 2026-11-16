@@ -11,7 +11,7 @@ import (
 
 var update = flag.Bool("update", false, "更新 golden 文件")
 
-// 固定退出码是 CLI 对外行为；期望值独立保存在测试夹具中。
+// The fixed exit codes are the CLI's external behavior; the expected values are kept separately in a test fixture.
 func TestExitTableContract(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "exit-codes.json"))
 	if err != nil {
@@ -49,7 +49,7 @@ func TestCategoryForStatus(t *testing.T) {
 	}
 }
 
-// 每个本地错误码都有类别，类别都在退出码表中。
+// Every local error code has a category, and every category is in the exit code table.
 func TestLocalCodes(t *testing.T) {
 	cats := map[Category]bool{}
 	for _, e := range ExitTable() {

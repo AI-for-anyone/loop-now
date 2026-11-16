@@ -8,17 +8,17 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// parsed 是一次解析的结果。
+// parsed is the result of one parse.
 type parsed struct {
-	path     []string // 解析到的命令或命令组路径
-	cmd      *Command // 解析到命令时不为空
+	path     []string // path of the command or command group that was parsed
+	cmd      *Command // non-nil when a command was parsed
 	help     bool
 	args     []string
 	flags    map[string]string
 	repeated map[string][]string
 }
 
-// parse 解析命令行（不含程序名）。help 为 true 时忽略其余的参数错误。
+// parse parses the command line (without the program name). When help is true, other argument errors are ignored.
 func parse(r *Registry, argv []string) (*parsed, *output.Error) {
 	p := &parsed{flags: map[string]string{}, repeated: map[string][]string{}}
 	i := 0
@@ -31,7 +31,8 @@ func parse(r *Registry, argv []string) (*parsed, *output.Error) {
 		if c := r.Find(next...); c != nil {
 			p.path, p.cmd = next, c
 			i++
-			// 命令也可拥有子命令；只消费明确注册的路径，保留普通位置参数。
+			// A command may also have subcommands; only consume paths that are explicitly registered and keep ordinary
+			// positional arguments.
 			if i < len(argv) && r.Find(append(append([]string(nil), next...), argv[i])...) != nil {
 				continue
 			}
@@ -50,7 +51,8 @@ func parse(r *Registry, argv []string) (*parsed, *output.Error) {
 	return p, parseCommand(p, rest)
 }
 
-// parseGroup 处理没有解析到具体命令的情况：命令组、未知命令或空命令行。
+// parseGroup handles the case where no concrete command was parsed: a command group, an unknown command or an
+// empty command line.
 func parseGroup(r *Registry, p *parsed, rest []string) *output.Error {
 	for _, tok := range rest {
 		if tok == "--" {
@@ -62,7 +64,7 @@ func parseGroup(r *Registry, p *parsed, rest []string) *output.Error {
 		}
 	}
 	if len(rest) == 0 && len(p.path) == 0 {
-		p.help = true // 不带参数运行，输出完整说明
+		p.help = true // run without arguments: print the full description
 		return nil
 	}
 	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
@@ -79,7 +81,7 @@ func parseGroup(r *Registry, p *parsed, rest []string) *output.Error {
 		WithDetails(map[string]any{"subcommands": r.children(p.path)})
 }
 
-// parseCommand 解析命令路径之后的选项与位置参数。
+// parseCommand parses the options and positional arguments after the command path.
 func parseCommand(p *parsed, rest []string) *output.Error {
 	c := p.cmd
 	known := map[string]Flag{}
@@ -153,7 +155,8 @@ func parseCommand(p *parsed, rest []string) *output.Error {
 	return validate(c, p)
 }
 
-// validate 检查位置参数个数、必填选项、选项取值与选项之间的约束。
+// validate checks the number of positional arguments, required options, option values and the constraints between
+// options.
 func validate(c *Command, p *parsed) *output.Error {
 	min, variadic := len(c.Args), false
 	if n := len(c.Args); n > 0 && c.Args[n-1].Variadic {

@@ -18,9 +18,10 @@ var (
 		{Name: "project", Type: cli.TypeString, Description: "Project name or project ID, from project list"},
 		{Name: "platform", Type: cli.TypeBool, Description: "Agents held by the platform (belonging to no project; the address is the name)"},
 	}
-	// 列出与创建 Agent 必须指定范围：Agent 的归属不能更改，不把默认项目当作隐含的范围。
+	// Listing and creating Agents requires a scope: an Agent's owner cannot be changed, so the default project is not
+	// used as an implicit scope.
 	scopeRequired = cli.Constraint{Kind: cli.ExactlyOne, Flags: []string{"project", "platform"}, Hint: "用 loopctl project list 查看项目"}
-	// 用量与异常的范围是筛选条件，都不指定时为全部。
+	// For usage and anomalies the scope is a filter; when neither is given, everything is included.
 	scopeOptional = cli.Constraint{Kind: cli.AtMostOne, Flags: []string{"project", "platform"}}
 )
 
@@ -130,7 +131,8 @@ func addProject(r *cli.Registry) {
 	})
 }
 
-// projectID 把项目名或 ID 解析为项目 ID：UUID 直接使用（项目名不能是 UUID 格式），其余在未删除的项目中按名称完全匹配。
+// projectID resolves a project name or ID to a project ID: a UUID is used directly (project names cannot have UUID
+// format), anything else is matched exactly by name among projects that are not deleted.
 func projectID(ctx context.Context, inv *cli.Invocation, ref string) (string, error) {
 	if IsUUID(ref) {
 		return ref, nil
@@ -156,7 +158,7 @@ func projectID(ctx context.Context, inv *cli.Invocation, ref string) (string, er
 	return "", output.Errorf(output.CodeNotFound, "没有名为 %q 的项目，用 loopctl project list 查看项目", ref)
 }
 
-// scopePath 返回列出与创建 Agent 的路径：/projects/{projectId}/agents 或 /platform/agents。
+// scopePath returns the path for listing and creating Agents: /projects/{projectId}/agents or /platform/agents.
 func scopePath(ctx context.Context, inv *cli.Invocation) ([]string, error) {
 	if inv.Bool("platform") {
 		return []string{"platform", "agents"}, nil
@@ -168,7 +170,7 @@ func scopePath(ctx context.Context, inv *cli.Invocation) ([]string, error) {
 	return []string{"projects", id, "agents"}, nil
 }
 
-// scopeQuery 把可选的范围加入用量与异常的查询参数。
+// scopeQuery adds the optional scope to the query parameters for usage and anomalies.
 func scopeQuery(ctx context.Context, inv *cli.Invocation, q url.Values) error {
 	if inv.Bool("platform") {
 		q.Set("platform", "true")

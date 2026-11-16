@@ -131,7 +131,8 @@ func addPlugins(r *cli.Registry) {
 	})
 }
 
-// previewForInstall 取得预览；非官方来源没有 --force 时说明它包含什么并拒绝，不发出安装请求。
+// previewForInstall gets a preview; for an unofficial source without --force it describes what the plugin contains
+// and refuses, without sending the install request.
 func previewForInstall(ctx context.Context, inv *cli.Invocation, body map[string]any, force bool) (string, error) {
 	data, err := send(ctx, inv, http.MethodPost, body, "plugin-previews")
 	if err != nil {
@@ -172,7 +173,8 @@ func previewForInstall(ctx context.Context, inv *cli.Invocation, body map[string
 	return pv.PreviewID, nil
 }
 
-// pluginSource 把 install 的来源参数解析为 PluginSource；只写 id 时是官方插件（不存在时服务端返回 not_found）。
+// pluginSource parses the source argument of install into a PluginSource; a bare id means an official plugin (if it
+// does not exist, the server returns not_found).
 func pluginSource(arg string) (map[string]any, error) {
 	switch {
 	case strings.HasPrefix(arg, "builtin:"):
@@ -196,7 +198,8 @@ func pluginSource(arg string) (map[string]any, error) {
 	return map[string]any{"kind": "builtin", "location": arg}, nil
 }
 
-// gitSource 拆出地址末尾的 @ref：只有 @ 之前已经有路径（含 /）且之后不含 / 与 : 时才是 ref，git@host:... 的 @ 不算。
+// gitSource splits off an @ref at the end of the address: it is only a ref when the part before @ already contains
+// a path (with a /) and the part after contains neither / nor :; the @ in git@host:... does not count.
 func gitSource(s string) map[string]any {
 	out := map[string]any{"kind": "git", "location": s}
 	if i := strings.LastIndex(s, "@"); i > 0 {
@@ -219,7 +222,8 @@ func readPluginDir(dir, version string) (pluginmanifest.Manifest, error) {
 	return m, nil
 }
 
-// packPlugin 把目录写成 npm 包格式的 .tgz（顶层目录 package/），返回 sha256 与大小。
+// packPlugin writes a directory as a .tgz in npm package format (top-level directory package/) and returns the
+// sha256 and the size.
 func packPlugin(dir, out string) (string, int64, error) {
 	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {

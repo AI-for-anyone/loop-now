@@ -38,13 +38,13 @@ func checkAssets(t *testing.T, root string) {
 			t.Fatalf("asset mismatch: %s", f.Name())
 		}
 		info, err := os.Stat(filepath.Join(root, f.Name()))
-		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) { // Windows 上由继承的 ACL 决定
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) { // on Windows this is decided by the inherited ACL
 			t.Fatal("asset is not private")
 		}
 	}
 	for _, dir := range []string{root, filepath.Dir(root)} {
 		info, err := os.Stat(dir)
-		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0700) { // Windows 上由继承的 ACL 决定
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0700) { // on Windows this is decided by the inherited ACL
 			t.Fatal("install directory is not private")
 		}
 	}

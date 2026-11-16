@@ -107,7 +107,7 @@ func TestGoogleSACLIWithApp(t *testing.T) {
 	if deleted["status"] != "deleted" || selection()["status"] != "account_deleted" {
 		t.Fatal("SA deleted explicit account fell back")
 	}
-	// 删除账号时清掉没有进行中任务在用的版本（迁移 030 起的清理规则）。
+	// Deleting an account cleans up the versions no running task is using (the cleanup rule since migration 030).
 	for _, v := range []any{a["currentVersionId"], replaced["currentVersionId"]} {
 		var exists bool
 		if err := s.a.Store.Pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM project_cli_versions WHERE id=$1)", v).Scan(&exists); err != nil || exists {

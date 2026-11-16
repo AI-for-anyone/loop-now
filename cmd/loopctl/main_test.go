@@ -11,15 +11,17 @@ import (
 	"loop-now/internal/testutil/testenv"
 )
 
-// loopctl 二进制只依赖标准库与本 module，不引用服务端的包；唯一的例外是插件命令与服务端共用的清单校验
-// （internal/pluginmanifest）带来的 JSON Schema 校验库及其依赖。
+// The loopctl binary depends only on the standard library and this module and does not import server packages; the
+// only exception is the JSON Schema validation library and its dependencies, pulled in by the manifest validation
+// (internal/pluginmanifest) that the plugin commands share with the server.
 func TestDependencies(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", ".").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, pkg := range strings.Fields(string(out)) {
-		// golang.org/x/sys 由 internal/privatefs 带入（配置文件的"只有当前用户可访问"在 Windows 上要读写 ACL）。
+		// golang.org/x/sys is pulled in by internal/privatefs ("only the current user can access it" for the config
+		// file requires reading and writing ACLs on Windows).
 		if strings.HasPrefix(pkg, "github.com/santhosh-tekuri/jsonschema/v6") || strings.HasPrefix(pkg, "golang.org/x/text/") || strings.HasPrefix(pkg, "golang.org/x/sys") {
 			continue
 		}
@@ -32,7 +34,8 @@ func TestDependencies(t *testing.T) {
 	}
 }
 
-// 真实进程：每次调用只向标准输出写一个 JSON 对象，标准错误为空，退出码与类别一致。
+// Real process: each call writes exactly one JSON object to standard output, standard error is empty, and the exit
+// code matches the category.
 func TestProcessOutput(t *testing.T) {
 	bin := testenv.Exe(filepath.Join(t.TempDir(), "loopctl"))
 	if out, err := exec.Command("go", "build", "-ldflags", "-X loop-now/internal/buildinfo.version=9.9.9-test", "-o", bin, ".").CombinedOutput(); err != nil {
