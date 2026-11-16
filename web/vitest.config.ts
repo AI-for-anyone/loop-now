@@ -8,7 +8,7 @@ const zhSupplement = ['src/zh-CN/**/*.test.{ts,tsx}']
 const notYetEnglish = [
   'scripts/**/*.test.ts',
   ...[].map((dir) => `src/${dir}/**/*.test.{ts,tsx}`),
-  ...['console-inbox', 'desktop', 'images', 'inbox', 'prompts', 'settings'].map(
+  ...['console-inbox', 'desktop', 'images', 'inbox', 'prompts'].map(
     (dir) => `src/features/${dir}/**/*.test.{ts,tsx}`,
   ),
 ]
