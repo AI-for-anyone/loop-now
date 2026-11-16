@@ -49,11 +49,11 @@ function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string
     <Dialog open onOpenChange={(open) => !open && !invoke.isPending && onClose()}>
       <DialogContent kind="action" className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>{action.label}</DialogTitle>
+          <DialogTitle>{localizedText(action.label)}</DialogTitle>
           <DialogDescription>{text.by(plugin.displayName)}</DialogDescription>
         </DialogHeader>
         <form className="grid min-w-0 gap-4" onSubmit={submit} noValidate>
-          {fields.length ? <SchemaFields fields={fields} draft={draft} onChange={setDraft} errors={errors} disabled={invoke.isPending} /> : <p className="text-[14px]">{text.confirm(action.label)}</p>}
+          {fields.length ? <SchemaFields fields={fields} draft={draft} onChange={setDraft} errors={errors} disabled={invoke.isPending} /> : <p className="text-[14px]">{text.confirm(localizedText(action.label))}</p>}
           {notEnabled ? <p role="status" className="rounded-input bg-tint-yellow px-3 py-2 text-[13px] font-bold">{text.notEnabled}</p> : <ErrorAlert error={invoke.error} />}
           <DialogFooter>
             <Button type="button" variant="secondary" disabled={invoke.isPending} onClick={onClose}>
@@ -78,7 +78,7 @@ export function PluginActionButtons({ plugin, actions, page, where, className }:
     <div role="group" aria-label={text.group(plugin.displayName)} className={cn('flex flex-wrap gap-2', className)}>
       {mine.map((action) => (
         <Button key={action.id} type="button" size="xs" variant="secondary" title={text.by(plugin.displayName)} onClick={() => setOpen(action)}>
-          {action.label}
+          {localizedText(action.label)}
         </Button>
       ))}
       {open && <ActionDialog plugin={plugin} action={open} where={where} onClose={() => setOpen(null)} />}

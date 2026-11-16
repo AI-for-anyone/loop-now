@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/content"
 )
@@ -26,13 +27,14 @@ var builtin embed.FS
 
 // Field is a credential input field.
 type Field struct {
-	Name      string   `json:"name"`
-	Label     string   `json:"label"`
-	Type      string   `json:"type"` // string / secret / enum
-	Options   []string `json:"options,omitempty"`
-	Default   string   `json:"default,omitempty"`
-	Required  bool     `json:"required"`
-	Multiline bool     `json:"multiline,omitempty"`
+	Name string `json:"name"`
+	// Label is shown in the console; a string (English) or an object per language, as in plugin manifests.
+	Label     pluginmanifest.Text `json:"label"`
+	Type      string              `json:"type"` // string / secret / enum
+	Options   []string            `json:"options,omitempty"`
+	Default   string              `json:"default,omitempty"`
+	Required  bool                `json:"required"`
+	Multiline bool                `json:"multiline,omitempty"`
 }
 
 // Warning is a risk notice shown in the console.
@@ -195,7 +197,10 @@ func (t *Template) validate() error {
 	}
 	names := map[string]bool{}
 	for _, f := range t.Fields {
-		if f.Name == "" || f.Label == "" || names[f.Name] {
+		if !f.Label.Valid() {
+			return fmt.Errorf("field %q has an invalid label: %w", f.Name, f.Label.Check("label"))
+		}
+		if f.Name == "" || f.Label.String() == "" || names[f.Name] {
 			return fmt.Errorf("field %q is invalid or duplicated", f.Name)
 		}
 		names[f.Name] = true

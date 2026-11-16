@@ -6,38 +6,38 @@
   "fields": [
     {
       "name": "host",
-      "label": "主机",
+      "label": { "en-US": "Host", "zh-CN": "主机" },
       "type": "string",
       "required": true
     },
     {
       "name": "port",
-      "label": "端口",
+      "label": { "en-US": "Port", "zh-CN": "端口" },
       "type": "string",
       "required": true,
       "default": "3306"
     },
     {
       "name": "user",
-      "label": "用户名",
+      "label": { "en-US": "Username", "zh-CN": "用户名" },
       "type": "string",
       "required": true
     },
     {
       "name": "password",
-      "label": "密码",
+      "label": { "en-US": "Password", "zh-CN": "密码" },
       "type": "secret",
       "required": true
     },
     {
       "name": "database",
-      "label": "数据库",
+      "label": { "en-US": "Database", "zh-CN": "数据库" },
       "type": "string",
       "required": true
     },
     {
       "name": "sslMode",
-      "label": "TLS 模式",
+      "label": { "en-US": "TLS mode", "zh-CN": "TLS 模式" },
       "type": "enum",
       "required": true,
       "options": [
@@ -50,21 +50,21 @@
     },
     {
       "name": "caCert",
-      "label": "CA 证书 PEM",
+      "label": { "en-US": "CA certificate PEM", "zh-CN": "CA 证书 PEM" },
       "type": "string",
       "required": false,
       "multiline": true
     },
     {
       "name": "clientCert",
-      "label": "客户端证书 PEM",
+      "label": { "en-US": "Client certificate PEM", "zh-CN": "客户端证书 PEM" },
       "type": "string",
       "required": false,
       "multiline": true
     },
     {
       "name": "clientKey",
-      "label": "客户端私钥 PEM",
+      "label": { "en-US": "Client private key PEM", "zh-CN": "客户端私钥 PEM" },
       "type": "secret",
       "required": false,
       "multiline": true

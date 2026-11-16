@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 )
 
@@ -150,7 +151,7 @@ func TestRenderLark(t *testing.T) {
 }
 
 func TestTemplateEnvRejectsPlaceholders(t *testing.T) {
-	tmpl := &Template{Name: "x", Version: "1", Binary: "x", Injection: "env", Fields: []Field{{Name: "token", Label: "t", Type: "secret"}},
+	tmpl := &Template{Name: "x", Version: "1", Binary: "x", Injection: "env", Fields: []Field{{Name: "token", Label: pluginmanifest.PlainText("t"), Type: "secret"}},
 		Env: map[string]string{"X_MODE": "{{token}}"}}
 	if err := tmpl.validate(); err == nil || !strings.Contains(err.Error(), "must not reference a field") {
 		t.Fatalf("a fixed environment variable referring to a field should be rejected at load: %v", err)
@@ -201,7 +202,7 @@ func TestRenderLarkCLIByPlatform(t *testing.T) {
 }
 
 func TestRenderEnumValidation(t *testing.T) {
-	tmpl := &Template{Name: "x", Fields: []Field{{Name: "brand", Label: "Brand", Type: "enum", Options: []string{"feishu", "lark"}, Default: "feishu", Required: true}},
+	tmpl := &Template{Name: "x", Fields: []Field{{Name: "brand", Label: pluginmanifest.PlainText("Brand"), Type: "enum", Options: []string{"feishu", "lark"}, Default: "feishu", Required: true}},
 		Credential: Credential{Env: map[string]string{"B": "{{brand}}"}}}
 	if p, _, err := tmpl.Render(map[string]string{}); err != nil || p.Env["B"] != "feishu" {
 		t.Fatalf("should use the default when not filled in: %+v %v", p, err)

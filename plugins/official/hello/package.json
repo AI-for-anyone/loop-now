@@ -2,8 +2,8 @@
   "name": "@loop-now/plugin-hello",
   "version": "1.0.0",
   "description": {
-    "zh-CN": "最小示例：平台侧在每轮结束时写一行日志，Agent 侧给 Pi 加一个 hello 工具",
-    "en-US": "Minimal example: the platform side writes a log line at the end of each turn, and the Agent side gives Pi a hello tool"
+    "en-US": "Minimal example: the platform side writes a log line at the end of each turn, and the Agent side gives Pi a hello tool",
+    "zh-CN": "最小示例：平台侧在每轮结束时写一行日志，Agent 侧给 Pi 加一个 hello 工具"
   },
   "license": "Apache-2.0",
   "type": "module",
@@ -19,8 +19,8 @@
   "loopNow": {
     "id": "hello",
     "displayName": {
-      "zh-CN": "Hello 示例",
-      "en-US": "Hello example"
+      "en-US": "Hello example",
+      "zh-CN": "Hello 示例"
     },
     "platform": "./platform/index.ts",
     "events": ["run.ended"],
@@ -30,8 +30,8 @@
       "properties": {
         "greeting": {
           "type": "string",
-          "title": "问候语",
-          "description": "hello 工具回复时用的开头。",
+          "title": { "en-US": "Greeting", "zh-CN": "问候语" },
+          "description": { "en-US": "The word the hello tool starts its reply with.", "zh-CN": "hello 工具回复时用的开头。" },
           "default": "Hello",
           "x-scope": "project"
         }

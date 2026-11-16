@@ -89,7 +89,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
           const mine = (accounts.data?.accounts ?? []).filter((account) => account.kind === kind.kind)
           return (
             <fieldset key={kind.kind} className="grid min-w-0 gap-1.5" disabled={!granted || save.isPending}>
-              <legend className="mb-1 text-[13px] font-black text-ink-700">{text.accounts(kind.label)}</legend>
+              <legend className="mb-1 text-[13px] font-black text-ink-700">{text.accounts(localizedText(kind.label))}</legend>
               <ErrorAlert error={accounts.error} />
               {accounts.isSuccess && mine.length === 0 && <Quiet>{text.noAccounts}</Quiet>}
               <div className="flex flex-wrap gap-2">

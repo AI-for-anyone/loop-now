@@ -19,11 +19,11 @@ loopctl plugin install hello
 
 ## 2. Configure (optional)
 
-The plugin has one setting, on its **Config** tab (**Plugin market** › **Hello example** › **Details** › **Config**). The form labels come from the plugin's manifest and are in Chinese.
+The plugin has one setting, on its **Config** tab (**Plugin market** › **Hello example** › **Details** › **Config**). The form labels come from the plugin's manifest, in English or Chinese to match the console.
 
 | Field | Label in the form | Default | What it does |
 |---|---|---|---|
-| `greeting` | 问候语 | `Hello` | The word the `hello` tool starts its reply with. Can be overridden per project. |
+| `greeting` | Greeting | `Hello` | The word the `hello` tool starts its reply with. Can be overridden per project. |
 
 To use a different greeting in one project, set it on that project's plugin page under **This project's config**. A changed greeting reaches an Agent the next time its Pi starts.
 
