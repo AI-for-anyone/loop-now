@@ -13,9 +13,9 @@ const catalog: Schemas['Model'][] = [
   { id: 'claude-haiku-5-5', name: 'Haiku', reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['off', 'low'], defaultThinkingLevel: 'low' },
 ]
 const modelHandler = http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json({ providerId: 'anthropic', models: catalog }))
-const basic = () => screen.getByRole('region', { name: '基本信息' })
+const basic = () => screen.getByRole('region', { name: 'Basics' })
 const picker = () => thinkingPicker(basic())
-const save = () => within(basic()).getByRole('button', { name: '保存' })
+const save = () => within(basic()).getByRole('button', { name: 'Save' })
 
 async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail = false) {
   let current = makeAgent({ thinkingLevel })
@@ -33,47 +33,47 @@ async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail
   return { ...view, writes, changeServer: (level: Schemas['ThinkingLevel']) => { current = { ...current, thinkingLevel: level } } }
 }
 
-it('只列模型支持等级及实际默认值，单独保存等级，不夹带模型或名称', async () => {
+it('lists only the levels the model supports and the actual default; saves the level on its own without the model or name', async () => {
   const { user, writes } = await setup()
-  expect(thinkingOptions(basic())).toEqual(['默认（中）', '关闭', '低', '中', '高'])
-  expect(thinkingChoice(basic())).toBe('默认（中）')
-  await chooseThinking(user, basic(), '高'); await user.click(save())
+  expect(thinkingOptions(basic())).toEqual(['Default (Medium)', 'Off', 'Low', 'Medium', 'High'])
+  expect(thinkingChoice(basic())).toBe('Default (Medium)')
+  await chooseThinking(user, basic(), 'High'); await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: 'high' }]))
   await waitFor(() => expect(save()).toBeDisabled())
 })
 
-it('恢复默认明确发送null，后续只改名称不重复发送等级', async () => {
+it('going back to the default sends null explicitly; a later name-only change does not send the level again', async () => {
   const { user, writes } = await setup('high')
-  await chooseThinking(user, basic(), '默认（中）'); await user.click(save())
+  await chooseThinking(user, basic(), 'Default (Medium)'); await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: null }]))
   await waitFor(() => expect(save()).toBeDisabled())
-  await user.type(within(basic()).getByLabelText('显示名称'), '2'); await user.click(save())
+  await user.type(within(basic()).getByLabelText('Display name'), '2'); await user.click(save())
   await waitFor(() => expect(writes[1]).toEqual({ name: '开发助手2' }))
 })
 
-it('切换模型恢复默认，避免将旧模型的等级带入新模型', async () => {
+it("switching models goes back to the default so the old model's level is not carried into the new model", async () => {
   const { user, writes } = await setup('high')
   await chooseModel(user, basic(), 'claude-haiku-5-5')
-  expect(thinkingChoice(basic())).toBe('默认（低）')
-  expect(within(picker()).queryByRole('radio', { name: '高' })).toBeNull()
+  expect(thinkingChoice(basic())).toBe('Default (Low)')
+  expect(within(picker()).queryByRole('radio', { name: 'High' })).toBeNull()
   await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' }, thinkingLevel: null }]))
 })
 
-it('等级校验失败在字段旁提示并保留草稿', async () => {
+it('a level validation failure is shown next to the field and the draft is kept', async () => {
   const { user, writes } = await setup(null, true)
-  await chooseThinking(user, basic(), '高'); await user.click(save())
+  await chooseThinking(user, basic(), 'High'); await user.click(save())
   expect(await within(basic()).findByText('The current model does not support this level')).toBeInTheDocument()
-  expect(thinkingChoice(basic())).toBe('高'); expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
+  expect(thinkingChoice(basic())).toBe('High'); expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
 })
 
-it('刷新跟随未编辑等级，已编辑等级保留并提示并发更新', async () => {
+it('a refresh updates an untouched level; an edited level is kept and a concurrent update is reported', async () => {
   const { user, client, agent, changeServer, writes } = await setup()
   changeServer('low'); await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-  await waitFor(() => expect(thinkingChoice(basic())).toBe('低')); expect(save()).toBeDisabled()
-  await chooseThinking(user, basic(), '高'); changeServer('medium')
+  await waitFor(() => expect(thinkingChoice(basic())).toBe('Low')); expect(save()).toBeDisabled()
+  await chooseThinking(user, basic(), 'High'); changeServer('medium')
   await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-  await waitFor(() => expect(within(basic()).getByText(/服务端的配置已更新/)).toBeInTheDocument())
-  expect(thinkingChoice(basic())).toBe('高')
+  await waitFor(() => expect(within(basic()).getByText(/The server's config was updated/)).toBeInTheDocument())
+  expect(thinkingChoice(basic())).toBe('High')
   await user.click(save()); await waitFor(() => expect(writes).toEqual([{ thinkingLevel: 'high' }]))
 })

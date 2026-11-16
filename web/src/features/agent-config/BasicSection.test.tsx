@@ -12,12 +12,12 @@ import { createTestQueryClient } from '@/test/render'
 import { chooseModel } from '@/test/model-picker'
 
 const region = (name: string) => screen.getByRole('region', { name })
-const saveButton = () => within(region('基本信息')).getByRole('button', { name: '保存' })
+const saveButton = () => within(region('Basics')).getByRole('button', { name: 'Save' })
 
-describe('未保存修改的离开确认', () => {
+describe('Leave confirmation for unsaved changes', () => {
   // On browser back/forward (POP navigation), popstate fires asynchronously; the memory router
   // fires it synchronously and cannot reproduce this, so a browser router is used here.
-  it('浏览器后退时点“离开”能真正离开，不再弹出确认', async () => {
+  it('on browser back, clicking "Leave" really leaves and the confirmation does not appear again', async () => {
     const agent = makeAgent()
     // Borrow renderConfig to register the API handlers, then render again with a browser router.
     const { unmount, user } = await renderConfig({ agent })
@@ -30,13 +30,13 @@ describe('未保存修改的离开确认', () => {
       </QueryClientProvider>,
     )
     try {
-      await user.click(await screen.findByRole('link', { name: '配置' }))
-      await user.type(await screen.findByLabelText('Agent Prompt'), '新的提示')
+      await user.click(await screen.findByRole('link', { name: 'Config' }))
+      await user.type(await screen.findByLabelText('Agent prompt'), 'New prompt')
       window.history.back()
       const dialog = await screen.findByRole('alertdialog')
-      expect(dialog).toHaveTextContent('有未保存的修改')
+      expect(dialog).toHaveTextContent('You have unsaved changes')
       await waitFor(() => expect(window.location.pathname).toMatch(/\/config$/))
-      await user.click(within(dialog).getByRole('button', { name: '离开' }))
+      await user.click(within(dialog).getByRole('button', { name: 'Leave' }))
       await waitFor(() => expect(window.location.pathname).toMatch(/\/chat$/))
       await waitFor(() => expect(router.state.location.pathname).toMatch(/\/chat$/))
       // Wait until every async popstate has been handled, and confirm that navigation was not blocked again.
@@ -48,7 +48,7 @@ describe('未保存修改的离开确认', () => {
     }
   })
 
-  it('有未保存的修改时删除 Agent，删除后直接回到列表', async () => {
+  it('deleting the Agent with unsaved changes goes straight back to the list', async () => {
     let deleted = false
     const agent = makeAgent()
     const { user, router } = await renderConfig({
@@ -63,34 +63,34 @@ describe('未保存修改的离开确认', () => {
         }),
       ],
     })
-    await user.type(screen.getByLabelText('Agent Prompt'), '没保存的提示')
-    const danger = region('删除 Agent')
-    await waitFor(() => expect(within(danger).getByRole('button', { name: '删除这个 Agent' })).toBeEnabled())
-    await user.click(within(danger).getByRole('button', { name: '删除这个 Agent' }))
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '删除' }))
+    await user.type(screen.getByLabelText('Agent prompt'), 'Unsaved prompt')
+    const danger = region('Delete Agent')
+    await waitFor(() => expect(within(danger).getByRole('button', { name: 'Delete this Agent' })).toBeEnabled())
+    await user.click(within(danger).getByRole('button', { name: 'Delete this Agent' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deleted).toBe(true))
     await waitFor(() => expect(router.state.location.pathname).toBe(defaultAgentsPath))
-    expect(screen.queryByText('有未保存的修改，确定离开吗？离开后修改将丢失。')).toBeNull()
+    expect(screen.queryByText('You have unsaved changes. Leave anyway? They will be lost.')).toBeNull()
   })
 })
 
-describe('跟随服务端刷新', () => {
-  it('没有本地改动时，表单换成服务端的最新值，不显示未保存', async () => {
+describe('Following server refreshes', () => {
+  it('without local changes, the form takes the latest server values and does not show unsaved', async () => {
     const agent = makeAgent()
     let current = agent
     const { client, user, router } = await renderConfig({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current))] })
-    current = { ...agent, name: '改名后的助手', prompt: '别处改的提示', promptVersion: 2, model: { provider: 'openai', modelId: 'gpt-x' } }
+    current = { ...agent, name: 'Renamed assistant', prompt: 'Prompt changed elsewhere', promptVersion: 2, model: { provider: 'openai', modelId: 'gpt-x' } }
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-    await waitFor(() => expect(screen.getByLabelText('显示名称')).toHaveValue('改名后的助手'))
-    expect(screen.getByLabelText('Agent Prompt')).toHaveValue('别处改的提示')
-    await waitFor(() => expect(screen.getByLabelText('模型提供方')).toHaveValue('openai'))
+    await waitFor(() => expect(screen.getByLabelText('Display name')).toHaveValue('Renamed assistant'))
+    expect(screen.getByLabelText('Agent prompt')).toHaveValue('Prompt changed elsewhere')
+    await waitFor(() => expect(screen.getByLabelText('Model provider')).toHaveValue('openai'))
     expect(saveButton()).toBeDisabled()
-    await user.click(screen.getByRole('link', { name: '对话' }))
+    await user.click(screen.getByRole('link', { name: 'Chat' }))
     await waitFor(() => expect(router.state.location.pathname).toMatch(/\/chat$/))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('有本地改动时保留人的编辑并提示，保存只提交改过的项', async () => {
+  it("with local changes, keeps the person's edits and shows a notice; saving submits only the changed fields", async () => {
     let saved: unknown = null
     const agent = makeAgent()
     let current = agent
@@ -105,22 +105,22 @@ describe('跟随服务端刷新', () => {
         }),
       ],
     })
-    await user.clear(screen.getByLabelText('显示名称'))
-    await user.type(screen.getByLabelText('显示名称'), '我的名字')
-    current = { ...agent, name: '改名后的助手', prompt: '别处改的提示' }
+    await user.clear(screen.getByLabelText('Display name'))
+    await user.type(screen.getByLabelText('Display name'), 'My name')
+    current = { ...agent, name: 'Renamed assistant', prompt: 'Prompt changed elsewhere' }
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
     // The server's new prompt reaches the input only after the prompt editor syncs it, so wait
     // for it to arrive; the name the person edited never changes, so it can't be used to wait on.
-    await waitFor(() => expect(screen.getByLabelText('Agent Prompt')).toHaveValue(current.prompt))
-    expect(screen.getByLabelText('显示名称')).toHaveValue('我的名字')
-    expect(within(region('基本信息')).getByText(/服务端的配置已更新/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Agent prompt')).toHaveValue(current.prompt))
+    expect(screen.getByLabelText('Display name')).toHaveValue('My name')
+    expect(within(region('Basics')).getByText(/The server's config was updated/)).toBeInTheDocument()
     await user.click(saveButton())
-    await waitFor(() => expect(saved).toEqual({ name: '我的名字' }))
-    await waitFor(() => expect(within(region('基本信息')).queryByText(/服务端的配置已更新/)).toBeNull())
+    await waitFor(() => expect(saved).toEqual({ name: 'My name' }))
+    await waitFor(() => expect(within(region('Basics')).queryByText(/The server's config was updated/)).toBeNull())
     await waitFor(() => expect(saveButton()).toBeDisabled())
   })
 
-  it('有本地改动时，别处只改了人没改过的项也提示；之后保存自己的修改不再提示', async () => {
+  it("with local changes, the notice also shows when only untouched fields changed elsewhere; after saving one's own changes it no longer shows", async () => {
     const agent = makeAgent()
     let current = agent
     const { client, user } = await renderConfig({
@@ -133,23 +133,23 @@ describe('跟随服务端刷新', () => {
         }),
       ],
     })
-    await user.clear(screen.getByLabelText('显示名称'))
-    await user.type(screen.getByLabelText('显示名称'), '我的名字')
+    await user.clear(screen.getByLabelText('Display name'))
+    await user.type(screen.getByLabelText('Display name'), 'My name')
     current = { ...agent, model: { provider: 'openai', modelId: 'gpt-x' } }
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
     // Same as above: wait for the notice that the server config was updated, not for the name, which never changes.
-    await waitFor(() => expect(within(region('基本信息')).getByText(/服务端的配置已更新/)).toBeInTheDocument())
-    expect(screen.getByLabelText('显示名称')).toHaveValue('我的名字')
-    expect(screen.getByLabelText('Agent Prompt')).toHaveValue(current.prompt)
+    await waitFor(() => expect(within(region('Basics')).getByText(/The server's config was updated/)).toBeInTheDocument())
+    expect(screen.getByLabelText('Display name')).toHaveValue('My name')
+    expect(screen.getByLabelText('Agent prompt')).toHaveValue(current.prompt)
     await user.click(saveButton())
     await waitFor(() => expect(saveButton()).toBeDisabled())
-    await user.type(screen.getByLabelText('显示名称'), '再改')
-    expect(within(region('基本信息')).queryByText(/服务端的配置已更新/)).toBeNull()
+    await user.type(screen.getByLabelText('Display name'), ' again')
+    expect(within(region('Basics')).queryByText(/The server's config was updated/)).toBeNull()
   })
 })
 
-describe('模型选择', () => {
-  it('切到别的提供方再切回时恢复原模型，目录中没有的模型也能恢复并保存其他修改', async () => {
+describe('Model choice', () => {
+  it('switching to another provider and back restores the original model; a model missing from the catalog is restored too and other changes can be saved', async () => {
     let saved: unknown = null
     const agent = makeAgent({ model: { provider: 'anthropic', modelId: 'retired-model' } })
     const { user } = await renderConfig({
@@ -161,40 +161,40 @@ describe('模型选择', () => {
         }),
       ],
     })
-    const basic = region('基本信息')
-    expect(await within(basic).findByText('当前模型不在服务端的模型目录中')).toBeInTheDocument()
-    await user.type(screen.getByLabelText('显示名称'), '2')
-    const provider = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    expect(await within(basic).findByText('The current model isn\'t in the server\'s model catalog')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Display name'), '2')
+    const provider = within(basic).getByLabelText('Model provider')
     await user.selectOptions(provider, 'openai')
-    expect(within(basic).queryByText('当前模型不在服务端的模型目录中')).toBeNull()
+    expect(within(basic).queryByText('The current model isn\'t in the server\'s model catalog')).toBeNull()
     await user.selectOptions(provider, 'anthropic')
-    expect(await within(basic).findByText('当前模型不在服务端的模型目录中')).toBeInTheDocument()
+    expect(await within(basic).findByText('The current model isn\'t in the server\'s model catalog')).toBeInTheDocument()
     expect(within(basic).getByText('anthropic / retired-model')).toBeInTheDocument()
     expect(saveButton()).toBeEnabled()
     await user.click(saveButton())
     await waitFor(() => expect(saved).toEqual({ name: '开发助手2' }))
   })
 
-  it('某个提供方的模型列表加载失败时显示原因，并保留显示当前模型', async () => {
+  it("when a provider's model list fails to load, shows the reason and keeps showing the current model", async () => {
     await renderConfig({
       handlers: [http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 }))],
     })
-    const basic = region('基本信息')
-    expect(await within(basic).findByText('无法获取模型目录，暂时不能修改模型。')).toBeInTheDocument()
-    expect(within(basic).getByText(/^原因：服务端内部错误/)).toBeInTheDocument()
+    const basic = region('Basics')
+    expect(await within(basic).findByText('Couldn\'t load the model catalog, so the model can\'t be changed right now.')).toBeInTheDocument()
+    expect(within(basic).getByText(/^Reason: Internal server error/)).toBeInTheDocument()
     expect(within(basic).getByText('anthropic / claude-sonnet-5-5')).toBeInTheDocument()
   })
 
-  it('提供方列表加载失败时同样显示原因', async () => {
+  it('when the provider list fails to load, the reason is shown as well', async () => {
     await renderConfig({
       handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.error())],
     })
-    const basic = region('基本信息')
-    expect(await within(basic).findByText('原因：无法连接服务端')).toBeInTheDocument()
+    const basic = region('Basics')
+    expect(await within(basic).findByText("Reason: Can't reach the server")).toBeInTheDocument()
     expect(within(basic).getByText('anthropic / claude-sonnet-5-5')).toBeInTheDocument()
   })
 
-  it('服务端对模型的字段级校验错误显示在模型选择旁，其余字段错误全部列出', async () => {
+  it('server field validation errors for the model show next to the model picker; all other field errors are listed', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({
       agent,
@@ -213,25 +213,25 @@ describe('模型选择', () => {
         ),
       ],
     })
-    const basic = region('基本信息')
+    const basic = region('Basics')
     await chooseModel(user, basic, 'claude-haiku-5-5')
     await user.click(saveButton())
     expect(await within(basic).findByText('Provider anthropic has no model claude-haiku-5-5')).toBeInTheDocument()
     const alert = within(basic).getByRole('alert')
-    expect(alert).toHaveTextContent('prompt：Prompt is too long')
-    expect(alert).toHaveTextContent('other：Unknown field')
+    expect(alert).toHaveTextContent('prompt: Prompt is too long')
+    expect(alert).toHaveTextContent('other: Unknown field')
     expect(alert).not.toHaveTextContent('model.modelId')
   })
 })
 
-describe('插件提供方', () => {
+describe('Plugin providers', () => {
   const grokModels = http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) =>
     HttpResponse.json({ providerId: params.providerId, models: [{ id: 'grok-4', name: 'Grok 4', reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] }] }),
   )
   const catalog = (plugins: Schemas['ModelProvider'][]) => ({ ...providers, providers: [...providers.providers, ...plugins] })
   const option = (select: HTMLElement, value: string) => within(select).getAllByRole('option').find((item) => (item as HTMLOptionElement).value === value) as HTMLOptionElement
 
-  it('带 agentId 读目录：不能用的插件提供方带原因并禁用，全局停用全部插件的仍可选但提示启动会失败', async () => {
+  it('reads the catalog with agentId: unusable plugin providers show the reason and are disabled; with all plugins turned off globally they stay selectable but warn that starting will fail', async () => {
     const agent = makeAgent()
     let asked: string | null = null
     const { user } = await renderConfig({
@@ -250,18 +250,18 @@ describe('插件提供方', () => {
         grokModels,
       ],
     })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'grok-cli')).toBeDefined())
     expect(asked).toBe(agent.id)
-    expect(option(select, 'anthropic')).toHaveTextContent(/^anthropic（2 个模型）$/)
-    expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 插件未授权给这个 Agent')
+    expect(option(select, 'anthropic')).toHaveTextContent(/^anthropic \(2 models\)$/)
+    expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli (plugin "Grok subscription", 2 models) — plugin not granted to this Agent')
     expect(option(select, 'grok-cli')).toBeDisabled()
-    expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok（插件「Grok 订阅」，2 个模型）$/)
+    expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok \(plugin "Grok subscription", 2 models\)$/)
     expect(option(select, 'grok-ok')).toBeEnabled()
-    expect(option(select, 'grok-off')).toHaveTextContent('grok-off（插件「Grok 订阅」，2 个模型） — 插件已全部停用')
+    expect(option(select, 'grok-off')).toHaveTextContent('grok-off (plugin "Grok subscription", 2 models) — all plugins are turned off')
     expect(option(select, 'grok-off')).toBeEnabled()
-    const disabledNote = '全局设置里已停用全部插件：可以保存，但 Agent 启动时会失败。'
+    const disabledNote = 'All plugins are turned off in global settings. You can save, but the Agent will fail to start.'
     expect(within(basic).queryByText(disabledNote)).toBeNull()
     await user.selectOptions(select, 'grok-off')
     expect(within(basic).getByText(disabledNote)).toHaveAttribute('role', 'note')
@@ -269,15 +269,15 @@ describe('插件提供方', () => {
     expect(within(basic).queryByText(disabledNote)).toBeNull()
   })
 
-  it('Agent 正在用的插件提供方现在不能用：选择器下方说明原因和去哪里处理', async () => {
+  it('the plugin provider the Agent uses is now unusable: a note below the picker gives the reason and where to fix it', async () => {
     const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
     await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'plugin_not_enabled' })]))), grokModels] })
-    const basic = region('基本信息')
-    expect(await within(basic).findByText('项目还没有启用插件「Grok 订阅」。在项目的插件页启用它、再在本页的“插件权限”一节授权给这个 Agent 后才能选。')).toHaveAttribute('role', 'note')
-    expect(within(basic).getByLabelText('模型提供方')).toHaveValue('grok-cli')
+    const basic = region('Basics')
+    expect(await within(basic).findByText('This project hasn\'t enabled the plugin "Grok subscription". Enable it on the project\'s Plugins page, then grant it to this Agent under "Plugin grants" on this page.')).toHaveAttribute('role', 'note')
+    expect(within(basic).getByLabelText('Model provider')).toHaveValue('grok-cli')
   })
 
-  it('平台 Agent：授权了插件就能选它的提供方；没授权时选项禁用，正在用的那个说明去本页授权', async () => {
+  it("platform Agent: a granted plugin's providers can be chosen; without a grant the option is disabled, and for the one in use a note says to grant it on this page", async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' } })
     // The model credential section also reads the catalog (without agentId), so record every read here.
     const asked: (string | null)[] = []
@@ -285,18 +285,18 @@ describe('插件提供方', () => {
       asked.push(new URL(request.url).searchParams.get('agentId'))
       return HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'agent_not_granted' }), pluginProvider('grok-ok', { name: 'Grok OK' })]))
     }), grokModels] })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
     expect(asked).toContain(agent.id)
-    expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 插件未授权给这个 Agent')
+    expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli (plugin "Grok subscription", 2 models) — plugin not granted to this Agent')
     expect(option(select, 'grok-ok')).toBeEnabled()
-    expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok（插件「Grok 订阅」，2 个模型）$/)
-    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。')).toHaveAttribute('role', 'note')
-    expect(within(basic).queryByText(/只给项目 Agent 用/)).toBeNull()
+    expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok \(plugin "Grok subscription", 2 models\)$/)
+    expect(within(basic).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note')
+    expect(within(basic).queryByText(/only for project Agents/)).toBeNull()
   })
 
-  it('保存时 422（model.provider）：说明显示在模型旁，目录重新读取后标出原因', async () => {
+  it('a 422 on save (model.provider): the message shows next to the model, and once the catalog is read again the reason is marked', async () => {
     const agent = makeAgent()
     let granted = true
     let reads = 0
@@ -314,8 +314,8 @@ describe('插件提供方', () => {
         }),
       ],
     })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'grok-cli')).toBeEnabled())
     await user.selectOptions(select, 'grok-cli')
     await chooseModel(user, basic, 'grok-4')
@@ -324,6 +324,6 @@ describe('插件提供方', () => {
     expect(await within(basic).findByText('Plugin grok is not granted to this Agent')).toBeInTheDocument()
     await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
     expect(reads).toBeGreaterThan(before)
-    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。')).toHaveAttribute('role', 'note')
+    expect(within(basic).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note')
   })
 })

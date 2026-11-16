@@ -5,7 +5,13 @@ import viteConfig from './vite.config.ts'
 // src/zh-CN/README.md for what it covers. The two projects never share a file.
 const zhSupplement = ['src/zh-CN/**/*.test.{ts,tsx}']
 // Test files not moved to the English UI yet; they still run in the Chinese UI. Transitional: empty once the move is done.
-const notYetEnglish = ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts']
+const notYetEnglish = [
+  'scripts/**/*.test.ts',
+  ...['api', 'app', 'components', 'i18n', 'lib', 'styles'].map((dir) => `src/${dir}/**/*.test.{ts,tsx}`),
+  ...['agents', 'chat', 'console-inbox', 'desktop', 'folders', 'identities', 'images', 'inbox', 'local-mode', 'overview', 'plugins', 'project-credentials', 'projects', 'prompts', 'settings', 'skills-library', 'sleep', 'stats', 'tasks'].map(
+    (dir) => `src/features/${dir}/**/*.test.{ts,tsx}`,
+  ),
+]
 
 export default mergeConfig(
   viteConfig,

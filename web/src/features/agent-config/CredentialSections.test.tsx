@@ -9,8 +9,8 @@ import { ghTemplate, larkTemplate, renderConfig } from '@/test/config'
 const region = (name: string) => screen.getByRole('region', { name })
 const makeAgent = (overrides: Partial<Schemas['Agent']> = {}) => makeBaseAgent({ scope: 'platform', projectId: null, ...overrides })
 
-describe('CLI 凭证的校验', () => {
-  it('服务端的字段级错误按 fields.<字段名> 显示在对应输入旁，其余的全部列出', async () => {
+describe('CLI credential validation', () => {
+  it('server field errors show next to the matching input by fields.<field name>; the rest are all listed', async () => {
     const agent = makeAgent({ clis: [{ name: 'lark-cli', hasTemplate: true, credential: null }] })
     const { user } = await renderConfig({
       agent,
@@ -28,23 +28,23 @@ describe('CLI 凭证的校验', () => {
         ),
       ],
     })
-    const item = within(region('可用 CLI')).getByRole('listitem', { name: 'lark-cli' })
-    await waitFor(() => expect(within(item).getByRole('button', { name: '录入凭证' })).toBeEnabled())
-    await user.click(within(item).getByRole('button', { name: '录入凭证' }))
+    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'lark-cli' })
+    await waitFor(() => expect(within(item).getByRole('button', { name: 'Enter credential' })).toBeEnabled())
+    await user.click(within(item).getByRole('button', { name: 'Enter credential' }))
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('App ID'), 'bad')
     await user.type(within(dialog).getByLabelText('App Secret'), 'secret')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     const message = await within(dialog).findByText('Invalid App ID format')
     expect(within(dialog).getByLabelText('App ID').parentElement).toContainElement(message)
     const alert = within(dialog).getByRole('alert')
-    expect(alert).toHaveTextContent('fields.extra：The template has no such field')
+    expect(alert).toHaveTextContent('fields.extra: The template has no such field')
     expect(alert).not.toHaveTextContent('fields.appId')
   })
 })
 
-describe('CLI 模板不可用时的凭证录入', () => {
-  it('模板加载中时按钮禁用并说明原因', async () => {
+describe('Entering credentials when CLI templates are unavailable', () => {
+  it('while templates load, the button is disabled and the reason is shown', async () => {
     await renderConfig({
       agent: makeAgent({ clis: [{ name: 'gh', hasTemplate: true, credential: null }] }),
       handlers: [
@@ -54,12 +54,12 @@ describe('CLI 模板不可用时的凭证录入', () => {
         }),
       ],
     })
-    const item = within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })
-    expect(within(item).getByRole('button', { name: '录入凭证' })).toBeDisabled()
-    expect(within(item).getByText('正在加载 CLI 模板，加载完成后才能录入凭证。')).toBeInTheDocument()
+    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })
+    expect(within(item).getByRole('button', { name: 'Enter credential' })).toBeDisabled()
+    expect(within(item).getByText('Loading CLI templates; credentials can be entered once they load.')).toBeInTheDocument()
   })
 
-  it('模板加载失败时显示错误、按钮禁用；之后模板到达也不会自己弹出对话框', async () => {
+  it('when templates fail to load, the error shows and the button is disabled; templates arriving later do not open the dialog on their own', async () => {
     let fail = true
     const { client, user } = await renderConfig({
       agent: makeAgent({ clis: [{ name: 'gh', hasTemplate: true, credential: null }] }),
@@ -69,18 +69,18 @@ describe('CLI 模板不可用时的凭证录入', () => {
         ),
       ],
     })
-    const clis = region('可用 CLI')
-    expect(await within(clis).findByText('无法获取 CLI 模板。')).toBeInTheDocument()
-    expect(within(clis).getByRole('alert')).toHaveTextContent('服务端内部错误')
+    const clis = region('Available CLIs')
+    expect(await within(clis).findByText('Couldn\'t load CLI templates.')).toBeInTheDocument()
+    expect(within(clis).getByRole('alert')).toHaveTextContent('Internal server error')
     const item = within(clis).getByRole('listitem', { name: 'gh' })
-    expect(within(item).getByText('CLI 模板加载失败，暂时不能录入凭证。')).toBeInTheDocument()
-    const button = within(item).getByRole('button', { name: '录入凭证' })
+    expect(within(item).getByText('CLI templates failed to load, so credentials can\'t be entered right now.')).toBeInTheDocument()
+    const button = within(item).getByRole('button', { name: 'Enter credential' })
     expect(button).toBeDisabled()
     await user.click(button)
     fail = false
     await client.invalidateQueries({ queryKey: keys.cliTemplates })
-    expect(await within(item).findByText('内置模板 v2.100.0')).toBeInTheDocument()
-    expect(within(item).getByRole('button', { name: '录入凭证' })).toBeEnabled()
+    expect(await within(item).findByText('Built-in template v2.100.0')).toBeInTheDocument()
+    expect(within(item).getByRole('button', { name: 'Enter credential' })).toBeEnabled()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
