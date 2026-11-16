@@ -53,7 +53,7 @@ describe('流程尺', () => {
     ruler(makeTaskDetail('project'), { onRecord, onSelect })
     const visits = screen.getByRole('list', { name: '访问与重试记录' })
     const items = within(visits).getAllByRole('button')
-    expect(items.map((item) => item.textContent)).toEqual(['第 1 次 · 已完成', '第 2 次 · 阻塞· 在看'])
+    expect(items.map((item) => item.textContent)).toEqual(['第 1 次 · 已完成', '第 2 次 · 阻塞 · 在看'])
     expect(items[1]).toHaveAttribute('aria-current', 'true')
     await userEvent.click(items[0])
     expect(onRecord).toHaveBeenCalledWith('check', oldNodeId)

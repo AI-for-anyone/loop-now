@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
@@ -20,16 +20,26 @@ const endpoint = apiUrl(`/tasks/${taskId}/lark-account-switches`), account = lar
 function setup() {
   server.use(http.get(apiUrl(`/projects/${defaultProject.id}/credential-accounts`), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [account] })))
 }
+// 改版第 5 步：表单收在“更换 Lark 账号并继续 QA”按钮下面，默认收起；这里的用例先点开再操作表单。
+function openSwitch() {
+  const toggle = document.querySelector<HTMLButtonElement>('[data-lark-switch-toggle]')
+  if (toggle && !toggle.disabled && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle)
+}
+// 表单里的“更换 Lark 账号并继续 QA”（和上面的展开按钮同名）。
+const switchButton = () => within(document.querySelector<HTMLElement>('[data-lark-switch-panel]')!).getByRole('button', { name: copy.switch })
 function renderController(value = detail(), query = '') {
   setup()
-  return renderRoutes([{ path: '/', element: <TaskLarkSwitchController detail={value} node={value.nodes[1]} disabled={false} /> }], '/' + query)
+  const result = renderRoutes([{ path: '/', element: <TaskLarkSwitchController detail={value} node={value.nodes[1]} disabled={false} /> }], '/' + query)
+  openSwitch()
+  return result
 }
 async function chooseMembers() {
+  openSwitch()
   const members = detail().larkSwitchParticipants!
   await userEvent.selectOptions(screen.getByLabelText(copy.choosePublisher), members[0].runtimeId)
   await userEvent.selectOptions(screen.getByLabelText(copy.chooseFollowup), members[1].runtimeId)
-  await waitFor(() => expect(screen.getByRole('button', { name: copy.switch })).toBeEnabled())
-  await userEvent.click(screen.getByRole('button', { name: copy.switch }))
+  await waitFor(() => expect(switchButton()).toBeEnabled())
+  await userEvent.click(switchButton())
   await userEvent.selectOptions(screen.getByLabelText(copy.target), account.id)
 }
 describe('formal ConsoleTaskDetail participants -> explicit switch submission', () => {
@@ -37,7 +47,7 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
     const value = detail(); renderController(value)
     expect(screen.getByLabelText(copy.choosePublisher)).toHaveValue('')
     expect(screen.getByLabelText(copy.chooseFollowup)).toHaveValue('')
-    expect(screen.getByRole('button', { name: copy.switch })).toBeDisabled()
+    expect(switchButton()).toBeDisabled()
     expect(value.nodes.some(n => n.runtimeId === value.larkSwitchParticipants![1].runtimeId)).toBe(false)
     await chooseMembers()
     expect(screen.getByText(new RegExp(copy.unprepared))).toBeVisible()
@@ -48,13 +58,13 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
     const first = renderController(value); expect(screen.getByText(copy.switchUnavailable)).toBeVisible(); first.unmount()
     renderController({ ...detail(), larkSwitchParticipants: [] })
     expect(screen.getByText(copy.noParticipants)).toBeVisible(); expect(screen.queryByText(copy.switchUnavailable)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: copy.switch })).toBeDisabled()
+    expect(switchButton()).toBeDisabled()
   })
   it.each([null, false] as const)('original permission %s cannot be selected even when static available says true', allowed => {
     const value = detail(); value.larkSwitchParticipants![1].larkAllowed = allowed
     renderController(value)
     expect(screen.getByRole('option', { name: new RegExp(allowed === null ? copy.permissionUnknown : copy.permissionDenied) })).toBeDisabled()
-    expect(screen.getByRole('button', { name: copy.switch })).toBeDisabled()
+    expect(switchButton()).toBeDisabled()
   })
   it('unavailable members show the safe reason and never get selected automatically', () => {
     const value = detail(); value.larkSwitchParticipants![1].available = false; value.larkSwitchParticipants![1].unavailableReason = 'snapshot_invalid'
@@ -112,5 +122,47 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
     act(() => update({ ...detail(), larkSwitchParticipants: [] }))
     expect(screen.getByLabelText(copy.target)).toHaveValue(account.id)
     expect(screen.getByRole('button', { name: copy.confirm })).toBeDisabled()
+  })
+})
+
+describe('摆放：节点头里只是一个次要按钮，点开才展开表单', () => {
+  const render = (value = detail(), query = '') => {
+    setup()
+    return renderRoutes([{ path: '/', element: <TaskLarkSwitchController detail={value} node={value.nodes[1]} disabled={false} /> }], '/' + query)
+  }
+  const toggle = () => screen.getByRole('button', { name: copy.switch, expanded: false })
+  it('默认收起：只有按钮（aria-expanded=false，aria-controls 指向收起的面板），看不到成员选择', () => {
+    render()
+    const button = toggle()
+    expect(button).toBeEnabled()
+    const panel = document.getElementById(button.getAttribute('aria-controls')!)!
+    expect(panel).toHaveAttribute('hidden')
+    expect(screen.queryByRole('combobox', { name: copy.choosePublisher })).not.toBeInTheDocument()
+  })
+  it('点开后在下面展开原来的表单；再点收起', async () => {
+    render()
+    await userEvent.click(toggle())
+    const button = screen.getByRole('button', { name: copy.switch, expanded: true })
+    expect(document.getElementById(button.getAttribute('aria-controls')!)).not.toHaveAttribute('hidden')
+    expect(screen.getByRole('combobox', { name: copy.choosePublisher })).toBeVisible()
+    await userEvent.click(button)
+    expect(toggle()).toBeInTheDocument()
+  })
+  it('能力未就绪：按钮禁用，原因是旁边的一行小字，没有卡片', () => {
+    const value = detail(); delete value.larkSwitchParticipants
+    render(value)
+    expect(toggle()).toBeDisabled()
+    expect(toggle().parentElement).toHaveTextContent(copy.switchUnavailable)
+    expect(screen.queryByRole('region', { name: copy.switch })).not.toBeInTheDocument()
+  })
+  it('已有原操作 ID：不用点开，原操作和“核对原操作”直接可见', async () => {
+    server.use(http.get(endpoint + '/:id', ({ params }) => HttpResponse.json({ ...larkSwitchReceipt('succeeded'), actionId: params.id })))
+    const id = '30000000-0000-7000-8000-000000000009'
+    render(detail(), `?${taskLarkSwitchLocatorKey(taskId)}=${id}`)
+    const button = screen.getByRole('button', { name: copy.switch, expanded: true })
+    expect(document.getElementById(button.getAttribute('aria-controls')!)).not.toHaveAttribute('hidden')
+    expect(screen.getByText(new RegExp(id))).toBeVisible()
+    expect(screen.getByRole('button', { name: copy.recover })).toBeVisible()
+    expect(await screen.findByText(copy.committed)).toBeVisible()
   })
 })

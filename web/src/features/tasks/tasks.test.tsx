@@ -270,6 +270,8 @@ it('节点资料：正在看的一次是展开的小票，其余折叠；来自�
   expect(older.open).toBe(false)
   expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-ink')
+  // 输入、输出、产物三个小标题的黄色记号笔都只罩住文字。
+  for (const name of ['输入', '输出', '产物']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
   expect(within(viewing).getByRole('note')).toHaveTextContent('仅供检查，不作为成功结果')
   expect(within(viewing).getByRole('link', { name: '01 质量检查 · 第 1 次的输出' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
   await user.click(within(older).getByText('第 1 次访问 · 第 1 次尝试'))

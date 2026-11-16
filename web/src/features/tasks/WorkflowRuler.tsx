@@ -181,11 +181,14 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                             onClick={() => onRecord(view.step.id, item.id)}
                             className={cn('flex min-h-[26px] cursor-pointer items-center gap-2 text-left text-[12.5px] text-ink outline-none focus-visible:shadow-focus', here ? 'font-black' : 'font-bold')}
                           >
-                            <span aria-hidden="true" className="h-0.5 w-2.5 shrink-0 bg-ink" />
-                            <span className={cn(here && 'underline decoration-2 underline-offset-4')}>
-                              {t.tasks.ruler.visit(item.visit, item.attempt)} · {t.tasks.nodeStatuses[item.status]}
+                            <span aria-hidden="true" className="mt-[11px] h-0.5 w-2.5 shrink-0 self-start bg-ink" />
+                            {/* “在看”跟着文字一起换行（英文较长时不会被挤到一边）。 */}
+                            <span className="min-w-0 py-0.5 leading-[1.6]">
+                              <span className={cn(here && 'underline decoration-2 underline-offset-4')}>
+                                {t.tasks.ruler.visit(item.visit, item.attempt)} · {t.tasks.nodeStatuses[item.status]}
+                              </span>
+                              {here && <span className="text-[11.5px] font-black whitespace-nowrap text-pink-text"> · {t.tasks.ruler.here}</span>}
                             </span>
-                            {here && <span className="text-[11.5px] font-black text-pink-text">· {t.tasks.ruler.here}</span>}
                           </button>
                         </li>
                       )

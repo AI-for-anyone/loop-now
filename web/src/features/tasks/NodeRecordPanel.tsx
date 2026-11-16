@@ -155,22 +155,27 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
           <div id="task-conversation" role="tabpanel" aria-label={t.tasks.conversation} hidden={tab !== 'conversation'} className="flex min-h-0 flex-1 flex-col">
             {/* 节点头：空心步号加步名（黄色记号笔）、Agent、第几次访问、“当前节点”藏青小标签、状态印章；
                 下面是原因（阻塞时红色便签）和恢复动作（荧光粉“重试当前节点”，其余是次要按钮）。 */}
-            <div className={cn('flex max-h-[40%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
+            <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
               <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
                 <TaskBadge className="ml-auto" status={node.status} />
               </NodeHeading>
-              {(statusReason || current) && <div className="flex flex-wrap items-start gap-x-[22px] gap-y-3">
+              {/* 原因便签旁边是恢复动作：荧光粉“重试当前节点”，旁边是“更换 Lark 账号并继续 QA”（次要按钮，点开在下面展开表单）。 */}
+              <TaskLarkSwitchController detail={detail} node={node} disabled={disabled}>
+                {(lark) => <>
+                  {(statusReason || current) && <div className="flex flex-wrap items-start gap-x-[22px] gap-y-3">
                 {statusReason && <StickyNote tone={node.status === 'blocked' ? 'red' : 'yellow'} className="min-w-0 flex-[1_1_380px] items-start text-[14px] leading-[1.6] font-normal [&>svg]:mt-[3px]">
                   <strong className="block font-black [overflow-wrap:anywhere]">{reasonHead}</strong>
                   {reasonRest.length > 0 && <span className="line-clamp-2 text-ink [overflow-wrap:anywhere]">{reasonRest.join('\n')}</span>}
                   <details className="mt-0.5"><summary className="cursor-pointer font-black underline underline-offset-3">{t.tasks.details}</summary><p className="mt-1 whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">{statusReason}</p></details>
                 </StickyNote>}
-                <div className="pt-1.5"><TaskActions task={detail.task} showRetry={current} showCancel={false} disabled={disabled} /></div>
-              </div>}
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 pt-1.5"><TaskActions task={detail.task} showRetry={current} showCancel={false} disabled={disabled} />{lark.toggle}</div>
+                  </div>}
+                  {lark.panel}
+                </>}
+              </TaskLarkSwitchController>
               {node.sleep?.state === 'sleeping' && node.sleep.nodeRunId === node.id && node.sleep.runtimeId === node.runtimeId && node.sleep.wakeAt && <SleepUntil at={node.sleep.wakeAt} reason={node.sleep.reason} />}
-              <TaskLarkSwitchController detail={detail} node={node} disabled={disabled} />
               {node.question && <details className="text-[13.5px]"><summary className="cursor-pointer font-bold">{t.tasks.question} · {t.tasks.questionState[node.question.status]}</summary><PendingQuestion question={node.question} /></details>}
             </div>
             <div className="min-h-[120px] flex-1 overflow-hidden">
@@ -252,7 +257,7 @@ function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onCo
       {record.reason && record.status !== 'blocked' && <p className="text-[14px] [overflow-wrap:anywhere]">{record.reason}</p>}
       <div className="grid min-w-0 gap-x-7 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="min-w-0">
-          <h3 className="riso-marker mb-2 self-start px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.inputs}</h3>
+          <h3 className="riso-marker mb-2 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.inputs}</h3>
           {keys.length === 0 ? <p className="text-[13.5px] text-ink-500">{t.tasks.none}</p> : <dl className="grid grid-cols-[minmax(72px,auto)_minmax(0,1fr)] border-t-2 border-ink text-[13.5px]">
             {keys.map(key => { const version = versions.get(key), value = record.inputs[key], origin = version ? source(version) : null
               return <div key={key} className="contents">
@@ -265,7 +270,7 @@ function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onCo
           </dl>}
         </section>
         <section className="min-w-0">
-          <h3 className="riso-marker mb-2 self-start px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.output}</h3>
+          <h3 className="riso-marker mb-2 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.output}</h3>
           {record.output === null ? <p className="text-[13.5px] text-ink-500">{t.tasks.noOutput}</p> : <pre className="max-w-full overflow-x-auto rounded-card bg-tint-blue px-[18px] py-3.5 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap break-all">{JSON.stringify(record.output, null, 2)}</pre>}
         </section>
       </div>
