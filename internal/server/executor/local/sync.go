@@ -24,7 +24,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// failure 是可预期的执行失败，对应 RunErrorCode。
+// failure is an expected run failure, matching RunErrorCode.
 type failure struct {
 	code string
 	msg  string
@@ -36,16 +36,17 @@ func fail(code, format string, args ...any) *failure {
 	return &failure{code: code, msg: fmt.Sprintf(format, args...)}
 }
 
-// prepared 是启动前准备的结果。
+// prepared is the result of the preparation before startup.
 type prepared struct {
 	env        []string
 	skillDirs  []string
 	cliBinDirs []string
-	cliBins    []string // 放进执行 PATH 的模板 CLI 可执行文件（与 cliBinDirs 一一对应）
+	cliBins    []string // template CLI executables put on the run PATH (one for one with cliBinDirs)
 }
 
-// prepare 按规则同步配置：安装缺失的模板 CLI、重建 Skills 与 Prompt、先删后写凭证文件、同步工作区来源。
-// 实际进行的 CLI 安装与这次同步的结果都记入该执行的运行记录。
+// prepare syncs the config by the rules: it installs missing template CLIs, rebuilds Skills and the Prompt, deletes and
+// then rewrites credential files, and syncs workspace sources. The CLI installs actually performed and the result of
+// this sync are recorded in the run record of this run.
 func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, larkShim string) (prepared, error) {
 	var p prepared
 	if snap.LarkBinding != nil && larkShim == "" {
@@ -54,7 +55,7 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 	if err := d.ensure(); err != nil {
 		return p, err
 	}
-	// 1. 安装被允许、且有模板的 CLI。
+	// 1. Install the CLIs that are allowed and have a template.
 	ghBin := ""
 	for _, cli := range snap.CLIs {
 		if cli == "lark-cli" && snap.LarkBinding != nil {
@@ -101,9 +102,10 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 	return p, err
 }
 
-// syncConfig 依次重建 Skills 与 Prompt、写凭证文件、同步工作区来源。
+// syncConfig rebuilds Skills and the Prompt, writes credential files and syncs workspace sources, in that order.
 func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, p *prepared, ghBin string, outcomes *[]sourceOutcome) error {
-	// 2. Skills 与 Prompt 按配置整体覆盖。Claude Code 的 Skills 放在平台给它的插件目录里。
+	// 2. Skills and the Prompt are overwritten as a whole from the config. Claude Code's Skills go in the plugin
+	// directory the platform gives it.
 	claude := isClaude(snap)
 	var err error
 	if claude {
@@ -124,8 +126,9 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if err := writePluginMCP(d, snap.Plugins, claude); err != nil {
 		return err
 	}
-	// “用本机的登录状态”：运行时的 HOME 是用户真实的主目录；d.home 不变，凭证文件、清理与回收都只认 d.home。
-	// Claude Code 运行时总是这样（它只能用用户本人在本机的登录），与全局开关无关。
+	// “用本机的登录状态” ("Use local logins"): the runtime's HOME is the user's real home directory; d.home does not change,
+	// and credential files, cleanup and reclaiming only ever use d.home. The Claude Code runtime always works this way
+	// (it can only use the user's own local login), regardless of the global switch.
 	loginHome := ""
 	if snap.Local.Logins || claude {
 		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
@@ -143,13 +146,14 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	} else if err := os.Remove(d.prompt); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// 3. 模型凭证为独立Pi缓存，CLI凭证保持模板规则。插件提供方的订阅账号改为链接到账号的状态目录（先清掉上次的链接）。
+	// 3. Model credentials go into a separate Pi cache; CLI credentials keep the template rules. A plugin provider's
+	// subscription account is instead linked to the account's state directory (the previous links are removed first).
 	if err := clearProviderLinks(d); err != nil {
 		return fail(executor.ErrCredentialUnavailable, "清理订阅账号的旧链接失败：%v", err)
 	}
 	switch {
 	case claude:
-		// Claude Code 用它自己在本机的登录，平台不写模型凭证与 models.json。
+		// Claude Code uses its own local login; the platform writes no model credentials and no models.json.
 	case snap.ProviderState != nil:
 		if err := e.linkProviderState(snap, d, loginHome); err != nil {
 			return err
@@ -164,7 +168,7 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 			return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
 		}
 	}
-	// CLI凭证文件先删后写。
+	// CLI credential files are deleted first, then written.
 	if err := e.syncCredentialFiles(snap, d); err != nil {
 		return err
 	}
@@ -173,7 +177,8 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 		userPath = e.o.UserPath(ctx)
 	}
 	log := e.snapshotLog(snap).With("runId", runID)
-	// 开着登录状态时，受管 CLI 经恢复独立 HOME 的小脚本运行；关着时清掉旧脚本。
+	// With the login setting on, managed CLIs run through shims that restore the separate HOME; with it off, old shims
+	// are removed.
 	shimDir, err := syncCLIShims(d, loginHome, p.cliBins, e.loginOnlyEnv())
 	if err != nil {
 		return err
@@ -183,7 +188,8 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 		pathDirs = []string{shimDir}
 	}
 	p.env = e.buildEnv(d, snap, pathDirs, userPath, loginHome, log)
-	// 4. 工作区来源：平台替 Agent 做的克隆不随登录状态开关，用开关关着时的环境。
+	// 4. Workspace sources: the clones the platform makes for the Agent do not follow the login switch and use the
+	// environment as it is with the switch off.
 	sourceEnv := p.env
 	if loginHome != "" {
 		sourceEnv = e.buildEnv(d, snap, p.cliBinDirs, userPath, "", log)
@@ -191,7 +197,8 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	return e.syncSources(ctx, snap, d, sourceEnv, ghBin, outcomes)
 }
 
-// appendedPrompt 是 --append-system-prompt 文件的内容：Agent 的 Prompt 加上“文件夹与上下文”一节。
+// appendedPrompt is the content of the --append-system-prompt file: the Agent's Prompt plus the "Folders and context"
+// section.
 func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	section, err := e.contextPrompt(snap, d, loginHome)
 	if err != nil {
@@ -206,7 +213,7 @@ func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs, loginH
 	return strings.TrimRight(snap.Prompt, "\n") + "\n\n" + section, nil
 }
 
-// sourceOutcome 是一个文件夹来源在这次同步中的处理结果。
+// sourceOutcome is how one folder source was handled in this sync.
 type sourceOutcome struct {
 	path         string
 	kind         string
@@ -239,7 +246,8 @@ func failureMessage(err error) string {
 	return err.Error()
 }
 
-// syncSkills 把 Agent 的 Skill 副本与内置 Skill loopctl 整体重建到 dir 下，返回各 Skill 的目录。
+// syncSkills rebuilds the Agent's Skill copies and the built-in Skill loopctl under dir as a whole, and returns each
+// Skill's directory.
 func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, dir string) ([]string, error) {
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
@@ -273,7 +281,8 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, di
 		}
 		dirs = append(dirs, filepath.Join(dir, k.Name))
 	}
-	// 内置 Skill loopctl：内容由同版本 loopctl 生成，不存数据库，每次同步时写入。
+	// The built-in Skill loopctl: its content is generated by the loopctl of the same version, not stored in the
+	// database, and written on every sync.
 	for name, data := range guide.Files() {
 		p := path.Join(guide.SkillName, name)
 		if err := root.MkdirAll(path.Dir(p), 0o700); err != nil {
@@ -287,7 +296,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, di
 	return dirs, nil
 }
 
-// fileMode 让 Skill 中的脚本可执行。
+// fileMode makes scripts in a Skill executable.
 func fileMode(p string) fs.FileMode {
 	switch path.Ext(p) {
 	case ".sh", ".py", ".js", ".mjs", ".rb", ".pl":
@@ -346,7 +355,7 @@ func (e *Executor) syncSources(ctx context.Context, snap agentconfig.Snapshot, d
 		switch src.Kind {
 		case "git":
 			if exists {
-				o.outcome = "kept" // 已存在的仓库不拉取、不覆盖、不重置
+				o.outcome = "kept" // an existing repository is not pulled, overwritten or reset
 				*outcomes = append(*outcomes, o)
 				continue
 			}
@@ -392,10 +401,10 @@ func (e *Executor) syncFilesSource(ctx context.Context, root *os.Root, src store
 			processed = append(processed, f)
 			continue
 		case full || f.Pending == "write":
-			// 首次同步写入全部文件；人工修改过的文件覆盖磁盘内容。
+			// The first sync writes all files; files that were edited by hand overwrite what is on disk.
 		default:
 			if _, err := root.Lstat(p); err == nil {
-				continue // 没被人改过的已有文件不覆盖
+				continue // existing files nobody edited are not overwritten
 			} else if !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
@@ -418,7 +427,8 @@ func (e *Executor) syncFilesSource(ctx context.Context, root *os.Root, src store
 	return e.src.MarkSourceSynced(ctx, src.ID, processed)
 }
 
-// writeFileAtomic 先写同目录下的临时文件再改名覆盖，避免 Agent 读到写了一半的文件。
+// writeFileAtomic writes a temp file in the same directory first and then renames it over the target, so the Agent
+// never reads a half-written file.
 func writeFileAtomic(root *os.Root, p string, data []byte) error {
 	tmp := path.Join(path.Dir(p), ".loop-now-tmp-"+randHex())
 	if err := root.WriteFile(tmp, data, 0o644); err != nil {
@@ -522,7 +532,8 @@ func seedModelAuth(snap agentconfig.Snapshot, d agentDirs) error {
 	return modelcredential.WriteAuthFile(d.pi, data)
 }
 
-// syncModelsJSON 只写当前执行冻结的 Provider 片段；空配置必须删除旧文件。
+// syncModelsJSON writes only the Provider fragment captured for the current run; an empty config must delete the old
+// file.
 func syncModelsJSON(snap agentconfig.Snapshot, d agentDirs) error {
 	root, err := os.OpenRoot(d.pi)
 	if err != nil {

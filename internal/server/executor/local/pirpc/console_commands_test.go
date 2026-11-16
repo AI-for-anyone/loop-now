@@ -105,7 +105,8 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	}
 }
 
-// Pi 以 compact 失败报告的“没有压缩”是正常结果：会话太短、已经压缩过、扩展取消（平台没有发 abort）；其余失败照旧是错误。
+// A "did not compact" that Pi reports as a failed compact is a normal result: session too short, already compacted, or
+// cancelled by an extension (the platform sent no abort); any other failure is still an error.
 func TestCompactSkippedOutcomes(t *testing.T) {
 	for message, want := range map[string]string{
 		"Nothing to compact (session too small)": CompactTooSmall,

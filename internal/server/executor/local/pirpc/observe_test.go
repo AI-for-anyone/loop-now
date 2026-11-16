@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// obsRec 记录 Observer 回调。
+// obsRec records Observer callbacks.
 type obsRec struct {
 	mu      sync.Mutex
 	usage   []Usage
@@ -56,7 +56,8 @@ func usageJSON(in, out, cr, cw int64) map[string]any {
 		"cost": map[string]any{"input": 0.1, "output": 0.2, "cacheRead": 0, "cacheWrite": 0, "total": 0.3}}
 }
 
-// messageOf 取出 message_end 事件中的消息，用于构造重复携带同一消息的 turn_end 与 agent_end。
+// messageOf extracts the message from a message_end event, used to build turn_end and agent_end that carry the same
+// message again.
 func messageOf(line string) any {
 	var ev map[string]any
 	if err := json.Unmarshal([]byte(line), &ev); err != nil {
@@ -74,8 +75,9 @@ func assistantEnd(stop string, u map[string]any, extra map[string]any) string {
 	return jsonLine(map[string]any{"type": "message_end", "message": m})
 }
 
-// 按 Pi 1.1.0 源码与文档（docs/json.md、dist/types.d.ts）构造的一轮事件：工具循环、工具自身用量、压缩、预热、
-// 自动重试；turn_end 与 agent_end 中重复出现的消息不得重复计数，message_update 中的阶段性用量不计。
+// A turn of events built from the Pi 1.1.0 source and docs (docs/json.md, dist/types.d.ts): a tool loop, the tool's own
+// usage, compaction, warm-up, automatic retry; messages repeated in turn_end and agent_end must not be counted twice,
+// and interim usage in message_update is not counted.
 func TestObserveUsageAndNotices(t *testing.T) {
 	f := newPipeFake(t)
 	obs := &obsRec{}
@@ -114,7 +116,7 @@ func TestObserveUsageAndNotices(t *testing.T) {
 	if out := recvPrompt(t, ch); out.err != nil || out.res.Outcome != OutcomeCompleted {
 		t.Fatalf("本轮结果不对：%+v %v", out.res, out.err)
 	}
-	// 两轮之间的预热：不属于任何一轮。
+	// Warm-up between two turns: belongs to no turn.
 	f.send(jsonLine(map[string]any{"type": "entry_appended", "entry": map[string]any{"type": "usage", "kind": "cache_warm",
 		"provider": "anthropic", "model": "claude-sonnet-4-5", "usage": usageJSON(0, 1, 60000, 0)}}))
 	obs.waitUsage(t, 7)
@@ -204,7 +206,7 @@ func TestObserveCompactionFailedAndAborted(t *testing.T) {
 	}
 }
 
-// 同一 fakepi 进程中，观察到的用量之和等于 get_session_stats 的增量。
+// Within the same fakepi process, the sum of observed usage equals the increase in get_session_stats.
 func TestObserveMatchesSessionStats(t *testing.T) {
 	p := startFake(t, nil)
 	obs := &obsRec{}
@@ -242,7 +244,8 @@ func TestObserveMatchesSessionStats(t *testing.T) {
 		t.Fatalf("观察到的用量与 get_session_stats 的增量不一致：观察 %v/%v/%v/%v，统计 %v/%v/%v/%v（%d 条）",
 			in, out, cr, cw, diff("input"), diff("output"), diff("cacheRead"), diff("cacheWrite"), len(usage))
 	}
-	// 重试失败的一条、工具调用一条、最终回复一条 = 3 条 assistant；另有工具、压缩、预热各一条。
+	// One for the failed attempt that was retried, one for the tool call, one for the final reply = 3 assistant
+	// entries; plus one each for tool, compaction and warm-up.
 	kinds := map[string]int{}
 	for _, u := range usage {
 		kinds[u.Kind]++

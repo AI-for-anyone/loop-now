@@ -7,9 +7,9 @@ import (
 	"os"
 )
 
-// linkDir 与 linkFile 在 Unix 上都是软链接（绝对路径）。
+// linkDir and linkFile both create symlinks (absolute paths) on Unix.
 func linkDir(target, link string) error  { return os.Symlink(target, link) }
 func linkFile(target, link string) error { return os.Symlink(target, link) }
 
-// isLink 报告 path 是不是链接本身。
+// isLink reports whether path is the link itself.
 func isLink(_ string, info fs.FileInfo) bool { return info.Mode()&fs.ModeSymlink != 0 }

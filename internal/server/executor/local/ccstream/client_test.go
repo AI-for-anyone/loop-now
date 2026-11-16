@@ -16,7 +16,7 @@ import (
 	"loop-now/internal/testutil/fakeclaudebin"
 )
 
-// start 在临时 HOME 与工作目录里启动 fakeclaude（会话记录写在临时 HOME 下）。
+// start starts fakeclaude in a temp HOME and working directory (session records are written under the temp HOME).
 func start(t *testing.T, o ccstream.Options, env ...string) *ccstream.Client {
 	t.Helper()
 	home, cwd := t.TempDir(), t.TempDir()
@@ -45,7 +45,7 @@ func ctx(t *testing.T) context.Context {
 	return c
 }
 
-// sink 记下一轮里的事件。
+// sink records the events of a turn.
 type sink struct {
 	mu       sync.Mutex
 	text     strings.Builder
@@ -103,8 +103,8 @@ func (o *observer) RateLimit(info map[string]any, inTurn bool) {
 	o.limits = append(o.limits, info)
 }
 
-// 一个进程连续处理多轮：文字流式交给 sink（子 Agent 的不转）、Bash 工具的开始结束与命令（记为 bash）、按模型的用量、init 信息；
-// 不认识的输出类型忽略。
+// One process handles many turns in a row: text is streamed to the sink (not sub-Agent text), plus the Bash tool's
+// start, end and command (recorded as bash), per-model usage and init info; unknown output types are ignored.
 func TestTurnsTextToolsUsageAndInit(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	obs := &observer{}
@@ -144,7 +144,7 @@ func TestTurnsTextToolsUsageAndInit(t *testing.T) {
 	}
 }
 
-// 图片以 base64 块随文字发出。
+// Images are sent as base64 blocks along with the text.
 func TestImages(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	img := messageimage.Encode("image/png", []byte{0x89, 'P', 'N', 'G'})
@@ -153,7 +153,8 @@ func TestImages(t *testing.T) {
 	}
 }
 
-// claude 报告的错误为 runtime_error，消息取 result；未登录等需要进一步判断的保留原始字段。
+// Errors claude reports are runtime_error with the message taken from result; for cases that need a closer look, such
+// as not logged in, the raw fields are kept.
 func TestFailures(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	res, err := c.Prompt(ctx(t), "fake:error boom", nil)
@@ -170,7 +171,8 @@ func TestFailures(t *testing.T) {
 	}
 }
 
-// 打断：控制消息得到确认时这一轮以打断结束，进程留着，下一轮正常。
+// Interrupt: when the control message is confirmed, the turn ends as interrupted, the process stays, and the next turn
+// works normally.
 func TestInterruptByControlMessage(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	s := newSink()
@@ -195,7 +197,8 @@ func TestInterruptByControlMessage(t *testing.T) {
 	}
 }
 
-// 控制消息等不到确认时改发 SIGINT：这一轮以打断结束，进程随后退出。
+// When the control message gets no confirmation, SIGINT is sent instead: the turn ends as interrupted and the process
+// exits afterwards.
 func TestInterruptFallsBackToSignal(t *testing.T) {
 	c := start(t, ccstream.Options{InterruptGrace: 200 * time.Millisecond})
 	s := newSink()
@@ -221,7 +224,8 @@ func TestInterruptFallsBackToSignal(t *testing.T) {
 	}
 }
 
-// 一轮中进程退出：runtime_exited，带已收到的文字；之后发消息返回 ErrExited。
+// The process exits during a turn: runtime_exited, with the text received so far; messages sent afterwards return
+// ErrExited.
 func TestExitMidTurn(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	if _, err := c.Prompt(ctx(t), "warm up", nil); err != nil {
@@ -240,7 +244,8 @@ func TestExitMidTurn(t *testing.T) {
 	}
 }
 
-// 启动即退出（例如不认识的参数）与迟迟没有 init：都是 runtime_start_failed，错误输出留给调用方拼进消息。
+// Exiting right at startup (for example, an unknown argument) and no init for too long: both are runtime_start_failed,
+// and the error output is left for the caller to add to the message.
 func TestStartFailures(t *testing.T) {
 	c := start(t, ccstream.Options{}, "FAKECLAUDE_EXIT_AT_START=1")
 	<-c.Done()
@@ -260,8 +265,9 @@ func TestStartFailures(t *testing.T) {
 	}
 }
 
-// 发过 SIGINT 的进程随后一定退出，写进去的消息会丢：打断那一轮结束后立刻发下一条，不写入，等它退出后返回 ErrExited，
-// 让调用方用 --resume 重新起进程。
+// A process that was sent SIGINT is sure to exit afterwards, and a message written to it would be lost: sending the
+// next message right after the interrupted turn ends does not write it, but waits for the process to exit and returns
+// ErrExited, so the caller starts a new process with --resume.
 func TestPromptAfterSignalWaitsForExit(t *testing.T) {
 	c := start(t, ccstream.Options{InterruptGrace: 200 * time.Millisecond})
 	s := newSink()
@@ -295,7 +301,8 @@ func TestPromptAfterSignalWaitsForExit(t *testing.T) {
 	}
 }
 
-// 工具调用只出现在完整的 assistant 消息里时补登记：开始、命令与结束都对得上。
+// When a tool call appears only in the full assistant message, it is registered from there: start, command and end
+// all match up.
 func TestToolUseOnlyInAssistantMessage(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	s := newSink()
@@ -308,7 +315,7 @@ func TestToolUseOnlyInAssistantMessage(t *testing.T) {
 	}
 }
 
-// 一行超过上限时停读并结束进程：这一轮以 runtime_exited 结束，不会挂住。
+// A line over the limit stops reading and ends the process: the turn ends with runtime_exited and does not hang.
 func TestOverlongLineEndsTurn(t *testing.T) {
 	c := start(t, ccstream.Options{MaxLine: 1024})
 	if _, err := c.Prompt(ctx(t), "warm up", nil); err != nil {

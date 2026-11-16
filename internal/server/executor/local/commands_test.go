@@ -8,8 +8,9 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// Pi 启动后读出命令列表存进 Agent 目录（不为列命令另起 Pi）；首字符为 / 的扩展命令由 Pi 直接处理，这一轮 completed、
-// CommandHandled、没有回复；Pi 不认识的 /xxx 照常交给模型。
+// After Pi starts, its command list is read and stored in the Agent directory (Pi is not started separately just to
+// list commands); an extension command whose first character is / is handled by Pi itself, and the turn is completed,
+// CommandHandled, with no reply; a /xxx that Pi does not know is passed to the model as usual.
 func TestPiCommandsCachedAndHandled(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(func(s *agentconfig.Snapshot) {
@@ -49,7 +50,8 @@ func TestPiCommandsCachedAndHandled(t *testing.T) {
 	if res.Outcome != executor.OutcomeCompleted || !res.CommandHandled || res.Text != "" {
 		t.Fatalf("扩展命令应由 Pi 直接处理：%+v", res)
 	}
-	// 命令的输出（notify）按顺序随结果交出，setStatus 不算；多行原文保留。
+	// The command's output (notify) is handed over with the result, in order; setStatus does not count; multi-line text
+	// is kept verbatim.
 	want := []executor.CommandNotice{{Level: "info", Message: "Fetching grok-accounts…"}, {Level: "warning", Message: "Result of grok-accounts\n   Used       1%\n   Args       gui"}}
 	if len(res.CommandNotices) != 2 || res.CommandNotices[0] != want[0] || res.CommandNotices[1] != want[1] || res.CommandNoticesTruncated {
 		t.Fatalf("命令输出：%+v", res.CommandNotices)

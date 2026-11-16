@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-// pipeFake 是进程内的 Pi 替身：读取客户端写出的命令，按脚本写出响应与事件。
+// pipeFake is an in-process Pi double: it reads the commands the client writes and writes responses and events from a
+// script.
 type pipeFake struct {
 	t    *testing.T
 	c    *Client
@@ -258,7 +259,7 @@ func TestPipeCRLFAndUnicodeSeparators(t *testing.T) {
 	rec := newRecorder()
 	ch := goPrompt(testCtx(t), f.c, "x", rec)
 	id := f.expect("prompt")
-	// U+2028/U+2029 是 JSON 字符串内的合法字符，不能作为分帧依据。
+	// U+2028/U+2029 are valid characters inside JSON strings and must not be used for framing.
 	raw := "{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"delta\":\"a b c\"}}\r"
 	f.send(okResp(id, "prompt", nil)+"\r", evStart(), raw,
 		"{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"a b c\"}],\"stopReason\":\"stop\"}}\r",
@@ -273,7 +274,7 @@ func TestPipeLargeLine(t *testing.T) {
 	f := newPipeFake(t)
 	ch := goPrompt(testCtx(t), f.c, "x", nil)
 	id := f.expect("prompt")
-	big := strings.Repeat("长", 100<<10) // 约 300KB
+	big := strings.Repeat("长", 100<<10) // about 300KB
 	f.send(okResp(id, "prompt", map[string]any{"disposition": "started"}),
 		evStart(), evDelta(big), evEnd(big, "stop", ""), evSettled(false))
 	o := recvPrompt(t, ch)
@@ -286,7 +287,7 @@ func TestPipeStaleSettledBeforeResponse(t *testing.T) {
 	f := newPipeFake(t)
 	ch := goPrompt(testCtx(t), f.c, "x", nil)
 	id := f.expect("prompt")
-	// prompt 响应之前的 agent_settled 属于上一次运行，应被忽略。
+	// An agent_settled before the prompt response belongs to the previous run and must be ignored.
 	f.send(evStart(), evEnd("stale", "stop", ""), evSettled(false),
 		okResp(id, "prompt", map[string]any{"disposition": "started"}),
 		evStart(), evEnd("fresh", "stop", ""), evSettled(false))
@@ -336,7 +337,7 @@ func TestPipePromptCtxCancelDetaches(t *testing.T) {
 		t.Fatalf("ctx 取消应返回 ctx.Err()：%v", o.err)
 	}
 	f.send(evDelta("late"), evSettled(false))
-	// 下一轮正常进行，且 Prompt 返回后不再有回调。
+	// The next turn runs normally, and there are no more callbacks after Prompt returns.
 	ch2 := goPrompt(testCtx(t), f.c, "y", nil)
 	id2 := f.expect("prompt")
 	f.send(okResp(id2, "prompt", map[string]any{"disposition": "started"}), evStart(), evEnd("y", "stop", ""), evSettled(false))
@@ -382,7 +383,7 @@ func TestPipeCallCtxCancel(t *testing.T) {
 	if err := <-errCh; !errors.Is(err, context.Canceled) {
 		t.Fatalf("应返回 ctx.Err()：%v", err)
 	}
-	// 迟到的响应被忽略，不阻塞读协程。
+	// A late response is ignored and does not block the reader goroutine.
 	f.send(okResp(id, "get_state", nil))
 	go func() { _, err := f.c.Call(testCtx(t), "get_state", nil); errCh <- err }()
 	id2 := f.expect("get_state")
@@ -404,7 +405,7 @@ func TestRingBufferKeepsTail(t *testing.T) {
 		t.Fatalf("%q", r.String())
 	}
 	r2 := newRingBuffer(4)
-	_, _ = r2.Write([]byte("x长")) // 截断落在多字节字符中间时丢弃残缺前缀
+	_, _ = r2.Write([]byte("x长")) // when truncation falls in the middle of a multi-byte character, the incomplete prefix is dropped
 	_, _ = r2.Write([]byte("ab"))
 	if r2.String() != "ab" {
 		t.Fatalf("%q", r2.String())

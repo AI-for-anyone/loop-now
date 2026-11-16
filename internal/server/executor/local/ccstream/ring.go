@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-// ringBuffer 只保留最近写入的 limit 字节，并发安全。
+// ringBuffer keeps only the last limit bytes written, and is safe for concurrent use.
 type ringBuffer struct {
 	mu    sync.Mutex
 	buf   []byte
@@ -29,7 +29,7 @@ func (r *ringBuffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// String 返回缓冲内容，去掉截断造成的开头残缺 UTF-8 字节。
+// String returns the buffer content, dropping incomplete UTF-8 bytes at the start left by truncation.
 func (r *ringBuffer) String() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()

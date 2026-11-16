@@ -20,7 +20,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// fakeRealHome 建一个假的“用户真实主目录”，里面放一些与 Loop Now 自己的文件同名的东西，返回目录与其中全部文件的快照。
+// fakeRealHome creates a fake "real user home directory" holding some things with the same names as Loop Now's own
+// files, and returns the directory and a snapshot of all the files in it.
 func fakeRealHome(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	home := t.TempDir()
@@ -82,7 +83,7 @@ func sameTree(t *testing.T, root string, want map[string]string) {
 	}
 }
 
-// lookPath 按 PATH（dump 里的值）找命令，和 shell 的查找一致。
+// lookPath finds a command on PATH (the value in the dump), the same way the shell looks it up.
 func lookPath(path, name string) string {
 	for _, dir := range filepath.SplitList(path) {
 		p := filepath.Join(dir, name)
@@ -93,18 +94,22 @@ func lookPath(path, name string) string {
 	return ""
 }
 
-// 用本机的登录状态：Pi 的 HOME 是用户真实的主目录，SSH_AUTH_SOCK 与 XDG_* 透传；平台目录不变；配了账号的受管 CLI 经小脚本
-// 以 Agent 的独立 HOME 运行（环境与开关关着时一致），没配的 CLI 不被拦住；提示词提醒交互授权；开关变化即重启，关掉后环境复原、旧脚本清掉。
+// "Use local logins": Pi's HOME is the user's real home directory and SSH_AUTH_SOCK and XDG_* are passed through; the
+// platform directories do not change; managed CLIs with a configured account run through shims with the Agent's
+// separate HOME (the same environment as with the switch off), while CLIs without one are not intercepted; the prompt
+// mentions interactive authorization; changing the switch restarts the process, and turning it off restores the
+// environment and removes the old shims.
 func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	skipWithoutCLITemplates(t)
 	realHome, before := fakeRealHome(t)
 	userBin := t.TempDir()
-	for _, name := range []string{"gh", "tea"} { // 用户本机装的 gh 与 tea
+	for _, name := range []string{"gh", "tea"} { // gh and tea installed locally by the user
 		if err := os.WriteFile(filepath.Join(userBin, name), []byte("#!/bin/sh\necho user-"+name+"\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// 执行基础 PATH 用空的临时目录：命令的解析结果不受宿主机上装没装 gh、tea 影响。
+	// Use empty temp directories for the base run PATH, so how commands resolve does not depend on whether gh or tea is
+	// installed on the host.
 	base := strings.Join([]string{t.TempDir(), t.TempDir()}, string(os.PathListSeparator))
 	h := newHarness(t, func(o *Options) {
 		o.ContextDir = t.TempDir()
@@ -117,7 +122,7 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	h.env["SSH_AUTH_SOCK"] = "/tmp/ssh-agent.sock"
 	h.env["XDG_CONFIG_HOME"] = filepath.Join(realHome, ".xdg-config")
 	ghDir := preinstall(t, h.root, "gh", "2.100.0", "gh")
-	// 受管 gh 打印它看到的 HOME 与登录状态才透传的变量。
+	// The managed gh prints the HOME it sees and the variables passed through only for the login setting.
 	if err := os.WriteFile(filepath.Join(ghDir, "gh"), []byte("#!/bin/sh\nprintf '%s|%s|%s|%s' \"$HOME\" \"${XDG_CONFIG_HOME-unset}\" \"${SSH_AUTH_SOCK-unset}\" \"$*\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +148,8 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	if path := d.Env["PATH"]; path != strings.Join([]string{shims, base, userBin}, string(os.PathListSeparator)) {
 		t.Fatalf("PATH 应为小脚本目录、执行 PATH、用户 PATH（不再直接放模板目录）：%s", path)
 	}
-	// 配了账号的 gh 找到的是小脚本；它以 Agent 的独立 HOME、开关关着时的环境运行原来的 gh。
+	// gh with a configured account resolves to the shim; the shim runs the original gh with the Agent's separate HOME
+	// and the environment as with the switch off.
 	gh := lookPath(d.Env["PATH"], "gh")
 	if gh != filepath.Join(shims, "gh") {
 		t.Fatalf("gh 应解析到小脚本：%s", gh)
@@ -159,7 +165,7 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	if err != nil || string(out) != dirs.home+"|unset|unset|auth status" {
 		t.Fatalf("受管 gh 的环境不对：%q %v", out, err)
 	}
-	// 没配的 tea 按 PATH 落到用户本机那份。
+	// tea, which is not configured, resolves via PATH to the user's local copy.
 	if tea := lookPath(d.Env["PATH"], "tea"); tea != filepath.Join(userBin, "tea") {
 		t.Fatalf("没配的 CLI 应落到用户本机：%s", tea)
 	}
@@ -168,7 +174,8 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	}
 	pid := h.pid(id)
 
-	// 关掉：下一次派发重启，环境与原来一致，旧脚本清掉，不再提醒。
+	// Turn it off: the next dispatch restarts the process, the environment is as before, the old shims are removed, and
+	// there is no reminder any more.
 	h.src.mu.Lock()
 	h.src.snaps[id].Local.Logins = false
 	h.src.mu.Unlock()
@@ -188,7 +195,8 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	sameTree(t, realHome, before)
 }
 
-// 只有这个 Agent 配了账号的受管 CLI 才生成小脚本：没配 gh 的 Agent 不拦 gh，按 PATH 落到用户本机的 gh 并用真实 HOME。
+// Only managed CLIs with an account configured for this Agent get a shim: an Agent without gh configured does not
+// intercept gh, which resolves via PATH to the user's local gh and uses the real HOME.
 func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("小脚本只在 Unix 上")
@@ -198,7 +206,7 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(userBin, "gh"), []byte("#!/bin/sh\necho user-gh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	base := t.TempDir() // 空的执行基础 PATH：宿主机上装的 gh（例如 CI runner 的 /usr/bin/gh）不会先命中
+	base := t.TempDir() // empty base run PATH: a gh installed on the host (e.g. /usr/bin/gh on a CI runner) is not hit first
 	h := newHarness(t, func(o *Options) {
 		o.ExecBasePath = base
 		o.RealHome = func() (string, error) { return realHome, nil }
@@ -206,7 +214,7 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	}, "")
 	dumpPath := filepath.Join(t.TempDir(), "dump.json")
 	h.env["FAKEPI_DUMP"] = dumpPath
-	preinstall(t, h.root, "gh", "2.100.0", "gh") // 装过，但这个 Agent 没配
+	preinstall(t, h.root, "gh", "2.100.0", "gh") // installed, but not configured for this Agent
 	id := h.agent(func(s *agentconfig.Snapshot) { s.Local = agentconfig.LocalAccess{Logins: true, UserPath: true} })
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
 		t.Fatal(res)
@@ -223,8 +231,9 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	}
 }
 
-// 开关开着跑完整的启动—释放—CleanupStale—删除 Agent：清理只认 Agent 自己的目录，用户真实主目录原样不动；
-// 平台替 Agent 做的克隆（旧文件夹来源）不读用户的 git 配置。
+// With the switch on, run the full start, release, CleanupStale, delete Agent sequence: cleanup only touches the
+// Agent's own directories and the user's real home directory stays untouched; clones the platform makes for the Agent
+// (old folder sources) do not read the user's git config.
 func TestLoginsNeverTouchRealHome(t *testing.T) {
 	skipWithoutCLITemplates(t)
 	realHome, before := fakeRealHome(t)
@@ -240,7 +249,7 @@ func TestLoginsNeverTouchRealHome(t *testing.T) {
 		s.Local = agentconfig.LocalAccess{Logins: true}
 		s.CLIs = []string{"lark-cli"}
 		s.CLIPayloads["lark-cli"] = clitemplate.Payload{Files: []clitemplate.PayloadFile{{Path: ".lark-cli/config.json", Content: []byte(`{"apps":[{"appId":"agent"}]}`)}}}
-		// 用户的 ~/.gitconfig 把 file:/// 改写到不存在的地方：克隆若读了它就会失败。
+		// The user's ~/.gitconfig rewrites file:/// to a place that does not exist: a clone that read it would fail.
 		s.Sources = []store.FolderSource{{ID: uuid.Must(uuid.NewV7()), Path: "app", Kind: "git", GitURL: "file://" + bare, GitBranch: "main"}}
 	})
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
@@ -256,7 +265,7 @@ func TestLoginsNeverTouchRealHome(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(dirs.root, cliShimDir, "lark-cli")); !strings.Contains(string(b), "HOME="+shellQuote(dirs.home)) {
 		t.Fatalf("lark-cli 的小脚本应恢复独立 HOME：%s", b)
 	}
-	// 释放（删除 Agent 时调用）与启动清理：只删 Agent 自己的目录。
+	// Release (called when an Agent is deleted) and startup cleanup: only the Agent's own directories are deleted.
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -275,8 +284,10 @@ func TestLoginsNeverTouchRealHome(t *testing.T) {
 	}
 }
 
-// buildEnv：开关关着时与不传 loginHome 完全相同；开着时只换 HOME 一组变量并透传 SSH_AUTH_SOCK／XDG_*，
-// Windows 上 USERPROFILE 等按真实主目录、APPDATA／LOCALAPPDATA 取进程环境的真实值，TEMP 仍是 Agent 的。
+// buildEnv: with the switch off it is exactly the same as without loginHome; with it on, only the HOME group of
+// variables changes and SSH_AUTH_SOCK/XDG_* are passed through; on Windows USERPROFILE and the like follow the real
+// home directory, APPDATA/LOCALAPPDATA take the real values from the process environment, and TEMP is still the
+// Agent's.
 func TestLoginsBuildEnv(t *testing.T) {
 	real := filepath.Join(t.TempDir(), "real-home")
 	env := map[string]string{"SSH_AUTH_SOCK": "/tmp/agent.sock", "XDG_CACHE_HOME": filepath.Join(real, "cache"), "APPDATA": `D:\Roaming`, "LOCALAPPDATA": `D:\Local`, "LANG": "C"}
@@ -311,7 +322,7 @@ func TestLoginsBuildEnv(t *testing.T) {
 		}
 		changed = append(changed, "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA")
 	}
-	// 除了这一组，其余变量与关着时逐个相同。
+	// Apart from this group, every other variable is identical to the switch-off case.
 	for k, v := range on {
 		if !slices.Contains(changed, k) && off[k] != v {
 			t.Errorf("%s 不应随开关变化：%q → %q", k, off[k], v)

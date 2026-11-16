@@ -1,5 +1,6 @@
-// fakepi 是测试替身，模拟平台用到的 Pi CLI/RPC 子集（按 Pi 1.1.0 的源码写成，--version 默认报平台钉的 1.4.0）。
-// 回复行为由 prompt 文本中的 '!' 指令控制，见 README.md。
+// Command fakepi is a test double that simulates the subset of the Pi CLI/RPC the platform uses (written from the Pi
+// 1.1.0 source; --version reports 1.4.0, the version the platform pins, by default).
+// Reply behavior is controlled by '!' directives in the prompt text, see README.md.
 package main
 
 import (
@@ -19,10 +20,12 @@ import (
 
 const defaultVersion = "1.4.0"
 
-// neutral 为 FAKEPI_NEUTRAL=1 时的中性模式：回复不带平台加的“本轮运行ID”一行、不回显指令词，界面上可见的文字用英文（给英文截图用）。
+// neutral is the neutral mode used when FAKEPI_NEUTRAL=1: replies do not carry the
+// “本轮运行ID” ("Run ID for this turn") line the platform adds, do not echo directive words, and text visible in the
+// UI is in English (for English screenshots).
 var neutral bool
 
-// say 返回默认模式或中性模式下的文字。
+// say returns the text for the default mode or the neutral mode.
 func say(zh, en string) string {
 	if neutral {
 		return en
@@ -47,11 +50,12 @@ type options struct {
 	skills             []string
 	appendSystemPrompt []string
 	extensions         []string
-	export             string   // --export <会话文件>
-	positional         []string // 选项之外的参数（--export 的输出路径）
+	export             string   // --export <session file>
+	positional         []string // arguments other than options (the output path of --export)
 }
 
-// parseArgs 解析参数；未知参数忽略（与 Pi 一样，未知的 --flag 会吞掉随后的非选项值）。
+// parseArgs parses the arguments; unknown arguments are ignored (as in Pi, an unknown --flag swallows the non-option
+// value after it).
 func parseArgs(args []string) options {
 	var o options
 	next := func(i *int) (string, bool) {
@@ -96,7 +100,7 @@ func parseArgs(args []string) options {
 		case "--export":
 			o.export, _ = next(&i)
 		case "--no-approve", "--offline", "--no-skills":
-			// 接受但不处理
+			// accepted but not handled
 		default:
 			if strings.HasPrefix(a, "--") && !strings.Contains(a, "=") &&
 				i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
@@ -150,7 +154,7 @@ func run(args []string) int {
 			s.handle(line)
 		}
 		if err != nil {
-			return 0 // stdin 结束即退出
+			return 0 // exit once stdin ends
 		}
 	}
 }
@@ -179,13 +183,13 @@ func dump(path string, args []string, cwd string) error {
 	return os.WriteFile(path, b, 0o600)
 }
 
-// ---- 会话文件 ----
+// ---- Session file ----
 
 type session struct {
-	file     string // 空表示不持久化
+	file     string // empty means not persisted
 	id       string
 	cwd      string
-	flushed  bool // 文件是否已在磁盘上
+	flushed  bool // whether the file is already on disk
 	lastID   string
 	messages int
 }
@@ -256,7 +260,7 @@ func openSession(o options, cwd string) (*session, error) {
 	return s, nil
 }
 
-// load 读取已有会话文件的头部 id、最后一条 entry id 与消息数。
+// load reads the header id, the last entry id and the message count of an existing session file.
 func (s *session) load() error {
 	b, err := os.ReadFile(s.file)
 	if err != nil {
@@ -303,7 +307,7 @@ func defaultSessionDir(cwd string) string {
 	return filepath.Join(agentDir, "sessions", "--"+safe+"--")
 }
 
-// append 追加一条消息 entry；首次写入时创建文件并写入会话头。
+// append appends one message entry; the first write creates the file and writes the session header.
 func (s *session) append(msg map[string]any) error {
 	s.messages++
 	if s.file == "" {
@@ -356,11 +360,11 @@ type server struct {
 	sess *session
 	cur  *turnRun
 
-	// 本进程报告过的全部用量之和，供 get_session_stats。
+	// Sum of all usage this process has reported, for get_session_stats.
 	statsMu sync.Mutex
 	stats   sessionStats
 
-	// uiResp 收到的 extension_ui_response（!ask 等待它）。
+	// uiResp receives extension_ui_response (!ask waits for it).
 	uiResp chan map[string]any
 }
 
@@ -370,7 +374,7 @@ type sessionStats struct {
 	toolCalls, toolResults               int
 }
 
-// addUsage 把一份用量计入会话统计。
+// addUsage adds one usage report to the session stats.
 func (s *server) addUsage(u usageSpec) {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
@@ -386,7 +390,7 @@ func (s *server) count(f func(*sessionStats)) {
 	f(&s.stats)
 }
 
-// sessionStatsData 按 Pi 1.1.0 的 SessionStats 结构返回统计（dist/core/agent-session.d.ts）。
+// sessionStatsData returns the stats in the shape of Pi 1.1.0's SessionStats (dist/core/agent-session.d.ts).
 func (s *server) sessionStatsData() map[string]any {
 	s.statsMu.Lock()
 	st := s.stats
@@ -425,7 +429,7 @@ func (r *turnRun) aborted() bool {
 	}
 }
 
-// sleep 可被 abort 打断；返回 true 表示被打断。
+// sleep can be interrupted by abort; it returns true when interrupted.
 func (r *turnRun) sleep(d time.Duration) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -566,16 +570,17 @@ func (s *server) abort(id json.RawMessage) {
 		return
 	}
 	if r.ignoreAbort {
-		return // !noabort：永不响应
+		return // !noabort: never respond
 	}
 	r.abortOnce.Do(func() { close(r.abortCh) })
 	go func() {
-		<-r.done // 本轮或压缩已结束，Pi 回到空闲
+		<-r.done // the turn or compaction has ended and Pi is back to idle
 		s.ok(id, "abort", nil)
 	}()
 }
 
-// compact 模拟手动压缩：响应在 compaction_end 后返回；FAKEPI_COMPACT_DELAY 可制造可取消的等待。
+// compact simulates a manual compaction: the response comes after compaction_end; FAKEPI_COMPACT_DELAY can create a
+// wait that can be cancelled.
 func (s *server) compact(id json.RawMessage, instructions string) {
 	s.mu.Lock()
 	if s.cur != nil {
@@ -611,12 +616,13 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 		if value := os.Getenv("FAKEPI_COMPACT_USAGE"); value != "" {
 			usage = parseUsage(value)
 		}
-		// FAKEPI_COMPACT_ERROR 让 compact 以这段文字失败（与 Pi 相同：例如 "Nothing to compact (session too small)"、"Already compacted"）。
+		// FAKEPI_COMPACT_ERROR makes compact fail with this text (as in Pi: for example "Nothing to compact (session
+		// too small)", "Already compacted").
 		if fail := os.Getenv("FAKEPI_COMPACT_ERROR"); fail != "" && !aborted {
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false, "errorMessage": "Compaction failed: " + fail})
 			s.fail(id, "compact", fail)
 		} else if aborted {
-			// 与 Pi 相同：被取消的压缩以 "Compaction cancelled" 失败。
+			// As in Pi: a cancelled compaction fails with "Compaction cancelled".
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": true, "willRetry": false})
 			s.fail(id, "compact", "Compaction cancelled")
 		} else {
@@ -634,8 +640,10 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 	}()
 }
 
-// exportFile 模拟 `pi --export <会话文件> [输出]`：读会话文件，写出 HTML（FAKEPI_EXPORT_CONTENT，或含会话原文的默认内容）。
-// FAKEPI_EXPORT_FAIL 让它像 Pi 一样报错退出；FAKEPI_EXPORT_ENV 把环境变量写进这个文件，供测试检查导出用的环境。
+// exportFile simulates `pi --export <session file> [output]`: it reads the session file and writes HTML
+// (FAKEPI_EXPORT_CONTENT, or default content containing the session's raw text). FAKEPI_EXPORT_FAIL makes it fail and
+// exit like Pi; FAKEPI_EXPORT_ENV writes the environment variables into that file, so tests can check the environment
+// used for export.
 func exportFile(o options) int {
 	data, err := os.ReadFile(o.export)
 	if err != nil || os.Getenv("FAKEPI_EXPORT_FAIL") != "" {
@@ -686,7 +694,8 @@ func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage
 	if d.handled || s.extensionCommand(msg) {
 		s.mu.Unlock()
 		if !d.handled {
-			// 与真实扩展命令一样，输出用 ctx.ui.notify 给出（在 prompt 响应之前），一条普通进度、一条多行结果。
+			// As with real extension commands, the output is given via ctx.ui.notify (before the prompt response): one
+			// plain progress notice and one multi-line result.
 			name, args, _ := strings.Cut(strings.TrimPrefix(msg, "/"), " ")
 			s.emit(map[string]any{"type": "extension_ui_request", "id": "notify-" + shortID(), "method": "notify", "message": "Fetching " + name + "…"})
 			s.emit(map[string]any{"type": "extension_ui_request", "id": "notify-" + shortID(), "method": "notify", "notifyType": "warning",
@@ -699,7 +708,7 @@ func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage
 	r := &turnRun{abortCh: make(chan struct{}), done: make(chan struct{}), ignoreAbort: d.noAbort, dir: d}
 	s.cur = r
 	s.mu.Unlock()
-	// 与 Pi 一致：响应先于本轮任何事件发出。
+	// As in Pi: the response is sent before any event of the turn.
 	s.ok(id, "prompt", map[string]any{"disposition": "started"})
 	go s.runTurn(r, msg, d, images)
 }
@@ -735,7 +744,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 	s.persist(d, user)
 	s.count(func(st *sessionStats) { st.userMessages++ })
 
-	// endAssistant 结束一条助手消息并记录。
+	// endAssistant ends an assistant message and records it.
 	endAssistant := func(m map[string]any, toolResults []any) {
 		s.countAssistant(m)
 		s.emit(map[string]any{"type": "message_end", "message": m})
@@ -803,7 +812,8 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 	}
 
 	if !aborted && d.ask != "" {
-		// 扩展对话：发 extension_ui_request，等回应后把它写进回复文本；abort 时放弃等待。
+		// Extension dialog: send extension_ui_request, wait for the answer and write it into the reply text; give up
+		// waiting on abort.
 		req := map[string]any{"type": "extension_ui_request", "id": "ask-" + shortID(), "method": d.ask, "title": say("fakepi 问", "fakepi asks")}
 		if d.ask == "select" {
 			req["options"] = []string{"staging", "production"}
@@ -840,7 +850,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 		s.emit(map[string]any{"type": "message_start", "message": s.assistant(nil, "pending", "")})
 		reply := d.reply(msg)
 		if d.errorMsg != "" && !d.hasText {
-			reply = "" // 出错且未指定文本时不输出内容
+			reply = "" // on error with no text given, output no content
 		}
 		sent, ab := s.streamText(r, reply, d, d.crash)
 		switch {
@@ -859,7 +869,8 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 
 	s.emit(map[string]any{"type": "agent_end", "messages": nonNil(produced), "willRetry": false})
 	settledAborted := aborted || (!r.ignoreAbort && r.aborted())
-	// 与 Pi 一致：先回到空闲再发 agent_settled，客户端收到后即可发送下一条 prompt。
+	// As in Pi: go back to idle first, then send agent_settled, so the client can send the next prompt as soon as it
+	// receives it.
 	s.mu.Lock()
 	s.cur = nil
 	s.mu.Unlock()
@@ -871,7 +882,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 	}
 }
 
-// emitWarm 输出一条缓存预热的用量条目（Pi 1.1.0 以 entry_appended 推送 type 为 usage 的会话条目）。
+// emitWarm outputs one cache warm usage entry (Pi 1.1.0 pushes session entries of type usage via entry_appended).
 func (s *server) emitWarm(u usageSpec) {
 	s.addUsage(u)
 	s.emit(map[string]any{"type": "entry_appended", "entry": map[string]any{
@@ -879,7 +890,7 @@ func (s *server) emitWarm(u usageSpec) {
 		"provider": s.provider(), "model": s.modelID(), "usage": u.wire()}})
 }
 
-// countAssistant 计入一条已结束的助手消息及其用量。
+// countAssistant counts one finished assistant message and its usage.
 func (s *server) countAssistant(m map[string]any) {
 	s.count(func(st *sessionStats) { st.assistantMessages++ })
 	if u, ok := m["usageSpec"].(usageSpec); ok {
@@ -888,7 +899,7 @@ func (s *server) countAssistant(m map[string]any) {
 	delete(m, "usageSpec")
 }
 
-// streamText 分 3 段流式输出文本；返回已输出的文本与是否被 abort。
+// streamText streams the text in 3 chunks; it returns the text output so far and whether it was aborted.
 func (s *server) streamText(r *turnRun, text string, d directives, crash bool) (string, bool) {
 	chunks := split3(text)
 	if crash && len(chunks) == 0 {
@@ -944,7 +955,7 @@ func (s *server) assistant(content []any, stop, errMsg string) map[string]any {
 		s.mu.Unlock()
 		if r != nil && r.dir.usage != nil {
 			m["usage"] = r.dir.usage.wire()
-			m["usageSpec"] = *r.dir.usage // 只在进程内使用，输出前删除
+			m["usageSpec"] = *r.dir.usage // used only inside the process; deleted before output
 		}
 		if r != nil && r.dir.respModel != "" {
 			m["responseModel"] = r.dir.respModel
@@ -953,13 +964,13 @@ func (s *server) assistant(content []any, stop, errMsg string) map[string]any {
 	return m
 }
 
-// usageSpec 是指令中给出的一份用量。
+// usageSpec is one usage report given in a directive.
 type usageSpec struct {
 	input, output, cacheRead, cacheWrite int64
 	reasoning                            *int64
 }
 
-// wire 按 Pi 1.1.0 的 Usage 结构输出（费用恒为 0）。
+// wire outputs it in the shape of Pi 1.1.0's Usage (cost is always 0).
 func (u usageSpec) wire() map[string]any {
 	m := map[string]any{
 		"input": u.input, "output": u.output, "cacheRead": u.cacheRead, "cacheWrite": u.cacheWrite,
@@ -972,7 +983,7 @@ func (u usageSpec) wire() map[string]any {
 	return m
 }
 
-// parseUsage 解析 "输入,输出[,缓存读[,缓存写[,推理]]]"。
+// parseUsage parses "input,output[,cacheRead[,cacheWrite[,reasoning]]]".
 func parseUsage(v string) *usageSpec {
 	var n [5]int64
 	parts := strings.Split(v, ",")
@@ -990,7 +1001,7 @@ func parseUsage(v string) *usageSpec {
 	return u
 }
 
-// ---- 指令 ----
+// ---- Directives ----
 
 type toolSpec struct {
 	name string
@@ -1009,15 +1020,15 @@ type directives struct {
 	rejectPrompt bool
 	handled      bool
 	noSession    bool
-	usage        *usageSpec // 每条已结束的助手消息带的用量
+	usage        *usageSpec // usage carried by each finished assistant message
 	respModel    string
 	toolUsage    *usageSpec
 	compact      *usageSpec
 	warm         *usageSpec
 	warmAfter    *usageSpec
-	ask          string   // !ask：回复前发一个扩展对话（confirm、select、input）并等回应
-	found        bool     // 是否出现过任何指令
-	rest         []string // 非指令词
+	ask          string   // !ask: send an extension dialog (confirm, select, input) before replying and wait for the answer
+	found        bool     // whether any directive appeared
+	rest         []string // non-directive words
 }
 
 func parseDirectives(msg string) directives {
@@ -1078,8 +1089,10 @@ func parseDirectives(msg string) directives {
 	return d
 }
 
-// reply 返回本轮回复文本：!text 优先；否则回显消息（有指令时去掉指令词）。
-// 中性模式回显时去掉平台加的运行 ID 一行（“Run ID for this turn: …”，旧会话为“本轮运行ID：…”）与指令词、保留换行，前缀为 "Got it: "；什么都不剩时回复 "Got it."。
+// reply returns this turn's reply text: !text wins; otherwise the message is echoed (with directive words removed when
+// there are directives). When echoing in neutral mode, it removes the run ID line the platform adds ("Run ID for this
+// turn: ...", in old sessions “本轮运行ID：…” ("Run ID for this turn: ...")) and the directive words, keeps newlines,
+// and uses the prefix "Got it: "; when nothing is left it replies "Got it.".
 func (d directives) reply(msg string) string {
 	if d.hasText {
 		return d.text
@@ -1087,7 +1100,7 @@ func (d directives) reply(msg string) string {
 	if neutral {
 		var lines []string
 		for _, line := range strings.Split(msg, "\n") {
-			// 平台加的运行 ID 一行：现在是英文，旧会话里是中文，两种都去掉。
+			// The run ID line the platform adds: English now, Chinese in old sessions; remove both.
 			if strings.HasPrefix(line, "Run ID for this turn: ") || strings.HasPrefix(line, "本轮运行ID：") {
 				continue
 			}
@@ -1114,7 +1127,7 @@ func (d directives) reply(msg string) string {
 
 func underscores(s string) string { return strings.ReplaceAll(s, "_", " ") }
 
-// split3 按字符把文本尽量均分为至多 3 段。
+// split3 splits the text by characters into at most 3 parts of as equal length as possible.
 func split3(s string) []string {
 	rs := []rune(s)
 	if len(rs) == 0 {
@@ -1128,7 +1141,7 @@ func split3(s string) []string {
 	return out
 }
 
-// ---- 工具函数 ----
+// ---- Helpers ----
 
 func textContent(s string) []any {
 	if s == "" {
@@ -1173,7 +1186,8 @@ func shortID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// commands 是 get_commands 的结果：每个 -e 扩展文件一条扩展命令（名字为文件名去掉扩展名），每个 --skill 目录一条 skill:<目录名>。
+// commands is the result of get_commands: one extension command per -e extension file (named after the file name
+// without its extension), and one skill:<directory name> per --skill directory.
 func (s *server) commands() []map[string]any {
 	out := []map[string]any{}
 	for _, e := range s.opts.extensions {
@@ -1191,7 +1205,8 @@ func (s *server) commands() []map[string]any {
 	return out
 }
 
-// extensionCommand 与 Pi 一样：首字符为 / 且命令名是某个扩展命令时，由扩展处理，不交给模型。
+// extensionCommand works as in Pi: when the first character is / and the command name is an extension command, the
+// extension handles it and it is not passed to the model.
 func (s *server) extensionCommand(msg string) bool {
 	name, ok := strings.CutPrefix(msg, "/")
 	if !ok {

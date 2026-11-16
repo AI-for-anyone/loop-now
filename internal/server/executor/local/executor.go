@@ -32,7 +32,7 @@ import (
 	"loop-now/internal/server/toolcommand"
 )
 
-// Source 是执行器读取配置与回写状态的数据源，由 agentconfig.Service 实现。
+// Source is the data source the executor reads config from and writes state back to; agentconfig.Service implements it.
 type Source interface {
 	ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (agentconfig.Snapshot, error)
 	ReadBlob(ctx context.Context, sha string) ([]byte, error)
@@ -43,13 +43,14 @@ type Source interface {
 	DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error)
 }
 
-// Options 是本机执行器的参数，全部来自配置与启动检查。
+// Options are the local executor's parameters, all taken from the config and the startup checks.
 type Options struct {
 	Models modelcatalog.Reader
-	// Hooks 在每一轮开始前调用插件的 run.before_start；为空时不调用。
+	// Hooks calls the plugins' run.before_start before each turn starts; nil means it is not called.
 	Hooks pluginhost.Hooker
-	// Dialogs 回答扩展在一轮之中发来的 confirm、select、input（装配为控制台提问）；为空时一律按取消回应。
-	// agentID 是执行的 Agent（任务轮次为任务实例），ctx 在这一轮不再是进程的当前执行或进程退出时结束。
+	// Dialogs answers the confirm, select and input requests an extension sends during a turn (presented as console
+	// questions); when nil, every request is answered as cancelled. agentID is the Agent that runs (for a task turn,
+	// the task instance); ctx ends when this turn is no longer the process's current run or when the process exits.
 	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req pirpc.DialogRequest) pirpc.DialogResponse
 	LarkFactory               func(context.Context, LarkRuntimeRequest) (LarkRuntime, error)
 	GoogleResolver            cliauth.GrantResolver
@@ -59,11 +60,11 @@ type Options struct {
 	CodexServiceTierExtension string
 	LegacyAuthExtension       string
 	PiPackageRoot             string
-	PiAIDir                   string // 预检解析出的 pi-ai 目录（在 pi-coding-agent 之内或与之并列）
+	PiAIDir                   string // pi-ai directory resolved by the preflight check (inside pi-coding-agent or next to it)
 	AuthIPCTimeout            time.Duration
 	WorkRoot                  string
 	PiBin                     string
-	NodeBin                   string // PiBin 是 .js 文件（随包布局）时用它运行；为空时按 PATH 找 node
+	NodeBin                   string // used to run PiBin when it is a .js file (packaged layout); empty means find node on PATH
 	GitBin                    string
 	ExecBasePath              string
 	Passthrough               []string
@@ -77,35 +78,41 @@ type Options struct {
 	CloneTimeout              time.Duration
 	InstanceID                uuid.UUID
 	Hostname                  string
-	// StderrTailBytes 是写入错误信息与运行记录的 Pi 错误输出末尾长度；为 0 时取 1000。
+	// StderrTailBytes is how much of the end of Pi's stderr goes into error messages and run records; 0 means 1000.
 	StderrTailBytes int
-	// Observer 接收运行记录；为空时丢弃。
+	// Observer receives run records; nil means they are discarded.
 	Observer executor.Observer
-	// Tokens 为每次启动的 Pi 进程签发 Agent 令牌；为空时不注入令牌（测试用）。
+	// Tokens issues an Agent token for every Pi process started; nil means no token is injected (for tests).
 	Tokens TokenIssuer
-	// AgentURL 是注入给 Pi 的 LOOPCTL_AGENT_URL：回环监听器上 Agent 专用接口的完整基址。
+	// AgentURL is the LOOPCTL_AGENT_URL injected into Pi: the full base URL of the Agent-only API on the loopback
+	// listener.
 	AgentURL string
-	// LoopctlBinDir 是已安装的同版本 loopctl 所在目录，放在 Agent 执行 PATH 的最前面；为空时不加入（测试用）。
+	// LoopctlBinDir is the directory of the installed loopctl of the same version, put at the front of the Agent's run
+	// PATH; empty means it is not added (for tests).
 	LoopctlBinDir string
-	// ContextDir 是项目与全局上下文文件夹的根；为空时不注入上下文入口与路径说明（测试用）。
+	// ContextDir is the root of the project and global context folders; empty means no context entry and no path notes
+	// are injected (for tests).
 	ContextDir string
-	// UserPath 返回用户的 PATH 目录（“用本机的 CLI”开启时接在执行 PATH 之后）；为空时不接。
+	// UserPath returns the directories of the user's PATH (appended after the run PATH when
+	// “用本机的 CLI” ("Use local CLIs") is on); nil means nothing is appended.
 	UserPath func(context.Context) []string
-	// RealHome 返回服务端进程用户真实的主目录（“用本机的登录状态”开启时作 Pi 的 HOME，Claude Code 运行时总是用它）；为空时取 os.UserHomeDir。
+	// RealHome returns the real home directory of the user running the server process (used as Pi's HOME when
+	// “用本机的登录状态” ("Use local logins") is on; the Claude Code runtime always uses it); nil means os.UserHomeDir.
 	RealHome func() (string, error)
-	// ClaudeBin 是 claude 可执行文件；为空时在用户登录 shell 的 PATH（UserPath）里找。
+	// ClaudeBin is the claude executable; empty means look it up on the PATH of the user's login shell (UserPath).
 	ClaudeBin string
 }
 
-// TokenIssuer 签发与作废 Agent 令牌。令牌在启动 Pi 前签发，进程停止、退出或被丢弃时作废。
+// TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
+// exits or is discarded.
 type TokenIssuer interface {
 	IssueAgentToken(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, token string, err error)
 	RevokeAgentToken(ctx context.Context, id uuid.UUID) error
 }
 
-// Executor 是本机执行器。
+// Executor is the local executor.
 type Executor struct {
-	sessionCache sync.Map // 会话文件路径 -> sessionMeta（/resume 列表用）
+	sessionCache sync.Map // session file path -> sessionMeta (for the /resume list)
 	o            Options
 	src          Source
 	tmpl         *clitemplate.Catalog
@@ -123,7 +130,7 @@ type Executor struct {
 	live     map[*proc]struct{} // includes detached processes until stop/bridge cleanup is confirmed
 	pending  map[uuid.UUID]int
 	closedCh chan struct{}
-	claude   *claudecli.Probe // claude 的版本与会话记录目录的缓存
+	claude   *claudecli.Probe // cache of claude's version and session record directory
 }
 
 type proc struct {
@@ -134,39 +141,39 @@ type proc struct {
 	authBridge          *modelauth.RuntimeBridge
 	log                 *slog.Logger
 	agentID             uuid.UUID
-	rt                  runtimeProcess // 运行时进程；进程表、停止、打断与一轮的执行只用它
-	client              *pirpc.Client  // Pi 的 RPC 客户端，只供 Pi 专有的操作；其他运行时为空
+	rt                  runtimeProcess // runtime process; the process table, stop, interrupt and running a turn use only this
+	client              *pirpc.Client  // Pi's RPC client, only for Pi-specific operations; nil for other runtimes
 	drv                 driver
-	runtimeIdentity     string      // 运行时名称与它自己的指纹，变化即重启
-	runtimeBinary       string      // 运行时可执行文件的真实路径（Claude Code）
-	runtimeVersion      string      // 运行时版本（Claude Code）
-	sessionID           string      // 平台给运行时的会话 ID（Claude Code）
-	sessionStale        atomic.Bool // 运行时已换（Pi 与 Claude Code 之间）：不再把它的会话文件记回去
-	initChecked         atomic.Bool // 已核对过进程报告的初始信息（Claude Code 的技能列表）
-	sessionUntracked    atomic.Bool // 找不到运行时写的会话记录（Claude Code）：不当作保存失败，下次启动开新会话
+	runtimeIdentity     string      // runtime name plus its own fingerprint; a change means restart
+	runtimeBinary       string      // real path of the runtime executable (Claude Code)
+	runtimeVersion      string      // runtime version (Claude Code)
+	sessionID           string      // session ID the platform gave the runtime (Claude Code)
+	sessionStale        atomic.Bool // runtime switched (between Pi and Claude Code): do not record its session file back any more
+	initChecked         atomic.Bool // initial info reported by the process has been checked (Claude Code's Skill list)
+	sessionUntracked    atomic.Bool // runtime's session record not found (Claude Code): not a save failure; next start opens a new session
 	version             int64
 	promptIdentity      string
-	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
-	stateIdentity       string // 插件提供方订阅账号状态的指纹（版本、目录、路径），变化即重启
+	localIdentity       string // fingerprint of local mode (directory and PATH switches); a change means restart with the new config
+	stateIdentity       string // fingerprint of the plugin provider's subscription state (version, dir, paths); a change means restart
 	stateVersion        uuid.UUID
 	credentialIdentity  string
 	modelConfigIdentity string
-	provider            string // 启动时的提供方与模型，用于压缩用量
+	provider            string // provider and model at startup, used for compaction usage
 	model               string
 	startedAt           time.Time
-	sessionFile         string // Pi 报告的会话文件路径
+	sessionFile         string // session file path reported by Pi
 	sessMu              sync.Mutex
-	recorded            string // 已写入数据库的会话文件路径（受 sessMu 保护）
+	recorded            string // session file path already written to the database (guarded by sessMu)
 	busy                bool
 	lastUsed            time.Time
 	idleTimer           *time.Timer
 	dirs                agentDirs
 	stopOnce            sync.Once
 	exitOnce            sync.Once
-	stopping            atomic.Bool               // 平台主动停止，退出不算意外
-	curRun              atomic.Pointer[uuid.UUID] // 正在这个进程上回复的执行
-	exitRun             atomic.Pointer[uuid.UUID] // 进程在哪次执行中退出（在 curRun 清空前设置）
-	tokenID             uuid.UUID                 // 为这个进程签发的 Agent 令牌；未签发时为零值
+	stopping            atomic.Bool               // stopped on purpose by the platform; the exit is not unexpected
+	curRun              atomic.Pointer[uuid.UUID] // the run currently replying on this process
+	exitRun             atomic.Pointer[uuid.UUID] // the run during which the process exited (set before curRun is cleared)
+	tokenID             uuid.UUID                 // Agent token issued for this process; zero value when none was issued
 	revokeOnce          sync.Once
 	revokeErr           error
 	stopDone            chan struct{}
@@ -183,14 +190,15 @@ type run struct {
 	prompting   bool
 }
 
-// stopCause 说明为什么停止进程；reason 为空时不记录停止事件（例如启动失败或进程已退出）。
+// stopCause says why a process is stopped; an empty reason means no stop event is recorded (for example when startup
+// failed or the process has already exited).
 type stopCause struct {
 	reason   string
 	runID    *uuid.UUID
-	forAgent *uuid.UUID // 为哪个 Agent 腾出名额（reason 为 evicted 时）
+	forAgent *uuid.UUID // the Agent a slot is freed for (when reason is evicted)
 }
 
-// 停止原因（pi.stopped 的 reason）。
+// Stop reasons (the reason of pi.stopped).
 const (
 	stopIdleTimeout   = "idle_timeout"
 	stopConfigChanged = "config_changed"
@@ -199,24 +207,26 @@ const (
 	stopShutdown      = "shutdown"
 	stopAbortTimeout  = "abort_timeout"
 	stopForkSnapshot  = "fork_snapshot"
-	// 平台命令停止空闲进程：/new、/reload、/resume。console_export 是早先 /export html 为导出临时启动的进程，
-	// 现在导出改用 pi --export、不再启动进程，保留它是为了旧记录。
+	// Platform commands that stop an idle process: /new, /reload, /resume. console_export was the process that /export
+	// html used to start temporarily for an export; exports now use pi --export and no longer start a process, and the
+	// value is kept for old records.
 	stopSessionReset   = "session_reset"
 	stopConsoleReload  = "console_reload"
 	stopSessionResumed = "session_resumed"
 	stopConsoleExport  = "console_export"
 )
 
-// StopReasons 是 pi.stopped 可能带的全部原因，openapi 的 ProcessExit.reason 与 TimelinePiStopped.reason 要列全（api 的契约测试核对）。
+// StopReasons are all the reasons pi.stopped can carry; ProcessExit.reason and TimelinePiStopped.reason in openapi must
+// list them all (checked by the api contract test).
 var StopReasons = []string{stopIdleTimeout, stopConfigChanged, stopEvicted, stopReleased, stopShutdown, stopAbortTimeout, stopForkSnapshot,
 	stopSessionReset, stopConsoleReload, stopSessionResumed, stopConsoleExport}
 
-// idleStopReasons 是 StopIdle 接受的原因。
+// idleStopReasons are the reasons StopIdle accepts.
 var idleStopReasons = []string{stopSessionReset, stopConsoleReload, stopSessionResumed}
 
 var _ executor.Executor = (*Executor)(nil)
 
-// New 创建本机执行器。
+// New creates the local executor.
 func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Installer, log *slog.Logger) *Executor {
 	if o.RealHome == nil {
 		o.RealHome = os.UserHomeDir
@@ -238,14 +248,14 @@ func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Ins
 
 func (e *Executor) event(agentID uuid.UUID, runID *uuid.UUID, typ string, data map[string]any) {
 	if runID != nil && *runID == uuid.Nil {
-		runID = nil // 导出等维护操作没有对话运行，不能写入不存在的 run 外键
+		runID = nil // maintenance such as export has no conversation run; must not write a dangling run foreign key
 	}
 	e.obs.Event(agentID, runID, executor.Event{Type: typ, At: time.Now(), Data: data})
 }
 
 // ---- Execute ----
 
-// Execute 实现 executor.Executor。
+// Execute implements executor.Executor.
 func (e *Executor) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -349,10 +359,13 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	switch {
 	case exiting(p) && tr.ErrorCode != exitCode:
-		// 打断时发过 SIGINT 的进程（Claude Code）随后一定退出：移出进程表，下一条消息用新进程接续会话，而不是写进这个进程后失败。
+		// A process that was sent SIGINT on interrupt (Claude Code) is sure to exit afterwards: remove it from the
+		// process table, so the next message continues the session in a new process instead of being written to this
+		// one and failing.
 		e.retire(p)
 	case tr.ErrorCode == exitCode, !alive(p):
-		// 进程已退出：立刻移出进程表，下一条消息启动新进程（不等读协程确认 EOF）。
+		// The process has exited: remove it from the process table right away, so the next message starts a new process
+		// (without waiting for the reader goroutine to confirm EOF).
 		e.discard(p, &runID)
 	}
 	sessionErr := e.turnFinished(p)
@@ -378,7 +391,8 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage
 		if res.ErrorCode == exitCode {
-			// stdout 读到结束时，stderr 可能还在由 os/exec 的协程拷进缓冲：等进程结束（有上限，同 recordExit）再取尾部。
+			// When stdout reaches EOF, stderr may still be being copied into the buffer by the os/exec goroutine: wait
+			// for the process to end (with a limit, as in recordExit) before taking the tail.
 			select {
 			case <-p.rt.Done():
 			case <-time.After(e.o.StopGrace):
@@ -416,7 +430,8 @@ func (a sinkAdapter) ToolEnded(id, name string, isError bool) {
 	a.s.Tool(id, name, state)
 }
 
-// acquire 返回可用于该 Agent 的进程：复用配置版本一致的存活进程，否则在名额内启动新进程。
+// acquire returns a process usable for the Agent: it reuses a live process with the same config version, or else starts
+// a new one within the slot limit.
 func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapshot, sink executor.Sink) (*proc, error) {
 	waitingReported := false
 	startReason := "no_process"
@@ -443,16 +458,17 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 			}
 			delete(e.procs, snap.AgentID)
 			if p.drv.name() != e.driverFor(snap).name() {
-				// 换了运行时：会话已在数据库里重置，旧进程停止时不能把它的会话文件记回去。
+				// The runtime changed: the session has been reset in the database, so the old process must not record
+				// its session file back when it stops.
 				p.sessionStale.Store(true)
 			}
 			e.mu.Unlock()
 			if !alive(p) {
-				// 进程已退出但还没被 watch 移出：记下意外退出后清理。
+				// The process has exited but watch has not removed it yet: record the unexpected exit, then clean up.
 				e.recordExit(p, nil)
 				e.stop(p, stopCause{})
 			} else {
-				// 配置变化：停止旧进程后按新配置重启。
+				// The config changed: stop the old process, then restart with the new config.
 				e.stop(p, stopCause{reason: stopConfigChanged, runID: &r.id})
 				startReason = stopConfigChanged
 			}
@@ -472,7 +488,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		}
 		ch := make(chan struct{}, 1)
 		if waitingReported {
-			e.waiters = append([]chan struct{}{ch}, e.waiters...) // 被唤醒后仍未拿到名额，保持原位次
+			e.waiters = append([]chan struct{}{ch}, e.waiters...) // woken but still got no slot: keep its place in line
 		} else {
 			e.waiters = append(e.waiters, ch)
 		}
@@ -553,7 +569,7 @@ func (e *Executor) removeWaiter(ch chan struct{}) {
 			return
 		}
 	}
-	// 已被唤醒但放弃了名额：转交给下一位。
+	// Woken up but gave the slot up: pass it on to the next waiter.
 	select {
 	case <-ch:
 		if len(e.waiters) > 0 {
@@ -565,7 +581,7 @@ func (e *Executor) removeWaiter(ch chan struct{}) {
 	}
 }
 
-// launch 准备配置并启动 Pi 进程；startReason 为 no_process 或 config_changed。
+// launch prepares the config and starts the Pi process; startReason is no_process or config_changed.
 func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink executor.Sink, runID uuid.UUID, startReason string) (result *proc, err error) {
 	d := e.dirs(snap.AgentID)
 	sink.Phase(executor.PhasePreparing)
@@ -589,7 +605,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	sink.Phase(executor.PhaseLaunching)
 	sessionFile := ""
 	if snap.Session.State == "active" && snap.Session.SessionFile != "" {
-		// Pi 遇到不存在的会话文件路径会悄悄新建会话，所以必须先自己检查。
+		// Given a session file path that does not exist, Pi silently creates a new session, so we must check first.
 		if _, err := os.Stat(snap.Session.SessionFile); err != nil {
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &runID); mErr != nil {
 				return nil, mErr
@@ -666,18 +682,21 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	return p, nil
 }
 
-// runtimeIdentity 是进程复用时比较的运行时指纹：运行时名称加它自己的指纹。
+// runtimeIdentity is the runtime fingerprint compared when reusing a process: the runtime name plus its own
+// fingerprint.
 func runtimeIdentity(drv driver, snap agentconfig.Snapshot) string {
 	return drv.name() + "\x00" + drv.identity(snap)
 }
 
-// exiting 报告进程是否已在退出（Claude Code 打断时发过 SIGINT）：这样的进程不能再交给它新消息。
+// exiting reports whether the process is already exiting (Claude Code, sent SIGINT on interrupt): such a process must
+// not be given new messages.
 func exiting(p *proc) bool {
 	x, ok := p.rt.(interface{ Exiting() bool })
 	return ok && x.Exiting()
 }
 
-// retire 把正在按平台的意思退出的进程移出进程表并收尾；它的退出不算意外，不记退出事件。
+// retire removes a process that is exiting at the platform's request from the process table and finishes it off; its
+// exit is not unexpected, and no exit event is recorded.
 func (e *Executor) retire(p *proc) {
 	p.stopping.Store(true)
 	e.mu.Lock()
@@ -688,7 +707,8 @@ func (e *Executor) retire(p *proc) {
 	go e.stop(p, stopCause{})
 }
 
-// discard 把已退出的进程移出进程表，记下意外退出，并确保其进程组结束。
+// discard removes an exited process from the process table, records the unexpected exit, and makes sure its process
+// group ends.
 func (e *Executor) discard(p *proc, runID *uuid.UUID) {
 	p.exitRun.Store(runID)
 	e.mu.Lock()
@@ -697,14 +717,14 @@ func (e *Executor) discard(p *proc, runID *uuid.UUID) {
 	}
 	e.mu.Unlock()
 	go func() {
-		if !p.stopping.Load() { // 打断超时等平台主动结束的，不算意外退出
+		if !p.stopping.Load() { // ended on purpose by the platform (e.g. interrupt timeout): not an unexpected exit
 			e.recordExit(p, runID)
 		}
 		e.stop(p, stopCause{})
 	}()
 }
 
-// recordExit 等进程结束后记下一次意外退出（每个进程至多一次）。
+// recordExit waits for the process to end, then records one unexpected exit (at most once per process).
 func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 	p.exitOnce.Do(func() {
 		select {
@@ -726,7 +746,7 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 	})
 }
 
-// turnFinished 在一轮结束后记录会话文件、把进程标为空闲并启动空闲计时。
+// turnFinished records the session file after a turn ends, marks the process idle and starts the idle timer.
 func (e *Executor) turnFinished(p *proc) error {
 	sessionErr := e.recordSession(p)
 	p.curRun.Store(nil)
@@ -746,7 +766,7 @@ func (e *Executor) turnFinished(p *proc) error {
 	return sessionErr
 }
 
-// recordSession 只在会话文件已写入磁盘时记录路径。
+// recordSession records the path only once the session file has been written to disk.
 func (e *Executor) recordSession(p *proc) error {
 	if p.sessionStale.Load() {
 		return nil
@@ -786,7 +806,7 @@ func (e *Executor) idleExpired(p *proc) {
 	e.stop(p, stopCause{reason: stopIdleTimeout})
 }
 
-// watch 在进程意外退出时把它移出表，记下退出，并让出名额。
+// watch removes the process from the table when it exits unexpectedly, records the exit, and gives up the slot.
 func (e *Executor) watch(p *proc) {
 	<-p.rt.Done()
 	e.revokeProcToken(p)
@@ -797,7 +817,7 @@ func (e *Executor) watch(p *proc) {
 	}
 	e.mu.Unlock()
 	if !p.stopping.Load() {
-		// 先读 curRun：discard 在清空 curRun 之前设置 exitRun，两者至少有一个能对上。
+		// Read curRun first: discard sets exitRun before clearing curRun, so at least one of them matches.
 		run := p.curRun.Load()
 		if run == nil {
 			run = p.exitRun.Load()
@@ -811,8 +831,8 @@ func (e *Executor) watch(p *proc) {
 	e.stop(p, stopCause{})
 }
 
-// stop 依次关闭 stdin、SIGTERM、SIGKILL 结束进程组，前一步未生效才进入下一步；
-// 原因不为空时，进程结束后记录一次停止事件。
+// stop ends the process group by closing stdin, then SIGTERM, then SIGKILL, moving to the next step only if the
+// previous one did not work; when the reason is not empty, it records one stop event after the process has ended.
 func (e *Executor) stop(p *proc, why stopCause) {
 	p.stopOnce.Do(func() {
 		defer func() {
@@ -842,9 +862,9 @@ func (e *Executor) stop(p *proc, why stopCause) {
 		if p.authBridge != nil {
 			defer p.authBridge.Close()
 		}
-		begin := time.Now() // 停止事件记在开始停止的时刻，而不是进程结束之后
+		begin := time.Now() // the stop event is recorded at the time stopping began, not after the process ended
 		p.stopping.Store(true)
-		e.revokeProcToken(p) // 先作废令牌：进程开始停止后不能再调用 Agent 接口
+		e.revokeProcToken(p) // revoke the token first: once the process starts stopping it must not call the Agent API any more
 		if p.revokeErr != nil {
 			p.stopErr = ErrRuntimeStopUnconfirmed
 		}
@@ -871,7 +891,7 @@ func (e *Executor) stop(p *proc, why stopCause) {
 	e.wakeOne()
 }
 
-// revokeProcToken 作废进程的 Agent 令牌，每个进程至多一次。
+// revokeProcToken revokes the process's Agent token, at most once per process.
 func (e *Executor) revokeProcToken(p *proc) {
 	p.revokeOnce.Do(func() { p.revokeErr = e.revokeToken(p.tokenID, p.log) })
 }
@@ -889,7 +909,7 @@ func (e *Executor) revokeToken(tokenID uuid.UUID, log *slog.Logger) error {
 	return nil
 }
 
-// recordStop 记录一次平台主动停止进程，时间为开始停止的时刻。
+// recordStop records one stop of a process by the platform, timed at the moment stopping began.
 func (e *Executor) recordStop(p *proc, why stopCause, at time.Time) {
 	data := map[string]any{"pid": p.rt.Pid(), "reason": why.reason, "uptimeMs": at.Sub(p.startedAt).Milliseconds(), "runtime": p.drv.runtime()}
 	if why.forAgent != nil {
@@ -908,7 +928,8 @@ func waitDone(p *proc, d time.Duration) bool {
 	}
 }
 
-// procObserver 把 Pi 报告的用量与事件转给执行器的观察者：一轮之中的关联到当前执行，其余只关联到 Agent。
+// procObserver passes the usage and events Pi reports to the executor's observer: those during a turn are tied to the
+// current run, the rest only to the Agent.
 type procObserver struct {
 	e *Executor
 	p *proc
@@ -925,7 +946,8 @@ func (o procObserver) Usage(u pirpc.Usage, inTurn bool) {
 	eu := executor.Usage{Kind: u.Kind, Provider: u.Provider, Model: u.Model, ResponseModel: u.ResponseModel, StopReason: u.StopReason,
 		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, DurationMs: u.DurationMs}
 	if u.Kind == pirpc.UsageCompaction && eu.Provider == "" {
-		// Pi 自动压缩使用会话当前模型；平台启动时指定模型且不中途切换。
+		// Pi's automatic compaction uses the session's current model; the platform sets the model at startup and does
+		// not switch it midway.
 		eu.Provider, eu.Model = o.p.provider, o.p.model
 	}
 	if eu.Provider == "" || eu.Model == "" {
@@ -934,7 +956,8 @@ func (o procObserver) Usage(u pirpc.Usage, inTurn bool) {
 	o.e.obs.Usage(o.p.agentID, o.runID(inTurn), eu)
 }
 
-// dialog 把对话交给 Options.Dialogs，限定在发出它的那一轮：这一轮结束（进程转去执行别的）时不再等待回答。
+// dialog hands a dialog to Options.Dialogs, limited to the turn that sent it: once this turn ends (the process moves on
+// to another run) it no longer waits for the answer.
 func (e *Executor) dialog(ctx context.Context, p *proc, req pirpc.DialogRequest) pirpc.DialogResponse {
 	run := p.curRun.Load()
 	if run == nil {
@@ -978,32 +1001,34 @@ func (o procObserver) Notice(n pirpc.Notice, inTurn bool) {
 	o.e.event(o.p.agentID, o.runID(inTurn), typ, n.Data)
 }
 
-// ---- Interrupt / Release / 状态 / 关闭 ----
+// ---- Interrupt / Release / state / shutdown ----
 
-// Interrupt 实现 executor.Executor：异步执行，立即返回。只打断 ID 为 runID 的那一次执行。
+// Interrupt implements executor.Executor: it works asynchronously and returns at once. It only interrupts the run whose
+// ID is runID.
 func (e *Executor) Interrupt(_ context.Context, agentID, runID uuid.UUID) error {
 	e.mu.Lock()
 	r := e.runs[agentID]
 	e.mu.Unlock()
 	if r == nil || r.id != runID {
-		return nil // 没有执行，或当前已是另一次执行：迟到的打断不作用到它上面
+		return nil // no run, or the current run is a different one: a late interrupt does not apply to it
 	}
 	r.mu.Lock()
 	if r.interrupted.Swap(true) {
 		r.mu.Unlock()
-		return nil // 已在打断中
+		return nil // already being interrupted
 	}
 	p, prompting := r.proc, r.prompting
 	r.mu.Unlock()
 	if !prompting {
-		r.cancel() // 尚在等待名额或准备阶段：直接放弃
+		r.cancel() // still waiting for a slot or preparing: just give up
 		return nil
 	}
 	go e.abort(r, p)
 	return nil
 }
 
-// abort 先清空 Pi 的内部队列再中止当前执行；在打断超时内反复尝试，超时后强制结束进程（会话文件保留）。
+// abort first clears Pi's internal queue, then aborts the current run; it keeps trying within the interrupt timeout and
+// force-kills the process after the timeout (the session file is kept).
 func (e *Executor) abort(r *run, p *proc) {
 	deadline := time.Now().Add(e.o.AbortTimeout)
 	for time.Now().Before(deadline) {
@@ -1015,7 +1040,7 @@ func (e *Executor) abort(r *run, p *proc) {
 			case <-r.done:
 				return
 			case <-time.After(300 * time.Millisecond):
-				// Prompt 可能刚好还没发出，再试一次。
+				// The Prompt may just not have been sent yet; try again.
 				continue
 			}
 		}
@@ -1039,14 +1064,16 @@ func (e *Executor) abort(r *run, p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	// 先记下停止再强杀：强杀后执行可能先以进程退出结束并清理进程，停止事件不能依赖之后的 stop 调用。
+	// Record the stop before force-killing: after the kill the run may end first with a process exit and clean up the
+	// process, so the stop event cannot rely on a later stop call.
 	e.recordStop(p, stopCause{reason: stopAbortTimeout, runID: &r.id}, time.Now())
 	p.stopping.Store(true)
 	_ = procgroup.Kill(p.rt.Pid())
 	e.stop(p, stopCause{})
 }
 
-// Release 实现 executor.Executor：停止进程并删除独立 HOME（工作区与会话文件保留）。
+// Release implements executor.Executor: it stops the process and deletes the separate HOME (the workspace and the
+// session files are kept).
 func (e *Executor) Release(ctx context.Context, agentID uuid.UUID) error {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
@@ -1060,17 +1087,20 @@ func (e *Executor) Release(ctx context.Context, agentID uuid.UUID) error {
 	if p != nil {
 		e.stop(p, stopCause{reason: stopReleased})
 	}
-	// 先删订阅账号的链接，之后删除目录时不会经链接动到账号的状态目录。
+	// Remove the subscription account links first, so deleting the directory afterwards cannot reach the account's
+	// state directory through a link.
 	if err := clearProviderLinks(e.dirs(agentID)); err != nil {
 		return err
 	}
-	// Claude Code 为这个工作区留在 ~/.claude 下的会话记录：先归档进 Agent 自己的 sessions 目录，再用 claude purge 删掉。
-	// 失败只记日志，不影响删除与回收。
+	// The session records Claude Code keeps under ~/.claude for this workspace: first archive them into the Agent's own
+	// sessions directory, then delete them with claude purge. A failure is only logged and does not block deletion and
+	// cleanup.
 	e.purgeClaude(ctx, agentID)
 	return releaseHome(e.o.WorkRoot, agentID)
 }
 
-// ProviderStatesInUse 返回运行中的 Pi 正在用的插件提供方状态版本（清理器不删它们的目录）。
+// ProviderStatesInUse returns the plugin provider state versions used by running Pi processes (the sweeper does not
+// delete their directories).
 func (e *Executor) ProviderStatesInUse() map[uuid.UUID]bool {
 	out := map[uuid.UUID]bool{}
 	e.mu.Lock()
@@ -1083,7 +1113,8 @@ func (e *Executor) ProviderStatesInUse() map[uuid.UUID]bool {
 	return out
 }
 
-// beforeRun 调用拦截类 Hook run.before_start（plugins/SPEC.md §4）：被阻止时这一轮以 plugin_blocked 失败，不启动 Pi。
+// beforeRun calls the intercepting Hook run.before_start (plugins/SPEC.md §4): when it blocks, this turn fails with
+// plugin_blocked and Pi is not started.
 func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req executor.Request) (bool, string, error) {
 	if e.o.Hooks == nil {
 		return false, "", nil
@@ -1112,10 +1143,11 @@ func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req
 	return true, "插件 " + o.Plugin + " 阻止了这一轮：" + reason, nil
 }
 
-// Process 实现 executor.Executor。
-// FreezeForFork 由持有常态派发门禁的任务准备器调用：当前轮结束后停止空闲Pi，稳定源会话。
-// 与平台命令的 StopIdle 是同一件事，只是停止原因为 fork_snapshot。正在做别的维护时错误带 ErrRuntimeBusy；
-// 当前轮还没结束时是“常态轮次尚未完全结束”。
+// Process implements executor.Executor.
+// FreezeForFork is called by the task preparer that holds the regular dispatch gate: it stops the idle Pi once the
+// current turn ends, so the source session is stable. It is the same thing as the platform commands' StopIdle, only
+// with the stop reason fork_snapshot. While another maintenance operation is running, the error wraps ErrRuntimeBusy;
+// when the current turn has not ended yet, it is “常态轮次尚未完全结束” ("the regular turn has not fully finished").
 func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
 	_, err := e.stopIdle(ctx, agentID, stopForkSnapshot)
 	return err
@@ -1138,7 +1170,7 @@ func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {
 	return executor.ProcessInfo{State: executor.ProcessStopped}
 }
 
-// Shutdown 实现 executor.Executor：结束全部进程。
+// Shutdown implements executor.Executor: it ends all processes.
 func (e *Executor) Shutdown(ctx context.Context) error {
 	e.mu.Lock()
 	if !e.closed {
@@ -1168,7 +1200,7 @@ func (e *Executor) Shutdown(ctx context.Context) error {
 	}
 }
 
-// ---- 遗留进程与已删除 Agent 的清理 ----
+// ---- Cleanup of leftover processes and deleted Agents ----
 
 type pidRecord struct {
 	PID        int       `json:"pid"`
@@ -1176,7 +1208,8 @@ type pidRecord struct {
 	InstanceID string    `json:"instanceId"`
 	Hostname   string    `json:"hostname"`
 	SessionDir string    `json:"sessionDir"`
-	// ProcessStart 是内核记录的进程启动时刻（见 processStart）；平台不支持时为空。
+	// ProcessStart is the process start time recorded by the kernel (see processStart); empty when the platform does
+	// not support it.
 	ProcessStart string `json:"processStart,omitempty"`
 }
 
@@ -1206,7 +1239,8 @@ func (e *Executor) removeProcPidFile(p *proc) {
 	_ = os.Remove(p.dirs.pidFile)
 }
 
-// CleanupStale 在服务端启动时结束上一次运行遗留、仍存活的 Pi 进程，并删除已删除 Agent 的独立 HOME。
+// CleanupStale runs at server startup: it ends Pi processes left over from the previous run that are still alive, and
+// deletes the separate HOME of deleted Agents.
 func (e *Executor) CleanupStale(ctx context.Context) error {
 	return e.CleanupStaleExceptPending(ctx, nil)
 }
@@ -1264,8 +1298,10 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 
 func processAlive(pid int) bool { return procgroup.ProcessAlive(pid) }
 
-// isOurPi 确认记录里的 PID 仍是当初启动的那个 Pi 进程，避免误杀复用了 PID 的其他进程：记录了启动时刻时比对它
-// （Pi 会改自己的进程标题，命令行里不再有 --mode rpc 与会话目录）；没有记录时（旧版本写的、或平台不支持）退回到比对命令行。
+// isOurPi confirms that the PID in the record is still the Pi process originally started, so that another process that
+// reused the PID is not killed by mistake. When a start time was recorded it compares that (Pi changes its own process
+// title, so the command line no longer contains --mode rpc and the session directory); when none was recorded (written
+// by an old version, or the platform does not support it) it falls back to comparing the command line.
 func isOurPi(rec pidRecord) bool {
 	if !processAlive(rec.PID) {
 		return false

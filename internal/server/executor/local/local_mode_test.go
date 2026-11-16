@@ -15,10 +15,12 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// 本机模式：生效且存在的本机目录写进“文件夹与上下文”一节，用户 PATH 接在执行 PATH 之后；
-// 清单或开关变化时下一次派发按新配置重启（保留会话），目录是否存在的变化不触发重启。
+// Local mode: local directories that are in effect and exist are written into the "Folders and context" section, and
+// the user's PATH is appended after the run PATH; when the list or the switches change, the next dispatch restarts with
+// the new config (keeping the session), while a directory coming into or out of existence does not trigger a restart.
 func TestLocalModePromptPathAndRestart(t *testing.T) {
-	// 用本平台写法的执行 PATH（Windows 上以分号分隔）；用户 PATH 里重复了其中一个目录（Windows 上换了大小写），只应出现一次。
+	// Use a run PATH written the way this platform writes it (separated by semicolons on Windows); the user's PATH
+	// repeats one of its directories (in different case on Windows), which must appear only once.
 	baseA, baseB, userBin := filepath.Join(t.TempDir(), "base-a"), filepath.Join(t.TempDir(), "base-b"), filepath.Join(t.TempDir(), "user-bin")
 	sep := string(os.PathListSeparator)
 	basePath := baseA + sep + baseB
@@ -60,7 +62,8 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	}
 	pid := h.pid(id)
 
-	// 目录后来被建出来：指纹不含存在与否，不重启；下次自然重启时才会列出。
+	// The directory is created later: the fingerprint does not include whether it exists, so there is no restart; it is
+	// listed only at the next natural restart.
 	if err := os.MkdirAll(later, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +71,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 		t.Fatal("目录存在与否的变化不应重启 Pi")
 	}
 
-	// 清单变化：下一次派发重启，带上新的清单，会话不变。
+	// The list changes: the next dispatch restarts with the new list, and the session stays the same.
 	h.src.mu.Lock()
 	h.src.snaps[id].Local.Directories = append(h.src.snaps[id].Local.Directories, agentconfig.LocalDirectory{Path: root, Note: "整个目录"})
 	session := h.src.recorded[id]
@@ -82,7 +85,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	}
 	pid = h.pid(id)
 
-	// 关掉“用本机的 CLI”：重启，PATH 不再带用户目录。
+	// Turn off “用本机的 CLI” ("Use local CLIs"): restart, and PATH no longer includes the user's directories.
 	h.src.mu.Lock()
 	h.src.snaps[id].Local.UserPath = false
 	h.src.mu.Unlock()
@@ -108,7 +111,7 @@ func TestLocalDirectoriesPromptWording(t *testing.T) {
 	if got := localDirectoriesPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: filepath.Join(dir, "missing")}}}}); got != "" {
 		t.Fatalf("没有存在的目录时不应写这一条：%q", got)
 	}
-	// 没有上下文文件夹（测试装配）时仍写出本机目录这一节。
+	// Without context folders (test setup), the local directories section is still written.
 	e := &Executor{}
 	section, err := e.contextPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}}}}, agentDirs{}, "")
 	if err != nil || !strings.HasPrefix(section, "## Folders and context\n\n- Local directories") {
@@ -123,7 +126,8 @@ func TestAppendUserPath(t *testing.T) {
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("appendUserPath = %v", got)
 	}
-	// Windows 的目录不分大小写：SYSTEMROOT 拼出的 System32 与用户 PATH 里的 system32 是同一个。
+	// Windows directories are case-insensitive: the System32 built from SYSTEMROOT and the system32 on the user's PATH
+	// are the same directory.
 	got = appendUserPath([]string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`}, []string{`C:\WINDOWS\system32`, `c:\windows`, `C:\Tools\bin`})
 	want = []string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`, `C:\Tools\bin`}
 	if runtime.GOOS == "windows" && strings.Join(got, "|") != strings.Join(want, "|") {
@@ -131,7 +135,7 @@ func TestAppendUserPath(t *testing.T) {
 	}
 }
 
-// countDir 数 PATH 里与 dir 相同的目录有几个（按 execenv.PathKey 比较）。
+// countDir counts how many directories on PATH are the same as dir (compared with execenv.PathKey).
 func countDir(path, dir string) int {
 	n := 0
 	for _, d := range filepath.SplitList(path) {

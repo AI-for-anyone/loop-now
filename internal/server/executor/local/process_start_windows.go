@@ -8,7 +8,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// processStart 返回内核记录的进程创建时刻（GetProcessTimes，100 纳秒精度），与 PID 一起确认它没有被别的进程复用。
+// processStart returns the process creation time recorded by the kernel (GetProcessTimes, 100-nanosecond precision),
+// which together with the PID confirms the PID has not been reused by another process.
 func processStart(pid int) (string, error) {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
@@ -22,5 +23,6 @@ func processStart(pid int) (string, error) {
 	return fmt.Sprintf("%d", creation.Nanoseconds()), nil
 }
 
-// processCommandLine 在 Windows 上不读别的进程的命令行：没有记录启动时刻的旧 pi.pid 一律不确认。
+// processCommandLine does not read other processes' command lines on Windows: an old pi.pid without a recorded start
+// time is never confirmed.
 func processCommandLine(int) (string, error) { return "", fmt.Errorf("不支持读取进程命令行") }

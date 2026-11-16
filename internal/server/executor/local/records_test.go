@@ -17,7 +17,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// recObs 记录执行器回报的运行记录。
+// recObs records the run records the executor reports.
 type recObs struct {
 	mu      sync.Mutex
 	events  []obsEvent
@@ -66,7 +66,7 @@ func copyID(id *uuid.UUID) *uuid.UUID {
 	return &v
 }
 
-// eventsOf 返回某个 Agent 的事件（按回报顺序），可按类型过滤。
+// eventsOf returns an Agent's events (in the order reported), optionally filtered by type.
 func (o *recObs) eventsOf(agentID uuid.UUID, types ...string) []obsEvent {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -104,7 +104,7 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// waitFor 轮询直到 cond 成立。
+// waitFor polls until cond holds.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -348,7 +348,8 @@ func TestRecordsWorkspaceSyncFailure(t *testing.T) {
 
 func TestRecordsCLIInstall(t *testing.T) {
 	skipWithoutCLITemplates(t)
-	// 只有其他平台安装包的模板：安装尝试以“没有当前平台的安装包”失败，并被记录。
+	// A template with install packages only for other platforms: the install attempt fails with
+	// “没有当前平台的安装包” ("no install package for the current platform") and is recorded.
 	dir := t.TempDir()
 	tmpl := `{"name":"zz","version":"1.0.0","injection":"env","fields":[],"credential":{"env":{}},"binary":"zz",
 		"install":{"plan9/mips":{"url":"https://example.invalid/zz.zip","sha256":"` + strings.Repeat("0", 64) + `","format":"zip","path":"zz"}}}`
@@ -370,7 +371,7 @@ func TestRecordsCLIInstall(t *testing.T) {
 		t.Fatalf("安装失败事件不对：%+v", evs)
 	}
 
-	// 已安装的 CLI 不产生安装事件。
+	// A CLI that is already installed produces no install event.
 	preinstall(t, h.root, "gh", "2.100.0", "gh")
 	h2 := h.agent(func(s *agentconfig.Snapshot) { s.CLIs = []string{"gh"} })
 	h.execRun(h2, "hi")
@@ -379,7 +380,8 @@ func TestRecordsCLIInstall(t *testing.T) {
 	}
 }
 
-// 打断只作用于指定的那一轮：A 已经结束、B 正在执行时，针对 A 的迟到打断不能影响 B；针对 B 的打断照常生效。
+// An interrupt only applies to the turn it names: when A has already ended and B is running, a late interrupt aimed at
+// A must not affect B; an interrupt aimed at B takes effect as usual.
 func TestInterruptTargetsOnlyGivenRun(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
@@ -394,7 +396,7 @@ func TestInterruptTargetsOnlyGivenRun(t *testing.T) {
 			res, _ := h.e.Execute(ctx, executor.Request{AgentID: id, RunID: runID, Message: msg}, sink)
 			done <- res
 		}()
-		<-sink.gotText // 已经在输出文字，正处于两段文字之间的等待中
+		<-sink.gotText // already printing text, waiting between two chunks of text
 		return sink, done
 	}
 	wait := func(done chan executor.Result) executor.Result {
@@ -408,7 +410,7 @@ func TestInterruptTargetsOnlyGivenRun(t *testing.T) {
 	}
 	runB := uuid.Must(uuid.NewV7())
 	_, doneB := start(runB, "!sleep=300ms 第二轮")
-	_ = h.e.Interrupt(ctx, id, runA) // 针对 A 的迟到打断
+	_ = h.e.Interrupt(ctx, id, runA) // the late interrupt aimed at A
 	if res := wait(doneB); res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("针对 A 的打断不应作用到 B：%+v", res)
 	}

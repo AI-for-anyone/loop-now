@@ -8,7 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// processStart 返回内核记录的进程启动时刻（精确到微秒），与 PID 一起确认它没有被别的进程复用。
+// processStart returns the process start time recorded by the kernel (to the microsecond), which together with the PID
+// confirms the PID has not been reused by another process.
 func processStart(pid int) (string, error) {
 	info, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil {

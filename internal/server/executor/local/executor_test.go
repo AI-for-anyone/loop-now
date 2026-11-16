@@ -30,7 +30,7 @@ import (
 	"loop-now/internal/testutil/fakepibin"
 )
 
-// ---- 测试替身 ----
+// ---- Test doubles ----
 
 type fakeSource struct {
 	mu          sync.Mutex
@@ -42,7 +42,8 @@ type fakeSource struct {
 	missing     map[uuid.UUID]bool
 	deleted     []uuid.UUID
 	unavailable bool
-	// recordLog 依次记下每次 RecordSessionFile 的路径（核对没有把旧运行时的会话记回去）。
+	// recordLog records, in order, the path of every RecordSessionFile call (to check that the old runtime's session is
+	// not recorded back).
 	recordLog map[uuid.UUID][]string
 }
 
@@ -272,7 +273,7 @@ func preinstall(t *testing.T, root, name, version, binary string) string {
 	return dir
 }
 
-// ---- 6.3 环境与参数 ----
+// ---- 6.3 Environment and arguments ----
 
 func TestEnvAndArgs(t *testing.T) {
 	skipWithoutCLITemplates(t)
@@ -348,11 +349,12 @@ func TestEnvAndArgs(t *testing.T) {
 	}
 }
 
-// ---- 6.4 同步 ----
+// ---- 6.4 Sync ----
 
 func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 	tmplDir := t.TempDir()
-	// 当前平台要有安装包才算支持；工具已预装，不会下载。
+	// It only counts as supported with an install package for the current platform; the tool is preinstalled, so
+	// nothing is downloaded.
 	demo := `{"name":"demo","version":"1","injection":"files","fields":[{"name":"token","label":"t","type":"secret","required":true}],
 	"credential":{"files":[{"path":".demo/cred","content":"{{token}}"}]},"binary":"demo",
 	"install":{"` + clitemplate.Platform() + `":{"url":"https://example.invalid/demo.zip","sha256":"` + strings.Repeat("0", 64) + `","format":"zip","path":"demo"}}}`
@@ -379,7 +381,7 @@ func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(agentRoot, "skills", "pdf-tools", "SKILL.md")); err != nil {
 		t.Fatal("配置中的 Skill 应被写入")
 	}
-	// 从可用列表移除 demo：重启后凭证文件被删除。
+	// Remove demo from the available list: after the restart the credential file is deleted.
 	pid := h.pid(id)
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.CLIs = nil; delete(s.CLIPayloads, "demo") })
 	h.exec(id, "hi")
@@ -391,7 +393,8 @@ func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 	}
 }
 
-// 5.5：用内置 lark-cli 模板渲染的凭证写入独立 HOME，权限收紧；Pi 环境中没有 lark-cli 的凭证变量；移除后清理。
+// 5.5: credentials rendered with the built-in lark-cli template are written to the separate HOME with tightened
+// permissions; Pi's environment has no lark-cli credential variables; they are cleaned up after removal.
 func TestLarkCLICredentialFiles(t *testing.T) {
 	skipWithoutCLITemplates(t)
 	h := newHarness(t, nil, "")
@@ -444,7 +447,8 @@ func TestLarkCLICredentialFiles(t *testing.T) {
 			t.Errorf("凭证不应出现在 Pi 环境中：%s", k)
 		}
 	}
-	// 删除凭证但保留 lark-cli：凭证文件被清理，固定变量仍按模板注入。
+	// Delete the credentials but keep lark-cli: the credential files are cleaned up, and the fixed variables are still
+	// injected from the template.
 	h.src.update(id, func(s *agentconfig.Snapshot) { delete(s.CLIPayloads, "lark-cli") })
 	h.exec(id, "hi")
 	if _, err := os.Stat(filepath.Join(home, ".lark-cli", "config.json")); !os.IsNotExist(err) {
@@ -453,7 +457,7 @@ func TestLarkCLICredentialFiles(t *testing.T) {
 	if d := readDump(t, dumpPath); d.Env["LARKSUITE_CLI_REMOTE_META"] != "off" {
 		t.Errorf("没有凭证时也应注入固定变量：%v", d.Env)
 	}
-	// 从可用列表移除 lark-cli：固定变量不再注入。
+	// Remove lark-cli from the available list: the fixed variables are no longer injected.
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.CLIs = nil })
 	h.exec(id, "hi")
 	for _, rel := range []string{".lark-cli/config.json", keyPath} {
@@ -485,12 +489,12 @@ func TestSyncFilesSourceRules(t *testing.T) {
 			t.Fatalf("首次同步应写入 %s", f)
 		}
 	}
-	// Agent 改了 a、c，删了 e，自己建了 b。
+	// The Agent changed a and c, deleted e, and created b itself.
 	_ = os.WriteFile(filepath.Join(ws, "docs/a.md"), []byte("agent-a"), 0o644)
 	_ = os.WriteFile(filepath.Join(ws, "docs/c.md"), []byte("agent-c"), 0o644)
 	_ = os.Remove(filepath.Join(ws, "docs/e.md"))
 	_ = os.WriteFile(filepath.Join(ws, "docs/b.md"), []byte("agent-b"), 0o644)
-	// 人编辑了 a、上传了 b、删除了 d，并从配置中删掉了来源 old。
+	// A person edited a, uploaded b, deleted d, and removed the source old from the config.
 	changed := []store.SyncFile{file("a.md", "human-a", "write"), file("b.md", "human-b", "write"), file("c.md", "c1", "none"),
 		file("d.md", "d1", "delete"), file("e.md", "e1", "none")}
 	h.src.mu.Lock()
@@ -596,7 +600,7 @@ func TestCloneRepo(t *testing.T) {
 	}
 }
 
-// ---- 6.5 进程生命周期与会话 ----
+// ---- 6.5 Process lifecycle and sessions ----
 
 func TestReuseIdleAndResume(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IdleTimeout = 300 * time.Millisecond }, "")
@@ -630,7 +634,7 @@ func TestSessionMissing(t *testing.T) {
 	id := h.agent(nil)
 	h.exec(id, "one")
 	recorded := h.src.recorded[id]
-	_ = h.e.Release(context.Background(), id) // 停进程
+	_ = h.e.Release(context.Background(), id) // stop the process
 	if err := os.Remove(recorded); err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +677,7 @@ func TestCredentialUnavailable(t *testing.T) {
 	}
 }
 
-// ---- 6.6 进程数上限 ----
+// ---- 6.6 Process limit ----
 
 func TestEvictIdleAtLimit(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.MaxProcesses = 1 }, "")
@@ -725,7 +729,7 @@ func TestWaitForSlotAndInterruptWhileWaiting(t *testing.T) {
 	}
 }
 
-// ---- 6.7 打断、异常与清理 ----
+// ---- 6.7 Interrupts, failures and cleanup ----
 
 func TestInterruptKeepsProcess(t *testing.T) {
 	h := newHarness(t, nil, "")
@@ -804,7 +808,7 @@ func TestCleanupStale(t *testing.T) {
 	}
 	waited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(waited) }()
-	start, _ := processStart(cmd.Process.Pid) // Windows 不读别的进程的命令行，只按启动时刻认进程
+	start, _ := processStart(cmd.Process.Pid) // Windows reads no other process's command line; the process is identified by start time only
 	b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: d.sessions, ProcessStart: start})
 	_ = os.WriteFile(d.pidFile, b, 0o600)
 	deletedID := uuid.Must(uuid.NewV7())
@@ -827,8 +831,9 @@ func TestCleanupStale(t *testing.T) {
 	}
 }
 
-// pi.pid 记下进程的启动时刻：启动后改了进程标题的 Pi（命令行里不再有 --mode rpc 与会话目录）照样被认出并结束；
-// 启动时刻对不上的（PID 已被别的进程复用）不碰。
+// pi.pid records the process start time: a Pi that changed its process title after starting (so its command line no
+// longer contains --mode rpc and the session directory) is still recognized and ended; one whose start time does not
+// match (the PID was reused by another process) is left alone.
 func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
 	skipOnWindows(t, "夹具用 /bin/sleep 充当被改了标题的 Pi")
 	h := newHarness(t, nil, "")
@@ -903,11 +908,11 @@ func TestReleaseRemovesHome(t *testing.T) {
 	}
 }
 
-// ---- Agent 令牌 ----
+// ---- Agent tokens ----
 
 type fakeTokens struct {
 	mu      sync.Mutex
-	issued  map[uuid.UUID]string // 令牌 ID → 明文
+	issued  map[uuid.UUID]string // token ID -> plaintext
 	revoked map[uuid.UUID]bool
 }
 
@@ -926,7 +931,7 @@ func (f *fakeTokens) RevokeAgentToken(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// live 返回未作废的令牌明文。
+// live returns the plaintext of tokens that have not been revoked.
 func (f *fakeTokens) live() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -963,7 +968,7 @@ func TestAgentTokens(t *testing.T) {
 		}
 	}
 
-	// 配置变化导致 Pi 重启：旧令牌作废，新进程是新令牌。
+	// A config change restarts Pi: the old token is revoked and the new process gets a new token.
 	first := live[0]
 	h.src.mu.Lock()
 	h.src.snaps[id].ConfigVersion = 2
@@ -974,7 +979,7 @@ func TestAgentTokens(t *testing.T) {
 		t.Fatalf("Pi 重启后旧令牌应作废、换成新令牌：%v", live)
 	}
 
-	// 进程被强制结束：令牌立即作废。
+	// The process is force-killed: its token is revoked immediately.
 	if err := procgroup.Kill(h.pid(id)); err != nil {
 		t.Fatal(err)
 	}
@@ -986,7 +991,7 @@ func TestAgentTokens(t *testing.T) {
 		t.Fatalf("进程被强制结束后令牌应作废：%d", n)
 	}
 
-	// 释放 Agent（删除时）：进程停止，令牌作废。
+	// Release the Agent (on deletion): the process stops and the token is revoked.
 	h.exec(id, "重新启动")
 	if len(tokens.live()) != 1 {
 		t.Fatal("重新启动后应有一个有效令牌")
@@ -999,7 +1004,7 @@ func TestAgentTokens(t *testing.T) {
 	}
 }
 
-// ---- loopctl 与内置 Skill ----
+// ---- loopctl and the built-in Skill ----
 
 func TestLoopctlInPathAndBuiltinSkill(t *testing.T) {
 	skipWithoutCLITemplates(t)
@@ -1030,7 +1035,8 @@ func TestLoopctlInPathAndBuiltinSkill(t *testing.T) {
 	}
 }
 
-// fakepi验证RPC分叉参数与目录隔离；不等同于真实Pi/模型验收。
+// Uses fakepi to verify the RPC fork arguments and directory isolation; this is not the same as acceptance with a real
+// Pi/model.
 func TestTaskForkUsesIndependentSessionAndWorkspace(t *testing.T) {
 	h := newHarness(t, nil, "")
 	normal := h.agent(nil)

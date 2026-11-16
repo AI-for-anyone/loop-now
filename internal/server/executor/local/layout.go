@@ -1,4 +1,5 @@
-// Package local 是本机执行器：在服务端所在机器上，以 RPC 模式为每个常态 Agent 管理一个常驻 Pi 进程。
+// Package local is the local executor: on the machine the server runs on, it manages one long-running Pi process in RPC
+// mode for each regular Agent.
 package local
 
 import (
@@ -20,18 +21,19 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// agentDirs 是一个 Agent 在工作根目录下的目录布局。
+// agentDirs is the directory layout of one Agent under the work root.
 type agentDirs struct {
 	root      string // <WORK_ROOT>/agents/<id>
-	home      string // 独立 HOME；删除 Agent 时整体删除
+	home      string // separate HOME; deleted as a whole when the Agent is deleted
 	tmp       string // TMPDIR
 	pi        string // PI_CODING_AGENT_DIR
 	sessions  string // --session-dir
-	skills    string // 每次启动按配置重建
-	prompt    string // --append-system-prompt 文件
-	workspace string // 运行时的工作目录
+	skills    string // rebuilt from the config on every start
+	prompt    string // --append-system-prompt file
+	workspace string // the runtime's working directory
 	pidFile   string
-	// claudePlugin 是平台给 Claude Code 的插件目录（--plugin-dir，里面是 Skills），claudeMCP 是它的 --mcp-config 文件。
+	// claudePlugin is the plugin directory the platform gives Claude Code (--plugin-dir, holding the Skills); claudeMCP
+	// is its --mcp-config file.
 	claudePlugin string
 	claudeMCP    string
 }
@@ -63,10 +65,12 @@ func (d agentDirs) ensure() error {
 	return nil
 }
 
-// buildEnv 从空环境构造 Pi 进程的环境：目录变量、执行 PATH、允许透传的通用变量、
-// 被允许 CLI 的凭证；模型秘密仅通过独立auth.json/私有fd。不继承服务端的任何其他变量。
-// loginHome 不为空时（“用本机的登录状态”）HOME 与 Windows 上对应的一组变量取用户真实的，并透传 loginPassthrough；
-// TMPDIR、PI_CODING_AGENT_DIR 等平台目录不变。
+// buildEnv builds the Pi process's environment from an empty one: directory variables, the run PATH, the common
+// variables allowed to pass through, and the credentials of the allowed CLIs; model secrets go only through the
+// separate auth.json/private fd. No other variable of the server is inherited. When loginHome is not empty
+// (“用本机的登录状态” ("Use local logins")), HOME and the matching set of variables on Windows take the user's real
+// values, and loginPassthrough is passed through; platform directories such as TMPDIR and PI_CODING_AGENT_DIR do not
+// change.
 func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, userPath []string, loginHome string, log *slog.Logger) []string {
 	vars := map[string]string{}
 	var order []string
@@ -91,7 +95,8 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, 
 			}
 		}
 	}
-	// 模板的固定环境变量按当前模板注入，放在凭证之后，不会被模型凭证中的同名变量覆盖。
+	// The templates' fixed environment variables are injected from the current template, after the credentials, so they
+	// cannot be overridden by variables of the same name in the model credential.
 	for _, cli := range snap.CLIs {
 		t, ok := e.tmpl.Get(cli)
 		if !ok {
@@ -107,14 +112,16 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, 
 	if loginHome != "" {
 		home = loginHome
 	}
-	// Windows 上 node、git 与 PowerShell 还需要 SYSTEMROOT 等系统变量和与 HOME 对应的 USERPROFILE／APPDATA／TEMP；Unix 上为空。
+	// On Windows, node, git and PowerShell also need system variables such as SYSTEMROOT, and USERPROFILE/APPDATA/TEMP
+	// to match HOME; on Unix this is empty.
 	for _, kv := range execenv.Base(home, d.tmp) {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			set(k, v)
 		}
 	}
 	if loginHome != "" && runtime.GOOS == "windows" {
-		// 用户的 APPDATA／LOCALAPPDATA 可能被重定向，取服务端进程环境里的真实值。
+		// The user's APPDATA/LOCALAPPDATA may be redirected, so take the real values from the server process's
+		// environment.
 		for _, k := range []string{"APPDATA", "LOCALAPPDATA"} {
 			if v := e.o.Getenv(k); v != "" {
 				set(k, v)
@@ -137,13 +144,14 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, 
 	}
 	var path []string
 	if e.o.LoopctlBinDir != "" {
-		path = append(path, e.o.LoopctlBinDir) // 同版本 loopctl 放在最前面，不会被 CLI 目录中的同名程序覆盖
+		path = append(path, e.o.LoopctlBinDir) // same-version loopctl goes first, so a same-named program in a CLI directory cannot shadow it
 	}
 	path = append(append(append(path, cliBinDirs...), snap.Plugins.Bin...), e.o.ExecBasePath)
-	// “用本机的 CLI”：用户的 PATH 接在最后，已在前面出现的目录不重复，随包 Node、loopctl 与模板 CLI 仍然优先。
+	// “用本机的 CLI” ("Use local CLIs"): the user's PATH goes last, directories that already appear earlier are not
+	// repeated, and the bundled Node, loopctl and template CLIs still take precedence.
 	path = appendUserPath(path, userPath)
 	set("PATH", strings.Join(path, string(os.PathListSeparator)))
-	// 已授权插件的配置与账号；不覆盖上面的目录、PATH 与保留变量。
+	// Config and accounts of granted plugins; they do not override the directories, PATH and reserved variables above.
 	for _, k := range slices.Sorted(maps.Keys(snap.Plugins.Env)) {
 		if _, taken := vars[k]; !taken && !executor.IsReservedEnv(k) {
 			set(k, snap.Plugins.Env[k])
@@ -156,10 +164,13 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, 
 	return out
 }
 
-// loginPassthrough 是开着“用本机的登录状态”时另外透传的变量：ssh-agent 的套接字（带口令的密钥）与改过位置的 XDG 目录。
+// loginPassthrough are the variables also passed through when “用本机的登录状态” ("Use local logins") is on: the
+// ssh-agent socket (for keys with a passphrase) and relocated XDG directories.
 var loginPassthrough = []string{"SSH_AUTH_SOCK", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"}
 
-// loginOnlyEnv 是只因“用本机的登录状态”才出现在 Pi 环境里的变量（关着时本来就透传的不算），受管 CLI 的小脚本要去掉它们。
+// loginOnlyEnv are the variables that appear in Pi's environment only because of
+// “用本机的登录状态” ("Use local logins") (ones passed through anyway when it is off do not count); the managed CLI
+// shims must remove them.
 func (e *Executor) loginOnlyEnv() []string {
 	var out []string
 	for _, k := range loginPassthrough {
@@ -170,14 +181,18 @@ func (e *Executor) loginOnlyEnv() []string {
 	return out
 }
 
-// cliShimDir 是受管 CLI 小脚本所在的目录（每次启动 Pi 时重建）。
+// cliShimDir is the directory of the managed CLI shims (rebuilt every time Pi starts).
 const cliShimDir = "cli-shims"
 
-// syncCLIShims 在开着“用本机的登录状态”时，为这个 Agent 放进执行 PATH 的每个模板 CLI 写一个同名小脚本：把 HOME 恢复成
-// Agent 的独立 HOME、去掉只因登录状态才透传的变量，再 exec 原来的可执行文件。这样受管 CLI（及其子进程）的环境与开关关着时
-// 一致，仍用 Loop Now 配置的账号与凭证文件（gcloud、psql、mysql 的包装按 $HOME 找凭证，lark-cli 的主密钥按 $HOME 找），
-// 不会读写用户真实主目录里的东西。没配的 CLI 不生成脚本，按 PATH 落到用户本机装的那份并用真实 HOME。
-// 目录每次先整体删除再按需重建，不留旧脚本；返回脚本目录，不需要时为空。只在 Unix 上做：模板 CLI 都没有 Windows 安装包。
+// syncCLIShims, when “用本机的登录状态” ("Use local logins") is on, writes a shim of the same name for each template CLI this
+// Agent puts on the run PATH: it restores HOME to the Agent's separate HOME, removes the variables passed through only
+// because of the login setting, then execs the original executable. That way the environment of a managed CLI (and its
+// child processes) is the same as with the switch off, and it still uses the accounts and credential files configured
+// in Loop Now (the gcloud, psql and mysql wrappers find credentials via $HOME, and lark-cli finds its master key via
+// $HOME) without reading or writing anything in the user's real home directory. CLIs that are not configured get no
+// shim, so PATH resolves them to the user's locally installed copy, which uses the real HOME. The directory is deleted
+// as a whole and rebuilt as needed every time, leaving no old shims; it returns the shim directory, or empty when none
+// is needed. Only done on Unix: none of the template CLIs has a Windows install package.
 func syncCLIShims(d agentDirs, loginHome string, bins, unset []string) (string, error) {
 	dir := filepath.Join(d.root, cliShimDir)
 	if err := os.RemoveAll(dir); err != nil {
@@ -204,11 +219,12 @@ func syncCLIShims(d agentDirs, loginHome string, bins, unset []string) (string, 
 	return dir, nil
 }
 
-// shellQuote 把 s 放进单引号，供 /bin/sh 原样使用。
+// shellQuote puts s in single quotes so /bin/sh uses it verbatim.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// appendUserPath 把 user 中尚未出现在 path（各项可能是以分隔符连接的多个目录）里的目录依次接到末尾；
-// 是否已出现按 execenv.PathKey 比较（Windows 上不分大小写）。
+// appendUserPath appends, in order, the directories in user that do not yet appear in path (each item may be several
+// directories joined by the separator); whether a directory already appears is compared with execenv.PathKey
+// (case-insensitive on Windows).
 func appendUserPath(path, user []string) []string {
 	if len(user) == 0 {
 		return path
@@ -230,8 +246,9 @@ func appendUserPath(path, user []string) []string {
 	return path
 }
 
-// pluginArgs 返回已授权插件的 Pi 参数（plugins/SPEC.md §2.1），排在平台自己的 -e 之后：
-// 每个扩展一条 -e，每个 Skill 目录一条 --skill；有 MCP 服务器时加 -e builtin:mcp（--no-extensions 也关掉了内置 MCP）。
+// pluginArgs returns the Pi arguments for granted plugins (plugins/SPEC.md §2.1), placed after the platform's own -e:
+// one -e per extension and one --skill per Skill directory; when there are MCP servers it adds -e builtin:mcp
+// (--no-extensions also turns off the built-in MCP).
 func pluginArgs(p agentconfig.PluginAssets) []string {
 	var args []string
 	for _, ext := range p.Extensions {
@@ -246,8 +263,9 @@ func pluginArgs(p agentconfig.PluginAssets) []string {
 	return args
 }
 
-// writePluginMCP 把已授权插件的 MCP 服务器写进运行时读的文件：Pi 为 Agent 的 Pi 目录 mcp.json，Claude Code 为 claude-mcp.json
-// （经 --mcp-config 传入，格式相同）；没有时、以及另一个运行时的那份，都删除。
+// writePluginMCP writes the MCP servers of granted plugins into the file the runtime reads: for Pi, mcp.json in the
+// Agent's Pi directory; for Claude Code, claude-mcp.json (passed via --mcp-config, same format). When there are none,
+// and for the other runtime's file, the file is deleted.
 func writePluginMCP(d agentDirs, p agentconfig.PluginAssets, claude bool) error {
 	path, other := filepath.Join(d.pi, "mcp.json"), d.claudeMCP
 	if claude {
@@ -269,13 +287,14 @@ func writePluginMCP(d agentDirs, p agentconfig.PluginAssets, claude bool) error 
 	return os.WriteFile(path, b, 0o600)
 }
 
-// piArgs 返回启动 Pi 的参数。
+// piArgs returns the arguments for starting Pi.
 func piArgs(d agentDirs, snap agentconfig.Snapshot, skillDirs []string, sessionFile string) []string {
 	args := []string{"--mode", "rpc", "--no-approve", "--offline", "--no-skills", "--no-extensions"}
 	for _, s := range skillDirs {
 		args = append(args, "--skill", s)
 	}
-	// prepare 写好的 Prompt 文件（Agent 的 Prompt 与“文件夹与上下文”一节）；两者都没有时不存在。
+	// The Prompt file written by prepare (the Agent's Prompt and the "Folders and context" section); it does not exist
+	// when there is neither.
 	if _, err := os.Stat(d.prompt); err == nil {
 		args = append(args, "--append-system-prompt", d.prompt)
 	}

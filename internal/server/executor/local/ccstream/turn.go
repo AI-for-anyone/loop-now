@@ -10,7 +10,8 @@ import (
 	"loop-now/internal/server/executor/local/runturn"
 )
 
-// wireLine 是一行输出中平台关心的字段；其余字段与不认识的类型忽略。
+// wireLine holds the fields of an output line that the platform cares about; other fields and unknown types are
+// ignored.
 type wireLine struct {
 	Type            string          `json:"type"`
 	Subtype         string          `json:"subtype"`
@@ -71,22 +72,23 @@ type wireBlock struct {
 	IsError   bool            `json:"is_error"`
 }
 
-// turn 是进行中的一轮。text、tools 只由读协程访问；interrupted、signalled、ackedAt、initTimeout、detached 受 Client.mu 保护。
+// turn is a turn in progress. text and tools are accessed only by the reader goroutine; interrupted, signalled,
+// ackedAt, initTimeout and detached are guarded by Client.mu.
 type turn struct {
 	sink   runturn.Sink
 	done   chan struct{}
 	result runturn.Result
 
 	finished    bool
-	detached    bool // 调用方已不再等待：不再回调 sink
+	detached    bool // the caller no longer waits: sink is not called any more
 	interrupted bool
 	signalled   bool
 	ackedAt     time.Time
 	initTimeout bool
 
-	textMu sync.Mutex        // 进程退出时收尾的协程也要读 text
-	text   strings.Builder   // 当前这条回复已收到的文字
-	tools  map[string]string // 已开始的工具调用 id → 工具名（只由读协程访问）
+	textMu sync.Mutex        // the goroutine that wraps up when the process exits also reads text
+	text   strings.Builder   // text received so far for the current reply
+	tools  map[string]string // tool call id -> tool name for started tool calls (accessed only by the reader goroutine)
 }
 
 func (t *turn) resetText() {
@@ -101,7 +103,7 @@ func (t *turn) addText(s string) {
 	t.textMu.Unlock()
 }
 
-// partial 返回当前这条回复已收到的文字。
+// partial returns the text received so far for the current reply.
 func (t *turn) partial() string {
 	t.textMu.Lock()
 	defer t.textMu.Unlock()
@@ -121,7 +123,8 @@ func (t *turn) finish(res runturn.Result) {
 	close(t.done)
 }
 
-// exited 在进程退出时结束这一轮：打断中的算打断；第一轮 init 之前退出是启动失败。
+// exited ends this turn when the process exits: if it was being interrupted it counts as interrupted; exiting before
+// the first turn's init is a start failure.
 func (t *turn) exited(started bool) {
 	switch {
 	case t.interrupted:
@@ -135,7 +138,8 @@ func (t *turn) exited(started bool) {
 	}
 }
 
-// handleLine 处理一行输出。只看顶层（parent_tool_use_id 为空）的文字与工具：子 Agent 的过程不转给 sink。
+// handleLine handles one line of output. Only top-level (empty parent_tool_use_id) text and tools are considered:
+// sub-Agent activity is not passed to the sink.
 func (c *Client) handleLine(line []byte) {
 	var m wireLine
 	if json.Unmarshal(line, &m) != nil {
@@ -184,7 +188,8 @@ func (c *Client) handleLine(line []byte) {
 				continue
 			}
 			if _, seen := t.tools[b.ID]; !seen {
-				// 流式事件里没登记到的工具调用（输出格式变了时）在完整消息里补登记，工具结束才对得上。
+				// A tool call not registered from the stream events (when the output format has changed) is registered
+				// from the full message, so the tool end still matches up.
 				t.tools[b.ID] = b.Name
 				if active {
 					t.sink.ToolStarted(b.ID, b.Name)
@@ -200,7 +205,7 @@ func (c *Client) handleLine(line []byte) {
 				if s, ok := t.sink.(interface {
 					ToolCommand(id, name, command string)
 				}); ok {
-					// Claude Code 的 Bash 工具对应平台记录的 bash 命令。
+					// Claude Code's Bash tool corresponds to the bash command the platform records.
 					s.ToolCommand(b.ID, "bash", in.Command)
 				}
 			}
@@ -245,7 +250,7 @@ func (c *Client) handleLine(line []byte) {
 	}
 }
 
-// finishTurn 以 result 结束这一轮：先按模型报告用量，再给出结果。
+// finishTurn ends this turn with a result: it reports usage per model first, then gives the result.
 func (c *Client) finishTurn(t *turn, m wireLine, obs Observer) {
 	info := ResultInfo{Subtype: m.Subtype, IsError: m.IsError, TerminalReason: m.TerminalReason, APIErrorStatus: m.APIErrorStatus}
 	if m.Result != nil {
@@ -297,7 +302,7 @@ func (c *Client) finishTurn(t *turn, m wireLine, obs Observer) {
 	}
 }
 
-// blocks 返回消息的内容块；内容是字符串时没有块。
+// blocks returns the content blocks of a message; there are no blocks when the content is a string.
 func blocks(raw json.RawMessage) []wireBlock {
 	var msg wireMessage
 	if json.Unmarshal(raw, &msg) != nil {

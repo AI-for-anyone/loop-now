@@ -23,8 +23,9 @@ import (
 	"loop-now/internal/testutil/fakeclaudebin"
 )
 
-// claudeHarness 是用 fakeclaude 跑 Claude Code 运行时的执行器：真实 HOME 换成临时目录（里面先放好用户自己的文件），
-// fakeclaude 的会话记录写在它的 .claude/projects 下，启动参数记在 argsFile。
+// claudeHarness is an executor that runs the Claude Code runtime on fakeclaude: the real HOME is replaced by a temp
+// directory (with the user's own files put in it first), fakeclaude's session records are written under its
+// .claude/projects, and the startup arguments are recorded in argsFile.
 type claudeHarness struct {
 	*harness
 	realHome string
@@ -62,7 +63,7 @@ func (h *claudeHarness) claudeAgent(fn func(s *agentconfig.Snapshot)) uuid.UUID 
 	})
 }
 
-// launches 返回每次启动 fakeclaude 的参数。
+// launches returns the arguments of each fakeclaude start.
 func (h *claudeHarness) launches() [][]string {
 	h.t.Helper()
 	f, err := os.Open(h.argsFile)
@@ -92,9 +93,11 @@ func (h *claudeHarness) claudePid(id uuid.UUID) int {
 
 func hasFlag(args []string, flag string) bool { return slices.Contains(args, flag) }
 
-// 一轮的参数、会话记录、用量、复用与重启后接续：
-// 参数按平台的决定（不读用户的设置与 MCP、关自动记忆、bypassPermissions 且不卡在批准上、系统提示不冻结、平台的插件目录与工具白名单）；
-// 会话记录是 claude 自己写在真实 HOME 的 .claude/projects 下的那个文件；配置变化重启后用 --resume 接续。
+// A turn's arguments, session record, usage, reuse, and continuing after a restart:
+// the arguments follow the platform's decisions (do not read the user's settings and MCP, auto memory off,
+// bypassPermissions without getting stuck on approvals, system prompt not frozen, the platform's plugin directory and
+// tool allowlist); the session record is the file claude itself writes under .claude/projects in the real HOME; after a
+// restart caused by a config change, --resume continues the session.
 func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	id := h.claudeAgent(nil)
@@ -170,8 +173,8 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	}
 }
 
-// 交给 claude 的环境：真实 HOME、Agent 的 TMPDIR、平台的 PATH；Anthropic／Claude 的变量不论来自透传、CLI 凭证还是插件都去掉，
-// 也没有 Pi 的目录变量。
+// The environment given to claude: the real HOME, the Agent's TMPDIR, the platform's PATH; Anthropic/Claude variables
+// are removed whether they come from pass-through, CLI credentials or plugins, and there are no Pi directory variables.
 func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 	loopctlDir := t.TempDir()
 	h := newClaudeHarness(t, func(o *Options) { o.LoopctlBinDir = loopctlDir })
@@ -198,7 +201,8 @@ func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 	if len(env.Forbidden) != 0 {
 		t.Fatalf("不能把 Anthropic／Claude 的变量交给 claude：%v", env.Forbidden)
 	}
-	// claude 自己的短命令（auth status 等）与主进程同一套基础变量：USER／LOGNAME（claude 按它找登录）、透传的 LANG。
+	// claude's own short commands (auth status etc.) get the same base variables as the main process: USER/LOGNAME
+	// (claude finds the login by them) and the passed-through LANG.
 	h.env["LANG"] = "zh_CN.UTF-8"
 	helper := strings.Join(h.e.ClaudeHelperEnv(context.Background(), h.realHome), "\n")
 	for _, want := range []string{"USER=tester", "LOGNAME=tester", "LANG=zh_CN.UTF-8", "HOME=" + h.realHome} {
@@ -217,8 +221,9 @@ func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 	}
 }
 
-// 真实 HOME 里平台什么也不写：除了 claude 自己写的会话记录（.claude/projects 下），用户的文件原样，受管 CLI 的凭证文件在 Agent 的独立 HOME；
-// 释放与启动清理只动 Agent 自己的目录。
+// The platform writes nothing in the real HOME: apart from the session records claude writes itself (under
+// .claude/projects), the user's files are untouched and the managed CLIs' credential files are in the Agent's separate
+// HOME; release and startup cleanup only touch the Agent's own directories.
 func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	id := h.claudeAgent(func(s *agentconfig.Snapshot) {
@@ -243,7 +248,7 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	}
 	after := snapshotTree(t, h.realHome)
 	prefix := filepath.ToSlash(filepath.Join(".claude", "projects", claudecli.ProjectDirName(d.workspace))) + "/"
-	claudeOwn := func(k string) bool { // claude 自己的会话记录、它为此建的上级目录，以及 fakeclaude 记下 purge 调用的文件
+	claudeOwn := func(k string) bool { // claude's own session records, the parent dirs it made for them, and fakeclaude's purge call log
 		return strings.HasPrefix(k, prefix) || k == ".claude/" || k == ".claude/projects/" || k == ".fakeclaude-purge.log"
 	}
 	for k := range after {
@@ -258,8 +263,10 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	}
 }
 
-// 平台给 Claude Code 的东西：插件目录里有 loopctl、Agent 的 Skill 与插件的 Skill；插件的 MCP 服务器经 --mcp-config；
-// 追加提示里有 Agent 的 Prompt、自己文件夹的入口原文与项目入口（说明在 Claude Code 启动时读）；不写 Pi 的模型文件。
+// What the platform gives Claude Code: the plugin directory holds loopctl, the Agent's Skills and the plugins' Skills;
+// the plugins' MCP servers go through --mcp-config; the appended prompt holds the Agent's Prompt, the verbatim entry of
+// its own folder and the project entry (with a note that they are read when Claude Code starts); Pi's model files are
+// not written.
 func TestClaudeSkillsMCPAndPrompt(t *testing.T) {
 	contextDir := t.TempDir()
 	h := newClaudeHarness(t, func(o *Options) { o.ContextDir = contextDir })
@@ -318,8 +325,9 @@ func TestClaudeSkillsMCPAndPrompt(t *testing.T) {
 	}
 }
 
-// 失败：找不到 claude、启动即退出（带版本号与错误输出）、未登录（由 claude auth status 判断，它输出里的邮箱与组织不进消息、事件与日志）、
-// 已登录时的 API 错误仍是 runtime_error、一轮中进程崩溃。
+// Failures: claude not found, exiting right at startup (with the version and error output), not logged in (decided by
+// claude auth status; the email and organization in its output do not go into messages, events or logs), an API error
+// while logged in is still runtime_error, and the process crashing during a turn.
 func TestClaudeFailures(t *testing.T) {
 	missing := newClaudeHarness(t, func(o *Options) { o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude") })
 	if res, _ := missing.exec(missing.claudeAgent(nil), "hi"); res.ErrorCode != executor.ErrRuntimeUnavailable {
@@ -361,8 +369,9 @@ func TestClaudeFailures(t *testing.T) {
 	}
 }
 
-// 打断：控制消息得到确认时进程留着，下一条复用它；等不到确认改发 SIGINT 时那个进程随后会退出，紧跟的下一条消息走重启（--resume），
-// 不报错、不丢，也不记成意外退出。
+// Interrupt: when the control message is confirmed, the process stays and the next message reuses it; when no
+// confirmation comes and SIGINT is sent instead, that process exits afterwards and the very next message goes through a
+// restart (--resume), without an error, without being lost, and without being recorded as an unexpected exit.
 func TestClaudeInterruptThenNextMessage(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	id := h.claudeAgent(nil)
@@ -414,7 +423,8 @@ func TestClaudeInterruptThenNextMessage(t *testing.T) {
 	}
 }
 
-// 任务实例首次启动：从平台稳定复制的基线分叉（--resume <基线文件> --fork-session，新会话 ID 由平台给）。
+// A task instance's first start: fork from the baseline the platform copied in a stable state (--resume <baseline file>
+// --fork-session, with the new session ID given by the platform).
 func TestClaudeTaskFork(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	baseline := filepath.Join(t.TempDir(), "baseline.jsonl")
@@ -432,7 +442,8 @@ func TestClaudeTaskFork(t *testing.T) {
 	}
 }
 
-// 从 Pi 换到 Claude Code：旧的 Pi 进程停止时不把它的会话文件记回去（数据库里的会话已重置）。
+// Switching from Pi to Claude Code: when the old Pi process stops, it does not record its session file back (the
+// session in the database has been reset).
 func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	id := h.agent(nil)
@@ -441,14 +452,14 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	}
 	h.src.mu.Lock()
 	piSession := h.src.recorded[id]
-	h.src.recorded[id] = "" // 切换运行时时数据库里的会话已重置
+	h.src.recorded[id] = "" // switching runtimes has reset the session in the database
 	h.src.recordLog[id] = nil
 	h.src.mu.Unlock()
 	h.e.mu.Lock()
 	p := h.e.procs[id]
 	h.e.mu.Unlock()
 	p.sessMu.Lock()
-	p.recorded = "" // 让旧进程停止时“有东西可记”：若不拦住就会把 Pi 的会话记回去
+	p.recorded = "" // give the old process "something to record" when it stops: if not blocked, it would record the Pi session back
 	p.sessMu.Unlock()
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = "claude-code", "haiku" })
 	if res, _ := h.exec(id, "claude turn"); res.Outcome != executor.OutcomeCompleted {
@@ -461,7 +472,7 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	}
 }
 
-// purgeLog 返回 fakeclaude 记下的 purge 调用。
+// purgeLog returns the purge calls logged by fakeclaude.
 func (h *claudeHarness) purgeLog() []string {
 	b, _ := os.ReadFile(filepath.Join(h.realHome, ".fakeclaude-purge.log"))
 	var out []string
@@ -473,9 +484,11 @@ func (h *claudeHarness) purgeLog() []string {
 	return out
 }
 
-// 释放（删除 Agent、任务实例退役）时清理 Claude Code 为工作区留下的数据：先把会话记录归档进 Agent 的 sessions/claude，
-// 再 claude purge <工作区> -y。目标只能正是这个 Agent 的工作区：绑定的本机目录、别的 Agent 的工作区、工作根之外的路径一律不运行；
-// 没用过 Claude Code 的 Agent 不起 claude；找不到 claude 时跳过并记日志；归档失败就不 purge。
+// Release (deleting an Agent, retiring a task instance) cleans up the data Claude Code left for the workspace: first
+// the session records are archived into the Agent's sessions/claude, then claude purge <workspace> -y runs. The target
+// can only be exactly this Agent's workspace: for a bound local directory, another Agent's workspace or a path outside
+// the work root nothing is run; claude is not started for an Agent that never used Claude Code; when claude is not
+// found the step is skipped and logged; when archiving fails, there is no purge.
 func TestClaudePurgeOnRelease(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	localDir := t.TempDir()
@@ -520,7 +533,7 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 		t.Fatalf("被拒绝的路径不应调用 claude：%v", got)
 	}
 
-	// 找不到 claude：跳过并记日志。
+	// claude not found: skip and log.
 	missing := newClaudeHarness(t, nil)
 	other := missing.claudeAgent(nil)
 	missing.e.o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude")
@@ -529,7 +542,8 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 	}
 }
 
-// 归档失败（会话记录读不出来）就不 purge：宁可留着也不丢记录。
+// When archiving fails (the session records cannot be read), there is no purge: better to keep them than to lose
+// records.
 func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root 读得出无权限的文件")
@@ -557,8 +571,9 @@ func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 	}
 }
 
-// Agent 看到的技能只有平台给的：--settings 关掉自带技能（disableBundledSkills）并把关不掉的几个设为 off；
-// 启动后核对进程报告的技能，有不以 loop-now: 开头的就记一条警告日志（每个进程一次），不阻断执行。
+// The only Skills an Agent sees are the platform's: --settings turns off bundled Skills (disableBundledSkills) and sets
+// the few that cannot be turned off to off; after startup the Skills the process reports are checked, and any not
+// starting with loop-now: produce one warning log (once per process) without blocking the run.
 func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	clean := h.claudeAgent(nil)
@@ -595,8 +610,10 @@ func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 	}
 }
 
-// 找不到 claude 写的会话记录（例如 Windows 上它对工作目录的编码与平台不同）：这一轮照常完成，不报“会话记录保存失败”；
-// 记一次警告；这个进程里对话照常接续，重启后开新会话（--session-id，不 --resume）。
+// The session record written by claude is not found (for example on Windows, where it encodes the working directory
+// differently from the platform): the turn completes normally without reporting
+// “会话记录保存失败” ("failed to save the session record"); one warning is logged; the conversation continues as usual
+// in this process, and after a restart a new session is opened (--session-id, not --resume).
 func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	h.env["FAKECLAUDE_NO_TRANSCRIPT"] = "1"
