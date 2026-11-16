@@ -15,8 +15,8 @@ function renderSettings() {
   return renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectCredentialSettings projectId={defaultProject.id} /></DraftNavigationGuard> }], '/')
 }
 
-describe('旧后台项目凭证兼容', () => {
-  it('精确缺失路由合并提示且不查询impact/operation，focus重读新后台自动恢复', async () => {
+describe('Project credentials with an old backend', () => {
+  it('an exact missing route shows one combined notice and queries no impact or operation; reading again on focus recovers automatically with a new backend', async () => {
     let supported = false, lists = 0, ancillary = 0, writes = 0
     server.use(
       http.get(apiUrl('/projects/:projectId/credential-accounts'), () => {
@@ -30,25 +30,25 @@ describe('旧后台项目凭证兼容', () => {
       http.post(apiUrl('/projects/:projectId/credential-accounts'), () => { writes++; return HttpResponse.json({}) }),
     )
     renderSettings()
-    await screen.findByText(/当前后台尚未支持项目凭证/)
+    await screen.findByText(/This server doesn't support project credentials yet/)
     expect(screen.getAllByRole('alert')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: '浏览器登录' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '录入账号' })).toBeDisabled()
-    expect(screen.queryByText('尚未配置账号')).toBeNull()
-    expect(screen.queryByLabelText('添加模型账号 · 提供方')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Browser login' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add account' })).toBeDisabled()
+    expect(screen.queryByText('No accounts yet')).toBeNull()
+    expect(screen.queryByLabelText('Add model account · provider')).toBeNull()
     expect(ancillary).toBe(0); expect(writes).toBe(0)
     supported = true
     await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true) })
-    await screen.findByLabelText('添加模型账号 · 提供方')
-    expect(screen.queryByText(/当前后台尚未支持项目凭证/)).toBeNull()
-    expect(screen.getByLabelText('添加模型账号 · 提供方')).toBeEnabled()
-    expect(screen.getAllByText('尚未配置账号')).toHaveLength(2)
+    await screen.findByLabelText('Add model account · provider')
+    expect(screen.queryByText(/This server doesn't support project credentials yet/)).toBeNull()
+    expect(screen.getByLabelText('Add model account · provider')).toBeEnabled()
+    expect(screen.getAllByText('No accounts yet')).toHaveLength(2)
     expect(lists).toBeGreaterThanOrEqual(2)
     expect(ancillary).toBe(0); expect(writes).toBe(0)
     focusManager.setFocused(undefined)
   })
 
-  it('真实资源404仍是资源错误，不推断不支持或空账号，已有草稿暂隐藏后恢复', async () => {
+  it('a real resource 404 is still a resource error, not inferred as unsupported or as no accounts; an existing draft is hidden for a while and then restored', async () => {
     const user = userEvent.setup()
     let gone = false
     server.use(
@@ -58,16 +58,16 @@ describe('旧后台项目凭证兼容', () => {
     )
     server.use(http.get(apiUrl('/projects/:projectId/credential-account-impact'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accountId: null, agents: [] })))
     const { client } = renderSettings()
-    await screen.findByLabelText('添加模型账号 · 提供方')
-    await user.click(screen.getByLabelText('添加模型账号 · 提供方'))
+    await screen.findByLabelText('Add model account · provider')
+    await user.click(screen.getByLabelText('Add model account · provider'))
     await user.click(await screen.findByRole('option', { name: /^Anthropic/ }))
     await user.type(screen.getByLabelText('API Key'), 'local-fixture-draft')
     gone = true
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('资源不存在或已删除'))
-    expect(screen.queryByText(/当前后台尚未支持项目凭证/)).toBeNull()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Not found, or already deleted'))
+    expect(screen.queryByText(/This server doesn't support project credentials yet/)).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
-    expect(screen.getByRole('button', { name: '浏览器登录' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Browser login' })).toBeDisabled()
     gone = false
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())

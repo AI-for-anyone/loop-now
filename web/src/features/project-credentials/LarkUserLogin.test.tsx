@@ -9,7 +9,7 @@ import { LarkAccountDetails } from './LarkAccountDetails'
 
 const copy = t.credentials.lark
 
-const app = projectAccount({ purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: null, name: '原应用' })
+const app = projectAccount({ purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: null, name: 'Original app' })
 const props = (): LarkUserLoginProps => ({ projectId: app.projectId, available: true, sources: [app], onStart: vi.fn().mockResolvedValue(undefined), onRecover: vi.fn().mockResolvedValue(undefined) })
 describe('Lark login presentation, injected actions only', () => {
   it('one application still requires explicit selection, pins its revision, never asks for secrets', async () => {
@@ -30,9 +30,9 @@ describe('Lark login presentation, injected actions only', () => {
     expect(p.onStart).not.toHaveBeenCalled()
   })
   it('zero compatible sources shows original setup path; no automatic registration or POST', () => {
-    const p = props(); render(<LarkUserLogin {...p} sources={[]} applicationSetup={<a href="#application">原应用录入</a>} />)
+    const p = props(); render(<LarkUserLogin {...p} sources={[]} applicationSetup={<a href="#application">Original app setup</a>} />)
     expect(screen.getByText(copy.noApplication)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '原应用录入' })).toHaveAttribute('href', '#application')
+    expect(screen.getByRole('link', { name: 'Original app setup' })).toHaveAttribute('href', '#application')
     expect(p.onStart).not.toHaveBeenCalled()
   })
   it.each(['unknown', 'not-found'] as const)('restores only original ID for %s, does not create another operation', async recovery => {
@@ -78,9 +78,9 @@ describe('Lark login presentation, injected actions only', () => {
     const view = render(<LarkAccountDetails account={account} />)
     expect(screen.getByText(copy.unknownIdentity)).toBeInTheDocument()
     expect(screen.getByText(copy.unknownGrants)).toBeInTheDocument()
-    view.rerender(<LarkAccountDetails account={account} identity="核实用户" grantedScopes={[]} />)
+    view.rerender(<LarkAccountDetails account={account} identity="Verified user" grantedScopes={[]} />)
     expect(screen.getByText(copy.emptyGrants)).toBeInTheDocument()
-    expect(screen.getByText('核实用户')).toBeInTheDocument()
+    expect(screen.getByText('Verified user')).toBeInTheDocument()
   })
   it('relogin uses saved target without requiring source bot, and does not imply cross-user policy', async () => {
     const p = props(), target = { ...app, authMethod: 'oauth' as const, status: 'requires_login' as const }, relogin = vi.fn().mockResolvedValue(undefined)
@@ -108,6 +108,6 @@ describe('Lark login presentation, injected actions only', () => {
   it('a failed login says why from its error code', () => {
     const p = props(); render(<LarkUserLogin {...p} phase="failed" operationId="one" errorCode="oauth_failed" />)
     expect(screen.getByText(copy.failed)).toBeInTheDocument()
-    expect(screen.getByText('飞书授权未完成。')).toHaveAttribute('role', 'status')
+    expect(screen.getByText('Lark authorization didn\'t complete.')).toHaveAttribute('role', 'status')
   })
 })
