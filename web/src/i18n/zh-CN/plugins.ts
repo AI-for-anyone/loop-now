@@ -279,8 +279,8 @@ export const plugins = {
     models: (count: number) => `${count} 个模型`,
     extension: (path: string) => `来自 ${path}`,
     loadErrors: '加载失败的扩展',
-    // 插件声明了哪些 HOME 下的路径随项目账号保存（扩展的登录与状态）；进了目录却没声明的，登录可能不随账号保存。
-    statePaths: '登录状态随项目账号保存：',
+    // 插件声明了哪些 HOME 下的路径随账号保存（扩展的登录与状态；项目账号与平台 Agent 自己的登录都是）；进了目录却没声明的，登录可能不随账号保存。
+    statePaths: '登录状态随项目账号和平台 Agent 的登录保存：',
     noStatePaths: '没有声明登录状态路径，登录可能不随账号保存',
   },
   // 插件详情。
@@ -315,8 +315,8 @@ export const plugins = {
     uninstallTitle: (name: string) => `卸载 ${name}？`,
     uninstallBody: '会删除它的配置、项目启用、Agent 授权、账号、状态、事件投递与令牌。已经启动的 Agent 继续用已加载的部分，直到下次启动。',
     deleteData: (dir: string) => `同时删除数据目录 ${dir}`,
-    // 插件注册了模型提供方时补充：订阅账号默认保留，删除数据时一起删。
-    deleteDataProviders: '它注册的模型提供方在各项目里的订阅账号默认保留，重新安装后恢复；勾选后这些账号一并删除（被未结束任务用着的保留到任务结束）。',
+    // 插件注册了模型提供方时补充：项目里的订阅账号与平台 Agent 自己的登录默认保留，删除数据时一起删。
+    deleteDataProviders: '它注册的模型提供方在各项目里的订阅账号和平台 Agent 自己的登录默认保留，重新安装后恢复；勾选后一并删除（被未结束任务用着的账号保留到任务结束）。',
     uninstalling: '正在卸载…',
     checking: '正在检查…',
   },

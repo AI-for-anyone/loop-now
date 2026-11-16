@@ -129,10 +129,10 @@ describe('按正式提供方接口认证', () => {
     await user.click(within(area()).getByRole('button', { name: '替换 API Key' })); expect(screen.getByLabelText('API Key')).toHaveValue('')
   })
 
-  it('不属于项目的 Agent 用着插件提供方：说明插件提供方只给项目 Agent 用，不能在这里登录，也不给登录按钮', async () => {
+  it('不属于项目的 Agent 用着没有 OAuth 登录的插件提供方：说明暂未开放控制台认证，也不给登录按钮', async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' }, modelCredential: null })
-    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli', { unavailableReason: 'platform_agent' })] }))] })
-    expect(await within(area()).findByText('插件提供方只给项目 Agent 用，不能在这里登录。')).toBeInTheDocument()
+    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli', { authMethods: [] })] }))] })
+    expect(await within(area()).findByText('当前提供方暂未开放控制台认证。')).toBeInTheDocument()
     expect(within(area()).queryByRole('button', { name: /登录/ })).toBeNull()
   })
 })
