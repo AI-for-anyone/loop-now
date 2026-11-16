@@ -29,8 +29,8 @@ export const server = setupServer(
   http.get(apiUrl('/agents/:agentId/folder/git-pulls'), () => HttpResponse.json({ pulls: [] })),
   // Running count next to “任务” (Tasks) in the left sidebar: by default no unfinished tasks.
   http.get(apiUrl('/projects/:projectId/tasks/counts'), () => HttpResponse.json({ preparing: 0, running: 0, waiting: 0, blocked: 0 })),
-  // Local mode: by default all three switches are on, and neither projects nor Agents have
-  // registered local directories yet (tests that need them override with localModeBackend).
+  // Local mode: by default the first three switches are on and “用本机的登录状态” (Use local logins) is off, and neither projects
+  // nor Agents have registered local directories yet (tests that need them override with localModeBackend).
   http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
   http.get(apiUrl('/projects/:projectId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [] })),
   http.get(apiUrl('/agents/:agentId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [], projectId: null, inherited: [] })),

@@ -50,8 +50,8 @@ module.exports = {
     perMachine: false,
     allowToChangeInstallationDirectory: true,
     allowElevation: false,
-    // Run right after installing. On uninstall, delete the shell's own data (%APPDATA%\Loop Now) but leave the profile directories
-    // (%LOCALAPPDATA%\Loop Now) alone.
+    // Run right after installing. Uninstalling deletes no data: neither the shell's own data (%APPDATA%\Loop Now) nor the profile
+    // directories (%LOCALAPPDATA%\Loop Now).
     runAfterFinish: true,
     deleteAppDataOnUninstall: false,
     shortcutName: 'Loop Now',

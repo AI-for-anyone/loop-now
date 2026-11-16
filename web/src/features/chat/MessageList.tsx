@@ -101,8 +101,9 @@ function interruptedBy(previous: Turn, turn: Turn) {
   return turn.run.whenBusy === 'interrupt' && previous.run.status === 'interrupted' && previous.run.endReason === 'user_interrupt'
 }
 
-// Cut line: a divider in the conversation flow. An icon at the left end, then a short caption between two 2px dashed pink lines;
-// “会话已重开” (session restarted) has scissors at the left end, “已打断” (Interrupted) a lightning bolt.
+// Dividers between turns (CutLine, components/CutLine.tsx): “会话已切换，页面历史保留” (Session switched; page history is kept)
+// with scissors where the session changes, and “已打断，先处理这条” (Interrupted; handling this first) with a lightning bolt.
+
 // Set the scroll position and record the actual result (the browser clamps the position to the scrollable range).
 function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
   el.scrollTop = top
@@ -139,8 +140,6 @@ interface MessageListProps {
   turnsTotal?: number
 }
 
-// The number column is 46px wide, with another 18px to the body: up to three digits use 34px type; four digits, five and more get a
-// smaller size so they don't push into the body on the right.
 // The number column is 36px wide: two digits at 26px, shrinking step by step from three digits on, so even five digits fit in the
 // column without pushing into the body on the right.
 const numberSize = (number: number) => (number >= 10000 ? 'text-[12px]' : number >= 1000 ? 'text-[15px]' : number >= 100 ? 'text-[20px]' : 'text-[26px]')

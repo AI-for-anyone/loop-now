@@ -20,7 +20,8 @@ function Field({ label, hint, children, id }: { label: string; hint?: string; ch
 
 // The last segment of the repository URL is the default target folder: https://github.com/acme/budget-ledger.git → budget-ledger.
 const repoName = (url: string) => url.trim().replace(/\.git$/, '').replace(/\/+$/, '').split(/[/:]/).at(-1) ?? ''
-// Reject an https URL that contains a username or password (user:token@host); the ssh form git@host:path is not affected.
+// Reject any URL with a scheme that carries a username or password before the host (scheme://user@host or scheme://user:token@host;
+// this includes ssh://git@host/path); the scp-like form git@host:path has no scheme and is not affected.
 const hasCredentials = (url: string) => /^[a-z][a-z0-9+.-]*:\/\/[^/@]+@/i.test(url.trim())
 
 export function GitPullDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (input: GitPullInput) => Promise<void> }) {

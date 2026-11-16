@@ -22,7 +22,8 @@ const rowClass = (current: boolean, active: boolean) =>
     active && 'shadow-[inset_0_0_0_2px_var(--ink)]',
   )
 
-// The small yellow square on the left of the trigger button: the first character of the name for a project, a globe icon for Global.
+// The small yellow square on the left of the trigger button: the first character of the name for a project, a globe icon for Global
+// (NavIcon "settings", which draws a globe).
 function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
   return (
     <span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border-2 border-ink bg-riso-yellow font-display-latin text-[13px] leading-none font-extrabold uppercase">

@@ -60,8 +60,8 @@ export function TaskDetail() {
   }
   const project = scope.project
   const ruler = <WorkflowRuler detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} agentName={agentName} />
-  // Task details (redesign step 5): a compact page header (hollow task number, status stamp, archive status, live status, start and
-  // end times, and a red-outlined “取消任务” (Cancel task) on the right),
+  // Task details (redesign step 5): a compact page header (hollow task number, status stamp, archive status, live status, created and
+  // updated times, and a red-outlined “取消任务” (Cancel task) on the right),
   // and below it one sheet filling the page: two index tabs on the sheet's top edge, the selected node's conversation or node materials
   // on the sheet, and the vertical workflow ruler in the stub on the right.
   // On narrow screens the stub is hidden, and a horizontally scrollable row of small step tags appears above the index tabs instead.

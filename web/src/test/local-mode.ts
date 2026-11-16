@@ -5,7 +5,7 @@ import { apiUrl, errorBody } from './api'
 type Directory = Schemas['LocalDirectory']
 type Listing = { revision: number; directories: Directory[] }
 
-// Fake server for local mode: keeps the three switches and the local directory lists of projects and Agents in memory, and
+// Fake server for local mode: keeps the four switches and the local directory lists of projects and Agents in memory, and
 // answers reads, writes and revision checks per the contract. Directories whose path contains missing are treated as nonexistent.
 // Tests can change state directly to simulate changes made "elsewhere", or use failNextPut to make the next save fail.
 export function localModeBackend(init: { settings?: Partial<Schemas['LocalModeSettings']>; projects?: Record<string, Listing>; agents?: Record<string, Listing & { projectId: string | null }> } = {}) {

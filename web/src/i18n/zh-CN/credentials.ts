@@ -259,7 +259,6 @@ export const credentials = {
       typesafe: { name: "typesafe", alias: "" },
     },
   },
-  // Browser login for a project model account (Codex).
   // Login for a project model account: Codex, or a provider with OAuth registered by a plugin.
   // Plugin providers may also use a device code, or ask you questions partway through the login.
   projectLogin: {

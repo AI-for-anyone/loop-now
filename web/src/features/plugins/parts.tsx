@@ -31,8 +31,8 @@ export function IdVersion({ id, version }: { id: string; version: string }) {
   return <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12px] leading-[18px] font-bold text-ink">{text.idVersion(id, version)}</code>
 }
 
-// Official plugins (shipped with the platform, or installed from the official market) get a pink sticker; ones a market marks as verified
-// get a green background; all other sources haven't been reviewed and get a yellow background naming the source.
+// Official plugins (shipped with the platform, or installed from the official market) get a navy pill with white text; ones a market
+// marks as verified get a green background; all other sources haven't been reviewed and get a yellow background naming the source.
 // When trust is omitted, judge by the source alone (shipped with the platform means official); when it is undefined, it isn't known yet
 // (the market list hasn't been read), so show nothing for now.
 export function SourceBadge({ source, trust = source.kind === 'builtin' ? 'official' : null }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'>; trust?: 'official' | 'verified' | null }) {

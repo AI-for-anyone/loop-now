@@ -2,8 +2,9 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEve
 import { cn } from '@/lib/utils'
 import { niceTicks } from './ticks'
 
-// Charts for the stats page: inline SVG, no chart library. 2px lines; bars have 4px rounded tops and sit flush on the baseline,
-// with 2px between stacked segments; grid lines stay in the background.
+// Charts for the stats page: inline SVG, no chart library. 2px lines; stacked columns sit flush on the baseline, their segments
+// stacked flush against each other with a 2px navy outline around the whole column; horizontal bars have a 4px rounded right end;
+// grid lines stay in the background.
 // Every multi-series chart has a legend; bars show a tooltip per column, lines for the nearest x value, and once focused by
 // keyboard the left and right arrow keys step through them one by one.
 

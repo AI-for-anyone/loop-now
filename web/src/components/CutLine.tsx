@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
-// Cut line: an icon plus two pink dashed segments around a line of text. Used for the "session reopened" and “打断” (Interrupt) dividers on
-// the conversation page, and between visits to the same node in task details.
+// Cut line: an icon plus two pink dashed segments around a line of text. Used for the “会话已切换，页面历史保留” (Session switched; page
+// history is kept) and “已打断，先处理这条” (Interrupted; handling this first) dividers on the chat page, and between visits to the same
+// node in task details.
 // The text can be plain text or a button or link (children); with children the divider is no longer named by label, and the control
 // inside describes itself.
 export function CutLine({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children?: ReactNode }) {

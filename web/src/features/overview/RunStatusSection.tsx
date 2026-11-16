@@ -130,7 +130,7 @@ function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
         aria-hidden="true"
         className={cn(
           'font-display-latin text-[20px] font-extrabold',
-          // The misregistration shadow is only for display type ≥ 28px; at 26px here it is left off.
+          // The misregistration shadow is only for display type ≥ 28px; at 20px here it is left off.
           total > 0 ? 'text-riso-pink' : 'text-ink-500',
         )}
       >
