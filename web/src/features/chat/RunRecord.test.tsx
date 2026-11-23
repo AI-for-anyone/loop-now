@@ -81,7 +81,7 @@ describe('run log timeline', () => {
       { type: 'phase', at: at(0.064), phase: 'preparing', runtime: 'pi' },
       { type: 'workspace_sync', at: at(0.1), result: 'succeeded', durationMs: 500, error: null, sources: [] },
       { type: 'phase', at: at(0.664), phase: 'launching', runtime: 'pi' },
-      { type: 'pi_reused', at: at(0.7), pid: 48213, processStartedAt: at(-600) },
+      { type: 'pi_reused', at: at(0.7), pid: 48213, processStartedAt: at(-600), runtime: 'pi' },
       { type: 'running', at: at(1) },
       modelCall(1.5, 1000, 20),
       tool(2, 't1', 'succeeded', 400, 'pwd'),

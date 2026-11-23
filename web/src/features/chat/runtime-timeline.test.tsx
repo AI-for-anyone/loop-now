@@ -32,11 +32,11 @@ describe('process entries in the run log name the runtime', () => {
     expect(steps[0].detail).toBe('Reused the resident Claude Code process, PID 300.')
   })
 
-  it('old records without runtime: always treated as Pi', () => {
+  it('Pi process entries say Pi (old records without a runtime reach the console with pi filled in by the server)', () => {
     const steps = buildSteps(null, [
       { type: 'phase', at: at(0), phase: 'launching', runtime: 'pi' },
-      { type: 'pi_started', at: at(1), pid: 1, startupMs: 10, reason: 'config_changed', configVersion: 1 },
-      { type: 'pi_stopped', at: at(9), pid: 1, reason: 'idle_timeout', uptimeMs: 8000 },
+      { type: 'pi_started', at: at(1), pid: 1, startupMs: 10, reason: 'config_changed', configVersion: 1, runtime: 'pi' },
+      { type: 'pi_stopped', at: at(9), pid: 1, reason: 'idle_timeout', uptimeMs: 8000, runtime: 'pi' },
     ])
     expect(steps.map((step) => step.label)).toEqual(['Pi start', 'Pi process stopped'])
     expect(steps[0].detail).toBe('Started a new Pi process, PID 1 (restart after a config change).')

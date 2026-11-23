@@ -5140,8 +5140,8 @@ export interface components {
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description An already running Pi process was reused */
         TimelinePiReused: {
@@ -5155,8 +5155,8 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description The platform stopped the Pi process */
         TimelinePiStopped: {
@@ -5174,8 +5174,8 @@ export interface components {
              */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export";
             uptimeMs: number;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description The Pi process exited unexpectedly */
         TimelinePiExited: {
@@ -5191,8 +5191,8 @@ export interface components {
             exit: string;
             /** @description Tail of Pi's error output (length-limited) */
             stderrTail: string;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description Subscription quota status reported by Claude Code (rate_limit_event); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run. */
         TimelineModelRateLimit: {
