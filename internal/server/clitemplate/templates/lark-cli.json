@@ -5,7 +5,7 @@
   "fields": [
     { "name": "appId", "label": "App ID", "type": "string", "required": true },
     { "name": "appSecret", "label": "App Secret", "type": "secret", "required": true },
-    { "name": "brand", "label": "品牌", "type": "enum", "options": ["feishu", "lark"], "default": "feishu", "required": true }
+    { "name": "brand", "label": { "en-US": "Brand", "zh-CN": "品牌" }, "type": "enum", "options": ["feishu", "lark"], "default": "feishu", "required": true }
   ],
   "env": {
     "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1",

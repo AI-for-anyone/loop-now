@@ -115,11 +115,19 @@ function strings(v: unknown): v is string[] {
 function localizedField(v: unknown, field: string, fallback: string, error: (p: string, m: string) => void): LocalizedText {
   if (v === undefined) return fallback
   if (typeof v === 'string') return v
-  if (isObject(v) && Object.keys(v).length > 0 && Object.entries(v).every(([k, t]) => LANGUAGE_TAG.test(k) && typeof t === 'string' && t.trim() !== '')) {
-    return v as Record<string, string>
-  }
+  if (isLocalizedObject(v)) return v
   error(field, `${field} ${LOCALIZED_RULE}`)
   return fallback
+}
+
+/** Whether v is a valid per-language object for localized text (the object form that localizedField accepts). */
+function isLocalizedObject(v: unknown): v is Record<string, string> {
+  return isObject(v) && Object.keys(v).length > 0 && Object.entries(v).every(([k, t]) => LANGUAGE_TAG.test(k) && typeof t === 'string' && t.trim() !== '')
+}
+
+/** A label (actions, channels, account kinds): a non-empty string or a per-language object. */
+function isLabel(v: unknown): boolean {
+  return (typeof v === 'string' && v !== '') || isLocalizedObject(v)
 }
 
 export function validatePlugin(dir: string, options: ValidateOptions = {}): ValidationResult {
@@ -284,6 +292,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
       return
     }
     kinds.add(a.kind)
+    if (a.label !== undefined && !isLabel(a.label)) error(`${p}.label`, `${p}.label ${LOCALIZED_RULE}`)
     if (!isObject(a.fields)) error(`${p}.fields`, `loopNow.accounts entry ${a.kind} has no fields.`)
     else checkSchema(a.fields, `${p}.fields`, { secret: true, scope: false }, error, warn)
   })
@@ -291,11 +300,12 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   const actionIds = new Set<string>()
   actions.forEach((a: unknown, i) => {
     const p = `loopNow.actions[${i}]`
-    if (!isObject(a) || typeof a.id !== 'string' || !SLUG_PATTERN.test(a.id) || actionIds.has(a.id) || typeof a.label !== 'string' || a.label === '' || !strings(a.where) || a.where.length === 0) {
+    if (!isObject(a) || typeof a.id !== 'string' || !SLUG_PATTERN.test(a.id) || actionIds.has(a.id) || a.label === undefined || a.label === '' || !strings(a.where) || a.where.length === 0) {
       error(p, 'Each entry in loopNow.actions must have a unique id, a label and where.')
       return
     }
     actionIds.add(a.id)
+    if (!isLabel(a.label)) error(`${p}.label`, `${p}.label ${LOCALIZED_RULE}`)
     if (a.where.some((w) => !WHERE.includes(w))) error(`${p}.where`, `In loopNow.actions, where can only contain ${orList(WHERE)}.`)
     if (a.fields !== undefined) {
       if (!isObject(a.fields)) error(`${p}.fields`, `loopNow.actions entry ${a.id} has fields that are not an object.`)
@@ -305,11 +315,12 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   const channelIds: string[] = []
   const identityChannels: string[] = []
   channels.forEach((c: unknown, i) => {
-    if (!isObject(c) || typeof c.id !== 'string' || !SLUG_PATTERN.test(c.id) || typeof c.label !== 'string' || c.label === '') {
+    if (!isObject(c) || typeof c.id !== 'string' || !SLUG_PATTERN.test(c.id) || c.label === undefined || c.label === '') {
       error(`loopNow.channels[${i}]`, 'Each entry in loopNow.channels must have an id and a label.')
       return
     }
     channelIds.push(c.id)
+    if (!isLabel(c.label)) error(`loopNow.channels[${i}].label`, `loopNow.channels[${i}].label ${LOCALIZED_RULE}`)
     if (c.manageIdentities !== undefined && typeof c.manageIdentities !== 'boolean') error(`loopNow.channels[${i}].manageIdentities`, 'manageIdentities must be a boolean.')
     if (c.manageIdentities === true) {
       identityChannels.push(c.id)
@@ -401,6 +412,7 @@ function checkSchema(
       if (!types.every((x) => typeof x === 'string' && SCHEMA_TYPES.includes(x))) error(`${p}.type`, `type must be ${orList(SCHEMA_TYPES)}.`)
     }
     if (s.enum !== undefined && !Array.isArray(s.enum)) error(`${p}.enum`, 'enum must be an array.')
+    if (Array.isArray(s.oneOf)) s.oneOf.forEach((option, i) => walk(option, `${p}.oneOf[${i}]`, depth + 1))
     if (s.required !== undefined && !strings(s.required)) error(`${p}.required`, 'required must be an array of strings.')
     if (s.items !== undefined) walk(s.items, `${p}.items`, depth + 1)
     if (s.properties !== undefined) {
@@ -427,6 +439,35 @@ function checkSchema(
     }
   }
   walk(schema, at, 0)
+  checkLocalizedText(schema, at, error)
+}
+
+// Keywords whose value holds subschemas, the same list the server walks: a map of name to schema, an array of schemas, or one schema.
+// (dependencies may also map a name to an array of property names; such values are not schemas and are skipped.)
+const SCHEMA_MAPS = ['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'] as const
+const SCHEMA_ARRAYS = ['prefixItems', 'allOf', 'anyOf', 'oneOf'] as const
+const SCHEMA_SINGLES = ['not', 'if', 'then', 'else', 'additionalProperties', 'contains', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'contentSchema'] as const
+
+// checkLocalizedText reports a title or description that is neither a string nor valid LocalizedText, in every subschema. The server
+// reports an invalid object with the same sentence and leaves other values (a number, a boolean, an array, null) to the JSON Schema
+// meta-schema, which rejects them at install time; here they get the same sentence, so a plugin author sees them when running
+// validate.
+function checkLocalizedText(s: unknown, p: string, error: (p: string, m: string) => void): void {
+  if (!isObject(s)) return
+  for (const key of ['title', 'description'] as const) {
+    if (s[key] !== undefined && typeof s[key] !== 'string' && !isLocalizedObject(s[key])) error(`${p}.${key}`, `${p}.${key} ${LOCALIZED_RULE}`)
+  }
+  for (const key of SCHEMA_MAPS) {
+    const map = s[key]
+    if (isObject(map)) for (const [name, sub] of Object.entries(map)) checkLocalizedText(sub, `${p}.${key}.${name}`, error)
+  }
+  for (const key of SCHEMA_ARRAYS) {
+    const list = s[key]
+    if (Array.isArray(list)) list.forEach((sub, i) => checkLocalizedText(sub, `${p}.${key}[${i}]`, error))
+  }
+  if (Array.isArray(s.items)) s.items.forEach((sub, i) => checkLocalizedText(sub, `${p}.items[${i}]`, error))
+  else checkLocalizedText(s.items, `${p}.items`, error)
+  for (const key of SCHEMA_SINGLES) checkLocalizedText(s[key], `${p}.${key}`, error)
 }
 
 function releaseParts(v: string): number[] | null {

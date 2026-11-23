@@ -26,16 +26,16 @@ loopctl plugin install webhook
 
 ## 2. Configure
 
-Settings are on the plugin's **Config** tab (**Plugin market** › **Webhook notifications** › **Details** › **Config**). The form labels come from the plugin's manifest and are in Chinese.
+Settings are on the plugin's **Config** tab (**Plugin market** › **Webhook notifications** › **Details** › **Config**). The form labels come from the plugin's manifest, in English or Chinese to match the console.
 
 | Field | Label in the form | What to enter |
 |---|---|---|
-| `url` | 回调地址 | Your endpoint, starting with `http://` or `https://`. When empty, nothing is sent. Per project. |
-| `secret` | 签名密钥 | The signing secret. It is write-only: the page never shows it again. Use **Replace** to change it and **Clear** to remove it. When set, every request is signed. Per project. |
-| `recipients` | 推送哪些消息 | 只推给外部身份 (only messages to external identities, the default) or 全部收件人 (every Inbox message in the project). Per project. |
-| `retryLimit` | 失败重试次数 | How many times a failed delivery is retried, 0 to 10. Default 4. |
-| `manageIdentities` | 代管外部身份 | Turn on to let the plugin manage external identities (see **Managing an external identity**). Off by default. |
-| `publicBaseUrl` | 平台外部地址 | Loop Now's external address as your system reaches it, for example `https://loop.example.com:8781`. Needed for replies. |
+| `url` | Callback URL | Your endpoint, starting with `http://` or `https://`. When empty, nothing is sent. Per project. |
+| `secret` | Signing secret | The signing secret. It is write-only: the page never shows it again. Use **Replace** to change it and **Clear** to remove it. When set, every request is signed. Per project. |
+| `recipients` | Which messages to send | **Only external identities** (the default) or **All recipients** (every Inbox message in the project). Per project. |
+| `retryLimit` | Retries on failure | How many times a failed delivery is retried, 0 to 10. Default 4. |
+| `manageIdentities` | Manage external identities | Turn on to let the plugin manage external identities (see **Managing an external identity**). Off by default. |
+| `publicBaseUrl` | External address | Loop Now's external address as your system reaches it, for example `https://loop.example.com:8781`. Needed for replies. |
 
 Fields marked "per project" are set on the **Config** tab for all projects and can be overridden for one project on its plugin page, under **This project's config**. The others apply to all projects. Saved changes take effect at once; nothing needs restarting.
 
@@ -93,7 +93,7 @@ Other languages follow the same formula.
 ## Managing an external identity
 
 1. On the **Config** tab, turn on `manageIdentities` and set `url`, `secret` and `publicBaseUrl`.
-2. In the console, open **External identities**, pick the identity, and under **Managed by** choose **Webhook notifications · Webhook 回调**. Save.
+2. In the console, open **External identities**, pick the identity, and under **Managed by** choose **Webhook notifications · Webhook callback**. Save.
 3. From then on, messages and questions sent to that identity no longer come as `inbox.received`. They come as `identity.inbound`, signed, retried and listed the same way:
 
 ```json
@@ -132,7 +132,7 @@ curl -sS -X POST "$ANSWER_URL" -H 'content-type: application/json' -H "x-loop-no
 
 ## Troubleshooting
 
-- **Nothing arrives:** check that the plugin is enabled in the project and that `url` is set, for all projects or for this one. With 只推给外部身份 (only external identities), messages to Agents are not sent. The **Logs** tab says so when the URL is not valid (`Callback URL is invalid`).
+- **Nothing arrives:** check that the plugin is enabled in the project and that `url` is set, for all projects or for this one. With **Only external identities**, messages to Agents are not sent. The **Logs** tab says so when the URL is not valid (`Callback URL is invalid`).
 - **Deliveries show Failed:** your endpoint answered with a 4xx status other than 408, 425 or 429, or with a redirect. The **Deliveries** tab shows the status code.
 - **The signature does not match:** sign the raw body, with the timestamp and a dot in front, and use the secret that applies to this project. A project override of `secret` replaces the one on the **Config** tab.
 - **The same message arrives twice:** a retry can follow a delivery your endpoint processed but answered too late. Ignore repeats of the same `x-loop-now-delivery`.

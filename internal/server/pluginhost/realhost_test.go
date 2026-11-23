@@ -332,7 +332,7 @@ func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
 	base := time.Date(2026, 10, 27, 9, 0, 30, 0, time.Local)
 	now.Store(base.UnixNano())
 	e := newRealHostEnv(t, []realPlugin{{id: "alpha", http: true,
-		actions:   []pluginmanifest.Action{{ID: "resend", Label: "重发", Where: []string{"agent"}}},
+		actions:   []pluginmanifest.Action{{ID: "resend", Label: pluginmanifest.PlainText("重发"), Where: []string{"agent"}}},
 		schedules: []pluginmanifest.Schedule{{ID: "sweep", Cron: "* * * * *"}},
 		code: `export default function (api) {
   api.actions.register('resend', async (input, ctx) => ({ notice: 'resent ' + input.note }))
