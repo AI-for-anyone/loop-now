@@ -182,6 +182,7 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 	for _, e := range entries {
 		out.Entries = append(out.Entries, e.v)
 	}
+	fillPhaseRuntimes(len(out.Entries), func(i int) any { return out.Entries[i] }, func(i int, v any) { out.Entries[i] = v })
 	return out, nil
 }
 
@@ -246,13 +247,53 @@ func toolEntries(tools []store.ToolEvent) []timed {
 	return out
 }
 
-// runtimeOf is the runtime recorded by the process event (pi or claude-code); old records have none, which is nil
-// (meaning pi).
-func runtimeOf(d map[string]any) *string {
+// recordedRuntime is the runtime recorded with an event; empty when the event has none (written before it was
+// recorded) or names no registered runtime.
+func recordedRuntime(d map[string]any) string {
 	if v := str(d, "runtime"); agentruntime.Known(v) {
-		return &v
+		return v
 	}
-	return nil
+	return ""
+}
+
+// runtimeOf is the runtime of a process event. Process events written before the runtime was recorded get pi, a rule
+// for those old records only: every process was Pi then.
+func runtimeOf(d map[string]any) string {
+	if v := recordedRuntime(d); v != "" {
+		return v
+	}
+	return agentruntime.Pi
+}
+
+// fillPhaseRuntimes gives every phase entry in a run's entries (in time order) its runtime. Phase events written before
+// the runtime was recorded get it by a rule for those old records only, the one the console used to apply: the runtime
+// of the first process entry (pi_started or pi_reused) after the phase and before the run ended; without one,
+// claude-code when the run ended with a runtime_* error code (codes only Claude Code reported then); otherwise pi.
+func fillPhaseRuntimes(n int, get func(int) any, set func(int, any)) {
+	for i := 0; i < n; i++ {
+		phase, ok := get(i).(apitypes.TimelinePhaseEntry)
+		if !ok || phase.Runtime != "" {
+			continue
+		}
+		phase.Runtime = agentruntime.Pi
+	scan:
+		for j := i + 1; j < n; j++ {
+			switch e := get(j).(type) {
+			case apitypes.TimelinePiStartedEntry:
+				phase.Runtime = e.Runtime
+				break scan
+			case apitypes.TimelinePiReusedEntry:
+				phase.Runtime = e.Runtime
+				break scan
+			case apitypes.TimelineEndedEntry:
+				if e.ErrorCode != nil && strings.HasPrefix(*e.ErrorCode, "runtime_") {
+					phase.Runtime = agentruntime.ClaudeCode
+				}
+				break scan
+			}
+		}
+		set(i, phase)
+	}
 }
 
 // eventEntry turns one lifecycle event into a timeline entry.
@@ -284,7 +325,7 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	case store.EventRunDispatched:
 		return b(apitypes.TimelineDispatched), true
 	case store.EventRunPhase:
-		return apitypes.TimelinePhaseEntry{TimelineBase: b(apitypes.TimelinePhase), Phase: str(d, "phase")}, true
+		return apitypes.TimelinePhaseEntry{TimelineBase: b(apitypes.TimelinePhase), Phase: str(d, "phase"), Runtime: recordedRuntime(d)}, true
 	case store.EventCLIInstall:
 		return apitypes.TimelineCLIInstallEntry{TimelineBase: b(apitypes.TimelineCLIInstall), CLI: str(d, "cli"), Version: str(d, "version"),
 			Result: str(d, "result"), DurationMs: num(d, "durationMs"), Error: optStr(d, "error")}, true

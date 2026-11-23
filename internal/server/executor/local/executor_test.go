@@ -144,18 +144,24 @@ func (f *fakeSource) update(id uuid.UUID, fn func(s *agentconfig.Snapshot)) {
 }
 
 type recSink struct {
-	mu      sync.Mutex
-	phases  []string
-	running int
-	text    strings.Builder
-	tools   []string
-	gotText chan struct{}
+	mu     sync.Mutex
+	phases []string
+	// phaseRuntimes is the runtime reported with each phase.
+	phaseRuntimes []string
+	running       int
+	text          strings.Builder
+	tools         []string
+	gotText       chan struct{}
 }
 
 func newSink() *recSink { return &recSink{gotText: make(chan struct{}, 100)} }
 
-func (s *recSink) Phase(p string) { s.mu.Lock(); s.phases = append(s.phases, p); s.mu.Unlock() }
-func (s *recSink) Running(int64)  { s.mu.Lock(); s.running++; s.mu.Unlock() }
+func (s *recSink) Phase(p, runtime string) {
+	s.mu.Lock()
+	s.phases, s.phaseRuntimes = append(s.phases, p), append(s.phaseRuntimes, runtime)
+	s.mu.Unlock()
+}
+func (s *recSink) Running(int64) { s.mu.Lock(); s.running++; s.mu.Unlock() }
 func (s *recSink) TextDelta(d string) {
 	s.mu.Lock()
 	s.text.WriteString(d)

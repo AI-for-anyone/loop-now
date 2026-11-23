@@ -494,7 +494,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		}
 		e.mu.Unlock()
 		if !waitingReported {
-			sink.Phase(executor.PhaseWaitingSlot)
+			sink.Phase(executor.PhaseWaitingSlot, e.driverFor(snap).runtime())
 			waitingReported = true
 		}
 		select {
@@ -584,7 +584,7 @@ func (e *Executor) removeWaiter(ch chan struct{}) {
 // launch prepares the config and starts the Pi process; startReason is no_process or config_changed.
 func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink executor.Sink, runID uuid.UUID, startReason string) (result *proc, err error) {
 	d := e.dirs(snap.AgentID)
-	sink.Phase(executor.PhasePreparing)
+	sink.Phase(executor.PhasePreparing, e.driverFor(snap).runtime())
 	if err := d.ensure(); err != nil {
 		return nil, err
 	}
@@ -602,7 +602,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if err != nil {
 		return nil, err
 	}
-	sink.Phase(executor.PhaseLaunching)
+	sink.Phase(executor.PhaseLaunching, e.driverFor(snap).runtime())
 	sessionFile := ""
 	if snap.Session.State == "active" && snap.Session.SessionFile != "" {
 		// Given a session file path that does not exist, Pi silently creates a new session, so we must check first.

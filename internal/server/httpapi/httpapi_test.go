@@ -65,7 +65,7 @@ func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink exec
 	q.running[req.AgentID] = ch
 	q.mu.Unlock()
 	defer func() { q.mu.Lock(); delete(q.running, req.AgentID); q.mu.Unlock() }()
-	sink.Phase(executor.PhaseLaunching)
+	sink.Phase(executor.PhaseLaunching, "pi")
 	sink.Running(1)
 	sink.Tool("t1", "bash", executor.ToolStarted)
 	sink.TextDelta("Hel")

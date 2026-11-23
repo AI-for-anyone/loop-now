@@ -522,7 +522,9 @@ type turnSink struct {
 	text    string
 }
 
-func (t *turnSink) Phase(phase string) { t.event(store.EventRunPhase, map[string]any{"phase": phase}) }
+func (t *turnSink) Phase(phase, runtime string) {
+	t.event(store.EventRunPhase, map[string]any{"phase": phase, "runtime": runtime})
+}
 func (t *turnSink) warn(err error) {
 	if err != nil && t.service.Log != nil {
 		log := t.service.Log

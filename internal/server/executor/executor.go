@@ -171,8 +171,8 @@ type CommandNotice struct {
 // Sink receives events during a run. Callbacks may come from goroutines inside the executor; implementations must
 // return quickly.
 type Sink interface {
-	// Phase reports a change of startup phase.
-	Phase(phase string)
+	// Phase reports a change of startup phase; runtime is the id of the runtime the run is being started on.
+	Phase(phase, runtime string)
 	// Running means the message has been handed to Pi and the reply has started.
 	Running(configVersion int64)
 	TextDelta(delta string)

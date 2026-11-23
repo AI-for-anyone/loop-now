@@ -70,6 +70,7 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 		}
 		return projected[i].at.Before(projected[j].at)
 	})
+	fillPhaseRuntimes(len(projected), func(i int) any { return projected[i].value }, func(i int, v any) { projected[i].value = v })
 	if cursor != "" {
 		keep := projected[:0]
 		for _, v := range projected {

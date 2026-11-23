@@ -713,9 +713,9 @@ type runSink struct {
 	runID   uuid.UUID
 }
 
-func (k *runSink) Phase(phase string) {
+func (k *runSink) Phase(phase, runtime string) {
 	ctx := k.s.ctx
-	if err := k.s.st.SetRunPhase(ctx, k.runID, phase); err != nil {
+	if err := k.s.st.SetRunPhase(ctx, k.runID, phase, runtime); err != nil {
 		k.s.log.Warn("failed to update the run phase", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)

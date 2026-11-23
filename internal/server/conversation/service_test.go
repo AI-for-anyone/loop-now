@@ -75,7 +75,7 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	defer func() { f.mu.Lock(); delete(f.running, req.AgentID); delete(f.runIDs, req.AgentID); f.mu.Unlock() }()
 	f.started <- req.Message
 
-	sink.Phase(executor.PhasePreparing)
+	sink.Phase(executor.PhasePreparing, "pi")
 	sink.Running(1)
 	sink.Tool("call-1", "bash", executor.ToolStarted)
 	sink.TextDelta("partial")
