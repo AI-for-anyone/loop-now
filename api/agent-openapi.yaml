@@ -8663,12 +8663,19 @@ components:
     TimelinePhase:
       description: A startup phase began
       type: object
-      required: [type, at, phase]
+      required: [type, at, phase, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [phase] }
         at: { type: string, format: date-time }
         phase: { type: string, enum: [waiting_slot, preparing, launching] }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: |
+            The runtime this run is being started on, recorded with the phase. Records written before it was recorded
+            get it when read, by a rule that applies to those old records only: the runtime of the first process entry
+            (pi_started or pi_reused) after this phase in the same run, where a process entry without one means pi; when
+            there is none, claude-code if the run ended with a runtime_* error code; otherwise pi.
     TimelinePiExited:
       description: The Pi process exited unexpectedly
       type: object
