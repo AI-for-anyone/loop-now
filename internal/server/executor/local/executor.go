@@ -22,7 +22,6 @@ import (
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/executor"
-	"loop-now/internal/server/executor/local/pirpc"
 	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
@@ -931,34 +930,6 @@ func waitDone(p *proc, d time.Duration) bool {
 	}
 }
 
-// procObserver passes the usage and events Pi reports to the executor's observer: those during a turn are tied to the
-// current run, the rest only to the Agent.
-type procObserver struct {
-	e *Executor
-	p *proc
-}
-
-func (o procObserver) runID(inTurn bool) *uuid.UUID {
-	if !inTurn {
-		return nil
-	}
-	return o.p.curRun.Load()
-}
-
-func (o procObserver) Usage(u pirpc.Usage, inTurn bool) {
-	eu := executor.Usage{Kind: u.Kind, Provider: u.Provider, Model: u.Model, ResponseModel: u.ResponseModel, StopReason: u.StopReason,
-		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, DurationMs: u.DurationMs}
-	if u.Kind == pirpc.UsageCompaction && eu.Provider == "" {
-		// Pi's automatic compaction uses the session's current model; the platform sets the model at startup and does
-		// not switch it midway.
-		eu.Provider, eu.Model = o.p.provider, o.p.model
-	}
-	if eu.Provider == "" || eu.Model == "" {
-		eu.Provider, eu.Model = "", ""
-	}
-	o.e.obs.Usage(o.p.agentID, o.runID(inTurn), eu)
-}
-
 // dialog hands a dialog to Options.Dialogs, limited to the turn that sent it: once this turn ends (the process moves on
 // to another run) it no longer waits for the answer.
 func (e *Executor) dialog(ctx context.Context, p *proc, req runturn.DialogRequest) runturn.DialogResponse {
@@ -987,7 +958,9 @@ func (e *Executor) dialog(ctx context.Context, p *proc, req runturn.DialogReques
 	return e.o.Dialogs(ctx, p.agentID, runID, req)
 }
 
-func (o procObserver) Notice(n runturn.Notice, inTurn bool) {
+// notice records a runtime notice (see runturn.Notice) as a run event: one during a turn is tied to the current run,
+// the rest only to the Agent.
+func (e *Executor) notice(p *proc, n runturn.Notice, inTurn bool) {
 	typ := ""
 	switch n.Type {
 	case runturn.NoticeRetryStarted:
@@ -1001,7 +974,11 @@ func (o procObserver) Notice(n runturn.Notice, inTurn bool) {
 	default:
 		return
 	}
-	o.e.event(o.p.agentID, o.runID(inTurn), typ, n.Data)
+	var runID *uuid.UUID
+	if inTurn {
+		runID = p.curRun.Load()
+	}
+	e.event(p.agentID, runID, typ, n.Data)
 }
 
 // ---- Interrupt / Release / state / shutdown ----

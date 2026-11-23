@@ -169,7 +169,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 // attach hooks up the usage and event observers, and extension dialogs.
 func (pd piDriver) attach(p *proc) {
 	e, client := pd.e, piClient(p)
-	client.SetObserver(procObserver{e: e, p: p})
+	client.SetObserver(piObserver{e: e, p: p})
 	if e.o.Dialogs != nil {
 		client.SetDialogs(func(ctx context.Context, req runturn.DialogRequest) runturn.DialogResponse {
 			return e.dialog(ctx, p, req)
@@ -302,3 +302,33 @@ func (pd piDriver) forkBaseline(_ context.Context, agentID uuid.UUID, source str
 	}
 	return data, nil
 }
+
+// piObserver passes the usage and events Pi reports to the executor's observer: those during a turn are tied to the
+// current run, the rest only to the Agent.
+type piObserver struct {
+	e *Executor
+	p *proc
+}
+
+func (o piObserver) runID(inTurn bool) *uuid.UUID {
+	if !inTurn {
+		return nil
+	}
+	return o.p.curRun.Load()
+}
+
+func (o piObserver) Usage(u pirpc.Usage, inTurn bool) {
+	eu := executor.Usage{Kind: u.Kind, Provider: u.Provider, Model: u.Model, ResponseModel: u.ResponseModel, StopReason: u.StopReason,
+		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, DurationMs: u.DurationMs}
+	if u.Kind == pirpc.UsageCompaction && eu.Provider == "" {
+		// Pi's automatic compaction uses the session's current model; the platform sets the model at startup and does
+		// not switch it midway.
+		eu.Provider, eu.Model = o.p.provider, o.p.model
+	}
+	if eu.Provider == "" || eu.Model == "" {
+		eu.Provider, eu.Model = "", ""
+	}
+	o.e.obs.Usage(o.p.agentID, o.runID(inTurn), eu)
+}
+
+func (o piObserver) Notice(n runturn.Notice, inTurn bool) { o.e.notice(o.p, n, inTurn) }
