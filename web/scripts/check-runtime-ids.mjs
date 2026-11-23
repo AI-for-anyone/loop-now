@@ -7,6 +7,7 @@
 // runtime id, such as a command's source ('platform' | 'pi'), is not a runtime and is not reported.
 // The runtime ids are read from the generated API types, so a new runtime is covered without changing this check.
 // Checked files are those of tsconfig.app.json (so not tests or test helpers), except the lookup itself.
+// Runs as part of npm run lint.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'

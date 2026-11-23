@@ -17,7 +17,7 @@
     "typecheck": "tsc -b",
     "api:gen": "openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts",
     "api:check": "openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts --check",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-runtime-ids.mjs",
     "pretest": "node scripts/check-node.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
