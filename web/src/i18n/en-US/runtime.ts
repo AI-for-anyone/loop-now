@@ -6,7 +6,7 @@ export const runtime = {
   providerOption: (name: string, count: number) => `${name} (this computer, ${count} ${count === 1 ? 'model' : 'models'})`,
   providerNote: (name: string) => `Uses the ${name} installed on this computer and your login there. The platform doesn't store login details.`,
   differences: {
-    title: 'Running on Claude Code',
+    title: (name: string) => `Running on ${name}`,
     home: 'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
     commands: 'It runs commands without asking first, the same as Pi Agents.',
     plugins: "Plugins that only contain Pi extensions don't apply to it; plugin skills and MCP tools work.",

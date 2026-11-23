@@ -10,9 +10,9 @@ export const runtime = {
   // A provider run by a local CLI in the model picker, and the note when its runtime uses the login on this computer.
   providerOption: (name: string, count: number) => `${name}（本机，${count} 个模型）`,
   providerNote: (name: string) => `用本机安装的 ${name} 和你在本机的登录，平台不保存登录信息。`,
-  // How it differs from Pi when Claude Code is selected on the config page.
+  // How a runtime differs from the bundled Pi, item by item from its capabilities, when it is selected.
   differences: {
-    title: '用 Claude Code 运行时',
+    title: (name: string) => `用 ${name} 运行时`,
     home: '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
     commands: '不经确认直接执行命令，与 Pi 的 Agent 相同。',
     plugins: '只含 Pi 扩展的插件对它不起作用；插件的技能和 MCP 工具可以用。',

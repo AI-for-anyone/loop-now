@@ -16,8 +16,8 @@ import { invalidateModelCatalog, useModelProviders, useUpdateAgent } from '@/api
 import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
-import { runtimeOfProvider } from '@/lib/runtime'
-import { ClaudeCodeDifferences } from './RuntimeNotes'
+import { useRuntimeLookup } from '@/lib/runtime'
+import { RuntimeDifferences } from './RuntimeNotes'
 import { Section } from './Section'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 
@@ -29,6 +29,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const update = useUpdateAgent(agent.id)
   const client = useQueryClient()
   const providers = useModelProviders(agent.id)
+  const runtimes = useRuntimeLookup()
   const serverTier = agent.serviceTier === 'default' ? null : agent.serviceTier ?? null
   const [name, setName] = useState(agent.name)
   const [model, setModel] = useState<ModelRef | null>(agent.model)
@@ -68,8 +69,9 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const dirty = name !== agent.name || modelChanged || thinkingChanged || tierChanged
   useDirtyForm('basic', dirty)
   // The runtime is determined by the model provider: if the selected provider uses a different runtime, saving switches it (a new
-  // session starts), so confirm first.
-  const nextRuntime = model ? runtimeOfProvider(model.provider, providers.data?.providers) : agent.runtime
+  // session starts), so confirm first. The catalog says which runtime runs the provider; without it (the provider can't be changed then),
+  // the runtime definitions do.
+  const nextRuntime = model ? (providers.data?.providers.find((provider) => provider.id === model.provider)?.runtime ?? runtimes.forProvider(model.provider)?.id ?? agent.runtime) : agent.runtime
   const switchesRuntime = modelChanged && nextRuntime !== agent.runtime
 
   const save = () => {
@@ -126,7 +128,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
             {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, field => field === 'serviceTier')} />}
             {/* Shown as soon as a provider is selected (even before a model is chosen); when the catalog is unavailable, go by the model in
                 the form or the Agent's current runtime. */}
-            {(provider?.runtime ?? nextRuntime) === 'claude-code' && <ClaudeCodeDifferences className="col-span-full" />}
+            <RuntimeDifferences runtime={runtimes.get(provider?.runtime ?? nextRuntime)} className="col-span-full" />
           </>}
         </ModelPicker>
       </div>
@@ -159,7 +161,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
         open={confirmingSwitch}
         onOpenChange={setConfirmingSwitch}
         title={t.runtime.switch.title}
-        body={t.runtime.switch.body(t.runtime.names[agent.runtime], t.runtime.names[nextRuntime])}
+        body={t.runtime.switch.body(runtimes.name(agent.runtime), runtimes.name(nextRuntime))}
         confirmLabel={t.runtime.switch.confirm}
         onConfirm={submit}
       />
