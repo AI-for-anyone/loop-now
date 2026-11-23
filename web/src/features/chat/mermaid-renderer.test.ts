@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import mermaid from 'mermaid'
 import { mermaidConfig, renderMermaid } from './mermaid-renderer'
 vi.mock('mermaid', () => ({ default: { initialize: vi.fn(), render: vi.fn(async () => ({ svg: '<svg/>', bindFunctions: vi.fn() })) } }))
-it('只初始化一次并锁住安全/边界设置，每图独立ID且不绑定回调', async () => {
+it('initializes only once and locks the security/limit settings; each diagram gets its own ID and no callbacks are bound', async () => {
   expect(mermaid.initialize).not.toHaveBeenCalled()
   await renderMermaid('flowchart LR\n A-->B'); await renderMermaid('sequenceDiagram\n A->>B: Hi')
   expect(mermaid.initialize).toHaveBeenCalledExactlyOnceWith(mermaidConfig)
@@ -12,7 +12,7 @@ it('只初始化一次并锁住安全/边界设置，每图独立ID且不绑定�
   expect(renders.mock.calls[0][0]).not.toBe(renders.mock.calls[1][0])
   for (const result of renders.mock.results) expect((await result.value).bindFunctions).not.toHaveBeenCalled()
 })
-it('超长源在加载解析前拒绝', async () => {
+it('rejects an overlong source before loading the parser', async () => {
   const before = vi.mocked(mermaid.render).mock.calls.length
   await expect(renderMermaid('x'.repeat(50_001))).rejects.toThrow('maxTextSize')
   expect(mermaid.render).toHaveBeenCalledTimes(before)

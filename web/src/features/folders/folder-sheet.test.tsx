@@ -12,35 +12,35 @@ const limits = { maxBytes: 1 << 20, extensions: ['.md', '.go', '.ts', '.json'] }
 function setup(preset: 'workspace' | 'project' = 'workspace') {
   const source = createMockFolder({ key: preset, preset, latency: 0, git: preset === 'workspace', gitDuration: 400, uploadDuration: 0 })
   const user = userEvent.setup()
-  const view = renderWithQuery(<FileManager variant="sheet" source={source} rootLabel="server 的文件夹" limits={limits} className="h-[600px]" />)
+  const view = renderWithQuery(<FileManager variant="sheet" source={source} rootLabel="server's folder" limits={limits} className="h-[600px]" />)
   return { source, user, ...view }
 }
 
-const content = () => screen.getByRole('region', { name: '文件' })
+const content = () => screen.getByRole('region', { name: 'Files' })
 
-describe('纸张上的文件夹', () => {
-  it('直接排在纸上，不再套一层卡片；工具条在顶部：新建、上传、从 Git 拉取都是带字的藏青描边胶囊', async () => {
+describe('Folder on the sheet', () => {
+  it('sits directly on the sheet without a card around it; the toolbar is at the top: New, Upload and Pull from Git are labeled pills with a navy outline', async () => {
     const { container } = setup()
     const manager = container.querySelector('[data-file-manager]')!
     expect(manager).not.toHaveClass('rounded-card')
     expect(manager).not.toHaveClass('bg-white')
-    for (const name of ['新建文件', '新建文件夹', '上传', '从 Git 拉取']) {
+    for (const name of ['New file', 'New folder', 'Upload', 'Pull from Git']) {
       const button = await screen.findByRole('button', { name })
       expect(button).toHaveClass('h-[34px]', 'rounded-full', 'border-2', 'border-ink', 'bg-paper-raised')
       expect(button).toHaveTextContent(name)
     }
     // The root folder's name is preceded by a yellow folder block.
-    expect(screen.getByRole('navigation', { name: '位置' }).querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow', 'border-2', 'border-ink')
+    expect(screen.getByRole('navigation', { name: 'Location' }).querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow', 'border-2', 'border-ink')
   })
 
-  it('还没有 AGENTS.md：粉色投影的卡片', async () => {
+  it('no AGENTS.md yet: a card with a pink shadow', async () => {
     setup('project')
     const note = await screen.findByRole('note')
-    expect(note).toHaveTextContent('还没有 AGENTS.md')
+    expect(note).toHaveTextContent('No AGENTS.md yet')
     expect(note).toHaveClass('bg-tint-pink-2', 'border-2', 'border-ink', 'shadow-print-pink')
   })
 
-  it('文件列表：表头下一道实线，行与行之间虚线；文件夹是黄色的文件夹块，文件是白色的纸；大小与时间用等宽字', async () => {
+  it('file list: a solid line under the header, dashed lines between rows; folders are yellow folder blocks, files are white paper; size and time are monospaced', async () => {
     setup()
     const table = await within(content()).findByRole('table')
     expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
@@ -56,7 +56,7 @@ describe('纸张上的文件夹', () => {
     expect(cells[2]).toHaveClass('font-mono')
   })
 
-  it('文件树里选中的一项是黄色', async () => {
+  it('the selected item in the file tree is yellow', async () => {
     const { user } = setup()
     const tree = await screen.findByRole('tree')
     // The root folder is selected at first.
@@ -72,34 +72,34 @@ describe('纸张上的文件夹', () => {
     expect(root).not.toHaveClass('bg-riso-yellow')
   })
 
-  it('底部一道虚线，下面是说明', async () => {
+  it('a dashed line at the bottom with a note below it', async () => {
     const { container } = setup()
     await within(content()).findByRole('table')
     const footer = container.querySelector('[data-folder-footer]')!
     expect(footer).toHaveClass('border-t-2', 'border-dashed')
-    expect(footer).toHaveTextContent('Agent 可能正在同时修改这些文件；同一个文件以最后一次保存为准。')
+    expect(footer).toHaveTextContent('The Agent may be editing these files too; the last save wins.')
   })
 
-  it('票根“概况”写着当前文件夹里的文件夹数、文件数与文件总大小；窄屏不显示', async () => {
+  it('the “Overview” stub shows the number of folders, the number of files and the total file size of the current folder; hidden on narrow screens', async () => {
     const { source } = setup()
     const { entries } = await source.list('', null)
     const dirs = entries.filter((entry) => entry.type === 'dir').length
     const files = entries.filter((entry) => entry.type === 'file')
     const bytes = files.reduce((sum, entry) => sum + (entry.size ?? 0), 0)
-    const stub = await screen.findByRole('complementary', { name: '概况' })
+    const stub = await screen.findByRole('complementary', { name: 'Overview' })
     expect(stub).toHaveClass('max-nav:hidden', 'border-dashed')
-    await waitFor(() => expect(within(stub).getByText('文件夹')).toBeInTheDocument())
-    await waitFor(() => expect(within(stub).getByText('文件夹').previousElementSibling).toHaveTextContent(String(dirs)))
-    expect(within(stub).getByText('文件').previousElementSibling).toHaveTextContent(String(files.length))
+    await waitFor(() => expect(within(stub).getByText('folders')).toBeInTheDocument())
+    await waitFor(() => expect(within(stub).getByText('folders').previousElementSibling).toHaveTextContent(String(dirs)))
+    expect(within(stub).getByText('files').previousElementSibling).toHaveTextContent(String(files.length))
     const [value, unit] = t.folders.size(bytes).split(' ')
     expect(within(stub).getByText(unit).previousElementSibling).toHaveTextContent(value)
   })
 
-  it('卡片版（设置页里的共享文件夹）照旧：有边框、没有票根', async () => {
+  it('the card version (shared folders on settings pages) is unchanged: it has a border and no stub', async () => {
     const source = createMockFolder({ key: 'card', preset: 'project', latency: 0 })
-    const { container } = renderWithQuery(<FileManager source={source} rootLabel="项目文件夹" limits={limits} className="h-[600px]" />)
+    const { container } = renderWithQuery(<FileManager source={source} rootLabel="Project folder" limits={limits} className="h-[600px]" />)
     await screen.findByRole('note')
     expect(container.querySelector('[data-file-manager]')).toHaveClass('rounded-card')
-    expect(screen.queryByRole('complementary', { name: '概况' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Overview' })).toBeNull()
   })
 })

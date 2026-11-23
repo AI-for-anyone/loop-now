@@ -11,7 +11,7 @@ const tokens = Object.fromEntries([...root.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-F
 
 function token(name: string): string {
   const value = name.startsWith('#') ? name : tokens[name]
-  if (!value) throw new Error(`index.css 中没有令牌 --${name}`)
+  if (!value) throw new Error(`index.css has no token --${name}`)
   return value
 }
 
@@ -31,85 +31,85 @@ function contrast(foreground: string, background: string): number {
 const WHITE = '#FFFFFF'
 
 const pairs: [string, string, string][] = [
-  ['正文', 'ink', 'paper'],
-  ['次要文字', 'ink-700', 'paper'],
-  ['元信息（页面）', 'ink-500', 'paper'],
-  ['元信息（卡片）', 'ink-500', 'paper-raised'],
-  ['元信息（白底条目）', 'ink-500', WHITE],
-  ['元信息（浅蓝底）', 'ink-500', 'tint-blue'],
-  ['链接', 'riso-blue', 'paper'],
-  ['胶囊：中性、待写入', 'ink', 'tint-blue'],
-  ['胶囊：成功、空闲、已设置', 'green-text', 'tint-green'],
-  ['胶囊：失败、会话丢失、无法连接', 'red-text', 'tint-red'],
-  ['胶囊：忙、回复中', 'ink', 'riso-pink'],
-  ['胶囊：风险提示、数据库不可用', 'ink', 'tint-yellow'],
-  ['印章：已打断', 'pink-text', 'paper-raised'],
-  ['印章：已打断（页面）', 'pink-text', 'paper'],
-  ['印章：服务端重启中断', 'ink-700', 'paper-raised'],
-  ['印章：失败', 'red-text', 'paper-raised'],
-  ['贴纸：空闲', 'green-text', 'tint-green'],
-  ['贴纸：正忙', 'ink', 'riso-pink'],
-  ['贴纸：会话丢失', 'red-text', 'tint-red'],
-  ['顶栏：文字与已连接', WHITE, 'riso-blue'],
-  ['顶栏：数据库不可用', 'ink', 'tint-yellow'],
-  ['顶栏：无法连接', 'red-text', 'tint-red'],
-  ['忙碌提示', 'ink', 'paper'],
-  ['便签', 'ink', 'riso-yellow'],
-  ['出错的输入框', 'ink', 'error-field'],
-  ['出错说明', 'red-text', 'paper-raised'],
-  ['按钮 default', WHITE, 'riso-blue'],
-  ['按钮 interrupt', 'ink', 'riso-pink'],
-  ['按钮 secondary', 'ink', 'tint-blue'],
-  ['按钮 ghost', 'ink', 'paper-raised'],
-  ['按钮 destructive', WHITE, 'red'],
-  ['按钮 destructive-link', 'red-text', 'paper-raised'],
-  ['按钮 ink', 'riso-yellow', 'ink'],
-  ['用户消息气泡', 'ink', 'tint-pink'],
+  ['Body', 'ink', 'paper'],
+  ['Secondary text', 'ink-700', 'paper'],
+  ['Meta (page)', 'ink-500', 'paper'],
+  ['Meta (card)', 'ink-500', 'paper-raised'],
+  ['Meta (white item)', 'ink-500', WHITE],
+  ['Meta (light blue background)', 'ink-500', 'tint-blue'],
+  ['Link', 'riso-blue', 'paper'],
+  ['Pill: neutral, pending write', 'ink', 'tint-blue'],
+  ['Pill: success, idle, set', 'green-text', 'tint-green'],
+  ['Pill: failed, session lost, unreachable', 'red-text', 'tint-red'],
+  ['Pill: busy, replying', 'ink', 'riso-pink'],
+  ['Pill: risk warning, database unavailable', 'ink', 'tint-yellow'],
+  ['Stamp: interrupted', 'pink-text', 'paper-raised'],
+  ['Stamp: interrupted (page)', 'pink-text', 'paper'],
+  ['Stamp: cut off by a server restart', 'ink-700', 'paper-raised'],
+  ['Stamp: failed', 'red-text', 'paper-raised'],
+  ['Sticker: idle', 'green-text', 'tint-green'],
+  ['Sticker: busy', 'ink', 'riso-pink'],
+  ['Sticker: session lost', 'red-text', 'tint-red'],
+  ['Top bar: text and connected', WHITE, 'riso-blue'],
+  ['Top bar: database unavailable', 'ink', 'tint-yellow'],
+  ['Top bar: unreachable', 'red-text', 'tint-red'],
+  ['Busy notice', 'ink', 'paper'],
+  ['Sticky note', 'ink', 'riso-yellow'],
+  ['Input with an error', 'ink', 'error-field'],
+  ['Error text', 'red-text', 'paper-raised'],
+  ['Button default', WHITE, 'riso-blue'],
+  ['Button interrupt', 'ink', 'riso-pink'],
+  ['Button secondary', 'ink', 'tint-blue'],
+  ['Button ghost', 'ink', 'paper-raised'],
+  ['Button destructive', WHITE, 'red'],
+  ['Button destructive-link', 'red-text', 'paper-raised'],
+  ['Button ink', 'riso-yellow', 'ink'],
+  ['User message bubble', 'ink', 'tint-pink'],
   // add-observability: segmented controls, overview and run records.
-  ['分段控件：未选中', 'ink-700', 'tint-blue'],
-  ['分段控件：选中', 'ink', 'riso-yellow'],
-  ['概览汇总卡：回复中', 'ink-700', 'tint-pink-2'],
-  ['概览汇总卡：空闲', 'ink-700', 'tint-green'],
-  ['概览汇总卡：会话丢失', 'ink-700', 'tint-red'],
-  ['概览汇总卡：排队中', 'ink-700', 'tint-blue'],
-  ['概览：大号合计与汇总数', 'riso-blue', 'paper-raised'],
-  ['概览：汇总数（空闲）', 'green-text', 'tint-green'],
-  ['概览：汇总数（会话丢失）', 'red-text', 'tint-red'],
-  ['概览：汇总数（排队中）', 'riso-blue', 'tint-blue'],
-  ['概览：出错横幅正文', 'ink', 'tint-red'],
-  ['概览：用量明细的悬停提示', WHITE, 'ink'],
-  ['概览：运行状态实时更新中', 'green-text', 'tint-green'],
-  ['运行记录：步骤说明', 'ink-700', WHITE],
-  ['运行记录：失败的用时', 'red-text', WHITE],
-  ['运行记录：结局（被打断）', 'pink-text', 'tint-pink-2'],
-  ['运行记录：结局（服务端重启中断）', 'ink-700', 'tint-blue'],
-  ['定位：突出显示的回复', 'ink', 'tint-yellow'],
-  ['定位：突出显示的回复中的元信息', 'ink-500', 'tint-yellow'],
+  ['Segmented control: not selected', 'ink-700', 'tint-blue'],
+  ['Segmented control: selected', 'ink', 'riso-yellow'],
+  ['Overview summary tile: replying', 'ink-700', 'tint-pink-2'],
+  ['Overview summary tile: idle', 'ink-700', 'tint-green'],
+  ['Overview summary tile: session lost', 'ink-700', 'tint-red'],
+  ['Overview summary tile: queued', 'ink-700', 'tint-blue'],
+  ['Overview: large total and summary counts', 'riso-blue', 'paper-raised'],
+  ['Overview: summary count (idle)', 'green-text', 'tint-green'],
+  ['Overview: summary count (session lost)', 'red-text', 'tint-red'],
+  ['Overview: summary count (queued)', 'riso-blue', 'tint-blue'],
+  ['Overview: error banner body', 'ink', 'tint-red'],
+  ['Overview: usage detail hover tooltip', WHITE, 'ink'],
+  ['Overview: run status updating live', 'green-text', 'tint-green'],
+  ['Run log: step description', 'ink-700', WHITE],
+  ['Run log: duration of a failure', 'red-text', WHITE],
+  ['Run log: outcome (interrupted)', 'pink-text', 'tint-pink-2'],
+  ['Run log: outcome (cut off by a server restart)', 'ink-700', 'tint-blue'],
+  ['Locate: highlighted reply', 'ink', 'tint-yellow'],
+  ['Locate: meta in a highlighted reply', 'ink-500', 'tint-yellow'],
   // "Printed sheet" redesign.
-  ['索引标签：未选中', 'ink-700', 'paper-tab'],
-  ['索引标签：当前页', 'ink', 'riso-yellow'],
-  ['票根：小标题', 'ink-500', 'paper-raised'],
-  ['输入区：按键说明', 'ink-700', 'tint-yellow'],
-  ['输入区：实时连接正常', 'green-text', 'tint-yellow'],
-  ['输入区：正在重连', 'red-text', 'tint-yellow'],
+  ['Index tab: not selected', 'ink-700', 'paper-tab'],
+  ['Index tab: current page', 'ink', 'riso-yellow'],
+  ['Stub: small heading', 'ink-500', 'paper-raised'],
+  ['Composer: key hints', 'ink-700', 'tint-yellow'],
+  ['Composer: live connection OK', 'green-text', 'tint-yellow'],
+  ['Composer: reconnecting', 'red-text', 'tint-yellow'],
 ]
 
 // Code blocks have a riso-blue background; the highlight colors are taken from the color values of .hljs* in index.css.
 const hljsColors = [...css.slice(css.indexOf('.hljs {')).matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex)
 
-describe('设计令牌的对比度', () => {
-  it.each(pairs)('%s：不低于 4.5:1', (_name, foreground, background) => {
+describe('Design token contrast', () => {
+  it.each(pairs)('%s: at least 4.5:1', (_name, foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('代码块中的文字与各高亮颜色在孔版蓝上都不低于 4.5:1', () => {
+  it('code block text and every highlight color are at least 4.5:1 on riso blue', () => {
     expect(hljsColors.length).toBeGreaterThan(5)
     for (const color of hljsColors) expect(contrast(color, 'riso-blue'), color).toBeGreaterThanOrEqual(4.5)
   })
 
   // The paper grain on the main area's beige background: a small tiled image instead
   // of a full-page SVG filter (so nothing needs recomputing while scrolling).
-  it('纸张颗粒是一张不到 12 KB 的平铺图', () => {
+  it('the paper grain is a tiled image under 12 KB', () => {
     const rule = css.slice(css.indexOf('.riso-grain {'), css.indexOf('}', css.indexOf('.riso-grain {')))
     const file = /url\(['"]?([^'")]+)['"]?\)/.exec(rule)?.[1]
     expect(file).toMatch(/\.png$/)
@@ -118,7 +118,7 @@ describe('设计令牌的对比度', () => {
     expect(css).not.toContain('feTurbulence')
   })
 
-  it('荧光粉、荧光黄在纸上达不到正文对比度，所以不能作文字色', () => {
+  it('fluorescent pink and yellow do not reach body text contrast on paper, so they cannot be text colors', () => {
     expect(contrast('riso-pink', 'paper')).toBeLessThan(4.5)
     expect(contrast('riso-yellow', 'paper')).toBeLessThan(4.5)
   })

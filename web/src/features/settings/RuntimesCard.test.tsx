@@ -25,61 +25,61 @@ function setup(list: Schemas['RuntimeList'] | (() => Response)) {
 const claude = () => screen.findByRole('region', { name: 'Claude Code' })
 const notFound = { available: false, version: null, binaryPath: null, unavailableReason: 'not_found', login: null } as const
 
-describe('全局设置的 Agent 运行时', () => {
-  it('Pi 写版本；Claude Code 写版本、路径、登录方式与订阅、检查时间，可用且已登录时没有提醒', async () => {
+describe('Agent runtimes in global settings', () => {
+  it('Pi shows its version; Claude Code shows version, path, login method and subscription, and check time, with no warning when available and logged in', async () => {
     setup(runtimeList())
     const cc = await claude()
     const pi = screen.getByRole('region', { name: 'Pi' })
-    expect(pi).toHaveTextContent('Pi版本 1.1.0可用')
-    expect(cc).toHaveTextContent('Claude Code版本 2.1.0可用已登录')
-    expect(cc).toHaveTextContent('路径/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js')
-    expect(cc).toHaveTextContent('登录claude.ai · 订阅 max')
-    expect(cc).toHaveTextContent(`检查于 ${t.chat.time('2026-11-11T08:00:00Z')}`)
+    expect(pi).toHaveTextContent('PiVersion 1.1.0Available')
+    expect(cc).toHaveTextContent('Claude CodeVersion 2.1.0AvailableLogged in')
+    expect(cc).toHaveTextContent('Path/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js')
+    expect(cc).toHaveTextContent('Loginclaude.ai · max subscription')
+    expect(cc).toHaveTextContent(`Checked ${t.chat.time('2026-11-11T08:00:00Z')}`)
     expect(within(cc).queryByRole('note')).toBeNull()
   })
 
-  it('没找到 claude：标不可用，说明装好并确认终端里能运行', async () => {
+  it('claude not found: marked unavailable, with a note to install it and make sure it runs in a terminal', async () => {
     setup(runtimeList(notFound))
     const cc = await claude()
-    expect(cc).toHaveTextContent(/^Claude Code不可用/)
-    expect(within(cc).getByRole('note')).toHaveTextContent(/^本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。$/)
-    expect(cc).not.toHaveTextContent('路径')
+    expect(cc).toHaveTextContent(/^Claude CodeUnavailable/)
+    expect(within(cc).getByRole('note')).toHaveTextContent(/^claude wasn't found on this computer: install Claude Code and make sure claude runs in a terminal\.$/)
+    expect(cc).not.toHaveTextContent('Path')
   })
 
-  it('读不出版本：说明确认在终端里能正常运行 claude', async () => {
+  it('version cannot be read: a note to make sure claude runs normally in a terminal', async () => {
     setup(runtimeList({ available: false, version: null, unavailableReason: 'version_failed', login: null }))
-    expect(within(await claude()).getByRole('note')).toHaveTextContent('运行 claude --version 失败：确认在终端里能正常运行 claude。')
+    expect(within(await claude()).getByRole('note')).toHaveTextContent('Running claude --version failed: make sure claude runs normally in a terminal.')
   })
 
-  it('没登录：标未登录，说明在本机终端运行 claude 并登录', async () => {
+  it('not logged in: marked logged out, with a note to run claude in a terminal on this computer and log in', async () => {
     setup(runtimeList({ login: { state: 'logged_out', authMethod: null, subscriptionType: null } }))
     const cc = await claude()
-    expect(cc).toHaveTextContent('可用未登录')
-    expect(within(cc).getByRole('note')).toHaveTextContent('本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。')
-    expect(cc).not.toHaveTextContent('登录claude')
+    expect(cc).toHaveTextContent('AvailableLogged out')
+    expect(within(cc).getByRole('note')).toHaveTextContent('Claude Code isn\'t logged in on this computer: run claude in a terminal there and log in.')
+    expect(cc).not.toHaveTextContent('Loginclaude')
   })
 
-  it('登录状态判断不了：不当作出错，只说明运行失败时会如实报错', async () => {
+  it('login status cannot be determined: not treated as an error, only a note that a failed run reports the real error', async () => {
     setup(runtimeList({ login: { state: 'unknown', authMethod: null, subscriptionType: null } }))
     const cc = await claude()
-    expect(cc).toHaveTextContent('登录状态未知')
+    expect(cc).toHaveTextContent('Login status unknown')
     expect(within(cc).queryByRole('note')).toBeNull()
-    expect(cc).toHaveTextContent('判断不了登录状态；Agent 运行失败时会如实报错。')
+    expect(cc).toHaveTextContent('The login status can\'t be determined; if a run fails, the error says why.')
   })
 
-  it('“重新检查”不用服务端缓存（refresh=true），换上新结果', async () => {
+  it('“Check again” bypasses the server cache (refresh=true) and shows the new result', async () => {
     let current = runtimeList(notFound)
     const { user, queries } = setup(() => HttpResponse.json(current))
     expect(within(await claude()).getByRole('note')).toBeInTheDocument()
     current = runtimeList()
-    await user.click(screen.getByRole('button', { name: '重新检查' }))
+    await user.click(screen.getByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'Claude Code' })).queryByRole('note')).toBeNull())
     expect(queries).toEqual(['', '?refresh=true'])
-    expect(screen.getByRole('region', { name: 'Claude Code' })).toHaveTextContent('已登录')
+    expect(screen.getByRole('region', { name: 'Claude Code' })).toHaveTextContent('Logged in')
   })
 
-  it('读不到时显示原因', async () => {
+  it('shows the reason when the runtimes cannot be read', async () => {
     setup(() => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('服务端内部错误')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Internal server error')
   })
 })

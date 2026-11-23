@@ -8,21 +8,21 @@ import { baseHandlers } from '@/test/shell'
 
 const section = (name: string) => screen.getByRole('region', { name })
 
-describe('概览页的入口', () => {
-  it('打开根地址显示概览：三块内容，左侧栏在全局范围，“概览”是第一项且为当前项', async () => {
+describe('Overview page entry', () => {
+  it('opening the root address shows the overview: three blocks, the sidebar in the global scope, “Overview” is the first item and the current one', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    expect(section('运行状态')).toBeInTheDocument()
-    expect(section('用量')).toBeInTheDocument()
-    expect(section('异常与失败')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '切换范围，当前：全局' })).toBeInTheDocument()
-    const links = within(screen.getByRole('navigation', { name: '主导航' })).getAllByRole('link')
-    expect(links[1]).toHaveTextContent('概览')
+    expect(section('Run status')).toBeInTheDocument()
+    expect(section('Usage')).toBeInTheDocument()
+    expect(section('Issues and failures')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Switch scope, current: Global' })).toBeInTheDocument()
+    const links = within(screen.getByRole('navigation', { name: 'Main navigation' })).getAllByRole('link')
+    expect(links[1]).toHaveTextContent('Overview')
     expect(links[1]).toHaveAttribute('aria-current', 'page')
     expect(links.filter((link) => link.getAttribute('aria-current') === 'page')).toHaveLength(1)
   })
 
-  it('概览页的内容区不显示服务健康，左侧栏的连接状态照常显示', async () => {
+  it('the overview content area does not show service health; the sidebar connection status shows as usual', async () => {
     const { snapshot } = await renderOverview({
       handlers: [
         http.get(apiUrl('/health'), () =>
@@ -31,27 +31,27 @@ describe('概览页的入口', () => {
       ],
     })
     await snapshot([makeAgentOverview()])
-    const status = screen.getByRole('status', { name: '连接状态' })
-    await waitFor(() => expect(status).toHaveTextContent('数据库不可用'))
+    const status = screen.getByRole('status', { name: 'Connection' })
+    await waitFor(() => expect(status).toHaveTextContent('Database unavailable'))
     const main = screen.getByRole('main')
     expect(main).not.toHaveTextContent('unable to open database file')
-    expect(main).not.toHaveTextContent('数据库不可用')
+    expect(main).not.toHaveTextContent('Database unavailable')
   })
 
-  it('没有 Agent 时显示空状态与新建 Agent 的入口，不显示三块内容', async () => {
+  it('with no Agents it shows the empty state and a way to create an Agent, without the three blocks', async () => {
     const { snapshot, user } = await renderOverview()
     await snapshot([])
-    const empty = screen.getByRole('region', { name: '还没有 Agent。' })
-    expect(empty).toHaveTextContent('新建一个 Agent 后，这里会显示它的运行状态、用量和异常。')
-    expect(screen.queryByRole('region', { name: '用量' })).toBeNull()
-    await user.click(within(empty).getByRole('button', { name: '新建 Agent' }))
-    expect(await screen.findByRole('dialog', { name: '新建 Agent' })).toBeInTheDocument()
+    const empty = screen.getByRole('region', { name: 'No Agents yet.' })
+    expect(empty).toHaveTextContent('Once you create an Agent, its run status, usage, and issues show up here.')
+    expect(screen.queryByRole('region', { name: 'Usage' })).toBeNull()
+    await user.click(within(empty).getByRole('button', { name: 'New Agent' }))
+    expect(await screen.findByRole('dialog', { name: 'New Agent' })).toBeInTheDocument()
   })
 
-  it('只有用量加载失败时，只在用量一块提示错误、请求编号与重试，其余照常显示', async () => {
+  it('when only usage fails to load, only the usage block shows the error, request ID and retry; the rest shows as usual', async () => {
     let fail = true
     const { snapshot, user } = await renderOverview({
-      anomalies: anomalyPage([makeAnomaly({ agentName: '测试助手' })]),
+      anomalies: anomalyPage([makeAnomaly({ agentName: 'Test helper' })]),
       handlers: [
         http.get(apiUrl('/usage'), () =>
           fail
@@ -63,93 +63,93 @@ describe('概览页的入口', () => {
         ),
       ],
     })
-    await snapshot([makeAgentOverview({ name: '开发助手' })])
-    const usage = section('用量')
+    await snapshot([makeAgentOverview({ name: 'dev-helper' })])
+    const usage = section('Usage')
     const alert = await within(usage).findByRole('alert')
-    expect(alert).toHaveTextContent('用量加载失败')
+    expect(alert).toHaveTextContent("Couldn't load usage")
     expect(alert).toHaveTextContent('01890a5d-ac96-774b-bcce-b302099a8057')
-    expect(within(section('运行状态')).getByRole('table')).toHaveTextContent('开发助手')
-    expect(await within(section('异常与失败')).findByText('测试助手')).toBeInTheDocument()
-    expect(within(section('异常与失败')).queryByRole('alert')).toBeNull()
+    expect(within(section('Run status')).getByRole('table')).toHaveTextContent('dev-helper')
+    expect(await within(section('Issues and failures')).findByText('Test helper')).toBeInTheDocument()
+    expect(within(section('Issues and failures')).queryByRole('alert')).toBeNull()
     fail = false
-    await user.click(within(alert).getByRole('button', { name: '重试' }))
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
     expect(await within(usage).findByText('1,234', { selector: 'span.riso-misreg' })).toBeInTheDocument()
     expect(within(usage).queryByRole('alert')).toBeNull()
   })
 })
 
-describe('运行状态', () => {
-  it('Agent 开始回复：不刷新页面就显示回复中与当前阶段，“回复中”的汇总数加一', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+describe('Run status', () => {
+  it('an Agent starts replying: without reloading, it shows replying and the current phase, and the “Replying” count goes up by one', async () => {
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     const { snapshot, emit } = await renderOverview()
-    await snapshot([agent, makeAgentOverview({ name: '测试助手' })])
-    const tiles = screen.getByRole('list', { name: '运行状态汇总' })
-    const busyTile = within(tiles).getByText('回复中').closest('li')!
+    await snapshot([agent, makeAgentOverview({ name: 'Test helper' })])
+    const tiles = screen.getByRole('list', { name: 'Run status summary' })
+    const busyTile = within(tiles).getByText('Replying').closest('li')!
     expect(busyTile).toHaveTextContent('0')
-    expect(within(tiles).getByText('空闲').closest('li')).toHaveTextContent('2')
+    expect(within(tiles).getByText('Idle').closest('li')).toHaveTextContent('2')
 
     const run = makeRun({ status: 'starting', phase: 'preparing', endedAt: null, runningAt: null, configVersion: 3 })
     await emit('agent.status', { agent: { ...agent, status: makeStatus(agent.agentId, { busy: true, currentRun: run, processState: 'starting' }) } })
     expect(busyTile).toHaveTextContent('1')
-    expect(busyTile).toHaveTextContent('开发助手')
-    const row = within(screen.getByRole('table')).getByText('开发助手').closest('tr')!
-    expect(row).toHaveTextContent('回复中')
-    expect(row).toHaveTextContent('准备运行环境')
-    expect(row).toHaveTextContent('配置 v3')
+    expect(busyTile).toHaveTextContent('dev-helper')
+    const row = within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
+    expect(row).toHaveTextContent('Replying')
+    expect(row).toHaveTextContent('Preparing the environment')
+    expect(row).toHaveTextContent('config v3')
   })
 
-  it('排队数与会话丢失计入汇总', async () => {
+  it('queue counts and lost sessions count in the summary', async () => {
     const { snapshot } = await renderOverview()
     const busy = makeAgentOverview({ name: 'A' })
     busy.status = makeStatus(busy.agentId, { busy: true, currentRun: makeRun({ status: 'running', endedAt: null }), queued: { interrupt: 1, normal: 2 } })
     const missing = makeAgentOverview({ name: 'B' })
     missing.status = makeStatus(missing.agentId, { session: { state: 'missing', epoch: 1 } })
     await snapshot([busy, missing])
-    const tiles = screen.getByRole('list', { name: '运行状态汇总' })
-    expect(within(tiles).getByText('会话丢失').closest('li')).toHaveTextContent(/会话丢失\s*1\s*B/)
-    expect(within(tiles).getByText('排队中').closest('li')).toHaveTextContent('3打断 1 条 · 普通 2 条')
+    const tiles = screen.getByRole('list', { name: 'Run status summary' })
+    expect(within(tiles).getByText('Session lost').closest('li')).toHaveTextContent(/Session lost\s*1\s*B/)
+    expect(within(tiles).getByText('Queued').closest('li')).toHaveTextContent('31 interrupt · 2 normal')
     const rowA = within(screen.getByRole('table')).getByText('A').closest('tr')!
-    expect(rowA).toHaveTextContent('排队 3 条：打断 1 条，普通 2 条')
-    expect(within(screen.getByRole('table')).getByText('B').closest('tr')).toHaveTextContent('会话丢失')
+    expect(rowA).toHaveTextContent('3 messages queued: 1 interrupt, 2 normal')
+    expect(within(screen.getByRole('table')).getByText('B').closest('tr')).toHaveTextContent('Session lost')
   })
 
-  it('Pi 进程空闲退出后显示未运行，并说明退出的时间与原因', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+  it('after the Pi process exits on idle it shows not running, with the time and reason of the exit', async () => {
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     agent.status = makeStatus(agent.agentId, { processState: 'idle', processPid: 4321, processStartedAt: new Date(Date.now() - 60_000).toISOString() })
     const { snapshot, emit } = await renderOverview()
     await snapshot([agent])
-    const row = () => within(screen.getByRole('table')).getByText('开发助手').closest('tr')!
-    expect(row()).toHaveTextContent('待命 · PID 4321')
+    const row = () => within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
+    expect(row()).toHaveTextContent('Ready · PID 4321')
     const exitAt = new Date()
     exitAt.setHours(10, 20, 0, 0)
     await emit('agent.status', {
       agent: { ...agent, status: makeStatus(agent.agentId, { processState: 'stopped' }), lastProcessExit: { at: exitAt.toISOString(), reason: 'idle_timeout' } },
     })
-    expect(row()).toHaveTextContent('已停止')
+    expect(row()).toHaveTextContent('Stopped')
     expect(row()).not.toHaveTextContent('PID')
-    expect(row()).toHaveTextContent('10:20 · 空闲超时退出')
+    expect(row()).toHaveTextContent('10:20 · Exited after idling')
   })
 
-  it('显示上一条回复的结果与结束时间', async () => {
+  it('shows the result and end time of the last reply', async () => {
     const failed = makeAgentOverview({ name: 'A', lastRun: makeRun({ status: 'failed', errorCode: 'session_missing' }) })
     const done = makeAgentOverview({ name: 'B', lastRun: makeRun({ status: 'completed' }) })
     const { snapshot } = await renderOverview()
     await snapshot([failed, done])
     const table = screen.getByRole('table')
-    expect(within(table).getByText('A').closest('tr')).toHaveTextContent('上一条失败：会话文件丢失')
+    expect(within(table).getByText('A').closest('tr')).toHaveTextContent('Last reply failed: Session file missing')
     expect(within(table).getByText('A').closest('tr')).toHaveTextContent('errorCode=session_missing')
-    expect(within(table).getByText('B').closest('tr')).toHaveTextContent('上一条已完成')
+    expect(within(table).getByText('B').closest('tr')).toHaveTextContent('Last reply completed')
   })
 
-  it('点击 Agent 进入它的对话页', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+  it('clicking an Agent opens its chat page', async () => {
+    const agent = makeAgent({ name: 'dev-helper' })
     const { snapshot, user } = await renderOverview({ handlers: baseHandlers([agent]) })
     await snapshot([makeAgentOverview({ agentId: agent.id, name: agent.name })])
-    await user.click(within(screen.getByRole('table')).getByRole('link', { name: /开发助手/ }))
-    expect(await screen.findByRole('log', { name: '对话' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('table')).getByRole('link', { name: /dev-helper/ }))
+    expect(await screen.findByRole('log', { name: 'Conversation' })).toBeInTheDocument()
   })
 
-  it('Agent 被删除后从表中移除；新建的 Agent 出现在表中', async () => {
+  it('a deleted Agent leaves the table; a new Agent appears in the table', async () => {
     const a = makeAgentOverview({ name: 'A' })
     const { snapshot, emit } = await renderOverview()
     await snapshot([a])
@@ -159,43 +159,43 @@ describe('运行状态', () => {
     expect(within(screen.getByRole('table')).queryByText('A')).toBeNull()
   })
 
-  it('事件流断开时显示正在重连，恢复后显示最新状态', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+  it('when the event stream drops it shows reconnecting, and after recovery the latest state', async () => {
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     const { snapshot, source, emit } = await renderOverview()
     await snapshot([agent])
-    expect(screen.getByText('运行状态实时更新中')).toBeInTheDocument()
+    expect(screen.getByText('Run status is updating live')).toBeInTheDocument()
     await act(async () => source().fail())
-    expect(await screen.findByText('连接中断，正在重连…')).toBeInTheDocument()
+    expect(await screen.findByText('Connection lost, reconnecting…')).toBeInTheDocument()
     await waitFor(() => expect(FakeEventSource.instances.filter((s) => s.url.endsWith('/overview/events'))).toHaveLength(2), { timeout: 3000 })
     await act(async () => source().open())
-    await emit('snapshot', { agents: [{ ...agent, name: '改名后的助手' }] })
-    expect(screen.getByText('运行状态实时更新中')).toBeInTheDocument()
-    expect(within(screen.getByRole('table')).getByText('改名后的助手')).toBeInTheDocument()
+    await emit('snapshot', { agents: [{ ...agent, name: 'Renamed helper' }] })
+    expect(screen.getByText('Run status is updating live')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getByText('Renamed helper')).toBeInTheDocument()
   })
 })
 
-describe('用量', () => {
-  it('默认显示今天、按 Agent；显示合计与四项明细，逐行显示总数并能查看明细，不显示费用', async () => {
+describe('Usage', () => {
+  it('shows today by Agent by default; shows the total and its four parts, a total per row with details, and no cost', async () => {
     const { snapshot } = await renderOverview({
       usage: usagePage([
-        makeUsageRow({ agentName: '开发助手', input: 92140, output: 8420, cacheRead: 61440, cacheWrite: 4096 }),
-        makeUsageRow({ agentName: '旧助手', agentDeleted: true, input: 100, output: 10 }),
+        makeUsageRow({ agentName: 'dev-helper', input: 92140, output: 8420, cacheRead: 61440, cacheWrite: 4096 }),
+        makeUsageRow({ agentName: 'Old helper', agentDeleted: true, input: 100, output: 10 }),
       ]),
     })
     await snapshot([makeAgentOverview()])
-    const usage = section('用量')
-    expect(within(usage).getByRole('radio', { name: '今天' })).toBeChecked()
-    expect(within(usage).getByRole('radio', { name: '按 Agent' })).toBeChecked()
-    expect(await within(usage).findByText('今天合计')).toBeInTheDocument()
+    const usage = section('Usage')
+    expect(within(usage).getByRole('radio', { name: 'Today' })).toBeChecked()
+    expect(within(usage).getByRole('radio', { name: 'By Agent' })).toBeChecked()
+    expect(await within(usage).findByText('Total · Today')).toBeInTheDocument()
     expect(within(usage).getByText('166,206', { selector: 'span.riso-misreg' })).toBeInTheDocument()
     const rows = within(usage).getAllByRole('listitem')
-    expect(rows[0]).toHaveTextContent('开发助手')
-    expect(rows[0]).toHaveAccessibleDescription('输入 92,140 · 输出 8,420 · 缓存读取 61,440 · 缓存写入 4,096 · 合计 166,096')
-    expect(rows[1]).toHaveTextContent('旧助手已删除')
-    expect(screen.getByRole('main')).not.toHaveTextContent(/费用|成本|美元|USD|\$/)
+    expect(rows[0]).toHaveTextContent('dev-helper')
+    expect(rows[0]).toHaveAccessibleDescription('Input 92,140 · Output 8,420 · Cache read 61,440 · Cache write 4,096 · Total 166,096')
+    expect(rows[1]).toHaveTextContent('Old helperDeleted')
+    expect(screen.getByRole('main')).not.toHaveTextContent(/cost|fee|price|dollar|USD|\$/i)
   })
 
-  it('切换到本周时，从本周一零点开始统计', async () => {
+  it('switching to this week counts from this Monday at midnight', async () => {
     const froms: string[] = []
     const { snapshot, user } = await renderOverview({
       handlers: [
@@ -207,16 +207,16 @@ describe('用量', () => {
     })
     await snapshot([makeAgentOverview()])
     await waitFor(() => expect(froms).toHaveLength(1))
-    await user.click(within(section('用量')).getByRole('radio', { name: '本周' }))
+    await user.click(within(section('Usage')).getByRole('radio', { name: 'This week' }))
     await waitFor(() => expect(froms).toHaveLength(2))
     const monday = new Date(froms[1])
     expect(monday.getDay()).toBe(1)
     expect([monday.getHours(), monday.getMinutes(), monday.getSeconds()]).toEqual([0, 0, 0])
     expect(Date.now() - monday.getTime()).toBeLessThan(7 * 24 * 60 * 60 * 1000)
-    expect(await within(section('用量')).findByText('本周合计')).toBeInTheDocument()
+    expect(await within(section('Usage')).findByText('Total · This week')).toBeInTheDocument()
   })
 
-  it('按模型查看时，同一模型的数值为各 Agent 之和；没有模型的显示为未知模型', async () => {
+  it('by model, the numbers of one model are the sum over Agents; rows without a model show as an unknown model', async () => {
     const { snapshot, user } = await renderOverview({
       usage: usagePage([
         makeUsageRow({ agentName: 'A', model: 'x', input: 100, output: 10 }),
@@ -225,25 +225,25 @@ describe('用量', () => {
       ]),
     })
     await snapshot([makeAgentOverview()])
-    const usage = section('用量')
-    await within(usage).findByText('今天合计')
-    await user.click(within(usage).getByRole('radio', { name: '按模型' }))
+    const usage = section('Usage')
+    await within(usage).findByText('Total · Today')
+    await user.click(within(usage).getByRole('radio', { name: 'By model' }))
     const rows = within(usage).getAllByRole('listitem')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveTextContent('anthropic / x')
     expect(rows[0]).toHaveTextContent('330')
-    expect(rows[1]).toHaveTextContent('未知模型')
+    expect(rows[1]).toHaveTextContent('Unknown model')
   })
 
-  it('所选时间段没有用量时显示空状态', async () => {
+  it('shows the empty state when the chosen period has no usage', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    expect(await within(section('用量')).findByText('今天还没有用量。')).toBeInTheDocument()
+    expect(await within(section('Usage')).findByText('No usage yet · Today')).toBeInTheDocument()
   })
 })
 
-describe('异常与失败', () => {
-  it('以最近 24 小时为开始时间，显示总条数，从新到旧列出，可以加载更多', async () => {
+describe('Issues and failures', () => {
+  it('starts from the last 24 hours, shows the total count, lists newest first, and can load more', async () => {
     const requests: URLSearchParams[] = []
     const first = [makeAnomaly({ agentName: 'B', kind: 'run_interrupted', errorCode: null, errorMessage: null, endReason: 'user_interrupt' })]
     const second = [makeAnomaly({ agentName: 'A', errorCode: 'workspace_sync_failed', errorMessage: 'Clone failed: Authentication failed' })]
@@ -257,115 +257,115 @@ describe('异常与失败', () => {
       ],
     })
     await snapshot([makeAgentOverview()])
-    const list = section('异常与失败')
-    expect(await within(list).findByText('最近 24 小时 · 2 条')).toBeInTheDocument()
+    const list = section('Issues and failures')
+    expect(await within(list).findByText('Last 24 hours · 2')).toBeInTheDocument()
     const from = Date.parse(requests[0].get('from')!)
     expect(Math.abs(Date.now() - 24 * 60 * 60 * 1000 - from)).toBeLessThan(60_000)
-    await user.click(within(list).getByRole('button', { name: '加载更多' }))
+    await user.click(within(list).getByRole('button', { name: 'Load more' }))
     await waitFor(() => expect(within(list).getAllByRole('link')).toHaveLength(2))
     expect(requests[1].get('cursor')).toBe('c1')
     expect(requests[1].get('from')).toBe(requests[0].get('from'))
     const [b, a] = within(list).getAllByRole('link')
-    expect(b).toHaveTextContent('已打断')
+    expect(b).toHaveTextContent('Interrupted')
     expect(b).toHaveTextContent('endReason=user_interrupt')
     expect(a).toHaveTextContent('errorCode=workspace_sync_failed')
-    expect(a).toHaveTextContent('工作区同步失败：Clone failed: Authentication failed')
-    expect(within(list).queryByRole('button', { name: '加载更多' })).toBeNull()
+    expect(a).toHaveTextContent('Workspace sync failed: Clone failed: Authentication failed')
+    expect(within(list).queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
-  it('CLI 安装失败显示为失败，原因中包含 CLI 名称', async () => {
+  it('a failed CLI install shows as failed, with the CLI name in the reason', async () => {
     const { snapshot } = await renderOverview({
       anomalies: anomalyPage([makeAnomaly({ errorCode: 'cli_install_failed', errorMessage: 'gh 2.100.0: the downloaded file does not match the SHA-256 in the template' })]),
     })
     await snapshot([makeAgentOverview()])
-    const item = await within(section('异常与失败')).findByRole('link')
-    expect(item).toHaveTextContent('失败')
-    expect(item).toHaveTextContent('CLI 安装失败：gh 2.100.0')
+    const item = await within(section('Issues and failures')).findByRole('link')
+    expect(item).toHaveTextContent('Failed')
+    expect(item).toHaveTextContent('CLI install failed: gh 2.100.0')
   })
 
-  it('会话文件丢失进入对话页、不带锚点；其他条目定位到这条回复', async () => {
+  it('a missing session file goes to the chat page without an anchor; other items jump to that reply', async () => {
     const missing = makeAnomaly({ errorCode: 'session_missing', errorMessage: null })
     const other = makeAnomaly()
     const { snapshot } = await renderOverview({ anomalies: anomalyPage([missing, other]) })
     await snapshot([makeAgentOverview()])
-    const [a, b] = await within(section('异常与失败')).findAllByRole('link')
+    const [a, b] = await within(section('Issues and failures')).findAllByRole('link')
     expect(a).toHaveAttribute('href', `/agents/${missing.agentId}/chat`)
-    expect(a).toHaveTextContent('去处理')
+    expect(a).toHaveTextContent('Fix it')
     expect(b).toHaveAttribute('href', `/agents/${other.agentId}/chat#run-${other.runId}`)
-    expect(b).toHaveTextContent('查看回复')
+    expect(b).toHaveTextContent('View reply')
   })
 
-  it('失败的手动压缩写成“压缩失败”，带上压缩的指令；“查看压缩”定位到这次压缩', async () => {
+  it('a failed manual compaction reads “Compaction failed” with the compaction instructions; “View compaction” jumps to that compaction', async () => {
     const failed = makeAnomaly({
       errorCode: 'pi_error',
       errorMessage: 'compaction failed',
-      compaction: { instructions: '保留关键决定', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null },
+      compaction: { instructions: 'Keep key decisions', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null },
     })
     const { snapshot } = await renderOverview({ anomalies: anomalyPage([failed]) })
     await snapshot([makeAgentOverview()])
-    const item = await within(section('异常与失败')).findByRole('link')
-    expect(within(item).getByText('压缩失败')).toBeInTheDocument()
-    expect(within(item).queryByText('失败', { exact: true })).toBeNull()
-    expect(item).toHaveTextContent('/compact 保留关键决定')
-    expect(item).toHaveTextContent('Agent 报告错误：compaction failed')
-    expect(item).toHaveTextContent('查看压缩')
+    const item = await within(section('Issues and failures')).findByRole('link')
+    expect(within(item).getByText('Compaction failed')).toBeInTheDocument()
+    expect(within(item).queryByText('Failed', { exact: true })).toBeNull()
+    expect(item).toHaveTextContent('/compact Keep key decisions')
+    expect(item).toHaveTextContent('Agent reported an error: compaction failed')
+    expect(item).toHaveTextContent('View compaction')
     expect(item).toHaveAttribute('href', `/agents/${failed.agentId}/chat#run-${failed.runId}`)
   })
 
-  it('没有指令的手动压缩只写 /compact', async () => {
+  it('a manual compaction without instructions shows only /compact', async () => {
     const failed = makeAnomaly({ errorCode: 'pi_exited', errorMessage: null, compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })
     const { snapshot } = await renderOverview({ anomalies: anomalyPage([failed]) })
     await snapshot([makeAgentOverview()])
-    const item = await within(section('异常与失败')).findByRole('link')
+    const item = await within(section('Issues and failures')).findByRole('link')
     expect(item.querySelector('code')).toHaveTextContent(/^\/compact$/)
   })
 
-  it('最近 24 小时没有异常时显示空状态', async () => {
+  it('shows the empty state when there are no issues in the last 24 hours', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    expect(await within(section('异常与失败')).findByText('最近 24 小时没有异常。')).toBeInTheDocument()
+    expect(await within(section('Issues and failures')).findByText('No issues in the last 24 hours.')).toBeInTheDocument()
   })
 })
 
 // "Printed sheet" redesign, step 3: the overview's header is the page title, and the content sits on a sheet, numbered 01, 02, 03.
-describe('纸张上的概览', () => {
+describe('Overview on a sheet', () => {
   const sectionNumber = (name: string) => section(name).querySelector('[data-section-number]')
 
-  it('页头是页面标题：面包屑写着当前范围，标题“概览”，下面一行是范围选择与实时状态', async () => {
+  it('the header is the page title: the breadcrumb names the current scope, the title is “Overview”, and the line below has the scope select and live status', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    const header = screen.getByRole('heading', { level: 1, name: '概览' }).closest('header')!
-    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›概览')
+    const header = screen.getByRole('heading', { level: 1, name: 'Overview' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Overview')
     const meta = header.querySelector('[data-page-meta]')!
-    expect(within(meta as HTMLElement).getByRole('combobox', { name: '范围' })).toBeInTheDocument()
-    expect(within(meta as HTMLElement).getByText('运行状态实时更新中')).toBeInTheDocument()
+    expect(within(meta as HTMLElement).getByRole('combobox', { name: 'Scope' })).toBeInTheDocument()
+    expect(within(meta as HTMLElement).getByText('Run status is updating live')).toBeInTheDocument()
   })
 
-  it('选定项目时面包屑写项目名称；范围选择是虚线框里的“范围 名称”', async () => {
+  it('with a project chosen the breadcrumb names the project; the scope select is “Scope name” in a dashed box', async () => {
     await renderOverview({ path: `/?project=${encodeURIComponent(defaultProject.name)}` })
-    await waitFor(() => expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›概览`))
-    const select = screen.getByRole('combobox', { name: '范围' })
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Overview`))
+    const select = screen.getByRole('combobox', { name: 'Scope' })
     expect(select.parentElement).toHaveClass('border-dashed', 'border-[1.5px]', 'h-[26px]')
   })
 
-  it('运行状态、用量、异常与失败排在一张纸上，按 01、02、03 编号；区块之间一道虚线', async () => {
+  it('run status, usage, and issues and failures sit on one sheet, numbered 01, 02, 03, with a dashed line between blocks', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    const sheet = section('运行状态').closest('[data-sheet]')!
-    expect(sheet).toContainElement(section('用量'))
-    expect(sheet).toContainElement(section('异常与失败'))
-    expect(sectionNumber('运行状态')).toHaveTextContent('01')
-    expect(sectionNumber('用量')).toHaveTextContent('02')
-    expect(sectionNumber('异常与失败')).toHaveTextContent('03')
-    expect(within(section('运行状态')).getByRole('heading', { level: 2, name: '运行状态' })).toHaveClass('riso-marker', 'font-display-cn')
-    expect(section('运行状态')).not.toHaveClass('border-t-2')
-    expect(section('用量')).toHaveClass('border-t-2', 'border-dashed')
+    const sheet = section('Run status').closest('[data-sheet]')!
+    expect(sheet).toContainElement(section('Usage'))
+    expect(sheet).toContainElement(section('Issues and failures'))
+    expect(sectionNumber('Run status')).toHaveTextContent('01')
+    expect(sectionNumber('Usage')).toHaveTextContent('02')
+    expect(sectionNumber('Issues and failures')).toHaveTextContent('03')
+    expect(within(section('Run status')).getByRole('heading', { level: 2, name: 'Run status' })).toHaveClass('riso-marker', 'font-display-cn')
+    expect(section('Run status')).not.toHaveClass('border-t-2')
+    expect(section('Usage')).toHaveClass('border-t-2', 'border-dashed')
   })
 
-  it('状态卡片：带色底、2px 藏青描边、藏青实色投影，数字是 Bricolage 大字，不再倾斜', async () => {
+  it('status tiles: tinted background, 2px navy border, solid navy shadow, the number in large Bricolage, no longer tilted', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    const tiles = within(screen.getByRole('list', { name: '运行状态汇总' })).getAllByRole('listitem')
+    const tiles = within(screen.getByRole('list', { name: 'Run status summary' })).getAllByRole('listitem')
     expect(tiles).toHaveLength(4)
     for (const tile of tiles) {
       expect(tile).toHaveClass('border-2', 'border-ink', 'rounded-card', 'shadow-[4px_4px_0_var(--ink)]')
@@ -375,36 +375,36 @@ describe('纸张上的概览', () => {
     expect(within(tiles[1]).getByText('1')).toHaveClass('font-display-latin', 'text-[46px]')
   })
 
-  it('Agent 表：表头下一道实线，行与行之间虚线；模型名等宽；空闲是浅绿胶囊', async () => {
+  it('Agent table: a solid line under the header, dashed lines between rows; model names monospace; idle is a light green pill', async () => {
     const { snapshot } = await renderOverview()
-    await snapshot([makeAgentOverview({ name: '开发助手' })])
+    await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     const table = screen.getByRole('table')
     // Placed directly on the sheet, not wrapped in a white card.
     expect(table.parentElement).not.toHaveClass('bg-white', 'shadow-print-rest')
     expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
-    const row = within(table).getByText('开发助手').closest('tr')!
+    const row = within(table).getByText('dev-helper').closest('tr')!
     expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
     expect(within(row).getByText(/ \/ /)).toHaveClass('font-mono')
-    const pill = within(row).getByText('空闲').closest('[data-state-pill]')!
+    const pill = within(row).getByText('Idle').closest('[data-state-pill]')!
     expect(pill).toHaveAttribute('data-state-pill', 'idle')
     expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green', 'rotate-[-3deg]')
   })
 
-  it('用量：横条是网点填充的，最多的一行有黄色“最多”小标签；范围和分组是分段按钮，选中的是黄色', async () => {
+  it('usage: bars have a halftone fill, the largest row has a small yellow “Most” tag; period and grouping are segmented buttons, the chosen one yellow', async () => {
     const { snapshot } = await renderOverview({
-      usage: usagePage([makeUsageRow({ agentName: '开发助手', input: 9000, output: 1000 }), makeUsageRow({ agentName: '测试助手', input: 2000, output: 500 })]),
+      usage: usagePage([makeUsageRow({ agentName: 'dev-helper', input: 9000, output: 1000 }), makeUsageRow({ agentName: 'Test helper', input: 2000, output: 500 })]),
     })
     await snapshot([makeAgentOverview()])
-    const usage = section('用量')
+    const usage = section('Usage')
     const lines = await within(usage).findAllByRole('listitem')
-    expect(lines[0]).toHaveTextContent('开发助手')
-    expect(within(lines[0]).getByText('最多')).toHaveClass('bg-riso-yellow')
-    expect(within(lines[1]).queryByText('最多')).toBeNull()
+    expect(lines[0]).toHaveTextContent('dev-helper')
+    expect(within(lines[0]).getByText('Most')).toHaveClass('bg-riso-yellow')
+    expect(within(lines[1]).queryByText('Most')).toBeNull()
     const track = lines[0].querySelector('[data-usage-track]')!
     expect(track).toHaveClass('border-2', 'border-ink')
     expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-riso-blue', 'bg-size-[5px_5px]')
-    const range = within(usage).getByRole('radiogroup', { name: '时间段' })
+    const range = within(usage).getByRole('radiogroup', { name: 'Period' })
     expect(range).toHaveClass('border-2', 'border-ink', 'rounded-full')
-    expect(within(range).getByRole('radio', { name: '今天' })).toHaveClass('data-[state=on]:bg-riso-yellow')
+    expect(within(range).getByRole('radio', { name: 'Today' })).toHaveClass('data-[state=on]:bg-riso-yellow')
   })
 })

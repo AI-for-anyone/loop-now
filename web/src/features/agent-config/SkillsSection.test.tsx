@@ -5,12 +5,12 @@ import { apiUrl, errorBody } from '@/test/api'
 import { renderConfig } from '@/test/config'
 
 const openAddDialog = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
-  await user.click(within(screen.getByRole('region', { name: 'Skills' })).getByRole('button', { name: '从库中添加' }))
+  await user.click(within(screen.getByRole('region', { name: 'Skills' })).getByRole('button', { name: 'Add from library' }))
   return screen.findByRole('dialog')
 }
 
-describe('从 Skills 库添加', () => {
-  it('库加载中显示加载状态', async () => {
+describe('Add from the Skills library', () => {
+  it('shows a loading state while the library loads', async () => {
     const { user } = await renderConfig({
       handlers: [
         http.get(apiUrl('/skills'), async () => {
@@ -20,15 +20,15 @@ describe('从 Skills 库添加', () => {
       ],
     })
     const dialog = await openAddDialog(user)
-    expect(within(dialog).getByText('加载中…')).toBeInTheDocument()
+    expect(within(dialog).getByText('Loading…')).toBeInTheDocument()
   })
 
-  it('库加载失败时显示原因', async () => {
+  it('shows the reason when the library fails to load', async () => {
     const { user } = await renderConfig({
       handlers: [http.get(apiUrl('/skills'), () => HttpResponse.json(errorBody('internal_error', 'Database unavailable'), { status: 500 }))],
     })
     const dialog = await openAddDialog(user)
     expect(await within(dialog).findByText(/Database unavailable/)).toBeInTheDocument()
-    expect(within(dialog).queryByText('加载中…')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Loading…')).not.toBeInTheDocument()
   })
 })

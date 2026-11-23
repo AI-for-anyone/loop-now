@@ -19,68 +19,68 @@ function detailWithRework(): Schemas['TaskDetail'] {
 const ruler = (detail: Schemas['TaskDetail'], props: Partial<Parameters<typeof WorkflowRuler>[0]> = {}) =>
   render(<WorkflowRuler detail={detail} selected="check" record={nodeId} onSelect={() => {}} onRecord={() => {}} agentName={(id) => id} {...props} />)
 
-describe('流程尺', () => {
-  it('每一步是尺子上的一个点：当前步是写着步号的黄色大圆点（aria-current=step），走过的写最近一次的状态，没到的写“还没到”', () => {
+describe('workflow ruler', () => {
+  it('each step is a dot on the ruler: the current step is a big yellow dot with the step number (aria-current=step), visited steps show their latest status, and steps not reached say “not yet”', () => {
     const detail = makeTaskDetail('project')
     ruler(detail)
-    const nav = screen.getByRole('navigation', { name: '固定流程' })
-    const current = within(nav).getByRole('button', { name: /质量检查/ })
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    const current = within(nav).getByRole('button', { name: /Quality check/ })
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
-    expect(current).toHaveTextContent('01质量检查任务检查员· 阻塞×2')
+    expect(current).toHaveTextContent('01Quality checktask-checker· Blocked×2')
     // The status and the visit count are wrapped together, so they move together when the line wraps.
-    expect(current.querySelector('[data-step-state]')).toHaveTextContent('· 阻塞×2')
+    expect(current.querySelector('[data-step-state]')).toHaveTextContent('· Blocked×2')
     expect(current.querySelector('[data-step-state]')).toHaveClass('whitespace-nowrap')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveTextContent('01')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('bg-riso-yellow')
-    const todo = within(nav).getByRole('button', { name: /提交报告/ })
+    const todo = within(nav).getByRole('button', { name: /Submit report/ })
     expect(todo).not.toHaveAttribute('aria-current')
-    expect(todo).toHaveTextContent('· 还没到')
+    expect(todo).toHaveTextContent('· not yet')
     expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('border-dashed')
     // Between steps, the edge's condition is written out; the bottom shows which step the task has reached.
-    expect(within(nav).getByText('↓ 通过')).toBeInTheDocument()
-    expect(within(nav).getByText('走到第 1 步')).toBeInTheDocument()
-    expect(within(nav).getByText('走到第 1 步').previousElementSibling).toHaveTextContent('1 / 2')
+    expect(within(nav).getByText('↓ Pass')).toBeInTheDocument()
+    expect(within(nav).getByText('at step 1')).toBeInTheDocument()
+    expect(within(nav).getByText('at step 1').previousElementSibling).toHaveTextContent('1 / 2')
   })
 
-  it('返工线写在出发的那一步下面：“返工到 01 · 已用 1/3 次”，次数只算选了这条线并且已完成的访问', () => {
+  it('a rework edge is written under the step it starts from: “<label> → 01 · used 1/3”, counting only completed visits that took this edge', () => {
     const detail = detailWithRework()
     expect(edgeUses(detail, 'again')).toBe(1)
     expect(workflowSteps(detail)[1].jumps).toMatchObject([{ to: 0, back: true, used: 1 }])
     ruler(detail)
-    const nav = screen.getByRole('navigation', { name: '固定流程' })
-    expect(within(nav).getByText('返工到 01 · 已用 1/3 次').closest('p')).toHaveClass('text-pink-text')
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    expect(within(nav).getByText('Rework → 01 · used 1/3').closest('p')).toHaveClass('text-pink-text')
   })
 
-  it('选中的一步下面列出各次访问，点哪次跳到哪次；正在看的那次标着“在看”', async () => {
+  it('the selected step lists its visits below it and clicking one jumps to it; the one being viewed is marked “viewing”', async () => {
     const onRecord = vi.fn(), onSelect = vi.fn()
     ruler(makeTaskDetail('project'), { onRecord, onSelect })
-    const visits = screen.getByRole('list', { name: '访问与重试记录' })
+    const visits = screen.getByRole('list', { name: 'Visits and retries' })
     const items = within(visits).getAllByRole('button')
-    expect(items.map((item) => item.textContent)).toEqual(['第 1 次 · 已完成', '第 2 次 · 阻塞 · 在看'])
+    expect(items.map((item) => item.textContent)).toEqual(['Visit 1 · Completed', 'Visit 2 · Blocked · viewing'])
     expect(items[1]).toHaveAttribute('aria-current', 'true')
     await userEvent.click(items[0])
     expect(onRecord).toHaveBeenCalledWith('check', oldNodeId)
-    await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
     expect(onSelect).toHaveBeenCalledWith('finish')
   })
 
-  it('任务完成后没有当前步，底部写“已全部走完”', () => {
+  it('once the task is completed there is no current step, and the bottom says “all steps done”', () => {
     const detail = makeTaskDetail('project')
     detail.task = { ...detail.task, status: 'completed', currentStepId: null, currentNodeRunId: null }
     expect(workflowPosition(detail)).toEqual({ at: 2, total: 2, done: true })
     ruler(detail, { selected: null })
-    expect(screen.getByText('已全部走完')).toBeInTheDocument()
+    expect(screen.getByText('all steps done')).toBeInTheDocument()
     expect(screen.queryByRole('button', { current: 'step' })).not.toBeInTheDocument()
   })
 })
 
-describe('窄屏的步骤小标签', () => {
-  it('一排步骤小标签：当前步黄色、走完的藏青带对勾、没到的虚线；正在看的一步按下（aria-pressed），点一下选中', async () => {
+describe('small step tags on narrow screens', () => {
+  it('a row of small step tags: the current step yellow, done steps navy with a check mark, steps not reached dashed; the step being viewed is pressed (aria-pressed), and a click selects it', async () => {
     const onSelect = vi.fn()
     const detail = detailWithRework()
     render(<WorkflowChips detail={detail} selected="check" onSelect={onSelect} />)
-    const nav = screen.getByRole('navigation', { name: '固定流程' })
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
     const [check, finish] = within(nav).getAllByRole('button')
     expect(check).toHaveAttribute('aria-current', 'step')
     expect(check).toHaveAttribute('aria-pressed', 'true')

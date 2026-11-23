@@ -3,10 +3,10 @@ import { waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from './query-client'
 
-describe('查询客户端', () => {
+describe('query client', () => {
   afterEach(() => onlineManager.setOnline(true))
 
-  it('浏览器判断离线时，查询与修改仍照常发往本机服务端', async () => {
+  it('when the browser considers itself offline, queries and mutations still go to the local server as usual', async () => {
     onlineManager.setOnline(false)
     const client = createQueryClient()
     const queryFn = vi.fn(async () => 1)

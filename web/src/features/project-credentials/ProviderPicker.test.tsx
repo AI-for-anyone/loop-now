@@ -23,7 +23,7 @@ const catalog: Schemas['ModelProvider'][] = [
   // The local Claude Code: it uses its own login on this machine and has no project account.
   { ...provider('claude-code', 4, []), name: 'Claude Code', source: 'local_cli', runtime: 'claude-code' },
 ]
-const codexAccount = projectAccount({ id: '10000000-0000-7000-8000-000000000002', provider: 'openai-codex', authMethod: 'oauth', status: 'logged_in', name: 'Codex 账号' })
+const codexAccount = projectAccount({ id: '10000000-0000-7000-8000-000000000002', provider: 'openai-codex', authMethod: 'oauth', status: 'logged_in', name: 'Codex account' })
 
 function start(accounts: Schemas['ProjectCredentialAccount'][] = [codexAccount], providers: Schemas['ModelProvider'][] = catalog) {
   const bodies: unknown[] = []
@@ -41,116 +41,116 @@ function start(accounts: Schemas['ProjectCredentialAccount'][] = [codexAccount],
 const names = (scope: HTMLElement, role: 'option' | 'button') => within(scope).getAllByRole(role).map(item => item.querySelector('.font-bold')?.textContent ?? item.textContent)
 const option = (name: string) => screen.getByRole('option', { name: new RegExp(`^${name}`) })
 
-describe('模型提供方选择器', () => {
-  it('插件注册的提供方单独成"插件提供"一组：显示扩展给的名称、id 和插件，可按插件名搜索，选中后同样标出插件', async () => {
+describe('Model provider picker', () => {
+  it('providers registered by plugins form their own "From plugins" group: shows the extension name, id and plugin, can be searched by plugin name, and still names the plugin once chosen', async () => {
     const { user } = start([], [...catalog, pluginProvider('grok-cli'), pluginProvider('plain-plugin', { name: null, pluginDisplayName: null, pluginId: 'plain' })])
-    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
-    const group = await screen.findByRole('group', { name: '插件提供' })
+    await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
+    const group = await screen.findByRole('group', { name: 'From plugins' })
     expect(names(group, 'option')).toEqual(['Grok CLI', 'plain-plugin'])
-    expect(option('Grok CLI')).toHaveTextContent(/Grok CLIgrok-cli插件 · Grok 订阅登录2 个模型$/)
-    expect(option('plain-plugin')).toHaveTextContent(/插件 · plain/)
-    expect(within(screen.getByRole('group', { name: '其他' })).queryByRole('option', { name: /grok/ })).toBeNull()
-    await user.type(screen.getByRole('searchbox', { name: '搜索提供方' }), '订阅')
+    expect(option('Grok CLI')).toHaveTextContent(/Grok CLIgrok-cliPlugin · Grok subscriptionLogin2 models$/)
+    expect(option('plain-plugin')).toHaveTextContent(/Plugin · plain/)
+    expect(within(screen.getByRole('group', { name: 'Other' })).queryByRole('option', { name: /grok/ })).toBeNull()
+    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'subscription')
     expect(screen.getAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent)).toEqual(['Grok CLI'])
     await user.click(option('Grok CLI'))
-    const chosen = screen.getByRole('group', { name: '添加模型账号 · 提供方' })
+    const chosen = screen.getByRole('group', { name: 'Add model account · provider' })
     expect(chosen).toHaveTextContent('Grok CLI')
     expect(chosen).toHaveTextContent('grok-cli')
-    expect(chosen).toHaveTextContent('插件 · Grok 订阅')
+    expect(chosen).toHaveTextContent('Plugin · Grok subscription')
   })
 
-  it('打开面板时搜索框聚焦；常用提供方在顶部，已有账号的排最前；列表按用途分组，没有模型的、不能录入的不显示', async () => {
+  it('opening the panel focuses the search box; common providers are at the top with those that have accounts first; the list is grouped by purpose, and providers without models or that cannot be entered are hidden', async () => {
     const { user } = start()
-    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
-    expect(screen.getByRole('searchbox', { name: '搜索提供方' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
+    expect(screen.getByRole('searchbox', { name: 'Search providers' })).toHaveFocus()
     await screen.findByRole('option', { name: /^Anthropic/ })
-    const chips = within(screen.getByRole('group', { name: '常用提供方' })).getAllByRole('button').map(chip => chip.textContent)
+    const chips = within(screen.getByRole('group', { name: 'Common providers' })).getAllByRole('button').map(chip => chip.textContent)
     expect(chips).toEqual(['OpenAI Codex', 'Anthropic', 'DeepSeek', 'Moonshot Kimi'])
 
-    expect(names(screen.getByRole('group', { name: '模型厂商' }), 'option')).toEqual(['OpenAI Codex', 'Anthropic'])
-    expect(names(screen.getByRole('group', { name: '国内厂商' }), 'option')).toEqual(['DeepSeek', 'Moonshot Kimi', '智谱 Z.ai'])
-    expect(names(screen.getByRole('group', { name: '聚合与网关' }), 'option')).toEqual(['OpenRouter'])
-    expect(names(screen.getByRole('group', { name: '其他' }), 'option')).toEqual(['zz-new'])
+    expect(names(screen.getByRole('group', { name: 'Model makers' }), 'option')).toEqual(['OpenAI Codex', 'Anthropic'])
+    expect(names(screen.getByRole('group', { name: 'Chinese providers' }), 'option')).toEqual(['DeepSeek', 'Moonshot Kimi', 'Zhipu Z.ai'])
+    expect(names(screen.getByRole('group', { name: 'Aggregators & gateways' }), 'option')).toEqual(['OpenRouter'])
+    expect(names(screen.getByRole('group', { name: 'Other' }), 'option')).toEqual(['zz-new'])
     expect(screen.queryByRole('option', { name: /typesafe/ })).toBeNull()
     expect(screen.queryByRole('option', { name: /no-login/ })).toBeNull()
     expect(screen.queryByRole('option', { name: /Claude Code|claude-code/ })).toBeNull()
 
-    expect(option('OpenAI Codex')).toHaveTextContent(/openai-codex.*已有 1 个.*登录.*7 个模型/)
-    expect(option('Anthropic')).toHaveTextContent(/anthropic.*API 密钥.*17 个模型/)
+    expect(option('OpenAI Codex')).toHaveTextContent(/openai-codex.*1 account.*Login.*7 models/)
+    expect(option('Anthropic')).toHaveTextContent(/anthropic.*API key.*17 models/)
     // Regional variants collapse into one entry: it shows the first id and how many more
     // there are, and the model count is the largest among the variants, not their sum.
-    expect(option('Moonshot Kimi')).toHaveTextContent(/moonshotai \+1.*4 个模型/)
+    expect(option('Moonshot Kimi')).toHaveTextContent(/moonshotai \+1.*4 models/)
     expect(within(option('zz-new')).queryByText('zz-new', { selector: '.font-mono' })).toBeNull()
   })
 
-  it('输入即筛：匹配中文名、英文名、id 和别名；没有模型的搜索时出现；没有匹配时说明去哪加自定义 Provider', async () => {
+  it('filters as you type: matches the display name, id and aliases; providers without models appear when searching; with no match it says where to add a custom provider', async () => {
     const { user } = start()
-    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
+    await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
     await screen.findByRole('option', { name: /^Anthropic/ })
-    const search = screen.getByRole('searchbox', { name: '搜索提供方' })
+    const search = screen.getByRole('searchbox', { name: 'Search providers' })
     const results = async (query: string) => { await user.clear(search); if (query) await user.type(search, query); return screen.queryAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent) }
-    expect(await results('智谱')).toEqual(['智谱 Z.ai'])
-    expect(await results('zhipu')).toEqual(['智谱 Z.ai'])
+    expect(await results('z.ai')).toEqual(['Zhipu Z.ai'])
+    expect(await results('zhipu')).toEqual(['Zhipu Z.ai'])
     expect(await results('kimi')).toEqual(['Moonshot Kimi'])
-    expect(await results('月之暗面')).toEqual(['Moonshot Kimi'])
+    expect(await results('moonshot')).toEqual(['Moonshot Kimi'])
     expect(await results('moonshotai-cn')).toEqual(['Moonshot Kimi'])
     expect(await results('claude')).toEqual(['Anthropic'])
-    expect(screen.queryByRole('group', { name: '常用提供方' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Common providers' })).toBeNull()
     expect(await results('typesafe')).toEqual(['typesafe'])
-    expect(await results('没有这家')).toEqual([])
-    expect(screen.getByRole('status')).toHaveTextContent('没有匹配的提供方。要加自定义 Provider，去全局设置的 models.json。')
+    expect(await results('no such vendor')).toEqual([])
+    expect(screen.getByRole('status')).toHaveTextContent('No matching provider. To add a custom provider, edit models.json in global settings.')
     expect(await results('')).toContain('Anthropic')
-    expect(screen.getByRole('group', { name: '常用提供方' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Common providers' })).toBeInTheDocument()
   })
 
-  it('地区变体：选中后在选中条里用分段按钮切区域，已填的内容保留，写入账号的是具体 id；密钥型直接出表单，按钮是"保存密钥"', async () => {
+  it('regional variants: once chosen, a segmented control in the chosen bar switches the region, filled-in values are kept, and the account gets the specific id; a key provider shows the form directly with a "Save key" button', async () => {
     const { user, bodies } = start()
-    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
+    await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
     await user.click(await screen.findByRole('option', { name: /^Moonshot Kimi/ }))
     expect(screen.queryByRole('listbox')).toBeNull()
-    const bar = screen.getByRole('group', { name: '添加模型账号 · 提供方' })
+    const bar = screen.getByRole('group', { name: 'Add model account · provider' })
     expect(bar).toHaveTextContent('Moonshot Kimi')
     expect(bar).toHaveTextContent('moonshotai')
-    expect(within(bar).getByRole('radio', { name: '国际' })).toBeChecked()
-    expect(within(bar).getByRole('button', { name: '更换' })).toHaveFocus()
-    await user.type(screen.getByLabelText('账号名称'), 'Kimi 中国'); await user.type(screen.getByLabelText('API Key'), 'variant-secret')
-    await user.click(within(bar).getByRole('radio', { name: '中国' }))
+    expect(within(bar).getByRole('radio', { name: 'International' })).toBeChecked()
+    expect(within(bar).getByRole('button', { name: 'Change' })).toHaveFocus()
+    await user.type(screen.getByLabelText('Account name'), 'Kimi China'); await user.type(screen.getByLabelText('API Key'), 'variant-secret')
+    await user.click(within(bar).getByRole('radio', { name: 'China' }))
     expect(bar).toHaveTextContent('moonshotai-cn')
     expect(screen.getByLabelText('API Key')).toHaveValue('variant-secret')
-    expect(await screen.findByText(/当前没有匹配的使用者/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '保存密钥' }))
-    await waitFor(() => expect(bodies).toEqual([{ purpose: 'model', provider: 'moonshotai-cn', name: 'Kimi 中国', credential: { type: 'api_key', key: 'variant-secret' } }]))
+    expect(await screen.findByText(/No matching users right now/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save key' }))
+    await waitFor(() => expect(bodies).toEqual([{ purpose: 'model', provider: 'moonshotai-cn', name: 'Kimi China', credential: { type: 'api_key', key: 'variant-secret' } }]))
     // After saving, it collapses back to the trigger button.
-    expect(await screen.findByRole('button', { name: '添加模型账号 · 提供方' })).toHaveAttribute('aria-expanded', 'false')
+    expect(await screen.findByRole('button', { name: 'Add model account · provider' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByLabelText('API Key')).toBeNull()
   })
 
-  it('"更换"重开面板时表单先藏起来，Esc 收起后原样回来；表单里点取消回到面板；登录型的按钮是"登录 X"', async () => {
+  it('when "Change" reopens the panel the form is hidden first and comes back unchanged after Esc; Cancel in the form returns to the panel; a login provider has a "Log in to X" button', async () => {
     const { user } = start()
-    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
+    await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
     await user.click(await screen.findByRole('option', { name: /^Anthropic/ }))
     await user.type(screen.getByLabelText('API Key'), 'kept-secret')
-    await user.click(screen.getByRole('button', { name: '更换' }))
-    expect(screen.getByRole('searchbox', { name: '搜索提供方' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    expect(screen.getByRole('searchbox', { name: 'Search providers' })).toHaveFocus()
     expect(screen.getByLabelText('API Key')).not.toBeVisible()
     await user.keyboard('{Escape}')
     expect(screen.getByLabelText('API Key')).toBeVisible()
     expect(screen.getByLabelText('API Key')).toHaveValue('kept-secret')
-    expect(screen.getByRole('button', { name: '更换' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus()
 
-    await user.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.getByRole('searchbox', { name: '搜索提供方' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('searchbox', { name: 'Search providers' })).toHaveFocus()
     await user.click(screen.getByRole('option', { name: /^OpenAI Codex/ }))
-    expect(await screen.findByRole('button', { name: '登录 OpenAI Codex' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Log in to OpenAI Codex' })).toBeInTheDocument()
     expect(screen.queryByLabelText('API Key')).toBeNull()
   })
 
-  it('键盘：上下键移动（搜索框指向当前项）、回车选中、Esc 收起并把焦点还给按钮', async () => {
+  it('keyboard: arrow keys move (the search box points at the current item), Enter chooses, Esc closes and returns focus to the button', async () => {
     const { user } = start()
-    const trigger = screen.getByRole('button', { name: '添加模型账号 · 提供方' })
+    const trigger = screen.getByRole('button', { name: 'Add model account · provider' })
     await user.click(trigger)
     await screen.findByRole('option', { name: /^Anthropic/ })
-    const search = screen.getByRole('searchbox', { name: '搜索提供方' })
+    const search = screen.getByRole('searchbox', { name: 'Search providers' })
     const current = () => document.getElementById(search.getAttribute('aria-activedescendant') ?? '')?.querySelector('.font-bold')?.textContent
     expect(search).not.toHaveAttribute('aria-activedescendant')
     await user.keyboard('{ArrowDown}')
@@ -167,31 +167,31 @@ describe('模型提供方选择器', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
     await user.keyboard('{Enter}')
-    expect(screen.getByRole('listbox', { name: '提供方' })).toBeInTheDocument()
-    await user.type(screen.getByRole('searchbox', { name: '搜索提供方' }), 'zai')
+    expect(screen.getByRole('listbox', { name: 'Providers' })).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'zai')
     await user.keyboard('{ArrowDown}{Enter}')
-    expect(screen.getByRole('group', { name: '添加模型账号 · 提供方' })).toHaveTextContent(/智谱 Z\.ai.*zai/)
-    expect(screen.getByRole('radio', { name: '中国 Coding' })).not.toBeChecked()
+    expect(screen.getByRole('group', { name: 'Add model account · provider' })).toHaveTextContent(/Zhipu Z\.ai.*zai/)
+    expect(screen.getByRole('radio', { name: 'China Coding' })).not.toBeChecked()
   })
 
-  it('账号列表每一行显示提供方的名称、id、认证方式和本地格式的更新时间；不在表里的 id 直接显示 id', async () => {
-    start([codexAccount, projectAccount({ provider: 'zz-new', name: '新提供方账号' })])
-    const codex = (await screen.findByRole('heading', { name: 'Codex 账号' })).closest('li')!
+  it('each account row shows the provider name, id, auth method and the update time in the local format; an id not in the table is shown as is', async () => {
+    start([codexAccount, projectAccount({ provider: 'zz-new', name: 'New provider account' })])
+    const codex = (await screen.findByRole('heading', { name: 'Codex account' })).closest('li')!
     expect(within(codex).getByText('OpenAI Codex')).toBeInTheDocument()
     expect(within(codex).getByText('openai-codex')).toBeInTheDocument()
-    expect(within(codex).getByText('登录')).toBeInTheDocument()
+    expect(within(codex).getByText('Login')).toBeInTheDocument()
     const updated = codex.querySelector('time')!
     expect(updated).toHaveAttribute('dateTime', codexAccount.updatedAt)
-    expect(updated).toHaveTextContent(zhCN.chat.time(codexAccount.updatedAt))
+    expect(updated).toHaveTextContent(enUS.chat.time(codexAccount.updatedAt))
     expect(codex).not.toHaveTextContent(codexAccount.updatedAt)
-    const unknown = screen.getByRole('heading', { name: '新提供方账号' }).closest('li')!
+    const unknown = screen.getByRole('heading', { name: 'New provider account' }).closest('li')!
     expect(within(unknown).getAllByText('zz-new')).toHaveLength(1)
-    expect(within(unknown).getByText('API 密钥')).toBeInTheDocument()
+    expect(within(unknown).getByText('API key')).toBeInTheDocument()
   })
 })
 
-describe('提供方小表', () => {
-  it('每个 id 只出现一次；收了几个 id 的条目，中英文都有同样多的变体名，只有一个的没有', () => {
+describe('Provider table', () => {
+  it('each id appears only once; an entry with several ids has as many variant names in both Chinese and English, and one with a single id has none', () => {
     const ids = providerCatalog.flatMap(entry => entry.ids)
     expect(new Set(ids).size).toBe(ids.length)
     for (const table of [zhCN, enUS]) {

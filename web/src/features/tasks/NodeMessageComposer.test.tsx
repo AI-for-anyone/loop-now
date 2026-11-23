@@ -26,97 +26,97 @@ function Harness({ cap = capability, current = true, disabled = false }: { cap?:
   const [action, setAction] = useState<NodeDraft['action']>()
   return <NodeMessageComposer taskId={taskId} draft={{ ...draft, action }} onAction={setAction} current={current} disabled={disabled} capability={cap} text={text} onChange={setText} onAccepted={sent => setText(old => old === sent ? '' : old)} />
 }
-it('默认queue严格绑定原四目标，只显示已接收而非Agent已回复', async () => {
+it('queues by default, strictly bound to the original four targets, and shows only received, not replied by the Agent', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />)
-  await userEvent.type(screen.getByRole('textbox'), '原节点普通消息'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.type(screen.getByRole('textbox'), 'plain message to the original node'); await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   expect(await screen.findByText(copy.accepted)).toBeVisible()
-  expect(bodies).toHaveLength(1); expect(bodies[0]).toMatchObject({ expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, text: '原节点普通消息', whenBusy: 'queue' })
+  expect(bodies).toHaveLength(1); expect(bodies[0]).toMatchObject({ expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, text: 'plain message to the original node', whenBusy: 'queue' })
   expect(bodies[0].actionId).toMatch(/^[\da-f-]{36}$/)
   expect(screen.getByRole('textbox')).toHaveValue('')
 })
-it('不再提供忙时处理选择，一律排队；输入法回车/ShiftEnter和空消息不会提交', async () => {
+it('no longer offers a when-busy choice and always queues; IME Enter, Shift+Enter and empty messages do not submit', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />)
-  await userEvent.click(screen.getByRole('button', { name: '发送' })); expect(screen.getByRole('alert')).toBeVisible(); expect(bodies).toHaveLength(0)
-  const box = screen.getByRole('textbox'); await userEvent.type(box, '输入法内容')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' })); expect(screen.getByRole('alert')).toBeVisible(); expect(bodies).toHaveLength(0)
+  const box = screen.getByRole('textbox'); await userEvent.type(box, 'IME text')
   fireEvent.keyDown(box, { key: 'Enter', isComposing: true }); fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 }); fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
   expect(bodies).toHaveLength(0)
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument(); fireEvent.keyDown(box, { key: 'Enter' })
   await waitFor(() => expect(bodies).toHaveLength(1)); expect(bodies[0].whenBusy).toBe('queue')
 })
-it('发送中继续编辑，原回执不会清掉新草稿', async () => {
+it('editing continues while sending, and the original receipt does not clear the new draft', async () => {
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; await gate; return HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
-  await userEvent.type(box, '已提交内容'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(screen.getByRole('button', { name: '正在发送…' })).toBeDisabled()
-  await userEvent.clear(box); await userEvent.type(box, '新的编辑草稿'); release()
-  await screen.findByText(copy.accepted); expect(box).toHaveValue('新的编辑草稿')
+  await userEvent.type(box, 'submitted text'); await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  await userEvent.clear(box); await userEvent.type(box, 'new edited draft'); release()
+  await screen.findByText(copy.accepted); expect(box).toHaveValue('new edited draft')
 })
-it('409只发送一次、保原草稿且不降级旧接口或重新发', async () => {
+it('409 sends only once, keeps the original draft, and neither falls back to the old API nor resends', async () => {
   let posts = 0
   server.use(http.post(endpoint, () => { posts++; return HttpResponse.json(errorBody('task_conflict', 'The node is no longer the current run'), { status: 409 }) }))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
-  await userEvent.type(box, '保留在旧节点'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByText(/The node is no longer the current run/)).toBeVisible(); expect(box).toHaveValue('保留在旧节点')
+  await userEvent.type(box, 'kept on the old node'); await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  expect(await screen.findByText(/The node is no longer the current run/)).toBeVisible(); expect(box).toHaveValue('kept on the old node')
   await new Promise(resolve => setTimeout(resolve, 100)); expect(posts).toBe(1)
 })
-it('结果未知不自动新动作，明确手动重试沿用原action/内容/目标，期间新草稿不清', async () => {
+it('an unknown result starts no new action automatically; an explicit manual retry reuses the original action, text and target, and a new draft typed meanwhile is not cleared', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 }) : HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
-  await userEvent.type(box, '原动作内容'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  await screen.findByRole('button', { name: '重试确认原消息' }); expect(bodies).toHaveLength(1)
-  await userEvent.clear(box); await userEvent.type(box, '之后的新草稿'); fireEvent.keyDown(box, { key: 'Enter' }); expect(bodies).toHaveLength(1)
-  await userEvent.click(screen.getByRole('button', { name: '重试确认原消息' })); await screen.findByText(copy.accepted)
-  expect(bodies).toHaveLength(2); expect(bodies[1]).toEqual(bodies[0]); expect(box).toHaveValue('之后的新草稿')
+  await userEvent.type(box, 'original action text'); await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await screen.findByRole('button', { name: 'Retry checking the original message' }); expect(bodies).toHaveLength(1)
+  await userEvent.clear(box); await userEvent.type(box, 'later new draft'); fireEvent.keyDown(box, { key: 'Enter' }); expect(bodies).toHaveLength(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Retry checking the original message' })); await screen.findByText(copy.accepted)
+  expect(bodies).toHaveLength(2); expect(bodies[1]).toEqual(bodies[0]); expect(box).toHaveValue('later new draft')
 })
-it.each(['nodeRunId', 'agentId', 'runtimeId', 'taskId'] as const)('能力%s不匹配固定草稿目标时禁发', field => {
+it.each(['nodeRunId', 'agentId', 'runtimeId', 'taskId'] as const)('sending is disabled when the capability %s does not match the fixed draft target', field => {
   renderWithQuery(<Harness cap={{ ...capability, [field]: 'other-target' }} />)
-  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
 })
-it('历史只读，无发送；原题回答权限不参与普通消息能力', () => {
+it('history is read-only with no send; permission to answer the original question does not count for the plain message capability', () => {
   renderWithQuery(<Harness current={false} />)
-  expect(screen.getByRole('textbox')).toHaveAttribute('readonly'); expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument()
+  expect(screen.getByRole('textbox')).toHaveAttribute('readonly'); expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
 })
-it('错误目标回执不清稿、不宣称接收或自动改投', async () => {
+it('a receipt for the wrong target does not clear the draft, claim it was received, or redirect automatically', async () => {
   server.use(http.post(endpoint, async ({ request }) => HttpResponse.json({ ...receipt(await request.json() as Schemas['TaskNodeInboxInput']), nodeRunId: 'other-node' }, { status: 201 })))
   renderWithQuery(<Harness />); const box = screen.getByRole('textbox')
-  await userEvent.type(box, '不能错误清除'); await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  await screen.findByText(/Inbox 或运行记录返回的原任务/); expect(box).toHaveValue('不能错误清除')
+  await userEvent.type(box, 'must not be cleared by mistake'); await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await screen.findByText(/The task, run, Agent, or instance returned by the Inbox or run log/); expect(box).toHaveValue('must not be cleared by mistake')
   expect(screen.queryByText(copy.accepted)).not.toBeInTheDocument()
 })
 
-it('未知结果按原action GET恢复，404不重POST/换ID；历史仍可读原回执', async () => {
+it('an unknown result recovers by a GET of the original action, a 404 neither re-POSTs nor changes the ID, and history can still read the original receipt', async () => {
   const user = userEvent.setup(), bodies: Schemas['TaskNodeInboxInput'][] = []; let found = false
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(errorBody('internal_error'), { status: 503 }) }),
     http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-actions/:actionId`), ({ params }) => { expect(params.actionId).toBe(bodies[0].actionId); return found ? HttpResponse.json(receipt(bodies[0])) : HttpResponse.json(errorBody('not_found', 'The action is not visible yet'), { status: 404 }) }))
-  const env = renderWithQuery(<Harness />); await user.type(screen.getByRole('textbox'), '保持原动作'); await user.click(screen.getByRole('button', { name: '发送' })); await screen.findByRole('button', { name: '读取原发送结果' })
-  await user.click(screen.getByRole('button', { name: '读取原发送结果' })); await screen.findByText(copy.notFound); expect(bodies).toHaveLength(1)
+  const env = renderWithQuery(<Harness />); await user.type(screen.getByRole('textbox'), 'keep the original action'); await user.click(screen.getByRole('button', { name: 'Send' })); await screen.findByRole('button', { name: 'Read the original send result' })
+  await user.click(screen.getByRole('button', { name: 'Read the original send result' })); await screen.findByText(copy.notFound); expect(bodies).toHaveLength(1)
   env.rerender(<Harness current={false} />); found = true
-  await user.click(screen.getByRole('button', { name: '读取原发送结果' })); await screen.findByText(copy.accepted); expect(bodies).toHaveLength(1); expect(screen.getByRole('textbox')).toHaveValue('')
+  await user.click(screen.getByRole('button', { name: 'Read the original send result' })); await screen.findByText(copy.accepted); expect(bodies).toHaveLength(1); expect(screen.getByRole('textbox')).toHaveValue('')
 })
-it('任务节点把 /resume 当普通节点消息，不弹平台命令确认', async () => {
+it('a task node treats /resume as a plain node message, without a platform command confirmation', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />)
   await userEvent.type(screen.getByRole('textbox'), '/resume full-session-id')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(bodies).toHaveLength(1))
   expect(bodies[0].text).toBe('/resume full-session-id')
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 })
-it('⌘／Ctrl+Enter 作为打断发到原节点；输入框下方说明按键', async () => {
+it('⌘/Ctrl+Enter sends to the original node as an interrupt; the keys are explained below the input', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))
   renderWithQuery(<Harness />)
-  expect(screen.getByText('立即打断')).toBeVisible()
-  const box = screen.getByRole('textbox'); await userEvent.type(box, '先停下{Meta>}{Enter}{/Meta}')
-  await waitFor(() => expect(bodies).toHaveLength(1)); expect(bodies[0]).toMatchObject({ text: '先停下', whenBusy: 'interrupt', expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId })
+  expect(screen.getByText('to interrupt')).toBeVisible()
+  const box = screen.getByRole('textbox'); await userEvent.type(box, 'stop first{Meta>}{Enter}{/Meta}')
+  await waitFor(() => expect(bodies).toHaveLength(1)); expect(bodies[0]).toMatchObject({ text: 'stop first', whenBusy: 'interrupt', expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId })
   await waitFor(() => expect(box).toHaveValue(''))
-  await userEvent.type(box, '也可以用 Ctrl{Control>}{Enter}{/Control}')
+  await userEvent.type(box, 'Ctrl works too{Control>}{Enter}{/Control}')
   await waitFor(() => expect(bodies).toHaveLength(2)); expect(bodies[1].whenBusy).toBe('interrupt')
 })

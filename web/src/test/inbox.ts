@@ -13,13 +13,13 @@ const id = () => `00000000-0000-7000-a000-${String(++seq).padStart(12, '0')}`
 let clock = Date.parse('2026-10-12T08:00:00Z')
 const nextTime = () => new Date((clock += 60_000)).toISOString()
 
-export const consoleParty: Participant = { kind: 'console', id: null, address: '@console', name: '控制台', deleted: false, pluginId: null, channelId: null }
+export const consoleParty: Participant = { kind: 'console', id: null, address: '@console', name: 'Console', deleted: false, pluginId: null, channelId: null }
 
 export const agentParty = (agent: Pick<Schemas['Agent'], 'id' | 'name' | 'address'>, deleted = false): Participant => ({
   kind: 'agent',
   id: agent.id,
   address: agent.address,
-  name: deleted ? '已删除 Agent' : agent.name,
+  name: deleted ? 'Deleted Agent' : agent.name,
   deleted,
   pluginId: null,
   channelId: null,
@@ -29,7 +29,7 @@ export const externalParty = (identity: Pick<Schemas['ExternalIdentity'], 'id' |
   kind: 'external',
   id: identity.id,
   address: `@${identity.name}`,
-  name: deleted ? '已删除身份' : identity.name,
+  name: deleted ? 'Deleted identity' : identity.name,
   deleted,
   pluginId: null,
   channelId: null,
@@ -37,7 +37,7 @@ export const externalParty = (identity: Pick<Schemas['ExternalIdentity'], 'id' |
 
 export function makeInboxMessage(overrides: Partial<Message> & Pick<Message, 'from' | 'to'>): Message {
   const messageId = overrides.id ?? id()
-  const text = overrides.text ?? '你好'
+  const text = overrides.text ?? 'Hello'
   return {
     id: messageId,
     threadId: overrides.threadId ?? messageId,

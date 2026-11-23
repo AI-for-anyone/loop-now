@@ -18,8 +18,8 @@ import { AccountImpact } from './ProjectAccounts'
 import { CliToolStatus } from '@/features/agent-config/CredentialStatus'
 
 const agent = makeAgent()
-const a = projectAccount({ purpose: 'cli', provider: null, cli: 'psql', name: '连接A', authMethod: null })
-const b = projectAccount({ ...a, id: '10000000-0000-7000-8000-000000000002', name: '连接B' })
+const a = projectAccount({ purpose: 'cli', provider: null, cli: 'psql', name: 'Connection A', authMethod: null })
+const b = projectAccount({ ...a, id: '10000000-0000-7000-8000-000000000002', name: 'Connection B' })
 function connections(overrides: Partial<Schemas['DBConnections']> = {}): Schemas['DBConnections'] {
   return { agentId: agent.id, projectId: defaultProject.id, cli: 'psql', configVersion: 1, credentialsRevision: 1, mode: 'explicit_set', accountIds: [], connections: [], status: 'not_configured', ...overrides }
 }
@@ -31,8 +31,8 @@ function renderDB(read: () => Schemas['DBConnections'], accounts = [a, b]) {
   return renderRoutes([{ path: '/', element: <ScopeContext value={{ kind: 'project', project: defaultProject }}><DraftNavigationGuard><AgentDBConnections agentId={agent.id} configVersion={1} cli="psql" /></DraftNavigationGuard></ScopeContext> }], '/')
 }
 
-describe('项目Agent DB集合正式HTTP fixture', () => {
-  it('干净表单跟随同configVersion下解析集合变化，不保留旧自动账号', async () => {
+describe('Project Agent DB connection sets, formal HTTP fixture', () => {
+  it('a clean form follows resolved set changes under the same configVersion and does not keep the old automatic account', async () => {
     let data = connections({ accountIds: [a.id], status: 'resolved', connections: [{ accountId: a.id, name: a.name, versionId: a.currentVersionId, status: 'resolved' }] })
     const env = renderDB(() => data)
     await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
@@ -42,20 +42,20 @@ describe('项目Agent DB集合正式HTTP fixture', () => {
     await waitFor(() => screen.getAllByRole('checkbox').forEach(box => expect(box).not.toBeChecked()))
   })
 
-  it('无集合沿旧single编辑，切显式空集合后移除旧写入口', async () => {
+  it('without a set it keeps the legacy single editing; after switching to an explicit empty set the legacy write entry is removed', async () => {
     const user = userEvent.setup()
     let data = connections({ mode: 'legacy_single' })
     const selection = emptySelections({ ...agent, clis: [{ name: 'psql', hasTemplate: true, credential: null }] })
     server.use(http.get(apiUrl('/agents/:agentId/credential-selections'), () => HttpResponse.json(selection)),
       http.put(apiUrl('/agents/:agentId/db-connections/:cli'), () => { data = connections(); return HttpResponse.json(data) }))
     renderDB(() => data, [])
-    expect(await screen.findByLabelText('psql 项目账号')).toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: '保存空集合（不授权连接）' }))
-    await waitFor(() => expect(screen.queryByLabelText('psql 项目账号')).toBeNull())
-    expect(await screen.findByText('当前模式：明确连接集合（旧单账号编辑已停用） · 未配置连接')).toBeInTheDocument()
+    expect(await screen.findByLabelText('psql project account')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Save empty set (grant no connections)' }))
+    await waitFor(() => expect(screen.queryByLabelText('psql project account')).toBeNull())
+    expect(await screen.findByText('Current mode: Explicit connection set (legacy single-account editing is off) · No connection configured')).toBeInTheDocument()
   })
 
-  it('账号库两候选不自动授权，按稳定ID一次全量PUT，不写旧single', async () => {
+  it('two candidates in the account store are not granted automatically; one full PUT by stable IDs, nothing written to the legacy single', async () => {
     const user = userEvent.setup(), writes: unknown[] = []
     let data = connections(), singles = 0
     server.use(http.put(apiUrl('/agents/:agentId/db-connections/:cli'), async ({ request }) => {
@@ -65,51 +65,51 @@ describe('项目Agent DB集合正式HTTP fixture', () => {
     const boxes = await screen.findAllByRole('checkbox')
     expect(boxes).toHaveLength(2); boxes.forEach(box => expect(box).not.toBeChecked())
     expect(screen.queryByRole('combobox')).toBeNull()
-    await user.click(boxes[1]); await user.click(boxes[0]); await user.click(screen.getByRole('button', { name: '保存连接集合' }))
+    await user.click(boxes[1]); await user.click(boxes[0]); await user.click(screen.getByRole('button', { name: 'Save connection set' }))
     await waitFor(() => expect(writes).toEqual([{ accountIds: [a.id, b.id], expectedConfigVersion: 1 }]))
     expect(singles).toBe(0)
   })
 
-  it('显式清空PUT[]与DELETE恢复旧模式有不同请求/不删除账号', async () => {
+  it('an explicit empty PUT [] and a DELETE back to legacy mode are different requests and delete no account', async () => {
     const user = userEvent.setup(), writes: unknown[] = [], deletes: string[] = []
     let data = connections({ accountIds: [a.id], connections: [{ accountId: a.id, name: a.name, versionId: a.currentVersionId, status: 'resolved' }], status: 'resolved' })
     server.use(http.put(apiUrl('/agents/:agentId/db-connections/:cli'), async ({ request }) => { writes.push(await request.json()); data = connections(); return HttpResponse.json(data) }),
       http.delete(apiUrl('/agents/:agentId/db-connections/:cli'), ({ request }) => { deletes.push(new URL(request.url).search); return HttpResponse.json(data) }))
     renderDB(() => data)
     await user.click((await screen.findAllByRole('checkbox'))[0])
-    await user.click(screen.getByRole('button', { name: '保存空集合（不授权连接）' }))
+    await user.click(screen.getByRole('button', { name: 'Save empty set (grant no connections)' }))
     await waitFor(() => expect(writes).toEqual([{ accountIds: [], expectedConfigVersion: 1 }]))
-    await waitFor(() => expect(screen.getByRole('button', { name: '删除集合配置，恢复旧模式' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: '删除集合配置，恢复旧模式' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete the set and switch back to legacy mode' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Delete the set and switch back to legacy mode' }))
     await waitFor(() => expect(deletes).toEqual(['?expectedConfigVersion=1']))
     expect(writes).toHaveLength(1)
   })
 
-  it('412保留集合草稿且仅发一次；取最新失败不能采用，核对后用固定新版本', async () => {
+  it('412 keeps the set draft and sends only once; a failed read of the latest cannot be adopted; after review it saves with the pinned new version', async () => {
     const user = userEvent.setup(), writes: unknown[] = []
     let readFail = false, newest = false
     server.use(http.put(apiUrl('/agents/:agentId/db-connections/:cli'), async ({ request }) => { writes.push(await request.json()); readFail = true; return HttpResponse.json(errorBody('precondition_failed'), { status: 412 }) }))
     const env = renderDB(() => connections())
     server.use(http.get(apiUrl('/agents/:agentId/db-connections/:cli'), () => readFail ? HttpResponse.json(errorBody('internal_error'), { status: 500 }) : HttpResponse.json(connections({ configVersion: newest ? 2 : 1 }))))
-    await user.click((await screen.findAllByRole('checkbox'))[1]); await user.click(screen.getByRole('button', { name: '保存连接集合' }))
-    await screen.findByText('配置已在别处更新，尚未保存本次修改')
+    await user.click((await screen.findAllByRole('checkbox'))[1]); await user.click(screen.getByRole('button', { name: 'Save connection set' }))
+    await screen.findByText('The config was updated elsewhere; your changes weren\'t saved')
     expect((screen.getAllByRole('checkbox'))[1]).toBeChecked()
-    expect(screen.getByRole('button', { name: '已核对，采用此版本' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reviewed, adopt this version' })).toBeDisabled()
     expect(writes).toHaveLength(1)
     readFail = false; newest = true
-    await user.click(screen.getByRole('button', { name: '重新读取最新信息' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: '已核对，采用此版本' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: '已核对，采用此版本' }))
-    await user.click(screen.getByRole('button', { name: '保存连接集合' }))
+    await user.click(screen.getByRole('button', { name: 'Read the latest again' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reviewed, adopt this version' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Reviewed, adopt this version' }))
+    await user.click(screen.getByRole('button', { name: 'Save connection set' }))
     await waitFor(() => expect(writes).toEqual([{ accountIds: [b.id], expectedConfigVersion: 1 }, { accountIds: [b.id], expectedConfigVersion: 2 }]))
     expect(JSON.stringify(env.client.getMutationCache().getAll())).not.toContain('accountIds')
   })
 
-  it('远端更新不覆盖dirty集合，删除成员仍保留原ID/逐项失效，不补选候选B', async () => {
+  it('a remote update does not overwrite a dirty set; a deleted member keeps its original ID and fails on its own, candidate B is not picked instead', async () => {
     const user = userEvent.setup()
     let data = connections({ accountIds: [a.id], status: 'account_deleted', connections: [{ accountId: a.id, name: a.name, versionId: null, status: 'account_deleted' }] })
     const env = renderDB(() => data, [b])
-    expect(await screen.findByText('账号已删除')).toBeInTheDocument()
+    expect(await screen.findByText('Account deleted')).toBeInTheDocument()
     await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
     const boxes = screen.getAllByRole('checkbox'); expect(boxes[0]).toBeChecked(); expect(boxes[1]).not.toBeChecked()
     await user.click(boxes[1])
@@ -117,45 +117,45 @@ describe('项目Agent DB集合正式HTTP fixture', () => {
     await act(() => env.client.invalidateQueries({ queryKey: dbConnectionKey(agent.id, 'psql') }))
     expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     screen.getAllByRole('checkbox').forEach(box => expect(box).toBeChecked())
-    await waitFor(() => expect(screen.getByRole('button', { name: '保存连接集合' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save connection set' })).toBeDisabled())
   })
 })
 
-it('平台psql保留私有单槽，不查询项目DB集合', async () => {
+it('platform psql keeps its private single slot and does not query project DB sets', async () => {
   let dbReads = 0
   server.use(http.get(apiUrl('/agents/:agentId/db-connections/:cli'), () => { dbReads++; return HttpResponse.json(connections()) }))
-  await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'psql', hasTemplate: true, credential: null }] }), templates: [{ name: 'psql', version: '18.3', fields: [{ name: 'password', label: '密码', type: 'secret', required: true }], injection: 'files', install: { status: 'not_installed' }, warnings: [] }] })
-  expect(await screen.findByRole('button', { name: '录入凭证' })).toBeInTheDocument()
-  expect(screen.queryByText('psql 授权连接集合')).toBeNull()
+  await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'psql', hasTemplate: true, credential: null }] }), templates: [{ name: 'psql', version: '18.3', fields: [{ name: 'password', label: 'Password', type: 'secret', required: true }], injection: 'files', install: { status: 'not_installed' }, warnings: [] }] })
+  expect(await screen.findByRole('button', { name: 'Enter credential' })).toBeInTheDocument()
+  expect(screen.queryByText('Granted psql connections')).toBeNull()
   expect(dbReads).toBe(0)
 })
 
-it('正式impact集合成员明确标识连接集合，不冒充自动取用', async () => {
-  server.use(http.get(apiUrl('/projects/:projectId/credential-account-impact'), () => HttpResponse.json({ projectId: defaultProject.id, accountId: a.id, credentialsRevision: 2, agents: [{ agentId: agent.id, name: '数据库助手', mode: 'connection_set', configVersion: 1 }] })))
+it('formal impact marks set members as connection set and does not present them as automatic', async () => {
+  server.use(http.get(apiUrl('/projects/:projectId/credential-account-impact'), () => HttpResponse.json({ projectId: defaultProject.id, accountId: a.id, credentialsRevision: 2, agents: [{ agentId: agent.id, name: 'Database assistant', mode: 'connection_set', configVersion: 1 }] })))
   renderRoutes([{ path: '/', element: <AccountImpact projectId={defaultProject.id} purpose="cli" slot="psql" accountId={a.id} /> }], '/')
-  expect(await screen.findByText(/数据库助手（连接集合）/)).toBeInTheDocument()
-  expect(screen.queryByText(/数据库助手（自动取用）/)).toBeNull()
-  expect(screen.getByText(/删除后明确选择或连接集合中的该项将失效/)).toBeInTheDocument()
+  expect(await screen.findByText(/Database assistant \(connection set\)/)).toBeInTheDocument()
+  expect(screen.queryByText(/Database assistant \(automatic\)/)).toBeNull()
+  expect(screen.getByText(/After deletion, explicit choices or connection-set entries for it become invalid/)).toBeInTheDocument()
 })
 
-it('工具未就绪按正式安装原因展示，不把账号保存当作工具或连接成功', () => {
+it('a tool that is not ready shows the formal install reason and does not treat a saved account as a working tool or connection', () => {
   renderRoutes([{ path: '/', element: <CliToolStatus template={{ name: 'psql', version: '18.3', fields: [], injection: 'files', install: { status: 'failed', error: 'A required runtime library is missing' }, warnings: [] }} /> }], '/')
-  expect(screen.getByText('工具准备：安装失败 · psql v18.3')).toBeInTheDocument()
+  expect(screen.getByText('Tool setup: Install failed · psql v18.3')).toBeInTheDocument()
   expect(screen.getByText('A required runtime library is missing')).toBeInTheDocument()
-  expect(screen.getByText('工具状态与账号录入、远端连接或认证结果分开。')).toBeInTheDocument()
+  expect(screen.getByText('Tool status is separate from account entry, remote connection, and authentication results.')).toBeInTheDocument()
 })
 
-it('正式multiline保留PEM换行，私钥输入遮蔽且只绘制掩码', async () => {
+it('formal multiline keeps PEM line breaks; private key input is masked and only the mask is drawn', async () => {
   const user = userEvent.setup()
   function Fields() {
     const [values, setValues] = useState<Record<string, string>>({})
-    return <CredentialFields fields={[{ name: 'ca', label: 'CA证书', type: 'string', required: false, multiline: true }, { name: 'key', label: '客户端私钥', type: 'secret', required: false, multiline: true }]} values={values} onChange={(name, value) => setValues(previous => ({ ...previous, [name]: value }))} />
+    return <CredentialFields fields={[{ name: 'ca', label: 'CA certificate', type: 'string', required: false, multiline: true }, { name: 'key', label: 'Client private key', type: 'secret', required: false, multiline: true }]} values={values} onChange={(name, value) => setValues(previous => ({ ...previous, [name]: value }))} />
   }
   renderRoutes([{ path: '/', element: <Fields /> }], '/')
-  await user.type(screen.getByLabelText('CA证书'), 'CERT{enter}LINE')
-  await user.type(screen.getByLabelText('客户端私钥'), 'PRIVATE{enter}KEY')
-  expect(screen.getByLabelText('CA证书')).toHaveValue('CERT\nLINE')
-  expect(screen.getByLabelText('客户端私钥')).toHaveValue('PRIVATE\nKEY')
-  expect(screen.getByLabelText('客户端私钥')).toHaveClass('text-transparent', 'selection:text-transparent')
+  await user.type(screen.getByLabelText('CA certificate'), 'CERT{enter}LINE')
+  await user.type(screen.getByLabelText('Client private key'), 'PRIVATE{enter}KEY')
+  expect(screen.getByLabelText('CA certificate')).toHaveValue('CERT\nLINE')
+  expect(screen.getByLabelText('Client private key')).toHaveValue('PRIVATE\nKEY')
+  expect(screen.getByLabelText('Client private key')).toHaveClass('text-transparent', 'selection:text-transparent')
   expect(screen.queryByText('PRIVATE')).toBeNull()
 })

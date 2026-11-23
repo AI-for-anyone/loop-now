@@ -100,8 +100,8 @@ export function statsFixture(agents: Record<StatsAgentName, StatsAgentRef>, now:
       maxAnswerSeconds: 72 * 60,
       series: [1, 3, 2, 2, 1, 3, 2],
       pending: [
-        { messageId: '64000000-0000-7000-8000-000000000001', ...ref('server'), text: '要不要顺手删掉 legacy 的 agent_folder_sources 表？', askedAt: new Date(now.getTime() - 23 * 60_000).toISOString() },
-        { messageId: '64000000-0000-7000-8000-000000000002', ...ref('web'), text: '侧栏宽度 244 还是 260？', askedAt: new Date(now.getTime() - 5 * 60_000).toISOString() },
+        { messageId: '64000000-0000-7000-8000-000000000001', ...ref('server'), text: 'Should we also drop the legacy agent_folder_sources table?', askedAt: new Date(now.getTime() - 23 * 60_000).toISOString() },
+        { messageId: '64000000-0000-7000-8000-000000000002', ...ref('web'), text: 'Sidebar width 244 or 260?', askedAt: new Date(now.getTime() - 5 * 60_000).toISOString() },
       ],
     },
     wait: {

@@ -1,6 +1,6 @@
 import type { Schemas } from '@/api/client'
 import { defaultProject } from './api'
-export const importCandidate = (overrides: Partial<Schemas['CLIImportCandidate']> = {}): Schemas['CLIImportCandidate'] => ({ candidateId: '51000000-0000-7000-8000-000000000001', cli: 'gh', sourceKind: 'gh_hosts', label: '合成 GitHub 账号', status: 'may_import', missingFields: [], supplementableFields: [], reasonCode: null, previouslyImported: false, ...overrides })
+export const importCandidate = (overrides: Partial<Schemas['CLIImportCandidate']> = {}): Schemas['CLIImportCandidate'] => ({ candidateId: '51000000-0000-7000-8000-000000000001', cli: 'gh', sourceKind: 'gh_hosts', label: 'Synthetic GitHub account', status: 'may_import', missingFields: [], supplementableFields: [], reasonCode: null, previouslyImported: false, ...overrides })
 export function importScan(overrides: Partial<Schemas['CLIImportScan']> = {}): Schemas['CLIImportScan'] {
   return { scanId: '52000000-0000-7000-8000-000000000001', projectId: defaultProject.id, expiresAt: '2030-10-16T10:00:00Z', credentialsRevision: 5, sources: ['gh', 'mysql', 'psql', 'gcloud', 'lark-cli'].map(cli => ({ cli: cli as Schemas['CLIImportCLI'], status: 'candidates', reasonCode: null })), candidates: [importCandidate()], ...overrides }
 }

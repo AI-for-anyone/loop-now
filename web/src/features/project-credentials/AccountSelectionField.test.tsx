@@ -3,18 +3,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderRoutes } from '@/test/render'
 import { AccountSelectionField } from './AccountSelectionField'
 
-describe('账号选择展示不自行解析或静默回落', () => {
-  it('两候选含不可用仍都展示、不默认选第一条；只允许明确保存', async () => {
+describe('Account selection display does not resolve on its own or fall back silently', () => {
+  it('shows both candidates even when one is unavailable, does not preselect the first, and only allows an explicit save', async () => {
     const save = vi.fn(), change = vi.fn()
-    renderRoutes([{ path: '/', element: <AccountSelectionField label="模型项目账号" description="多个对应账号，需要明确选择" options={[{ value: 'a', label: '账号A · 不可用' }, { value: 'b', label: '账号B · 已登录' }]} value="" canRestore={false} settingsPath="/p/demo/settings" onChange={change} onSave={save} onRestore={() => {}} /> }], '/')
+    renderRoutes([{ path: '/', element: <AccountSelectionField label="Model project account" description="Several matching accounts; choose one explicitly" options={[{ value: 'a', label: 'Account A · Unavailable' }, { value: 'b', label: 'Account B · Logged in' }]} value="" canRestore={false} settingsPath="/p/demo/settings" onChange={change} onSave={save} onRestore={() => {}} /> }], '/')
     expect(screen.getByRole('combobox')).toHaveValue('')
     expect(screen.getAllByRole('option')).toHaveLength(3)
-    expect(screen.getByRole('button', { name: '保存选择' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save selection' })).toBeDisabled()
     expect(change).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled()
   })
-  it('已选删除时保留失效值，不把剩余唯一账号冒充当前选中', () => {
-    renderRoutes([{ path: '/', element: <AccountSelectionField label="模型项目账号" description="明确选择的账号已删除，不自动换用" options={[{ value: 'b', label: '账号B' }]} value="deleted-a" canRestore dirty={false} settingsPath="/p/demo/settings" onChange={() => {}} onSave={() => {}} onRestore={() => {}} /> }], '/')
+  it('keeps the stale value when the chosen account was deleted and does not pass off the only remaining account as the current choice', () => {
+    renderRoutes([{ path: '/', element: <AccountSelectionField label="Model project account" description="The explicitly chosen account was deleted; no other account is used automatically" options={[{ value: 'b', label: 'Account B' }]} value="deleted-a" canRestore dirty={false} settingsPath="/p/demo/settings" onChange={() => {}} onSave={() => {}} onRestore={() => {}} /> }], '/')
     expect(screen.getByRole('combobox')).toHaveValue('deleted-a')
-    expect(screen.getByRole('button', { name: '恢复当前提供方自动取用' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Restore automatic selection for this provider' })).toBeEnabled()
   })
 })

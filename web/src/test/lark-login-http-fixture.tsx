@@ -8,8 +8,8 @@ import '../index.css'
 
 export function LarkHTTPFixture() {
   return <main className="mx-auto grid max-w-5xl min-w-0 gap-5 p-4 text-ink">
-    <h1 className="text-2xl font-bold">项目账号 · 实际React正式HTTP fixture</h1>
-    <p className="rounded-card bg-tint-yellow p-3">隔离浏览器必须完整拦截API与授权页。此入口只挂载产品组件，不内置后端响应，不执行真实登录或任务操作。</p>
+    <h1 className="text-2xl font-bold">Project accounts · the real React components over the formal HTTP fixture</h1>
+    <p className="rounded-card bg-tint-yellow p-3">The isolated browser must intercept the API and the authorization page completely. This entry only mounts the product components: it has no built-in backend responses and performs no real login or task operations.</p>
     <ProjectCredentialSettings projectId="00000000-0000-7000-8000-000000000001" />
   </main>
 }

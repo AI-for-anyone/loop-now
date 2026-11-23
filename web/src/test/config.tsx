@@ -23,7 +23,7 @@ const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reaso
 // Provider registered by a plugin's Pi extension: OAuth only; unavailableReason
 // can be non-null only when the catalog is read with an agentId.
 export function pluginProvider(id: string, overrides: Partial<Schemas['ModelProvider']> = {}): Schemas['ModelProvider'] {
-  return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides }
+  return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides } // check-english: zh (LocalizedText in both languages)
 }
 
 // Local Claude Code (contract ModelProvider source=local_cli): uses its own login on
@@ -47,7 +47,7 @@ export const catalogHandlers = [
 export const ghTemplate: Schemas['CliTemplate'] = {
   name: 'gh',
   version: '2.100.0',
-  fields: [{ name: 'token', label: '访问令牌', type: 'secret', required: true }],
+  fields: [{ name: 'token', label: 'Access token', type: 'secret', required: true }],
   injection: 'env',
   install: { status: 'installed' },
   warnings: [],
@@ -59,7 +59,7 @@ export const larkTemplate: Schemas['CliTemplate'] = {
   fields: [
     { name: 'appId', label: 'App ID', type: 'string', required: true },
     { name: 'appSecret', label: 'App Secret', type: 'secret', required: true },
-    { name: 'brand', label: '品牌', type: 'enum', options: ['feishu', 'lark'], default: 'feishu', required: true },
+    { name: 'brand', label: 'Brand', type: 'enum', options: ['feishu', 'lark'], default: 'feishu', required: true },
   ],
   injection: 'files',
   install: { status: 'not_installed' },

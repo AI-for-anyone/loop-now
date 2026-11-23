@@ -37,218 +37,218 @@ function renderDetail(path = '/plugins/webhook', initial: Parameters<typeof fake
   return { ...renderRoutes(routes, path), fake }
 }
 
-describe('插件详情', () => {
-  it('页头：名称、官方来源、版本与状态；页签贴在纸张上沿、写在地址里；概览按编号分区：它包含什么、启用项目、最近动静（事件、投递记录、日志三个数字），票根里是目录尺', async () => {
+describe('Plugin details', () => {
+  it('header: name, official source, version and status; tabs sit on the top edge of the sheet and are kept in the URL; the overview has numbered sections: what it contains, enabled projects, recent activity (three numbers for events, deliveries and logs), with the section ruler in the stub', async () => {
     renderDetail()
-    expect(await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })).toBeInTheDocument()
-    const tabs = screen.getByRole('navigation', { name: 'Webhook 通知' })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Webhook notifications' })).toBeInTheDocument()
+    const tabs = screen.getByRole('navigation', { name: 'Webhook notifications' })
     expect(within(tabs).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('aria-current')])).toEqual([
-      ['概览', 'page'],
-      ['配置', null],
-      ['事件', null],
-      ['投递记录', null],
-      ['日志', null],
+      ['Overview', 'page'],
+      ['Config', null],
+      ['Events', null],
+      ['Deliveries', null],
+      ['Logs', null],
     ])
-    expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›插件市场›webhook')
-    const contains = screen.getByRole('region', { name: '它包含什么' })
-    expect(within(contains).getByText('inbox.read').parentElement).toHaveTextContent('读收件箱消息正文')
-    const enabled = screen.getByRole('region', { name: '在哪些项目启用' })
-    await waitFor(() => expect(within(enabled).getByRole('switch', { name: `在 ${defaultProject.name} 启用 Webhook 通知` })).toHaveAttribute('aria-checked', 'true'))
-    expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('回调地址 → https://hooks.example.com/propanda')
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Plugin market›webhook')
+    const contains = screen.getByRole('region', { name: 'What it contains' })
+    expect(within(contains).getByText('inbox.read').parentElement).toHaveTextContent('Read Inbox message bodies')
+    const enabled = screen.getByRole('region', { name: 'Enabled in projects' })
+    await waitFor(() => expect(within(enabled).getByRole('switch', { name: `Enable Webhook notifications in ${defaultProject.name}` })).toHaveAttribute('aria-checked', 'true'))
+    expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('Callback URL → https://hooks.example.com/propanda')
     // Recent activity: the API gives no total, so count only the entries read
     // so far and add "+" when there are more; each column links to its tab.
-    const activity = screen.getByRole('region', { name: '最近动静' })
+    const activity = screen.getByRole('region', { name: 'Recent activity' })
     const figure = (name: string) => within(activity).getByRole('heading', { name }).nextElementSibling
-    await waitFor(() => expect(figure('事件')).toHaveTextContent(/^50\+$/))
-    await waitFor(() => expect(figure('投递记录')).toHaveTextContent(/^4$/))
-    await waitFor(() => expect(figure('日志')).toHaveTextContent(/^100\+$/))
-    expect(within(activity).getByRole('link', { name: '看全部事件 ›' })).toHaveAttribute('href', '/plugins/webhook/events')
-    expect(within(activity).getByRole('link', { name: '看全部日志 ›' })).toHaveAttribute('href', '/plugins/webhook/logs')
-    expect(screen.queryByRole('region', { name: '最近事件' })).not.toBeInTheDocument()
-    const toc = screen.getByRole('navigation', { name: '目录' })
-    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(['01它包含什么', '02在哪些项目启用', '03最近动静'])
+    await waitFor(() => expect(figure('Events')).toHaveTextContent(/^50\+$/))
+    await waitFor(() => expect(figure('Deliveries')).toHaveTextContent(/^4$/))
+    await waitFor(() => expect(figure('Logs')).toHaveTextContent(/^100\+$/))
+    expect(within(activity).getByRole('link', { name: 'All events ›' })).toHaveAttribute('href', '/plugins/webhook/events')
+    expect(within(activity).getByRole('link', { name: 'All logs ›' })).toHaveAttribute('href', '/plugins/webhook/logs')
+    expect(screen.queryByRole('region', { name: 'Recent events' })).not.toBeInTheDocument()
+    const toc = screen.getByRole('navigation', { name: 'Contents' })
+    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(['01What it contains', '02Enabled in projects', '03Recent activity'])
     expect(within(toc).getByText('v1.2.0')).toBeInTheDocument()
   })
 
-  it('在另一个项目启用：带上它现有的项目级配置与版本', async () => {
+  it('enabling in another project sends its existing project config and revision', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail()
-    const toggle = await screen.findByRole('switch', { name: `在 ${other.name} 启用 Webhook 通知` })
+    const toggle = await screen.findByRole('switch', { name: `Enable Webhook notifications in ${other.name}` })
     await waitFor(() => expect(toggle).toBeEnabled())
     await user.click(toggle)
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/projects/${other.id}/plugins/webhook`, query: {}, body: { enabled: true, values: {}, expectedRevision: 0 } }]))
   })
 
-  it('配置页签：按清单生成的全局表单，密钥已设置；保存带版本；项目级覆盖与给插件进程的环境', async () => {
+  it('config tab: the global form generated from the manifest with the secret set; saving sends the revision; project overrides and the environment for the plugin process', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail('/plugins/webhook/config')
-    expect(await screen.findByLabelText('回调地址')).toHaveValue('https://hooks.example.com/loop-now')
-    expect(screen.getByText('已设置')).toBeInTheDocument()
-    await user.clear(screen.getByLabelText('重试上限'))
-    await user.type(screen.getByLabelText('重试上限'), '3')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(await screen.findByLabelText('Callback URL')).toHaveValue('https://hooks.example.com/loop-now')
+    expect(screen.getByText('Set')).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Retry limit'))
+    await user.type(screen.getByLabelText('Retry limit'), '3')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: '/plugins/webhook/config', query: {}, body: { values: { url: 'https://hooks.example.com/loop-now', retries: 3 }, expectedRevision: 2 } }]))
-    const overrides = screen.getByRole('region', { name: '项目级覆盖' })
-    await waitFor(() => expect(overrides).toHaveTextContent(`${defaultProject.name}覆盖 1 项回调地址 → https://hooks.example.com/propanda`))
-    expect(screen.getByRole('region', { name: '给插件进程的环境' })).toHaveTextContent('LOOP_NOW_PLUGIN_DATA=/work/platform/plugins/webhook/data')
-    expect(screen.getByRole('region', { name: '给插件进程的环境' })).toHaveTextContent('只含 inbox.read、state')
+    const overrides = screen.getByRole('region', { name: 'Project overrides' })
+    await waitFor(() => expect(overrides).toHaveTextContent(`${defaultProject.name}1 overrideCallback URL → https://hooks.example.com/propanda`))
+    expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('LOOP_NOW_PLUGIN_DATA=/work/platform/plugins/webhook/data')
+    expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('Only inbox.read, state')
   })
 
-  it('事件页签：按状态筛选，往下加载更早的', async () => {
+  it('events tab: filters by status and loads earlier ones below', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail('/plugins/webhook/events')
-    const panel = await screen.findByRole('region', { name: '事件' })
+    const panel = await screen.findByRole('region', { name: 'Events' })
     await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(50))
-    await user.click(within(panel).getByRole('button', { name: '加载更早的' }))
+    await user.click(within(panel).getByRole('button', { name: 'Load earlier' }))
     await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(62))
-    await user.click(within(panel).getByRole('radio', { name: '处理失败' }))
+    await user.click(within(panel).getByRole('radio', { name: 'Failed' }))
     await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(1))
     expect(fake.requests.filter((r) => r.path === '/plugins/webhook/deliveries').map((r) => r.query)).toEqual([{ limit: '50' }, { limit: '50', before: 'old-47' }, { limit: '50', status: 'failed' }])
   })
 
-  it('投递记录页签：按约定的记录形状列出，新的在前；重试中写下次时间，放弃写状态码；认不得的显示原始 JSON', async () => {
+  it('deliveries tab: lists records of the agreed shape, newest first; retrying ones show the next time and abandoned ones the status code; unrecognized ones show raw JSON', async () => {
     renderDetail('/plugins/webhook/records')
-    const panel = await screen.findByRole('region', { name: '投递记录' })
+    const panel = await screen.findByRole('region', { name: 'Deliveries' })
     const rows = await within(panel).findAllByRole('row')
     expect(rows.slice(1).map((row) => row.textContent)).toEqual([
       expect.stringMatching(/hooks\.example\.com\/loop-now2001$/),
-      expect.stringMatching(/hooks\.example\.com\/loop-now重试中下次 .*3$/),
-      expect.stringMatching(/old\.example\.com\/hook已放弃 · 4045$/),
+      expect.stringMatching(/hooks\.example\.com\/loop-nowRetryingNext .*3$/),
+      expect.stringMatching(/old\.example\.com\/hookAbandoned · 4045$/),
       expect.stringContaining('deliveries/legacy'),
     ])
-    expect(within(rows[4]).getByLabelText('原始记录')).toHaveTextContent('"note": "written by an older version"')
+    expect(within(rows[4]).getByLabelText('Raw record')).toHaveTextContent('"note": "written by an older version"')
   })
 
-  it('日志页签：一页 100 条，按 nextBefore 往前翻', async () => {
+  it('logs tab: 100 per page, paging back with nextBefore', async () => {
     const user = userEvent.setup()
     renderDetail('/plugins/webhook/logs')
-    const panel = await screen.findByRole('region', { name: '日志' })
+    const panel = await screen.findByRole('region', { name: 'Logs' })
     await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(100))
     expect(within(panel).getAllByRole('listitem')[0]).toHaveTextContent('info delivered evt_01JB → hooks.example.com 200 in 118ms')
-    await user.click(within(panel).getByRole('button', { name: '加载更早的日志' }))
+    await user.click(within(panel).getByRole('button', { name: 'Load earlier logs' }))
     await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(120))
-    expect(within(panel).queryByRole('button', { name: '加载更早的日志' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Load earlier logs' })).toBeNull()
   })
 
-  it('检查更新：按已装来源取预览，确认后更新到新版本', async () => {
+  it('check for updates: previews from the installed source and updates to the new version after confirming', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail()
-    await user.click(await screen.findByRole('button', { name: '检查更新' }))
-    const dialog = await screen.findByRole('dialog', { name: /更新 Webhook 通知/ })
+    await user.click(await screen.findByRole('button', { name: 'Check for updates' }))
+    const dialog = await screen.findByRole('dialog', { name: /Update Webhook notifications/ })
     expect(dialog).toHaveTextContent('webhook · v1.2.0 → v1.3.0')
-    await user.click(within(dialog).getByRole('button', { name: '更新' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Update' }))
     await waitFor(() => expect(fake.writes().map((r) => [r.method, r.path, r.body])).toEqual([
       ['POST', '/plugin-previews', { pluginId: 'webhook' }],
       ['POST', '/plugins/webhook/update', { previewId: '71000000-0000-7000-8000-000000000001' }],
     ]))
   })
 
-  it('卸载：可选同时删除数据目录，卸载后回到插件市场', async () => {
+  it('uninstall: can also delete the data folder, and goes back to the plugin market afterwards', async () => {
     const user = userEvent.setup()
     const { fake, router } = renderDetail()
-    await user.click(await screen.findByRole('button', { name: '卸载' }))
-    const dialog = await screen.findByRole('alertdialog', { name: '卸载 Webhook 通知？' })
-    await user.click(within(dialog).getByRole('checkbox', { name: '同时删除数据目录 /work/platform/plugins/webhook/data' }))
-    await user.click(within(dialog).getByRole('button', { name: '卸载' }))
+    await user.click(await screen.findByRole('button', { name: 'Uninstall' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Uninstall Webhook notifications?' })
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Also delete the data folder /work/platform/plugins/webhook/data' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/plugins'))
     expect(fake.writes()).toEqual([{ method: 'DELETE', path: '/plugins/webhook', query: { deleteData: 'true' }, body: undefined }])
   })
 
-  it('没有这个插件时说明并给出回到插件市场的链接', async () => {
+  it('a missing plugin is explained with a link back to the plugin market', async () => {
     renderDetail('/plugins/missing')
-    expect(await screen.findByText('没有这个插件，可能已被卸载。')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '回到插件市场' })).toHaveAttribute('href', '/plugins')
+    expect(await screen.findByText('This plugin doesn\'t exist; it may have been uninstalled.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to the plugin market' })).toHaveAttribute('href', '/plugins')
   })
 })
 
-describe('插件详情的说明与仓库', () => {
+describe('Plugin details: README and repository', () => {
   const readme = [
-    '# Webhook 通知',
+    '# Webhook notifications',
     '',
-    '## 配置',
+    '## Config',
     '',
-    '- `url`：回调地址',
-    '- `retries`：重试上限',
+    '- `url`: the callback URL',
+    '- `retries`: the retry limit',
     '',
     '```json',
     '{ "url": "https://hooks.example.com" }',
     '```',
     '',
-    '详见[文档](https://docs.example.com/webhook)、[示例](./examples/basic.md)与[邮件](mailto:dev@example.com)。',
+    'See the [docs](https://docs.example.com/webhook), the [example](./examples/basic.md) and [email](mailto:dev@example.com).',
     '',
-    '![架构图](./docs/arch.png)![远程图](https://img.example.com/x.png)',
+    '![Architecture](./docs/arch.png)![Remote image](https://img.example.com/x.png)',
     '',
     '<script>alert(1)</script>',
   ].join('\n')
 
-  it('概览的说明卡片：按控制台语言读 README；渲染标题、列表、代码块、行内代码与链接，原始 HTML 按文字显示；相对链接与图片只显示文字', async () => {
-    const { fake } = renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.zh-CN.md', markdown: readme, truncated: false } } })
-    const card = await screen.findByRole('region', { name: '说明' })
-    expect(fake.requests.find((r) => r.path === '/plugins/webhook/readme')?.query).toEqual({ locale: 'zh-CN' })
-    expect(card).toHaveTextContent('README.zh-CN.md')
-    expect(within(card).getByRole('heading', { level: 2, name: '配置' })).toBeInTheDocument()
-    expect(within(card).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['url：回调地址', 'retries：重试上限'])
+  it('the overview About card reads the README in the console language; renders headings, lists, code blocks, inline code and links; shows raw HTML as text; shows relative links and images as text only', async () => {
+    const { fake } = renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.en-US.md', markdown: readme, truncated: false } } })
+    const card = await screen.findByRole('region', { name: 'About' })
+    expect(fake.requests.find((r) => r.path === '/plugins/webhook/readme')?.query).toEqual({ locale: 'en-US' })
+    expect(card).toHaveTextContent('README.en-US.md')
+    expect(within(card).getByRole('heading', { level: 2, name: 'Config' })).toBeInTheDocument()
+    expect(within(card).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['url: the callback URL', 'retries: the retry limit'])
     expect(within(card).getByText('url').tagName).toBe('CODE')
     expect(card.querySelector('pre code')).toHaveTextContent('{ "url": "https://hooks.example.com" }')
-    const docs = within(card).getByRole('link', { name: '文档' })
+    const docs = within(card).getByRole('link', { name: 'docs' })
     expect(docs).toHaveAttribute('href', 'https://docs.example.com/webhook')
     expect(docs).toHaveAttribute('target', '_blank')
     expect(docs.getAttribute('rel')).toContain('noopener')
-    expect(within(card).getByRole('link', { name: '邮件' })).toHaveAttribute('href', 'mailto:dev@example.com')
-    expect(within(card).queryByRole('link', { name: '示例' })).toBeNull()
-    expect(within(card).getByText('示例')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'email' })).toHaveAttribute('href', 'mailto:dev@example.com')
+    expect(within(card).queryByRole('link', { name: 'example' })).toBeNull()
+    expect(within(card).getByText('example')).toBeInTheDocument()
     expect(card.querySelector('img')).toBeNull()
-    expect(card).toHaveTextContent('架构图远程图')
+    expect(card).toHaveTextContent('ArchitectureRemote image')
     expect(card.querySelector('script')).toBeNull()
     expect(card).toHaveTextContent('<script>alert(1)</script>')
-    expect(screen.queryByText('说明太长，只显示了开头的部分。')).toBeNull()
+    expect(screen.queryByText('This README is too long; only the beginning is shown.')).toBeNull()
   })
 
-  it('README 被截断时卡片底部说明', async () => {
-    renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.md', markdown: '# 很长的说明', truncated: true } } })
-    const card = await screen.findByRole('region', { name: '说明' })
-    expect(card.lastElementChild).toHaveTextContent('说明太长，只显示了开头的部分。')
+  it('a truncated README is noted at the bottom of the card', async () => {
+    renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.md', markdown: '# A very long README', truncated: true } } })
+    const card = await screen.findByRole('region', { name: 'About' })
+    expect(card.lastElementChild).toHaveTextContent('This README is too long; only the beginning is shown.')
   })
 
-  it('没有 README 时不显示说明卡片', async () => {
+  it('no About card without a README', async () => {
     const { client } = renderDetail()
-    await screen.findByRole('region', { name: '它包含什么' })
+    await screen.findByRole('region', { name: 'What it contains' })
     await waitFor(() => expect(client.getQueryState(['plugins', 'readme', 'webhook'])?.status).toBe('success'))
-    expect(screen.queryByRole('region', { name: '说明' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'About' })).toBeNull()
   })
 
-  it('git 来源：页头链到仓库网页，GitHub 带 ref 时链到 /tree/<ref>；SSH 写法只显示地址', async () => {
-    const git = (location: string, ref: string | null) => makeDetail(makePlugin({ id: 'lark-notify', displayName: '飞书通知', source: makeResolvedSource({ kind: 'git', location, ref, commit: 'abc1234def' }) }))
+  it('git source: the header links to the repository page, to /tree/<ref> on GitHub with a ref; an SSH address is shown as text only', async () => {
+    const git = (location: string, ref: string | null) => makeDetail(makePlugin({ id: 'lark-notify', displayName: 'Lark notifications', source: makeResolvedSource({ kind: 'git', location, ref, commit: 'abc1234def' }) }))
     const { unmount } = renderDetail('/plugins/lark-notify', { details: [git('https://github.com/foo/loop-now-lark-notify.git', 'release/0.3')] })
-    const link = await screen.findByRole('link', { name: '仓库' })
+    const link = await screen.findByRole('link', { name: 'Repository' })
     expect(link).toHaveAttribute('href', 'https://github.com/foo/loop-now-lark-notify/tree/release/0.3')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link.getAttribute('rel')).toContain('noopener')
     unmount()
     renderDetail('/plugins/lark-notify', { details: [git('git@github.com:foo/loop-now-lark-notify.git', null)] })
-    await screen.findByRole('heading', { level: 1, name: '飞书通知' })
-    expect(screen.queryByRole('link', { name: '仓库' })).toBeNull()
+    await screen.findByRole('heading', { level: 1, name: 'Lark notifications' })
+    expect(screen.queryByRole('link', { name: 'Repository' })).toBeNull()
     expect(screen.getByText('git@github.com:foo/loop-now-lark-notify.git')).toBeInTheDocument()
   })
 
-  it('官方插件没有仓库链接', async () => {
+  it('official plugins have no repository link', async () => {
     renderDetail()
-    await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })
-    expect(screen.queryByRole('link', { name: '仓库' })).toBeNull()
+    await screen.findByRole('heading', { level: 1, name: 'Webhook notifications' })
+    expect(screen.queryByRole('link', { name: 'Repository' })).toBeNull()
   })
 })
 
-describe('插件详情的模型提供方', () => {
-  const grok = makePlugin({ id: 'grok', displayName: 'Grok 订阅' })
+describe('Plugin details: model providers', () => {
+  const grok = makePlugin({ id: 'grok', displayName: 'Grok subscription' })
   const withProviders = (overrides: Partial<ReturnType<typeof makeDetail>>, agentExtensions = 1) => ({
-    ...makeDetail(grok, makeManifest({ id: 'grok', displayName: 'Grok 订阅', components: makeComponents({ agentExtensions }) })),
+    ...makeDetail(grok, makeManifest({ id: 'grok', displayName: 'Grok subscription', components: makeComponents({ agentExtensions }) })),
     ...overrides,
   })
   const provider = (id: string, overrides: Partial<ReturnType<typeof makeDetail>['providers'][number]> = {}) => ({
     id, name: id, extension: 'extensions/grok.ts', oauth: true, overridesBuiltin: false, inCatalog: false, error: null, modelCount: 2, ...overrides,
   })
 
-  it('列出 Pi 扩展注册的提供方：进了目录的标出，没进的说明原因；名称与错误是扩展原文，按纯文本显示；另列加载失败的扩展', async () => {
+  it('lists the providers registered by Pi extensions: those in the catalog are marked and the others say why; names and errors come from the extension and show as plain text; extensions that failed to load are listed separately', async () => {
     renderDetail('/plugins/grok', {
       details: [
         withProviders({
@@ -256,7 +256,7 @@ describe('插件详情的模型提供方', () => {
             provider('grok-cli', { name: 'Grok CLI', inCatalog: true, modelCount: 3 }),
             provider('anthropic', { overridesBuiltin: true }),
             provider('grok-key', { oauth: false }),
-            provider('grok-bad', { name: '<b>坏</b>', error: 'TypeError: <script>x</script>' }),
+            provider('grok-bad', { name: '<b>bad</b>', error: 'TypeError: <script>x</script>' }),
             provider('grok-dup'),
             provider('grok-bare', { name: 'Grok Bare', inCatalog: true }),
           ],
@@ -265,57 +265,57 @@ describe('插件详情的模型提供方', () => {
         }),
       ],
     })
-    const panel = await screen.findByRole('region', { name: '模型提供方' })
-    expect(panel).toHaveTextContent('安装或更新时从 Pi 扩展读出')
+    const panel = await screen.findByRole('region', { name: 'Model providers' })
+    expect(panel).toHaveTextContent('Read from its Pi extensions when installed or updated')
     const items = within(within(panel).getAllByRole('list')[0]).getAllByRole('listitem')
     expect(items.map((item) => item.textContent)).toEqual([
-      'Grok CLIgrok-cliOAuth 登录已进模型目录登录状态随项目账号和平台 Agent 的登录保存：.grok/auth.json、.config/grok3 个模型 · 来自 extensions/grok.ts',
-      'anthropicOAuth 登录与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录2 个模型 · 来自 extensions/grok.ts',
-      'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号和平台 Agent 的登录保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
-      '<b>坏</b>grok-badOAuth 登录注册出错：TypeError: <script>x</script>2 个模型 · 来自 extensions/grok.ts',
-      'grok-dupOAuth 登录没有进模型目录（例如与 models.json 里的提供方同 id）2 个模型 · 来自 extensions/grok.ts',
+      "Grok CLIgrok-cliOAuth loginIn the model catalogLogin state saved with project accounts and platform Agents' logins: .grok/auth.json, .config/grok3 models · From extensions/grok.ts",
+      "anthropicOAuth loginSame id as a built-in Pi provider: it only overrides that provider's settings and isn't added to the model catalog2 models · From extensions/grok.ts",
+      "grok-keyDoesn't register an OAuth login, so it isn't added to the model catalogLogin state saved with project accounts and platform Agents' logins: .grok-key2 models · From extensions/grok.ts",
+      '<b>bad</b>grok-badOAuth loginRegistration failed: TypeError: <script>x</script>2 models · From extensions/grok.ts',
+      'grok-dupOAuth loginNot in the model catalog (for example, a provider in models.json has the same id)2 models · From extensions/grok.ts',
       // In the model catalog but no state path declared: warn that the login may not be saved with the account.
-      'Grok Baregrok-bareOAuth 登录已进模型目录没有声明登录状态路径，登录可能不随账号保存2 个模型 · 来自 extensions/grok.ts',
+      'Grok Baregrok-bareOAuth loginIn the model catalogNo login state paths declared, so the login may not be saved with the account2 models · From extensions/grok.ts',
     ])
     expect(panel.querySelector('b, script')).toBeNull()
-    const failed = within(panel).getByRole('heading', { name: '加载失败的扩展' }).parentElement!
+    const failed = within(panel).getByRole('heading', { name: 'Extensions that failed to load' }).parentElement!
     expect(failed).toHaveTextContent('extensions/broken.tsSyntaxError: Unexpected token')
-    expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
+    expect(within(panel).queryByText('No model providers were found.')).toBeNull()
   })
 
-  it('整次读取失败时说明原因，不再说"没有读出"', async () => {
+  it('when the whole read fails, explains why instead of saying none were found', async () => {
     renderDetail('/plugins/grok', { details: [withProviders({ providersError: 'Pi unavailable: timed out' })] })
-    const panel = await screen.findByRole('region', { name: '模型提供方' })
-    expect(within(panel).getByRole('alert')).toHaveTextContent('读取失败：Pi unavailable: timed out')
-    expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
+    const panel = await screen.findByRole('region', { name: 'Model providers' })
+    expect(within(panel).getByRole('alert')).toHaveTextContent("Couldn't read them: Pi unavailable: timed out")
+    expect(within(panel).queryByText('No model providers were found.')).toBeNull()
   })
 
-  it('卸载注册了模型提供方的插件：说明订阅账号默认保留、删除数据时一并删除；没有提供方的插件不说', async () => {
+  it('uninstalling a plugin that registers model providers explains that subscription accounts are kept by default and deleted along with the data; plugins without providers do not say this', async () => {
     const user = userEvent.setup()
     const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({ providers: [provider('grok-cli', { inCatalog: true })] })] })
-    await user.click(await screen.findByRole('button', { name: '卸载' }))
-    const dialog = await screen.findByRole('alertdialog', { name: '卸载 Grok 订阅？' })
-    expect(dialog).toHaveTextContent('它注册的模型提供方在各项目里的订阅账号和平台 Agent 自己的登录默认保留，重新安装后恢复；勾选后一并删除（被未结束任务用着的账号保留到任务结束）。')
+    await user.click(await screen.findByRole('button', { name: 'Uninstall' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Uninstall Grok subscription?' })
+    expect(dialog).toHaveTextContent('The project subscription accounts and platform Agents\' own logins for the model providers it registers are kept by default and come back if you reinstall it. With this checked they\'re deleted too (accounts in use by an unfinished task stay until the task ends).')
     unmount()
     renderDetail()
-    await user.click(await screen.findByRole('button', { name: '卸载' }))
-    expect(await screen.findByRole('alertdialog', { name: '卸载 Webhook 通知？' })).not.toHaveTextContent('订阅账号')
+    await user.click(await screen.findByRole('button', { name: 'Uninstall' }))
+    expect(await screen.findByRole('alertdialog', { name: 'Uninstall Webhook notifications?' })).not.toHaveTextContent('subscription accounts')
   })
 
-  it('有 Pi 扩展但没有注册提供方：说明没有读出；没有扩展也没读出东西的插件不显示这一块', async () => {
+  it('Pi extensions without registered providers: says none were found; a plugin with no extensions and nothing read does not show this section', async () => {
     const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({})] })
-    const panel = await screen.findByRole('region', { name: '模型提供方' })
-    expect(panel).toHaveTextContent('没有读出模型提供方。')
+    const panel = await screen.findByRole('region', { name: 'Model providers' })
+    expect(panel).toHaveTextContent('No model providers were found.')
     unmount()
     renderDetail()
-    await screen.findByRole('region', { name: '它包含什么' })
-    expect(screen.queryByRole('region', { name: '模型提供方' })).toBeNull()
+    await screen.findByRole('region', { name: 'What it contains' })
+    expect(screen.queryByRole('region', { name: 'Model providers' })).toBeNull()
   })
 })
 
-describe('插件详情的来源标签', () => {
+describe('Plugin details: source label', () => {
   const official = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0' })] })
-  const other = makeMarket({ url: 'https://example.com/market.json', name: '社区市场', official: false, plugins: [makeMarketEntry({ id: 'grok', verified: true, installedVersion: '1.0.0' }), makeMarketEntry({ id: 'raw', verified: false, installedVersion: '1.0.0' })] })
+  const other = makeMarket({ url: 'https://example.com/market.json', name: 'Community market', official: false, plugins: [makeMarketEntry({ id: 'grok', verified: true, installedVersion: '1.0.0' }), makeMarketEntry({ id: 'raw', verified: false, installedVersion: '1.0.0' })] })
   const fromMarket = (id: string, market: string | null, kind: 'npm' | 'git' = 'npm') =>
     makeDetail(makePlugin({ id, displayName: id, source: makeResolvedSource({ kind, location: `pi-${id}`, npmVersion: '1.0.0', market }) }))
   const badge = async (id: string, detail: ReturnType<typeof makeDetail>) => {
@@ -324,32 +324,32 @@ describe('插件详情的来源标签', () => {
     const text = await waitFor(() => {
       // The source label is the first item in the header's meta info (the title is preceded by an initial-letter block).
       const found = heading.closest('header')!.querySelector('[data-page-meta] > span')?.textContent
-      if (!found) throw new Error('来源标签还没显示')
+      if (!found) throw new Error('The source label is not shown yet')
       return found
     })
     unmount()
     return text
   }
 
-  it('票根底部写当前版本与更新状态：市场里有新版本时写“有新版本”，页头是更新按钮；已是最新时页头是一个不能点的“已是最新”', async () => {
+  it('the stub footer shows the current version and update status: with a newer version in the market it says one is available and the header has an update button; when up to date the header has a disabled "Up to date"', async () => {
     const newer = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0', version: '1.1.0', updateAvailable: true })] })
     const first = renderDetail('/plugins/grok', { details: [fromMarket('grok', newer.url)], markets: [newer] })
-    let toc = await screen.findByRole('navigation', { name: '目录' })
-    expect(await within(toc).findByText('有新版本 v1.1.0')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '更新到 v1.1.0' })).toBeEnabled()
+    let toc = await screen.findByRole('navigation', { name: 'Contents' })
+    expect(await within(toc).findByText('v1.1.0 available')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Update to v1.1.0' })).toBeEnabled()
     first.unmount()
     renderDetail('/plugins/grok', { details: [fromMarket('grok', official.url)], markets: [official] })
-    toc = await screen.findByRole('navigation', { name: '目录' })
-    expect(await within(toc).findByText('已是最新')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '已是最新' })).toBeDisabled()
+    toc = await screen.findByRole('navigation', { name: 'Contents' })
+    expect(await within(toc).findByText('Up to date')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Up to date' })).toBeDisabled()
   })
 
-  it('按安装时的规则：官方市场装的算官方；其他市场标为已验证的写已验证；未验证的和不是从市场装的写未审核', async () => {
-    expect(await badge('grok', fromMarket('grok', official.url))).toBe('官方')
-    expect(await badge('grok', fromMarket('grok', other.url))).toBe('npm · 已验证')
-    expect(await badge('raw', fromMarket('raw', other.url))).toBe('npm · 未审核')
-    expect(await badge('direct', fromMarket('direct', null, 'git'))).toBe('git · 未审核')
+  it('follows the install rules: installed from the official market counts as official; verified entries in other markets say verified; unverified ones and ones not installed from a market say unreviewed', async () => {
+    expect(await badge('grok', fromMarket('grok', official.url))).toBe('Official')
+    expect(await badge('grok', fromMarket('grok', other.url))).toBe('npm · verified')
+    expect(await badge('raw', fromMarket('raw', other.url))).toBe('npm · unreviewed')
+    expect(await badge('direct', fromMarket('direct', null, 'git'))).toBe('git · unreviewed')
     // The market is no longer in the list: there is no way to tell, so treat it as unreviewed.
-    expect(await badge('gone', fromMarket('gone', 'https://removed.example/market.json'))).toBe('npm · 未审核')
+    expect(await badge('gone', fromMarket('gone', 'https://removed.example/market.json'))).toBe('npm · unreviewed')
   })
 })

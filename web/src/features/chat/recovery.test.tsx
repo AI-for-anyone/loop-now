@@ -11,86 +11,86 @@ function snapshot(agentId: string, status: Partial<Schemas['AgentStatus']>, curr
   return { status: makeStatus(agentId, status), currentText, queuedRuns, queueItems }
 }
 
-describe('断线续传与快照', () => {
-  it('断线期间显示重连状态；续传后文字连续，重复投递的事件不重复显示', async () => {
+describe('resume after disconnect and snapshots', () => {
+  it('shows the reconnecting state while disconnected; after resuming the text continues and events delivered twice show once', async () => {
     const run = makeRun({ status: 'running' })
-    const { agent, source, emit } = await renderChat({ messages: [makeMessage({ text: '写一首诗', run })] })
+    const { agent, source, emit } = await renderChat({ messages: [makeMessage({ text: 'Write a poem', run })] })
     act(() => source.open())
-    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '床前'), '10-0')
-    await emit('run.text', { runId: run.id, delta: '明月' }, '11-0')
-    expect(await screen.findByText('床前明月')).toBeInTheDocument()
+    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, 'Roses are'), '10-0')
+    await emit('run.text', { runId: run.id, delta: ' red' }, '11-0')
+    expect(await screen.findByText('Roses are red')).toBeInTheDocument()
 
     act(() => source.interrupt())
-    expect(await screen.findByText('连接中断，正在重连…')).toBeInTheDocument()
+    expect(await screen.findByText('Connection lost, reconnecting…')).toBeInTheDocument()
 
     // After the browser reconnects with Last-Event-ID, the server resumes
     // from after 11-0; network jitter makes 11-0 get delivered a second time.
     act(() => source.open())
-    await emit('run.text', { runId: run.id, delta: '明月' }, '11-0')
-    await emit('run.text', { runId: run.id, delta: '光' }, '12-0')
-    expect(await screen.findByText('床前明月光')).toBeInTheDocument()
-    expect(screen.getByText('实时连接正常')).toBeInTheDocument()
+    await emit('run.text', { runId: run.id, delta: ' red' }, '11-0')
+    await emit('run.text', { runId: run.id, delta: ', violets' }, '12-0')
+    expect(await screen.findByText('Roses are red, violets')).toBeInTheDocument()
+    expect(screen.getByText('Live')).toBeInTheDocument()
   })
 
-  it('超出保留范围时服务端推送快照，以快照文字为准整体替换', async () => {
+  it('beyond the retained range the server pushes a snapshot, and the snapshot text replaces everything', async () => {
     const run = makeRun({ status: 'running' })
-    const { agent, emit } = await renderChat({ messages: [makeMessage({ text: '问题', run })] })
-    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '旧的片段'), '10-0')
-    expect(await screen.findByText('旧的片段')).toBeInTheDocument()
-    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '断线期间已经写了很多'), '50-0')
-    expect(await screen.findByText('断线期间已经写了很多')).toBeInTheDocument()
-    expect(screen.queryByText('旧的片段')).toBeNull()
+    const { agent, emit } = await renderChat({ messages: [makeMessage({ text: 'Question', run })] })
+    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, 'Old fragment'), '10-0')
+    expect(await screen.findByText('Old fragment')).toBeInTheDocument()
+    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, 'Wrote a lot while disconnected'), '50-0')
+    expect(await screen.findByText('Wrote a lot while disconnected')).toBeInTheDocument()
+    expect(screen.queryByText('Old fragment')).toBeNull()
   })
 })
 
-describe('服务端重启与竞态', () => {
-  it('重启后快照中原回复为服务端重启中断，排队消息随后开始', async () => {
+describe('server restart and races', () => {
+  it('after a restart the snapshot shows the original reply as cut off by a server restart, and the queued message starts next', async () => {
     const interrupted = makeRun({ status: 'interrupted', endReason: 'server_restart' })
     const queued = makeRun({ status: 'queued', whenBusy: 'queue' })
     let history: Schemas['Message'][] = [
-      makeMessage({ text: '长任务', run: makeRun({ ...interrupted, status: 'running', endReason: null }) }),
-      makeMessage({ text: '排队的', run: queued }),
+      makeMessage({ text: 'Long task', run: makeRun({ ...interrupted, status: 'running', endReason: null }) }),
+      makeMessage({ text: 'Queued one', run: queued }),
     ]
-    const item = makeQueueItem({ runId: queued.id, text: '排队的' })
+    const item = makeQueueItem({ runId: queued.id, text: 'Queued one' })
     const { agent, emit } = await renderChat({
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(makeMessagePage(history))),
         http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: String(params.agentId), items: [item] })),
       ],
     })
-    expect(await screen.findByText('排队的')).toBeInTheDocument()
+    expect(await screen.findByText('Queued one')).toBeInTheDocument()
     // Server restart: in the history the original reply is already marked as
     // interrupted by the server restart, and the text produced so far has been saved.
     history = [
-      makeMessage({ text: '长任务', run: interrupted }),
-      makeMessage({ role: 'assistant', text: '做了一半的回复', run: interrupted }),
-      makeMessage({ text: '排队的', run: queued }),
+      makeMessage({ text: 'Long task', run: interrupted }),
+      makeMessage({ role: 'assistant', text: 'Half-finished reply', run: interrupted }),
+      makeMessage({ text: 'Queued one', run: queued }),
     ]
     await emit('snapshot', snapshot(agent.id, { busy: true, queued: { interrupt: 0, normal: 1 } }, null, [queued], [item]), '1-0')
-    expect(await screen.findByText('服务端重启中断')).toBeInTheDocument()
-    expect(screen.getByText('做了一半的回复')).toBeInTheDocument()
+    expect(await screen.findByText('Cut off by a server restart')).toBeInTheDocument()
+    expect(screen.getByText('Half-finished reply')).toBeInTheDocument()
     await emit('run.updated', { run: { ...queued, status: 'starting', phase: 'launching' } }, '2-0')
     await emit('queue.updated', { queuedRuns: [], items: [] }, '3-0')
     // The header also shows the current phase; here we only look at the turn in the conversation.
-    expect(await within(screen.getByRole('log')).findByText('启动中')).toBeInTheDocument()
+    expect(await within(screen.getByRole('log')).findByText('Starting')).toBeInTheDocument()
     // The message that started running leaves the queue list and appears as a turn in the conversation stream.
-    expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
-    expect(within(screen.getByRole('log')).getByText('排队的')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
+    expect(within(screen.getByRole('log')).getByText('Queued one')).toBeInTheDocument()
   })
 })
 
-describe('事件流永久关闭', () => {
-  it('Agent 已删除（404）时不再重连，提示不存在', async () => {
+describe('event stream closed for good', () => {
+  it('when the Agent was deleted (404) stops reconnecting and says it does not exist', async () => {
     const { agent, source } = await renderChat()
     server.use(http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('not_found'), { status: 404 })))
     act(() => source.fail())
-    expect(await screen.findByText('该 Agent 不存在或已删除。')).toBeInTheDocument()
+    expect(await screen.findByText('This Agent doesn\'t exist or was deleted.')).toBeInTheDocument()
     expect(FakeEventSource.instances.filter((s) => s.url === source.url)).toHaveLength(1)
   })
 
-  it('服务端出错（500）时按退避间隔重建连接，恢复后显示快照内容', async () => {
+  it('on a server error (500) reconnects after the backoff interval and shows the snapshot content once recovered', async () => {
     const run = makeRun({ status: 'running' })
-    const { agent, source } = await renderChat({ messages: [makeMessage({ text: '问题', run })] })
+    const { agent, source } = await renderChat({ messages: [makeMessage({ text: 'Question', run })] })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       act(() => source.fail())
@@ -101,10 +101,10 @@ describe('事件流永久关闭', () => {
       const next = FakeEventSource.latest()
       await act(async () => {
         next.open()
-        next.emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '恢复后的文字'), '99-0')
+        next.emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, 'Text after recovery'), '99-0')
         await vi.advanceTimersByTimeAsync(50)
       })
-      expect(await screen.findByText('恢复后的文字')).toBeInTheDocument()
+      expect(await screen.findByText('Text after recovery')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

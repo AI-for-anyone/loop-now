@@ -3,10 +3,10 @@ import { projectAccount } from './project-credentials'
 
 export const larkOperationId = '30000000-0000-7000-8000-000000000091'
 export function larkApplicationAccount() {
-  return projectAccount({ purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: null, name: 'QA 应用', larkApplication: { brand: 'feishu', appId: 'fixture-app' } })
+  return projectAccount({ purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: null, name: 'QA app', larkApplication: { brand: 'feishu', appId: 'fixture-app' } })
 }
 export function larkUserAccount(): Schemas['ProjectCredentialAccount'] {
-  return { ...projectAccount(), id: '10000000-0000-7000-8000-000000000092', purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: 'oauth', name: '人的备注', status: 'logged_in', currentVersionId: '20000000-0000-7000-8000-000000000092', larkApplication: { brand: 'feishu', appId: 'fixture-app' }, larkIdentity: { brand: 'feishu', appId: 'fixture-app', openId: 'fixture-open-id', displayName: '核实的飞书用户', grantedScopes: null, verifiedAt: '2026-10-20T00:00:00Z' } }
+  return { ...projectAccount(), id: '10000000-0000-7000-8000-000000000092', purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: 'oauth', name: 'Human note', status: 'logged_in', currentVersionId: '20000000-0000-7000-8000-000000000092', larkApplication: { brand: 'feishu', appId: 'fixture-app' }, larkIdentity: { brand: 'feishu', appId: 'fixture-app', openId: 'fixture-open-id', displayName: 'Verified Lark user', grantedScopes: null, verifiedAt: '2026-10-20T00:00:00Z' } }
 }
 type LarkOperation = Extract<Schemas['CLIAuthOperation'], { cli: 'lark-cli' }>
 export function larkOperation(status: LarkOperation['status'] = 'awaiting_authorization', id = larkOperationId): LarkOperation {

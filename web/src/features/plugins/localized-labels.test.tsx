@@ -1,4 +1,3 @@
-// @vitest-environment-options {"url": "http://localhost:3000/?lang=en-US"}
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
@@ -10,9 +9,11 @@ import { fieldsOf } from './schema-form'
 import { SchemaFields } from './SchemaForm'
 
 // Labels written by plugin and template authors may be LocalizedText (English first, with Chinese). The English UI shows the
-// en-US text; a plain string is shown as is in every language. The Chinese UI is covered in localized-labels.zh.test.tsx.
+// en-US text; a plain string is shown as is in every language. The Chinese UI is covered in
+// src/zh-CN/features/plugins/localized-labels.zh.test.tsx.
 const en = (english: string, chinese: string) => ({ 'en-US': english, 'zh-CN': chinese })
 
+// check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
 const schema = {
   type: 'object',
   required: ['url'],
@@ -46,7 +47,7 @@ describe('LocalizedText labels in the English UI', () => {
 
   it('CLI template field labels in the credential form', () => {
     const fields: Schemas['CliTemplate']['fields'] = [
-      { name: 'host', label: en('Host', '主机'), type: 'string', required: true },
+      { name: 'host', label: en('Host', '主机'), type: 'string', required: true },  // check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
       { name: 'token', label: 'Token', type: 'secret', required: false },
     ]
     render(<CredentialFields fields={fields} values={{ host: '', token: '' }} onChange={vi.fn()} />)
@@ -57,12 +58,12 @@ describe('LocalizedText labels in the English UI', () => {
   it('channel, account kind and action labels in the manifest chips and summary', () => {
     const manifest = makeManifest({
       configSchema: schema as never,
-      accounts: [{ kind: 'bot', label: en('Bot account', '机器人账号'), fields: { type: 'object', properties: { appId: { type: 'string', title: en('App ID', '应用 ID') } } } as never, multiple: false }],
-      components: makeComponents({ channels: [{ id: 'lark', label: en('Lark group', '飞书群'), manageIdentities: true }], actions: [{ id: 'resend', label: en('Resend', '重发'), fields: {} as never, where: ['global'] }] }),
+      accounts: [{ kind: 'bot', label: en('Bot account', '机器人账号'), fields: { type: 'object', properties: { appId: { type: 'string', title: en('App ID', '应用 ID') } } } as never, multiple: false }],  // check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
+      components: makeComponents({ channels: [{ id: 'lark', label: en('Lark group', '飞书群'), manageIdentities: true }], actions: [{ id: 'resend', label: en('Resend', '重发'), fields: {} as never, where: ['global'] }] }),  // check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
     })
     expect(componentChips(manifest)).toEqual(expect.arrayContaining([expect.stringContaining('Lark group'), expect.stringContaining('Bot account')]))
     render(<ManifestSummary manifest={manifest} />)
     for (const text of ['Lark group', 'Bot account', 'App ID', 'Resend', 'Callback URL']) expect(document.body).toHaveTextContent(text)
-    expect(document.body).not.toHaveTextContent(/飞书群|机器人账号|应用 ID|重发|回调地址/)
+    expect(document.body).not.toHaveTextContent(/飞书群|机器人账号|应用 ID|重发|回调地址/)  // check-english: zh (the Chinese entries must not be shown in the English UI)
   })
 })
