@@ -6,6 +6,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { claudeCodeList, commandList, piCommand, platformCommands } from '@/test/commands'
+import { runtimeDefinitions } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { Composer } from './Composer'
 import { applyCommand, commandText, matchCommands, slashToken } from './slash-commands'
@@ -148,6 +149,27 @@ describe('the "/" command menu of the input box', () => {
     await user.type(input, '/review')
     expect(await screen.findByRole('status')).toHaveTextContent('No matching commands. This Agent runs on Claude Code and has no Pi commands.')
     expect(screen.getByRole('status')).not.toHaveTextContent('after the Agent has run once')
+  })
+
+  it.each([
+    ['lists commands of its own but the Agent has never run', 'own-commands', /^The command list appears after the Agent has run once\.$/],
+    ['lists no commands of its own', 'no-commands', /^No matching commands\. This Agent runs on No Commands and has no Pi commands\.$/],
+  ])('with no match, what is said follows whether the runtime %s, not which runtime it is', async (_, runtime, said) => {
+    // Two runtimes the contract does not have: one that lists its own commands, one that does not.
+    const [pi, claudeCode] = runtimeDefinitions().runtimes
+    const own = { ...pi, id: 'own-commands', name: 'Own Commands', isDefault: false } as unknown as Schemas['RuntimeDefinition']
+    const none = { ...claudeCode, id: 'no-commands', name: 'No Commands' } as unknown as Schemas['RuntimeDefinition']
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [pi, claudeCode, own, none] })))
+    const { user, input } = setup(() => HttpResponse.json(commandList(platformCommands(), { runtime: runtime as Schemas['AgentRuntime'] })))
+    await user.type(input, '/zzz')
+    expect(await screen.findByRole('status')).toHaveTextContent(said)
+  })
+
+  it('when the runtime definitions cannot be read, says so instead of guessing', async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 })))
+    const { user, input } = setup()
+    await user.type(input, '/zzz')
+    expect(await screen.findByRole('status')).toHaveTextContent("Couldn't load the command list: Internal server error")
   })
 
   it('a Pi Agent whose commands were read but nothing matches: only says nothing matches', async () => {
