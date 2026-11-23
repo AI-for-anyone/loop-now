@@ -65,6 +65,6 @@ export const runtime = {
     unknownLogin: '判断不了登录状态；Agent 运行失败时会如实报错。',
     pickerWarning: (problem: string) => `${problem}处理好之前，用它的 Agent 运行会失败。`,
   },
-  // Model account section: Claude Code needs no account.
-  account: '这个 Agent 用本机的 Claude Code 和你在本机的登录，不需要在平台配置账号，平台也不保存登录信息。',
+  // Model account section of an Agent whose runtime uses the login on this computer: it needs no account.
+  account: (name: string) => `这个 Agent 用本机的 ${name} 和你在本机的登录，不需要在平台配置账号，平台也不保存登录信息。`,
 } as const

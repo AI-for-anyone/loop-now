@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import type { RuntimeDefinition } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { Section } from './Section'
 
@@ -20,11 +21,12 @@ export function ClaudeCodeDifferences({ className, brief = false }: { className?
   )
 }
 
-// The model account section for a platform Agent: Claude Code uses this machine's own login, so there is no account to log in to or enter.
-export function ClaudeCodeAccountSection() {
+// The model account section for a platform Agent whose runtime uses its own login on this computer (Claude Code): there is no account
+// to log in to or enter.
+export function LocalAccountSection({ runtime }: { runtime: RuntimeDefinition }) {
   return (
     <Section id="model-credential" title={t.config.modelCredential.title}>
-      <p className="text-[13.5px]">{t.runtime.account}</p>
+      <p className="text-[13.5px]">{t.runtime.account(runtime.name)}</p>
     </Section>
   )
 }

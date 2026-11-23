@@ -54,5 +54,5 @@ export const runtime = {
     unknownLogin: "The login status can't be determined; if a run fails, the error says why.",
     pickerWarning: (problem: string) => `${problem} Until then, Agents using it will fail to run.`,
   },
-  account: "This Agent uses the Claude Code on this computer and your login there. It needs no account on the platform, and the platform doesn't store login details.",
+  account: (name: string) => `This Agent uses the ${name} on this computer and your login there. It needs no account on the platform, and the platform doesn't store login details.`,
 } satisfies Messages['runtime']
