@@ -92,7 +92,7 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 		if p.Name != "" {
 			name = &p.Name
 		}
-		v := apitypes.ModelProvider{ID: p.ID, Name: name, Source: p.Source, Runtime: agentruntime.ForProvider(p.ID), PluginID: p.PluginID, PluginDisplayName: json.RawMessage("null"), APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)}
+		v := apitypes.ModelProvider{ID: p.ID, Name: name, Source: p.Source, Runtime: agentruntime.ForProvider(p.ID).ID, PluginID: p.PluginID, PluginDisplayName: json.RawMessage("null"), APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)}
 		if p.PluginID != nil {
 			if n, ok := names[*p.PluginID]; ok {
 				v.PluginDisplayName = n

@@ -63,7 +63,7 @@ var claudeEfforts = map[string]bool{"low": true, "medium": true, "high": true, "
 type claudeDriver struct{ e *Executor }
 
 func isClaude(snap agentconfig.Snapshot) bool {
-	return agentruntime.ForProvider(snap.Provider) == agentruntime.ClaudeCode
+	return agentruntime.ForProvider(snap.Provider).ID == agentruntime.ClaudeCode
 }
 
 func (claudeDriver) name() string { return "Claude Code" }

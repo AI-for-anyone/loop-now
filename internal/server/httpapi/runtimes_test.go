@@ -26,3 +26,26 @@ func TestListRuntimes(t *testing.T) {
 	}
 	e.expect(422, "GET", "/runtimes?refresh=maybe", nil, "X-Contract-Invalid-Request", "1")
 }
+
+// GET /runtime-definitions is console only and returns the registry per the contract, the default runtime first,
+// without checking anything on this computer (no Checker is set).
+func TestListRuntimeDefinitions(t *testing.T) {
+	e := newEnv(t)
+	got := decode[struct {
+		Runtimes []struct {
+			ID           string         `json:"id"`
+			Name         string         `json:"name"`
+			Providers    []string       `json:"providers"`
+			IsDefault    bool           `json:"isDefault"`
+			Capabilities map[string]any `json:"capabilities"`
+		} `json:"runtimes"`
+	}](t, e.expect(200, "GET", "/runtime-definitions", nil))
+	if len(got.Runtimes) != 2 || got.Runtimes[0].ID != "pi" || !got.Runtimes[0].IsDefault || len(got.Runtimes[0].Providers) != 0 ||
+		got.Runtimes[1].ID != "claude-code" || got.Runtimes[1].Name != "Claude Code" || got.Runtimes[1].IsDefault ||
+		len(got.Runtimes[1].Providers) != 1 || got.Runtimes[1].Providers[0] != "claude-code" {
+		t.Fatalf("runtime definitions: %+v", got)
+	}
+	if caps := got.Runtimes[1].Capabilities; caps["accounts"] != "local" || caps["realHome"] != true || caps["bundled"] != false || len(caps) != 5 {
+		t.Fatalf("claude-code capabilities: %v", caps)
+	}
+}

@@ -283,7 +283,7 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 		}
 		if session.State == "active" && session.SessionFile != "" {
 			copyFn := s.copyBaseline
-			if agentruntime.ForProvider(snapshot.Configuration().Provider) == agentruntime.ClaudeCode {
+			if agentruntime.ForProvider(snapshot.Configuration().Provider).ID == agentruntime.ClaudeCode {
 				copyFn = func(inst store.TaskInstance, source string) (string, error) {
 					return s.copyClaudeBaseline(ctx, inst, source)
 				}

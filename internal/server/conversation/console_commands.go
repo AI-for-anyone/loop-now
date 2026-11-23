@@ -304,12 +304,13 @@ func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Me
 }
 
 // platformCommandSpec describes one platform built-in command; platformCommands is the one list shared by the
-// conversation page's "/" menu and POST /messages. piOnly: only applies to Pi sessions (Claude Code manages its own
-// sessions; the platform cannot compact, export or resume them); needsSession: requires a usable session.
+// conversation page's "/" menu and POST /messages. sessionCommand: works on the runtime's session, so it is available
+// only when the runtime has it in its sessionCommands capability (Claude Code manages its own sessions; the platform
+// cannot compact, export or resume them); needsSession: requires a usable session.
 type platformCommandSpec struct {
-	name, usage          string
-	piOnly, needsSession bool
-	zh, en               string // Chinese and English descriptions; usage placeholders (instructions, html|jsonl, session-id) are spelled the same in them
+	name, usage                  string
+	sessionCommand, needsSession bool
+	zh, en                       string // Chinese and English descriptions; usage placeholders (instructions, html|jsonl, session-id) are spelled the same in them
 }
 
 // platformCommands is the list of platform commands.
@@ -319,15 +320,15 @@ var platformCommands = []platformCommandSpec{
 		zh: "查看当前会话、模型和进程状态", en: "Show the current session, model, and process"},
 	{name: "new", usage: "/new",
 		zh: "重开会话，保留页面里的对话历史", en: "Start a new session and keep the page's history"},
-	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true,
+	{name: "compact", usage: "/compact [instructions]", sessionCommand: true, needsSession: true,
 		zh: "压缩当前会话的上下文；instructions 是给这次压缩的附加说明，可省略", en: "Compact the current context; instructions are optional guidance for this compaction"},
 	{name: "reload", usage: "/reload",
 		zh: "停止当前进程，下一条消息时重新加载", en: "Stop the process; it reloads on the next message"},
 	{name: "copy", usage: "/copy",
 		zh: "复制最近一条有文字的成功回复", en: "Copy the latest successful reply that has text"},
-	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true,
+	{name: "export", usage: "/export [html|jsonl]", sessionCommand: true, needsSession: true,
 		zh: "导出当前会话，格式为 html（默认）或 jsonl", en: "Export the current session as html (default) or jsonl"},
-	{name: "resume", usage: "/resume [session-id]", piOnly: true,
+	{name: "resume", usage: "/resume [session-id]", sessionCommand: true,
 		zh: "不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话", en: "Without session-id, list resumable sessions; with a full session-id, resume that session"},
 }
 
@@ -336,10 +337,11 @@ func IsPlatformCommand(name string) bool {
 	return slices.ContainsFunc(platformCommands, func(c platformCommandSpec) bool { return c.name == name })
 }
 
-var piOnlyCommands = func() map[string]bool {
+// sessionCommands are the names of the platform commands that work on the runtime's session.
+var sessionCommands = func() map[string]bool {
 	out := map[string]bool{}
 	for _, c := range platformCommands {
-		if c.piOnly {
+		if c.sessionCommand {
 			out[c.name] = true
 		}
 	}
@@ -374,12 +376,12 @@ func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]Pl
 	if err != nil {
 		return nil, err
 	}
-	claude := agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode
+	caps := agentruntime.ForProvider(agent.ModelProvider).Capabilities
 	out := make([]PlatformCommand, 0, len(platformCommands))
 	for _, c := range platformCommands {
 		reason := ""
 		switch {
-		case c.piOnly && claude:
+		case c.sessionCommand && !caps.HasSessionCommand(c.name):
 			reason = "runtime_unsupported"
 		case c.needsSession && sess.State == "missing":
 			reason = "session_missing"
@@ -395,15 +397,15 @@ func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]Pl
 // RequireCommand confirms that the Agent's runtime supports this platform command (name without "/"); when it does not,
 // it returns 409 console_command_failed. Callers check this before acquiring the busy lock and creating a run.
 func (s *Service) RequireCommand(ctx context.Context, agentID uuid.UUID, name string) error {
-	if !piOnlyCommands[name] {
+	if !sessionCommands[name] {
 		return nil
 	}
 	agent, err := s.st.GetAgent(ctx, agentID)
 	if err != nil {
 		return err
 	}
-	if agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode {
-		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "Claude Code Agents do not support /"+name+". This command only works in Pi sessions.")
+	if runtime := agentruntime.ForProvider(agent.ModelProvider); !runtime.Capabilities.HasSessionCommand(name) {
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, runtime.Name+" Agents do not support /"+name+". This command only works in Pi sessions.")
 	}
 	return nil
 }

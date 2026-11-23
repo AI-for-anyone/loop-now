@@ -249,7 +249,7 @@ func toolEntries(tools []store.ToolEvent) []timed {
 // runtimeOf is the runtime recorded by the process event (pi or claude-code); old records have none, which is nil
 // (meaning pi).
 func runtimeOf(d map[string]any) *string {
-	if v := str(d, "runtime"); v == agentruntime.Pi || v == agentruntime.ClaudeCode {
+	if v := str(d, "runtime"); agentruntime.Known(v) {
 		return &v
 	}
 	return nil

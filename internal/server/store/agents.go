@@ -236,7 +236,7 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 				return err
 			}
 		}
-		if agentruntime.ForProvider(next.ModelProvider) != agentruntime.ForProvider(cur.ModelProvider) {
+		if agentruntime.ForProvider(next.ModelProvider).ID != agentruntime.ForProvider(cur.ModelProvider).ID {
 			if err := s.switchRuntimeTx(ctx, tx, id, cur.ModelProvider, next.ModelProvider); err != nil {
 				return err
 			}
@@ -282,7 +282,7 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 	}
 	return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,
 		Data: map[string]any{"fromEpoch": epoch - 1, "toEpoch": epoch, "reason": "runtime_changed",
-			"fromRuntime": agentruntime.ForProvider(from), "toRuntime": agentruntime.ForProvider(to)}})
+			"fromRuntime": agentruntime.ForProvider(from).ID, "toRuntime": agentruntime.ForProvider(to).ID}})
 }
 
 // AgentBusy reports whether the Agent has a run in progress.
