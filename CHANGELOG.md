@@ -52,6 +52,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Groundwork for more Agent runtimes
+
+- Nothing changes in use: Agents on Pi and on Claude Code start, reply, stop, join tasks and are deleted as before, and every text in the console is the same.
+- Inside, each runtime is now one entry in a registry (its name, the model providers it runs, what it can do) plus one driver, and the console decides what to show from those capabilities instead of asking which runtime it is. This is the preparation for running Agents on other CLIs installed on your computer.
+- API: new `GET /runtime-definitions` returns each runtime's name, model providers and capabilities without checking this computer (`GET /runtimes` still reports whether a runtime is installed and logged in). In run timelines, the startup phases and the process entries now always say which runtime they belong to; older records get it when read.
+- For contributors: a runtime id may be compared only in the registry and the driver files (Go) and in `web/src/lib/runtime.ts` (console); CI checks both.
+
 ### Documentation
 
 - The changelog is now written in English first, with the Chinese version in `CHANGELOG.zh-CN.md`; GitHub Release notes show the English section followed by the Chinese one. `AGENTS.md` is English with `AGENTS.zh-CN.md` beside it, and `MAIN.md` is English.
