@@ -527,29 +527,29 @@ func TestSchemaVersionTellsFolderCopyFromFrozenSources(t *testing.T) {
 	}
 	fresh, err := Decode(encoded)
 	if err != nil || !fresh.CopiesAgentFolder() {
-		t.Fatalf("新捕获应复制文件夹：%v", err)
+		t.Fatalf("a new capture should copy the folder: %v", err)
 	}
 	env := snap.env
 	env.SchemaVersion = frozenSourcesSchema
 	old, err := Decode(encodeEnvelope(t, env))
 	if err != nil || old.CopiesAgentFolder() {
-		t.Fatalf("schema 8 的旧任务应保留冻结来源：%v", err)
+		t.Fatalf("old schema 8 tasks should keep their frozen sources: %v", err)
 	}
 	env.SchemaVersion = copiedAgentFolderSchema
 	v9, err := Decode(encodeEnvelope(t, env))
 	if err != nil || !v9.CopiesAgentFolder() {
-		t.Fatalf("schema 9 的旧任务应继续复制文件夹：%v", err)
+		t.Fatalf("old schema 9 tasks should still copy the folder: %v", err)
 	}
 	env.SchemaVersion, env.SourceVersion = copiedAgentFolderSchema, 5
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
-		t.Fatal("schema 9 不能带 sourceVersion")
+		t.Fatal("schema 9 must not carry sourceVersion")
 	}
 	env.SchemaVersion, env.SourceVersion = schemaVersion, 5
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
-		t.Fatal("当前 schema 不能带 sourceVersion")
+		t.Fatal("the current schema must not carry sourceVersion")
 	}
 	env.SchemaVersion, env.SourceVersion = schemaVersion+1, 0
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
-		t.Fatal("未知 schema 应拒绝")
+		t.Fatal("an unknown schema should be rejected")
 	}
 }

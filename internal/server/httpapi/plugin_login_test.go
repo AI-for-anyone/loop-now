@@ -55,7 +55,7 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 	e.api.ProjectCredentials.Plugins = &modelauth.PluginLogins{Helper: httpPluginHelper{}, States: &providerstate.Manager{Root: filepath.Join(t.TempDir(), "states")},
 		Extensions: func(context.Context, string) ([]string, error) { return []string{"/x/index.ts"}, nil }}
 	base := "/projects/" + e.dc.Project.ID.String() + "/model-auth/operations"
-	start := decode[cm.LoginState](t, e.expect(202, "POST", base, map[string]any{"provider": "fake-oauth", "name": "订阅"}))
+	start := decode[cm.LoginState](t, e.expect(202, "POST", base, map[string]any{"provider": "fake-oauth", "name": "Subscription"}))
 	op := base + "/" + start.Operation.ID.String()
 	poll := func(ok func(cm.Operation) bool) cm.LoginState {
 		t.Helper()
@@ -65,34 +65,34 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 				return s
 			}
 		}
-		t.Fatal("等待登录状态超时")
+		t.Fatal("timed out waiting for the login state")
 		return cm.LoginState{}
 	}
 	s := poll(func(o cm.Operation) bool { return o.Prompt != nil })
 	if s.Operation.Prompt.Kind != "select" || s.Operation.Provider != "fake-oauth" {
-		t.Fatalf("问题：%+v", s.Operation)
+		t.Fatalf("question: %+v", s.Operation)
 	}
 	list := decode[cm.Operations](t, e.expect(200, "GET", base, nil))
 	if len(list.Operations) != 1 || list.Operations[0].Provider != "fake-oauth" || list.Operations[0].Prompt == nil {
-		t.Fatalf("不带 provider 的列表：%+v", list)
+		t.Fatalf("list without provider: %+v", list)
 	}
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "1", "value": "pigeon"})
 	e.expect(200, "POST", op+"/input", map[string]any{"promptId": "1", "value": "device"})
 	s = poll(func(o cm.Operation) bool { return o.DeviceCode != nil && o.Prompt != nil })
 	if s.Operation.Status != "awaiting_authorization" || s.Operation.DeviceCode.UserCode != "ABCD-EFGH" || s.Operation.DeviceCode.ExpiresAt == nil || s.Operation.Prompt.Kind != "manual_code" {
-		t.Fatalf("设备码与手工输入：%+v", s.Operation)
+		t.Fatalf("device code and manual input: %+v", s.Operation)
 	}
 	e.expect(200, "POST", op+"/input", map[string]any{"promptId": "2", "value": "pasted-callback"})
 	s = poll(func(o cm.Operation) bool { return o.Status == "succeeded" })
 	if s.Account == nil || *s.Account.AuthMethod != "oauth" || s.Operation.DeviceCode != nil {
-		t.Fatalf("成功：%+v", s)
+		t.Fatalf("success: %+v", s)
 	}
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "2", "value": "late"})
 	e.expect(422, "POST", base, map[string]any{"provider": "nope", "name": "x"})
 
 	// An Agent picks this provider and binds an account; with “用本机的登录状态” ("Use local logins") on, the selection carries
 	// localLogin.
-	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "订阅助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
+	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "Subscription assistant", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
 	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, plugin, true, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("选择里应带 localLogin：%+v", sel.Selections)
+		t.Fatalf("the selection should carry localLogin: %+v", sel.Selections)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestPlatformAgentPluginLoginAPI(t *testing.T) {
 		return nil, nil
 	}
 
-	agent := e.platformAgent("平台订阅助手")
+	agent := e.platformAgent("Platform subscription assistant")
 	path := "/agents/" + agent.ID.String()
 	reason := func() *string {
 		t.Helper()
@@ -152,18 +152,18 @@ func TestPlatformAgentPluginLoginAPI(t *testing.T) {
 				return p.UnavailableReason
 			}
 		}
-		t.Fatal("目录里没有插件提供方")
+		t.Fatal("the catalog has no plugin provider")
 		return nil
 	}
 	if r := reason(); r == nil || *r != "agent_not_granted" {
-		t.Fatalf("没授权：%v", r)
+		t.Fatalf("not granted: %v", r)
 	}
 	e.expect(422, "PATCH", path, map[string]any{"model": map[string]string{"provider": "fake-oauth", "modelId": "fake-1"}})
 	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, plugin, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if r := reason(); r != nil {
-		t.Fatalf("授权后（平台 Agent 不看项目启用）：%v", *r)
+		t.Fatalf("after the grant (platform Agents ignore project enablement): %v", *r)
 	}
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "fake-oauth", "modelId": "fake-1"}})
 	version := func() int64 {
@@ -176,7 +176,7 @@ func TestPlatformAgentPluginLoginAPI(t *testing.T) {
 	}
 	refused := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/model-auth/operations", map[string]any{"provider": "fake-oauth", "expectedConfigVersion": version()}))
 	if refused.Error.Code != "plugin_not_enabled" {
-		t.Fatalf("没授权不能登录：%+v", refused)
+		t.Fatalf("cannot log in without a grant: %+v", refused)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, plugin, true, nil); err != nil {
 		t.Fatal(err)
@@ -193,34 +193,34 @@ func TestPlatformAgentPluginLoginAPI(t *testing.T) {
 				return o
 			}
 		}
-		t.Fatal("等待登录状态超时")
+		t.Fatal("timed out waiting for the login state")
 		return modelauth.Operation{}
 	}
 	o := poll(func(o modelauth.Operation) bool { return o.Prompt != nil })
 	if o.Prompt.Kind != "select" || o.Provider != "fake-oauth" {
-		t.Fatalf("问题：%+v", o)
+		t.Fatalf("question: %+v", o)
 	}
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "1", "value": "pigeon"})
 	answered := decode[modelauth.State](t, e.expect(200, "POST", op+"/input", map[string]any{"promptId": "1", "value": "device"}))
 	if answered.Operation == nil || answered.Operation.ID != start.ID {
-		t.Fatalf("回答后的状态：%+v", answered)
+		t.Fatalf("state after answering: %+v", answered)
 	}
 	o = poll(func(o modelauth.Operation) bool { return o.DeviceCode != nil && o.Prompt != nil })
 	if o.Status != "awaiting_authorization" || o.DeviceCode.UserCode != "ABCD-EFGH" || o.DeviceCode.ExpiresAt == nil || o.Prompt.Kind != "manual_code" {
-		t.Fatalf("设备码与手工输入：%+v", o)
+		t.Fatalf("device code and manual input: %+v", o)
 	}
 	state := decode[modelauth.State](t, e.expect(200, "GET", path+"/model-auth", nil))
 	if state.Operation == nil || state.Operation.DeviceCode == nil || state.LocalLogin == nil || *state.LocalLogin != "missing" {
-		t.Fatalf("状态视图：%+v", state)
+		t.Fatalf("state view: %+v", state)
 	}
 	e.expect(200, "POST", op+"/input", map[string]any{"promptId": "2", "value": "pasted-callback"})
 	o = poll(func(o modelauth.Operation) bool { return o.Status == "succeeded" })
 	if o.DeviceCode != nil || o.Prompt != nil {
-		t.Fatalf("终态不带设备码与问题：%+v", o)
+		t.Fatalf("the final state has no device code or question: %+v", o)
 	}
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "2", "value": "late"})
 	state = decode[modelauth.State](t, e.expect(200, "GET", path+"/model-auth", nil))
 	if c := state.Credential; c == nil || c.Provider == nil || *c.Provider != "fake-oauth" || c.AuthMethod == nil || *c.AuthMethod != "oauth" || c.VersionID == nil {
-		t.Fatalf("登录后的凭证：%+v", state.Credential)
+		t.Fatalf("credential after login: %+v", state.Credential)
 	}
 }

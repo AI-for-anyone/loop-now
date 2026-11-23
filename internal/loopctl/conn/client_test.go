@@ -124,10 +124,10 @@ func TestRetryReadRequests(t *testing.T) {
 	}
 	_, id, attempts, _ := h.c.Meta()
 	if attempts != 2 || atomic.LoadInt32(&n) != 2 || id != "req-b" {
-		t.Fatalf("请求次数 %d/%d，请求 ID %s", attempts, atomic.LoadInt32(&n), id)
+		t.Fatalf("attempts %d/%d, request ID %s", attempts, atomic.LoadInt32(&n), id)
 	}
 	if len(h.sleeps) != 1 || h.sleeps[0] != 500*time.Millisecond {
-		t.Fatalf("等待 %v", h.sleeps)
+		t.Fatalf("sleeps %v", h.sleeps)
 	}
 }
 
@@ -141,10 +141,10 @@ func TestRetryGivesUp(t *testing.T) {
 		t.Fatalf("%v", e)
 	}
 	if _, _, attempts, _ := h.c.Meta(); attempts != 3 || atomic.LoadInt32(&n) != 3 {
-		t.Fatalf("应请求 3 次，得到 %d", atomic.LoadInt32(&n))
+		t.Fatalf("should make 3 requests, got %d", atomic.LoadInt32(&n))
 	}
 	if len(h.sleeps) != 2 || h.sleeps[0] != 500*time.Millisecond || h.sleeps[1] != time.Second {
-		t.Fatalf("等待 %v", h.sleeps)
+		t.Fatalf("sleeps %v", h.sleeps)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestRetryBackoffCap(t *testing.T) {
 	h.c.Do(context.Background(), Request{Method: "GET", Path: []string{"x"}, Retry: true})
 	want := []time.Duration{3 * time.Second, 5 * time.Second, 5 * time.Second}
 	if len(h.sleeps) != 3 || h.sleeps[0] != want[0] || h.sleeps[1] != want[1] || h.sleeps[2] != want[2] {
-		t.Fatalf("等待 %v，应为 %v", h.sleeps, want)
+		t.Fatalf("sleeps %v, want %v", h.sleeps, want)
 	}
 }
 
@@ -167,9 +167,9 @@ func TestNoRetry(t *testing.T) {
 		req   Request
 		codes []int
 	}{
-		{"写请求不重试", nil, Request{Method: "POST", Path: []string{"inbox", "messages"}}, []int{503, 200}},
-		{"重试次数为 0", map[string]string{EnvRetryMax: "0"}, Request{Method: "GET", Path: []string{"x"}, Retry: true}, []int{503, 200}},
-		{"其他状态码不重试", nil, Request{Method: "GET", Path: []string{"x"}, Retry: true}, []int{500, 200}},
+		{"writes are not retried", nil, Request{Method: "POST", Path: []string{"inbox", "messages"}}, []int{503, 200}},
+		{"retry count 0", map[string]string{EnvRetryMax: "0"}, Request{Method: "GET", Path: []string{"x"}, Retry: true}, []int{503, 200}},
+		{"other status codes are not retried", nil, Request{Method: "GET", Path: []string{"x"}, Retry: true}, []int{500, 200}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var n int32
@@ -178,7 +178,7 @@ func TestNoRetry(t *testing.T) {
 			h := agentClient(t, srv.URL, c.env)
 			_, e := h.c.Do(context.Background(), c.req)
 			if e == nil || atomic.LoadInt32(&n) != 1 {
-				t.Fatalf("应只请求一次并失败：%d %v", atomic.LoadInt32(&n), e)
+				t.Fatalf("should make one request and fail: %d %v", atomic.LoadInt32(&n), e)
 			}
 			if _, _, attempts, _ := h.c.Meta(); attempts != 1 {
 				t.Fatalf("attempts %d", attempts)
@@ -206,12 +206,12 @@ func TestTimeout(t *testing.T) {
 		t.Fatalf("%v", e)
 	}
 	if time.Since(start) > 5*time.Second || atomic.LoadInt32(&n) != 1 {
-		t.Fatalf("用时 %s，请求 %d 次", time.Since(start), atomic.LoadInt32(&n))
+		t.Fatalf("took %s, %d requests", time.Since(start), atomic.LoadInt32(&n))
 	}
 	atomic.StoreInt32(&n, 0)
 	h.c.Do(context.Background(), Request{Method: "GET", Path: []string{"x"}, Retry: true})
 	if atomic.LoadInt32(&n) != 3 {
-		t.Fatalf("读请求超时后应重试，请求了 %d 次", atomic.LoadInt32(&n))
+		t.Fatalf("a read should be retried after a timeout, made %d requests", atomic.LoadInt32(&n))
 	}
 }
 
@@ -240,7 +240,7 @@ func TestRedirectNotFollowed(t *testing.T) {
 	h := agentClient(t, srv.URL, nil)
 	_, e := h.c.Do(context.Background(), Request{Method: "GET", Path: []string{"x"}, Retry: true})
 	if e == nil || e.Code != output.CodeUnexpectedRedirect || output.ExitCode(e.Category) != 1 || atomic.LoadInt32(&followed) != 0 {
-		t.Fatalf("%v，跟随了 %d 次", e, atomic.LoadInt32(&followed))
+		t.Fatalf("%v, followed %d times", e, atomic.LoadInt32(&followed))
 	}
 }
 
@@ -252,13 +252,13 @@ func TestResponses(t *testing.T) {
 		code     string
 		category output.Category
 	}{
-		{"统一错误结构", 409, `{"error":{"code":"agent_not_idle","message":"忙","details":{"a":1},"fields":[{"field":"f","message":"m"}]}}`, "agent_not_idle", output.CategoryConflict},
-		{"非 2xx 无法解析", 502, `<html>bad gateway</html>`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
-		{"404 无法解析", 404, `not found`, output.CodeUnexpectedResponse, output.CategoryNotFound},
-		{"503 带其他 JSON", 503, `{"ok":false,"database":{"ok":false}}`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
-		{"2xx 无法解析", 200, `{"broken"`, output.CodeUnexpectedResponse, output.CategoryInternal},
-		{"401", 401, `{"error":{"code":"unauthenticated","message":"令牌无效"}}`, "unauthenticated", output.CategoryUnauthenticated},
-		{"403", 403, `{"error":{"code":"forbidden","message":"只限控制台"}}`, "forbidden", output.CategoryForbidden},
+		{"standard error body", 409, `{"error":{"code":"agent_not_idle","message":"busy","details":{"a":1},"fields":[{"field":"f","message":"m"}]}}`, "agent_not_idle", output.CategoryConflict},
+		{"unparsable non-2xx", 502, `<html>bad gateway</html>`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
+		{"unparsable 404", 404, `not found`, output.CodeUnexpectedResponse, output.CategoryNotFound},
+		{"503 with other JSON", 503, `{"ok":false,"database":{"ok":false}}`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
+		{"unparsable 2xx", 200, `{"broken"`, output.CodeUnexpectedResponse, output.CategoryInternal},
+		{"401", 401, `{"error":{"code":"unauthenticated","message":"invalid token"}}`, "unauthenticated", output.CategoryUnauthenticated},
+		{"403", 403, `{"error":{"code":"forbidden","message":"console only"}}`, "forbidden", output.CategoryForbidden},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -273,10 +273,10 @@ func TestResponses(t *testing.T) {
 				t.Fatalf("%+v", e)
 			}
 			if c.status == 503 && string(e.Details) != c.body {
-				t.Fatalf("JSON 响应体应放进 details：%s", e.Details)
+				t.Fatalf("the JSON response body should go into details: %s", e.Details)
 			}
-			if c.code == "agent_not_idle" && (string(e.Details) != `{"a":1}` || !strings.Contains(string(e.Fields), `"field":"f"`) || e.Message != "忙") {
-				t.Fatalf("没有保留服务端的详情：%+v", e)
+			if c.code == "agent_not_idle" && (string(e.Details) != `{"a":1}` || !strings.Contains(string(e.Fields), `"field":"f"`) || e.Message != "busy") {
+				t.Fatalf("the server's details were not kept: %+v", e)
 			}
 		})
 	}
@@ -288,7 +288,7 @@ func TestResponses(t *testing.T) {
 			t.Fatalf("%v %v", resp, e)
 		}
 	})
-	t.Run("超过响应上限", func(t *testing.T) {
+	t.Run("response over the limit", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, `"`+strings.Repeat("a", 2000)+`"`)
 		}))
@@ -308,15 +308,15 @@ func TestRequestHeadersAndPath(t *testing.T) {
 	}))
 	defer srv.Close()
 	h := agentClient(t, srv.URL, nil)
-	h.c.Do(context.Background(), Request{Method: "GET", Path: []string{"agents", "a/b#c 中"}, Query: map[string][]string{"address": {"默认项目/dev#任务"}}})
+	h.c.Do(context.Background(), Request{Method: "GET", Path: []string{"agents", "a/b#c 中"}, Query: map[string][]string{"address": {"Default project/dev#task"}}}) // check-english: zh (CJK in an escaped URL path segment)
 	if got.Header.Get("Authorization") != "Bearer "+agentToken || got.Header.Get("User-Agent") != "loopctl/v1 (linux/arm64)" || got.Header.Get("Accept") != "application/json" {
-		t.Fatalf("请求头 %v", got.Header)
+		t.Fatalf("request headers %v", got.Header)
 	}
-	if got.URL.EscapedPath() != "/agent/v1/agents/a%2Fb%23c%20%E4%B8%AD" || got.URL.Query().Get("address") != "默认项目/dev#任务" {
-		t.Fatalf("路径 %s，查询 %s", got.URL.EscapedPath(), got.URL.RawQuery)
+	if got.URL.EscapedPath() != "/agent/v1/agents/a%2Fb%23c%20%E4%B8%AD" || got.URL.Query().Get("address") != "Default project/dev#task" {
+		t.Fatalf("path %s, query %s", got.URL.EscapedPath(), got.URL.RawQuery)
 	}
 	if strings.Contains(got.URL.String(), "secret") || strings.Contains(got.URL.String(), "AGENT") {
-		t.Fatal("URL 中出现令牌")
+		t.Fatal("the token appears in the URL")
 	}
 }
 
@@ -347,9 +347,9 @@ func TestVersionWarnings(t *testing.T) {
 	for _, c := range []struct {
 		name, header, code string
 	}{
-		{"一致", "v1", ""},
-		{"不一致", "v2", output.WarnVersionMismatch},
-		{"没有版本头", "", output.WarnServerVersionUnknown},
+		{"same version", "v1", ""},
+		{"different version", "v2", output.WarnVersionMismatch},
+		{"no version header", "", output.WarnServerVersionUnknown},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -372,7 +372,7 @@ func TestVersionWarnings(t *testing.T) {
 				t.Fatalf("%v", ws)
 			}
 			if d, ok := ws[0].Details.(map[string]any); c.code == output.WarnVersionMismatch && (!ok || d["serverVersion"] != "v2" || d["clientVersion"] != "v1" || d["downloadPath"] != nil) {
-				t.Fatalf("Agent 身份的详情不对：%v", ws[0].Details)
+				t.Fatalf("wrong details for the Agent identity: %v", ws[0].Details)
 			}
 		})
 	}
@@ -395,7 +395,7 @@ func TestTLS(t *testing.T) {
 		}
 		return NewClient(s, ClientOptions{Version: "v1", GOOS: "darwin", GOARCH: "arm64"})
 	}
-	t.Run("指定签发它的 CA", func(t *testing.T) {
+	t.Run("issuing CA given", func(t *testing.T) {
 		c := resolve(ca.path)
 		resp, e := c.Do(context.Background(), Request{Method: "GET", Path: []string{"whoami"}})
 		if e != nil || string(resp.Data) != `{"ok":true}` {
@@ -403,13 +403,13 @@ func TestTLS(t *testing.T) {
 		}
 		ws := c.Warnings()
 		if len(ws) != 1 || ws[0].Details.(map[string]any)["downloadPath"] != "/downloads/loopctl/loopctl-darwin-arm64" {
-			t.Fatalf("外部身份应给出下载路径：%v", ws)
+			t.Fatalf("the external identity should get a download path: %v", ws)
 		}
 		if tr := c.hc.Transport.(*http.Transport); tr.TLSClientConfig.RootCAs == nil || tr.TLSClientConfig.InsecureSkipVerify {
-			t.Fatal("指定 CA 文件时应只信任该 CA，且不跳过校验")
+			t.Fatal("with a CA file, only that CA should be trusted and verification not skipped")
 		}
 	})
-	for name, caFile := range map[string]string{"指定另一个 CA": other.path, "没有指定 CA（系统根证书）": ""} {
+	for name, caFile := range map[string]string{"another CA given": other.path, "no CA given (system roots)": ""} {
 		t.Run(name, func(t *testing.T) {
 			_, e := resolve(caFile).Do(context.Background(), Request{Method: "GET", Path: []string{"whoami"}, Retry: true})
 			if e == nil || e.Code != output.CodeTLSVerifyFailed || e.Category != output.CategoryConfig {

@@ -331,7 +331,7 @@ func TestLarkNativeAppCapturedAThenNextRoundB(t *testing.T) {
 	// fakePi: make every turn of the Pi processes started from here on a bit slower, so that the sleep below can be
 	// registered while the turn is running, instead of betting that the end-of-turn write happens to be slow enough.
 	t.Setenv("FAKEPI_PROMPT_DELAY", "800ms")
-	if _, e = s.a.API.Inbox.Send(context.Background(), auth.Console(), "默认项目/native scoped#"+task.Task.ID.String(), " !sleep=800ms !text=lark_blocked_conversation", "queue"); e != nil {
+	if _, e = s.a.API.Inbox.Send(context.Background(), auth.Console(), "Default project/native scoped#"+task.Task.ID.String(), " !sleep=800ms !text=lark_blocked_conversation", "queue"); e != nil {
 		t.Fatal(e)
 	}
 	turn := sleepWaitTurn(t, s, instance.ID, uuid.Nil)
@@ -351,7 +351,7 @@ func TestLarkNativeAppCapturedAThenNextRoundB(t *testing.T) {
 	if e != nil || len(restarted.View.SleepingInstances) != 1 || !restarted.View.SleepingInstances[0].WakeAt.Equal(wakeAt) {
 		t.Fatal("sleep restart changed deadline")
 	}
-	if _, e = s.a.API.Inbox.Send(context.Background(), auth.Console(), "默认项目/native scoped#"+task.Task.ID.String(), "lark early wake", "queue"); e != nil {
+	if _, e = s.a.API.Inbox.Send(context.Background(), auth.Console(), "Default project/native scoped#"+task.Task.ID.String(), "lark early wake", "queue"); e != nil {
 		t.Fatal(e)
 	}
 	taskWait(t, s, task.Task.ID, func(d taskmodel.Detail) bool {

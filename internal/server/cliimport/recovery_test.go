@@ -86,7 +86,7 @@ func expireInDB(t *testing.T, pool *db.DB, id uuid.UUID) {
 
 func TestCLIImportLarkCanonicalDedup(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("lark-cli 只在 darwin 上生成随机主密钥文件，这个用例要用它区分同一凭证的两次渲染")
+		t.Skip("lark-cli generates a random master key file only on darwin, which this case needs to tell two renderings of the same credential apart")
 	}
 	e := newImportEnv(t)
 	ctx := context.Background()
@@ -178,7 +178,7 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 	h := sha256.Sum256([]byte("pending-outcome"))
 	candidate := uuid.New()
 	id := uuid.New()
-	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "合成未决"}}}
+	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "Synthetic pending"}}}
 	if _, _, err := e.st.BeginCLIImport(ctx, in); err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure(t *testing.T) {
 	s := e.service(t, Options{}, nil)
 	h := sha256.Sum256([]byte("maintenance-retry"))
 	id := uuid.New()
-	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: uuid.New(), CLI: "gh", Label: "合成到期"}}}
+	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: uuid.New(), CLI: "gh", Label: "Synthetic expired"}}}
 	if _, _, err := e.st.BeginCLIImport(ctx, in); err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var update = flag.Bool("update", false, "更新 golden 文件")
+var update = flag.Bool("update", false, "update golden files")
 
 // The complete schema output is pinned in a golden file, so any change to the commands shows up as a diff in
 // review.
@@ -25,9 +25,9 @@ func TestSchemaGolden(t *testing.T) {
 	}
 	want, err := os.ReadFile(p)
 	if err != nil {
-		t.Fatalf("读取 golden 文件：%v（用 -update 生成）", err)
+		t.Fatalf("read golden file: %v (generate it with -update)", err)
 	}
 	if !bytes.Equal(buf.Bytes(), want) {
-		t.Errorf("schema 输出与 %s 不一致；确认改动后用 go test -run TestSchemaGolden -update 更新", p)
+		t.Errorf("schema output differs from %s; after checking the change, update it with go test -run TestSchemaGolden -update", p)
 	}
 }

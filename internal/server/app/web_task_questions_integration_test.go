@@ -73,8 +73,8 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	addr = s.a.Addr()
 	t.Cleanup(s.stop)
 	ctx := context.Background()
-	managerPath, manager := s.createAgent("题联调Manager")
-	workerPath, worker := s.createAgent("题联调Worker")
+	managerPath, manager := s.createAgent("question integration Manager")
+	workerPath, worker := s.createAgent("question integration Worker")
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": manager.ID})
 	for _, path := range []string{managerPath, workerPath} {
@@ -104,7 +104,7 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 		return auth.Principal{Kind: auth.KindAgent, ID: worker.ID, TaskID: taskID, RuntimeID: n.RuntimeID}
 	}
 	ask := func(taskID uuid.UUID, n taskmodel.NodeRun, to, text string) (store.InboxMessage, error) {
-		return s.a.API.Inbox.Send(ctx, principal(taskID, n), to, text, "queue", inbox.QuestionInput{Options: []string{"继续", "调整"}, NodeRunID: n.ID})
+		return s.a.API.Inbox.Send(ctx, principal(taskID, n), to, text, "queue", inbox.QuestionInput{Options: []string{"继续", "adjust"}, NodeRunID: n.ID}) // check-english: zh (option label the browser script web/scripts/integration/tasks/question-app-browser-verify.mjs clicks)
 	}
 	producer := step("produce", " !sleep=1s !text=web-source-output")
 	producer.OutputFields = []workflow.Field{{Name: "text", Type: "string", Required: true}}
@@ -112,7 +112,7 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	review.InputFields = []workflow.Field{{Name: "text", Type: "string", Required: true}}
 	producerID := "produce"
 	review.Inputs = map[string]workflow.Source{"text": {Kind: "node", NodeID: &producerID, Field: "text"}}
-	a := create("Web真实多节点原题", workflow.Definition{StartStepID: "produce", Steps: []workflow.Step{producer, review}, Edges: []workflow.Edge{{ID: "next", From: "produce", To: "review", Label: "交给复核"}}})
+	a := create("Web real multi-node original question", workflow.Definition{StartStepID: "produce", Steps: []workflow.Step{producer, review}, Edges: []workflow.Edge{{ID: "next", From: "produce", To: "review", Label: "hand over for review"}}})
 	source := taskWait(t, s, a.Task.ID, func(d taskmodel.Detail) bool {
 		return len(d.Nodes) > 0 && s.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy"
 	}).Nodes[0]
@@ -123,29 +123,29 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	mapped := taskWait(t, s, a.Task.ID, func(d taskmodel.Detail) bool {
 		return len(d.Nodes) == 2 && s.a.Executor.Process(d.Nodes[1].RuntimeID).State == "busy"
 	})
-	aq, e := ask(a.Task.ID, mapped.Nodes[1], "@console", "Web真实原题：是否继续复核？")
+	aq, e := ask(a.Task.ID, mapped.Nodes[1], "@console", "Web真实原题：是否继续复核？") // check-english: zh (question text matched by web/scripts/integration/tasks/question-app-browser-verify.mjs)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.a.API.Inbox.Reply(ctx, principal(a.Task.ID, mapped.Nodes[1]), aq.ID, "Web真实原题之后的普通消息", "queue"); e != nil {
+	if _, e = s.a.API.Inbox.Reply(ctx, principal(a.Task.ID, mapped.Nodes[1]), aq.ID, "Web真实原题之后的普通消息", "queue"); e != nil { // check-english: zh (message text matched by web/scripts/integration/tasks/question-app-browser-verify.mjs)
 		t.Fatal(e)
 	}
 	taskWait(t, s, a.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "waiting" })
-	b := create("Web真实重试关闭", workflow.Definition{StartStepID: "work", Steps: []workflow.Step{step("work", " !sleep=5s !error=web-question-error !text=web-retry-output")}, Edges: []workflow.Edge{}})
+	b := create("Web real retry closes", workflow.Definition{StartStepID: "work", Steps: []workflow.Step{step("work", " !sleep=5s !error=web-question-error !text=web-retry-output")}, Edges: []workflow.Edge{}})
 	bn := taskWait(t, s, b.Task.ID, func(d taskmodel.Detail) bool {
 		return len(d.Nodes) > 0 && s.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy"
 	}).Nodes[0]
-	bq, e := ask(b.Task.ID, bn, "@console", "Web旧题：等待重试关闭")
+	bq, e := ask(b.Task.ID, bn, "@console", "Web old question: waiting for the retry to close it")
 	if e != nil {
 		t.Fatal(e)
 	}
 	taskWait(t, s, b.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	identity := decode[apitypes.ExternalIdentity](t, s.must(201, "POST", "/external-identities", map[string]any{"name": "web-question-reader"}))
-	c := create("Web真实权限题", workflow.Definition{StartStepID: "private", Steps: []workflow.Step{step("private", " !sleep=2s !error=web-private-error !text=web-private-output")}, Edges: []workflow.Edge{}})
+	c := create("Web real permission question", workflow.Definition{StartStepID: "private", Steps: []workflow.Step{step("private", " !sleep=2s !error=web-private-error !text=web-private-output")}, Edges: []workflow.Edge{}})
 	cn := taskWait(t, s, c.Task.ID, func(d taskmodel.Detail) bool {
 		return len(d.Nodes) > 0 && s.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy"
 	}).Nodes[0]
-	cq, e := ask(c.Task.ID, cn, "@"+identity.Name, "Web外部身份专属原题")
+	cq, e := ask(c.Task.ID, cn, "@"+identity.Name, "Web外部身份专属原题") // check-english: zh (question text matched by web/scripts/integration/tasks/question-app-browser-verify.mjs)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -163,7 +163,7 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 			}
 			n := record.Current()
 			if n != nil && n.ID != bn.ID && n.Status != "blocked" && n.Question == nil && s.a.Executor.Process(n.RuntimeID).State == "busy" {
-				q, err := ask(b.Task.ID, *n, "@console", "Web新题：不能被旧答案解除")
+				q, err := ask(b.Task.ID, *n, "@console", "Web new question: an old answer must not resolve it")
 				if err != nil {
 					http.Error(rw, "question create failed", 500)
 					return

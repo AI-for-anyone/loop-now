@@ -36,18 +36,18 @@ func TestLarkAppOfficialProtocolSourceAndNormalCapture(t *testing.T) {
 	project := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil)).Project.ID
 	base := "/projects/" + project.String() + "/cli-auth/operations"
 	accounts := "/projects/" + project.String() + "/credential-accounts"
-	s.must(201, "POST", accounts, map[string]any{"purpose": "model", "provider": "anthropic", "name": "离线模型", "credential": map[string]string{"type": "api_key", "key": "synthetic-lark-model"}})
-	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "原bot应用", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-fixture", "appSecret": "fixture-app-secret", "brand": "feishu"}}}))
+	s.must(201, "POST", accounts, map[string]any{"purpose": "model", "provider": "anthropic", "name": "offline model", "credential": map[string]string{"type": "api_key", "key": "synthetic-lark-model"}})
+	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "original bot app", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-fixture", "appSecret": "fixture-app-secret", "brand": "feishu"}}}))
 	if source.Status != "saved" || source.LarkIdentity != nil || source.LarkApplication == nil || source.LarkApplication.AppID != "app-fixture" {
 		t.Fatal("safe bot/source projection invalid")
 	}
-	path, agent := s.createAgent("Lark授权Agent")
+	path, agent := s.createAgent("Lark login Agent")
 	s.must(200, "PUT", path+"/clis/lark-cli", nil)
 	before, e := s.a.Config.ExecutionSnapshot(ctx, agent.ID)
 	if e != nil || before.LarkBinding != nil || len(before.CLIPayloads["lark-cli"].Files) == 0 {
 		t.Fatal("original bot capture changed", e)
 	}
-	a := p.Add("ou-actual-fixture", "核实用户", nil, "")
+	a := p.Add("ou-actual-fixture", "verified user", nil, "")
 	a.Release()
 	id := uuid.New()
 	s.must(202, "POST", base, map[string]any{"operationId": id, "cli": "lark-cli", "authType": "lark_user", "sourceAccountId": source.ID, "expectedSourceRevision": source.Revision})

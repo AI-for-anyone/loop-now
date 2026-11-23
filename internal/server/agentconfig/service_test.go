@@ -44,7 +44,7 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := sqlitetest.NewStore(t)
-	dc, err := st.EnsureDefaults(context.Background(), "默认组织", "默认项目")
+	dc, err := st.EnsureDefaults(context.Background(), "Default org", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) agent(t *testing.T) store.Agent {
 	t.Helper()
-	a, err := e.svc.CreateAgent(context.Background(), e.scope, "助手-"+uuid.NewString()[:8], "anthropic", "claude-x", "")
+	a, err := e.svc.CreateAgent(context.Background(), e.scope, "assistant-"+uuid.NewString()[:8], "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func (e *env) agent(t *testing.T) store.Agent {
 func wantCode(t *testing.T, err error, code string) {
 	t.Helper()
 	if !apperr.Is(err, code) {
-		t.Fatalf("期望错误码 %s，实际 %v", code, err)
+		t.Fatalf("want error code %s, got %v", code, err)
 	}
 }
 
@@ -87,11 +87,11 @@ func TestCreateAndQueryAgent(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	a := e.agent(t)
-	_, err := e.svc.CreateAgent(ctx, e.scope, a.Name, "anthropic", "claude-y", "提示")
+	_, err := e.svc.CreateAgent(ctx, e.scope, a.Name, "anthropic", "claude-y", "Prompt")
 	wantCode(t, err, apperr.CodeNameConflict)
-	b, err := e.svc.CreateAgent(ctx, e.scope, "助手二", "anthropic", "claude-y", "提示")
+	b, err := e.svc.CreateAgent(ctx, e.scope, "Assistant two", "anthropic", "claude-y", "Prompt")
 	if err != nil || a.ID == b.ID || a.ConfigVersion != 1 {
-		t.Fatalf("不同名的 Agent 应正常创建：%v %v", b, err)
+		t.Fatalf("an Agent with a different name should be created: %v %v", b, err)
 	}
 	// Renaming to an existing name is rejected.
 	dup := a.Name
@@ -100,11 +100,11 @@ func TestCreateAndQueryAgent(t *testing.T) {
 	_, err = e.svc.CreateAgent(ctx, e.scope, "", "anthropic", "no-such", "")
 	ae, _ := apperr.As(err)
 	if ae == nil || ae.Code != apperr.CodeValidationFailed || len(ae.Fields) != 2 {
-		t.Fatalf("应同时指出名称与模型：%+v", ae)
+		t.Fatalf("should report both the name and the model: %+v", ae)
 	}
 	items, err := e.st.ListAgents(ctx, e.scope)
 	if err != nil || len(items) != 2 || items[0].Busy || items[0].SessionState != "none" {
-		t.Fatalf("列表不对：%+v %v", items, err)
+		t.Fatalf("unexpected list: %+v %v", items, err)
 	}
 }
 
@@ -114,26 +114,26 @@ func TestAgentNameRules(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	a := e.agent(t)
-	for _, name := range []string{"前端/助手", "助手#1", "@助手", " 助手", "助手\u3000", "a\tb", "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"} {
+	for _, name := range []string{"frontend/assistant", "assistant#1", "@assistant", " assistant", "assistant\u3000", "a\tb", "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"} { // check-english: zh (a trailing ideographic space U+3000 counts as whitespace)
 		_, err := e.svc.CreateAgent(ctx, e.scope, name, "anthropic", "claude-x", "")
 		ae, _ := apperr.As(err)
 		if ae == nil || ae.Code != apperr.CodeValidationFailed || len(ae.Fields) != 1 || ae.Fields[0].Field != "name" {
-			t.Errorf("创建 %q 应以 name 字段错误拒绝：%+v", name, ae)
+			t.Errorf("creating %q should be rejected with a name field error: %+v", name, ae)
 		}
 		n := name
 		_, err = e.svc.UpdateAgent(ctx, a.ID, agentconfig.AgentPatch{Name: &n})
 		ae, _ = apperr.As(err)
 		if ae == nil || ae.Code != apperr.CodeValidationFailed || ae.Fields[0].Field != "name" {
-			t.Errorf("改名为 %q 应以 name 字段错误拒绝：%+v", name, ae)
+			t.Errorf("renaming to %q should be rejected with a name field error: %+v", name, ae)
 		}
 	}
 	got, err := e.st.GetAgent(ctx, a.ID)
 	if err != nil || got.Name != a.Name || got.ConfigVersion != a.ConfigVersion {
-		t.Fatalf("被拒绝的改名不应改动 Agent：%+v %v", got, err)
+		t.Fatalf("a rejected rename should not change the Agent: %+v %v", got, err)
 	}
 	// Spaces in the middle and @ are allowed.
-	if _, err := e.svc.CreateAgent(ctx, e.scope, "dev assistant@前端", "anthropic", "claude-x", ""); err != nil {
-		t.Fatalf("合法名称被拒绝：%v", err)
+	if _, err := e.svc.CreateAgent(ctx, e.scope, "dev assistant@frontend", "anthropic", "claude-x", ""); err != nil {
+		t.Fatalf("a valid name was rejected: %v", err)
 	}
 }
 
@@ -141,15 +141,15 @@ func TestUpdateAgentBumpsVersion(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	a := e.agent(t)
-	name := "新名字"
+	name := "New name"
 	got, err := e.svc.UpdateAgent(ctx, a.ID, agentconfig.AgentPatch{Name: &name})
 	if err != nil || got.ConfigVersion != 1 {
-		t.Fatalf("只改显示名称不应递增配置版本：%v %v", got.ConfigVersion, err)
+		t.Fatalf("changing only the display name should not bump the config version: %v %v", got.ConfigVersion, err)
 	}
-	prompt := "新的 Prompt"
+	prompt := "New Prompt"
 	got, err = e.svc.UpdateAgent(ctx, a.ID, agentconfig.AgentPatch{Prompt: &prompt, ExpectedPromptVersion: func() *int64 { v := int64(1); return &v }()})
 	if err != nil || got.ConfigVersion != 2 || got.Prompt != prompt {
-		t.Fatalf("修改 Prompt 应递增配置版本：%+v %v", got, err)
+		t.Fatalf("changing the Prompt should bump the config version: %+v %v", got, err)
 	}
 	p := "anthropic"
 	_, err = e.svc.UpdateAgent(ctx, a.ID, agentconfig.AgentPatch{Provider: &p})
@@ -182,18 +182,18 @@ func TestDeleteAgent(t *testing.T) {
 	}
 	// A soft-deleted Agent does not hold on to its name.
 	if _, err := e.svc.CreateAgent(ctx, e.scope, a.Name, "anthropic", "claude-x", ""); err != nil {
-		t.Fatalf("已删除 Agent 的名字应可再用：%v", err)
+		t.Fatalf("a deleted Agent's name should be reusable: %v", err)
 	}
 	if _, err := e.svc.GetAgentDetail(ctx, a.ID); !apperr.Is(err, apperr.CodeNotFound) {
-		t.Fatalf("删除后应按不存在处理：%v", err)
+		t.Fatalf("should be treated as missing after deletion: %v", err)
 	}
 	var creds, runs int
 	_ = e.st.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agent_credentials WHERE agent_id = $1), (SELECT count(*) FROM runs WHERE agent_id = $1)`, a.ID).Scan(&creds, &runs)
 	if creds != 0 || runs != 1 {
-		t.Fatalf("应删除凭证密文、保留执行记录：creds=%d runs=%d", creds, runs)
+		t.Fatalf("should delete the credential secrets and keep the run records: creds=%d runs=%d", creds, runs)
 	}
 	if len(e.releaser.released) != 1 || e.releaser.released[0] != a.ID {
-		t.Fatal("删除后应通知执行器释放")
+		t.Fatal("deletion should tell the executor to release")
 	}
 }
 
@@ -201,7 +201,7 @@ func skillZip(t *testing.T, name string, extra map[string]string) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create(name + "/SKILL.md")
-	_, _ = w.Write([]byte("---\nname: " + name + "\ndescription: 测试用 Skill\n---\n正文\n"))
+	_, _ = w.Write([]byte("---\nname: " + name + "\ndescription: Test Skill\n---\nBody\n"))
 	for p, d := range extra {
 		w, _ := zw.Create(name + "/" + p)
 		_, _ = w.Write([]byte(d))
@@ -218,13 +218,13 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tmpl.Name != "pdf-tools" || len(tmpl.Files) != 2 || !strings.Contains(tmpl.SkillMD, "name: pdf-tools") {
-		t.Fatalf("模板详情不对：%+v", tmpl)
+		t.Fatalf("unexpected template detail: %+v", tmpl)
 	}
 	_, err = e.svc.CreateSkillFromZip(ctx, skillZip(t, "pdf-tools", nil))
 	wantCode(t, err, apperr.CodeNameConflict)
-	md, err := e.svc.CreateSkillFromMarkdown(ctx, "---\nname: notes\ndescription: 记笔记\n---\n")
+	md, err := e.svc.CreateSkillFromMarkdown(ctx, "---\nname: notes\ndescription: Take notes\n---\n")
 	if err != nil || len(md.Files) != 1 {
-		t.Fatalf("只用 SKILL.md 新建模板失败：%v", err)
+		t.Fatalf("creating a template from SKILL.md alone failed: %v", err)
 	}
 	_, err = e.svc.UpdateSkillTemplateMarkdown(ctx, tmpl.ID, "---\nname: pdf-tools\n---\n")
 	wantCode(t, err, apperr.CodeValidationFailed)
@@ -238,22 +238,22 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 	wantCode(t, err, apperr.CodeNameConflict)
 
 	// Editing a template does not affect existing copies and keeps the other files.
-	newMD := "---\nname: pdf-tools\ndescription: 新描述\n---\n新正文\n"
+	newMD := "---\nname: pdf-tools\ndescription: New description\n---\nNew body\n"
 	edited, err := e.svc.UpdateSkillTemplateMarkdown(ctx, tmpl.ID, newMD)
-	if err != nil || len(edited.Files) != 2 || edited.Description != "新描述" {
-		t.Fatalf("编辑模板 SKILL.md 应保留其他文件：%+v %v", edited, err)
+	if err != nil || len(edited.Files) != 2 || edited.Description != "New description" {
+		t.Fatalf("editing the template SKILL.md should keep the other files: %+v %v", edited, err)
 	}
 	gotA, _ := e.svc.GetAgentSkill(ctx, a.ID, copyA.ID)
-	if gotA.Description != "测试用 Skill" {
-		t.Fatalf("编辑模板不应影响已有副本：%s", gotA.Description)
+	if gotA.Description != "Test Skill" {
+		t.Fatalf("editing the template should not affect existing copies: %s", gotA.Description)
 	}
 	// Edit a copy on its own, then recopy it from the latest template to overwrite it.
-	if _, err := e.svc.UpdateAgentSkillMarkdown(ctx, a.ID, copyA.ID, "---\nname: pdf-tools\ndescription: 我改的\n---\n"); err != nil {
+	if _, err := e.svc.UpdateAgentSkillMarkdown(ctx, a.ID, copyA.ID, "---\nname: pdf-tools\ndescription: Edited by me\n---\n"); err != nil {
 		t.Fatal(err)
 	}
 	re, err := e.svc.RecopyAgentSkill(ctx, a.ID, copyA.ID)
-	if err != nil || re.Description != "新描述" || re.SkillMD != newMD {
-		t.Fatalf("重新复制应整体覆盖：%+v %v", re, err)
+	if err != nil || re.Description != "New description" || re.SkillMD != newMD {
+		t.Fatalf("a recopy should overwrite everything: %+v %v", re, err)
 	}
 	// After the template is deleted the copy remains, its source is empty, and it cannot be recopied.
 	if err := e.svc.DeleteSkillTemplate(ctx, tmpl.ID); err != nil {
@@ -261,7 +261,7 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 	}
 	gotA, err = e.svc.GetAgentSkill(ctx, a.ID, copyA.ID)
 	if err != nil || gotA.SourceTemplateID != nil || len(gotA.Files) != 2 {
-		t.Fatalf("模板删除后副本应保留且来源为空：%+v %v", gotA, err)
+		t.Fatalf("after the template is deleted the copy should remain with an empty source: %+v %v", gotA, err)
 	}
 	_, err = e.svc.RecopyAgentSkill(ctx, a.ID, copyA.ID)
 	wantCode(t, err, apperr.CodeTemplateDeleted)
@@ -276,7 +276,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 
 	v, err := e.svc.AddCLI(ctx, a.ID, "jq")
 	if err != nil || v.HasTemplate {
-		t.Fatalf("没有模板的 CLI 只作标记：%+v %v", v, err)
+		t.Fatalf("a CLI without a template is only a marker: %+v %v", v, err)
 	}
 	_, err = e.svc.PutCLICredential(ctx, a.ID, "jq", map[string]string{"x": "y"})
 	wantCode(t, err, apperr.CodeValidationFailed)
@@ -291,7 +291,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 	lc, err := e.svc.PutCLICredential(ctx, c.ID, "lark-cli", map[string]string{"appId": "cli_a", "appSecret": "lark-secret"})
 	if err != nil || lc.Status != "set" || !slices.Contains(lc.FilePaths, ".lark-cli/config.json") || len(lc.Warnings) != 0 ||
 		strings.Join(lc.FieldNames, ",") != "appId,appSecret,brand" {
-		t.Fatalf("录入 lark-cli 凭证失败：%+v %v", lc, err)
+		t.Fatalf("entering the lark-cli credential failed: %+v %v", lc, err)
 	}
 
 	if _, err := e.svc.AddCLI(ctx, a.ID, "gh"); err != nil {
@@ -302,7 +302,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 	}
 	cred, err := e.svc.PutCLICredential(ctx, a.ID, "gh", map[string]string{"token": "ghp_example"})
 	if err != nil || cred.Status != "set" || cred.EnvNames[0] != "GH_TOKEN" {
-		t.Fatalf("录入 gh 凭证失败：%+v %v", cred, err)
+		t.Fatalf("entering the gh credential failed: %+v %v", cred, err)
 	}
 	if _, err := e.svc.PutModelCredential(ctx, a.ID, map[string]string{"ANTHROPIC_API_KEY": "sk-ant-secret"}); err != nil {
 		t.Fatal(err)
@@ -315,24 +315,24 @@ func TestCLIsAndCredentials(t *testing.T) {
 		_, err = e.svc.PutModelCredential(ctx, b.ID, map[string]string{"ANTHROPIC_API_KEY": "k", name: "x"})
 		ae, _ := apperr.As(err)
 		if ae == nil || ae.Code != apperr.CodeValidationFailed || len(ae.Fields) != 1 || ae.Fields[0].Field != "env."+name {
-			t.Errorf("%s 应以 env.%s 拒绝：%+v", name, name, ae)
+			t.Errorf("%s should be rejected as env.%s: %+v", name, name, ae)
 		}
 	}
 	if _, err := e.svc.PutModelCredential(ctx, b.ID, map[string]string{"ANTHROPIC_API_KEY": "k", "HTTPS_PROXY": "http://127.0.0.1:7890"}); err != nil {
-		t.Fatalf("代理变量应允许录入：%v", err)
+		t.Fatalf("proxy variables should be allowed: %v", err)
 	}
 
 	// The credential is stored as plaintext in the secret column.
 	var stored bool
 	_ = e.st.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND cli_name = 'gh' AND instr(secret, CAST('ghp_example' AS BLOB)) > 0)`, a.ID).Scan(&stored)
 	if !stored {
-		t.Fatal("secret 列中没有明文凭证")
+		t.Fatal("no plaintext credential in the secret column")
 	}
 
 	// The detail returns only metadata.
 	d, err := e.svc.GetAgentDetail(ctx, a.ID)
 	if err != nil || len(d.CLIs) != 2 || d.ModelCredential == nil || d.ModelCredential.EnvNames[0] != "ANTHROPIC_API_KEY" {
-		t.Fatalf("详情不对：%+v %v", d, err)
+		t.Fatalf("unexpected detail: %+v %v", d, err)
 	}
 	// Removing a CLI also deletes its credential.
 	if err := e.svc.RemoveCLI(ctx, a.ID, "gh"); err != nil {
@@ -340,7 +340,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 	}
 	rows, _ := e.st.ListCredentials(ctx, a.ID)
 	if len(rows) != 1 || rows[0].Purpose != store.PurposeModel {
-		t.Fatalf("移除 CLI 后其凭证应被删除：%+v", rows)
+		t.Fatalf("removing a CLI should delete its credential: %+v", rows)
 	}
 }
 
@@ -353,19 +353,19 @@ func TestDeleteProjectReleasesAgents(t *testing.T) {
 	e.svc.AgentRemoved = func(id uuid.UUID) { removed = append(removed, id) }
 	_, err := e.svc.CreateProject(ctx, "a/b")
 	wantCode(t, err, apperr.CodeValidationFailed)
-	p, err := e.svc.CreateProject(ctx, "临时")
+	p, err := e.svc.CreateProject(ctx, "Temporary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := e.svc.CreateAgent(ctx, store.ProjectScope(p.ID), "甲", "anthropic", "claude-x", "")
+	a, err := e.svc.CreateAgent(ctx, store.ProjectScope(p.ID), "Alpha", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := e.svc.CreateAgent(ctx, store.ProjectScope(p.ID), "乙", "anthropic", "claude-x", "")
+	b, err := e.svc.CreateAgent(ctx, store.ProjectScope(p.ID), "Beta", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	keep, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台", "anthropic", "claude-x", "")
+	keep, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "Platform", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,10 +377,10 @@ func TestDeleteProjectReleasesAgents(t *testing.T) {
 	e.releaser.mu.Unlock()
 	for _, id := range []uuid.UUID{a.ID, b.ID} {
 		if !slices.Contains(released, id) || !slices.Contains(removed, id) {
-			t.Fatalf("%s 应被释放并通知移除：released=%v removed=%v", id, released, removed)
+			t.Fatalf("%s should be released and reported removed: released=%v removed=%v", id, released, removed)
 		}
 	}
 	if slices.Contains(released, keep.ID) {
-		t.Fatal("其他范围的 Agent 不应被释放")
+		t.Fatal("Agents in other scopes should not be released")
 	}
 }

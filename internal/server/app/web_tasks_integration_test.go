@@ -69,7 +69,7 @@ func TestWebTasksIntegration(t *testing.T) {
 	addr = s.a.Addr()
 	t.Cleanup(s.stop)
 	ctx := context.Background()
-	path, agent := s.createAgent("Web任务隔离Manager")
+	path, agent := s.createAgent("Web task isolation Manager")
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": agent.ID})
 	s.must(200, "PUT", path+"/model-credential", map[string]any{"provider": "anthropic", "key": "synthetic-web-tasks-only"})
@@ -84,13 +84,13 @@ func TestWebTasksIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	create := func(title, description string, output []workflow.Field) taskmodel.Detail {
-		raw, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: title, Request: map[string]any{"seed": "isolated browser input"}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "隔离执行节点", Description: description, AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: output, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+		raw, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: title, Request: map[string]any{"seed": "isolated browser input"}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "isolated run node", Description: description, AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: output, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
 		if e != nil {
 			t.Fatal(e)
 		}
 		return decode[taskmodel.Detail](t, raw)
 	}
-	archived := create("Web隔离已归档任务", " !sleep=3s !text=web-archived-message !usage=7,11,0,0", []workflow.Field{{Name: "file", Type: "artifact", Required: true}})
+	archived := create("Web isolated archived task", " !sleep=3s !text=web-archived-message !usage=7,11,0,0", []workflow.Field{{Name: "file", Type: "artifact", Required: true}})
 	running := taskWait(t, s, archived.Task.ID, func(d taskmodel.Detail) bool {
 		return len(d.Nodes) > 0 && len(d.Nodes[0].RunIDs) > 0 && s.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy"
 	})
@@ -105,7 +105,7 @@ func TestWebTasksIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	taskWait(t, s, archived.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "completed" && d.Cleanup == "archived" })
-	blocked := create("Web隔离阻塞任务", " !sleep=1s !text=web-blocked-message", []workflow.Field{})
+	blocked := create("Web isolated blocked task", " !sleep=1s !text=web-blocked-message", []workflow.Field{})
 	taskWait(t, s, blocked.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	manifest := map[string]any{"apiBase": s.url, "projectName": dc.Project.Name, "archivedTaskId": archived.Task.ID.String(), "archivedTitle": archived.Task.Title, "blockedTaskId": blocked.Task.ID.String(), "blockedTitle": blocked.Task.Title, "artifactId": artifact.ID.String()}
 	manifestPath := filepath.Join(t.TempDir(), "tasks-browser-manifest.json")

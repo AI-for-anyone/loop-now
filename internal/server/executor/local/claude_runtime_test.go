@@ -103,11 +103,11 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	id := h.claudeAgent(nil)
 	res, sink := h.exec(id, "hello")
 	if res.Outcome != executor.OutcomeCompleted || res.Text != "echo: hello" || sink.text.String() != "echo: hello" {
-		t.Fatalf("第一轮：%+v %q", res, sink.text.String())
+		t.Fatalf("first turn: %+v %q", res, sink.text.String())
 	}
 	launches := h.launches()
 	if len(launches) != 1 {
-		t.Fatalf("应启动一次：%v", launches)
+		t.Fatalf("should start once: %v", launches)
 	}
 	args, d := launches[0], h.e.dirs(id)
 	want := map[string]string{"--model": "sonnet", "--effort": "high", "--setting-sources": "", "--settings": claudeSettings,
@@ -115,27 +115,27 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 		"--plugin-dir": d.claudePlugin, "--tools": strings.Join(ClaudeCodeTools, ","), "--input-format": "stream-json", "--output-format": "stream-json"}
 	for flag, v := range want {
 		if !hasFlag(args, flag) || argValue(args, flag) != v {
-			t.Errorf("参数 %s = %q，期望 %q", flag, argValue(args, flag), v)
+			t.Errorf("argument %s = %q, want %q", flag, argValue(args, flag), v)
 		}
 	}
 	for _, flag := range []string{"-p", "--verbose", "--include-partial-messages", "--strict-mcp-config"} {
 		if !hasFlag(args, flag) {
-			t.Errorf("缺少参数 %s", flag)
+			t.Errorf("missing argument %s", flag)
 		}
 	}
 	if hasFlag(args, "--mcp-config") || hasFlag(args, "--resume") {
-		t.Errorf("没有 MCP、没有旧会话：%v", args)
+		t.Errorf("no MCP and no old session expected: %v", args)
 	}
 	sid := argValue(args, "--session-id")
 	if !claudecli.ValidSessionID(sid) {
-		t.Fatalf("会话 ID：%q", sid)
+		t.Fatalf("session ID: %q", sid)
 	}
 	transcript := filepath.Join(claudecli.DefaultProjectsDir(h.realHome), claudecli.ProjectDirName(d.workspace), sid+".jsonl")
 	h.src.mu.Lock()
 	recorded := h.src.recorded[id]
 	h.src.mu.Unlock()
 	if recorded != transcript {
-		t.Fatalf("会话记录：%q，期望 %q", recorded, transcript)
+		t.Fatalf("session transcript: %q, want %q", recorded, transcript)
 	}
 	h.obs.mu.Lock()
 	var usage []executor.Usage
@@ -144,7 +144,7 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	}
 	h.obs.mu.Unlock()
 	if len(usage) != 1 || usage[0].Provider != "claude-code" || usage[0].Model != "claude-sonnet-fake" || usage[0].Input != 10 || usage[0].Kind != "assistant" {
-		t.Fatalf("用量：%+v", usage)
+		t.Fatalf("usage: %+v", usage)
 	}
 	h.obs.mu.Lock()
 	startedRuntime := ""
@@ -155,21 +155,21 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	}
 	h.obs.mu.Unlock()
 	if startedRuntime != "claude-code" {
-		t.Fatalf("进程启动事件应记下运行时：%q", startedRuntime)
+		t.Fatalf("the process start event should record the runtime: %q", startedRuntime)
 	}
 	pid := h.claudePid(id)
 	if res, _ = h.exec(id, "fake:history"); res.Text != "history=1" || h.claudePid(id) != pid {
-		t.Fatalf("复用同一进程：%+v", res)
+		t.Fatalf("reuse the same process: %+v", res)
 	}
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Prompt = "changed" })
 	if res, _ = h.exec(id, "fake:history"); res.Text != "history=2" || h.claudePid(id) == pid {
-		t.Fatalf("配置变化后重启并接续：%+v", res)
+		t.Fatalf("restart and resume after a config change: %+v", res)
 	}
 	if args := h.launches()[1]; argValue(args, "--resume") != sid || hasFlag(args, "--session-id") {
-		t.Fatalf("重启后应 --resume 原会话：%v", args)
+		t.Fatalf("after the restart the original session should be resumed with --resume: %v", args)
 	}
 	if b, _ := os.ReadFile(d.prompt); !strings.Contains(string(b), "changed") {
-		t.Fatalf("追加提示应是新的：%s", b)
+		t.Fatalf("the appended prompt should be the new one: %s", b)
 	}
 }
 
@@ -192,14 +192,14 @@ func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 		Forbidden                               []string `json:"forbidden"`
 	}
 	if res.Outcome != executor.OutcomeCompleted || json.Unmarshal([]byte(res.Text), &env) != nil {
-		t.Fatalf("环境：%+v", res)
+		t.Fatalf("environment: %+v", res)
 	}
 	d := h.e.dirs(id)
 	if env.HOME != h.realHome || env.TMPDIR != d.tmp || env.PI_CODING_AGENT_DIR != "" || !strings.HasPrefix(env.PATH, loopctlDir+string(os.PathListSeparator)) {
-		t.Fatalf("目录与 PATH：%+v", env)
+		t.Fatalf("directories and PATH: %+v", env)
 	}
 	if len(env.Forbidden) != 0 {
-		t.Fatalf("不能把 Anthropic／Claude 的变量交给 claude：%v", env.Forbidden)
+		t.Fatalf("Anthropic/Claude variables must not be given to claude: %v", env.Forbidden)
 	}
 	// claude's own short commands (auth status etc.) get the same base variables as the main process: USER/LOGNAME
 	// (claude finds the login by them) and the passed-through LANG.
@@ -207,17 +207,17 @@ func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 	helper := strings.Join(h.e.ClaudeHelperEnv(context.Background(), h.realHome), "\n")
 	for _, want := range []string{"USER=tester", "LOGNAME=tester", "LANG=zh_CN.UTF-8", "HOME=" + h.realHome} {
 		if !strings.Contains(helper, want) {
-			t.Errorf("辅助命令的环境缺少 %s：%s", want, helper)
+			t.Errorf("the helper command environment is missing %s: %s", want, helper)
 		}
 	}
 	for _, kv := range strings.Split(helper, "\n") {
 		if strings.HasPrefix(kv, "ANTHROPIC_") || strings.HasPrefix(kv, "CLAUDE") {
-			t.Errorf("辅助命令的环境不带 Anthropic／Claude 的变量：%s", kv)
+			t.Errorf("the helper command environment should carry no Anthropic/Claude variables: %s", kv)
 		}
 	}
 	all := claudeEnv([]string{"A=1", "ANTHROPIC_API_KEY=x", "CLAUDE_CONFIG_DIR=y", "CLAUDECODE=1", "CLAUDE_CODE_OAUTH_TOKEN=z", "PI_OFFLINE=1", "MYCLI_TOKEN=kept"})
 	if strings.Join(all, ",") != "A=1,MYCLI_TOKEN=kept" {
-		t.Fatalf("claudeEnv：%v", all)
+		t.Fatalf("claudeEnv: %v", all)
 	}
 }
 
@@ -231,11 +231,11 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 		s.CLIPayloads["mycli"] = clitemplate.Payload{Files: []clitemplate.PayloadFile{{Path: ".mycli/config.json", Content: []byte(`{"agent":true}`)}}}
 	})
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行：%+v", res)
+		t.Fatalf("execution: %+v", res)
 	}
 	d := h.e.dirs(id)
 	if b, err := os.ReadFile(filepath.Join(d.home, ".mycli", "config.json")); err != nil || string(b) != `{"agent":true}` {
-		t.Fatalf("凭证文件应在 Agent 的独立 HOME：%q %v", b, err)
+		t.Fatalf("the credential file should be in the Agent's own HOME: %q %v", b, err)
 	}
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)
@@ -253,12 +253,12 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	}
 	for k := range after {
 		if _, ok := h.before[k]; !ok && !claudeOwn(k) {
-			t.Errorf("真实 HOME 里多出了 %s", k)
+			t.Errorf("extra %s in the real HOME", k)
 		}
 	}
 	for k, v := range h.before {
 		if after[k] != v {
-			t.Errorf("真实 HOME 里的 %s 被改动或删除", k)
+			t.Errorf("%s in the real HOME was changed or deleted", k)
 		}
 	}
 }
@@ -292,35 +292,35 @@ func TestClaudeSkillsMCPAndPrompt(t *testing.T) {
 	}
 	res, _ := h.exec(id, "hi")
 	if res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行：%+v", res)
+		t.Fatalf("execution: %+v", res)
 	}
 	for _, rel := range []string{".claude-plugin/plugin.json", "skills/loopctl/SKILL.md", "skills/review/SKILL.md", "skills/plugin-skill/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(d.claudePlugin, filepath.FromSlash(rel))); err != nil {
-			t.Errorf("插件目录缺少 %s", rel)
+			t.Errorf("the plugin directory is missing %s", rel)
 		}
 	}
 	args := h.launches()[0]
 	if argValue(args, "--mcp-config") != d.claudeMCP {
-		t.Fatalf("MCP：%v", args)
+		t.Fatalf("MCP: %v", args)
 	}
 	if b, _ := os.ReadFile(d.claudeMCP); !strings.Contains(string(b), `"browser"`) {
-		t.Fatalf("MCP 文件：%s", b)
+		t.Fatalf("MCP file: %s", b)
 	}
 	if _, err := os.Stat(filepath.Join(d.pi, "mcp.json")); !os.IsNotExist(err) {
-		t.Fatal("不写 Pi 的 mcp.json")
+		t.Fatal("Pi's mcp.json should not be written")
 	}
 	prompt, _ := os.ReadFile(d.prompt)
 	for _, want := range []string{"You are the reviewer.", "OWN-ENTRY-MARKER", `<context_entry path="` + filepath.Join(d.workspace, "AGENTS.md") + `">`, "its content is included below if it exists", "loaded only when Claude Code starts"} {
 		if !strings.Contains(string(prompt), want) {
-			t.Errorf("追加提示缺少 %q：\n%s", want, prompt)
+			t.Errorf("the appended prompt is missing %q:\n%s", want, prompt)
 		}
 	}
 	if argValue(args, "--append-system-prompt-file") != d.prompt {
-		t.Fatalf("追加提示文件：%v", args)
+		t.Fatalf("appended prompt file: %v", args)
 	}
 	for _, f := range []string{"auth.json", "models.json"} {
 		if _, err := os.Stat(filepath.Join(d.pi, f)); !os.IsNotExist(err) {
-			t.Errorf("Claude Code 运行时不写 Pi 的 %s", f)
+			t.Errorf("the Claude Code runtime should not write Pi's %s", f)
 		}
 	}
 }
@@ -331,7 +331,7 @@ func TestClaudeSkillsMCPAndPrompt(t *testing.T) {
 func TestClaudeFailures(t *testing.T) {
 	missing := newClaudeHarness(t, func(o *Options) { o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude") })
 	if res, _ := missing.exec(missing.claudeAgent(nil), "hi"); res.ErrorCode != executor.ErrRuntimeUnavailable {
-		t.Fatalf("找不到 claude：%+v", res)
+		t.Fatalf("claude not found: %+v", res)
 	}
 
 	h := newClaudeHarness(t, nil)
@@ -339,32 +339,32 @@ func TestClaudeFailures(t *testing.T) {
 	id := h.claudeAgent(nil)
 	res, _ := h.exec(id, "hi")
 	if res.ErrorCode != executor.ErrRuntimeStartFailed || !strings.Contains(res.ErrorMessage, "9.9.9") || !strings.Contains(res.ErrorMessage, "unknown option") {
-		t.Fatalf("启动即退出：%+v", res)
+		t.Fatalf("exit right at startup: %+v", res)
 	}
 	delete(h.env, "FAKECLAUDE_EXIT_AT_START")
 
 	if res, _ = h.exec(id, "fake:notloggedin"); res.ErrorCode != executor.ErrRuntimeError {
-		t.Fatalf("auth status 报已登录时仍是 runtime_error：%+v", res)
+		t.Fatalf("should still be runtime_error when auth status reports logged in: %+v", res)
 	}
 	if err := os.WriteFile(filepath.Join(h.realHome, ".fakeclaude-logged-out"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if res, _ = h.exec(id, "fake:notloggedin"); res.ErrorCode != executor.ErrRuntimeLoginRequired || !strings.Contains(res.ErrorMessage, "not logged in") {
-		t.Fatalf("未登录：%+v", res)
+		t.Fatalf("not logged in: %+v", res)
 	}
 	res, _ = h.exec(id, "fake:exit")
 	if res.ErrorCode != executor.ErrRuntimeExited || !strings.Contains(res.ErrorMessage, "Claude Code 9.9.9 process exited unexpectedly") || !strings.Contains(res.ErrorMessage, "crashing on purpose") {
-		t.Fatalf("崩溃：%+v", res)
+		t.Fatalf("crash: %+v", res)
 	}
 	if res, _ = h.exec(id, "after crash"); res.Text != "echo: after crash" {
-		t.Fatalf("崩溃后下一条起新进程：%+v", res)
+		t.Fatalf("the next message after a crash should start a new process: %+v", res)
 	}
 	h.obs.mu.Lock()
 	events, _ := json.Marshal(h.obs.events)
 	h.obs.mu.Unlock()
 	for _, secret := range []string{"private@example.com", "Private Org", "org-private-id"} {
 		if strings.Contains(string(events), secret) || strings.Contains(h.logs.String(), secret) || strings.Contains(res.ErrorMessage, secret) {
-			t.Fatalf("auth status 输出里的 %q 不能进事件、日志或错误消息", secret)
+			t.Fatalf("%q from the auth status output must not reach events, logs or error messages", secret)
 		}
 	}
 }
@@ -390,7 +390,7 @@ func TestClaudeInterruptThenNextMessage(t *testing.T) {
 		select {
 		case <-sink.gotText:
 		case <-time.After(15 * time.Second):
-			t.Fatal("没有输出")
+			t.Fatal("no output")
 		}
 		if err := h.e.Interrupt(context.Background(), id, run); err != nil {
 			t.Fatal(err)
@@ -398,27 +398,27 @@ func TestClaudeInterruptThenNextMessage(t *testing.T) {
 		return <-done
 	}
 	if res := interrupt("fake:slow"); res.Outcome != executor.OutcomeInterrupted {
-		t.Fatalf("控制消息打断：%+v", res)
+		t.Fatalf("interrupt by control message: %+v", res)
 	}
 	pid := h.claudePid(id)
 	if res, _ := h.exec(id, "fake:history"); res.Text != "history=1" || h.claudePid(id) != pid {
-		t.Fatalf("确认打断后复用同一进程：%+v", res)
+		t.Fatalf("the same process should be reused after a confirmed interrupt: %+v", res)
 	}
 	if res := interrupt("fake:noack"); res.Outcome != executor.OutcomeInterrupted {
-		t.Fatalf("SIGINT 打断：%+v", res)
+		t.Fatalf("SIGINT interrupt: %+v", res)
 	}
 	res, _ := h.exec(id, "fake:history")
 	if res.Outcome != executor.OutcomeCompleted || res.Text != "history=3" {
-		t.Fatalf("打断后紧跟的下一条应在新进程里接续：%+v", res)
+		t.Fatalf("the next message right after the interrupt should resume in a new process: %+v", res)
 	}
 	if args := h.launches()[len(h.launches())-1]; !hasFlag(args, "--resume") {
-		t.Fatalf("新进程应 --resume：%v", args)
+		t.Fatalf("the new process should use --resume: %v", args)
 	}
 	h.obs.mu.Lock()
 	defer h.obs.mu.Unlock()
 	for _, ev := range h.obs.events {
 		if ev.ev.Type == store.EventPiExited {
-			t.Fatalf("SIGINT 之后的退出是平台的意思，不记成意外退出：%+v", ev.ev.Data)
+			t.Fatalf("the exit after SIGINT is the platform's doing and should not be recorded as an unexpected exit: %+v", ev.ev.Data)
 		}
 	}
 }
@@ -434,11 +434,11 @@ func TestClaudeTaskFork(t *testing.T) {
 	id := h.claudeAgent(func(s *agentconfig.Snapshot) { s.ForkSessionFile = baseline })
 	res, _ := h.exec(id, "fake:history")
 	if res.Text != "history=2" {
-		t.Fatalf("分叉应带上基线里的历史：%+v", res)
+		t.Fatalf("the fork should carry the history from the baseline: %+v", res)
 	}
 	args := h.launches()[0]
 	if argValue(args, "--resume") != baseline || !hasFlag(args, "--fork-session") || !claudecli.ValidSessionID(argValue(args, "--session-id")) {
-		t.Fatalf("分叉参数：%v", args)
+		t.Fatalf("fork arguments: %v", args)
 	}
 }
 
@@ -448,7 +448,7 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	id := h.agent(nil)
 	if res, _ := h.exec(id, "pi turn"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("Pi：%+v", res)
+		t.Fatalf("Pi: %+v", res)
 	}
 	h.src.mu.Lock()
 	piSession := h.src.recorded[id]
@@ -463,12 +463,12 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	p.sessMu.Unlock()
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = "claude-code", "haiku" })
 	if res, _ := h.exec(id, "claude turn"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("Claude Code：%+v", res)
+		t.Fatalf("Claude Code: %+v", res)
 	}
 	h.src.mu.Lock()
 	defer h.src.mu.Unlock()
 	if slices.Contains(h.src.recordLog[id], piSession) || !strings.HasSuffix(h.src.recorded[id], ".jsonl") || h.src.recorded[id] == piSession {
-		t.Fatalf("记下的会话：%v（Pi 的是 %s）", h.src.recordLog[id], piSession)
+		t.Fatalf("recorded sessions: %v (Pi's is %s)", h.src.recordLog[id], piSession)
 	}
 }
 
@@ -496,7 +496,7 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 		s.Local = agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: localDir, Note: "user files"}}}
 	})
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行：%+v", res)
+		t.Fatalf("execution: %+v", res)
 	}
 	d := h.e.dirs(id)
 	h.src.mu.Lock()
@@ -504,33 +504,33 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 	h.src.mu.Unlock()
 	pi := h.agent(nil)
 	if res, _ := h.exec(pi, "pi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("Pi：%+v", res)
+		t.Fatalf("Pi: %+v", res)
 	}
 	if err := h.e.Release(context.Background(), pi); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.purgeLog(); len(got) != 0 {
-		t.Fatalf("没用过 Claude Code 的 Agent 不清理：%v", got)
+		t.Fatalf("an Agent that never used Claude Code should not be cleaned up: %v", got)
 	}
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.purgeLog(); len(got) != 1 || got[0] != "purge "+d.workspace+" -y" {
-		t.Fatalf("purge 调用：%v（工作区 %s）", got, d.workspace)
+		t.Fatalf("purge calls: %v (workspace %s)", got, d.workspace)
 	}
 	want, _ := os.ReadFile(transcript)
 	if got, err := os.ReadFile(filepath.Join(d.sessions, "claude", filepath.Base(transcript))); err != nil || !bytes.Equal(got, want) || len(want) == 0 {
-		t.Fatalf("purge 之前应归档会话记录：%v", err)
+		t.Fatalf("the session transcript should be archived before the purge: %v", err)
 	}
 	bin := fakeclaudebin.Path(t)
 	env := h.e.claudeHelperEnv(context.Background(), h.realHome)
-	for name, path := range map[string]string{"绑定的本机目录": localDir, "别的 Agent 的工作区": h.e.dirs(pi).workspace, "工作根之外": filepath.Join(t.TempDir(), "agents", id.String(), "workspace"), "相对路径": "workspace"} {
+	for name, path := range map[string]string{"bound local directory": localDir, "another Agent's workspace": h.e.dirs(pi).workspace, "outside the work root": filepath.Join(t.TempDir(), "agents", id.String(), "workspace"), "relative path": "workspace"} {
 		if err := h.e.purgeClaudeWorkspace(context.Background(), bin, env, id, path); err == nil {
-			t.Errorf("%s 不能成为 purge 的目标", name)
+			t.Errorf("%s must not become a purge target", name)
 		}
 	}
 	if got := h.purgeLog(); len(got) != 1 {
-		t.Fatalf("被拒绝的路径不应调用 claude：%v", got)
+		t.Fatalf("a rejected path should not run claude: %v", got)
 	}
 
 	// claude not found: skip and log.
@@ -538,7 +538,7 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 	other := missing.claudeAgent(nil)
 	missing.e.o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude")
 	if err := missing.e.Release(context.Background(), other); err != nil || !strings.Contains(missing.logs.String(), "claude not found") {
-		t.Fatalf("找不到 claude 时跳过并记日志：%v %s", err, missing.logs.String())
+		t.Fatalf("when claude is not found the step should be skipped and logged: %v %s", err, missing.logs.String())
 	}
 }
 
@@ -546,12 +546,12 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 // records.
 func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root 读得出无权限的文件")
+		t.Skip("root can read files without permission")
 	}
 	h := newClaudeHarness(t, nil)
 	id := h.claudeAgent(nil)
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行：%+v", res)
+		t.Fatalf("execution: %+v", res)
 	}
 	h.src.mu.Lock()
 	transcript := h.src.recorded[id]
@@ -564,10 +564,10 @@ func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := h.purgeLog(); len(got) != 0 {
-		t.Fatalf("归档失败时不应 purge：%v", got)
+		t.Fatalf("there should be no purge when archiving fails: %v", got)
 	}
 	if !strings.Contains(h.logs.String(), "failed to archive the Claude Code session transcript") {
-		t.Fatalf("应记日志：%s", h.logs.String())
+		t.Fatalf("should log: %s", h.logs.String())
 	}
 }
 
@@ -578,7 +578,7 @@ func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 	h := newClaudeHarness(t, nil)
 	clean := h.claudeAgent(nil)
 	if res, _ := h.exec(clean, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行：%+v", res)
+		t.Fatalf("execution: %+v", res)
 	}
 	var settings struct {
 		AutoMemoryEnabled    *bool             `json:"autoMemoryEnabled"`
@@ -587,32 +587,32 @@ func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(argValue(h.launches()[0], "--settings")), &settings); err != nil || settings.AutoMemoryEnabled == nil || *settings.AutoMemoryEnabled ||
 		!settings.DisableBundledSkills || len(settings.SkillOverrides) != len(ClaudeCodeHiddenSkills) {
-		t.Fatalf("--settings：%+v %v", settings, err)
+		t.Fatalf("--settings: %+v %v", settings, err)
 	}
 	for _, name := range ClaudeCodeHiddenSkills {
 		if settings.SkillOverrides[name] != "off" {
-			t.Errorf("自带技能 %s 应设为 off", name)
+			t.Errorf("bundled skill %s should be set to off", name)
 		}
 	}
-	if strings.Contains(h.logs.String(), "平台以外的技能") {
-		t.Fatalf("只有平台的技能时不记警告：%s", h.logs.String())
+	if strings.Contains(h.logs.String(), "Skills from outside the platform") {
+		t.Fatalf("no warning should be logged when there are only platform skills: %s", h.logs.String())
 	}
 	h.env["FAKECLAUDE_EXTRA_SKILLS"] = "update-config,dataviz"
 	drifted := h.claudeAgent(nil)
 	for range 2 {
 		if res, _ := h.exec(drifted, "hi"); res.Outcome != executor.OutcomeCompleted {
-			t.Fatalf("多出技能也不阻断：%+v", res)
+			t.Fatalf("extra skills should not block the run: %+v", res)
 		}
 	}
 	logs := h.logs.String()
 	if strings.Count(logs, "Skills from outside the platform") != 1 || !strings.Contains(logs, "update-config") || !strings.Contains(logs, "dataviz") || strings.Contains(logs, "loop-now:loopctl") {
-		t.Fatalf("多出的技能应记一次警告（只列多出的）：%s", logs)
+		t.Fatalf("extra skills should log one warning (listing only the extra ones): %s", logs)
 	}
 }
 
 // The session record written by claude is not found (for example on Windows, where it encodes the working directory
 // differently from the platform): the turn completes normally without reporting
-// “会话记录保存失败” ("failed to save the session record"); one warning is logged; the conversation continues as usual
+// "Could not save the session record."; one warning is logged; the conversation continues as usual
 // in this process, and after a restart a new session is opened (--session-id, not --resume).
 func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
 	h := newClaudeHarness(t, nil)
@@ -620,23 +620,23 @@ func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
 	id := h.claudeAgent(nil)
 	for _, msg := range []string{"hi", "fake:history"} {
 		if res, _ := h.exec(id, msg); res.Outcome != executor.OutcomeCompleted {
-			t.Fatalf("%s：%+v", msg, res)
+			t.Fatalf("%s: %+v", msg, res)
 		}
 	}
 	if n := strings.Count(h.logs.String(), "Claude Code session transcript not found"); n != 1 {
-		t.Fatalf("应记一次警告，记了 %d 次：%s", n, h.logs.String())
+		t.Fatalf("should log one warning, logged %d times: %s", n, h.logs.String())
 	}
 	h.src.mu.Lock()
 	recorded := h.src.recorded[id]
 	h.src.mu.Unlock()
 	if recorded != "" {
-		t.Fatalf("没有会话记录可记：%q", recorded)
+		t.Fatalf("there should be no session transcript to record: %q", recorded)
 	}
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Prompt = "changed" })
 	if res, _ := h.exec(id, "after restart"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("重启后：%+v", res)
+		t.Fatalf("after the restart: %+v", res)
 	}
 	if args := h.launches()[1]; hasFlag(args, "--resume") || !claudecli.ValidSessionID(argValue(args, "--session-id")) {
-		t.Fatalf("重启后应开新会话：%v", args)
+		t.Fatalf("a new session should be opened after the restart: %v", args)
 	}
 }

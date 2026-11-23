@@ -42,20 +42,20 @@ func seed(t *testing.T, pool *pgxpool.Pool) fixture {
 	t.Helper()
 	f := fixture{org: uuid.New(), project: uuid.New(), agent: uuid.New(), credential: uuid.New(), event: uuid.New(),
 		at: time.Date(2026, 1, 2, 3, 4, 5, 123456000, time.UTC), secret: []byte{0, 0xff, 0x10, 'x'}}
-	exec(t, pool, `INSERT INTO organizations(id,name,is_default,created_at,updated_at) VALUES($1,'组织',true,$2,$2)`, f.org, f.at)
-	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'项目',true)`, f.project, f.org)
+	exec(t, pool, `INSERT INTO organizations(id,name,is_default,created_at,updated_at) VALUES($1,'Org',true,$2,$2)`, f.org, f.at)
+	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'Project',true)`, f.project, f.org)
 	// A plugin subscribed to Agent events: the source's triggers wrote plugin events for the Agent below, and the
 	// import must not add a second copy.
 	exec(t, pool, `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES('watcher','Watcher','{}','1.0.0','{"events": ["agent.created"]}','/nonexistent','installed')`)
 	exec(t, pool, `INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'watcher',true)`, f.project)
-	exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id,created_at) VALUES($1,$2,'甲','anthropic','m',$3)`, f.agent, f.project, f.at)
-	exec(t, pool, `INSERT INTO agent_credentials(id,agent_id,purpose,secret,field_names) VALUES($1,$2,'model',$3,ARRAY['KEY','引号"与,逗号'])`, f.credential, f.agent, f.secret)
-	exec(t, pool, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,'pi.started','{"b": [1, true], "a": "文本"}')`, f.event, f.at, f.agent)
+	exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id,created_at) VALUES($1,$2,'Alpha','anthropic','m',$3)`, f.agent, f.project, f.at)
+	exec(t, pool, `INSERT INTO agent_credentials(id,agent_id,purpose,secret,field_names) VALUES($1,$2,'model',$3,ARRAY['KEY','引号"与,逗号'])`, f.credential, f.agent, f.secret) // check-english: zh (non-ASCII text survives the PostgreSQL to SQLite conversion)
+	exec(t, pool, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,'pi.started','{"b": [1, true], "a": "text"}')`, f.event, f.at, f.agent)
 	exec(t, pool, `SELECT setval(pg_get_serial_sequence('runs','queue_seq'), 41)`)
 	// Tasks in the source have no numbers: after the import they are filled in per project by creation time (by id on
 	// a tie). The insertion order deliberately differs from the numbering order.
 	f.other = uuid.New()
-	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'另一个项目',false)`, f.other, f.org)
+	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'Another project',false)`, f.other, f.org)
 	early, tieA, tieB, elsewhere := uuid.MustParse("00000000-0000-7000-8000-00000000000c"), uuid.MustParse("00000000-0000-7000-8000-00000000000a"), uuid.MustParse("00000000-0000-7000-8000-00000000000b"), uuid.New()
 	for _, task := range []struct {
 		id, project uuid.UUID
@@ -87,7 +87,7 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if report.Version != pgschema.Latest || len(report.Tables) == 0 {
-		t.Fatalf("报告不对：%+v", report)
+		t.Fatalf("unexpected report: %+v", report)
 	}
 	st := openTarget(t, dir)
 
@@ -97,11 +97,11 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if orgID != f.org.String() || isDefault != 1 || createdAt != f.at.UnixMicro() {
-		t.Fatalf("uuid/布尔/时刻换写不对：%s %d %d", orgID, isDefault, createdAt)
+		t.Fatalf("wrong uuid/boolean/timestamp conversion: %s %d %d", orgID, isDefault, createdAt)
 	}
 	a, err := st.GetAgent(ctx, f.agent)
-	if err != nil || a.Name != "甲" || !a.CreatedAt.Equal(f.at) {
-		t.Fatalf("导入后按 store 读 Agent 不对：%+v %v", a, err)
+	if err != nil || a.Name != "Alpha" || !a.CreatedAt.Equal(f.at) {
+		t.Fatalf("unexpected Agent read through store after the import: %+v %v", a, err)
 	}
 	var secret []byte
 	var fields string
@@ -109,16 +109,16 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	var names []string
-	if !bytes.Equal(secret, f.secret) || json.Unmarshal([]byte(fields), &names) != nil || !reflect.DeepEqual(names, []string{"KEY", `引号"与,逗号`}) {
-		t.Fatalf("bytea/文本数组换写不对：%q", fields)
+	if !bytes.Equal(secret, f.secret) || json.Unmarshal([]byte(fields), &names) != nil || !reflect.DeepEqual(names, []string{"KEY", `引号"与,逗号`}) { // check-english: zh (non-ASCII text survives the PostgreSQL to SQLite conversion)
+		t.Fatalf("wrong bytea/text array conversion: %q", fields)
 	}
 	var data string
 	if err := st.Pool.QueryRow(ctx, `SELECT data FROM ev.lifecycle_events WHERE id=$1`, f.event).Scan(&data); err != nil {
 		t.Fatal(err)
 	}
 	var decoded map[string]any
-	if err := json.Unmarshal([]byte(data), &decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"a": "文本", "b": []any{1.0, true}}) {
-		t.Fatalf("jsonb 换写不对：%s", data)
+	if err := json.Unmarshal([]byte(data), &decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"a": "text", "b": []any{1.0, true}}) {
+		t.Fatalf("wrong jsonb conversion: %s", data)
 	}
 	// Sequences continue from where the source left off; the singleton settings hold only the source's row; the import
 	// itself produces no plugin changes.
@@ -133,7 +133,7 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if want := map[string]int64{"runs.queue_seq": 41, "task_turns.queue_seq": 0, "conversation_messages.seq": 0}; !reflect.DeepEqual(seqs, want) {
-		t.Fatalf("序列：%v", seqs)
+		t.Fatalf("sequences: %v", seqs)
 	}
 	var settings, models, changes, lifecycleChanges, pgEvents, events int64
 	if err := st.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM plugin_settings),(SELECT count(*) FROM model_settings),(SELECT count(*) FROM plugin_changes),(SELECT count(*) FROM ev.plugin_lifecycle_changes),(SELECT count(*) FROM plugin_events)`).Scan(&settings, &models, &changes, &lifecycleChanges, &events); err != nil {
@@ -143,25 +143,25 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if settings != 1 || models != 1 || changes != 0 || lifecycleChanges != 0 || pgEvents == 0 || events != pgEvents {
-		t.Fatalf("单例/插件变更不对：%d %d %d %d %d/%d", settings, models, changes, lifecycleChanges, events, pgEvents)
+		t.Fatalf("unexpected singletons/plugin changes: %d %d %d %d %d/%d", settings, models, changes, lifecycleChanges, events, pgEvents)
 	}
 	// After the import the post-baseline migrations run: tasks got their numbers per project, and the project counter
 	// continues from the largest number.
 	for id, want := range f.taskNumbers {
 		var number int64
 		if err := st.Pool.QueryRow(ctx, `SELECT number FROM task_records WHERE id=$1`, id).Scan(&number); err != nil || number != want {
-			t.Errorf("任务 %s 的编号 = %d，应为 %d：%v", id, number, want, err)
+			t.Errorf("task %s number = %d, want %d: %v", id, number, want, err)
 		}
 	}
 	for project, want := range map[uuid.UUID]int64{f.project: 3, f.other: 1} {
 		var last int64
 		if err := st.Pool.QueryRow(ctx, `SELECT last_task_number FROM projects WHERE id=$1`, project).Scan(&last); err != nil || last != want {
-			t.Errorf("项目 %s 的 last_task_number = %d，应为 %d：%v", project, last, want, err)
+			t.Errorf("project %s last_task_number = %d, want %d: %v", project, last, want, err)
 		}
 	}
 	page, err := st.ListTasks(ctx, f.project, "", 10)
 	if err != nil || len(page.Tasks) != 3 || page.Tasks[0].Number != 3 || page.Tasks[2].Number != 1 {
-		t.Fatalf("导入的任务按 store 读应带编号：%+v %v", page.Tasks, err)
+		t.Fatalf("imported tasks read through store should have numbers: %+v %v", page.Tasks, err)
 	}
 	// Every table is in the report, with row counts matching the source.
 	for _, tb := range report.Tables {
@@ -170,7 +170,7 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 			t.Fatal(err)
 		}
 		if n != tb.Rows {
-			t.Fatalf("%s：源库 %d 行，报告 %d 行", tb.Name, n, tb.Rows)
+			t.Fatalf("%s: %d rows in the source, %d in the report", tb.Name, n, tb.Rows)
 		}
 	}
 }
@@ -199,10 +199,10 @@ func TestImportRefusals(t *testing.T) {
 		exec(t, pool, `INSERT INTO goose_db_version(version_id,is_applied) VALUES($1,true)`, pgschema.Latest+1)
 		dir := filepath.Join(t.TempDir(), "db")
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "migration version") {
-			t.Fatalf("版本不符应拒绝：%v", err)
+			t.Fatalf("a version mismatch should be refused: %v", err)
 		}
 		if files := dbFiles(t, dir); len(files) != 0 {
-			t.Fatalf("拒绝后留下了 %v", files)
+			t.Fatalf("a refusal left %v behind", files)
 		}
 	})
 	t.Run("existing", func(t *testing.T) {
@@ -212,10 +212,10 @@ func TestImportRefusals(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "does not overwrite") {
-			t.Fatalf("已有库应拒绝：%v", err)
+			t.Fatalf("an existing database should be refused: %v", err)
 		}
 		if b, err := os.ReadFile(filepath.Join(dir, db.DataFile)); err != nil || string(b) != "keep" {
-			t.Fatal("已有库被改动", err)
+			t.Fatal("the existing database was changed", err)
 		}
 	})
 	t.Run("running", func(t *testing.T) {
@@ -227,7 +227,7 @@ func TestImportRefusals(t *testing.T) {
 		}
 		defer lock.Release()
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "stop the server") {
-			t.Fatalf("服务占着目录时应拒绝：%v", err)
+			t.Fatalf("should refuse while the server holds the directory: %v", err)
 		}
 	})
 	t.Run("structure", func(t *testing.T) {
@@ -235,10 +235,10 @@ func TestImportRefusals(t *testing.T) {
 		exec(t, pool, `ALTER TABLE agents ADD COLUMN extra text`)
 		dir := filepath.Join(t.TempDir(), "db")
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "table agents in the new database has no column extra") {
-			t.Fatalf("结构不符应拒绝：%v", err)
+			t.Fatalf("a structure mismatch should be refused: %v", err)
 		}
 		if files := dbFiles(t, dir); len(files) != 0 {
-			t.Fatalf("拒绝后留下了 %v", files)
+			t.Fatalf("a refusal left %v behind", files)
 		}
 	})
 	// A foreign key that does not hold in the source is rejected at commit; the whole import rolls back and the newly
@@ -247,13 +247,13 @@ func TestImportRefusals(t *testing.T) {
 		pool, src := pgimporttest.Source(t)
 		seed(t, pool)
 		exec(t, pool, `ALTER TABLE agents DROP CONSTRAINT agents_project_id_fkey`)
-		exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id) VALUES($1,$2,'孤儿','anthropic','m')`, uuid.New(), uuid.New())
+		exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id) VALUES($1,$2,'Orphan','anthropic','m')`, uuid.New(), uuid.New())
 		dir := filepath.Join(t.TempDir(), "db")
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); db.Code(err) != db.CodeConstraintFK {
-			t.Fatalf("外键不成立应失败：%v", err)
+			t.Fatalf("a broken foreign key should fail: %v", err)
 		}
 		if files := dbFiles(t, dir); len(files) != 0 {
-			t.Fatalf("失败后留下了 %v", files)
+			t.Fatalf("a failure left %v behind", files)
 		}
 	})
 }
@@ -263,11 +263,11 @@ func TestImportRefusals(t *testing.T) {
 func TestConnectErrorHidesCredentials(t *testing.T) {
 	_, err := pgimport.Import(context.Background(), pgimport.Options{SourceURL: "postgres://fixture-user:fixture-secret@127.0.0.1:1/fixture-db?connect_timeout=2", DBDir: filepath.Join(t.TempDir(), "db")})
 	if err == nil {
-		t.Fatal("应连接失败")
+		t.Fatal("the connection should fail")
 	}
 	for _, s := range []string{"fixture-user", "fixture-secret", "fixture-db"} {
 		if strings.Contains(err.Error(), s) {
-			t.Fatalf("错误里带了连接参数：%v", err)
+			t.Fatalf("the error contains connection parameters: %v", err)
 		}
 	}
 }

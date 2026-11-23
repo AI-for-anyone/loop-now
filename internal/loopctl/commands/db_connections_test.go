@@ -158,7 +158,7 @@ func TestDBConnectionsCASAndLegacyConflict(t *testing.T) {
 	for _, action := range []string{"set", "clear"} {
 		s, e := credentialStub(t)
 		details := map[string]any{"agentId": agentUUID, "cli": "psql", "mode": "explicit_set", "configVersion": 2}
-		s.On("PUT /agents/{agentId}/credential-selections", clitest.Sample{Status: 409, Body: map[string]any{"error": map[string]any{"code": "credential_selection_mode_conflict", "message": "集合模式", "details": details}}})
+		s.On("PUT /agents/{agentId}/credential-selections", clitest.Sample{Status: 409, Body: map[string]any{"error": map[string]any{"code": "credential_selection_mode_conflict", "message": "set mode", "details": details}}})
 		args := []string{"agent", "credential-selection", action, agentUUID, "--cli", "psql", "--expected-config-version", "1"}
 		if action == "set" {
 			args = append(args, "--account-id", credentialAccountID)

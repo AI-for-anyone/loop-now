@@ -76,7 +76,7 @@ func TestOfficialGoogleBundleOffline(t *testing.T) {
 // downloading a private Python.
 func TestGoogleBundleSelfContainedOffline(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("自包含 Google SDK 夹具是 sh 脚本加 tar 布局")
+		t.Skip("the self-contained Google SDK fixture is a sh script in a tar layout")
 	}
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)

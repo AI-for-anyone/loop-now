@@ -121,7 +121,7 @@ func TestGoogleActualLoginHelperPG(t *testing.T) {
 				r, e := f.st.GetProjectCredential(ctx, project, id)
 				return r.View, e
 			}
-			name := "原生离线登录"
+			name := "Native offline login"
 			in := cm.CLIAuthStart{OperationID: uuid.New(), CLI: "gcloud", AuthType: "google_user", Name: &name}
 			if _, e := service.Start(ctx, f.project, in); e != nil {
 				t.Fatal(e)

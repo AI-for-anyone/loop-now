@@ -35,7 +35,7 @@ func TestGoogleActualPendingHelperProjectDeleteRollbackAndCleanup(t *testing.T) 
 	}}}
 	service := NewService(f.st, helper, nil, ServiceOptions{LoginTimeout: 10 * time.Second, RecordTimeout: time.Second}, nil)
 	defer service.Close(context.Background())
-	name := "仅等待回调"
+	name := "Waiting for callback only"
 	id := uuid.New()
 	if _, e := service.Start(ctx, f.project, cm.CLIAuthStart{OperationID: id, CLI: "gcloud", AuthType: "google_user", Name: &name}); e != nil {
 		t.Fatal(e)

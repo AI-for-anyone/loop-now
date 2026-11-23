@@ -69,7 +69,7 @@ func terminal(t *testing.T, f fixture, a, id uuid.UUID) cliverify.Operation {
 
 func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("夹具是 /bin/sh 脚本")
+		t.Skip("the fixture is a /bin/sh script")
 	}
 	for _, kind := range []string{"overflow", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 
 func TestProcessParentExitDoesNotLeaveTermResistantChild(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("夹具是 /bin/sh 脚本，且经 ExtraFiles 传管道")
+		t.Skip("the fixture is a /bin/sh script and passes a pipe through ExtraFiles")
 	}
 	home := t.TempDir()
 	readyR, readyW, e := os.Pipe()
@@ -183,7 +183,7 @@ func testNode(t *testing.T) string {
 	}
 	p, e := exec.LookPath("node")
 	if e != nil {
-		t.Skip("本机没有 node")
+		t.Skip("node is not installed on this machine")
 	}
 	abs, e := filepath.Abs(p)
 	if e != nil {

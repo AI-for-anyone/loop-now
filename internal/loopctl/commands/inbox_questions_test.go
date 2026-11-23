@@ -25,12 +25,12 @@ func TestInboxQuestionsBothIdentities(t *testing.T) {
 			response["question"] = inboxQuestion("open")
 			s.On("POST /inbox/messages", clitest.Sample{Status: 201, Body: response})
 			s.On("POST /inbox/messages/{messageId}/reply", clitest.Sample{Status: 201, Body: response})
-			got := e.run("inbox", "send", "@console", "--text", "merge?", "--option", "合并", "--option=暂缓").ok(t)
-			if !reflect.DeepEqual(got, response) || !reflect.DeepEqual(lastBody(t, s), map[string]any{"to": "@console", "text": "merge?", "options": []any{"合并", "暂缓"}}) {
+			got := e.run("inbox", "send", "@console", "--text", "merge?", "--option", "Merge", "--option=Hold off").ok(t)
+			if !reflect.DeepEqual(got, response) || !reflect.DeepEqual(lastBody(t, s), map[string]any{"to": "@console", "text": "merge?", "options": []any{"Merge", "Hold off"}}) {
 				t.Fatal("ordinary question input/output changed")
 			}
 			before := len(s.Requests())
-			e.run("inbox", "send", "默认项目/dev#"+taskUUID, "--text", "question", "--option", "继续", "--node-run", nodeUUID).ok(t)
+			e.run("inbox", "send", "Default project/dev#"+taskUUID, "--text", "question", "--option", "Continue", "--node-run", nodeUUID).ok(t)
 			if len(s.Requests()) != before+1 || lastBody(t, s)["nodeRunId"] != nodeUUID {
 				t.Fatal("explicit nodeRunId not preserved or auto-read performed")
 			}
@@ -39,16 +39,16 @@ func TestInboxQuestionsBothIdentities(t *testing.T) {
 				t.Fatal("answer-only fabricated body/node")
 			}
 			e.stdin = "extra context"
-			e.run("inbox", "reply", messageUUID, "--answer", "1", "--text-file", "-", "--option", "再确认", "--option", "结束", "--node-run", nodeUUID, "--when-busy", "queue").ok(t)
-			if !reflect.DeepEqual(lastBody(t, s), map[string]any{"optionId": "1", "text": "extra context", "options": []any{"再确认", "结束"}, "nodeRunId": nodeUUID, "whenBusy": "queue"}) {
+			e.run("inbox", "reply", messageUUID, "--answer", "1", "--text-file", "-", "--option", "Confirm again", "--option", "Finish", "--node-run", nodeUUID, "--when-busy", "queue").ok(t)
+			if !reflect.DeepEqual(lastBody(t, s), map[string]any{"optionId": "1", "text": "extra context", "options": []any{"Confirm again", "Finish"}, "nodeRunId": nodeUUID, "whenBusy": "queue"}) {
 				t.Fatal("answer plus new question lost fields/order")
 			}
-			e.run("inbox", "reply", messageUUID, "--text", "new question", "--option", "继续").ok(t)
+			e.run("inbox", "reply", messageUUID, "--text", "new question", "--option", "Continue").ok(t)
 			if lastBody(t, s)["nodeRunId"] != nil {
 				t.Fatal("ordinary new question inferred Task sender")
 			}
-			e.run("inbox", "send", "默认项目/dev#"+taskUUID, "--text", "ordinary message").ok(t)
-			if !reflect.DeepEqual(lastBody(t, s), map[string]any{"to": "默认项目/dev#" + taskUUID, "text": "ordinary message"}) {
+			e.run("inbox", "send", "Default project/dev#"+taskUUID, "--text", "ordinary message").ok(t)
+			if !reflect.DeepEqual(lastBody(t, s), map[string]any{"to": "Default project/dev#" + taskUUID, "text": "ordinary message"}) {
 				t.Fatal("ordinary message gained question/dispatch fields")
 			}
 			count := len(s.Requests())
@@ -108,13 +108,13 @@ func TestInboxQuestionErrorsAndProjection(t *testing.T) {
 			}
 			response := inboxMessage(consoleParticipant(), agentParticipant())
 			response["question"] = inboxQuestion("answered")
-			response["answerTo"] = map[string]any{"messageId": messageUUID, "optionId": "2", "optionLabel": "暂缓"}
+			response["answerTo"] = map[string]any{"messageId": messageUUID, "optionId": "2", "optionLabel": "Hold off"}
 			s.On("POST /inbox/messages/{messageId}/read", clitest.Sample{Status: 200, Body: response})
 			if got := e.run("inbox", "read", messageUUID).ok(t); !reflect.DeepEqual(got, response) {
 				t.Fatal("question/answer projection changed")
 			}
 			response = inboxMessage(platformParticipant(), agentParticipant())
-			response["notice"] = map[string]any{"type": "question_expired", "messageId": messageUUID, "reason": "到期"}
+			response["notice"] = map[string]any{"type": "question_expired", "messageId": messageUUID, "reason": "expired"}
 			s.On("POST /inbox/messages/{messageId}/read", clitest.Sample{Status: 200, Body: response})
 			if got := e.run("inbox", "read", messageUUID).ok(t); !reflect.DeepEqual(got, response) {
 				t.Fatal("platform projection changed")
@@ -151,7 +151,7 @@ func TestInboxQuestionOptionValidationStaysOnServer(t *testing.T) {
 	e.vars[conn.EnvURL] = server.URL
 	e.vars[conn.EnvToken] = extToken
 	e.vars[conn.EnvCAFile] = (&recorder{srv: server}).caFile(t)
-	for _, options := range [][]string{{"same", "same"}, {strings.Repeat("长", 51)}, {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}} {
+	for _, options := range [][]string{{"same", "same"}, {strings.Repeat("x", 51)}, {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}} {
 		args := []string{"inbox", "send", "@console", "--text", "question"}
 		for _, option := range options {
 			args = append(args, "--option", option)

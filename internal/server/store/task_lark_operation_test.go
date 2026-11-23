@@ -81,7 +81,7 @@ func (l *larkOperationNativeLease) Release() { l.owner.releases.Add(1) }
 func requireRuntimeRecovery(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "darwin" {
-		t.Skip("运行时交接的恢复记录只在 darwin 上实现")
+		t.Skip("recovery records of runtime handoffs are only implemented on darwin")
 	}
 }
 

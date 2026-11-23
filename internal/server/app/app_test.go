@@ -37,13 +37,13 @@ func newWorld(t *testing.T) *world {
 	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0（读取模型目录需要）：%v", err)
+		t.Skipf("no usable Pi 1.4.0 on this machine (needed to read the model catalog): %v", err)
 	}
 	return &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "Default org", DefaultProjectName: "Default project",
 		PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
@@ -77,7 +77,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel),
 		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		w.t.Fatalf("启动服务端失败：%v", err)
+		w.t.Fatalf("failed to start the server: %v", err)
 	}
 	go func() { _ = a.Serve() }()
 	return &server{t: w.t, a: a, url: "http://" + a.Addr() + "/api/v1"}
@@ -87,7 +87,7 @@ func (s *server) stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := s.a.Shutdown(ctx); err != nil {
-		s.t.Errorf("停止服务端出错：%v", err)
+		s.t.Errorf("error stopping the server: %v", err)
 	}
 }
 
@@ -120,7 +120,7 @@ func (s *server) must(status int, method, path string, body any) []byte {
 	s.t.Helper()
 	got, out := s.call(method, path, body)
 	if got != status {
-		s.t.Fatalf("%s %s：期望 %d，实际 %d：%s", method, path, status, got, out)
+		s.t.Fatalf("%s %s: want %d, got %d: %s", method, path, status, got, out)
 	}
 	return out
 }
@@ -129,7 +129,7 @@ func decode[T any](t *testing.T, b []byte) T {
 	t.Helper()
 	var v T
 	if err := json.Unmarshal(b, &v); err != nil {
-		t.Fatalf("解析响应失败：%v：%s", err, b)
+		t.Fatalf("failed to parse the response: %v: %s", err, b)
 	}
 	return v
 }
@@ -150,7 +150,7 @@ func (s *server) createAgent(name string) (string, apitypes.Agent) {
 	models := decode[apitypes.ModelList](s.t, s.must(200, "GET", "/model-providers/"+provider+"/models", nil))
 	ctx := decode[apitypes.Context](s.t, s.must(200, "GET", "/context", nil))
 	ag := decode[apitypes.Agent](s.t, s.must(201, "POST", "/projects/"+ctx.Project.ID.String()+"/agents", map[string]any{"name": name,
-		"model": map[string]string{"provider": provider, "modelId": models.Models[0].ID}, "prompt": "你是测试助手"}))
+		"model": map[string]string{"provider": provider, "modelId": models.Models[0].ID}, "prompt": "You are a test assistant"}))
 	return "/agents/" + ag.ID.String(), ag
 }
 
@@ -168,7 +168,7 @@ func (s *server) waitIdle(a string) apitypes.AgentStatus {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	s.t.Fatal("等待空闲超时")
+	s.t.Fatal("timed out waiting for idle")
 	return apitypes.AgentStatus{}
 }
 
@@ -182,7 +182,7 @@ func (s *server) waitRunning(a string) apitypes.Run {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	s.t.Fatal("等待执行开始超时")
+	s.t.Fatal("timed out waiting for the run to start")
 	return apitypes.Run{}
 }
 
@@ -209,50 +209,50 @@ func TestEndToEndWithFakePi(t *testing.T) {
 	s := w.start(nil)
 	defer s.stop()
 
-	a, ag := s.createPlatformAgent("验收助手")
-	tmpl := decode[apitypes.SkillTemplate](t, s.must(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: 记笔记\n---\n"}))
+	a, ag := s.createPlatformAgent("acceptance assistant")
+	tmpl := decode[apitypes.SkillTemplate](t, s.must(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: Take notes\n---\n"}))
 	s.must(201, "POST", a+"/skills", map[string]any{"templateId": tmpl.ID})
-	s.must(200, "PUT", a+"/folder/content?path=docs/guide/a.md", []byte("资料内容"))
+	s.must(200, "PUT", a+"/folder/content?path=docs/guide/a.md", []byte("reference material"))
 	s.must(200, "PUT", a+"/clis/jq", nil)
 	s.must(200, "PUT", a+"/model-credential", map[string]any{"provider": "anthropic", "key": "sk-test"})
 
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "hello"})
 	st := s.waitIdle(a)
-	if r := s.replies(a); len(r) != 1 || !strings.Contains(r[0].Text, "你好") || r[0].Run.Status != "completed" {
-		t.Fatalf("第一轮回复不对：%+v", r)
+	if r := s.replies(a); len(r) != 1 || !strings.Contains(r[0].Text, "hello") || r[0].Run.Status != "completed" {
+		t.Fatalf("unexpected first reply: %+v", r)
 	}
 	agentRoot := filepath.Join(w.cfg.WorkRoot, "agents", ag.ID.String())
-	if b, err := os.ReadFile(filepath.Join(agentRoot, "workspace", "docs", "guide", "a.md")); err != nil || string(b) != "资料内容" {
-		t.Fatalf("上传的文件应直接写入 Agent 文件夹：%q %v", b, err)
+	if b, err := os.ReadFile(filepath.Join(agentRoot, "workspace", "docs", "guide", "a.md")); err != nil || string(b) != "reference material" {
+		t.Fatalf("the uploaded file should be written straight into the Agent folder: %q %v", b, err)
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "skills", "notes", "SKILL.md")); err != nil {
-		t.Fatal("Skill 应同步")
+		t.Fatal("the Skill should be synced")
 	}
 	if st.Session.State != "active" {
-		t.Fatalf("会话文件写盘后应记录：%+v", st.Session)
+		t.Fatalf("the session should be recorded once its file is written: %+v", st.Session)
 	}
 
 	// Queue and interrupt while busy.
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=1s 很长的回复"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=1s a very long reply"})
 	s.waitRunning(a)
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "打断的", "whenBusy": "interrupt"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "queued", "whenBusy": "queue"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "interrupting", "whenBusy": "interrupt"})
 	s.waitIdle(a)
 	r := s.replies(a)
-	if len(r) != 4 || r[1].Run.Status != "interrupted" || !strings.Contains(r[2].Text, "打断的") || !strings.Contains(r[3].Text, "排队的") {
+	if len(r) != 4 || r[1].Run.Status != "interrupted" || !strings.Contains(r[2].Text, "interrupting") || !strings.Contains(r[3].Text, "queued") {
 		var b strings.Builder
 		for _, m := range r {
 			fmt.Fprintf(&b, "%s|%s; ", m.Run.Status, m.Text)
 		}
-		t.Fatalf("打断与排队的顺序不对：%s", b.String())
+		t.Fatalf("wrong order of interrupt and queue: %s", b.String())
 	}
 
 	s.must(204, "DELETE", a, nil)
 	if _, err := os.Stat(filepath.Join(agentRoot, "home")); !os.IsNotExist(err) {
-		t.Fatal("删除 Agent 后独立 HOME 应被删除")
+		t.Fatal("the Agent's own HOME should be removed after deleting the Agent")
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "workspace", "docs")); err != nil {
-		t.Fatal("删除 Agent 后工作区应保留")
+		t.Fatal("the workspace should be kept after deleting the Agent")
 	}
 }
 
@@ -260,28 +260,28 @@ func TestEndToEndWithFakePi(t *testing.T) {
 func TestRestartGraceful(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
-	a, _ := s.createAgent("重启测试")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=10s 很长"})
+	a, _ := s.createAgent("restart test")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=10s very long"})
 	run := s.waitRunning(a)
 	time.Sleep(300 * time.Millisecond)
 	// Reserved for multiple instances: the lock value, run records and pi.pid all carry this instance's ID.
 	inst := s.a.InstanceID.String()
 	agentID := strings.TrimPrefix(a, "/agents/")
 	if owner, _ := s.a.Coord.LockOwner(context.Background(), agentID); owner != run.ID.String()+"|"+inst {
-		t.Fatalf("锁的值应为 <执行 ID>|<实例 ID>：%s", owner)
+		t.Fatalf("the lock value should be <run ID>|<instance ID>: %s", owner)
 	}
 	var runInst string
 	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT instance_id FROM runs WHERE id = $1`, run.ID).Scan(&runInst); err != nil || runInst != inst {
-		t.Fatalf("runs.instance_id 应为本实例：%s %v", runInst, err)
+		t.Fatalf("runs.instance_id should be this instance: %s %v", runInst, err)
 	}
 	pidJSON, err := os.ReadFile(filepath.Join(w.cfg.WorkRoot, "agents", agentID, "pi.pid"))
 	if err != nil || !strings.Contains(string(pidJSON), inst) {
-		t.Fatalf("pi.pid 应带本实例 ID：%s %v", pidJSON, err)
+		t.Fatalf("pi.pid should carry this instance ID: %s %v", pidJSON, err)
 	}
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "queued", "whenBusy": "queue"})
 	s.stop()
 	if fakepiAlive(t, w.cfg.WorkRoot) {
-		t.Fatal("正常停止后不应留下 Pi 进程")
+		t.Fatal("no Pi process should be left after a normal stop")
 	}
 
 	s2 := w.start(nil)
@@ -289,10 +289,10 @@ func TestRestartGraceful(t *testing.T) {
 	s2.waitIdle(a)
 	r := s2.replies(a)
 	if len(r) != 2 || r[0].Run.ID != run.ID || r[0].Run.Status != "interrupted" || *r[0].Run.EndReason != "server_restart" || r[0].Text == "" {
-		t.Fatalf("原回复应标为服务端重启中断并保留文字：%+v", r)
+		t.Fatalf("the original reply should be marked as interrupted by a server restart and keep its text: %+v", r)
 	}
-	if !strings.Contains(r[1].Text, "排队的") || r[1].Run.Status != "completed" {
-		t.Fatalf("排队消息应照常处理：%+v", r[1])
+	if !strings.Contains(r[1].Text, "queued") || r[1].Run.Status != "completed" {
+		t.Fatalf("the queued message should be handled as usual: %+v", r[1])
 	}
 }
 
@@ -300,15 +300,15 @@ func TestRestartGraceful(t *testing.T) {
 func TestRestartAfterCrash(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
-	a, _ := s.createAgent("崩溃测试")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
+	a, _ := s.createAgent("crash test")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s very long"})
 	s.waitRunning(a)
 	// Simulate a forced kill: no graceful exit and no ending of Pi processes; only stop conversation coordination and
 	// HTTP, and release the instance locks as a process exit would.
 	_ = s.a.Conv.Stop(context.Background())
 	s.a.ReleaseInstanceLocks()
 	if !fakepiAlive(t, w.cfg.WorkRoot) {
-		t.Fatal("模拟崩溃时 Pi 进程应仍在运行")
+		t.Fatal("the Pi process should still be running during the simulated crash")
 	}
 	s2 := w.start(nil)
 	defer s2.stop()
@@ -316,10 +316,10 @@ func TestRestartAfterCrash(t *testing.T) {
 	if fakepiAlive(t, w.cfg.WorkRoot) {
 		// The new instance might have started a process for a later message; there is no later message here, so there
 		// should be no Pi process at all.
-		t.Fatal("下次启动时应结束遗留的 Pi 进程")
+		t.Fatal("the next start should end leftover Pi processes")
 	}
 	if r := s2.replies(a); len(r) != 1 || *r[0].Run.EndReason != "server_restart" {
-		t.Fatalf("遗留执行应标为服务端重启中断：%+v", r)
+		t.Fatalf("the leftover run should be marked as interrupted by a server restart: %+v", r)
 	}
 	_ = s.a.Executor.Shutdown(context.Background())
 }
@@ -329,19 +329,19 @@ func TestSessionFiles(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(func(c *config.Config) { c.PiIdleTimeout = 300 * time.Millisecond })
 	defer s.stop()
-	a, _ := s.createAgent("会话测试")
+	a, _ := s.createAgent("session test")
 
 	// The first message is rejected by Pi and no session file is written: this does not count as lost later.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!rejectprompt !nosession"})
 	st := s.waitIdle(a)
 	if st.Session.State != "none" {
-		t.Fatalf("未写盘的会话不应被记录：%+v", st.Session)
+		t.Fatalf("a session never written to disk should not be recorded: %+v", st.Session)
 	}
 	time.Sleep(800 * time.Millisecond) // wait for the idle exit
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "第二条"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "second message"})
 	st = s.waitIdle(a)
 	if r := s.replies(a); r[len(r)-1].Run.Status != "completed" || st.Session.State != "active" {
-		t.Fatalf("应从新会话开始正常回复：%+v %+v", r[len(r)-1], st.Session)
+		t.Fatalf("should reply normally from a new session: %+v %+v", r[len(r)-1], st.Session)
 	}
 
 	// A session file already written to disk is deleted: it is judged lost, and recovers after confirming a reopen.
@@ -350,22 +350,22 @@ func TestSessionFiles(t *testing.T) {
 	for _, m := range matches {
 		_ = os.Remove(m)
 	}
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "第三条"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "third message"})
 	st = s.waitIdle(a)
 	if r := s.replies(a); *r[len(r)-1].Run.ErrorCode != "session_missing" || st.Session.State != "missing" {
-		t.Fatalf("会话文件被删后应判为丢失：%+v", st.Session)
+		t.Fatalf("the session should be judged missing after its file is deleted: %+v", st.Session)
 	}
-	if code, _ := s.call("POST", a+"/messages", map[string]any{"text": "第四条"}); code != http.StatusConflict {
-		t.Fatalf("会话丢失时应拒绝新消息：%d", code)
+	if code, _ := s.call("POST", a+"/messages", map[string]any{"text": "fourth message"}); code != http.StatusConflict {
+		t.Fatalf("new messages should be refused while the session is missing: %d", code)
 	}
 	sess := decode[apitypes.SessionInfo](t, s.must(200, "POST", a+"/session/reset", nil))
 	if sess.Epoch != 2 {
-		t.Fatalf("会话序号应加一：%+v", sess)
+		t.Fatalf("the session epoch should go up by one: %+v", sess)
 	}
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "第五条"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "fifth message"})
 	s.waitIdle(a)
 	if r := s.replies(a); r[len(r)-1].Run.Status != "completed" || r[len(r)-1].SessionEpoch != 2 {
-		t.Fatalf("重开后应正常回复：%+v", r[len(r)-1])
+		t.Fatalf("should reply normally after the reset: %+v", r[len(r)-1])
 	}
 }
 
@@ -375,19 +375,19 @@ func TestProjectsWithFakePi(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	ctx := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
-	s.must(200, "PATCH", "/projects/"+ctx.Project.ID.String(), map[string]any{"name": "主项目"})
+	s.must(200, "PATCH", "/projects/"+ctx.Project.ID.String(), map[string]any{"name": "Main project"})
 
-	p := decode[apitypes.Project](t, s.must(201, "POST", "/projects", map[string]any{"name": "临时"}))
+	p := decode[apitypes.Project](t, s.must(201, "POST", "/projects", map[string]any{"name": "Scratch"}))
 	providers := decode[apitypes.ModelProviderList](t, s.must(200, "GET", "/model-providers", nil))
 	models := decode[apitypes.ModelList](t, s.must(200, "GET", "/model-providers/"+providers.Providers[0].ID+"/models", nil))
-	ag := decode[apitypes.Agent](t, s.must(201, "POST", "/projects/"+p.ID.String()+"/agents", map[string]any{"name": "甲",
+	ag := decode[apitypes.Agent](t, s.must(201, "POST", "/projects/"+p.ID.String()+"/agents", map[string]any{"name": "Agent A",
 		"model": map[string]string{"provider": providers.Providers[0].ID, "modelId": models.Models[0].ID}}))
 	a := "/agents/" + ag.ID.String()
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "hello"})
 	s.waitIdle(a)
 	agentRoot := filepath.Join(w.cfg.WorkRoot, "agents", ag.ID.String())
 	if !fakepiAlive(t, agentRoot) {
-		t.Fatal("回复后 Pi 应常驻")
+		t.Fatal("Pi should stay running after the reply")
 	}
 	s.must(204, "DELETE", "/projects/"+p.ID.String(), nil)
 	deadline := time.Now().Add(5 * time.Second)
@@ -395,20 +395,20 @@ func TestProjectsWithFakePi(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if fakepiAlive(t, agentRoot) {
-		t.Fatal("删除项目后其中 Agent 的 Pi 进程应停止")
+		t.Fatal("deleting the project should stop the Pi processes of its Agents")
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "workspace")); err != nil {
-		t.Fatalf("删除项目后工作文件夹应保留：%v", err)
+		t.Fatalf("working folders should be kept after deleting the project: %v", err)
 	}
 	s.stop()
 
 	s2 := w.start(nil)
 	defer s2.stop()
-	if got := decode[apitypes.Context](t, s2.must(200, "GET", "/context", nil)); got.Project.ID != ctx.Project.ID || got.Project.Name != "主项目" {
-		t.Fatalf("重启后默认项目应是同一个且保持新名称：%+v", got.Project)
+	if got := decode[apitypes.Context](t, s2.must(200, "GET", "/context", nil)); got.Project.ID != ctx.Project.ID || got.Project.Name != "Main project" {
+		t.Fatalf("after the restart the default project should be the same one and keep its new name: %+v", got.Project)
 	}
 	if l := decode[apitypes.ProjectList](t, s2.must(200, "GET", "/projects", nil)); len(l.Projects) != 1 {
-		t.Fatalf("重启后不应多出项目：%+v", l)
+		t.Fatalf("no extra project should appear after the restart: %+v", l)
 	}
 }
 
@@ -428,6 +428,6 @@ func (s *server) createPlatformAgent(name string) (string, apitypes.Agent) {
 	models := decode[apitypes.ModelList](s.t, s.must(200, "GET", "/model-providers/"+provider+"/models", nil))
 
 	ag := decode[apitypes.Agent](s.t, s.must(201, "POST", "/platform/agents", map[string]any{"name": name,
-		"model": map[string]string{"provider": provider, "modelId": models.Models[0].ID}, "prompt": "你是测试助手"}))
+		"model": map[string]string{"provider": provider, "modelId": models.Models[0].ID}, "prompt": "You are a test assistant"}))
 	return "/agents/" + ag.ID.String(), ag
 }

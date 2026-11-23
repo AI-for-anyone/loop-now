@@ -22,7 +22,7 @@ import (
 // This proves visual RPC/model/session plumbing, not real-provider image reasoning.
 func TestInstalledPiImagesReachModelAndPersist(t *testing.T) {
 	if _, err := exec.LookPath("pi"); err != nil {
-		t.Skip("本机没有 pi")
+		t.Skip("pi is not installed on this machine")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()

@@ -71,7 +71,7 @@ func TestLarkDeviceFlowProtocolAndMissingRefresh(t *testing.T) {
 						t.Error("identity verification did not use issued token")
 					}
 					userCalls.Add(1)
-					json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]string{"open_id": "ou-fixture", "name": "核实用户"}})
+					json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]string{"open_id": "ou-fixture", "name": "Verified user"}})
 				default:
 					t.Error("unexpected protocol path")
 					http.Error(w, "fixture", 404)

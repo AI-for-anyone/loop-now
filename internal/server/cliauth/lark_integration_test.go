@@ -20,7 +20,7 @@ func (f larkLoginFunc) Login(ctx context.Context, a larkauth.Application, on fun
 	return f(ctx, a, on)
 }
 func larkCredential(a larkauth.Application) clicredential.Lark {
-	return clicredential.Lark{Type: "lark_user", AppSecret: a.AppSecret, AccessToken: "synthetic-lark-access", RefreshToken: "synthetic-lark-refresh", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: a.Brand, AppID: a.AppID, OpenID: "ou-fixture", DisplayName: "已核实用户", VerifiedAt: time.Now()}, RuntimeVariantVersion: clicredential.LarkUserVariant}
+	return clicredential.Lark{Type: "lark_user", AppSecret: a.AppSecret, AccessToken: "synthetic-lark-access", RefreshToken: "synthetic-lark-refresh", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: a.Brand, AppID: a.AppID, OpenID: "ou-fixture", DisplayName: "Verified user", VerifiedAt: time.Now()}, RuntimeVariantVersion: clicredential.LarkUserVariant}
 }
 func larkSource(t *testing.T, f googleFixture) store.ProjectCredentialRecord {
 	t.Helper()
@@ -38,7 +38,7 @@ func larkSource(t *testing.T, f googleFixture) store.ProjectCredentialRecord {
 		t.Fatal(e)
 	}
 	defer clear(plain)
-	r, e := f.st.CreateProjectCredential(context.Background(), f.project, "cli", "lark-cli", "原应用", store.ProjectCredentialWrite{TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1", FieldNames: fields, EnvNames: payload.EnvNames(), FilePaths: payload.FilePaths()}, Secret: plain})
+	r, e := f.st.CreateProjectCredential(context.Background(), f.project, "cli", "lark-cli", "Original app", store.ProjectCredentialWrite{TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1", FieldNames: fields, EnvNames: payload.EnvNames(), FilePaths: payload.FilePaths()}, Secret: plain})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -99,7 +99,7 @@ func TestLarkSourceCASAndIndependentUserGrant(t *testing.T) {
 				t.Fatal("same request should recover original operation")
 			}
 			if scenario == "source_renamed_before_commit" {
-				name := "改名"
+				name := "Renamed"
 				if _, e = f.st.MutateProjectCredential(ctx, f.project, source.View.ID, source.View.Revision, &name, nil, false); e != nil {
 					t.Fatal(e)
 				}

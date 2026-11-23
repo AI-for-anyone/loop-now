@@ -55,7 +55,7 @@ func TestSameRequestsOnExternalPort(t *testing.T) {
 		extCode, extBody, _ := ext.do(method, path, body, "X-Contract-Invalid-Request", "1")
 		if meta[k].Access == "console" {
 			if extCode != http.StatusForbidden || !strings.Contains(string(extBody), `"forbidden"`) {
-				t.Errorf("%s 只限控制台，对外端口应返回 403：%d %s", k, extCode, extBody)
+				t.Errorf("%s is console only, the external port should return 403: %d %s", k, extCode, extBody)
 			}
 			continue
 		}
@@ -64,7 +64,7 @@ func TestSameRequestsOnExternalPort(t *testing.T) {
 		}
 		conCode, conBody, _ := e.console().do(method, path, body, "X-Contract-Invalid-Request", "1")
 		if extCode != conCode {
-			t.Errorf("%s 在对外端口与控制台上的状态码应相同：%d / %d\n对外：%s\n控制台：%s", k, extCode, conCode, extBody, conBody)
+			t.Errorf("%s should have the same status code on the external port and the console: %d / %d\nexternal: %s\nconsole: %s", k, extCode, conCode, extBody, conBody)
 		}
 	}
 }
@@ -76,13 +76,13 @@ func TestAgentContractMatchesConsole(t *testing.T) {
 	for name, s := range agent.Components.Schemas {
 		c, ok := console.Components.Schemas[name]
 		if !ok {
-			t.Errorf("Agent 契约中的结构 %s 不在控制台契约中", name)
+			t.Errorf("schema %s in the Agent contract is not in the console contract", name)
 			continue
 		}
 		a, _ := json.Marshal(s.Value)
 		b, _ := json.Marshal(c.Value)
 		if !bytes.Equal(a, b) {
-			t.Errorf("结构 %s 在两份契约中不一致：\nAgent：%s\n控制台：%s", name, a, b)
+			t.Errorf("schema %s differs between the two contracts:\nAgent: %s\nconsole: %s", name, a, b)
 		}
 	}
 	am, cm := contracttest.LoadOperations(t, "agent-openapi.yaml"), contracttest.LoadOperations(t, "openapi.yaml")
@@ -94,13 +94,13 @@ func TestAgentContractMatchesConsole(t *testing.T) {
 			// operations; no Agent-only operation ID may appear in console.
 			for _, c := range cm {
 				if c.OperationID == m.OperationID {
-					t.Errorf("Agent 独有操作不应出现在控制台契约：%s", m.OperationID)
+					t.Errorf("an Agent-only operation should not appear in the console contract: %s", m.OperationID)
 				}
 			}
 			continue
 		}
 		if c, ok := cm[k]; !ok || c.OperationID != m.OperationID {
-			t.Errorf("Agent 接口 %s 应与控制台的同名接口一致：%+v / %+v", k, m, c)
+			t.Errorf("Agent endpoint %s should match the console endpoint of the same name: %+v / %+v", k, m, c)
 		}
 	}
 }
@@ -120,6 +120,6 @@ func TestAgentContractCatchesViolation(t *testing.T) {
 	}
 	resp.Body.Close()
 	if len(v.Failures()) == 0 {
-		t.Fatal("不符合 Agent 契约的响应应被发现")
+		t.Fatal("a response that violates the Agent contract should be caught")
 	}
 }

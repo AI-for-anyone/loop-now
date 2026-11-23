@@ -28,13 +28,13 @@ func TestLockDirAcrossProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	if out, err := child("try").CombinedOutput(); err != nil || !strings.Contains(string(out), "locked") {
-		t.Fatalf("父进程持锁时子进程应取锁失败：%v\n%s", err, out)
+		t.Fatalf("the child should fail to lock while the parent holds the lock: %v\n%s", err, out)
 	}
 	if err := l.Release(); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := child("try").CombinedOutput(); err != nil || !strings.Contains(string(out), "acquired") {
-		t.Fatalf("父进程释放后子进程应能取锁：%v\n%s", err, out)
+		t.Fatalf("the child should get the lock after the parent releases it: %v\n%s", err, out)
 	}
 
 	holder := child("hold")
@@ -48,11 +48,11 @@ func TestLockDirAcrossProcesses(t *testing.T) {
 	line, err := bufio.NewReader(stdout).ReadString('\n')
 	if err != nil || !strings.Contains(line, "acquired") {
 		holder.Process.Kill()
-		t.Fatalf("持锁子进程没有取到锁：%q %v", line, err)
+		t.Fatalf("the holding child did not get the lock: %q %v", line, err)
 	}
 	if _, err := LockDir(dir); !errors.Is(err, ErrLocked) {
 		holder.Process.Kill()
-		t.Fatalf("子进程持锁时父进程应得 ErrLocked，得到 %v", err)
+		t.Fatalf("the parent should get ErrLocked while the child holds the lock, got %v", err)
 	}
 	if err := holder.Process.Kill(); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestLockDirAcrossProcesses(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("持锁进程被杀后锁应自动释放：%v", err)
+			t.Fatalf("the lock should be released automatically after its holder is killed: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -76,7 +76,7 @@ func TestLockDirAcrossProcesses(t *testing.T) {
 func TestLockDirChild(t *testing.T) {
 	dir := os.Getenv(lockChildDir)
 	if dir == "" {
-		t.Skip("只在 TestLockDirAcrossProcesses 的子进程里运行")
+		t.Skip("only runs in the child process of TestLockDirAcrossProcesses")
 	}
 	l, err := LockDir(dir)
 	switch {

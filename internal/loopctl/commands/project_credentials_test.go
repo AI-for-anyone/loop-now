@@ -77,7 +77,7 @@ func TestProjectCredentialParameters(t *testing.T) {
 }
 
 func TestProjectCredentialSecretOutputProtection(t *testing.T) {
-	secret := "synthetic-quote-\"-雪-key"
+	secret := "synthetic-quote-\"-雪-key" // check-english: zh (non-ASCII secret stays redacted after JSON escaping)
 	for _, status := range []int{200, 422, 500} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

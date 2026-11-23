@@ -148,7 +148,7 @@ func TestGoogleActualAppFixedGrantAndPrivateRuntime(t *testing.T) {
 	})
 	a := s.a
 	ctx := context.Background()
-	path, agent := s.createAgent("Google固定授权")
+	path, agent := s.createAgent("Google pinned grant")
 	s.must(201, "POST", "/projects/"+agent.ProjectID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "fixture-model", "credential": map[string]any{"type": "api_key", "key": "synthetic-only"}})
 	if _, e := a.Store.SetProjectManager(ctx, *agent.ProjectID, agent.ID); e != nil {
 		t.Fatal(e)
@@ -195,7 +195,7 @@ func TestGoogleActualAppFixedGrantAndPrivateRuntime(t *testing.T) {
 	if !valid {
 		t.Fatal("controlled private gcloud PATH entry failed")
 	}
-	taskRaw, e := a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "Google原授权任务", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "检查", AgentID: agent.ID, Inputs: map[string]workflow.Source{}, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}}}, Edges: []workflow.Edge{}}})
+	taskRaw, e := a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "Google original grant task", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "check", AgentID: agent.ID, Inputs: map[string]workflow.Source{}, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}}}, Edges: []workflow.Edge{}}})
 	if e != nil {
 		t.Fatal(e)
 	}

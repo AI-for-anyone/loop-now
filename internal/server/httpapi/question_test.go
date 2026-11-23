@@ -25,10 +25,10 @@ import (
 func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	a := e.platformAgent("提问方")
+	a := e.platformAgent("Asker")
 	sender := e.agentCaller(a.ID)
 	create := func(text string) apitypes.InboxMessage {
-		return decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": text, "options": []string{"继续", "停止"}}))
+		return decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": text, "options": []string{"Continue", "Stop"}}))
 	}
 	q := create("first")
 	if q.Question == nil || q.Question.State != "open" || q.Question.Options[0].ID != "1" {
@@ -37,21 +37,21 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 	path := "/inbox/messages/" + q.ID.String() + "/reply"
 	sender.expectError(422, "validation_failed", "POST", path, map[string]any{"optionId": "1"})
 	// A later ordinary message in the thread is not the answer target.
-	ordinary := decode[apitypes.InboxMessage](t, sender.expect(201, "POST", path, map[string]any{"text": "补充说明"}))
-	e.expect(201, "POST", "/inbox/messages/"+ordinary.ID.String()+"/reply", map[string]any{"text": "普通消息"})
+	ordinary := decode[apitypes.InboxMessage](t, sender.expect(201, "POST", path, map[string]any{"text": "more details"}))
+	e.expect(201, "POST", "/inbox/messages/"+ordinary.ID.String()+"/reply", map[string]any{"text": "ordinary message"})
 	original, err := e.st.GetInboxMessage(ctx, q.ID, 200)
 	if err != nil || original.Question.State != "open" || original.ReadAt != nil {
 		t.Fatal("ordinary reply answered or read original", err)
 	}
 	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", path, map[string]any{"optionId": "2"}))
-	if answer.Text != "Selected: 停止" || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
+	if answer.Text != "Selected: Stop" || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
 		t.Fatal("answer projection")
 	}
 	if original, err = e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || original.ReadAt == nil {
 		t.Fatal("console answer left the question unread", err)
 	}
 	e.console().expectError(409, "already_answered", "POST", path, map[string]any{"optionId": "1"})
-	e.expect(201, "POST", path, map[string]any{"text": "已回答后的普通文字"})
+	e.expect(201, "POST", path, map[string]any{"text": "ordinary text after the answer"})
 	expired := create("expires")
 	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, expired.ID); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.console().expectError(409, "question_closed", "POST", "/inbox/messages/"+closed.ID.String()+"/reply", map[string]any{"optionId": "1"})
-	e.expect(201, "POST", "/inbox/messages/"+closed.ID.String()+"/reply", map[string]any{"text": "普通回复保留"})
+	e.expect(201, "POST", "/inbox/messages/"+closed.ID.String()+"/reply", map[string]any{"text": "ordinary reply is kept"})
 	for _, values := range [][]string{{}, {"same", "same"}, {" "}} {
 		sender.expect(422, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "bad", "options": values}, "X-Contract-Invalid-Request", "1")
 	}
@@ -92,8 +92,8 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 	e.api.Tasks.Source = &tasks.Source{CloseQuestion: store.CloseInboxQuestion, ViewQuestion: e.api.Inbox.ViewQuestion}
 	node := d.Nodes[0]
 	instance := e.agentCaller(node.RuntimeID)
-	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "继续任务吗", "options": []string{"继续", "停止"}, "nodeRunId": node.ID}))
-	instance.expectError(409, "task_conflict", "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "第二题", "options": []string{"x"}, "nodeRunId": node.ID})
+	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "Continue the task?", "options": []string{"Continue", "Stop"}, "nodeRunId": node.ID}))
+	instance.expectError(409, "task_conflict", "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "second question", "options": []string{"x"}, "nodeRunId": node.ID})
 	detail := decode[taskmodel.Detail](t, e.expect(200, "GET", "/tasks/"+d.Task.ID.String(), nil))
 	if detail.Nodes[0].Question == nil || !detail.Nodes[0].Question.CanAnswer || detail.Nodes[0].Question.ID != q.ID {
 		t.Fatal("real source question view not answerable")
@@ -131,11 +131,11 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 		t.Fatal("persistent close absent", err)
 	}
 	e.console().expectError(409, "question_closed", "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"optionId": "1"})
-	instance.expectError(409, "task_conflict", "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "旧节点新题", "options": []string{"x"}, "nodeRunId": node.ID})
-	newQ := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "新问题", "options": []string{"x"}, "nodeRunId": next.ID}))
+	instance.expectError(409, "task_conflict", "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "new question on the old node", "options": []string{"x"}, "nodeRunId": node.ID})
+	newQ := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "new question", "options": []string{"x"}, "nodeRunId": next.ID}))
 	e.expect(200, "POST", "/tasks/"+d.Task.ID.String()+"/cancel", map[string]any{"actionId": uuid.New()})
 	e.console().expectError(409, "question_closed", "POST", "/inbox/messages/"+newQ.ID.String()+"/reply", map[string]any{"optionId": "1"})
-	forwarded := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+newQ.ID.String()+"/reply", map[string]any{"text": "迟到普通文字"}))
+	forwarded := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+newQ.ID.String()+"/reply", map[string]any{"text": "late ordinary text"}))
 	if forwarded.To.Address == nil || strings.Contains(*forwarded.To.Address, "#") {
 		t.Fatal("late ordinary text not forwarded to Manager")
 	}
@@ -168,7 +168,7 @@ func TestTaskQuestionAnswerAndExpiryOneRecoveryTurn(t *testing.T) {
 			}
 			q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "question", "options": []string{"yes"}, "nodeRunId": node.ID}))
 			if mode == "answer" {
-				e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "回答在原轮settled前"})
+				e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "answer before the original turn settled"})
 			} else {
 				if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
@@ -208,8 +208,8 @@ func TestInboxQuestionConfiguredPreviewAndBlockedExpiry(t *testing.T) {
 	if _, err := e.st.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true WHERE id=$1`, node.RuntimeID); err != nil {
 		t.Fatal(err)
 	}
-	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "非200摘要", "options": []string{"yes"}, "nodeRunId": node.ID}))
-	e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "零一二三四五六七八九十一十二十三十四"})
+	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "non-200 preview", "options": []string{"yes"}, "nodeRunId": node.ID}))
+	e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "零一二三四五六七八九十一十二十三十四"}) // check-english: zh (the preview length counts runes, not bytes)
 	raw := e.expect(409, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"optionId": "1"})
 	var result struct {
 		Error struct {
@@ -222,7 +222,7 @@ func TestInboxQuestionConfiguredPreviewAndBlockedExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := e.st.GetInboxMessage(ctx, q.ID, 7)
-	if err != nil || result.Error.Details.Question.Answer == nil || result.Error.Details.Question.Answer.TextPreview != "零一二三四五六" || result.Error.Details.Question.Answer.TextPreview != got.Question.Answer.TextPreview {
+	if err != nil || result.Error.Details.Question.Answer == nil || result.Error.Details.Question.Answer.TextPreview != "零一二三四五六" || result.Error.Details.Question.Answer.TextPreview != got.Question.Answer.TextPreview { // check-english: zh (the preview length counts runes, not bytes)
 		t.Fatal("409 ignored configured preview", err)
 	}
 	// The current attempt can ask another question, then block before it expires.
@@ -261,7 +261,7 @@ func TestInboxQuestionOutboxAfterTaskProjectDeletion(t *testing.T) {
 	e.api.Tasks = tasks.New(e.st, e.api.Config, nil, tasks.Options{MaxSteps: 10, MaxEdges: 10, MaxVisits: 20, MaxRequest: 1 << 20}, e.api.Log)
 	e.api.Tasks.Source = &tasks.Source{CloseQuestion: store.CloseInboxQuestion, ViewQuestion: e.api.Inbox.ViewQuestion}
 	e.api.Inbox.Tasks = e.api.Tasks
-	project, err := e.st.CreateProject(ctx, e.dc.Organization.ID, "删除终态项目")
+	project, err := e.st.CreateProject(ctx, e.dc.Organization.ID, "Deleted terminal project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestInboxQuestionOutboxAfterTaskProjectDeletion(t *testing.T) {
 	if _, err = e.st.DeleteProject(ctx, project.ID); err != nil {
 		t.Fatal(err)
 	}
-	other := e.platformAgent("仍需收到到期")
+	other := e.platformAgent("Still gets expiry")
 	sender := e.agentCaller(other.ID)
 	later := decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "later", "options": []string{"yes"}}))
 	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, later.ID); err != nil {
@@ -351,7 +351,7 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 			node uuid.UUID
 		}) {
 			<-start
-			_, err := e.api.Inbox.Send(ctx, pair.from, "默认项目/Manager#"+pair.to.String(), "cross question", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: pair.node})
+			_, err := e.api.Inbox.Send(ctx, pair.from, "Default project/Manager#"+pair.to.String(), "cross question", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: pair.node})
 			results <- err
 		}(pair)
 	}
@@ -392,7 +392,7 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = e.api.Inbox.Send(ctx, auth.Console(), "默认项目/Manager#"+d.Task.ID.String(), "rollback-all", "interrupt", inbox.QuestionInput{Options: []string{"yes"}}); err == nil {
+	if _, err = e.api.Inbox.Send(ctx, auth.Console(), "Default project/Manager#"+d.Task.ID.String(), "rollback-all", "interrupt", inbox.QuestionInput{Options: []string{"yes"}}); err == nil {
 		t.Fatal("reminder fault ignored")
 	}
 	var afterMessages, afterQuestions int
@@ -614,7 +614,7 @@ func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
 					case <-ctx.Done():
 						return ctx.Err()
 					}
-					_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id=$2,name='改名后',updated_at=$3 WHERE id=$1`, e.dc.Project.ID, next.ID, tx.Now())
+					_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id=$2,name='Renamed project',updated_at=$3 WHERE id=$1`, e.dc.Project.ID, next.ID, tx.Now())
 					return err
 				})
 			}()
@@ -653,7 +653,7 @@ func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
 			}
 			if mode == "notice" {
 				msg, err := e.st.GetInboxMessage(ctx, messageID, 200)
-				if err != nil || msg.To.ID != next.ID || msg.From.Kind != "platform" || !strings.Contains(msg.Text, "/p/"+url.PathEscape("改名后")+"/") {
+				if err != nil || msg.To.ID != next.ID || msg.From.Kind != "platform" || !strings.Contains(msg.Text, "/p/"+url.PathEscape("Renamed project")+"/") {
 					t.Fatal("notice used stale Manager/link", err)
 				}
 				for i := 0; i < 3; i++ {

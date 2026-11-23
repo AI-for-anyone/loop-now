@@ -28,7 +28,7 @@ func TestTaskQuestionAppAnswerAndExpiryBeforeSettled(t *testing.T) {
 			if mode == "blocked-expiry" {
 				description += " !error=fixture_error"
 			}
-			body, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: manager.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "真实问题组件", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", Description: description, AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+			body, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: manager.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "real question component", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", Description: description, AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -41,7 +41,7 @@ func TestTaskQuestionAppAnswerAndExpiryBeforeSettled(t *testing.T) {
 			})
 			node := running.Nodes[0]
 			principal := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: created.Task.ID, RuntimeID: node.RuntimeID}
-			q, err := s.a.API.Inbox.Send(ctx, principal, "@console", "是否继续", "queue", inbox.QuestionInput{Options: []string{"是", "否"}, NodeRunID: node.ID})
+			q, err := s.a.API.Inbox.Send(ctx, principal, "@console", "Continue?", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: node.ID})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +179,7 @@ func TestTaskQuestionAppCompletionClosesPendingOriginal(t *testing.T) {
 	running := taskWait(t, s, created.Task.ID, func(d taskmodel.Detail) bool { return s.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy" })
 	node := running.Nodes[0]
 	p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: created.Task.ID, RuntimeID: node.RuntimeID}
-	q, err := s.a.API.Inbox.Send(ctx, p, "@console", "仍未回答", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID})
+	q, err := s.a.API.Inbox.Send(ctx, p, "@console", "still unanswered", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

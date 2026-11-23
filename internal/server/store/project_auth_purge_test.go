@@ -18,16 +18,16 @@ type projectAuthFixture struct {
 
 func seedProjectAuth(t *testing.T, base *modelAuthEnv) projectAuthFixture {
 	t.Helper()
-	dc, err := base.s.EnsureDefaults(base.ctx, "默认组织", "默认项目")
+	dc, err := base.s.EnsureDefaults(base.ctx, "Default organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := base.s.CreateProject(base.ctx, dc.Organization.ID, "删除认证项目")
+	p, err := base.s.CreateProject(base.ctx, dc.Organization.ID, "Auth purge project")
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := projectAuthFixture{project: p}
-	for _, name := range []string{"账户一", "账户二"} {
+	for _, name := range []string{"Account one", "Account two"} {
 		a, err := base.s.CreateAgent(base.ctx, store.ProjectScope(p.ID), name, "openai-codex", "fixture", "")
 		if err != nil {
 			t.Fatal(err)

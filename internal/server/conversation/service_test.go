@@ -54,10 +54,10 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 			return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, CommandHandled: true,
 				CommandNotices: []executor.CommandNotice{{Level: "info", Message: "Fetching…"}, {Level: "warning", Message: "Weekly Limit\n   Used       1%"}}, CommandNoticesTruncated: true}, nil
 		}
-		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
+		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "Reply: " + req.Message, ConfigVersion: 1}, nil
 	}
 	if !compact && !strings.HasPrefix(req.Message, prefix) {
-		return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
+		return executor.Result{}, fmt.Errorf("missing the correct run ID line for this turn")
 	}
 	if !compact {
 		req.Message = strings.TrimPrefix(req.Message, prefix)
@@ -66,7 +66,7 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	f.mu.Lock()
 	if f.running[req.AgentID] != nil {
 		f.mu.Unlock()
-		return executor.Result{}, fmt.Errorf("同一 Agent 同时有两次执行")
+		return executor.Result{}, fmt.Errorf("two runs at once for the same Agent")
 	}
 	f.running[req.AgentID] = ctl
 	f.runIDs[req.AgentID] = req.RunID
@@ -78,12 +78,12 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	sink.Phase(executor.PhasePreparing)
 	sink.Running(1)
 	sink.Tool("call-1", "bash", executor.ToolStarted)
-	sink.TextDelta("部分")
+	sink.TextDelta("partial")
 	if strings.Contains(req.Message, "block") {
 		select {
 		case c := <-ctl:
 			if c == "interrupt" {
-				return executor.Result{Outcome: executor.OutcomeInterrupted, Text: "部分", ConfigVersion: 1}, nil
+				return executor.Result{Outcome: executor.OutcomeInterrupted, Text: "partial", ConfigVersion: 1}, nil
 			}
 		case <-ctx.Done():
 			return executor.Result{}, ctx.Err()
@@ -98,11 +98,11 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		}
 	}
 	sink.Tool("call-1", "bash", executor.ToolSucceeded)
-	sink.TextDelta("回复")
+	sink.TextDelta(" reply")
 	if compact {
 		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{TokensBefore: 100, EstimatedTokensAfter: 40}}, nil
 	}
-	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
+	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "Reply: " + req.Message, ConfigVersion: 1}, nil
 }
 
 func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {
@@ -200,7 +200,7 @@ func (e *env) mustSend(text, whenBusy string) apitypes.Message {
 	e.t.Helper()
 	m, err := e.send(text, whenBusy)
 	if err != nil {
-		e.t.Fatalf("发送 %q 失败：%v", text, err)
+		e.t.Fatalf("sending %q failed: %v", text, err)
 	}
 	return m
 }
@@ -210,10 +210,10 @@ func (e *env) waitStarted(msg string) {
 	select {
 	case got := <-e.ex.started:
 		if got != msg {
-			e.t.Fatalf("期望开始执行 %q，实际 %q", msg, got)
+			e.t.Fatalf("want %q to start, got %q", msg, got)
 		}
 	case <-time.After(5 * time.Second):
-		e.t.Fatalf("等待 %q 开始执行超时", msg)
+		e.t.Fatalf("timed out waiting for %q to start", msg)
 	}
 }
 
@@ -232,7 +232,7 @@ func (e *env) waitIdle() {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	e.t.Fatal("等待 Agent 空闲超时")
+	e.t.Fatal("timed out waiting for the Agent to go idle")
 }
 
 func (e *env) history() []apitypes.Message {
@@ -246,36 +246,36 @@ func (e *env) history() []apitypes.Message {
 
 func TestSendWhenIdle(t *testing.T) {
 	e := newEnv(t)
-	m := e.mustSend("你好", "")
+	m := e.mustSend("Hello", "")
 	if m.Run.Status != "starting" || m.Run.WhenBusy != nil {
-		t.Fatalf("空闲时应立即开始，且不记录选择：%+v", m.Run)
+		t.Fatalf("should start right away when idle, without recording a choice: %+v", m.Run)
 	}
-	e.waitStarted("你好")
+	e.waitStarted("Hello")
 	e.waitIdle()
 	h := e.history()
-	if len(h) != 2 || h[0].Role != "user" || h[1].Role != "assistant" || h[1].Text != "回复：你好" || h[1].Run.Status != "completed" {
-		t.Fatalf("历史不对：%+v", h)
+	if len(h) != 2 || h[0].Role != "user" || h[1].Role != "assistant" || h[1].Text != "Reply: Hello" || h[1].Run.Status != "completed" {
+		t.Fatalf("wrong history: %+v", h)
 	}
 	if len(h[1].Run.Tools) != 2 || h[1].Run.Tools[0].State != "started" {
-		t.Fatalf("应记录工具状态：%+v", h[1].Run.Tools)
+		t.Fatalf("tool states should be recorded: %+v", h[1].Run.Tools)
 	}
 }
 
 func TestBusyWithoutChoice(t *testing.T) {
 	e := newEnv(t)
-	first := e.mustSend("block 慢", "")
-	e.waitStarted("block 慢")
-	_, err := e.send("第二条", "")
+	first := e.mustSend("block slow", "")
+	e.waitStarted("block slow")
+	_, err := e.send("second message", "")
 	ae, ok := apperr.As(err)
 	if !ok || ae.Code != apperr.CodeAgentBusy {
-		t.Fatalf("忙时未选择应返回 agent_busy：%v", err)
+		t.Fatalf("a busy send without a choice should return agent_busy: %v", err)
 	}
 	d := ae.Details.(apitypes.AgentBusyDetails)
 	if d.CurrentRunID == nil || *d.CurrentRunID != first.Run.ID {
-		t.Fatalf("详情应给出当前执行：%+v", d)
+		t.Fatalf("the details should give the current run: %+v", d)
 	}
 	if n := len(e.history()); n != 1 {
-		t.Fatalf("被拒绝的消息不应保存：%d", n)
+		t.Fatalf("a rejected message should not be saved: %d", n)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
@@ -283,24 +283,24 @@ func TestBusyWithoutChoice(t *testing.T) {
 
 func TestQueueAndInterruptOrdering(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
-	e.mustSend("普通1", "queue")
-	e.mustSend("普通2", "queue")
-	i1 := e.mustSend("block 打断1", "interrupt")
+	e.mustSend("block current", "")
+	e.waitStarted("block current")
+	e.mustSend("normal 1", "queue")
+	e.mustSend("normal 2", "queue")
+	i1 := e.mustSend("block interrupt 1", "interrupt")
 	if *i1.Run.WhenBusy != "interrupt" || i1.Run.Status != "queued" {
-		t.Fatalf("打断消息应排队并记录选择：%+v", i1.Run)
+		t.Fatalf("an interrupt message should queue and record the choice: %+v", i1.Run)
 	}
-	e.waitStarted("block 打断1")
-	// Another interrupt while an interrupt is in progress: it goes after "打断1" ("interrupt 1") and before the normal
+	e.waitStarted("block interrupt 1")
+	// Another interrupt while an interrupt is in progress: it goes after "interrupt 1" and before the normal
 	// messages.
-	e.mustSend("打断2", "interrupt")
+	e.mustSend("interrupt 2", "interrupt")
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
 	got := e.ex.messages()
-	want := []string{"block 当前", "block 打断1", "打断2", "普通1", "普通2"}
+	want := []string{"block current", "block interrupt 1", "interrupt 2", "normal 1", "normal 2"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("处理顺序不对：%v", got)
+		t.Fatalf("wrong processing order: %v", got)
 	}
 	h := e.history()
 	var interrupted *apitypes.Message
@@ -309,8 +309,8 @@ func TestQueueAndInterruptOrdering(t *testing.T) {
 			interrupted = &h[i]
 		}
 	}
-	if interrupted == nil || *interrupted.Run.EndReason != "user_interrupt" || interrupted.Text != "部分" {
-		t.Fatalf("被打断的回复应记为已打断并保留文字：%+v", interrupted)
+	if interrupted == nil || *interrupted.Run.EndReason != "user_interrupt" || interrupted.Text != "partial" {
+		t.Fatalf("the interrupted reply should be recorded as interrupted and keep its text: %+v", interrupted)
 	}
 }
 
@@ -337,7 +337,7 @@ func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 	select {
 	case <-reached:
 	case <-time.After(5 * time.Second):
-		t.Fatal("等待针对 A 的打断到达钩子超时")
+		t.Fatal("timed out waiting for the interrupt aimed at A to reach the hook")
 	}
 	// The interrupt has not reached the executor yet, and A happens to end naturally; then B starts.
 	e.ex.signal(e.agent, "release")
@@ -346,7 +346,7 @@ func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 	select {
 	case <-e.ex.intr:
 	case <-time.After(5 * time.Second):
-		t.Fatal("等待迟到的打断交给执行器超时")
+		t.Fatal("timed out waiting for the late interrupt to reach the executor")
 	}
 	time.Sleep(200 * time.Millisecond) // the abort-poll loop may deliver it once more; give it time
 	e.ex.signal(e.agent, "release")    // B ends normally
@@ -359,19 +359,19 @@ func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 		}
 	}
 	if status["block A"] != "completed" || status["block B"] != "completed" {
-		t.Fatalf("迟到的打断不应作用到 B：A=%s，B=%s", status["block A"], status["block B"])
+		t.Fatalf("the late interrupt should not hit B: A=%s, B=%s", status["block A"], status["block B"])
 	}
 }
 
 func TestConcurrentSendsExactlyOnce(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("block 开头", "")
-	e.waitStarted("block 开头")
+	e.mustSend("block opener", "")
+	e.waitStarted("block opener")
 	var wg sync.WaitGroup
 	for i := range 20 {
 		wg.Go(func() {
 			if _, err := e.send(fmt.Sprintf("m%02d", i), "queue"); err != nil {
-				t.Errorf("发送失败：%v", err)
+				t.Errorf("send failed: %v", err)
 			}
 		})
 	}
@@ -386,16 +386,16 @@ func TestConcurrentSendsExactlyOnce(t *testing.T) {
 	e.waitIdle()
 	got := e.ex.messages()[1:]
 	if !slices.Equal(got, wantOrder) || len(got) != 20 {
-		t.Fatalf("每条消息应恰好处理一次且按排队顺序：\n得到 %v\n期望 %v", got, wantOrder)
+		t.Fatalf("every message should be processed exactly once in queue order:\ngot %v\nwant %v", got, wantOrder)
 	}
 }
 
 func TestLockLoss(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
-	e.mustSend("排队1", "queue")
-	e.mustSend("排队2", "queue")
+	e.mustSend("block current", "")
+	e.waitStarted("block current")
+	e.mustSend("queued 1", "queue")
+	e.mustSend("queued 2", "queue")
 	// The busy lock is lost (simulated by releasing it directly; busy locks do not expire, but the driver must cope
 	// with a missing lock).
 	ctx := context.Background()
@@ -405,8 +405,8 @@ func TestLockLoss(t *testing.T) {
 	}
 	// With the lock lost the Agent is still judged busy (the database has in-flight and queued runs), and no second run
 	// is started.
-	if _, err := e.send("没选择", ""); !apperr.Is(err, apperr.CodeAgentBusy) {
-		t.Fatalf("锁丢了仍应判定为忙：%v", err)
+	if _, err := e.send("no choice", ""); !apperr.Is(err, apperr.CodeAgentBusy) {
+		t.Fatalf("the Agent should still be busy after losing the lock: %v", err)
 	}
 	// The lock is restored from the database (on send or on reconciliation).
 	deadline := time.Now().Add(30 * time.Second)
@@ -416,14 +416,14 @@ func TestLockLoss(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("未能按数据库补回锁")
+			t.Fatal("the lock was not restored from the database")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
-	if got := e.ex.messages(); !slices.Equal(got, []string{"block 当前", "排队1", "排队2"}) {
-		t.Fatalf("排队消息应按原顺序各处理一次：%v", got)
+	if got := e.ex.messages(); !slices.Equal(got, []string{"block current", "queued 1", "queued 2"}) {
+		t.Fatalf("queued messages should each be processed once, in their original order: %v", got)
 	}
 }
 
@@ -432,16 +432,16 @@ func TestLockLoss(t *testing.T) {
 func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
+	e.mustSend("block current", "")
+	e.waitStarted("block current")
 	active, err := e.st.ActiveRun(ctx, e.agent)
 	if err != nil || active == nil {
-		t.Fatal("应有进行中的执行", err)
+		t.Fatal("there should be an in-flight run", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for text, _ := e.co.RunText(ctx, active.ID.String()); text != "部分"; text, _ = e.co.RunText(ctx, active.ID.String()) {
+	for text, _ := e.co.RunText(ctx, active.ID.String()); text != "partial"; text, _ = e.co.RunText(ctx, active.ID.String()) {
 		if time.Now().After(deadline) {
-			t.Fatalf("回复文字没有到：%q", text)
+			t.Fatalf("the reply text did not arrive: %q", text)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -450,7 +450,7 @@ func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
 	}
 	r, _ := e.st.GetRun(ctx, active.ID)
 	if r.Status != "interrupted" || r.EndReason != "server_restart" {
-		t.Fatalf("停止时进行中的执行应按服务端重启中断收尾：%+v", r)
+		t.Fatalf("on stop, an in-flight run should end as interrupted by a server restart: %+v", r)
 	}
 	var reply *apitypes.Message
 	for _, m := range e.history() {
@@ -458,8 +458,8 @@ func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
 			reply = &m
 		}
 	}
-	if reply == nil || reply.Text != "部分" {
-		t.Fatalf("应写入已产生的文字：%+v", reply)
+	if reply == nil || reply.Text != "partial" {
+		t.Fatalf("the text produced so far should be written: %+v", reply)
 	}
 }
 
@@ -468,13 +468,13 @@ func TestRestartRecovery(t *testing.T) {
 	ctx := context.Background()
 	other := uuid.Must(uuid.NewV7())
 	// Simulate leftovers from the previous process: one in-flight run and one queued message.
-	_, run, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "旧的", Start: true, InstanceID: other})
+	_, run, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "old one", Start: true, InstanceID: other})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = e.co.AppendText(ctx, e.agent.String(), run.ID.String(), "已产生的文字", "run.text", []byte(`{}`))
+	_, _ = e.co.AppendText(ctx, e.agent.String(), run.ID.String(), "text produced so far", "run.text", []byte(`{}`))
 	_, _ = e.co.Restore(ctx, e.agent.String(), coord.LockValue(run.ID.String(), other.String()))
-	_, _, err = e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "排队的", WhenBusy: "queue", InstanceID: other})
+	_, _, err = e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "queued one", WhenBusy: "queue", InstanceID: other})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func TestRestartRecovery(t *testing.T) {
 	e.waitIdle()
 	r, _ := e.st.GetRun(ctx, run.ID)
 	if r.Status != "interrupted" || r.EndReason != "server_restart" {
-		t.Fatalf("遗留执行应标为服务端重启中断：%+v", r)
+		t.Fatalf("a leftover run should be marked as interrupted by a server restart: %+v", r)
 	}
 	var reply *apitypes.Message
 	for _, m := range e.history() {
@@ -495,11 +495,11 @@ func TestRestartRecovery(t *testing.T) {
 			reply = &m
 		}
 	}
-	if reply == nil || reply.Text != "已产生的文字" {
-		t.Fatalf("应保留已收到的文字：%+v", reply)
+	if reply == nil || reply.Text != "text produced so far" {
+		t.Fatalf("the text received so far should be kept: %+v", reply)
 	}
-	if !slices.Contains(e.ex.messages(), "排队的") {
-		t.Fatal("排队消息应照常处理")
+	if !slices.Contains(e.ex.messages(), "queued one") {
+		t.Fatal("the queued message should be processed as usual")
 	}
 }
 
@@ -512,23 +512,23 @@ func TestSessionMissingAndReset(t *testing.T) {
 	if err := e.st.MarkSessionMissing(ctx, e.agent, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.send("你好", ""); !apperr.Is(err, apperr.CodeSessionMissing) {
-		t.Fatalf("会话丢失时应拒绝：%v", err)
+	if _, err := e.send("Hello", ""); !apperr.Is(err, apperr.CodeSessionMissing) {
+		t.Fatalf("should be rejected while the session is lost: %v", err)
 	}
 	if n := len(e.history()); n != 0 {
-		t.Fatal("被拒绝的消息不应保存")
+		t.Fatal("a rejected message should not be saved")
 	}
 	sess, err := e.svc.ResetSession(ctx, e.agent)
 	if err != nil || sess.State != "none" || sess.Epoch != 2 {
-		t.Fatalf("重开会话后应为新会话、序号加一：%+v %v", sess, err)
+		t.Fatalf("after a reset it should be a new session with the epoch increased by one: %+v %v", sess, err)
 	}
-	m := e.mustSend("block 新会话", "")
+	m := e.mustSend("block new session", "")
 	if m.SessionEpoch != 2 {
-		t.Fatalf("新消息的会话序号应为 2：%d", m.SessionEpoch)
+		t.Fatalf("the new message's session epoch should be 2: %d", m.SessionEpoch)
 	}
-	e.waitStarted("block 新会话")
+	e.waitStarted("block new session")
 	if _, err := e.svc.ResetSession(ctx, e.agent); !apperr.Is(err, apperr.CodeAgentNotIdle) {
-		t.Fatalf("有进行中的执行时应拒绝重开：%v", err)
+		t.Fatalf("a reset should be rejected while a run is in flight: %v", err)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
@@ -538,7 +538,7 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	for i := range 3 {
-		msg := fmt.Sprintf("消息%d", i)
+		msg := fmt.Sprintf("message %d", i)
 		e.mustSend(msg, "")
 		e.waitStarted(msg)
 		e.waitIdle()
@@ -546,16 +546,16 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 	latest, err := e.svc.History(ctx, e.agent, store.MessageQuery{Limit: 2})
 	page, more := latest.Messages, latest.HasMore
 	if err != nil || len(page) != 2 || !more || latest.HasMoreAfter || page[1].Role != "assistant" {
-		t.Fatalf("最新一页不对：%d %v %v", len(page), more, err)
+		t.Fatalf("wrong latest page: %d %v %v", len(page), more, err)
 	}
 	olderPage, err := e.svc.History(ctx, e.agent, store.MessageQuery{Before: &page[0].ID, Limit: 10})
 	older := olderPage.Messages
 	if err != nil || len(older) != 4 || olderPage.HasMore || !olderPage.HasMoreAfter {
-		t.Fatalf("更早的一页不对：%d %v", len(older), err)
+		t.Fatalf("wrong older page: %d %v", len(older), err)
 	}
 	st, err := e.svc.Status(ctx, e.agent)
 	if err != nil || st.Busy || st.Session.State != "none" {
-		t.Fatalf("状态不对：%+v %v", st, err)
+		t.Fatalf("wrong status: %+v %v", st, err)
 	}
 	e.mustSend("block x", "")
 	e.waitStarted("block x")
@@ -570,8 +570,8 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	err = err2
-	if err != nil || !snap.Status.Busy || snap.CurrentText == nil || *snap.CurrentText != "部分" || lastID == "" {
-		t.Fatalf("快照不对：%+v %s %v", snap, lastID, err)
+	if err != nil || !snap.Status.Busy || snap.CurrentText == nil || *snap.CurrentText != "partial" || lastID == "" {
+		t.Fatalf("wrong snapshot: %+v %s %v", snap, lastID, err)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()

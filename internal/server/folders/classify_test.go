@@ -23,15 +23,15 @@ func TestClassifyCloneFailure(t *testing.T) {
 	for _, c := range cases {
 		code, msg := classifyCloneFailure(c.url, c.out)
 		if code != c.code {
-			t.Errorf("%q → %s，应为 %s", c.out, code, c.code)
+			t.Errorf("%q: got %s, want %s", c.out, code, c.code)
 		}
 		if !strings.Contains(msg, strings.TrimSpace(strings.Split(c.out, "\n")[0])) {
-			t.Errorf("消息应带 git 输出：%q", msg)
+			t.Errorf("message should include the git output: %q", msg)
 		}
 	}
 	_, msg := classifyCloneFailure("ssh://git@code.example.com:2222/team/app.git", "Host key verification failed.")
 	if !strings.Contains(msg, "ssh -T -p 2222 git@code.example.com") || !strings.Contains(msg, "known_hosts") {
-		t.Errorf("主机密钥失败应告诉用户怎么确认：%q", msg)
+		t.Errorf("host key failure should tell the user how to confirm: %q", msg)
 	}
 }
 
@@ -49,7 +49,7 @@ func TestSSHTarget(t *testing.T) {
 		"git@code.example.com:/abs/path/with:colon.git": "git@code.example.com",
 	} {
 		if got := sshTarget(in); got != want {
-			t.Errorf("sshTarget(%q) = %q，应为 %q", in, got, want)
+			t.Errorf("sshTarget(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

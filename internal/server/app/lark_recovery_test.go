@@ -68,7 +68,7 @@ func TestLarkRecoveryAdapterRetainsUnknownGate(t *testing.T) {
 
 func TestLarkStartupMissingNativeProofKeepsBothGates(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("运行时交接的恢复记录（启动标识与进程身份）只在 darwin 上实现，其他平台按无法确认处理")
+		t.Skip("the runtime handoff recovery record (boot ID and process identity) is only implemented on darwin; other platforms treat it as unconfirmable")
 	}
 	ctx := context.Background()
 	root := t.TempDir()

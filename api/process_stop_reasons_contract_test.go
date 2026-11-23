@@ -20,7 +20,7 @@ func TestProcessStopReasonsInContract(t *testing.T) {
 		enum := doc.Components.Schemas[c.schema].Value.Properties["reason"].Value.Enum
 		for _, reason := range local.StopReasons {
 			if !slices.Contains(enum, any(reason)) {
-				t.Errorf("%s %s.reason 缺少 %s", c.file, c.schema, reason)
+				t.Errorf("%s %s.reason is missing %s", c.file, c.schema, reason)
 			}
 		}
 	}

@@ -21,7 +21,7 @@ import (
 // user HOME or network is used.
 func TestInstalledPi14ExportFile(t *testing.T) {
 	if _, err := exec.LookPath("pi"); err != nil {
-		t.Skip("本机没有 pi")
+		t.Skip("pi is not installed on this machine")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -78,7 +78,7 @@ func TestInstalledPi14ExportFile(t *testing.T) {
 // outcomes, not errors. No model request, credentials, user HOME or network is used.
 func TestInstalledPi14CompactSkips(t *testing.T) {
 	if _, err := exec.LookPath("pi"); err != nil {
-		t.Skip("本机没有 pi")
+		t.Skip("pi is not installed on this machine")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	user := map[string]any{"type": "message", "id": "user-entry", "parentId": nil, "timestamp": now,
@@ -138,7 +138,7 @@ func TestInstalledPi14CompactSkips(t *testing.T) {
 			}()
 			res, err := client.Compact(ctx, "")
 			if err != nil || res.Skipped != c.want {
-				t.Fatalf("应是没有压缩（%s）：%+v %v", c.want, res, err)
+				t.Fatalf("should not compact (%s): %+v %v", c.want, res, err)
 			}
 		})
 	}

@@ -33,41 +33,41 @@ func TestExternalPortConfig(t *testing.T) {
 	env := requiredEnv()
 	c, err := Load(envOf(env))
 	if err != nil || c.ExternalListenAddr != "" {
-		t.Fatalf("默认不开启对外端口：%q %v", c.ExternalListenAddr, err)
+		t.Fatalf("the external port should be off by default: %q %v", c.ExternalListenAddr, err)
 	}
 	env[EnvExternalListenAddr] = "0.0.0.0:8781"
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSCert) || !strings.Contains(err.Error(), EnvExternalTLSKey) {
-		t.Fatalf("开启对外端口却缺少证书与私钥时应拒绝启动：%v", err)
+		t.Fatalf("should refuse to start with the external port on but no certificate and private key: %v", err)
 	}
 	env[EnvExternalTLSCert], env[EnvExternalTLSKey] = "/etc/loop-now/cert.pem", "/etc/loop-now/key.pem"
 	if c, err := Load(envOf(env)); err != nil || c.ExternalListenAddr != "0.0.0.0:8781" {
-		t.Fatalf("配置齐全时应通过：%v", err)
+		t.Fatalf("should pass with a complete configuration: %v", err)
 	}
 	env[EnvExternalListenAddr] = "8781"
 	if _, err := Load(envOf(env)); err == nil {
-		t.Fatal("对外监听地址格式不对时应拒绝启动")
+		t.Fatal("should refuse to start with a malformed external listen address")
 	}
 	// Self-signed certificate directory: replaces the certificate and private key, is mutually exclusive with them,
 	// and must be a clean absolute path.
 	env[EnvExternalListenAddr] = "127.0.0.1:0"
 	env[EnvExternalTLSSelfSigned] = fixturePath("/var/loop-now/tls")
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSSelfSigned) {
-		t.Fatalf("自签证书目录与证书、私钥同时设置时应拒绝启动：%v", err)
+		t.Fatalf("should refuse to start with both a self-signed certificate directory and a certificate and private key: %v", err)
 	}
 	delete(env, EnvExternalTLSCert)
 	delete(env, EnvExternalTLSKey)
 	if c, err := Load(envOf(env)); err != nil || c.ExternalTLSSelfSigned != fixturePath("/var/loop-now/tls") {
-		t.Fatalf("只设自签证书目录时应通过：%v", err)
+		t.Fatalf("should pass with only the self-signed certificate directory: %v", err)
 	}
 	env[EnvExternalTLSSelfSigned] = "relative/tls"
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSSelfSigned) {
-		t.Fatalf("自签证书目录不是绝对路径时应拒绝启动：%v", err)
+		t.Fatalf("should refuse to start when the self-signed certificate directory is not absolute: %v", err)
 	}
 	delete(env, EnvExternalTLSSelfSigned)
 	env[EnvExternalTLSCert], env[EnvExternalTLSKey] = "/etc/loop-now/cert.pem", "/etc/loop-now/key.pem"
 	delete(env, EnvLoopctlDistDir)
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvLoopctlDistDir) {
-		t.Fatalf("缺少 loopctl 构建产物目录时应拒绝启动：%v", err)
+		t.Fatalf("should refuse to start without the loopctl build output directory: %v", err)
 	}
 }
 
@@ -83,16 +83,16 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("ListenAddr = %q", c.ListenAddr)
 	}
 	if len(c.Warnings) != 0 {
-		t.Errorf("默认配置不应有告警：%v", c.Warnings)
+		t.Errorf("the default configuration should have no warnings: %v", c.Warnings)
 	}
 	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute {
-		t.Errorf("执行器默认值不对：%+v", c)
+		t.Errorf("unexpected executor defaults: %+v", c)
 	}
 	if c.MaxUploadFile != 10<<20 || c.MaxMessage != 64<<10 || c.TextEditMax != 1<<20 || c.MaxInboxMessage != 64<<10 {
-		t.Errorf("大小默认值不对：upload=%d message=%d textEdit=%d inbox=%d", c.MaxUploadFile, c.MaxMessage, c.TextEditMax, c.MaxInboxMessage)
+		t.Errorf("unexpected size defaults: upload=%d message=%d textEdit=%d inbox=%d", c.MaxUploadFile, c.MaxMessage, c.TextEditMax, c.MaxInboxMessage)
 	}
 	if c.InboxPreviewChars != 200 || c.InboxPageMax != 100 {
-		t.Errorf("Inbox 默认值不对：preview=%d pageMax=%d", c.InboxPreviewChars, c.InboxPageMax)
+		t.Errorf("unexpected Inbox defaults: preview=%d pageMax=%d", c.InboxPreviewChars, c.InboxPageMax)
 	}
 	if got := strings.Join(c.AllowedHosts, ","); got != "localhost,127.0.0.1,::1" {
 		t.Errorf("AllowedHosts = %q", got)
@@ -101,16 +101,16 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("WorkRoot = %q", c.WorkRoot)
 	}
 	if c.OverviewMaxLen != 1000 || c.PiStderrTailBytes != 1000 {
-		t.Errorf("可观测默认值不对：overview=%d stderrTail=%d", c.OverviewMaxLen, c.PiStderrTailBytes)
+		t.Errorf("unexpected observability defaults: overview=%d stderrTail=%d", c.OverviewMaxLen, c.PiStderrTailBytes)
 	}
 	if c.LogFormat != "text" || c.LogLevel != slog.LevelInfo {
-		t.Errorf("日志默认值不对：%s %s", c.LogFormat, c.LogLevel)
+		t.Errorf("unexpected log defaults: %s %s", c.LogFormat, c.LogLevel)
 	}
 	if c.PluginMarketURL != "https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json" {
-		t.Errorf("官方插件市场默认地址不对：%q", c.PluginMarketURL)
+		t.Errorf("unexpected default official plugin market URL: %q", c.PluginMarketURL)
 	}
 	if c.DefaultOrgName != "default" || c.DefaultProjectName != "default" {
-		t.Errorf("全新安装的默认组织与项目名：%q %q", c.DefaultOrgName, c.DefaultProjectName)
+		t.Errorf("default org and project names on a fresh install: %q %q", c.DefaultOrgName, c.DefaultProjectName)
 	}
 }
 
@@ -122,17 +122,17 @@ func TestLogConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.LogFormat != "json" || c.LogLevel != slog.LevelDebug {
-		t.Fatalf("日志配置不对：%s %s", c.LogFormat, c.LogLevel)
+		t.Fatalf("unexpected log configuration: %s %s", c.LogFormat, c.LogLevel)
 	}
 	var b strings.Builder
 	NewLogger(&b, c.LogFormat, c.LogLevel).Debug("hi", "runId", "r1")
 	if !strings.HasPrefix(b.String(), "{") || !strings.Contains(b.String(), `"runId":"r1"`) {
-		t.Fatalf("JSON 格式的日志每行应是一个 JSON 对象：%s", b.String())
+		t.Fatalf("each JSON log line should be one JSON object: %s", b.String())
 	}
 	b.Reset()
 	NewLogger(&b, "text", slog.LevelInfo).Debug("hidden")
 	if b.Len() != 0 {
-		t.Fatal("info 级别不应输出 debug 日志")
+		t.Fatal("the info level should not output debug logs")
 	}
 }
 
@@ -142,26 +142,26 @@ func TestLoadErrors(t *testing.T) {
 		mutate  func(map[string]string)
 		wantVar string
 	}{
-		{"数据根不是绝对路径", func(m map[string]string) { m[EnvDataDir] = "relative/dir" }, EnvDataDir},
-		{"数据根不规范", func(m map[string]string) { m[EnvDataDir] = "/data/../loop" }, EnvDataDir},
-		{"备份目录不是绝对路径", func(m map[string]string) { m[EnvBackupDir] = "backups" }, EnvBackupDir},
-		{"备份份数为零", func(m map[string]string) { m[EnvBackupKeep] = "0" }, EnvBackupKeep},
-		{"时长格式错误", func(m map[string]string) { m[EnvPiIdleTimeout] = "ten minutes" }, EnvPiIdleTimeout},
-		{"时长为零", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
-		{"大小格式错误", func(m map[string]string) { m[EnvMaxUploadFile] = "10MB" }, EnvMaxUploadFile},
-		{"进程上限为负", func(m map[string]string) { m[EnvPiMaxProcesses] = "-1" }, EnvPiMaxProcesses},
-		{"在线编辑上限大于上传上限", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
-		{"监听地址格式错误", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
-		{"控制台来源带路径", func(m map[string]string) { m[EnvConsoleOrigins] = "http://localhost:5173/app" }, EnvConsoleOrigins},
-		{"none 与来源混用", func(m map[string]string) { m[EnvConsoleOrigins] = "none,http://localhost:5173" }, EnvConsoleOrigins},
-		{"控制台目录不是绝对路径", func(m map[string]string) { m[EnvWebDir] = "web/dist" }, EnvWebDir},
-		{"就绪文件不规范", func(m map[string]string) { m[EnvReadyFile] = "/tmp/../ready.json" }, EnvReadyFile},
-		{"默认组织名含斜杠", func(m map[string]string) { m[EnvDefaultOrgName] = "a/b" }, EnvDefaultOrgName},
-		{"默认项目名是 UUID 格式", func(m map[string]string) { m[EnvDefaultProjectName] = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" }, EnvDefaultProjectName},
-		{"概览事件流保留条数为零", func(m map[string]string) { m[EnvOverviewMaxLen] = "0" }, EnvOverviewMaxLen},
-		{"Pi 错误输出长度为零", func(m map[string]string) { m[EnvPiStderrTail] = "0" }, EnvPiStderrTail},
-		{"日志格式不合法", func(m map[string]string) { m[EnvLogFormat] = "xml" }, EnvLogFormat},
-		{"日志级别不合法", func(m map[string]string) { m[EnvLogLevel] = "verbose" }, EnvLogLevel},
+		{"data root not absolute", func(m map[string]string) { m[EnvDataDir] = "relative/dir" }, EnvDataDir},
+		{"data root not clean", func(m map[string]string) { m[EnvDataDir] = "/data/../loop" }, EnvDataDir},
+		{"backup directory not absolute", func(m map[string]string) { m[EnvBackupDir] = "backups" }, EnvBackupDir},
+		{"zero backups kept", func(m map[string]string) { m[EnvBackupKeep] = "0" }, EnvBackupKeep},
+		{"malformed duration", func(m map[string]string) { m[EnvPiIdleTimeout] = "ten minutes" }, EnvPiIdleTimeout},
+		{"zero duration", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
+		{"malformed size", func(m map[string]string) { m[EnvMaxUploadFile] = "10MB" }, EnvMaxUploadFile},
+		{"negative process limit", func(m map[string]string) { m[EnvPiMaxProcesses] = "-1" }, EnvPiMaxProcesses},
+		{"text edit limit above upload limit", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
+		{"malformed listen address", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
+		{"console origin with a path", func(m map[string]string) { m[EnvConsoleOrigins] = "http://localhost:5173/app" }, EnvConsoleOrigins},
+		{"none mixed with origins", func(m map[string]string) { m[EnvConsoleOrigins] = "none,http://localhost:5173" }, EnvConsoleOrigins},
+		{"console directory not absolute", func(m map[string]string) { m[EnvWebDir] = "web/dist" }, EnvWebDir},
+		{"ready file not clean", func(m map[string]string) { m[EnvReadyFile] = "/tmp/../ready.json" }, EnvReadyFile},
+		{"default org name with a slash", func(m map[string]string) { m[EnvDefaultOrgName] = "a/b" }, EnvDefaultOrgName},
+		{"default project name in UUID format", func(m map[string]string) { m[EnvDefaultProjectName] = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" }, EnvDefaultProjectName},
+		{"zero overview stream length", func(m map[string]string) { m[EnvOverviewMaxLen] = "0" }, EnvOverviewMaxLen},
+		{"zero Pi stderr length", func(m map[string]string) { m[EnvPiStderrTail] = "0" }, EnvPiStderrTail},
+		{"invalid log format", func(m map[string]string) { m[EnvLogFormat] = "xml" }, EnvLogFormat},
+		{"invalid log level", func(m map[string]string) { m[EnvLogLevel] = "verbose" }, EnvLogLevel},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -169,13 +169,13 @@ func TestLoadErrors(t *testing.T) {
 			tc.mutate(env)
 			_, err := Load(envOf(env))
 			if err == nil {
-				t.Fatal("期望返回错误")
+				t.Fatal("want an error")
 			}
 			if !strings.Contains(err.Error(), tc.wantVar) {
-				t.Errorf("错误信息应指出 %s：%v", tc.wantVar, err)
+				t.Errorf("the error should name %s: %v", tc.wantVar, err)
 			}
 			if strings.Contains(err.Error(), "s3cret") {
-				t.Errorf("错误信息泄露了机密：%v", err)
+				t.Errorf("the error leaked a secret: %v", err)
 			}
 		})
 	}
@@ -187,10 +187,10 @@ func TestLoadNonLoopbackListenWarns(t *testing.T) {
 		env[EnvListenAddr] = addr
 		c, err := Load(envOf(env))
 		if err != nil {
-			t.Fatalf("%s: 非回环地址应告警后启动，而不是报错：%v", addr, err)
+			t.Fatalf("%s: a non-loopback address should warn and start, not fail: %v", addr, err)
 		}
 		if len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], EnvAllowedHosts) {
-			t.Errorf("%s: 告警不对：%v", addr, c.Warnings)
+			t.Errorf("%s: unexpected warnings: %v", addr, c.Warnings)
 		}
 	}
 	for _, addr := range []string{"127.0.0.1:8780", "[::1]:8780", "localhost:8780"} {
@@ -198,7 +198,7 @@ func TestLoadNonLoopbackListenWarns(t *testing.T) {
 		env[EnvListenAddr] = addr
 		c, err := Load(envOf(env))
 		if err != nil || len(c.Warnings) != 0 {
-			t.Errorf("%s: 回环地址不应告警：err=%v warnings=%v", addr, err, c.Warnings)
+			t.Errorf("%s: a loopback address should not warn: err=%v warnings=%v", addr, err, c.Warnings)
 		}
 	}
 }
@@ -232,18 +232,18 @@ func TestLoadOverrides(t *testing.T) {
 func TestStopOnStdinClose(t *testing.T) {
 	env := requiredEnv()
 	if c, err := Load(envOf(env)); err != nil || c.StopOnStdinClose {
-		t.Fatalf("默认关闭：%v %v", err, c)
+		t.Fatalf("should be off by default: %v %v", err, c)
 	}
 	for raw, want := range map[string]bool{"1": true, "true": true, "YES": true, "on": true, "0": false, "false": false, "No": false, "off": false, " ": false} {
 		env[EnvStopOnStdinClose] = raw
 		c, err := Load(envOf(env))
 		if err != nil || c.StopOnStdinClose != want {
-			t.Fatalf("%q 应解析为 %v：%v", raw, want, err)
+			t.Fatalf("%q should parse as %v: %v", raw, want, err)
 		}
 	}
 	env[EnvStopOnStdinClose] = "maybe"
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvStopOnStdinClose) {
-		t.Fatalf("非法值应报错并指明变量：%v", err)
+		t.Fatalf("an invalid value should fail and name the variable: %v", err)
 	}
 }
 
@@ -253,13 +253,13 @@ func TestConsoleSettings(t *testing.T) {
 	env := requiredEnv()
 	c, err := Load(envOf(env))
 	if err != nil || len(c.ConsoleOrigins) != 2 || c.WebDir != "" || c.ReadyFile != "" {
-		t.Fatalf("默认值不对：%v %+v", err, c.ConsoleOrigins)
+		t.Fatalf("unexpected defaults: %v %+v", err, c.ConsoleOrigins)
 	}
 	env[EnvConsoleOrigins] = "NONE"
 	env[EnvWebDir] = fixturePath("/opt/loop-now/web")
 	env[EnvReadyFile] = fixturePath("/tmp/loop-now-ready.json")
 	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != fixturePath("/opt/loop-now/web") || c.ReadyFile != fixturePath("/tmp/loop-now-ready.json") {
-		t.Fatalf("覆盖值不对：%v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
+		t.Fatalf("unexpected overrides: %v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
 	}
 }
 
@@ -272,10 +272,10 @@ func TestLogValueRedactsSecrets(t *testing.T) {
 	slog.New(slog.NewTextHandler(&b, nil)).Info("config", "config", c)
 	out := b.String()
 	if strings.Contains(out, "s3cret") {
-		t.Errorf("日志泄露了机密：%s", out)
+		t.Errorf("the log leaked a secret: %s", out)
 	}
 	if !strings.Contains(out, "piMaxProcesses=0") {
-		t.Errorf("日志缺少生效配置：%s", out)
+		t.Errorf("the log lacks the effective configuration: %s", out)
 	}
 }
 
@@ -283,12 +283,12 @@ func TestParseSize(t *testing.T) {
 	for in, want := range map[string]int64{"65536": 65536, "64KiB": 65536, "10MiB": 10 << 20, "1GiB": 1 << 30, " 2 MiB ": 2 << 20} {
 		got, err := ParseSize(in)
 		if err != nil || got != want {
-			t.Errorf("ParseSize(%q) = %d, %v；期望 %d", in, got, err, want)
+			t.Errorf("ParseSize(%q) = %d, %v; want %d", in, got, err, want)
 		}
 	}
 	for _, in := range []string{"10MB", "abc", ""} {
 		if _, err := ParseSize(in); err == nil {
-			t.Errorf("ParseSize(%q) 应报错", in)
+			t.Errorf("ParseSize(%q) should fail", in)
 		}
 	}
 }
@@ -393,13 +393,13 @@ func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 	var b strings.Builder
 	slog.New(slog.NewTextHandler(&b, nil)).Info("config", "config", c)
 	if out := b.String(); strings.Contains(out, "legacy-master-key-marker") || strings.Contains(strings.ToLower(out), "masterkey") {
-		t.Errorf("日志仍包含主密钥配置：%s", out)
+		t.Errorf("the log still contains the master key setting: %s", out)
 	}
 }
 
 func TestDataDirDefaultAndDBDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 的默认数据目录是 %LOCALAPPDATA%\\Loop Now\\data，不按 HOME 推导")
+		t.Skip("on Windows the default data directory is %LOCALAPPDATA%\\Loop Now\\data, not derived from HOME")
 	}
 	env := requiredEnv()
 	env["HOME"] = "/home/fixture"
@@ -408,18 +408,18 @@ func TestDataDirDefaultAndDBDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.DataDir != "/home/fixture/.loop_now" || DBDir(c.DataDir) != "/home/fixture/.loop_now/db" {
-		t.Fatalf("默认数据根应为 HOME 下的 .loop_now，库在其 db 子目录：%q", c.DataDir)
+		t.Fatalf("the default data root should be .loop_now under HOME, with the database in its db subdirectory: %q", c.DataDir)
 	}
 	if c.BackupDir != "/home/fixture/.loop_now/backups" || c.BackupKeep != 7 {
-		t.Fatalf("默认备份在数据根的 backups 下、保留 7 份：%q %d", c.BackupDir, c.BackupKeep)
+		t.Fatalf("default backups go under backups in the data root, keeping 7: %q %d", c.BackupDir, c.BackupKeep)
 	}
 	env[EnvDataDir] = "/srv/loop-now"
 	if c, err = Load(envOf(env)); err != nil || c.DataDir != "/srv/loop-now" || c.BackupDir != "/srv/loop-now/backups" {
-		t.Fatalf("LOOP_NOW_DATA_DIR 应覆盖默认值，备份目录随之：%q %q %v", c.DataDir, c.BackupDir, err)
+		t.Fatalf("LOOP_NOW_DATA_DIR should override the default, and the backup directory follows it: %q %q %v", c.DataDir, c.BackupDir, err)
 	}
 	env[EnvBackupDir], env[EnvBackupKeep] = "/mnt/backup", "3"
 	if c, err = Load(envOf(env)); err != nil || c.BackupDir != "/mnt/backup" || c.BackupKeep != 3 {
-		t.Fatalf("备份目录与份数可以覆盖：%q %d %v", c.BackupDir, c.BackupKeep, err)
+		t.Fatalf("the backup directory and count can be overridden: %q %d %v", c.BackupDir, c.BackupKeep, err)
 	}
 }
 
@@ -432,11 +432,11 @@ func TestBundledDefaults(t *testing.T) {
 	executableDir = func() string { return dir }
 	t.Cleanup(func() { executableDir = old })
 	if _, err := Load(envOf(map[string]string{})); err == nil || !strings.Contains(err.Error(), EnvLoopctlDistDir) {
-		t.Fatalf("没有 loopctl-dist 时应要求配置：%v", err)
+		t.Fatalf("should require configuration without loopctl-dist: %v", err)
 	}
 	c, err := Load(envOf(requiredEnv()))
 	if err != nil || c.NodeBin != "node" || c.PiBin != "pi" || c.PluginHostEntry != "" || c.PluginOfficialDir != "" {
-		t.Fatalf("没有随包文件时应保持原默认值：%v %+v", err, c)
+		t.Fatalf("should keep the original defaults without bundled files: %v %+v", err, c)
 	}
 	for _, rel := range []string{BundledNode, BundledPi, BundledPluginHost} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, rel)), 0o700); err != nil {
@@ -456,10 +456,10 @@ func TestBundledDefaults(t *testing.T) {
 	}
 	for got, want := range map[string]string{c.NodeBin: BundledNode, c.PiBin: BundledPi, c.LoopctlDistDir: BundledLoopctlDist, c.PluginHostEntry: BundledPluginHost, c.PluginOfficialDir: BundledPluginOfficial} {
 		if got != filepath.Join(dir, want) {
-			t.Errorf("应取随包的 %s：%q", want, got)
+			t.Errorf("should pick up the bundled %s: %q", want, got)
 		}
 	}
 	if c, err = Load(envOf(map[string]string{EnvNodeBin: fixturePath("/opt/node/bin/node"), EnvLoopctlDistDir: fixturePath("/opt/loopctl-dist")})); err != nil || c.NodeBin != fixturePath("/opt/node/bin/node") || c.LoopctlDistDir != fixturePath("/opt/loopctl-dist") {
-		t.Fatalf("环境变量应优先：%v %q %q", err, c.NodeBin, c.LoopctlDistDir)
+		t.Fatalf("environment variables should take precedence: %v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }

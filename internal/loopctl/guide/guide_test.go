@@ -18,7 +18,7 @@ import (
 	"loop-now/internal/server/content"
 )
 
-var update = flag.Bool("update", false, "更新 golden 文件")
+var update = flag.Bool("update", false, "update golden files")
 
 const goldenVersion = "golden-version"
 
@@ -38,10 +38,10 @@ func TestDeterministic(t *testing.T) {
 	t.Setenv("LANG", "C")
 	t.Setenv("LOOPCTL_AGENT_TOKEN", "lna_x")
 	if b := render(t); a != b {
-		t.Fatal("两次生成的内容不同")
+		t.Fatal("two renders produced different content")
 	}
 	if !bytes.Equal(Files()["SKILL.md"], Files()["SKILL.md"]) || len(Files()) != 1 {
-		t.Fatal("Files 应只有一个稳定的 SKILL.md")
+		t.Fatal("Files should hold only one stable SKILL.md")
 	}
 }
 
@@ -53,10 +53,10 @@ func TestGolden(t *testing.T) {
 	}
 	want, err := os.ReadFile(p)
 	if err != nil {
-		t.Fatalf("读取 golden 文件：%v（用 -update 生成）", err)
+		t.Fatalf("read golden file: %v (generate it with -update)", err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Errorf("SKILL.md 与 %s 不一致；确认改动后用 go test -run TestGolden -update 更新", p)
+		t.Errorf("SKILL.md differs from %s; after checking the change, update it with go test -run TestGolden -update", p)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestFrontmatterPassesPlatformValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if meta.Name != SkillName {
-		t.Fatalf("名称为 %q", meta.Name)
+		t.Fatalf("name is %q", meta.Name)
 	}
 }
 
@@ -137,13 +137,13 @@ func TestCommandsInGuide(t *testing.T) {
 	r := commands.Registry()
 	lines := commandLines(md)
 	if len(lines) < 10 {
-		t.Fatalf("只取到 %d 条命令：%v", len(lines), lines)
+		t.Fatalf("found only %d commands: %v", len(lines), lines)
 	}
 	seen := map[string]bool{}
 	for _, l := range lines {
 		argv := shellWords(l)[1:]
 		if e := cli.Check(r, argv, cli.IdentityAgent); e != nil {
-			t.Errorf("说明中的命令 %q 无法以 Agent 身份解析：%v", l, e)
+			t.Errorf("command %q in the guide does not parse with the Agent identity: %v", l, e)
 			continue
 		}
 		for _, c := range r.Commands() {
@@ -155,10 +155,10 @@ func TestCommandsInGuide(t *testing.T) {
 	for _, c := range r.Commands() {
 		mentioned := regexp.MustCompile(`loopctl ` + regexp.QuoteMeta(c.Name()) + `(\s|` + "`" + `|$)`).MatchString(md)
 		if c.AllowedFor(cli.IdentityAgent) && !seen[c.Name()] {
-			t.Errorf("Agent 命令 %s 没有写进说明", c.Name())
+			t.Errorf("Agent command %s is missing from the guide", c.Name())
 		}
 		if !c.AllowedFor(cli.IdentityAgent) && mentioned {
-			t.Errorf("说明中出现了外部身份专用的命令 %s", c.Name())
+			t.Errorf("the guide mentions the external-only command %s", c.Name())
 		}
 	}
 }
@@ -180,14 +180,14 @@ func TestTemplateReferenceChecked(t *testing.T) {
 	for _, ref := range []string{`{{cmd "inbox archive"}}`, `{{cmd "agent list"}}`} {
 		skillTemplate = orig + ref
 		if _, err := Render("x"); err == nil {
-			t.Errorf("引用 %s 时应生成失败", ref)
+			t.Errorf("rendering should fail when the template refers to %s", ref)
 		}
 	}
 }
 
 func TestShellWords(t *testing.T) {
-	got := shellWords(`loopctl inbox send @console --text "构建 完成" --x 'a b' -`)
-	want := []string{"loopctl", "inbox", "send", "@console", "--text", "构建 完成", "--x", "a b", "-"}
+	got := shellWords(`loopctl inbox send @console --text "build done" --x 'a b' -`)
+	want := []string{"loopctl", "inbox", "send", "@console", "--text", "build done", "--x", "a b", "-"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("%q", got)
 	}
@@ -197,8 +197,8 @@ func TestShellWords(t *testing.T) {
 // not end up with an invalid workflow.
 func TestTaskJSONExamplesMatchContract(t *testing.T) {
 	doc := clitest.Load(t, "agent-openapi.yaml")
-	md := strings.ReplaceAll(render(t), "<新动作UUID>", "0192f1a2-0000-7000-8000-000000000053")
-	md = strings.ReplaceAll(md, "<执行AgentID>", "0192f1a2-0000-7000-8000-000000000001")
+	md := strings.ReplaceAll(render(t), "<new action UUID>", "0192f1a2-0000-7000-8000-000000000053")
+	md = strings.ReplaceAll(md, "<executor Agent ID>", "0192f1a2-0000-7000-8000-000000000001")
 	blocks := regexp.MustCompile("(?s)```json\\n(.*?)```").FindAllStringSubmatch(md, -1)
 	if len(blocks) != 2 {
 		t.Fatalf("expected create and submit JSON examples, got %d", len(blocks))

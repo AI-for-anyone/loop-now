@@ -76,9 +76,9 @@ func TestCLIVerificationHTTPContractStage(t *testing.T) {
 		t.Fatal("unauthorized input reached controller")
 	}
 	for _, failure := range []*apperr.Error{
-		{Status: 409, Code: apperr.CodeVerificationInProgress, Message: "已有验证", Details: cliverify.ConflictDetails{ProjectID: e.dc.Project.ID, AccountID: account, OperationID: id, VersionID: version}},
-		{Status: 412, Code: apperr.CodePreconditionFailed, Message: "版本已变", Details: cliverify.VersionConflictDetails{ProjectID: e.dc.Project.ID, AccountID: account, ExpectedVersionID: version}},
-		{Status: 422, Code: apperr.CodeVerificationUnsupported, Message: "模板不支持", Details: cliverify.UnsupportedDetails{CLI: "gh", TemplateSource: "builtin", Reason: "template_fingerprint_mismatch"}},
+		{Status: 409, Code: apperr.CodeVerificationInProgress, Message: "verification already in progress", Details: cliverify.ConflictDetails{ProjectID: e.dc.Project.ID, AccountID: account, OperationID: id, VersionID: version}},
+		{Status: 412, Code: apperr.CodePreconditionFailed, Message: "version changed", Details: cliverify.VersionConflictDetails{ProjectID: e.dc.Project.ID, AccountID: account, ExpectedVersionID: version}},
+		{Status: 422, Code: apperr.CodeVerificationUnsupported, Message: "template not supported", Details: cliverify.UnsupportedDetails{CLI: "gh", TemplateSource: "builtin", Reason: "template_fingerprint_mismatch"}},
 	} {
 		c.err = failure
 		external.expectError(failure.Status, failure.Code, "POST", base, body)

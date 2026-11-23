@@ -50,7 +50,7 @@ func (f *fakeHooks) last(t *testing.T, typ string) hookCall {
 			return f.calls[i]
 		}
 	}
-	t.Fatalf("没有调用 %s", typ)
+	t.Fatalf("no call to %s", typ)
 	return hookCall{}
 }
 
@@ -76,44 +76,44 @@ func TestPluginHookCallSites(t *testing.T) {
 	hooks := &fakeHooks{outcomes: map[string]pluginhost.Outcome{}}
 	e.api.Hooks = hooks
 	project := e.dc.Project.ID
-	agent, path := e.newAgent("助手")
+	agent, path := e.newAgent("Assistant")
 
 	hooks.set("console.command", pluginhost.Outcome{Handled: true, Plugin: "bot", Value: json.RawMessage(`{"handled":true,"reply":"pong"}`)})
 	res := decode[map[string]any](t, e.expect(200, "POST", path+"/messages", map[string]any{"text": "/ping now"}))
 	if res["handled"] != true || res["plugin"] != "bot" || res["reply"] != "pong" {
-		t.Fatalf("认领：%v", res)
+		t.Fatalf("claim: %v", res)
 	}
 	cmd := hooks.last(t, "console.command")
 	if cmd.kind != pluginhost.Claim || cmd.event["command"] != "ping" || *cmd.project != project || cmd.event["agentId"].(*uuid.UUID).String() != agent.ID.String() || len(cmd.event["id"].(string)) != 26 {
-		t.Fatalf("console.command 事件：%+v", cmd)
+		t.Fatalf("console.command event: %+v", cmd)
 	}
 	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages", nil)); len(page.Messages) != 0 {
-		t.Fatalf("被认领的命令不应保存：%+v", page)
+		t.Fatalf("a claimed command should not be saved: %+v", page)
 	}
 
 	hooks.set("console.command", pluginhost.Outcome{})
-	hooks.set("message.before_enqueue", pluginhost.Outcome{Patch: map[string]any{"text": "改写后的消息"}})
-	sent := decode[apitypes.SendMessageResult](t, e.expect(202, "POST", path+"/messages", map[string]any{"text": "/unknown 原文"}))
-	if sent.Message.Text != "改写后的消息" || hooks.last(t, "message.before_enqueue").event["text"] != "/unknown 原文" {
-		t.Fatalf("改写：%+v", sent.Message)
+	hooks.set("message.before_enqueue", pluginhost.Outcome{Patch: map[string]any{"text": "rewritten message"}})
+	sent := decode[apitypes.SendMessageResult](t, e.expect(202, "POST", path+"/messages", map[string]any{"text": "/unknown original text"}))
+	if sent.Message.Text != "rewritten message" || hooks.last(t, "message.before_enqueue").event["text"] != "/unknown original text" {
+		t.Fatalf("rewrite: %+v", sent.Message)
 	}
 	e.waitAgentIdle(path)
 
-	hooks.set("inbox.before_send", pluginhost.Outcome{Blocked: true, Plugin: "guard", Reason: "工作时间外"})
-	e.expectError(409, "plugin_blocked", "POST", "/inbox/messages", map[string]any{"to": "默认项目/助手", "text": "在吗"})
-	if c := hooks.last(t, "inbox.before_send"); c.project == nil || *c.project != project || c.event["to"] != "默认项目/助手" {
-		t.Fatalf("控制台发给 Agent 时按收件 Agent 的项目：%+v", c)
+	hooks.set("inbox.before_send", pluginhost.Outcome{Blocked: true, Plugin: "guard", Reason: "outside working hours"})
+	e.expectError(409, "plugin_blocked", "POST", "/inbox/messages", map[string]any{"to": "Default project/Assistant", "text": "are you there"})
+	if c := hooks.last(t, "inbox.before_send"); c.project == nil || *c.project != project || c.event["to"] != "Default project/Assistant" {
+		t.Fatalf("the console sending to an Agent should use the recipient Agent's project: %+v", c)
 	}
 	hooks.set("inbox.before_send", pluginhost.Outcome{})
-	hooks.set("inbox.before_deliver", pluginhost.Outcome{Patch: map[string]any{"text": "[已审阅] 你好"}})
-	other, _ := e.newAgent("同事")
-	msg := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/同事", "text": "你好"}))
-	if msg.Text != "[已审阅] 你好" {
-		t.Fatalf("Agent 发出的消息应被改写：%+v", msg)
+	hooks.set("inbox.before_deliver", pluginhost.Outcome{Patch: map[string]any{"text": "[reviewed] Hello"}})
+	other, _ := e.newAgent("Colleague")
+	msg := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "Default project/Colleague", "text": "Hello"}))
+	if msg.Text != "[reviewed] Hello" {
+		t.Fatalf("messages sent by an Agent should be rewritten: %+v", msg)
 	}
 	_ = other
 
-	platform := e.platformAgent("睡眠者")
+	platform := e.platformAgent("Sleeper")
 	_, run, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: platform.ID, RunID: uuid.New(), Text: "source", Start: true, InstanceID: uuid.New()})
 	if err != nil {
 		t.Fatal(err)
@@ -124,10 +124,10 @@ func TestPluginHookCallSites(t *testing.T) {
 	hooks.set("sleep.before_schedule", pluginhost.Outcome{Patch: map[string]any{"durationSeconds": float64(900)}})
 	got := decode[sleepmodel.Receipt](t, e.agentCaller(platform.ID).expect(202, "POST", "/sleep", map[string]any{"actionId": uuid.New(), "runId": run.ID, "seconds": 120, "reason": nil}))
 	if got.Sleep.Seconds != 900 {
-		t.Fatalf("sleep 时长应被改写：%+v", got.Sleep)
+		t.Fatalf("the sleep duration should be rewritten: %+v", got.Sleep)
 	}
 	if c := hooks.last(t, "sleep.before_schedule"); c.project != nil || c.event["durationSeconds"] != int64(120) {
-		t.Fatalf("平台 Agent 的 sleep 事件：%+v", c)
+		t.Fatalf("sleep event of a platform Agent: %+v", c)
 	}
 }
 
@@ -138,26 +138,26 @@ func TestPluginHookTaskCallSites(t *testing.T) {
 	hooks := &fakeHooks{outcomes: map[string]pluginhost.Outcome{}}
 	e.api.Hooks = hooks
 	body := func(action uuid.UUID) map[string]any {
-		return map[string]any{"actionId": action, "title": "第二个任务", "request": map[string]any{}, "workflow": map[string]any{"startStepId": "work",
-			"steps": []any{map[string]any{"id": "work", "title": "处理", "description": "执行", "agentId": d.Nodes[0].AgentID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}}
+		return map[string]any{"actionId": action, "title": "Second task", "request": map[string]any{}, "workflow": map[string]any{"startStepId": "work",
+			"steps": []any{map[string]any{"id": "work", "title": "Handle", "description": "Do the work", "agentId": d.Nodes[0].AgentID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}}
 	}
 	action := uuid.New()
 	manager.expect(201, "POST", "/tasks", body(action))
-	if c := hooks.last(t, "task.before_start"); c.event["title"] != "第二个任务" || c.event["stepCount"] != 1 || *c.project != e.dc.Project.ID {
-		t.Fatalf("task.before_start：%+v", c)
+	if c := hooks.last(t, "task.before_start"); c.event["title"] != "Second task" || c.event["stepCount"] != 1 || *c.project != e.dc.Project.ID {
+		t.Fatalf("task.before_start: %+v", c)
 	}
-	hooks.set("task.before_start", pluginhost.Outcome{Blocked: true, Plugin: "budget", Reason: "本月额度用完"})
+	hooks.set("task.before_start", pluginhost.Outcome{Blocked: true, Plugin: "budget", Reason: "this month's budget is used up"})
 	manager.expect(201, "POST", "/tasks", body(action))
 	if n := hooks.count("task.before_start"); n != 1 {
-		t.Fatalf("重放不应再询问插件：%d", n)
+		t.Fatalf("a replay should not ask plugins again: %d", n)
 	}
 	manager.expectError(409, "plugin_blocked", "POST", "/tasks", body(uuid.New()))
 
-	hooks.set("node.before_submit", pluginhost.Outcome{Blocked: true, Plugin: "qa", Reason: "缺少测试"})
+	hooks.set("node.before_submit", pluginhost.Outcome{Blocked: true, Plugin: "qa", Reason: "tests are missing"})
 	node := d.Nodes[0].ID
 	manager.expectError(409, "plugin_blocked", "POST", "/tasks/"+d.Task.ID.String()+"/nodes/"+node.String()+"/submit",
 		map[string]any{"actionId": uuid.New(), "output": map[string]any{}, "edgeId": nil})
 	if c := hooks.last(t, "node.before_submit"); c.event["nodeRunId"] != node || *c.event["taskId"].(*uuid.UUID) != d.Task.ID {
-		t.Fatalf("node.before_submit：%+v", c)
+		t.Fatalf("node.before_submit: %+v", c)
 	}
 }

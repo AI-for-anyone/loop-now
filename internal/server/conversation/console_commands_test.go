@@ -91,7 +91,7 @@ func (e *env) waitAnyStarted() string {
 	case got := <-e.ex.started:
 		return got
 	case <-time.After(5 * time.Second):
-		e.t.Fatal("等待执行开始超时")
+		e.t.Fatal("timed out waiting for a run to start")
 		return ""
 	}
 }
@@ -107,17 +107,17 @@ func TestMessageQueuedDuringConsoleCommandStartsWhenItEnds(t *testing.T) {
 		done <- err
 	}()
 	if reason := <-m.entered; reason != "console_reload" {
-		t.Fatalf("停止原因：%s", reason)
+		t.Fatalf("stop reason: %s", reason)
 	}
-	queued := e.mustSend("命令期间的消息", "queue")
+	queued := e.mustSend("message during the command", "queue")
 	if queued.Run.Status != "queued" {
-		t.Fatalf("命令进行中消息应排队：%s", queued.Run.Status)
+		t.Fatalf("a message sent during a command should queue: %s", queued.Run.Status)
 	}
 	close(m.gate)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	e.waitStarted("命令期间的消息")
+	e.waitStarted("message during the command")
 	e.waitIdle()
 }
 
@@ -132,18 +132,18 @@ func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
 	if err := e.st.MarkSessionMissing(ctx, e.agent, nil); err != nil {
 		t.Fatal(err)
 	}
-	e.deliver("会话丢失期间的消息", "queue")
+	e.deliver("message while the session was lost", "queue")
 	select {
 	case got := <-e.ex.started:
-		t.Fatalf("会话丢失时不应安排提醒：%q", got)
+		t.Fatalf("no reminder should be scheduled while the session is lost: %q", got)
 	case <-time.After(100 * time.Millisecond):
 	}
 	info, err := e.svc.NewSession(ctx, e.agent)
 	if err != nil || info.State != "none" {
-		t.Fatalf("重开会话：%+v %v", info, err)
+		t.Fatalf("new session: %+v %v", info, err)
 	}
 	if reason := <-m.entered; reason != "session_reset" {
-		t.Fatalf("停止原因：%s", reason)
+		t.Fatalf("stop reason: %s", reason)
 	}
 	e.waitAnyStarted()
 	e.waitIdle()
@@ -160,13 +160,13 @@ func TestResumeListingDoesNotHoldBusyLock(t *testing.T) {
 		done <- err
 	}()
 	if got := <-m.entered; got != "list" {
-		t.Fatalf("应在列出会话：%s", got)
+		t.Fatalf("should be listing sessions: %s", got)
 	}
-	msg, err := e.send("列表期间的消息", "")
+	msg, err := e.send("message during the listing", "")
 	if err != nil || msg.Run.Status == "queued" {
-		t.Fatalf("列出会话时消息应立即开始：%+v %v", msg.Run.Status, err)
+		t.Fatalf("a message sent while sessions are listed should start right away: %+v %v", msg.Run.Status, err)
 	}
-	e.waitStarted("列表期间的消息")
+	e.waitStarted("message during the listing")
 	close(m.listGate)
 	if err := <-done; err != nil {
 		t.Fatal(err)
@@ -198,8 +198,8 @@ func (e *env) sessionUpdates() []apitypes.SseSessionUpdated {
 // state did not change.
 func TestSessionUpdatedWhenFirstTurnStartsSession(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("block 第一轮", "")
-	e.waitStarted("block 第一轮")
+	e.mustSend("block round 1", "")
+	e.waitStarted("block round 1")
 	if err := e.st.RecordSessionFile(context.Background(), e.agent, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
 	}
@@ -212,16 +212,16 @@ func TestSessionUpdatedWhenFirstTurnStartsSession(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("会话变 active 后应推送 session.updated：%+v", updates)
+			t.Fatalf("session.updated should be pushed once the session becomes active: %+v", updates)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	before := len(e.sessionUpdates())
-	e.mustSend("第二轮", "")
-	e.waitStarted("第二轮")
+	e.mustSend("round 2", "")
+	e.waitStarted("round 2")
 	e.waitIdle()
 	time.Sleep(200 * time.Millisecond) // wait for the overview status to be recomputed
 	if after := e.sessionUpdates(); len(after) != before {
-		t.Fatalf("会话没变时不应重复推送：%+v", after[before:])
+		t.Fatalf("nothing should be pushed again when the session did not change: %+v", after[before:])
 	}
 }

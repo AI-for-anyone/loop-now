@@ -158,7 +158,7 @@ func TestTaskConsoleAppAcceptedSwitchStrictHistory(t *testing.T) {
 	if status != 409 {
 		t.Fatal("ended strict request accepted")
 	}
-	legacy, e := s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/StrictWorker#"+d.Task.ID.String(), "legacy ended task ordinary route", "queue")
+	legacy, e := s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/StrictWorker#"+d.Task.ID.String(), "legacy ended task ordinary route", "queue")
 	if e != nil || legacy.To.ID != manager.ID || legacy.To.RuntimeID != uuid.Nil {
 		t.Fatal("ordinary Inbox ended-task Manager routing regressed", e)
 	}
@@ -176,7 +176,7 @@ func TestTaskConsoleAppBlockedSleepLineageAndRecovery(t *testing.T) {
 	d, p := sleepTask(t, s, " !sleep=800ms !text=long_original_execution_stream !error=original_execution_failed")
 	n := d.Nodes[0]
 	sleepWaitTurn(t, s, p.RuntimeID, uuid.Nil)
-	question, e := s.a.API.Inbox.Send(ctx, p, "默认项目/Manager", "Manager-only question", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: n.ID})
+	question, e := s.a.API.Inbox.Send(ctx, p, "Default project/Manager", "Manager-only question", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: n.ID})
 	if e != nil {
 		t.Fatal(e)
 	}

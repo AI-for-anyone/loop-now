@@ -38,21 +38,21 @@ func writePlugin(t *testing.T, pkg map[string]any, files ...string) string {
 
 func full() map[string]any {
 	return map[string]any{
-		"name": "@example/loop-now-webhook", "version": "1.2.0", "description": "收件箱有新消息时 POST",
+		"name": "@example/loop-now-webhook", "version": "1.2.0", "description": "POST on new inbox messages",
 		"pi": map[string]any{"extensions": []any{"./agent/index.ts"}, "skills": []any{"./skills"}},
 		"loopNow": map[string]any{
-			"id": "webhook", "displayName": "Webhook 通知", "minPlatformVersion": "2026.11", "platform": "./platform/index.ts",
+			"id": "webhook", "displayName": "Webhook notifications", "minPlatformVersion": "2026.11", "platform": "./platform/index.ts",
 			"events": []any{"inbox.received", "node.before_submit"}, "permissions": []any{"inbox.read", "state"}, "failClosed": true,
 			"configSchema": map[string]any{"type": "object", "properties": map[string]any{
 				"url": map[string]any{"type": "string"}, "token": map[string]any{"type": "string", "x-secret": true},
 				"channel": map[string]any{"type": "string", "x-scope": "project"}}},
-			"accounts":   []any{map[string]any{"kind": "lark", "label": "飞书账号", "fields": map[string]any{"type": "object"}, "multiple": true}},
+			"accounts":   []any{map[string]any{"kind": "lark", "label": "Lark account", "fields": map[string]any{"type": "object"}, "multiple": true}},
 			"mcpServers": map[string]any{"browser": map[string]any{"command": "node", "args": []any{"./mcp/server.js"}}},
 			"bin":        []any{"./bin"},
-			"actions":    []any{map[string]any{"id": "resend", "label": "重发", "where": []any{"identity"}}},
+			"actions":    []any{map[string]any{"id": "resend", "label": "Resend", "where": []any{"identity"}}},
 			"http":       true,
 			"schedule":   []any{map[string]any{"id": "sweep", "cron": "*/10 * * * *"}},
-			"channels":   []any{map[string]any{"id": "lark", "label": "飞书"}},
+			"channels":   []any{map[string]any{"id": "lark", "label": "Lark"}},
 		},
 	}
 }
@@ -69,25 +69,25 @@ func TestReadManifest(t *testing.T) {
 	if m.ID != "webhook" || m.Name != "@example/loop-now-webhook" || m.Version != "1.2.0" || !m.FailClosed || m.Platform != "./platform/index.ts" ||
 		c.AgentExtensions != 1 || len(c.Skills) != 1 || len(c.MCPServers) != 1 || c.MCPServers[0] != "browser" || len(c.Bin) != 1 || !c.Platform ||
 		len(c.Actions) != 1 || len(c.Channels) != 1 || !c.HTTP || len(c.Schedules) != 1 {
-		t.Fatalf("清单：%+v", m)
+		t.Fatalf("manifest: %+v", m)
 	}
 	if s := pluginmanifest.SecretFields(m.ConfigSchema); len(s) != 1 || s[0] != "token" {
-		t.Fatalf("secret 字段：%v", s)
+		t.Fatalf("secret fields: %v", s)
 	}
 	if p := pluginmanifest.ProjectFields(m.ConfigSchema); len(p) != 1 || p[0] != "channel" {
-		t.Fatalf("项目字段：%v", p)
+		t.Fatalf("project fields: %v", p)
 	}
 	if b, _ := json.Marshal(m.Public()); strings.Contains(string(b), "platform/index.ts") || strings.Contains(string(b), "mcp/server.js") {
-		t.Fatalf("接口里的清单不应带路径：%s", b)
+		t.Fatalf("the manifest in the API should not carry paths: %s", b)
 	}
 	if _, err := pluginmanifest.ReadManifest(dir, "dev-abc123"); err != nil {
-		t.Fatalf("开发版不检查 minPlatformVersion：%v", err)
+		t.Fatalf("a dev build should not check minPlatformVersion: %v", err)
 	}
 
 	pi := writePlugin(t, map[string]any{"name": "@scope/Pi_Tools.X", "version": "0.1.0", "pi": map[string]any{"skills": []any{"./skills"}}}, "skills/")
 	m, err = pluginmanifest.ReadManifest(pi, "2026.11")
 	if err != nil || m.ID != "pi-tools-x" || m.DisplayName.String() != "@scope/Pi_Tools.X" || m.Platform != "" || len(m.Events) != 0 {
-		t.Fatalf("标准 Pi 包：%+v %v", m, err)
+		t.Fatalf("standard Pi package: %+v %v", m, err)
 	}
 }
 
@@ -96,19 +96,19 @@ func TestReadManifest(t *testing.T) {
 // entry; any other shape is rejected.
 func TestLocalizedText(t *testing.T) {
 	pkg := full()
-	pkg["description"] = map[string]any{"en-US": "POST on new inbox messages", "zh-CN": "收件箱有新消息时 POST"}
-	pkg["loopNow"].(map[string]any)["displayName"] = map[string]any{"en-US": "Webhook", "zh-CN": "Webhook 通知"}
+	pkg["description"] = map[string]any{"en-US": "POST on new inbox messages", "zh-CN": "收件箱有新消息时 POST"}       // check-english: zh (zh-CN value of a language-tag object, picked by String)
+	pkg["loopNow"].(map[string]any)["displayName"] = map[string]any{"en-US": "Webhook", "zh-CN": "Webhook 通知"} // check-english: zh (zh-CN value of a language-tag object, picked by String)
 	dir := writePlugin(t, pkg, "agent/index.ts", "skills/", "platform/index.ts", "bin/")
 	m, err := pluginmanifest.ReadManifest(dir, "2026.11")
-	if err != nil || m.DisplayName.String() != "Webhook 通知" || m.Description.String() != "收件箱有新消息时 POST" {
-		t.Fatalf("对象形式：%v %v", m.DisplayName, err)
+	if err != nil || m.DisplayName.String() != "Webhook 通知" || m.Description.String() != "收件箱有新消息时 POST" { // check-english: zh (zh-CN value of a language-tag object, picked by String)
+		t.Fatalf("object form: %v %v", m.DisplayName, err)
 	}
-	if b, _ := json.Marshal(m.Public()); !strings.Contains(string(b), `"displayName":{"en-US":"Webhook","zh-CN":"Webhook 通知"}`) || !strings.Contains(string(b), `"description":{"en-US":`) {
-		t.Fatalf("接口里原样返回：%s", b)
+	if b, _ := json.Marshal(m.Public()); !strings.Contains(string(b), `"displayName":{"en-US":"Webhook","zh-CN":"Webhook 通知"}`) || !strings.Contains(string(b), `"description":{"en-US":`) { // check-english: zh (zh-CN value of a language-tag object, picked by String)
+		t.Fatalf("the API should return it as-is: %s", b)
 	}
 	var stored pluginmanifest.Manifest
-	if b, _ := json.Marshal(m); json.Unmarshal(b, &stored) != nil || stored.DisplayName.String() != "Webhook 通知" {
-		t.Fatalf("保存后读回：%s", b)
+	if b, _ := json.Marshal(m); json.Unmarshal(b, &stored) != nil || stored.DisplayName.String() != "Webhook 通知" { // check-english: zh (zh-CN value of a language-tag object, picked by String)
+		t.Fatalf("read back after saving: %s", b)
 	}
 	for _, c := range []struct {
 		text any
@@ -117,13 +117,13 @@ func TestLocalizedText(t *testing.T) {
 		{"Webhook", "Webhook"},
 		{map[string]any{"en-US": "Lark", "ja": "ラーク"}, "Lark"},
 		{json.RawMessage(`{"ja": "ラーク", "fr": "Lark"}`), "ラーク"},
-		{map[string]any{"zh-Hant-TW": "飛書"}, "飛書"},
+		{map[string]any{"zh-Hant-TW": "飛書"}, "飛書"}, // check-english: zh (Traditional Chinese value of a zh-Hant-TW tag)
 	} {
 		p := full()
 		p["loopNow"].(map[string]any)["displayName"] = c.text
 		m, err := pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
 		if err != nil || m.DisplayName.String() != c.want {
-			t.Fatalf("%v：%q %v", c.text, m.DisplayName.String(), err)
+			t.Fatalf("%v: %q %v", c.text, m.DisplayName.String(), err)
 		}
 	}
 	for _, bad := range []any{
@@ -139,7 +139,7 @@ func TestLocalizedText(t *testing.T) {
 			}
 			_, err := pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
 			if err == nil || !strings.Contains(err.Error(), field+" must be a string, or an object with language tags") {
-				t.Fatalf("%s=%v 应拒绝：%v", field, bad, err)
+				t.Fatalf("%s=%v should be rejected: %v", field, bad, err)
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func TestLocalizedText(t *testing.T) {
 	delete(p, "description")
 	m, err = pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
 	if b, _ := json.Marshal(m.Public()); err != nil || m.DisplayName.String() != "@example/loop-now-webhook" || !strings.Contains(string(b), `"description":""`) {
-		t.Fatalf("空的显示名回落到 npm 名，缺省的描述为空字符串：%s %v", b, err)
+		t.Fatalf("an empty display name should fall back to the npm name, and a missing description should be an empty string: %s %v", b, err)
 	}
 }
 
@@ -160,19 +160,19 @@ func TestReadManifestRejects(t *testing.T) {
 		files []string
 		want  string
 	}{
-		{"没有两段", func(p map[string]any) { delete(p, "pi"); delete(p, "loopNow") }, nil, "not a plugin"},
+		{"neither section", func(p map[string]any) { delete(p, "pi"); delete(p, "loopNow") }, nil, "not a plugin"},
 		{"id", func(p map[string]any) { p["loopNow"].(map[string]any)["id"] = "Web_Hook" }, nil, "loopNow.id"},
 		{"version", func(p map[string]any) { p["version"] = "" }, nil, "version"},
-		{"事件", func(p map[string]any) { p["loopNow"].(map[string]any)["events"] = []any{"inbox.recieved"} }, nil, "is not a platform event"},
-		{"权限", func(p map[string]any) { p["loopNow"].(map[string]any)["permissions"] = []any{"db.write"} }, nil, "is not an available scope"},
-		{"越界路径", func(p map[string]any) { p["pi"].(map[string]any)["extensions"] = []any{"../evil.ts"} }, nil, "relative path"},
-		{"不存在的文件", func(p map[string]any) { p["pi"].(map[string]any)["skills"] = []any{"./missing"} }, nil, "does not exist"},
-		{"订阅却没有平台侧", func(p map[string]any) { delete(p["loopNow"].(map[string]any), "platform") }, nil, "loopNow.platform"},
-		{"平台版本", func(p map[string]any) { p["loopNow"].(map[string]any)["minPlatformVersion"] = "2027.1" }, nil, "2027.1 or later"},
-		{"配置 schema", func(p map[string]any) {
+		{"events", func(p map[string]any) { p["loopNow"].(map[string]any)["events"] = []any{"inbox.recieved"} }, nil, "is not a platform event"},
+		{"permissions", func(p map[string]any) { p["loopNow"].(map[string]any)["permissions"] = []any{"db.write"} }, nil, "is not an available scope"},
+		{"path outside the plugin", func(p map[string]any) { p["pi"].(map[string]any)["extensions"] = []any{"../evil.ts"} }, nil, "relative path"},
+		{"missing file", func(p map[string]any) { p["pi"].(map[string]any)["skills"] = []any{"./missing"} }, nil, "does not exist"},
+		{"events without a platform side", func(p map[string]any) { delete(p["loopNow"].(map[string]any), "platform") }, nil, "loopNow.platform"},
+		{"platform version", func(p map[string]any) { p["loopNow"].(map[string]any)["minPlatformVersion"] = "2027.1" }, nil, "2027.1 or later"},
+		{"config schema", func(p map[string]any) {
 			p["loopNow"].(map[string]any)["configSchema"] = map[string]any{"type": "object", "properties": 3}
 		}, nil, "configSchema"},
-		{"账号种类", func(p map[string]any) {
+		{"account kind", func(p map[string]any) {
 			p["loopNow"].(map[string]any)["accounts"] = []any{map[string]any{"kind": "Lark", "label": "x", "fields": map[string]any{}}}
 		}, nil, "kind"},
 		{"MCP", func(p map[string]any) {
@@ -190,15 +190,15 @@ func TestReadManifestRejects(t *testing.T) {
 			_, err := pluginmanifest.ReadManifest(dir, "2026.11")
 			var e *pluginmanifest.Error
 			if err == nil || !strings.Contains(err.Error(), c.want) {
-				t.Fatalf("应因 %q 拒绝：%v", c.want, err)
+				t.Fatalf("should be rejected for %q: %v", c.want, err)
 			}
 			if !asError(err, &e) {
-				t.Fatalf("错误类型：%T", err)
+				t.Fatalf("error type: %T", err)
 			}
 		})
 	}
 	if _, err := pluginmanifest.ReadManifest(t.TempDir(), "2026.11"); err == nil || !strings.Contains(err.Error(), "package.json") {
-		t.Fatalf("没有清单文件：%v", err)
+		t.Fatalf("no manifest file: %v", err)
 	}
 }
 
@@ -212,25 +212,25 @@ func TestMCPServerEntries(t *testing.T) {
 		want  string // empty means accepted
 	}{
 		{"stdio", map[string]any{"command": "node", "args": []any{"./mcp/server.js"}}, ""},
-		{"stdio 带 type", map[string]any{"type": "stdio", "command": "node"}, ""},
+		{"stdio with type", map[string]any{"type": "stdio", "command": "node"}, ""},
 		{"url", map[string]any{"url": "http://127.0.0.1:3845/mcp"}, ""},
-		{"url 带 headers", map[string]any{"type": "http", "url": "https://mcp.figma.com/mcp", "headers": map[string]any{"Authorization": "Bearer ${FIGMA_TOKEN}"}}, ""},
+		{"url with headers", map[string]any{"type": "http", "url": "https://mcp.figma.com/mcp", "headers": map[string]any{"Authorization": "Bearer ${FIGMA_TOKEN}"}}, ""},
 		{"streamable-http", map[string]any{"type": "streamable-http", "url": "https://example.com/mcp"}, ""},
-		{"两者都有按 url", map[string]any{"command": "node", "url": "https://example.com/mcp"}, ""},
-		{"type stdio 按 command", map[string]any{"type": "stdio", "command": "node", "url": "ftp://x"}, ""},
+		{"both given, treated as url", map[string]any{"command": "node", "url": "https://example.com/mcp"}, ""},
+		{"type stdio uses command", map[string]any{"type": "stdio", "command": "node", "url": "ftp://x"}, ""},
 		{"sse", map[string]any{"type": "sse", "url": "https://example.com/sse"}, "SSE"},
-		{"未知 type", map[string]any{"type": "websocket", "url": "https://example.com/mcp"}, "must have type"},
-		{"type 不是字符串", map[string]any{"type": nil, "command": "node"}, "must have type"},
-		{"url 不是 http", map[string]any{"url": "ftp://example.com/mcp"}, "must be a stdio entry with a command"},
-		{"url 大写协议", map[string]any{"url": "HTTPS://mcp.figma.com/mcp"}, ""},
-		{"url 没有主机", map[string]any{"url": "http:foo"}, "must be a stdio entry with a command"},
-		{"url 没有主机 2", map[string]any{"url": "http:///mcp"}, "must be a stdio entry with a command"},
-		{"url 端口越界", map[string]any{"url": "http://127.0.0.1:99999/mcp"}, "must be a stdio entry with a command"},
-		{"http 却只有 command", map[string]any{"type": "http", "command": "node"}, "must be a stdio entry with a command"},
-		{"stdio 却只有 url", map[string]any{"type": "stdio", "url": "https://example.com/mcp"}, "must be a stdio entry with a command"},
-		{"空 command", map[string]any{"command": ""}, "must be a stdio entry with a command"},
-		{"都没有", map[string]any{"args": []any{}}, "must be a stdio entry with a command"},
-		{"不是对象", "node", "must be a stdio entry with a command"},
+		{"unknown type", map[string]any{"type": "websocket", "url": "https://example.com/mcp"}, "must have type"},
+		{"type not a string", map[string]any{"type": nil, "command": "node"}, "must have type"},
+		{"url not http", map[string]any{"url": "ftp://example.com/mcp"}, "must be a stdio entry with a command"},
+		{"url with upper-case scheme", map[string]any{"url": "HTTPS://mcp.figma.com/mcp"}, ""},
+		{"url without host", map[string]any{"url": "http:foo"}, "must be a stdio entry with a command"},
+		{"url without host 2", map[string]any{"url": "http:///mcp"}, "must be a stdio entry with a command"},
+		{"url port out of range", map[string]any{"url": "http://127.0.0.1:99999/mcp"}, "must be a stdio entry with a command"},
+		{"http with only command", map[string]any{"type": "http", "command": "node"}, "must be a stdio entry with a command"},
+		{"stdio with only url", map[string]any{"type": "stdio", "url": "https://example.com/mcp"}, "must be a stdio entry with a command"},
+		{"empty command", map[string]any{"command": ""}, "must be a stdio entry with a command"},
+		{"neither", map[string]any{"args": []any{}}, "must be a stdio entry with a command"},
+		{"not an object", "node", "must be a stdio entry with a command"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -239,7 +239,7 @@ func TestMCPServerEntries(t *testing.T) {
 			dir := writePlugin(t, pkg, "agent/index.ts", "skills/", "platform/index.ts", "bin/")
 			_, err := pluginmanifest.ReadManifest(dir, "2026.11")
 			if c.want == "" && err != nil || c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)) {
-				t.Fatalf("期望 %q：%v", c.want, err)
+				t.Fatalf("want %q, got %v", c.want, err)
 			}
 		})
 	}
@@ -256,13 +256,13 @@ func asError(err error, target **pluginmanifest.Error) bool {
 func TestValidate(t *testing.T) {
 	schema := map[string]any{"type": "object", "required": []any{"url"}, "properties": map[string]any{"url": map[string]any{"type": "string", "format": "uri"}, "n": map[string]any{"type": "integer"}}}
 	if err := pluginmanifest.Validate(schema, false, map[string]any{"n": 3}); err != nil {
-		t.Fatalf("不查 required：%v", err)
+		t.Fatalf("required should not be checked: %v", err)
 	}
 	if err := pluginmanifest.Validate(schema, true, map[string]any{"n": 3}); err == nil {
-		t.Fatal("查 required 时应拒绝")
+		t.Fatal("should be rejected when required is checked")
 	}
 	if err := pluginmanifest.Validate(schema, false, map[string]any{"n": "x"}); err == nil || !strings.Contains(err.Error(), "Does not match") {
-		t.Fatalf("类型不对：%v", err)
+		t.Fatalf("wrong type: %v", err)
 	}
 }
 
@@ -284,7 +284,7 @@ func TestOwnDisplayName(t *testing.T) {
 		}
 		m, err := pluginmanifest.ReadManifest(dir, "dev")
 		if err != nil || m.OwnDisplayName != c.own {
-			t.Fatalf("%s：%v %v", c.pkg, m.OwnDisplayName, err)
+			t.Fatalf("%s: %v %v", c.pkg, m.OwnDisplayName, err)
 		}
 	}
 }

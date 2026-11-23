@@ -31,7 +31,7 @@ func options(t *testing.T) (ProcessOptions, *os.File, *os.File) {
 }
 func TestIsolatedProcessEnvironmentAndPrivatePipes(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("helper 经 ExtraFiles 收私有管道，Windows 的 os/exec 不支持")
+		t.Skip("the helper receives private pipes through ExtraFiles, which os/exec does not support on Windows")
 	}
 	o, write, read := options(t)
 	t.Setenv("LOOP_NOW_MASTER_KEY", "master-private-marker")
@@ -86,7 +86,7 @@ func TestIsolatedProcessEnvironmentAndPrivatePipes(t *testing.T) {
 }
 func TestProcessRejectsUnsafeDirectoriesAndOptions(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("helper 经 ExtraFiles 收私有管道，Windows 的 os/exec 不支持")
+		t.Skip("the helper receives private pipes through ExtraFiles, which os/exec does not support on Windows")
 	}
 	o, _, _ := options(t)
 	positive := o

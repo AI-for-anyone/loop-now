@@ -43,7 +43,7 @@ func buildFakepi(dir string) (string, error) {
 	cmd := exec.Command("go", "build", "-o", out, "./internal/server/executor/local/fakepi")
 	cmd.Dir = root
 	if b, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("构建 fakepi 失败：%v\n%s", err, b)
+		return "", fmt.Errorf("build fakepi: %v\n%s", err, b)
 	}
 	return out, nil
 }
@@ -60,7 +60,7 @@ func moduleRoot() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("未找到 go.mod")
+			return "", errors.New("go.mod not found")
 		}
 		dir = parent
 	}
@@ -112,7 +112,7 @@ func waitDone(t *testing.T, c *Client) {
 	select {
 	case <-c.Done():
 	case <-time.After(10 * time.Second):
-		t.Fatal("等待进程结束超时")
+		t.Fatal("timed out waiting for the process to end")
 	}
 }
 
@@ -163,7 +163,7 @@ func (r *recorder) waitFirst(t *testing.T) {
 	select {
 	case <-r.first:
 	case <-time.After(10 * time.Second):
-		t.Fatal("等待首个文本增量超时")
+		t.Fatal("timed out waiting for the first text delta")
 	}
 }
 
@@ -187,7 +187,7 @@ func recvPrompt(t *testing.T, ch <-chan promptOut) promptOut {
 	case out := <-ch:
 		return out
 	case <-time.After(15 * time.Second):
-		t.Fatal("等待 Prompt 返回超时")
+		t.Fatal("timed out waiting for Prompt to return")
 		return promptOut{}
 	}
 }

@@ -30,7 +30,7 @@ func taskEnv(t *testing.T) (*env, caller, taskmodel.Detail) {
 	a := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "Manager", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
 	e.expect(200, "PUT", "/projects/"+e.dc.Project.ID.String()+"/manager", map[string]any{"agentId": a.ID})
 	manager := e.agentCaller(a.ID)
-	body := map[string]any{"actionId": uuid.New(), "title": "通用任务", "request": map[string]any{"prompt": "保持原始要求"}, "workflow": map[string]any{"startStepId": "work", "steps": []any{map[string]any{"id": "work", "title": "处理", "description": "执行", "agentId": a.ID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}}
+	body := map[string]any{"actionId": uuid.New(), "title": "General task", "request": map[string]any{"prompt": "keep the original request"}, "workflow": map[string]any{"startStepId": "work", "steps": []any{map[string]any{"id": "work", "title": "Handle", "description": "Do the work", "agentId": a.ID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}}
 	status, raw, header := manager.do("POST", "/tasks", body)
 	if status != 201 {
 		t.Fatalf("create status=%d body=%s", status, raw)
@@ -48,7 +48,7 @@ func taskEnv(t *testing.T) (*env, caller, taskmodel.Detail) {
 		t.Fatal("create replay duplicated task")
 	}
 	if d.Task.Number != 1 || again.Task.Number != 1 {
-		t.Fatalf("项目里第一个任务的编号应为 1，重放不变：%d %d", d.Task.Number, again.Task.Number)
+		t.Fatalf("the first task in the project should have number 1, unchanged on replay: %d %d", d.Task.Number, again.Task.Number)
 	}
 	return e, manager, d
 }
@@ -58,7 +58,7 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	node := d.Nodes[0]
 	manager.expect(200, "GET", path, nil)
 	if console := decode[taskmodel.Detail](t, e.expect(200, "GET", path, nil)); console.Task.Number != d.Task.Number {
-		t.Fatalf("控制台任务详情应带编号：%d", console.Task.Number)
+		t.Fatalf("the console task detail should carry the number: %d", console.Task.Number)
 	}
 	instance := e.agentCaller(node.RuntimeID)
 	who := decode[apitypes.Whoami](t, instance.expect(200, "GET", "/whoami", nil))
@@ -67,7 +67,7 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	}
 	instance.expect(200, "GET", "/tasks/current", nil)
 	manager.expectError(403, "forbidden", "POST", path+"/nodes/"+node.ID.String()+"/submit", map[string]any{"actionId": uuid.New(), "output": map[string]any{}, "edgeId": nil})
-	a := e.platformAgent("其他Agent")
+	a := e.platformAgent("Other Agent")
 	other := e.agentCaller(a.ID)
 	other.expectError(403, "forbidden", "GET", path, nil)
 	available := decode[taskmodel.AgentList](t, manager.expect(200, "GET", "/tasks/agents", nil))
@@ -100,9 +100,9 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	e.expect(200, "POST", path+"/cancel", map[string]any{"actionId": uuid.New()})
 	instance.expectError(409, "task_conflict", "POST", path+"/nodes/"+node.ID.String()+"/submit", map[string]any{"actionId": uuid.New(), "output": map[string]any{}, "edgeId": nil})
 	// Task instance Inboxes are isolated from the regular one; even the same Agent config cannot read them on its behalf.
-	normalMessage := sendInbox(e.console(), "默认项目/Manager", "常态")
-	taskMessage := sendInbox(e.console(), "默认项目/Manager#"+d.Task.ID.String(), "已结束转Manager")
-	if taskMessage.To.Address == nil || *taskMessage.To.Address != "默认组织/默认项目/Manager" {
+	normalMessage := sendInbox(e.console(), "Default project/Manager", "regular")
+	taskMessage := sendInbox(e.console(), "Default project/Manager#"+d.Task.ID.String(), "ended, forwarded to Manager")
+	if taskMessage.To.Address == nil || *taskMessage.To.Address != "Default organization/Default project/Manager" {
 		t.Fatal("ended task did not forward manager")
 	}
 	instance.expectError(404, "not_found", "POST", "/inbox/messages/"+normalMessage.ID.String()+"/read", nil)
@@ -157,11 +157,11 @@ func TestTaskSnapshotKeepsOldCredentialsAfterConfigRemoval(t *testing.T) {
 	if _, err := e.api.Config.AddCLI(ctx, agent, "gh"); err != nil {
 		t.Fatal(err)
 	}
-	e.sharedCredential(t, "cli", "gh", "任务共享CLI", "fixture-cli-before")
-	modelAccount := e.sharedCredential(t, "model", "anthropic", "任务共享模型", "fixture-model-before")
-	frozen := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "冻结配置", "request": map[string]any{}, "workflow": d.Workflow}))
+	e.sharedCredential(t, "cli", "gh", "Task shared CLI", "fixture-cli-before")
+	modelAccount := e.sharedCredential(t, "model", "anthropic", "Task shared model", "fixture-model-before")
+	frozen := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "Frozen config", "request": map[string]any{}, "workflow": d.Workflow}))
 	if frozen.Task.Number != 2 {
-		t.Fatalf("项目里第二个任务的编号应为 2：%d", frozen.Task.Number)
+		t.Fatalf("the second task in the project should have number 2: %d", frozen.Task.Number)
 	}
 	if err := e.api.Config.RemoveCLI(ctx, agent, "gh"); err != nil {
 		t.Fatal(err)
@@ -195,11 +195,11 @@ func TestTaskInboxIsSeparateFromNormalAndOtherTask(t *testing.T) {
 	e, manager, d := taskEnv(t)
 	node := d.Nodes[0]
 	instance := e.agentCaller(node.RuntimeID)
-	second := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "另一个任务", "request": map[string]any{}, "workflow": d.Workflow}))
+	second := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "Another task", "request": map[string]any{}, "workflow": d.Workflow}))
 	other := e.agentCaller(second.Nodes[0].RuntimeID)
 	instance.expectError(404, "not_found", "GET", "/tasks/"+d.Task.ID.String()+"/nodes/"+second.Nodes[0].ID.String()+"/messages", nil)
-	msg := sendInbox(e.console(), "默认项目/Manager#"+d.Task.ID.String(), "任务专属消息")
-	if msg.To.Address == nil || *msg.To.Address != "默认组织/默认项目/Manager#"+d.Task.ID.String() {
+	msg := sendInbox(e.console(), "Default project/Manager#"+d.Task.ID.String(), "task-only message")
+	if msg.To.Address == nil || *msg.To.Address != "Default organization/Default project/Manager#"+d.Task.ID.String() {
 		t.Fatal("task recipient lost address")
 	}
 	manager.expectError(404, "not_found", "POST", "/inbox/messages/"+msg.ID.String()+"/read", nil)
@@ -230,12 +230,12 @@ func TestTaskSSEResumeBacklogBeforeNewRelay(t *testing.T) {
 			}
 			ids := []uuid.UUID{first.Task.ID}
 			if test.project {
-				second := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "另一个任务", "request": map[string]any{}, "workflow": first.Workflow}))
+				second := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "Another task", "request": map[string]any{}, "workflow": first.Workflow}))
 				ids = append(ids, second.Task.ID)
 			}
 			mutate := func(id uuid.UUID, n int) {
 				_, err := e.st.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
-					m.Record.View.Task.Title = fmt.Sprintf("事件%d", n)
+					m.Record.View.Task.Title = fmt.Sprintf("event %d", n)
 					return nil, nil
 				})
 				if err != nil {

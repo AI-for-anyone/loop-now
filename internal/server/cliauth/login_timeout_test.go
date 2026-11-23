@@ -18,7 +18,7 @@ func TestGoogleLoginTimeoutUsesIndependentTerminalContext(t *testing.T) {
 	})
 	s := NewService(f.st, helper, nil, ServiceOptions{LoginTimeout: 100 * time.Millisecond, RecordTimeout: time.Second}, nil)
 	t.Cleanup(func() { s.Close(context.Background()) })
-	name := "仅合成超时"
+	name := "Synthetic timeout only"
 	in := cm.CLIAuthStart{OperationID: uuid.New(), CLI: "gcloud", AuthType: "google_user", Name: &name}
 	if _, err := s.Start(context.Background(), f.project, in); err != nil {
 		t.Fatal(err)

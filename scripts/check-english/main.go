@@ -9,13 +9,14 @@
 //   - any line of the API contracts api/*.yaml that contains Chinese: their descriptions, summaries, titles and
 //     comments are English, and so are examples. (A pattern that must match Chinese writes it with \u escapes, which
 //     are plain ASCII in the file.)
-//   - a string literal containing Chinese in a non-test .go file: messages returned to callers or shown to people are
-//     English. Text that must stay Chinese is marked explicitly with "check-english: zh" and a reason, either in the
-//     doc comment of the top-level declaration that holds it (the whole declaration is allowed: for example a table of
-//     interface copy in both languages) or in a comment at the end of the literal's line (for example a prefix that
-//     parses text written by older versions).
+//   - a string literal containing Chinese in any .go file, tests included: messages returned to callers or shown to
+//     people, test names, failure messages and test data are English. Text that must stay Chinese is marked
+//     explicitly with "check-english: zh" and a reason, either in the doc comment of the top-level declaration that
+//     holds it (the whole declaration is allowed: for example a table of interface copy in both languages) or in a
+//     comment at the end of the literal's line (for example a prefix that parses text written by older versions, or
+//     test data about handling Chinese text).
 //
-// Test files may keep Chinese test data and test messages, and shipped SQL migrations are never rewritten.
+// Shipped SQL migrations are never rewritten.
 //
 // Run from the repository root:
 //
@@ -85,7 +86,7 @@ func logger(x ast.Expr) bool {
 // allowMarker marks Chinese string literals that must stay as they are.
 const allowMarker = "check-english: zh"
 
-// stringLiterals reports the string literals of a non-test file that contain Chinese and are not marked with
+// stringLiterals reports the string literals of a file that contain Chinese and are not marked with
 // allowMarker (in the doc comment of their top-level declaration, or in a comment on their line).
 func stringLiterals(fset *token.FileSet, f *ast.File, path string) []string {
 	allowedLines := map[int]bool{}
@@ -167,9 +168,7 @@ func main() {
 				}
 			}
 		}
-		if !strings.HasSuffix(path, "_test.go") {
-			problems = append(problems, stringLiterals(fset, f, path)...)
-		}
+		problems = append(problems, stringLiterals(fset, f, path)...)
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {

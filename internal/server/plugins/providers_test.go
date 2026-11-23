@@ -57,39 +57,39 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(fc.dirs) != 0 {
-		t.Fatalf("预览时不能运行插件代码：%v", fc.dirs)
+		t.Fatalf("preview must not run plugin code: %v", fc.dirs)
 	}
 	if _, err := e.svc.Install(ctx, plugins.InstallInput{PreviewID: pv.PreviewID, Confirm: true}, ""); err != nil {
 		t.Fatal(err)
 	}
 	p, ok := reg.Provider("fake-oauth")
 	if !ok || p.Source != "plugin" || p.PluginID == nil || *p.PluginID != "grokish" || p.Name != "Name fake-oauth" || !slices.Equal(p.AuthMethods, []string{"oauth"}) || !reg.HasModel("fake-oauth", "m1") {
-		t.Fatalf("带 OAuth 的提供方应进目录：%+v %v", p, ok)
+		t.Fatalf("a provider with OAuth should enter the catalog: %+v %v", p, ok)
 	}
 	if _, ok := reg.Provider("plain"); ok {
-		t.Fatal("不带 OAuth 的提供方不进目录")
+		t.Fatal("a provider without OAuth should not enter the catalog")
 	}
 	if a, _ := reg.Provider("anthropic"); a.Source == "plugin" {
-		t.Fatal("覆盖内置提供方的不进目录")
+		t.Fatal("a provider overriding a built-in one should not enter the catalog")
 	}
 	d, err := e.svc.Get(ctx, "grokish")
 	if err != nil || len(d.Providers) != 3 || d.ProvidersError != nil || len(d.ProviderErrors) != 1 || d.ProviderErrors[0].Path != "agent/other.ts" {
-		t.Fatalf("详情里的提供方：%+v %v", d, err)
+		t.Fatalf("providers in the details: %+v %v", d, err)
 	}
 	in := map[string]bool{}
 	for _, v := range d.Providers {
 		in[v.ID] = v.InCatalog
 	}
 	if !in["fake-oauth"] || in["plain"] || in["anthropic"] {
-		t.Fatalf("inCatalog：%v", in)
+		t.Fatalf("inCatalog: %v", in)
 	}
 
 	pv, _ = e.svc.Preview(ctx, plugins.PreviewRequest{Source: &plugins.Source{Kind: "local", Location: dirB}})
 	if _, err := e.svc.Install(ctx, plugins.InstallInput{PreviewID: pv.PreviewID, Confirm: true}, ""); code(err) != apperr.CodeNameConflict {
-		t.Fatalf("另一个插件注册同一提供方应 409：%v", err)
+		t.Fatalf("another plugin registering the same provider should get 409: %v", err)
 	}
 	if _, err := e.st.GetPlugin(ctx, "copycat"); err == nil {
-		t.Fatal("冲突时不应安装")
+		t.Fatal("should not install on a conflict")
 	}
 
 	// Server restart: merged in again from the database.
@@ -99,12 +99,12 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := reg2.Provider("fake-oauth"); !ok {
-		t.Fatal("重启后应从数据库并入")
+		t.Fatal("should be merged in from the database after a restart")
 	}
 	// When models.json replaces the Pi catalog part, the plugin providers are kept.
 	reg2.Replace(modelcatalog.New("1.4.0", nil, nil))
 	if _, ok := reg2.Provider("fake-oauth"); !ok {
-		t.Fatal("换 Pi 目录后插件提供方应保留")
+		t.Fatal("plugin providers should be kept after the Pi catalog is replaced")
 	}
 	// By default an uninstall keeps every project's subscription accounts and platform Agents' own logins; only when
 	// deleting data is chosen are the logins of the providers it registered deleted.
@@ -117,13 +117,13 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := reg2.Provider("fake-oauth"); ok {
-		t.Fatal("卸载后应从目录里消失")
+		t.Fatal("should disappear from the catalog after uninstall")
 	}
 	if _, err := os.Stat(dirA); err != nil {
-		t.Fatal("本地来源目录不删")
+		t.Fatal("the local source directory should not be deleted")
 	}
 	if len(deleted) != 0 {
-		t.Fatalf("默认卸载不删登录：%v", deleted)
+		t.Fatalf("a default uninstall should not delete logins: %v", deleted)
 	}
 	pv, err = e.svc.Preview(ctx, plugins.PreviewRequest{Source: &plugins.Source{Kind: "local", Location: dirA}})
 	if err != nil {
@@ -136,7 +136,7 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(deleted) != 1 || !slices.Contains(deleted[0], "fake-oauth") {
-		t.Fatalf("删除数据时删掉它注册的提供方的登录：%v", deleted)
+		t.Fatalf("deleting data should delete the logins of the providers it registered: %v", deleted)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestPluginProviderCaptureFailureKeepsInstall(t *testing.T) {
 	e.install(plugins.Source{Kind: "local", Location: dir}, true)
 	d, err := e.svc.Get(ctx, "flaky")
 	if err != nil || d.ProvidersError == nil || len(d.Providers) != 0 {
-		t.Fatalf("读取失败应记原因：%+v %v", d, err)
+		t.Fatalf("a failed read should record the reason: %+v %v", d, err)
 	}
 }
 
@@ -182,9 +182,9 @@ func TestProviderStateOverlapWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(d.ProviderErrors) != 1 || d.ProviderErrors[0].Path != "providerState.fake-oauth" || !strings.Contains(d.ProviderErrors[0].Error, ".config/gh/hosts.yml") {
-		t.Fatalf("重叠提示：%+v", d.ProviderErrors)
+		t.Fatalf("overlap warning: %+v", d.ProviderErrors)
 	}
 	if len(d.ProviderState) != 2 {
-		t.Fatalf("声明照样保存：%+v", d.ProviderState)
+		t.Fatalf("the declarations should still be saved: %+v", d.ProviderState)
 	}
 }

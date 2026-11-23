@@ -179,7 +179,7 @@ func TestSleepAppTaskNodeAndBlockedConversation(t *testing.T) {
 			}
 			if mode == "task_conversation" {
 				taskWait(t, s, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
-				_, err = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/Worker#"+created.Task.ID.String(), " !sleep=800ms !text=ordinary", "queue")
+				_, err = s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/Worker#"+created.Task.ID.String(), " !sleep=800ms !text=ordinary", "queue")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -447,7 +447,7 @@ func TestSleepAppInboxReadBeforeDispatchStillContinues(t *testing.T) {
 	if _, err = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER read_before_dispatch AFTER INSERT ON inbox_messages WHEN NEW.to_agent_id='`+agent.ID.String()+`' BEGIN UPDATE inbox_messages SET read_at=now() WHERE id=NEW.id; END`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/UnreadWake", "valid real message", "queue"); err != nil {
+	if _, err = s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/UnreadWake", "valid real message", "queue"); err != nil {
 		t.Fatal(err)
 	}
 	if st := s.waitIdle(path); st.Sleep != nil {
@@ -480,7 +480,7 @@ func TestSleepAppInboxReadBeforeDispatchStillContinues(t *testing.T) {
 		}
 		if json.Unmarshal(line, &entry) == nil && entry.Message.Role == "user" {
 			prompts++
-			if prompts == 2 && len(entry.Message.Content) > 0 && !strings.Contains(entry.Message.Content[0].Text, "sleep已因新工作结束") {
+			if prompts == 2 && len(entry.Message.Content) > 0 && !strings.Contains(entry.Message.Content[0].Text, "sleep was ended by new work") {
 				t.Fatal("continuation omitted sleep-ended notice")
 			}
 		}

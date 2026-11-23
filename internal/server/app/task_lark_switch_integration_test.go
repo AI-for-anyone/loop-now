@@ -276,7 +276,7 @@ func TestTaskLarkSwitchAppInternalPhaseAAndOrdinaryInbox(t *testing.T) {
 	if _, created, err = s.a.Tasks.ReserveLarkSwitch(ctx, auth.Console(), in); err != nil || created {
 		t.Fatal("App replay repeated reservation", err)
 	}
-	msg, err := s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/SwitchPublisher#"+in.TaskID.String(), "durable message during switch", "interrupt", inbox.QuestionInput{})
+	msg, err := s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/SwitchPublisher#"+in.TaskID.String(), "durable message during switch", "interrupt", inbox.QuestionInput{})
 	if err != nil {
 		t.Fatal("actual Inbox transaction", err)
 	}

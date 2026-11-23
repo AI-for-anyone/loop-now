@@ -18,17 +18,17 @@ import (
 func TestRealHostManagesIdentity(t *testing.T) {
 	entry := os.Getenv("LOOP_NOW_PLUGIN_HOST_ENTRY")
 	if entry == "" {
-		t.Skip("没有设置 LOOP_NOW_PLUGIN_HOST_ENTRY")
+		t.Skip("LOOP_NOW_PLUGIN_HOST_ENTRY is not set")
 	}
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("找不到 node")
+		t.Skip("node not found")
 	}
 	e := newEnv(t)
 	ctx := context.Background()
 	dir := writePluginDir(t, "bridge", "identities.manage")
 	patchManifest(t, dir, func(ln map[string]any) {
-		ln["channels"] = []any{map[string]any{"id": "lark", "label": "飞书", "manageIdentities": true}}
+		ln["channels"] = []any{map[string]any{"id": "lark", "label": "Lark", "manageIdentities": true}}
 	})
 	code := `export default function (api) {
   api.channels.register('lark', { identityInbound: async (event) => {
@@ -51,32 +51,32 @@ func TestRealHostManagesIdentity(t *testing.T) {
 	root := t.TempDir()
 	e.startHost([]string{node, entry}, []string{"PATH=" + filepath.Dir(node) + ":/usr/bin:/bin", "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + e.api.Plugins.APIURL}, "bridge")
 
-	agent, _ := e.newAgent("助手")
-	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "@boss", "text": "今晚上线吗？", "options": []string{"上线", "再等等"}}))
+	agent, _ := e.newAgent("Assistant")
+	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "@boss", "text": "Going live tonight?", "options": []string{"Go live", "Wait a bit"}}))
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		m, err := e.st.GetInboxMessage(ctx, q.ID, 200)
 		if err == nil && m.Question.State == "answered" {
 			if m.Question.Answer == nil || *m.Question.Answer.OptionID != "2" {
-				t.Fatalf("插件以身份的名义回答：%+v", m.Question.Answer)
+				t.Fatalf("the plugin answers in the identity's name: %+v", m.Question.Answer)
 			}
 			break
 		}
 		if time.Now().After(deadline) {
 			var log string
 			_ = e.st.Pool.QueryRow(ctx, `SELECT coalesce(string_agg(level||':'||line, ' | ' ORDER BY id),'') FROM plugin_host_log`).Scan(&log)
-			t.Fatalf("问题没有被回答：%v；宿主日志：%s", err, log)
+			t.Fatalf("the question was not answered: %v; host log: %s", err, log)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	var log string
 	deadline = time.Now().Add(5 * time.Second)
-	for !strings.Contains(log, "answered 再等等") && time.Now().Before(deadline) {
+	for !strings.Contains(log, "answered Wait a bit") && time.Now().Before(deadline) {
 		_ = e.st.Pool.QueryRow(ctx, `SELECT coalesce(string_agg(level||':'||line, ' | ' ORDER BY id),'') FROM plugin_host_log WHERE plugin_id='bridge'`).Scan(&log)
 		time.Sleep(50 * time.Millisecond)
 	}
-	if !strings.Contains(log, "inbound lark "+boss.ID.String()+" 2") || !strings.Contains(log, "read 今晚上线吗？") || !strings.Contains(log, "answered 再等等") {
-		t.Fatalf("宿主日志：%s", log)
+	if !strings.Contains(log, "inbound lark "+boss.ID.String()+" 2") || !strings.Contains(log, "read Going live tonight?") || !strings.Contains(log, "answered Wait a bit") {
+		t.Fatalf("host log: %s", log)
 	}
 }
 
@@ -86,11 +86,11 @@ func TestRealHostManagesIdentity(t *testing.T) {
 func TestRealHostAnswersChannelQuestion(t *testing.T) {
 	entry := os.Getenv("LOOP_NOW_PLUGIN_HOST_ENTRY")
 	if entry == "" {
-		t.Skip("没有设置 LOOP_NOW_PLUGIN_HOST_ENTRY")
+		t.Skip("LOOP_NOW_PLUGIN_HOST_ENTRY is not set")
 	}
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("找不到 node")
+		t.Skip("node not found")
 	}
 	e := newEnv(t)
 	ctx := context.Background()
@@ -102,18 +102,18 @@ func TestRealHostAnswersChannelQuestion(t *testing.T) {
   api.channels.register('slack', { outbound: async (event) => {
     api.log.info('outbound ' + event.channelId + ' ' + event.isQuestion + ' ' + (event.question ? event.question.options.map((o) => o.label).join('/') : ''))
     if (event.question) {
-      const ans = await api.channels.reply(event.question.id, { text: '发' })
+      const ans = await api.channels.reply(event.question.id, { text: 'Yes' })
       api.log.info('answered ' + ans.from.kind)
     }
   } })
-  api.channels.send('slack', { to: '默认项目/助手', text: '要发版吗', senderName: 'Slack · 李四' }).then((m) => api.log.info('sent ' + m.id))
+  api.channels.send('slack', { to: 'Default project/Assistant', text: 'Shall we release?', senderName: 'Slack · Bob' }).then((m) => api.log.info('sent ' + m.id))
 }`
 	if err := os.WriteFile(filepath.Join(dir, "platform.ts"), []byte(code), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	e.installPlugin(dir)
 	e.expect(200, "PUT", "/projects/"+e.dc.Project.ID.String()+"/plugins/bridge", map[string]any{"enabled": true, "values": map[string]any{}, "expectedRevision": 0})
-	agent, path := e.newAgent("助手")
+	agent, path := e.newAgent("Assistant")
 	e.api.Plugins.APIURL = e.srv.URL + "/api/v1"
 	root := t.TempDir()
 	e.startHost([]string{node, entry}, []string{"PATH=" + filepath.Dir(node) + ":/usr/bin:/bin", "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + e.api.Plugins.APIURL}, "bridge")
@@ -127,24 +127,24 @@ func TestRealHostAnswersChannelQuestion(t *testing.T) {
 	deadline := time.Now().Add(20 * time.Second)
 	for e.st.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages WHERE from_kind='plugin' AND to_agent_id=$1`, agent.ID).Scan(&sent) != nil {
 		if time.Now().After(deadline) {
-			t.Fatalf("插件没有发出消息；宿主日志：%s", hostLog())
+			t.Fatalf("the plugin sent no message; host log: %s", hostLog())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	e.waitAgentIdle(path)
 	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages/"+sent+"/reply",
-		map[string]any{"text": "今晚发吗？", "options": []string{"发", "不发"}}))
+		map[string]any{"text": "Release tonight?", "options": []string{"Yes", "No"}}))
 	deadline = time.Now().Add(20 * time.Second)
 	for {
 		m, err := e.st.GetInboxMessage(ctx, q.ID, 200)
 		if err == nil && m.Question.State == "answered" {
-			if m.Question.Answer == nil || m.Question.Answer.OptionID != nil || m.Question.Answer.TextPreview != "发" {
-				t.Fatalf("插件以文字作答：%+v", m.Question.Answer)
+			if m.Question.Answer == nil || m.Question.Answer.OptionID != nil || m.Question.Answer.TextPreview != "Yes" {
+				t.Fatalf("the plugin answers with text: %+v", m.Question.Answer)
 			}
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("问题没有被回答：%v；宿主日志：%s", err, hostLog())
+			t.Fatalf("the question was not answered: %v; host log: %s", err, hostLog())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -152,7 +152,7 @@ func TestRealHostAnswersChannelQuestion(t *testing.T) {
 	for !strings.Contains(hostLog(), "answered plugin") && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if log := hostLog(); !strings.Contains(log, "outbound slack true 发/不发") || !strings.Contains(log, "answered plugin") {
-		t.Fatalf("宿主日志：%s", log)
+	if log := hostLog(); !strings.Contains(log, "outbound slack true Yes/No") || !strings.Contains(log, "answered plugin") {
+		t.Fatalf("host log: %s", log)
 	}
 }

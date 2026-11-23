@@ -37,7 +37,7 @@ func readLink(t *testing.T, p string) string {
 	t.Helper()
 	got, err := os.Readlink(p)
 	if err != nil {
-		t.Fatalf("%s 应是链接：%v", p, err)
+		t.Fatalf("%s should be a link: %v", p, err)
 	}
 	return got
 }
@@ -48,7 +48,7 @@ func readLink(t *testing.T, p string) string {
 // state through a link.
 func TestProviderStateLinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 上是目录联接与硬链接，另行验证")
+		t.Skip("on Windows these are directory junctions and hard links; verified separately")
 	}
 	h := newHarness(t, nil, "")
 	state, dir := makeState(t, t.TempDir())
@@ -60,22 +60,22 @@ func TestProviderStateLinks(t *testing.T) {
 	a, b := h.agent(withState), h.agent(withState)
 	for _, id := range []uuid.UUID{a, b} {
 		if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-			t.Fatalf("启动：%+v", res)
+			t.Fatalf("start: %+v", res)
 		}
 		d := h.e.dirs(id)
 		if got := readLink(t, filepath.Join(d.pi, "auth.json")); got != filepath.Join(dir, "auth.json") {
-			t.Fatalf("auth.json 链接：%s", got)
+			t.Fatalf("auth.json link: %s", got)
 		}
 		if got := readLink(t, filepath.Join(d.home, ".pi", "fake-oauth")); got != filepath.Join(dir, ".pi", "fake-oauth") {
-			t.Fatalf("状态路径链接：%s", got)
+			t.Fatalf("state path link: %s", got)
 		}
 		// The second message reuses the same Pi process: auth.json must not be rewritten like an ordinary credential
 		// (after a real login the second message once failed because of this).
 		if res, _ := h.exec(id, "again"); res.Outcome != executor.OutcomeCompleted {
-			t.Fatalf("复用进程的第二条消息：%+v", res)
+			t.Fatalf("second message on the reused process: %+v", res)
 		}
 		if got := readLink(t, filepath.Join(d.pi, "auth.json")); got != filepath.Join(dir, "auth.json") {
-			t.Fatalf("复用后 auth.json 链接：%s", got)
+			t.Fatalf("auth.json link after reuse: %s", got)
 		}
 	}
 	// A write through one Agent's HOME is visible to the other Agent and in the state directory (tokens the extension
@@ -84,27 +84,27 @@ func TestProviderStateLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(h.e.dirs(b).home, ".pi", "fake-oauth", "refreshed.json")); string(got) != "new" {
-		t.Fatalf("共用一份状态：%q", got)
+		t.Fatalf("one shared copy of the state: %q", got)
 	}
 	if !h.e.ProviderStatesInUse()[state.VersionID] {
-		t.Fatal("运行中的 Pi 在用的版本要报给清理器")
+		t.Fatal("the version a running Pi uses should be reported to the cleaner")
 	}
 
 	// Switch to not using a subscription account: restart, the links are removed, auth.json goes back to an ordinary
 	// file written by the platform, and the state directory is unchanged.
 	h.src.update(a, func(s *agentconfig.Snapshot) { s.ProviderState, s.Plugins = nil, agentconfig.PluginAssets{} })
 	if res, _ := h.exec(a, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("换掉后：%+v", res)
+		t.Fatalf("after switching away: %+v", res)
 	}
 	d := h.e.dirs(a)
 	if info, err := os.Lstat(filepath.Join(d.pi, "auth.json")); err != nil || !info.Mode().IsRegular() {
-		t.Fatalf("auth.json 应是普通文件：%v %v", info, err)
+		t.Fatalf("auth.json should be a regular file: %v %v", info, err)
 	}
 	if _, err := os.Lstat(filepath.Join(d.home, ".pi", "fake-oauth")); !os.IsNotExist(err) {
-		t.Fatalf("旧链接应已删掉：%v", err)
+		t.Fatalf("the old link should be gone: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(d.root, providerLinksFile)); !os.IsNotExist(err) {
-		t.Fatal("链接记录应已删掉")
+		t.Fatal("the link record should be gone")
 	}
 
 	// Release the Agent: only its own directories are deleted; everything in the state directory is still there.
@@ -113,14 +113,14 @@ func TestProviderStateLinks(t *testing.T) {
 	}
 	for _, f := range []string{"auth.json", ".pi/fake-oauth/accounts.json", ".pi/fake-oauth/refreshed.json"} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(f))); err != nil {
-			t.Fatalf("释放 Agent 不能动状态目录：%s %v", f, err)
+			t.Fatalf("releasing an Agent must not touch the state directory: %s %v", f, err)
 		}
 	}
 
 	// Plugin not mounted: fails explicitly.
 	c := h.agent(func(s *agentconfig.Snapshot) { st := *state; s.ProviderState = &st })
 	if res, _ := h.exec(c, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "grokish") {
-		t.Fatalf("没挂载插件：%+v", res)
+		t.Fatalf("plugin not mounted: %+v", res)
 	}
 	// State directory missing: fails explicitly.
 	e := h.agent(func(s *agentconfig.Snapshot) {
@@ -131,7 +131,7 @@ func TestProviderStateLinks(t *testing.T) {
 	// A platform Agent's (no project context) subscription account is its own login, so the hint says to log in again
 	// in its model credentials; for a project Agent the hint says to log in again in the project.
 	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "again in this Agent's model credentials") {
-		t.Fatalf("状态目录不在（平台 Agent）：%+v", res)
+		t.Fatalf("state directory missing (platform Agent): %+v", res)
 	}
 	project := uuid.New()
 	pe := h.agent(func(s *agentconfig.Snapshot) {
@@ -141,13 +141,13 @@ func TestProviderStateLinks(t *testing.T) {
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
 	if res, _ := h.exec(pe, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "again in the project") {
-		t.Fatalf("状态目录不在（项目 Agent）：%+v", res)
+		t.Fatalf("state directory missing (project Agent): %+v", res)
 	}
 	// A declared path covers the credential file of any CLI template (not only those this Agent configured): fail
 	// explicitly, rather than erroring when credential files are deleted and rewritten on every turn.
 	managed := h.e.tmpl.AllCredentialFilePaths()
 	if len(managed) == 0 {
-		t.Fatal("内置模板应有凭证文件路径")
+		t.Fatal("the built-in templates should have credential file paths")
 	}
 	cover := strings.SplitN(managed[0], "/", 2)[0]
 	g := h.agent(func(s *agentconfig.Snapshot) {
@@ -156,7 +156,7 @@ func TestProviderStateLinks(t *testing.T) {
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
 	if res, _ := h.exec(g, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, managed[0]) {
-		t.Fatalf("与模板凭证文件重叠：%+v", res)
+		t.Fatalf("overlaps a template credential file: %+v", res)
 	}
 	// A declared path not yet written at login: create an empty directory in the state directory, then link it.
 	f := h.agent(func(s *agentconfig.Snapshot) {
@@ -165,10 +165,10 @@ func TestProviderStateLinks(t *testing.T) {
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
 	if res, _ := h.exec(f, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("还没写的路径：%+v", res)
+		t.Fatalf("path not written yet: %+v", res)
 	}
 	if info, err := os.Stat(filepath.Join(dir, ".config", "fake-later")); err != nil || !info.IsDir() {
-		t.Fatalf("应在状态目录里建空目录：%v", err)
+		t.Fatalf("an empty directory should be created in the state directory: %v", err)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestMkdirPrivate(t *testing.T) {
 			t.Fatal(err)
 		}
 		if info, err := os.Lstat(plain); err != nil || privatefs.IsPrivate(plain, info) {
-			t.Fatalf("放开的目录里直接新建的目录应继承开放的 ACL，否则核对不出收紧：%v", err)
+			t.Fatalf("a directory created right inside the open directory should inherit the open ACL, or the tightening cannot be checked: %v", err)
 		}
 	}
 	dir := filepath.Join(root, ".config", "fake-later")
@@ -195,24 +195,24 @@ func TestMkdirPrivate(t *testing.T) {
 	for _, p := range []string{filepath.Join(root, ".config"), dir} {
 		info, err := os.Lstat(p)
 		if err != nil || !info.IsDir() || !privatefs.IsPrivate(p, info) || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o700) {
-			t.Fatalf("%s 应是只有当前用户能访问的目录：%v", p, err)
+			t.Fatalf("%s should be a directory only the current user can access: %v", p, err)
 		}
 	}
 	if err := mkdirPrivate(root, dir); err != nil {
-		t.Fatalf("已存在时照常成功：%v", err)
+		t.Fatalf("should succeed as usual when it already exists: %v", err)
 	}
 	if err := mkdirPrivate(root, filepath.Join(t.TempDir(), "x")); err == nil {
-		t.Fatal("状态目录外的路径应拒绝")
+		t.Fatal("a path outside the state directory should be rejected")
 	}
 	outside := t.TempDir()
 	if err := linkDir(outside, filepath.Join(root, "linked")); err != nil {
 		t.Fatal(err)
 	}
 	if err := mkdirPrivate(root, filepath.Join(root, "linked", "x")); err == nil {
-		t.Fatal("经链接的路径应拒绝")
+		t.Fatal("a path through a link should be rejected")
 	}
 	if _, err := os.Lstat(filepath.Join(outside, "x")); !os.IsNotExist(err) {
-		t.Fatal("不能经链接建到状态目录外面")
+		t.Fatal("must not create anything outside the state directory through a link")
 	}
 }
 
@@ -221,7 +221,7 @@ func TestMkdirPrivate(t *testing.T) {
 // starts and uses the local state, and auth.json is still linked to the account.
 func TestProviderStateWithLocalLogins(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 上另行验证")
+		t.Skip("verified separately on Windows")
 	}
 	realHome, before := fakeRealHome(t)
 	h := newHarness(t, func(o *Options) { o.RealHome = func() (string, error) { return realHome, nil } }, "")
@@ -233,7 +233,7 @@ func TestProviderStateWithLocalLogins(t *testing.T) {
 	res, _ := h.exec(id, "hi")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "Use local logins") || !strings.Contains(res.ErrorMessage, ".pi/fake-oauth") ||
 		!strings.Contains(res.ErrorMessage, "instead of this Agent's own login") {
-		t.Fatalf("本机没有该扩展的登录：%+v", res)
+		t.Fatalf("no local login for this extension: %+v", res)
 	}
 	sameTree(t, realHome, before)
 
@@ -246,14 +246,14 @@ func TestProviderStateWithLocalLogins(t *testing.T) {
 	}
 	before = snapshotTree(t, realHome)
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("本机有登录时启动：%+v", res)
+		t.Fatalf("start with a local login: %+v", res)
 	}
 	d := h.e.dirs(id)
 	if got := readLink(t, filepath.Join(d.pi, "auth.json")); got != filepath.Join(dir, "auth.json") {
-		t.Fatalf("auth.json 仍链接到账号：%s", got)
+		t.Fatalf("auth.json should still link to the account: %s", got)
 	}
 	if _, err := os.Lstat(filepath.Join(d.home, ".pi", "fake-oauth")); !os.IsNotExist(err) {
-		t.Fatalf("开关开着时不在 Agent HOME 里建状态链接：%v", err)
+		t.Fatalf("with the switch on no state link should be created in the Agent HOME: %v", err)
 	}
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)

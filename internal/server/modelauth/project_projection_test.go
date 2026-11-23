@@ -14,15 +14,15 @@ import (
 func TestProjectCredentialImpactAndCommitNotification(t *testing.T) {
 	st, _ := authFixture(t)
 	ctx := context.Background()
-	dc, err := st.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := st.EnsureDefaults(ctx, "Org", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "自动使用者", "anthropic", "fixture", "")
+	a, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "Automatic user", "anthropic", "fixture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "已清除历史", "anthropic", "fixture", "")
+	b, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "History cleared", "anthropic", "fixture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestProjectCredentialImpactAndCommitNotification(t *testing.T) {
 		notified = append(notified, id)
 	}
 	provider := "anthropic"
-	account, err := p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "model", Provider: &provider, Name: "共享A", Credential: cm.CredentialInput{Type: "api_key", Key: "synthetic-project-A"}})
+	account, err := p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "model", Provider: &provider, Name: "Shared A", Credential: cm.CredentialInput{Type: "api_key", Key: "synthetic-project-A"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestProjectCredentialImpactAndCommitNotification(t *testing.T) {
 	if err != nil || len(impact.Agents) != 2 {
 		t.Fatal("explicit impact missing", err)
 	}
-	if _, err = p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "model", Provider: &provider, Name: "共享B", Credential: cm.CredentialInput{Type: "api_key", Key: "synthetic-project-B"}}); err != nil {
+	if _, err = p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "model", Provider: &provider, Name: "Shared B", Credential: cm.CredentialInput{Type: "api_key", Key: "synthetic-project-B"}}); err != nil {
 		t.Fatal(err)
 	}
 	impact, err = p.Impact(ctx, dc.Project.ID, "model", provider, nil)
@@ -96,7 +96,7 @@ func TestProjectCredentialImpactAndCommitNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 	cli := "gh"
-	shared, err := p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "cli", CLI: &cli, Name: "共享gh", Credential: cm.CredentialInput{Type: "cli", Fields: map[string]string{"token": "synthetic-gh"}}})
+	shared, err := p.Create(ctx, dc.Project.ID, cm.Create{Purpose: "cli", CLI: &cli, Name: "Shared gh", Credential: cm.CredentialInput{Type: "cli", Fields: map[string]string{"token": "synthetic-gh"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

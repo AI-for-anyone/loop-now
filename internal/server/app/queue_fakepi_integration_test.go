@@ -77,67 +77,67 @@ func TestQueueActualAppFakePi(t *testing.T) {
 		return decode[apitypes.SendMessageResult](t, s.must(202, "POST", path+"/messages", body)).Run
 	}
 	first := send("!sleep=30s !noabort !text=first", "")
-	waitFor(t, "第一条进入运行", func() bool {
+	waitFor(t, "first message running", func() bool {
 		r, e := s.a.Store.GetRun(ctx, first.ID)
 		return e == nil && r.Status == "running"
 	})
 	mine := send("!text=mine", "queue")
 	inbox := func(text string) uuid.UUID {
-		code, raw := s.agentCall(sender.ID, "POST", "/inbox/messages", map[string]any{"to": "默认项目/Receiver", "text": text, "whenBusy": "queue"})
+		code, raw := s.agentCall(sender.ID, "POST", "/inbox/messages", map[string]any{"to": "Default project/Receiver", "text": text, "whenBusy": "queue"})
 		if code != 201 {
-			t.Fatalf("Sender 发信：%d %s", code, raw)
+			t.Fatalf("Sender sends: %d %s", code, raw)
 		}
 		return decode[apitypes.InboxMessage](t, raw).ID
 	}
-	m1, m2 := inbox("请看构建结果"), inbox("第二条留言")
+	m1, m2 := inbox("please check the build results"), inbox("second note")
 	q := decode[apitypes.AgentQueue](t, s.must(200, "GET", path+"/queue", nil))
-	want := []string{"run:!text=mine:queue", "inbox:请看构建结果:queue", "inbox:第二条留言:queue"}
+	want := []string{"run:!text=mine:queue", "inbox:please check the build results:queue", "inbox:second note:queue"}
 	if !slices.Equal(queueKinds(q.Items), want) || q.Items[1].From.Kind != "agent" || q.Items[1].From.ID == nil || *q.Items[1].From.ID != sender.ID || q.Items[0].From.Kind != "console" {
-		t.Fatalf("排队列表：%+v", q.Items)
+		t.Fatalf("queue list: %+v", q.Items)
 	}
 	var snap apitypes.SseSnapshot
 	firstSSESnapshot(t, s.url+path+"/events", &snap)
 	if !slices.Equal(queueKinds(snap.QueueItems), want) {
-		t.Fatalf("SSE 快照的逐条列表：%+v", snap.QueueItems)
+		t.Fatalf("per-item list in the SSE snapshot: %+v", snap.QueueItems)
 	}
 
 	// Cancel a message sent by someone else: the receiving Agent sees only a cancellation note, the sender and the
 	// console see the full text; the Inbox event stream pushes the cancellation.
 	r := decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/inbox-messages/"+m2.String()+"/cancel", map[string]any{"actionId": uuid.New()}))
-	if r.Status != "accepted" || r.Item == nil || r.Item.Text != "第二条留言" || r.Operation != "cancel_inbox_message" {
-		t.Fatalf("取消回执：%+v", r)
+	if r.Status != "accepted" || r.Item == nil || r.Item.Text != "second note" || r.Operation != "cancel_inbox_message" {
+		t.Fatalf("cancel receipt: %+v", r)
 	}
 	code, raw := s.agentCall(receiver.ID, "POST", "/inbox/messages/"+m2.String()+"/read", map[string]any{})
 	got := decode[apitypes.InboxMessage](t, raw)
-	if code != 200 || got.Text != store.CancelledNotice || got.CancelledAt == nil || got.ReadAt != nil || strings.Contains(string(raw), "第二条留言") {
-		t.Fatalf("收件 Agent 读取已取消的消息：%d %s", code, raw)
+	if code != 200 || got.Text != store.CancelledNotice || got.CancelledAt == nil || got.ReadAt != nil || strings.Contains(string(raw), "second note") {
+		t.Fatalf("the receiving Agent reads the cancelled message: %d %s", code, raw)
 	}
 	code, raw = s.agentCall(receiver.ID, "GET", "/inbox/messages?unread=true", nil)
 	if code != 200 || strings.Contains(string(raw), m2.String()) || !strings.Contains(string(raw), m1.String()) {
-		t.Fatalf("已取消的消息不计为未读：%d %s", code, raw)
+		t.Fatalf("a cancelled message should not count as unread: %d %s", code, raw)
 	}
 	code, raw = s.agentCall(sender.ID, "GET", "/inbox/threads/"+m2.String(), nil)
-	if code != 200 || !strings.Contains(string(raw), "第二条留言") || !strings.Contains(string(raw), `"cancelledAt":"`) {
-		t.Fatalf("发件方看到全文与取消时间：%d %s", code, raw)
+	if code != 200 || !strings.Contains(string(raw), "second note") || !strings.Contains(string(raw), `"cancelledAt":"`) {
+		t.Fatalf("the sender should see the full text and the cancel time: %d %s", code, raw)
 	}
-	if console := decode[apitypes.InboxMessage](t, s.must(200, "GET", path+"/inbox/"+m2.String(), nil)); console.Text != "第二条留言" || console.CancelledAt == nil {
-		t.Fatalf("控制台看到全文：%+v", console)
+	if console := decode[apitypes.InboxMessage](t, s.must(200, "GET", path+"/inbox/"+m2.String(), nil)); console.Text != "second note" || console.CancelledAt == nil {
+		t.Fatalf("the console should see the full text: %+v", console)
 	}
 	events, err := s.a.Coord.ReadInbox(ctx, "0", 1000, 0)
 	if err != nil || !slices.ContainsFunc(events, func(e coord.Event) bool {
 		return e.Type == apitypes.EventInboxCancelled && strings.Contains(string(e.Data), m2.String())
 	}) {
-		t.Fatalf("应推送 inbox.message.cancelled：%v", err)
+		t.Fatalf("inbox.message.cancelled should be pushed: %v", err)
 	}
 
 	// Convert a single item to an interrupt: the message from someone else is handled before the Agent's own queued
 	// message, and the current reply is interrupted.
 	r = decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/inbox-messages/"+m1.String()+"/promote-to-interrupt", map[string]any{"actionId": uuid.New()}))
-	if r.Status != "accepted" || r.Run == nil || r.Run.WhenBusy == nil || *r.Run.WhenBusy != "interrupt" || !slices.Equal(queueKinds(r.Queue), []string{"inbox:请看构建结果:interrupt", "run:!text=mine:queue"}) {
-		t.Fatalf("转换回执：%+v", r)
+	if r.Status != "accepted" || r.Run == nil || r.Run.WhenBusy == nil || *r.Run.WhenBusy != "interrupt" || !slices.Equal(queueKinds(r.Queue), []string{"inbox:please check the build results:interrupt", "run:!text=mine:queue"}) {
+		t.Fatalf("promote receipt: %+v", r)
 	}
 	promoted := r.Run.ID
-	waitFor(t, "全部执行结束", func() bool {
+	waitFor(t, "all runs ended", func() bool {
 		for _, id := range []uuid.UUID{first.ID, promoted, mine.ID} {
 			if v, e := s.a.Store.GetRun(ctx, id); e != nil || v.EndedAt == nil {
 				return false
@@ -147,57 +147,57 @@ func TestQueueActualAppFakePi(t *testing.T) {
 	})
 	a, p, m := runOf(t, s, first.ID), runOf(t, s, promoted), runOf(t, s, mine.ID)
 	if a.EndReason != "user_interrupt" || p.Status != "completed" || m.Status != "completed" || !p.StartedAt.Before(*m.StartedAt) {
-		t.Fatalf("转换的消息应先于排队的控制台消息：first=%s promoted=%s@%v mine=%s@%v", a.EndReason, p.Status, p.StartedAt, m.Status, m.StartedAt)
+		t.Fatalf("the promoted message should run before the queued console message: first=%s promoted=%s@%v mine=%s@%v", a.EndReason, p.Status, p.StartedAt, m.Status, m.StartedAt)
 	}
 	var prompt string
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT text FROM conversation_messages WHERE id=$1`, p.UserMessageID).Scan(&prompt); err != nil || !strings.Contains(prompt, m1.String()) || strings.Contains(prompt, m2.String()) {
-		t.Fatalf("打断提醒应只点名转换的消息：%q %v", prompt, err)
+		t.Fatalf("the interrupt reminder should name only the promoted message: %q %v", prompt, err)
 	}
 	if q := decode[apitypes.AgentQueue](t, s.must(200, "GET", path+"/queue", nil)); len(q.Items) != 0 {
-		t.Fatalf("排队应已清空：%+v", q.Items)
+		t.Fatalf("the queue should be empty: %+v", q.Items)
 	}
 
 	// Stop the current reply: it ends as user_stopped and queued messages are handled as usual afterwards; a reply that
 	// has ended cannot be stopped again.
 	long := send("!sleep=30s !noabort !text=long", "")
-	waitFor(t, "长回复进入运行", func() bool {
+	waitFor(t, "long reply running", func() bool {
 		v, e := s.a.Store.GetRun(ctx, long.ID)
 		return e == nil && v.Status == "running"
 	})
 	after := send("!text=after", "queue")
 	r = decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/runs/"+long.ID.String()+"/stop", map[string]any{"actionId": uuid.New()}))
 	if r.Status != "accepted" || r.Run.ID != long.ID {
-		t.Fatalf("停止回执：%+v", r)
+		t.Fatalf("stop receipt: %+v", r)
 	}
-	waitFor(t, "停止后队列继续", func() bool {
+	waitFor(t, "queue continues after stop", func() bool {
 		v, e := s.a.Store.GetRun(ctx, after.ID)
 		return e == nil && v.Status == "completed"
 	})
 	if v := runOf(t, s, long.ID); v.Status != "interrupted" || v.EndReason != "user_stopped" {
-		t.Fatalf("被停止的回复：%s %s", v.Status, v.EndReason)
+		t.Fatalf("stopped reply: %s %s", v.Status, v.EndReason)
 	}
 	if code, body := s.call("POST", path+"/runs/"+long.ID.String()+"/stop", map[string]any{"actionId": uuid.New()}); code != 409 || !strings.Contains(string(body), "run_not_active") {
-		t.Fatalf("已结束的回复应 409 run_not_active：%d %s", code, body)
+		t.Fatalf("an ended reply should get 409 run_not_active: %d %s", code, body)
 	}
 	tl := s.must(200, "GET", path+"/runs/"+long.ID.String()+"/timeline", nil)
 	if !bytes.Contains(tl, []byte(`"stop":true`)) || !bytes.Contains(tl, []byte(`"user_stopped"`)) {
-		t.Fatalf("时间线应记下停止：%s", tl)
+		t.Fatalf("the timeline should record the stop: %s", tl)
 	}
 	// Withdraw a message you queued yourself: the Agent never receives it and it is removed from the queue.
 	busy := send("!sleep=30s !noabort !text=busy", "")
-	waitFor(t, "再次进入运行", func() bool {
+	waitFor(t, "running again", func() bool {
 		v, e := s.a.Store.GetRun(ctx, busy.ID)
 		return e == nil && v.Status == "running"
 	})
 	withdraw := send("!text=withdraw", "queue")
 	r = decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/runs/"+withdraw.ID.String()+"/cancel", map[string]any{"actionId": uuid.New()}))
 	if r.Status != "accepted" || r.Item.Text != "!text=withdraw" || r.Run.EndReason == nil || *r.Run.EndReason != "user_cancelled" {
-		t.Fatalf("撤回回执：%+v", r)
+		t.Fatalf("withdraw receipt: %+v", r)
 	}
 	s.must(200, "POST", path+"/runs/"+busy.ID.String()+"/stop", map[string]any{"actionId": uuid.New()})
 	s.waitIdle(path)
 	if v := runOf(t, s, withdraw.ID); v.StartedAt != nil || v.EndReason != "user_cancelled" {
-		t.Fatalf("撤回的消息不应执行：%+v", v)
+		t.Fatalf("a withdrawn message should not run: %+v", v)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 		}
 		task := decode[taskmodel.Detail](t, raw)
 		var active uuid.UUID
-		waitFor(t, name+" 节点进入运行", func() bool {
+		waitFor(t, name+" node running", func() bool {
 			return s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, task.Nodes[0].RuntimeID).Scan(&active) == nil
 		})
 		return task, worker, active
@@ -252,21 +252,21 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 	base := "/tasks/" + task.Task.ID.String() + "/nodes/" + task.Nodes[0].ID.String()
 	r := decode[taskmodel.TaskNodeQueueActionReceipt](t, s.must(200, "POST", base+"/runs/"+active.String()+"/stop", body(worker, task)))
 	if r.Status != "accepted" || r.RunID != active {
-		t.Fatalf("停止回执：%+v", r)
+		t.Fatalf("stop receipt: %+v", r)
 	}
-	waitFor(t, "节点转阻塞", func() bool {
+	waitFor(t, "node blocked", func() bool {
 		d, e := s.a.Tasks.Get(ctx, auth.Console(), task.Task.ID)
 		return e == nil && d.Nodes[0].Status == "blocked"
 	})
 	if st, code := turnState(active); st != "interrupted" || code != "user_stopped" {
-		t.Fatalf("被停止的轮次：%s %s", st, code)
+		t.Fatalf("stopped turn: %s %s", st, code)
 	}
 	d, _ := s.a.Tasks.Get(ctx, auth.Console(), task.Task.ID)
 	if d.Task.Reason == nil || !strings.Contains(*d.Task.Reason, "Stopped by a person.") {
-		t.Fatalf("阻塞原因：%+v", d.Task.Reason)
+		t.Fatalf("block reason: %+v", d.Task.Reason)
 	}
 	if code, raw := s.call("POST", base+"/runs/"+active.String()+"/stop", body(worker, task)); code != 409 {
-		t.Fatalf("已结束的轮次不能停止：%d %s", code, raw)
+		t.Fatalf("an ended turn cannot be stopped: %d %s", code, raw)
 	}
 
 	// Queued items: after the stop the node goes on to the next one.
@@ -275,15 +275,15 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 	s.must(201, "POST", base+"/inbox-messages", map[string]any{"actionId": uuid.New(), "expectedAgentId": worker.ID, "expectedRuntimeId": task.Nodes[0].RuntimeID, "text": "!text=next", "whenBusy": "queue"})
 	q := decode[taskmodel.TaskNodeQueue](t, s.must(200, "GET", base+"/queue", nil))
 	if len(q.Items) != 1 || q.Items[0].Text != "!text=next" {
-		t.Fatalf("节点排队：%+v", q.Items)
+		t.Fatalf("node queue: %+v", q.Items)
 	}
 	next := q.Items[0].RunID
 	s.must(200, "POST", base+"/runs/"+active.String()+"/stop", body(worker, task))
-	waitFor(t, "停止后领取下一条", func() bool {
+	waitFor(t, "next item claimed after stop", func() bool {
 		var started bool
 		return s.a.Store.Pool.QueryRow(ctx, `SELECT started_at IS NOT NULL FROM task_turns WHERE id=$1`, next).Scan(&started) == nil && started
 	})
 	if st, code := turnState(active); st != "interrupted" || code != "user_stopped" {
-		t.Fatalf("被停止的轮次：%s %s", st, code)
+		t.Fatalf("stopped turn: %s %s", st, code)
 	}
 }

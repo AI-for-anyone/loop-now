@@ -18,7 +18,7 @@ import (
 // directory).
 func TestCopyTreeLargeTreeTiming(t *testing.T) {
 	if os.Getenv("LOOP_NOW_CLONE_BENCH") != "1" {
-		t.Skip("设置 LOOP_NOW_CLONE_BENCH=1 才运行（会写入数 GB）")
+		t.Skip("set LOOP_NOW_CLONE_BENCH=1 to run (writes several GB)")
 	}
 	parent := os.Getenv("LOOP_NOW_CLONE_BENCH_DIR")
 	if parent == "" {
@@ -65,7 +65,7 @@ func TestCopyTreeLargeTreeTiming(t *testing.T) {
 			total += int64(len(large))
 		}
 	}
-	t.Logf("构造：%d 个文件，%.2f GB，用时 %v", files, float64(total)/(1<<30), time.Since(begin))
+	t.Logf("built: %d files, %.2f GB, took %v", files, float64(total)/(1<<30), time.Since(begin))
 	free := func() string {
 		out, _ := exec.Command("df", "-k", base).Output()
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -76,7 +76,7 @@ func TestCopyTreeLargeTreeTiming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("CopyTree：方式 %s，耗时 %v", res.Method, res.Duration)
-	t.Logf("复制前 df：%s", before)
-	t.Logf("复制后 df：%s", free())
+	t.Logf("CopyTree: method %s, took %v", res.Method, res.Duration)
+	t.Logf("df before copy: %s", before)
+	t.Logf("df after copy: %s", free())
 }

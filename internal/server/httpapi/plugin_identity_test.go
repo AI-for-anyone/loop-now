@@ -19,7 +19,7 @@ func (e *env) installManager(id string) {
 	e.t.Helper()
 	dir := writePluginDir(e.t, id, "identities.manage")
 	patchManifest(e.t, dir, func(ln map[string]any) {
-		ln["channels"] = []any{map[string]any{"id": "lark", "label": "飞书", "manageIdentities": true}, map[string]any{"id": "plain", "label": "普通"}}
+		ln["channels"] = []any{map[string]any{"id": "lark", "label": "Lark", "manageIdentities": true}, map[string]any{"id": "plain", "label": "Plain"}}
 	})
 	e.installPlugin(dir)
 }
@@ -36,7 +36,7 @@ func TestPluginManagesIdentity(t *testing.T) {
 	e.installManager("other")
 	bad := writePluginDir(t, "bad")
 	patchManifest(t, bad, func(ln map[string]any) {
-		ln["channels"] = []any{map[string]any{"id": "lark", "label": "飞书", "manageIdentities": true}}
+		ln["channels"] = []any{map[string]any{"id": "lark", "label": "Lark", "manageIdentities": true}}
 	})
 	e.expectError(422, "validation_failed", "POST", "/plugin-previews", map[string]any{"source": map[string]any{"kind": "local", "location": bad}})
 	boss, _ := e.identity("boss")
@@ -47,67 +47,67 @@ func TestPluginManagesIdentity(t *testing.T) {
 	e.expectError(404, "not_found", "PUT", "/external-identities/"+uuid.NewString()+"/manager", map[string]any{"managedBy": nil})
 	got := decode[apitypes.ExternalIdentity](t, e.expect(200, "PUT", manager, map[string]any{"managedBy": map[string]any{"pluginId": "bridge", "channelId": "lark"}}))
 	if got.ManagedBy == nil || got.ManagedBy.PluginID != "bridge" || got.ManagedBy.ChannelID != "lark" {
-		t.Fatalf("绑定：%+v", got)
+		t.Fatalf("binding: %+v", got)
 	}
 	if x := decode[apitypes.ExternalIdentity](t, e.expect(200, "GET", "/external-identities/"+ops.ID.String(), nil)); x.ManagedBy != nil {
-		t.Fatalf("没有代管：%+v", x)
+		t.Fatalf("not managed: %+v", x)
 	}
 
 	journal := e.startFakeHost("bridge", "other")
-	agent, _ := e.newAgent("助手")
-	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "@boss", "text": "今晚上线吗？", "options": []string{"上线", "再等等"}}))
+	agent, _ := e.newAgent("Assistant")
+	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages", map[string]any{"to": "@boss", "text": "Going live tonight?", "options": []string{"Go live", "Wait a bit"}}))
 	deadline := time.Now().Add(10 * time.Second)
 	var inbound map[string]any
 	for inbound == nil {
 		for _, m := range journalEntries(t, journal, "event") {
 			if m["eventType"] == "identity.inbound" {
 				if m["plugin"] != "bridge" {
-					t.Fatalf("identity.inbound 只给代管插件：%v", m)
+					t.Fatalf("identity.inbound should go to the managing plugin only: %v", m)
 				}
 				inbound = m["event"].(map[string]any)
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("代管插件没有收到 identity.inbound")
+			t.Fatal("the managing plugin did not receive identity.inbound")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	question, _ := inbound["question"].(map[string]any)
 	if inbound["identityId"] != boss.ID.String() || inbound["channelId"] != "lark" || inbound["messageId"] != q.ID.String() || question["id"] != q.ID.String() || len(question["options"].([]any)) != 2 {
-		t.Fatalf("identity.inbound：%v", inbound)
+		t.Fatalf("identity.inbound: %v", inbound)
 	}
 
 	bridge := []string{"Authorization", "Bearer " + e.pluginTokenFor("bridge")}
 	other := []string{"Authorization", "Bearer " + e.pluginTokenFor("other")}
 	read := decode[apitypes.InboxMessage](t, e.expect(200, "GET", "/external-identities/"+boss.ID.String()+"/inbox/"+q.ID.String(), nil, bridge...))
-	if read.Text != "今晚上线吗？" {
-		t.Fatalf("读代管身份的消息：%+v", read)
+	if read.Text != "Going live tonight?" {
+		t.Fatalf("read a message of the managed identity: %+v", read)
 	}
 	e.expect(200, "GET", "/external-identities/"+boss.ID.String()+"/inbox", nil, bridge...)
 	e.console().expectError(403, "forbidden", "GET", "/external-identities/"+ops.ID.String()+"/inbox", nil, bridge...)
 	e.console().expectError(403, "forbidden", "GET", "/external-identities/"+boss.ID.String()+"/inbox/"+q.ID.String(), nil, other...)
 	reply := "/inbox/messages/" + q.ID.String() + "/reply"
 	e.console().expectError(403, "forbidden", "POST", reply, map[string]any{"optionId": "1", "asIdentityId": boss.ID}, other...)
-	e.console().expectError(403, "forbidden", "POST", reply, map[string]any{"text": "我自己"}, bridge...)
+	e.console().expectError(403, "forbidden", "POST", reply, map[string]any{"text": "as myself"}, bridge...)
 	e.expectError(422, "validation_failed", "POST", reply, map[string]any{"optionId": "1", "asIdentityId": boss.ID})
 
 	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", reply, map[string]any{"optionId": "1", "asIdentityId": boss.ID}, bridge...))
 	if answer.From.Kind != "external" || *answer.From.ID != boss.ID || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
-		t.Fatalf("以身份的名义回答：%+v", answer)
+		t.Fatalf("answer in the identity's name: %+v", answer)
 	}
 	if m, err := e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || m.Question.State != "answered" {
-		t.Fatalf("问题记为已回答：%+v %v", m.Question, err)
+		t.Fatalf("question recorded as answered: %+v %v", m.Question, err)
 	}
 	var actor string
 	var onBehalfOf *uuid.UUID
 	if err := e.st.Pool.QueryRow(ctx, `SELECT actor_kind||'|'||actor_address, on_behalf_of FROM audit_log WHERE operation='replyInboxMessage' AND status=201 ORDER BY at DESC LIMIT 1`).Scan(&actor, &onBehalfOf); err != nil ||
 		actor != "plugin|plugin:bridge" || onBehalfOf == nil || *onBehalfOf != boss.ID {
-		t.Fatalf("审计：%q %v %v", actor, onBehalfOf, err)
+		t.Fatalf("audit: %q %v %v", actor, onBehalfOf, err)
 	}
 
 	e.expect(204, "DELETE", "/plugins/bridge", nil)
 	if x := decode[apitypes.ExternalIdentity](t, e.expect(200, "GET", "/external-identities/"+boss.ID.String(), nil)); x.ManagedBy != nil {
-		t.Fatalf("卸载插件后绑定清空：%+v", x)
+		t.Fatalf("uninstalling the plugin should clear the binding: %+v", x)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestPluginAnswersTaskQuestionAsIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			q := decode[apitypes.InboxMessage](t, e.agentCaller(node.RuntimeID).expect(201, "POST", "/inbox/messages",
-				map[string]any{"to": "@boss", "text": "要不要继续？", "options": []string{"继续", "停下"}, "nodeRunId": node.ID}))
+				map[string]any{"to": "@boss", "text": "Shall we continue?", "options": []string{"Continue", "Stop here"}, "nodeRunId": node.ID}))
 			reply := "/inbox/messages/" + q.ID.String() + "/reply"
 			var answer apitypes.InboxMessage
 			if by == "plugin" {
@@ -151,7 +151,7 @@ func TestPluginAnswersTaskQuestionAsIdentity(t *testing.T) {
 				ids = append(ids, m["id"].(string)+"/"+m["from"].(map[string]any)["kind"].(string))
 			}
 			if want := q.ID.String() + "/agent," + answer.ID.String() + "/external"; strings.Join(ids, ",") != want {
-				t.Fatalf("节点 Inbox 历史：%v，期望 %s", ids, want)
+				t.Fatalf("node Inbox history: %v, want %s", ids, want)
 			}
 			for range 3 {
 				if err := e.api.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -159,15 +159,15 @@ func TestPluginAnswersTaskQuestionAsIdentity(t *testing.T) {
 				}
 			}
 			if m, err := e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || m.Question.State != "answered" || *m.Question.Answer.OptionID != "1" {
-				t.Fatalf("问题：%+v %v", m.Question, err)
+				t.Fatalf("question: %+v %v", m.Question, err)
 			}
 			var turns int
 			if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE runtime_id=$1 AND origin='inbox_reminder'`, node.RuntimeID).Scan(&turns); err != nil || turns != 1 {
-				t.Fatalf("节点应恰好得到一次提醒轮次：%d %v", turns, err)
+				t.Fatalf("the node should get exactly one reminder turn: %d %v", turns, err)
 			}
 			record, err := e.st.GetTask(ctx, d.Task.ID)
 			if err != nil || record.Current().Question == nil || record.Current().Question.Status == "open" {
-				t.Fatalf("任务里的问题：%+v %v", record.Current().Question, err)
+				t.Fatalf("question in the task: %+v %v", record.Current().Question, err)
 			}
 		})
 	}

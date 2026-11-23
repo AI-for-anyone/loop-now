@@ -20,20 +20,20 @@ func TestLoadFromLocalPi(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(c.Providers) < 10 {
-		t.Fatalf("提供方太少：%d", len(c.Providers))
+		t.Fatalf("too few providers: %d", len(c.Providers))
 	}
 	anthropic, ok := c.Provider("anthropic")
 	if !ok || len(anthropic.Models) == 0 {
-		t.Fatal("目录中应有 anthropic 及其模型")
+		t.Fatal("the catalog should have anthropic and its models")
 	}
 	if !slices.Contains(anthropic.APIKeyEnvVars, "ANTHROPIC_API_KEY") {
-		t.Fatalf("anthropic 应附带 ANTHROPIC_API_KEY：%v", anthropic.APIKeyEnvVars)
+		t.Fatalf("anthropic should come with ANTHROPIC_API_KEY: %v", anthropic.APIKeyEnvVars)
 	}
 	if !c.HasModel("anthropic", anthropic.Models[0].ID) || c.HasModel("anthropic", "no-such-model") {
-		t.Fatal("HasModel 结果不对")
+		t.Fatal("unexpected HasModel result")
 	}
 	if c.GeneratedAt == nil {
-		t.Fatal("应带目录生成时间")
+		t.Fatal("should carry the catalog generation time")
 	}
 }
 
@@ -42,7 +42,7 @@ func TestLoadRejectsVersionMismatch(t *testing.T) {
 	options.PiVersion = "9.9.9"
 	_, err := modelcatalog.Load(context.Background(), options)
 	if err == nil || !strings.Contains(err.Error(), "9.9.9") {
-		t.Fatalf("版本不符应报错：%v", err)
+		t.Fatalf("a version mismatch should fail: %v", err)
 	}
 }
 
@@ -54,6 +54,6 @@ func TestLoadDoesNotTouchAgentDir(t *testing.T) {
 	}
 	after, _ := os.Stat(filepath.Join(home, ".pi", "agent"))
 	if before != nil && after != nil && !before.ModTime().Equal(after.ModTime()) {
-		t.Fatal("读取目录不应改动宿主的 Pi 配置目录")
+		t.Fatal("reading the catalog should not change the host Pi config directory")
 	}
 }

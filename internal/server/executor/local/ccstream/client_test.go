@@ -112,35 +112,35 @@ func TestTurnsTextToolsUsageAndInit(t *testing.T) {
 	s := newSink()
 	res, err := c.Prompt(ctx(t), "fake:tool echo hi", s)
 	if err != nil || res.Outcome != runturn.OutcomeCompleted || res.Text != "ran" {
-		t.Fatalf("工具这一轮：%+v %v", res, err)
+		t.Fatalf("tool turn: %+v %v", res, err)
 	}
 	if got := s.String(); got != "ran | start toolu_fake_1 Bash; command toolu_fake_1 bash echo hi; end toolu_fake_1 Bash" {
-		t.Fatalf("sink：%s", got)
+		t.Fatalf("sink: %s", got)
 	}
 	init := c.Init()
 	if init == nil || init.Version != "9.9.9" || init.SessionID != "11111111-2222-3333-4444-555555555555" || init.Model != "claude-haiku-fake" || strings.Join(init.Tools, ",") != "Bash,Read" {
-		t.Fatalf("init：%+v", init)
+		t.Fatalf("init: %+v", init)
 	}
 	s = newSink()
 	if res, err = c.Prompt(ctx(t), "fake:subagent", s); err != nil || res.Text != "main" || strings.Contains(s.String(), "SUBAGENT") {
-		t.Fatalf("子 Agent 的文字不转给 sink：%+v %v %s", res, err, s)
+		t.Fatalf("sub-Agent text should not reach the sink: %+v %v %s", res, err, s)
 	}
 	if res, err = c.Prompt(ctx(t), "fake:usage2", nil); err != nil || res.Outcome != runturn.OutcomeCompleted {
-		t.Fatalf("两个模型：%+v %v", res, err)
+		t.Fatalf("two models: %+v %v", res, err)
 	}
 	if res, err = c.Prompt(ctx(t), "fake:ratelimit", nil); err != nil || res.Text != "limited" {
-		t.Fatalf("额度事件：%+v %v", res, err)
+		t.Fatalf("rate limit event: %+v %v", res, err)
 	}
 	obs.mu.Lock()
 	defer obs.mu.Unlock()
 	if len(obs.usages) != 5 || obs.usages[0].Model != "claude-haiku-fake" || obs.usages[0].Input != 10 || obs.usages[0].Output != 5 || obs.usages[0].CacheRead != 3 || obs.usages[0].CacheWrite != 2 || obs.usages[0].Reasoning != nil {
-		t.Fatalf("用量：%+v", obs.usages)
+		t.Fatalf("usage: %+v", obs.usages)
 	}
 	if two := obs.usages[2:4]; two[0].Model != "claude-haiku-fake" || two[1].Model != "claude-helper-fake" || two[1].Reasoning == nil || *two[1].Reasoning != 7 {
-		t.Fatalf("一轮两个模型各一条：%+v", two)
+		t.Fatalf("one turn should have one entry per model: %+v", two)
 	}
 	if len(obs.limits) != 1 || obs.limits[0]["rateLimitType"] != "five_hour" {
-		t.Fatalf("额度事件：%+v", obs.limits)
+		t.Fatalf("rate limit event: %+v", obs.limits)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestImages(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	img := messageimage.Encode("image/png", []byte{0x89, 'P', 'N', 'G'})
 	if res, err := c.Prompt(ctx(t), "fake:images", nil, img, img); err != nil || res.Text != "images=2" {
-		t.Fatalf("图片：%+v %v", res, err)
+		t.Fatalf("images: %+v %v", res, err)
 	}
 }
 
@@ -159,15 +159,15 @@ func TestFailures(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	res, err := c.Prompt(ctx(t), "fake:error boom", nil)
 	if err != nil || res.Outcome != runturn.OutcomeFailed || res.ErrorCode != executor.ErrRuntimeError || res.ErrorMessage != "boom" {
-		t.Fatalf("错误：%+v %v", res, err)
+		t.Fatalf("error: %+v %v", res, err)
 	}
 	res, err = c.Prompt(ctx(t), "fake:notloggedin", nil)
 	last := c.LastResult()
 	if err != nil || res.ErrorCode != executor.ErrRuntimeError || last.TerminalReason != "api_error" || last.APIErrorStatus != nil || !strings.HasPrefix(last.Result, "Not logged in") {
-		t.Fatalf("未登录：%+v %+v %v", res, last, err)
+		t.Fatalf("not logged in: %+v %+v %v", res, last, err)
 	}
 	if res, err = c.Prompt(ctx(t), "still alive", nil); err != nil || res.Text != "echo: still alive" {
-		t.Fatalf("出错后进程照常：%+v %v", res, err)
+		t.Fatalf("the process should keep working after an error: %+v %v", res, err)
 	}
 }
 
@@ -187,13 +187,13 @@ func TestInterruptByControlMessage(t *testing.T) {
 	}
 	res := <-done
 	if res.Outcome != runturn.OutcomeAborted || !strings.HasPrefix(res.Text, ".") {
-		t.Fatalf("打断：%+v", res)
+		t.Fatalf("interrupt: %+v", res)
 	}
 	if err := c.Abort(ctx(t)); err != nil {
-		t.Fatalf("没有进行中的一轮时打断什么也不做：%v", err)
+		t.Fatalf("interrupting with no turn in progress should do nothing: %v", err)
 	}
 	if res, err := c.Prompt(ctx(t), "after", nil); err != nil || res.Text != "echo: after" {
-		t.Fatalf("打断后的下一轮：%+v %v", res, err)
+		t.Fatalf("next turn after the interrupt: %+v %v", res, err)
 	}
 }
 
@@ -212,15 +212,15 @@ func TestInterruptFallsBackToSignal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res := <-done; res.Outcome != runturn.OutcomeAborted {
-		t.Fatalf("SIGINT 打断：%+v", res)
+		t.Fatalf("SIGINT interrupt: %+v", res)
 	}
 	select {
 	case <-c.Done():
 	case <-time.After(5 * time.Second):
-		t.Fatal("SIGINT 之后进程应退出")
+		t.Fatal("the process should exit after SIGINT")
 	}
 	if _, err := c.Prompt(ctx(t), "x", nil); !errors.Is(err, runturn.ErrExited) {
-		t.Fatalf("退出后再发消息：%v", err)
+		t.Fatalf("message sent after exit: %v", err)
 	}
 }
 
@@ -233,14 +233,14 @@ func TestExitMidTurn(t *testing.T) {
 	}
 	res, err := c.Prompt(ctx(t), "fake:exit", nil)
 	if err != nil || res.Outcome != runturn.OutcomeFailed || res.ErrorCode != executor.ErrRuntimeExited || res.Text != "partial" {
-		t.Fatalf("进程退出：%+v %v", res, err)
+		t.Fatalf("process exit: %+v %v", res, err)
 	}
 	<-c.Done()
 	if c.ExitErr() == nil || !strings.Contains(c.Stderr(), "crashing on purpose") {
-		t.Fatalf("退出码与错误输出：%v %q", c.ExitErr(), c.Stderr())
+		t.Fatalf("exit code and error output: %v %q", c.ExitErr(), c.Stderr())
 	}
 	if _, err := c.Prompt(ctx(t), "x", nil); !errors.Is(err, runturn.ErrExited) {
-		t.Fatalf("退出后再发消息：%v", err)
+		t.Fatalf("message sent after exit: %v", err)
 	}
 }
 
@@ -251,17 +251,17 @@ func TestStartFailures(t *testing.T) {
 	<-c.Done()
 	res, err := c.Prompt(ctx(t), "hi", nil)
 	if err != nil || res.ErrorCode != executor.ErrRuntimeStartFailed || !strings.Contains(c.Stderr(), "unknown option") {
-		t.Fatalf("启动即退出：%+v %v %q", res, err, c.Stderr())
+		t.Fatalf("exit right at startup: %+v %v %q", res, err, c.Stderr())
 	}
 	slow := start(t, ccstream.Options{InitTimeout: 300 * time.Millisecond}, "FAKECLAUDE_NO_INIT=1")
 	res, err = slow.Prompt(ctx(t), "hi", nil)
 	if err != nil || res.ErrorCode != executor.ErrRuntimeStartFailed || !strings.Contains(res.ErrorMessage, "timed out while starting") {
-		t.Fatalf("启动超时：%+v %v", res, err)
+		t.Fatalf("startup timeout: %+v %v", res, err)
 	}
 	select {
 	case <-slow.Done():
 	case <-time.After(5 * time.Second):
-		t.Fatal("启动超时后进程应被结束")
+		t.Fatal("the process should be ended after the startup timeout")
 	}
 }
 
@@ -281,23 +281,23 @@ func TestPromptAfterSignalWaitsForExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res := <-done; res.Outcome != runturn.OutcomeAborted {
-		t.Fatalf("打断：%+v", res)
+		t.Fatalf("interrupt: %+v", res)
 	}
 	if !c.Exiting() {
-		t.Fatal("发过 SIGINT 后应标记为正在退出")
+		t.Fatal("should be marked as exiting after SIGINT was sent")
 	}
 	begin := time.Now()
 	res, err := c.Prompt(ctx(t), "right after", nil)
 	if !errors.Is(err, runturn.ErrExited) || res.Text != "" {
-		t.Fatalf("紧跟的下一条不应写进正在退出的进程：%+v %v", res, err)
+		t.Fatalf("the next message right after should not be written to the exiting process: %+v %v", res, err)
 	}
 	if time.Since(begin) > 4*time.Second {
-		t.Fatalf("应等到进程退出就返回，用了 %v", time.Since(begin))
+		t.Fatalf("should return as soon as the process exits, took %v", time.Since(begin))
 	}
 	select {
 	case <-c.Done():
 	default:
-		t.Fatal("返回时进程应已退出")
+		t.Fatal("the process should have exited on return")
 	}
 }
 
@@ -308,10 +308,10 @@ func TestToolUseOnlyInAssistantMessage(t *testing.T) {
 	s := newSink()
 	res, err := c.Prompt(ctx(t), "fake:tool2 ls -la", s)
 	if err != nil || res.Text != "ran2" {
-		t.Fatalf("结果：%+v %v", res, err)
+		t.Fatalf("result: %+v %v", res, err)
 	}
 	if got := s.String(); got != "ran2 | start toolu_fake_2 Bash; command toolu_fake_2 bash ls -la; end-error toolu_fake_2 Bash" {
-		t.Fatalf("sink：%s", got)
+		t.Fatalf("sink: %s", got)
 	}
 }
 
@@ -324,9 +324,9 @@ func TestOverlongLineEndsTurn(t *testing.T) {
 	begin := time.Now()
 	res, err := c.Prompt(ctx(t), "fake:bigline", nil)
 	if err != nil || res.ErrorCode != executor.ErrRuntimeExited {
-		t.Fatalf("超长行：%+v %v", res, err)
+		t.Fatalf("overlong line: %+v %v", res, err)
 	}
 	if time.Since(begin) > 10*time.Second {
-		t.Fatalf("不应等到外层超时：%v", time.Since(begin))
+		t.Fatalf("should not wait for the outer timeout: %v", time.Since(begin))
 	}
 }

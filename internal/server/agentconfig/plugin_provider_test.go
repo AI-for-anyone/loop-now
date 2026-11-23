@@ -34,8 +34,8 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.svc.CreateAgent(ctx, e.scope, "新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
-		t.Fatalf("新建 Agent 不能直接选插件提供方：%v", err)
+	if _, err := e.svc.CreateAgent(ctx, e.scope, "New agent", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
+		t.Fatalf("a new Agent should not pick a plugin provider directly: %v", err)
 	}
 	a := e.agent(t)
 	set := func() error {
@@ -44,39 +44,39 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		return err
 	}
 	if err := set(); !isField(err, "model.provider", "Enable the plugin in the project first") {
-		t.Fatalf("项目未启用：%v", err)
+		t.Fatalf("not enabled in the project: %v", err)
 	}
 	if _, reason, _ := e.svc.PluginProviderUnusable(ctx, a.ID, "fake-oauth"); reason != store.PluginUnusableNotEnabled {
-		t.Fatalf("原因：%q", reason)
+		t.Fatalf("reason: %q", reason)
 	}
 	if _, _, err := e.st.SaveProjectPlugin(ctx, e.scope.ProjectID, "grokish", true, store.PluginConfigUpdate{Apply: func(c store.PluginConfigRow) (store.PluginConfigRow, error) { return c, nil }}); err != nil {
 		t.Fatal(err)
 	}
 	if err := set(); !isField(err, "model.provider", "Grant the plugin to this Agent") {
-		t.Fatalf("未授权：%v", err)
+		t.Fatalf("not granted: %v", err)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, a.ID, "grokish", true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := set(); err != nil {
-		t.Fatalf("已授权后可以选：%v", err)
+		t.Fatalf("should be selectable once granted: %v", err)
 	}
 	if _, reason, _ := e.svc.PluginProviderUnusable(ctx, a.ID, "fake-oauth"); reason != "" {
-		t.Fatalf("已授权：%q", reason)
+		t.Fatalf("granted: %q", reason)
 	}
 	if plugin, reason, _ := e.svc.PluginProviderUnusable(ctx, a.ID, "anthropic"); plugin != "" || reason != "" {
-		t.Fatal("内置提供方不受影响")
+		t.Fatal("built-in providers should not be affected")
 	}
 
-	if _, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
-		t.Fatalf("新建平台 Agent 也不能直接选插件提供方：%v", err)
+	if _, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "New platform agent", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
+		t.Fatalf("a new platform Agent should not pick a plugin provider directly either: %v", err)
 	}
-	platform, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台助手", "anthropic", "claude-x", "")
+	platform, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "Platform assistant", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, reason, _ := e.svc.PluginProviderUnusable(ctx, platform.ID, "fake-oauth"); reason != store.PluginUnusableNotGranted {
-		t.Fatalf("平台 Agent 没授权：%q", reason)
+		t.Fatalf("platform Agent not granted: %q", reason)
 	}
 	setPlatform := func() error {
 		p, m := "fake-oauth", "fake-1"
@@ -84,16 +84,16 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		return err
 	}
 	if err := setPlatform(); !isField(err, "model.provider", "Grant the plugin to this Agent") {
-		t.Fatalf("平台 Agent 没授权不能选：%v", err)
+		t.Fatalf("a platform Agent without a grant should not be able to select: %v", err)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, platform.ID, "grokish", true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, reason, _ := e.svc.PluginProviderUnusable(ctx, platform.ID, "fake-oauth"); reason != "" {
-		t.Fatalf("平台 Agent 授权后：%q", reason)
+		t.Fatalf("platform Agent after the grant: %q", reason)
 	}
 	if err := setPlatform(); err != nil {
-		t.Fatalf("平台 Agent 授权后可以选（不看项目启用）：%v", err)
+		t.Fatalf("a granted platform Agent should be able to select (project enablement ignored): %v", err)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestPlatformAgentPluginProviderSnapshot(t *testing.T) {
 	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0", Manifest: json.RawMessage(`{}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: json.RawMessage(`{"providers":[],"errors":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
-	a, err := e.st.CreateAgent(ctx, store.PlatformScope(), "平台助手", "fake-oauth", "fake-1", "")
+	a, err := e.st.CreateAgent(ctx, store.PlatformScope(), "Platform assistant", "fake-oauth", "fake-1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestPlatformAgentPluginProviderSnapshot(t *testing.T) {
 	plain, _ := credential.Encode()
 	version := uuid.Must(uuid.NewV7())
 	if _, v, err := e.st.CompletePluginModelAuthOperation(ctx, op.ID, version, plain); err != nil || v == nil {
-		t.Fatalf("提交登录：%v %v", v, err)
+		t.Fatalf("commit login: %v %v", v, err)
 	}
 
 	snap, err := e.svc.ExecutionSnapshot(ctx, a.ID)
@@ -164,19 +164,19 @@ func TestPlatformAgentPluginProviderSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if snap.ContextProjectID != nil || snap.ModelBinding == nil || snap.ModelBinding.VersionID != version || snap.ModelCredential.Kind() != modelcredential.PluginState {
-		t.Fatalf("模型绑定是 Agent 自己的版本：%+v", snap.ModelBinding)
+		t.Fatalf("the model binding should be the Agent's own version: %+v", snap.ModelBinding)
 	}
 	if snap.ProviderState == nil || snap.ProviderState.VersionID != version || len(calls) != 1 || calls[0] != (call{"grokish", "fake-oauth", version}) {
-		t.Fatalf("状态目录：%+v %v", snap.ProviderState, calls)
+		t.Fatalf("state directory: %+v %v", snap.ProviderState, calls)
 	}
 	if !slices.Contains(snap.Plugins.IDs, "grokish") {
-		t.Fatalf("授权的插件挂载：%+v", snap.Plugins)
+		t.Fatalf("granted plugin mounts: %+v", snap.Plugins)
 	}
 	// After the credential is cleared there is no model credential, so no state directory is looked up.
 	if err := auth.Clear(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if snap, err = e.svc.ExecutionSnapshot(ctx, a.ID); err == nil && snap.ProviderState != nil {
-		t.Fatalf("清除后不再取状态目录：%+v", snap.ProviderState)
+		t.Fatalf("no state directory should be looked up after clearing: %+v", snap.ProviderState)
 	}
 }

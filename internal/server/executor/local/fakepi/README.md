@@ -1,62 +1,64 @@
 # fakepi
 
-测试替身：模拟平台用到的 Pi CLI/RPC 子集（按 Pi 1.1.0 的源码写成），不调用任何模型。
+[中文](README.zh-CN.md)
+
+A test double that imitates the part of the Pi CLI/RPC the platform uses (written from the Pi 1.1.0 source). It never calls a model.
 
 ```bash
 go build -o /tmp/fakepi ./internal/server/executor/local/fakepi
-/tmp/fakepi --version                      # 输出 $FAKEPI_VERSION，默认 1.4.0（平台钉的版本）
-/tmp/fakepi --mode rpc --session-dir /tmp/s  # RPC 模式，stdin/stdout 为 JSONL
+/tmp/fakepi --version                      # prints $FAKEPI_VERSION, 1.4.0 by default (the version the platform pins)
+/tmp/fakepi --mode rpc --session-dir /tmp/s  # RPC mode, JSONL on stdin/stdout
 ```
 
-## 参数
+## Arguments
 
-接受 `--mode rpc`、`--no-approve`、`--offline`、`--no-skills`、`--skill <p>`（可重复）、`-e <p>`（可重复）、
-`--append-system-prompt <p>`、`--provider <p>`、`--model <m>`、`--session-dir <d>`、
-`--session <file>`、`--no-session`；其他参数忽略。
+It accepts `--mode rpc`, `--no-approve`, `--offline`, `--no-skills`, `--skill <p>` (repeatable), `-e <p>` (repeatable),
+`--append-system-prompt <p>`, `--provider <p>`, `--model <m>`, `--session-dir <d>`,
+`--session <file>` and `--no-session`; other arguments are ignored.
 
-- `FAKEPI_DUMP=<path>`：启动时把 `{"args":[...],"env":{...},"cwd":"..."}` 写入该文件（args 不含程序名）。
-- `FAKEPI_NEUTRAL=1`：中性回复（给英文截图用）。默认回复改为 `Got it: <消息>`：去掉平台加的运行 ID 一行（`Run ID for this turn: …`，旧会话里的 `本轮运行ID：…` 也认）与指令词，
-  保留换行，什么都不剩时为 `Got it.`；`!text` 照旧优先。扩展对话标题、压缩摘要、可重试错误与崩溃时的 stderr 也改用英文。
-  不设时行为不变。服务端只把白名单里的变量传给 Pi，所以经服务端启动时还要把它加进
-  `LOOP_NOW_EXEC_ENV_PASSTHROUGH`（例如 `LANG,LC_ALL,TZ,FAKEPI_NEUTRAL`）。
-- `--session <file>`：文件不存在时向 stderr 输出错误并以 1 退出（注意：真实 Pi 1.1.0 对路径形式的
-  `--session` 会在该路径新建会话，不会报错）。
-- 未指定 `--session` 时，会话文件为 `<session-dir>/<时间戳>_<id>.jsonl`，收到第一条 prompt 时才创建；
-  首行为会话头，之后每条用户、助手、工具结果消息追加一行。
+- `FAKEPI_DUMP=<path>`: at startup, writes `{"args":[...],"env":{...},"cwd":"..."}` to that file (args without the program name).
+- `FAKEPI_NEUTRAL=1`: neutral replies (for screenshots). The default reply becomes `Got it: <message>`: the run ID line the platform adds (`Run ID for this turn: …`, and `本轮运行ID：…` in old sessions) and the directive words are removed,
+  newlines are kept, and when nothing is left the reply is `Got it.`; `!text` still wins. The extension dialog title, the compaction summary, the retryable error and the stderr line on a crash are English in both modes.
+  Without it the behaviour is unchanged. The server passes only allowlisted variables to Pi, so when Pi is started through the server, also add it to
+  `LOOP_NOW_EXEC_ENV_PASSTHROUGH` (for example `LANG,LC_ALL,TZ,FAKEPI_NEUTRAL`).
+- `--session <file>`: when the file does not exist, writes an error to stderr and exits with 1 (note: the real Pi 1.1.0 creates a new session at that path
+  for a path-style `--session` and does not fail).
+- Without `--session`, the session file is `<session-dir>/<timestamp>_<id>.jsonl`, created when the first prompt arrives;
+  the first line is the session header, then each user, assistant and tool result message is appended as a line.
 
-## 命令
+## Commands
 
-`get_state`、`get_commands`、`prompt`、`abort`、`clear_queue`、`get_session_stats`；其他命令返回 `success:false`。
-`get_commands` 按启动参数列出命令：每个 `-e <文件>`（`builtin:` 除外）一条扩展命令，名字为文件名去掉扩展名；每个 `--skill <目录>` 一条 `skill:<目录名>`。
-与 Pi 一样，首字符为 `/` 且命令名是其中某条扩展命令的 prompt 由扩展直接处理：响应 `disposition: "handled"`，没有本轮事件。
-`get_session_stats` 按 Pi 1.1.0 的 `SessionStats` 结构返回本进程报告过的全部用量之和（含工具结果、压缩与缓存预热），`cost` 恒为 0。
-运行中再收到 `prompt` 返回 `success:false`（与 Pi 相同）。`abort` 在运行中先发出
-`message_end`（stopReason `aborted`，含已输出文本）与 `agent_settled{aborted:true}`，再返回响应；
-空闲时立即成功。stdin 结束即以 0 退出。
+`get_state`, `get_commands`, `prompt`, `abort`, `clear_queue` and `get_session_stats`; other commands return `success:false`.
+`get_commands` lists commands from the startup arguments: one extension command per `-e <file>` (except `builtin:`), named after the file without its extension, and one `skill:<directory name>` per `--skill <directory>`.
+As in Pi, a prompt whose first character is `/` and whose command name is one of the extension commands is handled by the extension directly: the response has `disposition: "handled"` and the turn has no events.
+`get_session_stats` returns, in Pi 1.1.0's `SessionStats` shape, the sum of all usage this process has reported (including tool results, compaction and cache warming); `cost` is always 0.
+A `prompt` that arrives while a turn is running returns `success:false` (as in Pi). During a turn, `abort` first emits
+`message_end` (stopReason `aborted`, with the text output so far) and `agent_settled{aborted:true}`, then returns its response;
+when idle it succeeds at once. When stdin ends, it exits with 0.
 
-## prompt 指令
+## Prompt directives
 
-prompt 文本中以 `!` 开头、以空白分隔的词。默认回复 `echo: <消息>`（有指令时去掉指令词），分 3 段流式输出。
+Words in the prompt text that start with `!`, separated by whitespace. The default reply is `echo: <message>` (without the directive words when there are any), streamed in 3 parts.
 
-| 指令 | 行为 |
+| Directive | Behaviour |
 |---|---|
-| `!text=<s>` | 回复文本，`_` 代表空格 |
-| `!tool=<name>` | 回复前先执行一次工具调用（可重复） |
-| `!toolfail=<name>` | 同上，但 `isError: true` |
-| `!sleep=<duration>` | 文本分段之间休眠（Go duration），可被 abort 打断 |
-| `!ask=<method>` | 回复前发一个 `extension_ui_request`（confirm、select、input；select 的选项为 staging、production），等到 `extension_ui_response` 后回复 `answer confirmed=…`、`answer value=…` 或 `answer cancelled`；可被 abort 打断 |
-| `!error=<msg>` | 最终助手消息 stopReason `error`，errorMessage 为 msg（`_` 代表空格）；未给 `!text` 时不输出文本 |
-| `!retry` | 先输出一条 stopReason `error` 的助手消息，再输出成功的回复（模拟自动重试） |
-| `!crash` | 回复的第一段文本发出后以 3 退出 |
-| `!noabort` | 忽略 abort：永不响应，继续休眠 |
-| `!rejectprompt` | prompt 响应 `success:false`，error 为 `rejected` |
-| `!handled` | prompt 响应 `data: {"disposition":"handled"}`，不发出任何事件 |
-| `!nosession` | 本轮不写会话文件（模拟首轮在落盘前失败） |
-| `!usage=I,O[,CR[,CW[,R]]]` | 本轮每条已结束的助手消息带这份用量（输入、输出、缓存读、缓存写、推理）；默认全为 0 |
-| `!respmodel=<name>` | 助手消息带 `responseModel` |
-| `!toolusage=I,O[,CR[,CW]]` | 工具结果消息带这份用量 |
-| `!compact=I,O[,CR[,CW]]` | 最终回复前输出 `compaction_start`/`compaction_end`，`result.usage` 为这份用量 |
-| `!warm=I,O[,CR[,CW]]` | 最终回复前输出一条缓存预热的用量条目（`entry_appended`，`kind` 为 `cache_warm`） |
-| `!warmafter=I,O[,CR[,CW]]` | `agent_settled` 约 50ms 后输出一条缓存预热的用量条目（两轮之间） |
+| `!text=<s>` | Reply text; `_` stands for a space |
+| `!tool=<name>` | Run one tool call before replying (repeatable) |
+| `!toolfail=<name>` | Same, but with `isError: true` |
+| `!sleep=<duration>` | Sleep between text parts (a Go duration); abort interrupts it |
+| `!ask=<method>` | Before replying, send an `extension_ui_request` (confirm, select or input; select's options are staging and production), wait for the `extension_ui_response`, then reply `answer confirmed=…`, `answer value=…` or `answer cancelled`; abort interrupts it |
+| `!error=<msg>` | The final assistant message has stopReason `error` and errorMessage msg (`_` stands for a space); without `!text` no text is output |
+| `!retry` | First output an assistant message with stopReason `error`, then the successful reply (imitates an automatic retry) |
+| `!crash` | Exit with 3 after the first text part of the reply |
+| `!noabort` | Ignore abort: never respond and keep sleeping |
+| `!rejectprompt` | The prompt response is `success:false` with error `rejected` |
+| `!handled` | The prompt response is `data: {"disposition":"handled"}` and no events are emitted |
+| `!nosession` | Do not write the session file this turn (imitates a first turn that fails before it is saved) |
+| `!usage=I,O[,CR[,CW[,R]]]` | Every finished assistant message this turn carries this usage (input, output, cache read, cache write, reasoning); all 0 by default |
+| `!respmodel=<name>` | Assistant messages carry `responseModel` |
+| `!toolusage=I,O[,CR[,CW]]` | Tool result messages carry this usage |
+| `!compact=I,O[,CR[,CW]]` | Before the final reply, output `compaction_start`/`compaction_end` with this usage in `result.usage` |
+| `!warm=I,O[,CR[,CW]]` | Before the final reply, output a cache-warming usage entry (`entry_appended` with `kind` `cache_warm`) |
+| `!warmafter=I,O[,CR[,CW]]` | About 50ms after `agent_settled`, output a cache-warming usage entry (between turns) |
 
-助手消息结束时都带 `durationMs`；`!crash` 退出前向 stderr 写一行 `fakepi: 模拟崩溃`。
+Every assistant message ends with `durationMs`; before exiting, `!crash` writes the line `fakepi: simulated crash` to stderr.

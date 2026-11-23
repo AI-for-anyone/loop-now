@@ -33,7 +33,7 @@ func (e *env) lastReply(a string) apitypes.Message {
 			return page.Messages[i]
 		}
 	}
-	e.t.Fatal("没有回复")
+	e.t.Fatal("no reply")
 	return apitypes.Message{}
 }
 
@@ -42,7 +42,7 @@ func TestRunTimelineContract(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	agent, a := e.newAgent("timeline")
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "Hello"})
 	waitIdle(t, e, a)
 	reply := e.lastReply(a)
 	runID := reply.Run.ID
@@ -54,7 +54,7 @@ func TestRunTimelineContract(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	add(store.EventCLIInstall, map[string]any{"cli": "gh", "version": "2.100.0", "result": "failed", "durationMs": 12, "error": "摘要不符"})
+	add(store.EventCLIInstall, map[string]any{"cli": "gh", "version": "2.100.0", "result": "failed", "durationMs": 12, "error": "digest mismatch"})
 	add(store.EventWorkspaceSync, map[string]any{"result": "succeeded", "durationMs": 30, "sources": []map[string]any{
 		{"path": "app", "kind": "git", "outcome": "cloned"}, {"path": "docs", "kind": "files", "outcome": "files_synced", "filesWritten": 2, "filesDeleted": 1}}})
 	add(store.EventPiStarted, map[string]any{"pid": 123, "configVersion": 1, "startupMs": 800, "reason": "no_process"})
@@ -98,26 +98,26 @@ func TestRunTimelineContract(t *testing.T) {
 	for _, want := range []string{"dispatched", "phase", "running", "tool", "ended", "cli_install", "workspace_sync", "pi_started", "pi_reused",
 		"model_retry_started", "model_retry_ended", "compaction", "session_missing", "pi_stopped", "pi_exited", "abort_requested", "model_call"} {
 		if seen[want] == 0 {
-			t.Errorf("时间线缺少条目 %s：%v", want, order)
+			t.Errorf("timeline is missing entry %s: %v", want, order)
 		}
 	}
 	if seen["model_call"] != 4 || seen["tool"] != 1 {
-		t.Errorf("用量与工具条目数不对：%v", seen)
+		t.Errorf("wrong number of usage and tool entries: %v", seen)
 	}
 	if order[0] != "dispatched" {
-		t.Errorf("第一个条目应是派发：%v", order)
+		t.Errorf("the first entry should be dispatched: %v", order)
 	}
 	if tl.Usage.Calls != 4 || tl.Usage.Total != 100+20+1000+3+1+500+50+2000 {
-		t.Errorf("用量合计不对：%+v", tl.Usage)
+		t.Errorf("wrong usage totals: %+v", tl.Usage)
 	}
 	if strings.Contains(string(e.expect(200, "GET", a+"/runs/"+runID.String()+"/timeline", nil)), "cost") {
-		t.Error("时间线不应含费用")
+		t.Error("the timeline should not contain costs")
 	}
 
 	// The run info of a reply carries timestamps, usage totals and the model used.
 	run := e.lastReply(a).Run
 	if run.RunningAt == nil || run.StartedAt == nil || run.Usage.Calls != 4 || run.Model == nil || run.Model.ModelID != "claude-x" {
-		t.Errorf("执行信息不对：%+v", run)
+		t.Errorf("wrong run info: %+v", run)
 	}
 
 	// Reply not belonging to the Agent, Agent missing: 404.
@@ -131,7 +131,7 @@ func TestRunTimelineLegacy(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	agent, a := e.newAgent("legacy")
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "Hello"})
 	waitIdle(t, e, a)
 	runID := e.lastReply(a).Run.ID
 	if _, err := e.st.Pool.Exec(ctx, `DELETE FROM lifecycle_events WHERE run_id = $1`, runID); err != nil {
@@ -147,7 +147,7 @@ func TestRunTimelineLegacy(t *testing.T) {
 		got = append(got, en.Type)
 	}
 	if strings.Join(got, ",") != "dispatched,tool,running,ended" && strings.Join(got, ",") != "dispatched,running,tool,ended" {
-		t.Fatalf("旧执行的合成条目不对：%v", got)
+		t.Fatalf("wrong synthesized entries for an old run: %v", got)
 	}
 	_ = agent
 }
@@ -178,10 +178,10 @@ func TestUsageAndAnomalies(t *testing.T) {
 	since := url.QueryEscape(time.Now().Add(-24 * time.Hour).Format(time.RFC3339Nano))
 	page := decode[apitypes.UsagePage](t, e.expect(200, "GET", "/usage?from="+since, nil))
 	if len(page.Rows) != 3 {
-		t.Fatalf("应有三行：%+v", page.Rows)
+		t.Fatalf("want three rows: %+v", page.Rows)
 	}
 	if r := page.Rows[0]; r.AgentID != agentA.ID || *r.Provider != "anthropic" || r.Calls != 2 || r.Total != 30 {
-		t.Errorf("第一行应是 A 的 anthropic 用量：%+v", r)
+		t.Errorf("the first row should be A's anthropic usage: %+v", r)
 	}
 	var unknown int
 	for _, r := range page.Rows {
@@ -190,7 +190,7 @@ func TestUsageAndAnomalies(t *testing.T) {
 		}
 	}
 	if unknown != 1 {
-		t.Errorf("工具用量应记为未知模型：%+v", page.Rows)
+		t.Errorf("tool usage should be counted under an unknown model: %+v", page.Rows)
 	}
 	all := decode[apitypes.UsagePage](t, e.expect(200, "GET", "/usage", nil))
 	var totalB int64
@@ -200,10 +200,10 @@ func TestUsageAndAnomalies(t *testing.T) {
 		}
 	}
 	if totalB != 1004 {
-		t.Errorf("不限时间段时应包含更早的用量：%d", totalB)
+		t.Errorf("without a time range, older usage should be included: %d", totalB)
 	}
 	if strings.Contains(string(e.expect(200, "GET", "/usage", nil)), "cost") {
-		t.Error("用量统计不应含费用")
+		t.Error("usage stats should not contain costs")
 	}
 	from, to := url.QueryEscape(time.Now().Format(time.RFC3339)), url.QueryEscape(time.Now().Add(-time.Hour).Format(time.RFC3339))
 	e.expect(422, "GET", "/usage?from="+from+"&to="+to, nil, "X-Contract-Invalid-Request", "1")
@@ -219,7 +219,7 @@ func TestUsageAndAnomalies(t *testing.T) {
 		}
 	}
 	if !deleted {
-		t.Errorf("已删除 Agent 的用量应标明已删除：%+v", page.Rows)
+		t.Errorf("usage of a deleted Agent should be marked deleted: %+v", page.Rows)
 	}
 
 	// Anomaly list: A's failure is listed, B is deleted and not listed.
@@ -229,11 +229,11 @@ func TestUsageAndAnomalies(t *testing.T) {
 	}
 	list := decode[apitypes.AnomalyPage](t, e.expect(200, "GET", "/anomalies?from="+since+"&limit=2", nil))
 	if list.Total != 4 || len(list.Items) != 2 || list.NextCursor == nil {
-		t.Fatalf("第一页不对：%+v", list)
+		t.Fatalf("wrong first page: %+v", list)
 	}
 	it := list.Items[0]
 	if it.Kind != "run_failed" || it.AgentID != agentA.ID || it.AgentName != "A" || it.ErrorCode == nil || *it.ErrorCode != "workspace_sync_failed" {
-		t.Errorf("异常条目不对：%+v", it)
+		t.Errorf("wrong anomaly item: %+v", it)
 	}
 	seen := map[uuid.UUID]bool{}
 	for _, x := range list.Items {
@@ -241,17 +241,17 @@ func TestUsageAndAnomalies(t *testing.T) {
 	}
 	more := decode[apitypes.AnomalyPage](t, e.expect(200, "GET", "/anomalies?from="+since+"&limit=2&cursor="+url.QueryEscape(*list.NextCursor), nil))
 	if len(more.Items) != 2 || more.NextCursor != nil || more.Total != 4 {
-		t.Fatalf("第二页不对：%+v", more)
+		t.Fatalf("wrong second page: %+v", more)
 	}
 	for _, x := range more.Items {
 		if seen[x.RunID] {
-			t.Fatalf("翻页出现重复：%v", x.RunID)
+			t.Fatalf("duplicate across pages: %v", x.RunID)
 		}
 	}
 	e.expect(422, "GET", "/anomalies?cursor=bad", nil)
 	future := url.QueryEscape(time.Now().Add(time.Hour).Format(time.RFC3339))
 	if l := decode[apitypes.AnomalyPage](t, e.expect(200, "GET", "/anomalies?from="+future, nil)); l.Total != 0 || len(l.Items) != 0 {
-		t.Errorf("开始时间之后没有异常：%+v", l)
+		t.Errorf("no anomalies after the start time: %+v", l)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestOverviewEvents(t *testing.T) {
 	e.v.ValidateStreamSSE(contracttest.OverviewEventsPath, snap.event, []byte(snap.data))
 	s := decode[apitypes.SseOverviewSnapshot](t, []byte(snap.data))
 	if snap.event != "snapshot" || len(s.Agents) != 1 || s.Agents[0].Name != "A" || s.Agents[0].LastRun != nil {
-		t.Fatalf("快照不对：%+v", snap)
+		t.Fatalf("wrong snapshot: %+v", snap)
 	}
 
 	// Creating an Agent pushes its status (pushes are asynchronous, so the status from A's creation may arrive after
@@ -276,7 +276,7 @@ func TestOverviewEvents(t *testing.T) {
 		ev := next(t, ch)
 		e.v.ValidateStreamSSE(contracttest.OverviewEventsPath, ev.event, []byte(ev.data))
 		if ev.event != "agent.status" {
-			t.Fatalf("不应出现其他事件：%+v", ev)
+			t.Fatalf("no other events should appear: %+v", ev)
 		}
 		if decode[apitypes.SseAgentStatus](t, []byte(ev.data)).Agent.AgentID == agentB.ID {
 			resumeFrom = ev.id
@@ -286,12 +286,12 @@ func TestOverviewEvents(t *testing.T) {
 
 	// Sending a message: the final push is idle and carries the result of one reply (pushes merge intermediate changes,
 	// so not every intermediate state is guaranteed to appear); text deltas are not pushed.
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "Hello"})
 	for idle := false; !idle; {
 		ev := next(t, ch)
 		e.v.ValidateStreamSSE(contracttest.OverviewEventsPath, ev.event, []byte(ev.data))
 		if ev.event != "agent.status" {
-			t.Fatalf("不应出现其他事件：%+v", ev)
+			t.Fatalf("no other events should appear: %+v", ev)
 		}
 		st := decode[apitypes.SseAgentStatus](t, []byte(ev.data)).Agent
 		idle = !st.Status.Busy && st.LastRun != nil && st.LastRun.Status == "completed"
@@ -304,7 +304,7 @@ func TestOverviewEvents(t *testing.T) {
 		e.v.ValidateStreamSSE(contracttest.OverviewEventsPath, ev.event, []byte(ev.data))
 		if ev.event == "agent.removed" {
 			if decode[apitypes.SseAgentRemoved](t, []byte(ev.data)).AgentID != agentB.ID {
-				t.Fatalf("移除事件不对：%+v", ev)
+				t.Fatalf("wrong removal event: %+v", ev)
 			}
 			break
 		}
@@ -315,13 +315,13 @@ func TestOverviewEvents(t *testing.T) {
 	ch2, stop2 := readSSE(t, e, "/overview", resumeFrom)
 	defer stop2()
 	if first := next(t, ch2); first.event == "snapshot" {
-		t.Fatalf("续传不应推送快照：%+v", first)
+		t.Fatalf("resuming should not push a snapshot: %+v", first)
 	}
 	// Outside the retained range: a snapshot is pushed.
 	ch3, stop3 := readSSE(t, e, "/overview", "1-0")
 	defer stop3()
 	if ev := next(t, ch3); ev.event != "snapshot" {
-		t.Fatalf("超出保留范围应推送快照：%+v", ev)
+		t.Fatalf("outside the retained range a snapshot should be pushed: %+v", ev)
 	}
 }
 
@@ -334,17 +334,17 @@ func TestMessagesPaging(t *testing.T) {
 	}
 	all := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=200", nil))
 	if len(all.Messages) != 30 || all.HasMore || all.HasMoreAfter || all.TurnsBefore != 0 || all.TurnsTotal != 15 {
-		t.Fatalf("全部消息不对：%d %v %v %d %d", len(all.Messages), all.HasMore, all.HasMoreAfter, all.TurnsBefore, all.TurnsTotal)
+		t.Fatalf("wrong full message list: %d %v %v %d %d", len(all.Messages), all.HasMore, all.HasMoreAfter, all.TurnsBefore, all.TurnsTotal)
 	}
 	// Turn counts: each page's turnsBefore is the number of turns before the turn of its first message (here every turn
 	// is one question and one answer, run in order).
 	if raw := e.expect(200, "GET", a+"/messages?limit=4", nil); !strings.Contains(string(raw), `"turnsBefore":13`) || !strings.Contains(string(raw), `"turnsTotal":15`) {
-		t.Fatalf("最新一页的轮次计数不对：%s", raw)
+		t.Fatalf("wrong turn counts on the latest page: %s", raw)
 	}
 	target := all.Messages[6] // the 4th user message
 	around := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=6&aroundRun="+target.Run.ID.String(), nil))
 	if len(around.Messages) != 6 || !around.HasMore || !around.HasMoreAfter || around.Messages[2].ID != target.ID || around.TurnsBefore != 2 || around.TurnsTotal != 15 {
-		t.Fatalf("定位页不对：%d %v %v %d %d", len(around.Messages), around.HasMore, around.HasMoreAfter, around.TurnsBefore, around.TurnsTotal)
+		t.Fatalf("wrong located page: %d %v %v %d %d", len(around.Messages), around.HasMore, around.HasMoreAfter, around.TurnsBefore, around.TurnsTotal)
 	}
 	// Page forward from the located page to the newest without gaps or duplicates.
 	got := append([]apitypes.Message(nil), around.Messages...)
@@ -353,27 +353,27 @@ func TestMessagesPaging(t *testing.T) {
 		last := page.Messages[len(page.Messages)-1].ID
 		page = decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=7&after="+last.String(), nil))
 		if !page.HasMore {
-			t.Fatal("向后翻页时之前一定还有消息")
+			t.Fatal("when paging forward there must be earlier messages")
 		}
 		if first := slices.IndexFunc(all.Messages, func(m apitypes.Message) bool { return m.ID == page.Messages[0].ID }); page.TurnsBefore != int64(first/2) {
-			t.Fatalf("向后翻页 turnsBefore=%d，第一条是第 %d 条消息", page.TurnsBefore, first)
+			t.Fatalf("paging forward: turnsBefore=%d, the first item is message %d", page.TurnsBefore, first)
 		}
 		got = append(got, page.Messages...)
 	}
 	want := all.Messages[4:]
 	if len(got) != len(want) {
-		t.Fatalf("向后翻页条数不对：%d，期望 %d", len(got), len(want))
+		t.Fatalf("wrong count when paging forward: %d, want %d", len(got), len(want))
 	}
 	for i := range want {
 		if got[i].ID != want[i].ID {
-			t.Fatalf("第 %d 条不对", i)
+			t.Fatalf("item %d is wrong", i)
 		}
 	}
 	// Locate the last reply: nothing more after it.
 	lastRun := all.Messages[29].Run.ID
 	tail := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=6&aroundRun="+lastRun.String(), nil))
 	if tail.HasMoreAfter || len(tail.Messages) != 6 || tail.Messages[5].ID != all.Messages[29].ID {
-		t.Fatalf("定位到最新时不对：%+v", tail.HasMoreAfter)
+		t.Fatalf("wrong page when locating the latest: %+v", tail.HasMoreAfter)
 	}
 	// Mutually exclusive parameters; a run that does not belong to the Agent.
 	e.expect(422, "GET", a+"/messages?before="+target.ID.String()+"&after="+target.ID.String(), nil)
@@ -391,10 +391,10 @@ func TestRequestID(t *testing.T) {
 		t.Helper()
 		id := h.Get("Loop-Now-Request-Id")
 		if _, err := uuid.Parse(id); err != nil || ids[id] {
-			t.Fatalf("请求编号缺失或重复：%q", id)
+			t.Fatalf("request ID missing or duplicated: %q", id)
 		}
 		if v := h.Get("Loop-Now-Version"); v != buildinfo.Version() {
-			t.Fatalf("版本头应为 %q：%q", buildinfo.Version(), v)
+			t.Fatalf("version header should be %q: %q", buildinfo.Version(), v)
 		}
 		ids[id] = true
 		return id
@@ -417,7 +417,7 @@ func TestRequestID(t *testing.T) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 403 {
-		t.Fatalf("非法 Host 应被拒绝：%d", resp.StatusCode)
+		t.Fatalf("an invalid Host should be rejected: %d", resp.StatusCode)
 	}
 	check(resp.Header)
 	pre, _ := http.NewRequest("OPTIONS", e.srv.URL+"/api/v1/platform/agents", nil)
@@ -429,17 +429,17 @@ func TestRequestID(t *testing.T) {
 	}
 	resp.Body.Close()
 	if exp := resp.Header.Get("Access-Control-Expose-Headers"); !strings.Contains(exp, "Loop-Now-Request-Id") || !strings.Contains(exp, "Loop-Now-Version") {
-		t.Fatalf("预检响应应暴露请求编号头与版本头：%v", resp.Header)
+		t.Fatalf("the preflight response should expose the request ID and version headers: %v", resp.Header)
 	}
 
 	agent, a := e.newAgent("req")
-	_, _, h = e.do("POST", a+"/messages", map[string]any{"text": "你好"})
+	_, _, h = e.do("POST", a+"/messages", map[string]any{"text": "Hello"})
 	sent := check(h)
 	waitIdle(t, e, a)
 	runID := e.lastReply(a).Run.ID
 	evs, err := e.st.RunEvents(context.Background(), runID)
 	if err != nil || len(evs) == 0 || evs[0].Type != store.EventRunDispatched || evs[0].Data["requestId"] != sent {
-		t.Fatalf("派发事件应记下请求编号 %s：%+v %v", sent, evs, err)
+		t.Fatalf("the dispatch event should record request ID %s: %+v %v", sent, evs, err)
 	}
 	_ = agent
 }

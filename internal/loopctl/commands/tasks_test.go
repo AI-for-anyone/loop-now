@@ -27,18 +27,18 @@ const actionUUID = "0192f1a2-0000-7000-8000-000000000053"
 const artifactUUID = "0192f1a2-0000-7000-8000-000000000054"
 
 func taskWorkflow() map[string]any {
-	return map[string]any{"startStepId": "work", "steps": []any{map[string]any{"id": "work", "title": "处理", "description": "完成要求", "agentId": agentUUID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}
+	return map[string]any{"startStepId": "work", "steps": []any{map[string]any{"id": "work", "title": "Handle", "description": "Meet the requirements", "agentId": agentUUID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}
 }
 func taskCreateInput() map[string]any {
-	return map[string]any{"actionId": actionUUID, "title": "通用任务", "request": map[string]any{"text": "要求", "precise": json.Number("9007199254740993")}, "workflow": taskWorkflow()}
+	return map[string]any{"actionId": actionUUID, "title": "General task", "request": map[string]any{"text": "Requirements", "precise": json.Number("9007199254740993")}, "workflow": taskWorkflow()}
 }
 func taskArtifact() map[string]any {
 	sum := sha256.Sum256([]byte("abc"))
-	return map[string]any{"id": artifactUUID, "taskId": taskUUID, "nodeRunId": nodeUUID, "name": "结果.txt", "contentType": "text/plain", "size": 3, "sha256": hex.EncodeToString(sum[:]), "createdAt": now, "downloadPath": "/tasks/" + taskUUID + "/artifacts/" + artifactUUID}
+	return map[string]any{"id": artifactUUID, "taskId": taskUUID, "nodeRunId": nodeUUID, "name": "result.txt", "contentType": "text/plain", "size": 3, "sha256": hex.EncodeToString(sum[:]), "createdAt": now, "downloadPath": "/tasks/" + taskUUID + "/artifacts/" + artifactUUID}
 }
 func taskDetail() map[string]any {
 	d := map[string]any{
-		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "number": 12, "title": "通用任务", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/默认项目/tasks/" + taskUUID, "version": 1},
+		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "number": 12, "title": "General task", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/Default project/tasks/" + taskUUID, "version": 1},
 		"request": map[string]any{}, "workflow": taskWorkflow(), "nodes": []any{map[string]any{"id": nodeUUID, "taskId": taskUUID, "stepId": "work", "visit": 1, "attempt": 1, "agentId": agentUUID, "agentName": "dev", "runtimeId": agentUUID, "status": "submitted", "inputs": map[string]any{}, "inputVersions": []any{}, "output": map[string]any{}, "edgeId": nil, "reason": nil, "question": nil, "runIds": []any{}, "startedAt": now, "endedAt": nil}}, "artifacts": []any{taskArtifact()}, "cleanup": "none",
 	}
 	d["sleepingInstances"] = []any{}
@@ -53,7 +53,7 @@ func taskSamples() map[string]clitest.Sample {
 	return map[string]clitest.Sample{
 		"GET /tasks/{taskId}/nodes/{nodeRunId}/messages": {Status: 200, Body: map[string]any{"messages": []any{}, "nextCursor": nil}},
 		"GET /tasks":        {Status: 200, Body: map[string]any{"tasks": []any{taskDetail()["task"]}, "nextCursor": nil}},
-		"GET /tasks/agents": {Status: 200, Body: map[string]any{"agents": []any{map[string]any{"id": agentUUID, "name": "dev", "address": agentAddress, "prompt": "处理要求", "clis": []any{"gh"}, "configVersion": 1}}}},
+		"GET /tasks/agents": {Status: 200, Body: map[string]any{"agents": []any{map[string]any{"id": agentUUID, "name": "dev", "address": agentAddress, "prompt": "Handle the requirements", "clis": []any{"gh"}, "configVersion": 1}}}},
 		"POST /tasks":       {Status: 201, Body: taskDetail()}, "GET /tasks/current": ok, "GET /tasks/{taskId}": ok,
 		"POST /tasks/{taskId}/nodes/{nodeRunId}/submit": {Status: 200, Body: taskDetail()["nodes"].([]any)[0]}, "POST /tasks/{taskId}/nodes/{nodeRunId}/fail": {Status: 200, Body: taskDetail()["nodes"].([]any)[0]},
 		"POST /tasks/{taskId}/retry": ok, "POST /tasks/{taskId}/cancel": ok,
@@ -126,16 +126,16 @@ func TestTaskActionsPreserveContextAndReceipts(t *testing.T) {
 	if !reflect.DeepEqual(lastBody(t, s), input) {
 		t.Fatal(lastBody(t, s))
 	}
-	e.stdin = "失败原因\n"
+	e.stdin = "Reason for the failure\n"
 	e.run("task", "fail", taskUUID, nodeUUID, "--action-id", actionUUID, "--reason-file", "-").ok(t)
-	if lastBody(t, s)["reason"] != "失败原因\n" {
+	if lastBody(t, s)["reason"] != "Reason for the failure\n" {
 		t.Fatal(lastBody(t, s))
 	}
 	e.run("task", "retry", taskUUID, "--action-id", actionUUID, "--expected-node-run", nodeUUID, "--yes").ok(t)
 	if _, ok := lastBody(t, s)["note"]; ok {
 		t.Fatal("optional note sent")
 	}
-	e.stdin = "沿用原会话继续"
+	e.stdin = "Continue in the original session"
 	e.run("task", "retry", taskUUID, "--action-id", actionUUID, "--expected-node-run", nodeUUID, "--note-file", "-", "--yes").ok(t)
 	if !reflect.DeepEqual(lastBody(t, s), map[string]any{"actionId": actionUUID, "expectedNodeRunId": nodeUUID, "note": e.stdin}) {
 		t.Fatal(lastBody(t, s))
@@ -184,7 +184,7 @@ func TestTaskFormalErrorsAndNoWriteRetry(t *testing.T) {
 		status, exit int
 		code         string
 	}{{403, 6, "forbidden"}, {409, 8, "task_conflict"}, {422, 9, "validation_failed"}} {
-		s.On("POST /tasks/{taskId}/nodes/{nodeRunId}/submit", clitest.Sample{Status: tc.status, Body: apiError(tc.code, "节点或派发无效")})
+		s.On("POST /tasks/{taskId}/nodes/{nodeRunId}/submit", clitest.Sample{Status: tc.status, Body: apiError(tc.code, "invalid node or dispatch")})
 		e.run("task", "submit", taskUUID, nodeUUID, "--from-file", jsonFile(t, map[string]any{"actionId": actionUUID, "output": map[string]any{}, "edgeId": nil})).fails(t, tc.code, tc.exit)
 	}
 	var calls int
@@ -192,7 +192,7 @@ func TestTaskFormalErrorsAndNoWriteRetry(t *testing.T) {
 		calls++
 		w.Header().Set(conn.HeaderVersion, testVersion)
 		w.WriteHeader(503)
-		w.Write([]byte(`{"error":{"code":"unavailable","message":"临时失败"}}`))
+		w.Write([]byte(`{"error":{"code":"unavailable","message":"temporary failure"}}`))
 	}))
 	defer h.Close()
 	newEnv(t).agent(h.URL).run("task", "cancel", taskUUID, "--action-id", actionUUID, "--yes").fails(t, "unavailable", 4)
@@ -203,17 +203,17 @@ func TestTaskFormalErrorsAndNoWriteRetry(t *testing.T) {
 
 func TestTaskArtifactTransfer(t *testing.T) {
 	s, e := withTaskSamples(t)
-	file := writeFile(t, "原文件.txt", "abc")
-	d := e.run("task", "artifact", "put", taskUUID, nodeUUID, "--action-id", actionUUID, "--file", file, "--name", "成果 #.txt", "--content-type", "text/plain").ok(t)
+	file := writeFile(t, "source.txt", "abc")
+	d := e.run("task", "artifact", "put", taskUUID, nodeUUID, "--action-id", actionUUID, "--file", file, "--name", "成果 #.txt", "--content-type", "text/plain").ok(t) // check-english: zh (non-ASCII artifact name in the query)
 	if d["id"] != artifactUUID {
 		t.Fatal(d)
 	}
 	r := lastReq(t, s)
 	q, _ := url.ParseQuery(r.RawQuery)
-	if q.Get("name") != "成果 #.txt" || q.Get("nodeRunId") != nodeUUID || q.Get("actionId") != actionUUID || q.Get("contentType") != "text/plain" || string(r.Body) != "abc" || r.Header.Get("Content-Type") != "application/octet-stream" {
+	if q.Get("name") != "成果 #.txt" || q.Get("nodeRunId") != nodeUUID || q.Get("actionId") != actionUUID || q.Get("contentType") != "text/plain" || string(r.Body) != "abc" || r.Header.Get("Content-Type") != "application/octet-stream" { // check-english: zh (non-ASCII artifact name in the query)
 		t.Fatalf("%+v", r)
 	}
-	out := filepath.Join(t.TempDir(), "成果.txt")
+	out := filepath.Join(t.TempDir(), "output.txt")
 	e.run("task", "artifact", "get", taskUUID, artifactUUID, "--out", out).ok(t)
 	b, _ := os.ReadFile(out)
 	if string(b) != "abc" {
@@ -234,10 +234,10 @@ func TestTaskArtifactTransfer(t *testing.T) {
 
 func TestTaskUploadDefaultMetadata(t *testing.T) {
 	s, e := withTaskSamples(t)
-	file := writeFile(t, "结果.txt", "abc")
+	file := writeFile(t, "result.txt", "abc")
 	e.run("task", "artifact", "put", taskUUID, nodeUUID, "--action-id", actionUUID, "--file", file).ok(t)
 	q, _ := url.ParseQuery(lastReq(t, s).RawQuery)
-	if q.Get("name") != "结果.txt" || q.Get("contentType") != "application/octet-stream" {
+	if q.Get("name") != "result.txt" || q.Get("contentType") != "application/octet-stream" {
 		t.Fatal(q)
 	}
 }
@@ -245,7 +245,7 @@ func TestTaskUploadDefaultMetadata(t *testing.T) {
 // Streaming artifact downloads are not subject to the JSON size limit; after an interrupted read the temporary
 // file is written again from the start instead of concatenating the content twice.
 func TestTaskArtifactReadRecovery(t *testing.T) {
-	data := bytes.Repeat([]byte("成果"), 2048)
+	data := bytes.Repeat([]byte("result"), 2048)
 	sum := sha256.Sum256(data)
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -296,7 +296,7 @@ func TestTaskJSONHelpAndSecrets(t *testing.T) {
 func TestTaskHistoryErrorFieldsArePassedThrough(t *testing.T) {
 	s, e := withTaskSamples(t)
 	message := map[string]any{"id": actionUUID, "runId": nodeUUID, "nodeRunId": nodeUUID, "role": "assistant", "text": "", "origin": "task_node", "status": "failed", "createdAt": now}
-	for _, fields := range []map[string]any{nil, {"errorCode": nil, "errorMessage": nil}, {"errorCode": "session_missing", "errorMessage": "会话文件丢失，未创建替代会话"}} {
+	for _, fields := range []map[string]any{nil, {"errorCode": nil, "errorMessage": nil}, {"errorCode": "session_missing", "errorMessage": "session file missing; no replacement session created"}} {
 		body := map[string]any{}
 		for k, v := range message {
 			body[k] = v
@@ -323,7 +323,7 @@ func TestTaskQuestionReferencesPassThrough(t *testing.T) {
 		detail := taskDetail()
 		var expected any
 		if status != "" {
-			expected = map[string]any{"id": actionUUID, "threadId": artifactUUID, "messageId": nodeUUID, "text": "原题文本", "status": status, "canAnswer": status == "open"}
+			expected = map[string]any{"id": actionUUID, "threadId": artifactUUID, "messageId": nodeUUID, "text": "Original question text", "status": status, "canAnswer": status == "open"}
 		}
 		detail["nodes"].([]any)[0].(map[string]any)["question"] = expected
 		for _, query := range []struct {

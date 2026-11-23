@@ -64,7 +64,7 @@ func (c caller) expect(status int, method, path string, body any, hdr ...string)
 	c.t.Helper()
 	got, out, _ := c.do(method, path, body, hdr...)
 	if got != status {
-		c.t.Fatalf("%s %s：期望 %d，实际 %d：%s", method, path, status, got, out)
+		c.t.Fatalf("%s %s: want %d, got %d: %s", method, path, status, got, out)
 	}
 	return out
 }
@@ -74,10 +74,10 @@ func (c caller) expectError(status int, code, method, path string, body any, hdr
 	out := c.expect(status, method, path, body, hdr...)
 	var e apitypes.ErrorBody
 	if err := json.Unmarshal(out, &e); err != nil || e.Error.Code != code {
-		c.t.Fatalf("%s %s：期望错误码 %s：%s", method, path, code, out)
+		c.t.Fatalf("%s %s: want error code %s: %s", method, path, code, out)
 	}
 	if c.token != "" && strings.Contains(string(out), c.token) {
-		c.t.Fatalf("错误信息不应回显令牌：%s", out)
+		c.t.Fatalf("the error should not echo the token: %s", out)
 	}
 }
 
@@ -148,73 +148,73 @@ func strOf(p *string) string {
 func TestInboxAddressing(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	dev, a := e.newAgent("开发助手")
-	if strOf(dev.Address) != "默认组织/默认项目/开发助手" {
-		t.Fatalf("Agent 的地址应为完整三段：%s", strOf(dev.Address))
+	dev, a := e.newAgent("Dev assistant")
+	if strOf(dev.Address) != "Default organization/Default project/Dev assistant" {
+		t.Fatalf("an Agent's address should have all three parts: %s", strOf(dev.Address))
 	}
-	plat := e.platformAgent("巡检员")
-	if strOf(plat.Address) != "巡检员" {
-		t.Fatalf("平台 Agent 的地址应为名称本身：%s", strOf(plat.Address))
+	plat := e.platformAgent("Inspector")
+	if strOf(plat.Address) != "Inspector" {
+		t.Fatalf("a platform Agent's address should be its name: %s", strOf(plat.Address))
 	}
 	waitIdle(t, e, a)
 
-	m := sendInbox(con, "默认项目/开发助手", "你好")
+	m := sendInbox(con, "Default project/Dev assistant", "Hello")
 	if m.From.Kind != "console" || strOf(m.From.Address) != "@console" || m.From.Name != "Console" || m.From.ID != nil {
-		t.Fatalf("发件人应为控制台操作者：%+v", m.From)
+		t.Fatalf("the sender should be the console operator: %+v", m.From)
 	}
-	if m.To.Kind != "agent" || strOf(m.To.Address) != "默认组织/默认项目/开发助手" || *m.To.ID != dev.ID || m.ThreadID != m.ID || m.InReplyTo != nil {
-		t.Fatalf("收件人与线索不对：%+v", m)
+	if m.To.Kind != "agent" || strOf(m.To.Address) != "Default organization/Default project/Dev assistant" || *m.To.ID != dev.ID || m.ThreadID != m.ID || m.InReplyTo != nil {
+		t.Fatalf("wrong recipient or thread: %+v", m)
 	}
 	if strOf(m.WhenBusy) != "queue" || m.ReadAt != nil {
-		t.Fatalf("不指定 whenBusy 时应记为 queue，且未读：%+v", m)
+		t.Fatalf("without whenBusy it should be recorded as queue and unread: %+v", m)
 	}
-	for _, addr := range []string{"默认组织/默认项目/开发助手", dev.ID.String(), strings.ToUpper(dev.ID.String())} {
-		if got := sendInbox(con, addr, "同一个"); *got.To.ID != dev.ID {
-			t.Fatalf("%s 应解析为同一个 Agent", addr)
+	for _, addr := range []string{"Default organization/Default project/Dev assistant", dev.ID.String(), strings.ToUpper(dev.ID.String())} {
+		if got := sendInbox(con, addr, "same one"); *got.To.ID != dev.ID {
+			t.Fatalf("%s should resolve to the same Agent", addr)
 		}
 	}
-	if got := sendInbox(con, "巡检员", "发给平台 Agent"); *got.To.ID != plat.ID || strOf(got.To.Address) != "巡检员" {
-		t.Fatalf("单段名称应解析为平台 Agent：%+v", got.To)
+	if got := sendInbox(con, "Inspector", "to the platform Agent"); *got.To.ID != plat.ID || strOf(got.To.Address) != "Inspector" {
+		t.Fatalf("a one-part name should resolve to a platform Agent: %+v", got.To)
 	}
-	for _, addr := range []string{"默认项目/开发助手#t1", "默认组织/默认项目/开发助手/x", "默认项目/不存在", "不存在", "其他组织/默认项目/开发助手", "@nobody", "@"} {
+	for _, addr := range []string{"Default project/Dev assistant#t1", "Default organization/Default project/Dev assistant/x", "Default project/Missing", "Missing", "Other organization/Default project/Dev assistant", "@nobody", "@"} {
 		con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": addr, "text": "x"})
 	}
-	con.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "巡检员", "text": "  "})
-	con.expectError(413, "payload_too_large", "POST", "/inbox/messages", map[string]any{"to": "巡检员", "text": strings.Repeat("x", 1<<16+1)})
-	con.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "巡检员", "text": "x", "whenBusy": "now"},
+	con.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "Inspector", "text": "  "})
+	con.expectError(413, "payload_too_large", "POST", "/inbox/messages", map[string]any{"to": "Inspector", "text": strings.Repeat("x", 1<<16+1)})
+	con.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "Inspector", "text": "x", "whenBusy": "now"},
 		"X-Contract-Invalid-Request", "1")
 
 	// Sending to a person: whenBusy is recorded as empty and no reminder is created.
 	ci, _ := e.identity("ci-bot")
-	got := sendInbox(con, "@ci-bot", "给外部身份", "interrupt")
+	got := sendInbox(con, "@ci-bot", "to an external identity", "interrupt")
 	if got.WhenBusy != nil || got.To.Kind != "external" || *got.To.ID != ci.ID || strOf(got.To.Address) != "@ci-bot" {
-		t.Fatalf("发给外部身份：%+v", got)
+		t.Fatalf("sent to an external identity: %+v", got)
 	}
 	// A deleted external identity can no longer receive messages.
 	e.expect(204, "DELETE", "/external-identities/"+ci.ID.String(), nil)
 	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": "@ci-bot", "text": "x"})
 
 	// Lookup by address: both notations, platform Agents, and an empty list when not found or when the address has #.
-	for addr, want := range map[string]uuid.UUID{"默认组织/默认项目/开发助手": dev.ID, "默认项目/开发助手": dev.ID, "巡检员": plat.ID, dev.ID.String(): dev.ID} {
+	for addr, want := range map[string]uuid.UUID{"Default organization/Default project/Dev assistant": dev.ID, "Default project/Dev assistant": dev.ID, "Inspector": plat.ID, dev.ID.String(): dev.ID} {
 		l := decode[apitypes.AgentList](t, e.expect(200, "GET", "/agents?address="+urlQuery(addr), nil))
 		if len(l.Agents) != 1 || l.Agents[0].ID != want || l.Agents[0].Address == nil {
-			t.Fatalf("按地址 %s 查找：%+v", addr, l)
+			t.Fatalf("lookup by address %s: %+v", addr, l)
 		}
 	}
-	for _, addr := range []string{"默认项目/开发助手#t1", "不存在", "@console"} {
+	for _, addr := range []string{"Default project/Dev assistant#t1", "Missing", "@console"} {
 		if l := decode[apitypes.AgentList](t, e.expect(200, "GET", "/agents?address="+urlQuery(addr), nil)); len(l.Agents) != 0 {
-			t.Fatalf("按地址 %s 查找应为空：%+v", addr, l)
+			t.Fatalf("lookup by address %s should be empty: %+v", addr, l)
 		}
 	}
 	e.expect(422, "GET", "/agents", nil, "X-Contract-Invalid-Request", "1")
 
 	// Agents in a deleted project are not addressable.
-	p := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "临时"}))
-	tmp := decode[apitypes.Agent](t, e.expect(201, "POST", "/projects/"+p.ID.String()+"/agents", map[string]any{"name": "甲",
+	p := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "Temporary"}))
+	tmp := decode[apitypes.Agent](t, e.expect(201, "POST", "/projects/"+p.ID.String()+"/agents", map[string]any{"name": "Alpha",
 		"model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
 	waitIdle(t, e, "/agents/"+tmp.ID.String())
 	e.expect(204, "DELETE", "/projects/"+p.ID.String(), nil)
-	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": "临时/甲", "text": "x"})
+	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": "Temporary/Alpha", "text": "x"})
 	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": tmp.ID.String(), "text": "x"})
 
 	// An Agent created before the rules took effect, with a non-conforming name: its address is empty and it can only
@@ -228,31 +228,31 @@ func TestInboxAddressing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := decode[apitypes.Agent](t, e.expect(200, "GET", "/agents/"+legacy.String(), nil)); got.Address != nil {
-		t.Fatalf("名称不合规的 Agent 地址应为空：%s", strOf(got.Address))
+		t.Fatalf("an Agent with a non-conforming name should have an empty address: %s", strOf(got.Address))
 	}
-	if got := sendInbox(con, legacy.String(), "按 ID 发送"); *got.To.ID != legacy || got.To.Address != nil {
-		t.Fatalf("名称不合规的 Agent 只能按 ID 寻址：%+v", got.To)
+	if got := sendInbox(con, legacy.String(), "sent by ID"); *got.To.ID != legacy || got.To.Address != nil {
+		t.Fatalf("an Agent with a non-conforming name can only be addressed by ID: %+v", got.To)
 	}
 	waitIdle(t, e, "/agents/"+legacy.String())
 
 	// A project Agent and a platform Agent message each other (so the same-organization and platform-owned branches are
 	// actually exercised).
 	devC, platC := e.agentCaller(dev.ID), e.agentCaller(plat.ID)
-	if got := sendInbox(devC, "巡检员", "项目到平台"); got.From.Kind != "agent" || *got.From.ID != dev.ID || *got.To.ID != plat.ID {
-		t.Fatalf("项目 Agent 发给平台 Agent：%+v", got)
+	if got := sendInbox(devC, "Inspector", "project to platform"); got.From.Kind != "agent" || *got.From.ID != dev.ID || *got.To.ID != plat.ID {
+		t.Fatalf("project Agent sends to platform Agent: %+v", got)
 	}
-	if got := sendInbox(platC, "默认项目/开发助手", "平台到项目"); *got.To.ID != dev.ID {
-		t.Fatalf("平台 Agent 用两段地址发给项目 Agent（按默认组织解析）：%+v", got)
+	if got := sendInbox(platC, "Default project/Dev assistant", "platform to project"); *got.To.ID != dev.ID {
+		t.Fatalf("platform Agent sends to project Agent with a two-part address (resolved in the default organization): %+v", got)
 	}
-	if got := sendInbox(devC, "默认项目/开发助手", "同组织两段"); *got.To.ID != dev.ID {
-		t.Fatalf("同组织 Agent 用两段地址：%+v", got)
+	if got := sendInbox(devC, "Default project/Dev assistant", "same organization, two parts"); *got.To.ID != dev.ID {
+		t.Fatalf("same-organization Agent with a two-part address: %+v", got)
 	}
 	waitIdle(t, e, a)
 
 	// After a project is renamed, the address changes with it.
-	e.expect(200, "PATCH", "/projects/"+e.dc.Project.ID.String(), map[string]any{"name": "主项目"})
-	if got := decode[apitypes.Agent](t, e.expect(200, "GET", a, nil)); strOf(got.Address) != "默认组织/主项目/开发助手" {
-		t.Fatalf("项目改名后地址应改变：%s", strOf(got.Address))
+	e.expect(200, "PATCH", "/projects/"+e.dc.Project.ID.String(), map[string]any{"name": "Main project"})
+	if got := decode[apitypes.Agent](t, e.expect(200, "GET", a, nil)); strOf(got.Address) != "Default organization/Main project/Dev assistant" {
+		t.Fatalf("the address should change after the project is renamed: %s", strOf(got.Address))
 	}
 }
 
@@ -290,12 +290,12 @@ func reminderRuns(t *testing.T, e *env, agentID uuid.UUID) (queued map[int]int, 
 func TestInboxReminder(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	dev, a := e.newAgent("开发助手")
+	dev, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 
 	// When idle, a reminder turn starts immediately, marked in the history as a platform reminder, with the reminder
 	// text as its body.
-	m1 := sendInbox(con, dev.ID.String(), "第一条")
+	m1 := sendInbox(con, dev.ID.String(), "first message")
 	waitIdle(t, e, a)
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages", nil))
 	var user apitypes.Message
@@ -305,23 +305,23 @@ func TestInboxReminder(t *testing.T) {
 		}
 	}
 	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "the following 1 Inbox messages") || !strings.Contains(user.Text, "loopctl inbox read") || !strings.Contains(user.Text, m1.ID.String()) {
-		t.Fatalf("提醒那一轮的用户消息：%+v", user)
+		t.Fatalf("user message of the reminder turn: %+v", user)
 	}
 	if reply := e.lastReply(a); reply.Origin != "inbox_reminder" || reply.Run.Status != "completed" {
-		t.Fatalf("提醒那一轮的回复：%+v", reply)
+		t.Fatalf("reply of the reminder turn: %+v", reply)
 	}
 	var trig *uuid.UUID
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT DISTINCT inbox_message_id FROM lifecycle_events WHERE run_id = $1`, user.Run.ID).Scan(&trig); err != nil || trig == nil || *trig != m1.ID {
-		t.Fatalf("提醒那一轮的运行记录事件应记下触发的消息：%v %v", trig, err)
+		t.Fatalf("the run record events of the reminder turn should record the triggering message: %v %v", trig, err)
 	}
 
 	// In events of the regular conversation, the Inbox message field is empty.
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "普通对话"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "regular chat"})
 	waitIdle(t, e, a)
 	normal := e.lastReply(a)
 	var n int
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM lifecycle_events WHERE run_id = $1 AND inbox_message_id IS NOT NULL`, normal.Run.ID).Scan(&n); err != nil || n != 0 || normal.Origin != "console" {
-		t.Fatalf("普通对话不应记 Inbox 消息：%d %v %s", n, err, normal.Origin)
+		t.Fatalf("regular chat should not record an Inbox message: %d %v %s", n, err, normal.Origin)
 	}
 
 	// While busy, three queue messages are queued into just one reminder turn, triggered by the first one.
@@ -330,33 +330,33 @@ func TestInboxReminder(t *testing.T) {
 		agent.expect(200, "POST", "/inbox/messages/"+s.ID.String()+"/read", nil)
 	}
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "block"})
-	q1 := sendInbox(con, dev.ID.String(), "排队一")
-	sendInbox(con, dev.ID.String(), "排队二")
-	sendInbox(con, dev.ID.String(), "排队三")
+	q1 := sendInbox(con, dev.ID.String(), "queued one")
+	sendInbox(con, dev.ID.String(), "queued two")
+	sendInbox(con, dev.ID.String(), "queued three")
 	if queued, _ := reminderRuns(t, e, dev.ID); queued[1] != 1 || queued[0] != 0 {
-		t.Fatalf("三条 queue 消息应只排入一轮普通提醒：%v", queued)
+		t.Fatalf("three queue messages should be queued into just one regular reminder: %v", queued)
 	}
 	// 20 concurrent ones also give only one turn.
 	var wg sync.WaitGroup
 	for i := range 20 {
-		wg.Go(func() { sendInbox(con, dev.ID.String(), "并发"+string(rune('a'+i))) })
+		wg.Go(func() { sendInbox(con, dev.ID.String(), "concurrent "+string(rune('a'+i))) })
 	}
 	wg.Wait()
 	if queued, _ := reminderRuns(t, e, dev.ID); queued[1] != 1 {
-		t.Fatalf("并发的 queue 消息应只有一轮普通提醒：%v", queued)
+		t.Fatalf("concurrent queue messages should give only one regular reminder: %v", queued)
 	}
 	// An interrupt message interrupts the current run and gets its own interrupt reminder turn, which runs before the
 	// regular reminder.
-	sendInbox(con, dev.ID.String(), "打断", "interrupt")
+	sendInbox(con, dev.ID.String(), "interrupt", "interrupt")
 	waitIdle(t, e, a)
 	_, triggers := reminderRuns(t, e, dev.ID)
 	if len(triggers) != 3 || triggers[1] != q1.ID {
-		t.Fatalf("合并的提醒只记第一条触发消息：%v", triggers)
+		t.Fatalf("a merged reminder records only the first triggering message: %v", triggers)
 	}
 	var blockStatus string
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT r.status FROM runs r JOIN conversation_messages m ON m.id = r.user_message_id
 		WHERE m.text = 'block' AND r.agent_id = $1`, dev.ID).Scan(&blockStatus); err != nil || blockStatus != "interrupted" {
-		t.Fatalf("打断消息应打断当前执行：%s %v", blockStatus, err)
+		t.Fatalf("an interrupt message should interrupt the current run: %s %v", blockStatus, err)
 	}
 	// Run order: the interrupt reminder before the regular reminder.
 	rows, _ := e.st.Pool.Query(context.Background(), `SELECT priority FROM runs WHERE agent_id = $1 AND origin = 'inbox_reminder' ORDER BY started_at`, dev.ID)
@@ -368,23 +368,23 @@ func TestInboxReminder(t *testing.T) {
 	}
 	rows.Close()
 	if len(order) != 3 || order[1] != 0 || order[2] != 1 {
-		t.Fatalf("打断提醒应先于普通提醒执行：%v", order)
+		t.Fatalf("the interrupt reminder should run before the regular reminder: %v", order)
 	}
 
 	// All messages were read while queued: read messages leave the queue, so this reminder turn is voided at once
 	// (no_pending_messages) and Pi is not started.
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "block"})
-	sendInbox(con, dev.ID.String(), "很快读掉")
+	sendInbox(con, dev.ID.String(), "read right away")
 	for _, s := range decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages?unread=true&limit=100", nil)).Messages {
 		agent.expect(200, "POST", "/inbox/messages/"+s.ID.String()+"/read", nil)
 	}
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "解除", "whenBusy": "interrupt"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "release", "whenBusy": "interrupt"})
 	waitIdle(t, e, a)
 	var voided string
 	var replies int
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT r.status||'/'||coalesce(r.end_reason,''), (SELECT count(*) FROM conversation_messages m WHERE m.run_id = r.id AND m.role = 'assistant')
 		FROM runs r WHERE r.agent_id = $1 AND r.origin = 'inbox_reminder' ORDER BY r.queued_at DESC LIMIT 1`, dev.ID).Scan(&voided, &replies); err != nil || voided != "interrupted/no_pending_messages" || replies != 0 {
-		t.Fatalf("没有未读时这一轮提醒应作废、不回复：%q %d %v", voided, replies, err)
+		t.Fatalf("with nothing unread this reminder turn should be voided without a reply: %q %d %v", voided, replies, err)
 	}
 }
 
@@ -393,48 +393,48 @@ func TestInboxReminder(t *testing.T) {
 func TestInboxThreadsAndViews(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	dev, a := e.newAgent("开发助手")
+	dev, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 	agent := e.agentCaller(dev.ID)
 	ci, ciTok := e.identity("ci-bot")
 	ext := e.external(ciTok)
 
-	m := sendInbox(con, "默认项目/开发助手", "请处理")
+	m := sendInbox(con, "Default project/Dev assistant", "please handle this")
 	waitIdle(t, e, a)
 
 	// The console viewing an Agent's Inbox does not change the read state.
 	view := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", a+"/inbox", nil))
 	if len(view.Messages) != 1 || view.Messages[0].ReadAt != nil {
-		t.Fatalf("Agent 收件箱：%+v", view)
+		t.Fatalf("Agent inbox: %+v", view)
 	}
 	full := decode[apitypes.InboxMessage](t, e.expect(200, "GET", a+"/inbox/"+m.ID.String(), nil))
-	if full.Text != "请处理" || full.ReadAt != nil {
-		t.Fatalf("控制台查看全文后仍应未读：%+v", full)
+	if full.Text != "please handle this" || full.ReadAt != nil {
+		t.Fatalf("should still be unread after the console views the full text: %+v", full)
 	}
 	// An Agent listing summaries does not count as reading; reading one by one marks them read, and reading again does
 	// not change the read time.
 	l := decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages", nil))
-	if len(l.Messages) != 1 || l.Messages[0].ReadAt != nil || l.Messages[0].Preview != "请处理" {
-		t.Fatalf("Agent 列出收件箱：%+v", l)
+	if len(l.Messages) != 1 || l.Messages[0].ReadAt != nil || l.Messages[0].Preview != "please handle this" {
+		t.Fatalf("Agent lists its inbox: %+v", l)
 	}
 	r1 := decode[apitypes.InboxMessage](t, agent.expect(200, "POST", "/inbox/messages/"+m.ID.String()+"/read", nil))
 	r2 := decode[apitypes.InboxMessage](t, agent.expect(200, "POST", "/inbox/messages/"+m.ID.String()+"/read", nil))
-	if r1.ReadAt == nil || !r1.ReadAt.Equal(*r2.ReadAt) || r2.Text != "请处理" {
-		t.Fatalf("重复读取：%v %v", r1.ReadAt, r2.ReadAt)
+	if r1.ReadAt == nil || !r1.ReadAt.Equal(*r2.ReadAt) || r2.Text != "please handle this" {
+		t.Fatalf("repeated read: %v %v", r1.ReadAt, r2.ReadAt)
 	}
 	// Messages not sent to oneself cannot be read.
 	ext.expectError(404, "not_found", "POST", "/inbox/messages/"+m.ID.String()+"/read", nil)
 
 	// An Agent replies to the console; the console adds to the thread; a non-participant identity cannot reply.
-	reply := decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "收到", "whenBusy": "interrupt"}))
+	reply := decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "got it", "whenBusy": "interrupt"}))
 	if reply.To.Kind != "console" || reply.ThreadID != m.ID || *reply.InReplyTo != m.ID || reply.WhenBusy != nil {
-		t.Fatalf("Agent 的回复：%+v", reply)
+		t.Fatalf("Agent's reply: %+v", reply)
 	}
-	more := decode[apitypes.InboxMessage](t, con.expect(201, "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "补充"}))
+	more := decode[apitypes.InboxMessage](t, con.expect(201, "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "one more thing"}))
 	if more.To.Kind != "agent" || *more.To.ID != dev.ID || more.ThreadID != m.ID {
-		t.Fatalf("控制台在线索中追加：%+v", more)
+		t.Fatalf("console adds to the thread: %+v", more)
 	}
-	ext.expectError(404, "not_found", "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "插话"})
+	ext.expectError(404, "not_found", "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "butting in"})
 	waitIdle(t, e, a)
 
 	// The console's threads: the participants include itself, the unread count only counts messages sent to it; viewing
@@ -442,61 +442,61 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	threads := decode[apitypes.InboxThreadPage](t, con.expect(200, "GET", "/inbox/threads", nil))
 	if len(threads.Threads) != 1 || threads.UnreadTotal != 1 || threads.Threads[0].UnreadCount != 1 || len(threads.Threads[0].Participants) != 2 ||
 		threads.Threads[0].LastMessage.ID != more.ID {
-		t.Fatalf("控制台的线索：%+v", threads)
+		t.Fatalf("console's threads: %+v", threads)
 	}
 	thread := decode[apitypes.InboxThread](t, con.expect(200, "GET", "/inbox/threads/"+m.ID.String(), nil))
 	if len(thread.Messages) != 3 || thread.Messages[1].ID != reply.ID || thread.Messages[1].ReadAt != nil {
-		t.Fatalf("线索详情：%+v", thread)
+		t.Fatalf("thread detail: %+v", thread)
 	}
 	if got := decode[apitypes.InboxUnreadTotal](t, con.expect(200, "POST", "/inbox/threads/"+m.ID.String()+"/read", nil)); got.UnreadTotal != 0 {
-		t.Fatalf("整条标为已读后未读总数应为 0：%+v", got)
+		t.Fatalf("unread total should be 0 after marking the whole thread read: %+v", got)
 	}
 	ext.expectError(404, "not_found", "GET", "/inbox/threads/"+m.ID.String(), nil)
 	if l := decode[apitypes.InboxThreadPage](t, ext.expect(200, "GET", "/inbox/threads", nil)); len(l.Threads) != 0 {
-		t.Fatalf("外部身份只看到自己参与的线索：%+v", l)
+		t.Fatalf("an external identity sees only the threads it takes part in: %+v", l)
 	}
 
 	// Exchanges with an external identity and the console's read-only view; direction and unread filters; still
 	// viewable after deletion, shown as a deleted identity.
-	toCi := sendInbox(con, "@ci-bot", "给你")
-	fromCi := sendInbox(ext, "默认项目/开发助手", "外部来信")
+	toCi := sendInbox(con, "@ci-bot", "for you")
+	fromCi := sendInbox(ext, "Default project/Dev assistant", "external mail")
 	waitIdle(t, e, a)
 	all := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox", nil))
 	if len(all.Messages) != 2 || all.Messages[0].ID != fromCi.ID || all.Messages[1].ID != toCi.ID {
-		t.Fatalf("外部身份收件箱（全部，新的在前）：%+v", all)
+		t.Fatalf("external identity inbox (all, newest first): %+v", all)
 	}
 	for dir, want := range map[string]uuid.UUID{"received": toCi.ID, "sent": fromCi.ID} {
 		got := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox?direction="+dir, nil))
 		if len(got.Messages) != 1 || got.Messages[0].ID != want {
-			t.Fatalf("方向 %s：%+v", dir, got)
+			t.Fatalf("direction %s: %+v", dir, got)
 		}
 	}
 	unread := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox?direction=received&unread=true", nil))
 	if len(unread.Messages) != 1 {
-		t.Fatalf("只看未读：%+v", unread)
+		t.Fatalf("unread only: %+v", unread)
 	}
 	if got := decode[apitypes.InboxMessage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox/"+toCi.ID.String(), nil)); got.ReadAt != nil {
-		t.Fatalf("控制台查看外部身份的消息后仍应未读：%+v", got)
+		t.Fatalf("should still be unread after the console views the external identity's message: %+v", got)
 	}
 	e.expect(404, "GET", "/external-identities/"+ci.ID.String()+"/inbox/"+m.ID.String(), nil)
 	// An external identity can only see its own Inbox: only messages sent to it are listed.
 	mine := decode[apitypes.InboxMessagePage](t, ext.expect(200, "GET", "/inbox/messages?unread=true", nil))
 	if len(mine.Messages) != 1 || mine.Messages[0].ID != toCi.ID {
-		t.Fatalf("外部身份的收件箱：%+v", mine)
+		t.Fatalf("external identity's inbox: %+v", mine)
 	}
 	e.expect(204, "DELETE", "/external-identities/"+ci.ID.String(), nil)
 	gone := decode[apitypes.ExternalIdentity](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String(), nil))
 	if gone.DeletedAt == nil {
-		t.Fatalf("已删除的身份应带删除时间：%+v", gone)
+		t.Fatalf("a deleted identity should carry its deletion time: %+v", gone)
 	}
 	after := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox", nil))
 	if len(after.Messages) != 2 || !after.Messages[0].From.Deleted || after.Messages[0].From.Name != "Deleted identity" ||
 		strOf(after.Messages[0].From.Address) != "@ci-bot" || *after.Messages[0].From.ID != ci.ID {
-		t.Fatalf("删除后的历史消息：%+v", after.Messages[0].From)
+		t.Fatalf("history messages after deletion: %+v", after.Messages[0].From)
 	}
 	e.expect(404, "GET", "/external-identities/"+ci.ID.String()+"/tokens", nil)
 	if l := decode[apitypes.ExternalIdentityList](t, e.expect(200, "GET", "/external-identities", nil)); len(l.Identities) != 0 {
-		t.Fatalf("列表不含已删除的身份：%+v", l)
+		t.Fatalf("the list should not contain deleted identities: %+v", l)
 	}
 	// A name can be reused after it is released.
 	e.identity("ci-bot")
@@ -505,11 +505,11 @@ func TestInboxThreadsAndViews(t *testing.T) {
 func TestInboxPaging(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	plat := e.platformAgent("巡检员")
+	plat := e.platformAgent("Inspector")
 	agent := e.agentCaller(plat.ID)
 	var sent []uuid.UUID
 	for i := range 5 {
-		sent = append(sent, decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "第" + string(rune('1'+i)) + "条"})).ID)
+		sent = append(sent, decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "Message " + string(rune('1'+i)) + "."})).ID)
 	}
 	var got []uuid.UUID
 	cursor := ""
@@ -528,11 +528,11 @@ func TestInboxPaging(t *testing.T) {
 		cursor = *p.NextCursor
 	}
 	if len(got) != 5 || got[0] != sent[4] || got[4] != sent[0] {
-		t.Fatalf("游标分页应不重不漏、新的在前：%v", got)
+		t.Fatalf("cursor paging should have no duplicates or gaps, newest first: %v", got)
 	}
 	con.expectError(422, "validation_failed", "GET", "/inbox/messages?cursor=bad", nil)
 	if p := decode[apitypes.InboxMessagePage](t, con.expect(200, "GET", "/inbox/messages?limit=1000", nil)); len(p.Messages) != 5 {
-		t.Fatalf("超过上限时按上限返回：%d", len(p.Messages))
+		t.Fatalf("a limit above the maximum should return the maximum: %d", len(p.Messages))
 	}
 }
 
@@ -541,23 +541,23 @@ func TestInboxPaging(t *testing.T) {
 func TestInboxEvents(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	plat := e.platformAgent("巡检员")
+	plat := e.platformAgent("Inspector")
 	agent := e.agentCaller(plat.ID)
 
 	evs, stop := readSSEPath(t, e, "/inbox/events", "")
 	defer stop()
 	snap := next(t, evs)
 	if snap.event != "snapshot" {
-		t.Fatalf("首条应为快照：%+v", snap)
+		t.Fatalf("the first event should be a snapshot: %+v", snap)
 	}
 	e.v.ValidateStreamSSE(contracttest.InboxEventsPath, snap.event, []byte(snap.data))
 
-	msg := decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "报告"}))
+	msg := decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "report"}))
 	created := next(t, evs)
 	var c apitypes.SseInboxMessageCreated
 	_ = json.Unmarshal([]byte(created.data), &c)
 	if created.event != "inbox.message.created" || c.Message.ID != msg.ID || c.Message.To.Kind != "console" || c.UnreadTotal != 1 {
-		t.Fatalf("应收到 inbox.message.created：%+v", created)
+		t.Fatalf("want inbox.message.created: %+v", created)
 	}
 	e.v.ValidateStreamSSE(contracttest.InboxEventsPath, created.event, []byte(created.data))
 	con.expect(200, "POST", "/inbox/messages/"+msg.ID.String()+"/read", nil)
@@ -565,18 +565,18 @@ func TestInboxEvents(t *testing.T) {
 	var rd apitypes.SseInboxMessageRead
 	_ = json.Unmarshal([]byte(read.data), &rd)
 	if read.event != "inbox.message.read" || rd.ID != msg.ID || rd.UnreadTotal != 0 || rd.To.Kind != "console" {
-		t.Fatalf("应收到 inbox.message.read：%+v", read)
+		t.Fatalf("want inbox.message.read: %+v", read)
 	}
 	e.v.ValidateStreamSSE(contracttest.InboxEventsPath, read.event, []byte(read.data))
 	stop()
 
 	// Resuming with an ID still inside the retained range: no snapshot, nothing lost or duplicated.
-	agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "断线期间"})
+	agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "while disconnected"})
 	evs2, stop2 := readSSEPath(t, e, "/inbox/events", read.id)
 	defer stop2()
 	first := next(t, evs2)
-	if first.event != "inbox.message.created" || !strings.Contains(first.data, "断线期间") {
-		t.Fatalf("续传应从断开处继续：%+v", first)
+	if first.event != "inbox.message.created" || !strings.Contains(first.data, "while disconnected") {
+		t.Fatalf("resuming should continue from where it disconnected: %+v", first)
 	}
 	stop2()
 	// The resume position is outside the range (events were trimmed, or the server restarted): a snapshot comes first.
@@ -584,7 +584,7 @@ func TestInboxEvents(t *testing.T) {
 	evs3, stop3 := readSSEPath(t, e, "/inbox/events", first.id)
 	defer stop3()
 	if s := next(t, evs3); s.event != "snapshot" || !strings.Contains(s.data, `"unreadTotal":1`) {
-		t.Fatalf("续传位置超出范围时应先发快照：%+v", s)
+		t.Fatalf("when the resume position is out of range a snapshot should come first: %+v", s)
 	}
 }
 
@@ -592,7 +592,7 @@ func TestInboxEvents(t *testing.T) {
 
 func TestExternalAccess(t *testing.T) {
 	e := newEnv(t)
-	dev, a := e.newAgent("开发助手")
+	dev, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 	ci, tok := e.identity("ci-bot")
 	ext := e.external(tok)
@@ -609,21 +609,21 @@ func TestExternalAccess(t *testing.T) {
 	// Current identity and externally open endpoints.
 	who := decode[apitypes.Whoami](t, ext.expect(200, "GET", "/whoami", nil))
 	if who.Kind != "external" || strOf(who.Address) != "@ci-bot" || who.Name != "ci-bot" {
-		t.Fatalf("whoami：%+v", who)
+		t.Fatalf("whoami: %+v", who)
 	}
 	if w := decode[apitypes.Whoami](t, e.expect(200, "GET", "/whoami", nil)); w.Kind != "console" || strOf(w.Address) != "@console" {
-		t.Fatalf("控制台的 whoami：%+v", w)
+		t.Fatalf("console's whoami: %+v", w)
 	}
 	ext.expect(409, "PUT", a+"/model-credential", map[string]any{"provider": "anthropic", "key": "sk-audit-secret-value"})
-	_, body, hdr := ext.do("PATCH", a, map[string]any{"prompt": "由外部修改", "expectedPromptVersion": 1})
-	if got := decode[apitypes.Agent](t, body); got.Prompt != "由外部修改" {
-		t.Fatalf("外部身份修改 Agent 配置：%s", body)
+	_, body, hdr := ext.do("PATCH", a, map[string]any{"prompt": "changed externally", "expectedPromptVersion": 1})
+	if got := decode[apitypes.Agent](t, body); got.Prompt != "changed externally" {
+		t.Fatalf("external identity changes the Agent config: %s", body)
 	}
 	audits, err := e.st.ListAudit(context.Background(), 10)
 	if err != nil || len(audits) == 0 || audits[0].ActorAddress != "@ci-bot" || audits[0].Operation != "updateAgent" ||
 		audits[0].RequestID == nil || audits[0].RequestID.String() != hdr.Get("Loop-Now-Request-Id") || audits[0].Target["agentId"] != dev.ID.String() ||
 		*audits[0].ActorID != ci.ID || audits[0].Status != 200 {
-		t.Fatalf("外部身份的修改应记审计：%+v %v", audits, err)
+		t.Fatalf("a change by an external identity should be audited: %+v %v", audits, err)
 	}
 
 	// External health status is redacted: the database part only has ok, no raw error text or WAL information.
@@ -631,10 +631,10 @@ func TestExternalAccess(t *testing.T) {
 	var raw map[string]map[string]any
 	_ = json.Unmarshal(hb, &raw)
 	if len(raw["database"]) != 1 || raw["database"]["ok"] != true || strings.Contains(string(hb), `"error"`) || strings.Contains(string(hb), "wal") {
-		t.Fatalf("对外的健康状态只应有 database.ok：%s", hb)
+		t.Fatalf("the external health status should only have database.ok: %s", hb)
 	}
 	if _, cb, _ := e.do("GET", "/health", nil); !strings.Contains(string(cb), `"error"`) || !strings.Contains(string(cb), `"walBytes"`) || !strings.Contains(string(cb), `"walWarning":false`) {
-		t.Fatalf("控制台的健康状态应含 error 与 WAL 信息：%s", cb)
+		t.Fatalf("the console's health status should include error and WAL info: %s", cb)
 	}
 
 	// Console-only endpoints: 403.
@@ -646,22 +646,22 @@ func TestExternalAccess(t *testing.T) {
 		ext.expectError(403, "forbidden", c.method, c.path, map[string]any{"text": "x", "name": "x"}, "X-Contract-Invalid-Request", "1")
 	}
 	if n := countRuns(t, e, dev.ID); n != 0 {
-		t.Fatalf("被拒绝的直接对话不应保存消息：%d", n)
+		t.Fatalf("a rejected direct conversation should not save messages: %d", n)
 	}
 	// External identity sending: whenBusy defaults to queue.
-	got := sendInbox(ext, "默认项目/开发助手", "外部来信")
+	got := sendInbox(ext, "Default project/Dev assistant", "external mail")
 	if got.From.Kind != "external" || strOf(got.WhenBusy) != "queue" {
-		t.Fatalf("外部身份发送：%+v", got)
+		t.Fatalf("external identity sends: %+v", got)
 	}
 	waitIdle(t, e, a)
 
 	// 401 after revocation (other tokens unaffected), for an expired token, and after the identity is deleted.
 	tokens := decode[apitypes.ExternalTokenList](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/tokens", nil))
 	if len(tokens.Tokens) != 1 || !strings.HasPrefix(tok, tokens.Tokens[0].Prefix) || tokens.Tokens[0].LastUsedAt == nil {
-		t.Fatalf("令牌列表只有元数据：%+v", tokens)
+		t.Fatalf("the token list should only have metadata: %+v", tokens)
 	}
 	if strings.Contains(string(e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/tokens", nil)), tok[12:]) {
-		t.Fatal("令牌列表不应含令牌明文")
+		t.Fatal("the token list should not contain token plaintext")
 	}
 	second := decode[apitypes.ExternalTokenIssued](t, e.expect(201, "POST", "/external-identities/"+ci.ID.String()+"/tokens",
 		map[string]any{"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339)}))
@@ -695,9 +695,9 @@ func TestExternalAccess(t *testing.T) {
 	for rows.Next() {
 		var line string
 		_ = rows.Scan(&line)
-		for _, secret := range []string{tok, second.Secret, "由外部修改", "sk-audit-secret-value", "ANTHROPIC_API_KEY", "lne_", "lna_"} {
+		for _, secret := range []string{tok, second.Secret, "changed externally", "sk-audit-secret-value", "ANTHROPIC_API_KEY", "lne_", "lna_"} {
 			if strings.Contains(line, secret) {
-				t.Fatalf("审计中不应出现令牌或请求体：%s", line)
+				t.Fatalf("the audit should contain no tokens or request bodies: %s", line)
 			}
 		}
 	}
@@ -714,7 +714,7 @@ func countRuns(t *testing.T, e *env, agentID uuid.UUID) int {
 
 func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	e := newEnv(t)
-	dev, a := e.newAgent("开发助手")
+	dev, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 	_, extTok := e.identity("ci-bot")
 	agent := e.agentCaller(dev.ID)
@@ -727,8 +727,8 @@ func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	}
 	// The Agent API only accepts Agent tokens; requests with an Origin are rejected.
 	who := decode[apitypes.Whoami](t, agent.expect(200, "GET", "/whoami", nil))
-	if who.Kind != "agent" || strOf(who.Address) != "默认组织/默认项目/开发助手" || who.Name != "开发助手" {
-		t.Fatalf("Agent 的 whoami：%+v", who)
+	if who.Kind != "agent" || strOf(who.Address) != "Default organization/Default project/Dev assistant" || who.Name != "Dev assistant" {
+		t.Fatalf("Agent's whoami: %+v", who)
 	}
 	other := agent
 	other.token = extTok
@@ -760,20 +760,20 @@ func (e *env) expectError(status int, code, method, path string, body any) {
 	e.t.Helper()
 	var eb apitypes.ErrorBody
 	if err := json.Unmarshal(e.expect(status, method, path, body), &eb); err != nil || eb.Error.Code != code {
-		e.t.Fatalf("%s %s：期望错误码 %s：%+v", method, path, code, eb)
+		e.t.Fatalf("%s %s: want error code %s: %+v", method, path, code, eb)
 	}
 }
 
 func TestBuiltinSkillNameReserved(t *testing.T) {
 	e := newEnv(t)
-	e.expectError(409, "name_conflict", "POST", "/skills", map[string]any{"skillMd": "---\nname: loopctl\ndescription: 冒名\n---\n"})
-	e.expectError(409, "name_conflict", "POST", "/skills", zipUpload(t, "loopctl", "冒名"))
-	tpl := decode[apitypes.SkillTemplate](t, e.expect(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: 记笔记\n---\n"}))
-	e.expectError(409, "name_conflict", "PUT", "/skills/"+tpl.ID.String()+"/skill-md", map[string]any{"content": "---\nname: loopctl\ndescription: 改名\n---\n"})
-	_, a := e.newAgent("开发助手")
+	e.expectError(409, "name_conflict", "POST", "/skills", map[string]any{"skillMd": "---\nname: loopctl\ndescription: Impostor\n---\n"})
+	e.expectError(409, "name_conflict", "POST", "/skills", zipUpload(t, "loopctl", "Impostor"))
+	tpl := decode[apitypes.SkillTemplate](t, e.expect(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: Take notes\n---\n"}))
+	e.expectError(409, "name_conflict", "PUT", "/skills/"+tpl.ID.String()+"/skill-md", map[string]any{"content": "---\nname: loopctl\ndescription: Renamed\n---\n"})
+	_, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 	k := decode[apitypes.AgentSkill](t, e.expect(201, "POST", a+"/skills", map[string]any{"templateId": tpl.ID}))
-	e.expectError(409, "name_conflict", "PUT", a+"/skills/"+k.ID.String()+"/skill-md", map[string]any{"content": "---\nname: loopctl\ndescription: 改名\n---\n"})
+	e.expectError(409, "name_conflict", "PUT", a+"/skills/"+k.ID.String()+"/skill-md", map[string]any{"content": "---\nname: loopctl\ndescription: Renamed\n---\n"})
 }
 
 // ---- Lost session ----
@@ -781,19 +781,19 @@ func TestBuiltinSkillNameReserved(t *testing.T) {
 func TestInboxSessionMissing(t *testing.T) {
 	e := newEnv(t)
 	con := e.console()
-	dev, a := e.newAgent("开发助手")
+	dev, a := e.newAgent("Dev assistant")
 	waitIdle(t, e, a)
 	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE agent_sessions SET state = 'missing', session_file = '/nonexistent/session.jsonl' WHERE agent_id = $1`, dev.ID); err != nil {
 		t.Fatal(err)
 	}
 	// While the session is lost: messages are saved as usual, no reminder is scheduled.
-	first := sendInbox(con, dev.ID.String(), "会话丢失期间一")
-	sendInbox(con, dev.ID.String(), "会话丢失期间二")
+	first := sendInbox(con, dev.ID.String(), "while the session is lost, one")
+	sendInbox(con, dev.ID.String(), "while the session is lost, two")
 	if queued, triggers := reminderRuns(t, e, dev.ID); len(triggers) != 0 || len(queued) != 0 {
-		t.Fatalf("会话丢失时不应安排提醒：%v %v", queued, triggers)
+		t.Fatalf("no reminder should be scheduled while the session is lost: %v %v", queued, triggers)
 	}
 	if page := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", a+"/inbox?unread=true", nil)); len(page.Messages) != 2 {
-		t.Fatalf("消息应照常保存：%+v", page)
+		t.Fatalf("messages should be saved as usual: %+v", page)
 	}
 	// After a person confirms reopening the session: with unread messages, a reminder turn is scheduled at once,
 	// triggered by the earliest unread message.
@@ -801,7 +801,7 @@ func TestInboxSessionMissing(t *testing.T) {
 	waitIdle(t, e, a)
 	_, triggers := reminderRuns(t, e, dev.ID)
 	if len(triggers) != 1 || triggers[0] != first.ID {
-		t.Fatalf("重开会话后应安排一轮提醒，触发消息为最早的未读消息：%v", triggers)
+		t.Fatalf("after reopening the session one reminder turn should be scheduled, triggered by the earliest unread message: %v", triggers)
 	}
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages", nil))
 	var user apitypes.Message
@@ -811,7 +811,7 @@ func TestInboxSessionMissing(t *testing.T) {
 		}
 	}
 	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "the following 2 Inbox messages") || user.Run.Status != "completed" {
-		t.Fatalf("重开会话后的提醒：%+v", user)
+		t.Fatalf("reminder after reopening the session: %+v", user)
 	}
 	// Reopening the session with no unread messages schedules no reminder.
 	agent := e.agentCaller(dev.ID)
@@ -821,6 +821,6 @@ func TestInboxSessionMissing(t *testing.T) {
 	e.expect(200, "POST", a+"/session/reset", nil)
 	waitIdle(t, e, a)
 	if _, triggers := reminderRuns(t, e, dev.ID); len(triggers) != 1 {
-		t.Fatalf("没有未读消息时重开会话不应安排提醒：%v", triggers)
+		t.Fatalf("with no unread messages reopening the session should not schedule a reminder: %v", triggers)
 	}
 }

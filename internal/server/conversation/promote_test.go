@@ -75,7 +75,7 @@ func (e *env) mustPromote(id uuid.UUID) promoteResult {
 	e.t.Helper()
 	r, err := e.promote(id)
 	if err != nil {
-		e.t.Fatalf("转为打断失败：%v", err)
+		e.t.Fatalf("promote to interrupt failed: %v", err)
 	}
 	return r
 }
@@ -146,7 +146,7 @@ func (e *env) firstQueueEvent(n names, evs []coord.Event) []string {
 		}
 		return n.of(ev.QueuedRuns)
 	}
-	e.t.Fatal("没有 queue.updated 事件")
+	e.t.Fatal("no queue.updated event")
 	return nil
 }
 
@@ -169,27 +169,27 @@ func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 	n := names{}
 	a := e.send2(n, "block A", "")
 	e.waitStarted("block A")
-	e.send2(n, "普通1", "queue")
-	two := e.send2(n, "普通2", "queue")
+	e.send2(n, "normal 1", "queue")
+	two := e.send2(n, "normal 2", "queue")
 	mark := e.streamMark()
 	got := e.mustPromote(two.Run.ID)
-	// The promotion interrupts block A and the driver then starts "普通2" ("normal 2") on its own.
+	// The promotion interrupts block A and the driver then starts "normal 2" on its own.
 	// Wait for that, so the checks below always run after the queue has moved on
 	// and must look at what the promotion itself returned and emitted.
-	e.waitStarted("普通2")
-	if got.Run.WhenBusy == nil || *got.Run.WhenBusy != "interrupt" || !slices.Equal(n.items(got.Queue), []string{"普通2", "普通1"}) {
-		t.Fatalf("转换结果不对：%+v %v", got.Run, n.items(got.Queue))
+	e.waitStarted("normal 2")
+	if got.Run.WhenBusy == nil || *got.Run.WhenBusy != "interrupt" || !slices.Equal(n.items(got.Queue), []string{"normal 2", "normal 1"}) {
+		t.Fatalf("wrong promote result: %+v %v", got.Run, n.items(got.Queue))
 	}
-	if q := e.queueEventAfter(n, mark); !slices.Equal(q, []string{"普通2", "普通1"}) {
-		t.Fatalf("queue.updated 顺序不对：%v", q)
+	if q := e.queueEventAfter(n, mark); !slices.Equal(q, []string{"normal 2", "normal 1"}) {
+		t.Fatalf("wrong queue.updated order: %v", q)
 	}
 	e.waitIdleOrDump(names{})
-	if order := e.ex.messages(); !slices.Equal(order, []string{"block A", "普通2", "普通1"}) {
-		t.Fatalf("执行顺序不对：%v", order)
+	if order := e.ex.messages(); !slices.Equal(order, []string{"block A", "normal 2", "normal 1"}) {
+		t.Fatalf("wrong execution order: %v", order)
 	}
 	r, err := e.st.GetRun(context.Background(), a.Run.ID)
 	if err != nil || r.Status != "interrupted" || r.EndReason != "user_interrupt" {
-		t.Fatalf("进行中的回复应被打断：%+v %v", r, err)
+		t.Fatalf("the running reply should be interrupted: %+v %v", r, err)
 	}
 	tl, err := (&runrecord.Service{Store: e.st}).Timeline(context.Background(), e.agent, two.Run.ID)
 	if err != nil {
@@ -210,7 +210,7 @@ func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 		promoted = promoted || en.Type == "promoted" && en.From == "queue" && en.To == "interrupt"
 	}
 	if !queued || !promoted {
-		t.Fatalf("时间线应保留普通排队并追加转为打断：%s", raw)
+		t.Fatalf("the timeline should keep the normal queueing and add the promotion to interrupt: %s", raw)
 	}
 }
 
@@ -221,28 +221,28 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	n := names{}
 	e.send2(n, "hold A", "")
 	e.waitStarted("hold A")
-	e.send2(n, "普通1", "queue")
-	two := e.send2(n, "普通2", "queue")
-	three := e.send2(n, "普通3", "queue")
-	e.send2(n, "打断1", "interrupt") // hold A ignores interrupts, so "打断1" ("interrupt 1") stays in the interrupt queue
+	e.send2(n, "normal 1", "queue")
+	two := e.send2(n, "normal 2", "queue")
+	three := e.send2(n, "normal 3", "queue")
+	e.send2(n, "interrupt 1", "interrupt") // hold A ignores interrupts, so "interrupt 1" stays in the interrupt queue
 	time.Sleep(100 * time.Millisecond)
 	drain(e.ex.intr)
 
 	got := e.mustPromote(two.Run.ID)
-	want := []string{"打断1", "普通2", "普通1", "普通3"}
+	want := []string{"interrupt 1", "normal 2", "normal 1", "normal 3"}
 	if !slices.Equal(n.items(got.Queue), want) || !slices.Equal(e.snapshotQueue(n), want) || !slices.Equal(e.lastQueueEvent(n), want) {
-		t.Fatalf("第一次转换后顺序不对：结果 %v 快照 %v", n.items(got.Queue), e.snapshotQueue(n))
+		t.Fatalf("wrong order after the first promotion: result %v snapshot %v", n.items(got.Queue), e.snapshotQueue(n))
 	}
-	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2"}) || !slices.Equal(qn, []string{"普通1", "普通3"}) {
-		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
+	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"interrupt 1", "normal 2"}) || !slices.Equal(qn, []string{"normal 1", "normal 3"}) {
+		t.Fatalf("wrong Redis queues: %v / %v", qi, qn)
 	}
 	got = e.mustPromote(three.Run.ID)
-	want = []string{"打断1", "普通2", "普通3", "普通1"}
+	want = []string{"interrupt 1", "normal 2", "normal 3", "normal 1"}
 	if !slices.Equal(n.items(got.Queue), want) || !slices.Equal(e.snapshotQueue(n), want) {
-		t.Fatalf("连续转换应按转换先后：%v", n.items(got.Queue))
+		t.Fatalf("consecutive promotions should be ordered by when they were promoted: %v", n.items(got.Queue))
 	}
-	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2", "普通3"}) || !slices.Equal(qn, []string{"普通1"}) {
-		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
+	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"interrupt 1", "normal 2", "normal 3"}) || !slices.Equal(qn, []string{"normal 1"}) {
+		t.Fatalf("wrong Redis queues: %v / %v", qi, qn)
 	}
 	events := func(kind string) int {
 		var c int
@@ -254,7 +254,7 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	aborts, promoted := events(store.EventRunAbortRequested), events(store.EventRunPromoted)
 	again := e.mustPromote(two.Run.ID)
 	if !slices.Equal(n.items(again.Queue), want) || events(store.EventRunAbortRequested) != aborts || events(store.EventRunPromoted) != promoted {
-		t.Fatal("已是打断时应幂等，不重复打断、不重复记录")
+		t.Fatal("promoting an interrupt again should be idempotent: no second interrupt, no second record")
 	}
 	snap, _, err := e.svc.Snapshot(context.Background(), e.agent)
 	if err != nil {
@@ -262,14 +262,14 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	}
 	for _, r := range snap.QueuedRuns {
 		wb := *r.WhenBusy
-		if (n[r.ID] == "普通1") != (wb == "queue") {
-			t.Fatalf("快照里的 whenBusy 不对：%s=%s", n[r.ID], wb)
+		if (n[r.ID] == "normal 1") != (wb == "queue") {
+			t.Fatalf("wrong whenBusy in the snapshot: %s=%s", n[r.ID], wb)
 		}
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
-	if order := e.ex.messages(); !slices.Equal(order, []string{"hold A", "打断1", "普通2", "普通3", "普通1"}) {
-		t.Fatalf("实际执行顺序不对：%v", order)
+	if order := e.ex.messages(); !slices.Equal(order, []string{"hold A", "interrupt 1", "normal 2", "normal 3", "normal 1"}) {
+		t.Fatalf("wrong actual execution order: %v", order)
 	}
 }
 
@@ -278,18 +278,18 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 func TestPromoteConflictsAndValidation(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	running := e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
+	running := e.mustSend("block current", "")
+	e.waitStarted("block current")
 	_, err := e.promote(running.Run.ID)
 	ae, ok := apperr.As(err)
 	if !ok || ae.Code != apperr.CodeRunNotQueued {
-		t.Fatalf("进行中的执行应返回 run_not_queued：%v", err)
+		t.Fatalf("an in-flight run should return run_not_queued: %v", err)
 	}
 	if d := ae.Details.(store.RunNotQueuedDetails); d.RunID == nil || *d.RunID != running.Run.ID || d.Status == nil || *d.Status != "starting" && *d.Status != "running" {
-		t.Fatalf("冲突详情应带当前状态：%+v", d)
+		t.Fatalf("the conflict details should carry the current status: %+v", d)
 	}
 	if _, err = e.promote(uuid.New()); !apperr.Is(err, apperr.CodeNotFound) {
-		t.Fatalf("不存在的执行应 404：%v", err)
+		t.Fatalf("a nonexistent run should be 404: %v", err)
 	}
 	dc, err := e.st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
@@ -300,22 +300,22 @@ func TestPromoteConflictsAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = e.svc.PromoteToInterrupt(ctx, other.ID, running.Run.ID, uuid.New()); !apperr.Is(err, apperr.CodeNotFound) {
-		t.Fatalf("其他 Agent 的执行应 404：%v", err)
+		t.Fatalf("another Agent's run should be 404: %v", err)
 	}
 	inbox := uuid.Must(uuid.NewV7())
-	rem, err := e.st.InsertInboxWithReminder(ctx, &store.NewInboxMessage{ID: inbox, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: e.agent}, Text: "平台消息", WhenBusy: "queue"},
-		store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "提醒", WhenBusy: "queue", InstanceID: e.inst, TriggerInboxID: &inbox})
+	rem, err := e.st.InsertInboxWithReminder(ctx, &store.NewInboxMessage{ID: inbox, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: e.agent}, Text: "platform message", WhenBusy: "queue"},
+		store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "reminder", WhenBusy: "queue", InstanceID: e.inst, TriggerInboxID: &inbox})
 	if err != nil || rem.Run == nil {
-		t.Fatal("平台提醒", err)
+		t.Fatal("platform reminder", err)
 	}
 	if _, err = e.promote(rem.Run.ID); !apperr.Is(err, apperr.CodeValidationFailed) {
-		t.Fatalf("平台提醒不应开放：%v", err)
+		t.Fatalf("platform reminders should not be promotable: %v", err)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	_, err = e.promote(running.Run.ID)
 	if ae, ok = apperr.As(err); !ok || ae.Code != apperr.CodeRunNotQueued || *ae.Details.(store.RunNotQueuedDetails).Status != "completed" {
-		t.Fatalf("已结束的执行应返回 run_not_queued(completed)：%v", err)
+		t.Fatalf("an ended run should return run_not_queued(completed): %v", err)
 	}
 }
 
@@ -339,12 +339,12 @@ func TestPromoteRacesHandoffExactlyOnce(t *testing.T) {
 	e := newEnv(t)
 	for round := range 15 {
 		n := names{}
-		head := e.send2(n, "block 开头", "")
+		head := e.send2(n, "block opener", "")
 		_ = head
-		e.waitStarted("block 开头")
+		e.waitStarted("block opener")
 		ids := []uuid.UUID{}
 		for i := range 6 {
-			m := e.send2(n, "普通"+string(rune('a'+round))+string(rune('0'+i)), "queue")
+			m := e.send2(n, "normal"+string(rune('a'+round))+string(rune('0'+i)), "queue")
 			ids = append(ids, m.Run.ID)
 		}
 		rand.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
@@ -353,7 +353,7 @@ func TestPromoteRacesHandoffExactlyOnce(t *testing.T) {
 			wg.Go(func() {
 				if _, err := e.promote(id); err != nil {
 					if ae, ok := apperr.As(err); !ok || ae.Code != apperr.CodeRunNotQueued {
-						t.Errorf("转换失败：%v", err)
+						t.Errorf("promote failed: %v", err)
 					}
 				}
 			})
@@ -378,12 +378,12 @@ func TestPromoteRacesHandoffExactlyOnce(t *testing.T) {
 			if err := e.st.Pool.QueryRow(context.Background(), `SELECT (SELECT count(*) FROM lifecycle_events WHERE run_id=$1 AND type=$2),(SELECT status FROM runs WHERE id=$1)`, id, store.EventRunDispatched).Scan(&dispatched, &status); err != nil {
 				t.Fatal(err)
 			}
-			if dispatched != 1 || status != "completed" && status != "interrupted" || text != "block 开头" && counts[text] > 1 {
-				t.Fatalf("第 %d 轮：%s 派发 %d 次、状态 %s、执行 %d 次", round, text, dispatched, status, counts[text])
+			if dispatched != 1 || status != "completed" && status != "interrupted" || text != "block opener" && counts[text] > 1 {
+				t.Fatalf("round %d: %s dispatched %d times, status %s, executed %d times", round, text, dispatched, status, counts[text])
 			}
 		}
 		if qi, qn := e.queues(n); len(qi) != 0 || len(qn) != 0 {
-			t.Fatalf("第 %d 轮：Redis 队列应为空：%v / %v", round, qi, qn)
+			t.Fatalf("round %d: Redis queues should be empty: %v / %v", round, qi, qn)
 		}
 	}
 }
@@ -425,12 +425,12 @@ func TestTriggerAlreadyStartedIsNotInterruptedByItself(t *testing.T) {
 			select {
 			case by = <-reached:
 			case <-time.After(5 * time.Second):
-				t.Fatal("等待标记打断前的钩子超时")
+				t.Fatal("timed out waiting for the hook before marking the interrupt")
 			}
 			e.ex.signal(e.agent, "release") // A ends naturally; B is dequeued and starts
 			e.waitStarted("block B")
 			if r, err := e.st.GetRun(context.Background(), by); err != nil || r.Status == "queued" {
-				t.Fatalf("B 应已开始：%+v %v", r, err)
+				t.Fatalf("B should have started: %+v %v", r, err)
 			}
 			close(release) // only now mark the interrupt: B is the only in-flight run
 			if err := <-done; err != nil {
@@ -441,7 +441,7 @@ func TestTriggerAlreadyStartedIsNotInterruptedByItself(t *testing.T) {
 			e.waitIdleOrDump(names{})
 			r, err := e.st.GetRun(context.Background(), by)
 			if err != nil || r.Status != "completed" {
-				t.Fatalf("B 被自己引发的打断打断了：%+v %v", r, err)
+				t.Fatalf("B was interrupted by the interrupt it caused: %+v %v", r, err)
 			}
 		})
 	}
@@ -488,5 +488,5 @@ func (e *env) waitIdleOrDump(n names) {
 	raceLogs.mu.Unlock()
 	qi, qn := e.queues(n)
 	owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
-	e.t.Fatalf("等待 Agent 空闲超时：redis 打断 %v 普通 %v 锁 %q 执行顺序 %v", qi, qn, owner, e.ex.messages())
+	e.t.Fatalf("timed out waiting for the Agent to go idle: redis interrupt %v normal %v lock %q execution order %v", qi, qn, owner, e.ex.messages())
 }

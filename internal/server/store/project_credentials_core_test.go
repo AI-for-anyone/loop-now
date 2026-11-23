@@ -33,10 +33,10 @@ func TestProjectCredentialCASAndPinnedIdentity(t *testing.T) {
 	if err := e.s.Migrate(ctx, quietLogger()); err != nil {
 		t.Fatal(err)
 	}
-	a := e.agent(t, "使用者", "openai")
-	b := e.agent(t, "共同使用者", "openai")
+	a := e.agent(t, "user", "openai")
+	b := e.agent(t, "co-user", "openai")
 	write := projectCoreWrite(t, e, "synthetic-A")
-	acct, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "同标签", write)
+	acct, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "Same label", write)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestProjectCredentialCASAndPinnedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rename := "新标签"
+	rename := "New label"
 	named, err := e.s.MutateProjectCredential(ctx, e.project, acct.View.ID, 1, &rename, nil, false)
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestProjectCredentialCASAndPinnedIdentity(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM model_auth_versions`).Scan(&versionsAfter); err != nil || versionsAfter != versionsBefore {
 		t.Fatal("stale account CAS wrote a version", err)
 	}
-	other, err := e.s.CreateProjectCredential(ctx, e.project, "model", "anthropic", "不相关", write)
+	other, err := e.s.CreateProjectCredential(ctx, e.project, "model", "anthropic", "Unrelated", write)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +131,11 @@ func TestProjectCredentialCASAndPinnedIdentity(t *testing.T) {
 	if err = mustQuery.Scan(&org); err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.s.CreateProject(ctx, org, "别的归属")
+	p, err := e.s.CreateProject(ctx, org, "Other owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	outsider, err := e.s.CreateAgent(ctx, store.ProjectScope(p.ID), "外部消费者", "openai", "fixture", "")
+	outsider, err := e.s.CreateAgent(ctx, store.ProjectScope(p.ID), "outside consumer", "openai", "fixture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,13 +183,13 @@ func TestProjectCredentialSelectionRejectsWithoutMutation(t *testing.T) {
 	if err := e.s.Migrate(ctx, quietLogger()); err != nil {
 		t.Fatal(err)
 	}
-	a := e.agent(t, "选择者", "openai")
+	a := e.agent(t, "selector", "openai")
 	w := projectCoreWrite(t, e, "fixture")
-	one, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "重名", w)
+	one, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "Duplicate name", w)
 	if err != nil {
 		t.Fatal(err)
 	}
-	two, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "重名", w)
+	two, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "Duplicate name", w)
 	if err != nil {
 		t.Fatal(err)
 	}

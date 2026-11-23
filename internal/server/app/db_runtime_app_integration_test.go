@@ -119,7 +119,7 @@ func TestDatabaseActualAppCapturedScopeAndCacheRebuild(t *testing.T) {
 	a := s.a
 	var e error
 	ctx := context.Background()
-	path, agent := s.createAgent("数据库运行快照")
+	path, agent := s.createAgent("database runtime snapshot")
 	// Only synthetic model key; all actual execution is fakePi with network-free output.
 	s.must(201, "POST", "/projects/"+agent.ProjectID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "fixture-model", "credential": map[string]any{"type": "api_key", "key": "synthetic-only"}})
 	if e = a.Store.AddAgentCLI(ctx, agent.ID, "mysql"); e != nil {
@@ -226,7 +226,7 @@ func TestDatabaseActualAppCapturedScopeAndCacheRebuild(t *testing.T) {
 	if _, e = a.Store.SetProjectManager(ctx, *agent.ProjectID, agent.ID); e != nil {
 		t.Fatal(e)
 	}
-	taskRaw, e := a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "数据库固定快照", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "检查", AgentID: agent.ID, Inputs: map[string]workflow.Source{}, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}}}, Edges: []workflow.Edge{}}})
+	taskRaw, e := a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "database pinned snapshot", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "check", AgentID: agent.ID, Inputs: map[string]workflow.Source{}, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}}}, Edges: []workflow.Edge{}}})
 	if e != nil {
 		t.Fatal("actual task creation failed", e)
 	}

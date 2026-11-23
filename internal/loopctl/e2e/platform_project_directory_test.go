@@ -42,20 +42,20 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 	_, _, externalToken := s.issueToken("", "directory-fixture", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": externalToken, "LOOPCTL_CA_FILE": w.caFile})
 	provider, model := cliKeyProvider(t, ext)
-	platform := ext.run("agent", "create", "--platform", "--name", "目录协作者", "--provider", provider, "--model", model).ok(t)
+	platform := ext.run("agent", "create", "--platform", "--name", "Directory collaborator", "--provider", provider, "--model", model).ok(t)
 	platformID := platform["id"].(string)
 	ext.stdin = `{"provider":"` + provider + `","key":"synthetic-platform-directory","expectedConfigVersion":1}`
 	ext.run("agent", "credential", "set-model", platformID, "--from-file", "-").ok(t)
 	ext.stdin = ""
 	orgID := uuid.New()
-	if _, err := s.a.Store.Pool.Exec(ctx, `INSERT INTO organizations(id,name) VALUES($1,'跨组织')`, orgID); err != nil {
+	if _, err := s.a.Store.Pool.Exec(ctx, `INSERT INTO organizations(id,name) VALUES($1,'Other org')`, orgID); err != nil {
 		t.Fatal(err)
 	}
-	project, err := s.a.Store.CreateProject(ctx, orgID, "协作项目")
+	project, err := s.a.Store.CreateProject(ctx, orgID, "Shared project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager, err := s.a.Store.CreateAgent(ctx, store.ProjectScope(project.ID), "项目经理", provider, model, "private-project-prompt-sentinel")
+	manager, err := s.a.Store.CreateAgent(ctx, store.ProjectScope(project.ID), "Project manager", provider, model, "private-project-prompt-sentinel")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,14 +63,14 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	ext.stdin = `{"type":"api_key","key":"synthetic-project-directory"}`
-	ext.run("project", "model-account", "create", project.ID.String(), "--provider", provider, "--name", "隔离合成账号", "--from-file", "-").ok(t)
+	ext.run("project", "model-account", "create", project.ID.String(), "--provider", provider, "--name", "Isolated synthetic account", "--from-file", "-").ok(t)
 	ext.stdin = ""
 	// A real fakePi process obtains its token through the production executor.
-	s.console(201, "POST", "/inbox/messages", map[string]any{"to": platformID, "text": "开始目录验证"})
+	s.console(201, "POST", "/inbox/messages", map[string]any{"to": platformID, "text": "Start the directory check"})
 	s.waitIdle(platformID)
 	platformEnv := w.agentEnv()
 	plat := newLoopctl(t, platformEnv)
-	if plat.run("whoami").ok(t)["address"] != "目录协作者" {
+	if plat.run("whoami").ok(t)["address"] != "Directory collaborator" {
 		t.Fatal("wrong process token")
 	}
 	directory := plat.run("project", "list")
@@ -90,7 +90,7 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 			target = p.Manager
 		}
 	}
-	if !foundNull || target == nil || target.ID != manager.ID || target.Address != "跨组织/协作项目/项目经理" {
+	if !foundNull || target == nil || target.ID != manager.ID || target.Address != "Other org/Shared project/Project manager" {
 		t.Fatal("wrong cross-organization directory")
 	}
 	for _, bad := range []string{"private-project-prompt-sentinel", "synthetic-project-directory", "prompt", "credential"} {
@@ -98,7 +98,7 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 			t.Fatal("directory exposed private content")
 		}
 	}
-	sent := plat.run("inbox", "send", target.Address, "--text", "合成跨组织协作").ok(t)
+	sent := plat.run("inbox", "send", target.Address, "--text", "Synthetic cross-org collaboration").ok(t)
 	s.waitIdle(manager.ID.String())
 	managerEnv := w.agentEnv()
 	mgr := newLoopctl(t, managerEnv)
@@ -107,18 +107,18 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 	}
 	mgr.run("project", "list").fails(t, "forbidden", 6)
 	read := mgr.run("inbox", "read", sent["id"].(string)).ok(t)
-	if read["text"] != "合成跨组织协作" {
+	if read["text"] != "Synthetic cross-org collaboration" {
 		t.Fatal("wrong Manager message")
 	}
-	reply := mgr.run("inbox", "reply", sent["id"].(string), "--text", "合成确认").ok(t)
+	reply := mgr.run("inbox", "reply", sent["id"].(string), "--text", "Synthetic confirmation").ok(t)
 	s.waitIdle(platformID)
-	if plat.run("inbox", "read", reply["id"].(string)).ok(t)["text"] != "合成确认" {
+	if plat.run("inbox", "read", reply["id"].(string)).ok(t)["text"] != "Synthetic confirmation" {
 		t.Fatal("bidirectional Inbox failed")
 	}
-	if _, err = s.a.Store.RenameProject(ctx, project.ID, "新协作项目"); err != nil {
+	if _, err = s.a.Store.RenameProject(ctx, project.ID, "Renamed shared project"); err != nil {
 		t.Fatal(err)
 	}
-	plat.run("inbox", "send", target.Address, "--text", "旧地址不得改投").fails(t, "not_found", 7)
+	plat.run("inbox", "send", target.Address, "--text", "Old address must not be redirected").fails(t, "not_found", 7)
 	var renamed struct {
 		Projects []store.PlatformProjectDirectoryItem `json:"projects"`
 	}
@@ -130,7 +130,7 @@ func TestPlatformProjectDirectoryWithApp(t *testing.T) {
 	matched := false
 	for _, p := range renamed.Projects {
 		if p.ID == project.ID {
-			matched = p.Manager != nil && p.Manager.ID == manager.ID && p.Manager.Address == "跨组织/新协作项目/项目经理"
+			matched = p.Manager != nil && p.Manager.ID == manager.ID && p.Manager.Address == "Other org/Renamed shared project/Project manager"
 		}
 	}
 	if !matched {
@@ -154,7 +154,7 @@ func newPlatformDirectoryWorld(t *testing.T, external bool) *world {
 	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
+		t.Skipf("no usable Pi 1.4.0 on this machine: %v", err)
 	}
 	dump := filepath.Join(t.TempDir(), "dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
@@ -162,7 +162,7 @@ func newPlatformDirectoryWorld(t *testing.T, external bool) *world {
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "Default org", DefaultProjectName: "Default project",
 		PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,

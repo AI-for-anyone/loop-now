@@ -21,12 +21,12 @@ func TestPipeCompactProtocol(t *testing.T) {
 	}
 	compactDone := make(chan compactOut, 1)
 	go func() {
-		res, err := f.c.Compact(ctx, "保留关键决定")
+		res, err := f.c.Compact(ctx, "Keep the key decisions")
 		compactDone <- compactOut{res, err}
 	}()
 	cmd := f.next()
-	if cmd["type"] != "compact" || cmd["customInstructions"] != "保留关键决定" {
-		t.Fatalf("compact 参数不符：%v", cmd)
+	if cmd["type"] != "compact" || cmd["customInstructions"] != "Keep the key decisions" {
+		t.Fatalf("unexpected compact parameters: %v", cmd)
 	}
 	id := cmd["id"].(string)
 	f.send(
@@ -37,12 +37,12 @@ func TestPipeCompactProtocol(t *testing.T) {
 	)
 	out := <-compactDone
 	if out.err != nil || out.res != (CompactResult{TokensBefore: 4200, EstimatedTokensAfter: 350}) {
-		t.Fatalf("compact 结果不符：%+v %v", out.res, out.err)
+		t.Fatalf("unexpected compact result: %+v %v", out.res, out.err)
 	}
 	obs.waitUsage(t, 1)
 	usage, inTurn, _, _ := obs.snapshot()
 	if len(usage) != 1 || usage[0].Kind != UsageCompaction || !inTurn[0] {
-		t.Fatalf("压缩用量应归属当前维护运行：%+v %v", usage, inTurn)
+		t.Fatalf("compaction usage should belong to the current maintenance run: %+v %v", usage, inTurn)
 	}
 
 }
@@ -56,7 +56,7 @@ func TestPipeCompactOmitsEmptyInstructions(t *testing.T) {
 	}()
 	cmd := f.next()
 	if _, exists := cmd["customInstructions"]; exists {
-		t.Fatalf("空指令不应发送 customInstructions：%v", cmd)
+		t.Fatalf("empty instructions should not send customInstructions: %v", cmd)
 	}
 	f.send(okResp(cmd["id"].(string), "compact", map[string]any{"tokensBefore": 10, "estimatedTokensAfter": 5}))
 	if err := <-done; err != nil {
@@ -70,38 +70,38 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	ctx := testCtx(t)
 	done := make(chan error, 1)
 	go func() {
-		_, err := p.Compact(ctx, "只保留待办")
+		_, err := p.Compact(ctx, "Keep only the to-dos")
 		done <- err
 	}()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if data, err := os.ReadFile(capture); err == nil {
-			if string(data) != "只保留待办" {
-				t.Fatalf("压缩指令不符：%q", data)
+			if string(data) != "Keep only the to-dos" {
+				t.Fatalf("unexpected compaction instructions: %q", data)
 			}
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("等待 compact 开始超时")
+			t.Fatal("timed out waiting for compact to start")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	abortCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := p.Abort(abortCtx); err != nil {
-		t.Fatalf("Abort 应能取消 compact：%v", err)
+		t.Fatalf("Abort should cancel compact: %v", err)
 	}
 	select {
 	case err := <-done:
 		if !errors.Is(err, ErrCompactAborted) {
-			t.Fatalf("平台取消的 compact 应返回 ErrCompactAborted：%v", err)
+			t.Fatalf("a compact cancelled by the platform should return ErrCompactAborted: %v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("compact 未在 Abort 后返回")
+		t.Fatal("compact did not return after Abort")
 	}
 	res, err := p.Prompt(ctx, "after", nil)
 	if err != nil || res.Outcome != OutcomeCompleted || res.Text != "echo: after" {
-		t.Fatalf("取消压缩后进程应可继续使用：%+v %v", res, err)
+		t.Fatalf("the process should stay usable after the compaction is cancelled: %+v %v", res, err)
 	}
 }
 
@@ -119,12 +119,12 @@ func TestCompactSkippedOutcomes(t *testing.T) {
 			res, err := p.Compact(testCtx(t), "")
 			if want == "" {
 				if err == nil || !strings.Contains(err.Error(), "model unavailable") {
-					t.Fatalf("其他失败应是错误：%+v %v", res, err)
+					t.Fatalf("other failures should be errors: %+v %v", res, err)
 				}
 				return
 			}
 			if err != nil || res.Skipped != want || res.TokensBefore != 0 {
-				t.Fatalf("应是没有压缩（%s）：%+v %v", want, res, err)
+				t.Fatalf("should not compact (%s): %+v %v", want, res, err)
 			}
 		})
 	}

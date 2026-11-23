@@ -131,21 +131,21 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 			helper, root := nodeDeletionHelper(t)
 			s := w.startDeletionAuth(helper)
 			defer s.stop()
-			project := decode[apitypes.Project](t, s.must(201, "POST", "/projects", map[string]any{"name": "资源清理项目"}))
+			project := decode[apitypes.Project](t, s.must(201, "POST", "/projects", map[string]any{"name": "Resource cleanup project"}))
 			loginProject := project.ID
 			if mode == "agent" {
 				loginProject = uuid.Nil
 			}
-			a, op := deletionLogin(t, s, loginProject, "资源一")
+			a, op := deletionLogin(t, s, loginProject, "resource one")
 			first := deletionReady(t, s, a, op, root)
 			agents, ops, resources := []apitypes.Agent{a}, []modelauth.Operation{op}, []deletionResource{first}
 			if mode != "agent" {
-				b, bop := deletionLogin(t, s, project.ID, "资源二")
+				b, bop := deletionLogin(t, s, project.ID, "resource two")
 				agents = append(agents, b)
 				ops = append(ops, bop)
 				resources = append(resources, deletionReady(t, s, b, bop, root))
 			}
-			outside, outsideOp := deletionLogin(t, s, uuid.Nil, "无关登录")
+			outside, outsideOp := deletionLogin(t, s, uuid.Nil, "unrelated login")
 			outsideResource := deletionReady(t, s, outside, outsideOp, root)
 			path := "/projects/" + project.ID.String()
 			if mode == "agent" {
@@ -223,7 +223,7 @@ func TestDeletedLoginLateSuccessCannotSaveAndDrainIsBounded(t *testing.T) {
 		}
 	}()
 	s.a.ModelAuth.Options.LoginDrainTimeout = 50 * time.Millisecond
-	a, op := deletionLogin(t, s, uuid.Nil, "迟到授权")
+	a, op := deletionLogin(t, s, uuid.Nil, "late grant")
 	select {
 	case <-helper.started:
 	case <-time.After(3 * time.Second):

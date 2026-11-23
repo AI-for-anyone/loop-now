@@ -23,11 +23,11 @@ func TestCLIImportCancelFinalizeBothWinners(t *testing.T) {
 			owner := uuid.New()
 			candidate := uuid.New()
 			h := sha256.Sum256([]byte("request"))
-			in := store.CLIImportBegin{ID: uuid.New(), ProjectID: e.project, ScanID: uuid.New(), InstanceID: owner, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: "key", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "合成来源"}}}
+			in := store.CLIImportBegin{ID: uuid.New(), ProjectID: e.project, ScanID: uuid.New(), InstanceID: owner, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: "key", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "synthetic source"}}}
 			if _, _, err := e.s.BeginCLIImport(ctx, in); err != nil {
 				t.Fatal(err)
 			}
-			v := store.CLIImportPreparedItem{CandidateID: candidate, AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "测试同名", TemplateSource: "builtin", CredentialFormat: "1", AuthMethod: "static", ProvenanceKeyID: "key", OriginMAC: bytes.Repeat([]byte{1}, 32), ContentMAC: bytes.Repeat([]byte{2}, 32)}
+			v := store.CLIImportPreparedItem{CandidateID: candidate, AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "test same name", TemplateSource: "builtin", CredentialFormat: "1", AuthMethod: "static", ProvenanceKeyID: "key", OriginMAC: bytes.Repeat([]byte{1}, 32), ContentMAC: bytes.Repeat([]byte{2}, 32)}
 			var err error
 			v.Secret = []byte(`{"env":{"GH_TOKEN":"synthetic"},"files":[]}`)
 			if cancelFirst {

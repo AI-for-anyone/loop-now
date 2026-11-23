@@ -27,11 +27,11 @@ func newModelAuthEnv(t *testing.T) *modelAuthEnv {
 	t.Helper()
 	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
-	_, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
+	_, err := s.EnsureDefaults(ctx, "Default organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := s.CreateAgent(ctx, store.PlatformScope(), "模型Agent", "openai-codex", "codex-test", "")
+	a, err := s.CreateAgent(ctx, store.PlatformScope(), "Model Agent", "openai-codex", "codex-test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestModelAuthVersionsKeepAccountAndLegacyMarker(t *testing.T) {
 		t.Fatal("old task account replaced")
 	}
 	// SQL prevents a current pointer from referencing another Agent's version.
-	other, err := e.s.CreateAgent(e.ctx, store.PlatformScope(), "另一Agent", "openai-codex", "codex-test", "")
+	other, err := e.s.CreateAgent(e.ctx, store.PlatformScope(), "Another Agent", "openai-codex", "codex-test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
