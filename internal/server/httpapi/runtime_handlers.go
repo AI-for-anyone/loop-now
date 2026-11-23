@@ -4,9 +4,33 @@ import (
 	"net/http"
 	"strconv"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/runtimes"
 )
+
+// runtimeDefinition mirrors the RuntimeDefinition schema.
+type runtimeDefinition struct {
+	ID           string                    `json:"id"`
+	Name         string                    `json:"name"`
+	Providers    []string                  `json:"providers"`
+	IsDefault    bool                      `json:"isDefault"`
+	Capabilities agentruntime.Capabilities `json:"capabilities"`
+}
+
+// listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and
+// checks nothing on this computer.
+func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) {
+	list := []runtimeDefinition{}
+	for _, rt := range agentruntime.All() {
+		providers := rt.Providers
+		if providers == nil {
+			providers = []string{}
+		}
+		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runtimes": list})
+}
 
 // listRuntimes reports whether each Agent runtime is available on this machine; refresh=true bypasses the cache.
 func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {

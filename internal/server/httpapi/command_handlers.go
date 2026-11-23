@@ -37,11 +37,12 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	runtime := agentruntime.ForProvider(agent.ModelProvider)
 	out := struct {
 		Runtime    string         `json:"runtime"`
 		CapturedAt *time.Time     `json:"capturedAt"`
 		Commands   []agentCommand `json:"commands"`
-	}{Runtime: agentruntime.ForProvider(agent.ModelProvider), Commands: []agentCommand{}}
+	}{Runtime: runtime.ID, Commands: []agentCommand{}}
 	platform, err := s.Conv.PlatformCommands(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -61,9 +62,9 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Commands = append(out.Commands, item)
 	}
-	// Only Pi Agents have Pi commands; after switching to another runtime, the commands cached from the earlier Pi
-	// start are no longer listed either.
-	if s.PiCommands != nil && out.Runtime == agentruntime.Pi {
+	// Only runtimes with native commands list them; after switching to another runtime, the commands cached from the
+	// earlier start are no longer listed either.
+	if s.PiCommands != nil && runtime.Capabilities.NativeCommands {
 		cached, err := s.PiCommands(id)
 		if err != nil {
 			s.fail(w, r, err)

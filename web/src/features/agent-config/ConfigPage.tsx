@@ -1,15 +1,19 @@
 import { AgentPlugins } from '@/features/plugins/AgentPlugins'
 import { StickyNote } from '@/components/StickyNote'
+import type { Schemas } from '@/api/client'
 import { useAgentStatus } from '@/api/queries'
 import { config } from '@/config'
 import { useAgentContext } from '@/features/agents/agent-context'
 import { t } from '@/i18n'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { BasicSection } from './BasicSection'
 import { ClisSection } from './ClisSection'
 import { ConfigToc } from './ConfigToc'
 import { DangerZone } from './DangerZone'
 import { ModelCredentialSection } from './ModelCredentialSection'
-import { ClaudeCodeAccountSection } from './RuntimeNotes'
+import { LocalAccountSection } from './RuntimeNotes'
+import { Section } from './Section'
 import { SkillsSection } from './SkillsSection'
 import { AgentPromptSection } from '@/features/prompts/AgentPromptSection'
 import { AgentLocalDirectoriesSection } from '@/features/local-mode/LocalDirectories'
@@ -47,8 +51,7 @@ export function ConfigPage() {
           <AgentPromptSection agent={agent} />
           <AgentLocalDirectoriesSection key={`local-dirs:${agent.id}`} agent={agent} />
           {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} />
-            : agent.runtime === 'claude-code' ? <ClaudeCodeAccountSection />
-              : <ModelCredentialSection key={`${agent.id}:${agent.model.provider}`} agent={agent} />}
+            : <PlatformModelAccount agent={agent} />}
           <SkillsSection agentId={agent.id} />
           <ClisSection agent={agent} />
           <AgentPlugins agent={agent} />
@@ -58,4 +61,13 @@ export function ConfigPage() {
       <ConfigToc />
     </div></DraftNavigationGuard>
   )
+}
+
+// The model account section of a platform Agent: a runtime with its own login on this computer needs no account; the others log in to
+// their model provider here. Shown once the runtime definitions are read; if they cannot be read, the section says why.
+function PlatformModelAccount({ agent }: { agent: Schemas['Agent'] }) {
+  const lookup = useRuntimeLookup()
+  const runtime = lookup.get(agent.runtime)
+  if (!runtime) return lookup.error ? <Section id="model-credential" title={t.config.modelCredential.title}><ErrorAlert error={lookup.error} /></Section> : null
+  return runtime.capabilities.accounts === 'local' ? <LocalAccountSection runtime={runtime} /> : <ModelCredentialSection key={`${agent.id}:${agent.model.provider}`} agent={agent} />
 }

@@ -263,28 +263,25 @@ func pluginArgs(p agentconfig.PluginAssets) []string {
 	return args
 }
 
-// writePluginMCP writes the MCP servers of granted plugins into the file the runtime reads: for Pi, mcp.json in the
-// Agent's Pi directory; for Claude Code, claude-mcp.json (passed via --mcp-config, same format). When there are none,
-// and for the other runtime's file, the file is deleted.
-func writePluginMCP(d agentDirs, p agentconfig.PluginAssets, claude bool) error {
-	path, other := filepath.Join(d.pi, "mcp.json"), d.claudeMCP
-	if claude {
-		path, other = other, path
-	}
-	if err := os.Remove(other); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
+// writeMCPConfig writes the MCP servers of granted plugins into the file a runtime reads ({"mcpServers": ...}); when
+// there are none, the file is deleted.
+func writeMCPConfig(path string, p agentconfig.PluginAssets) error {
 	if len(p.MCPServers) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
+		return removeIfExists(path)
 	}
 	b, err := json.MarshalIndent(map[string]any{"mcpServers": p.MCPServers}, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, b, 0o600)
+}
+
+// removeIfExists deletes a file; one that does not exist is not an error.
+func removeIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // piArgs returns the arguments for starting Pi.

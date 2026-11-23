@@ -84,7 +84,7 @@ func TestRunLifecycleEventsAndTimes(t *testing.T) {
 		t.Fatalf("events should record the instance ID: %v %v", instance, err)
 	}
 
-	if err := e.s.SetRunPhase(e.ctx, active.ID, "preparing"); err != nil {
+	if err := e.s.SetRunPhase(e.ctx, active.ID, "preparing", "pi"); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.s.SetRunRunning(e.ctx, active.ID, 1); err != nil {

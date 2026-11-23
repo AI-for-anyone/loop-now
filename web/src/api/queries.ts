@@ -13,6 +13,7 @@ export const keys = {
   modelProviders: ['modelProviders'] as const,
   agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
   runtimes: ['runtimes'] as const,
+  runtimeDefinitions: ['runtimeDefinitions'] as const,
   modelSettings: ['modelSettings'] as const,
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
@@ -97,11 +98,17 @@ export function useModelProviders(agentId?: string) {
   })
 }
 
-// Whether each runtime is available on this machine (whether Claude Code is installed, whether it is logged in). The server caches this
-// for 30 seconds, and likewise it is not re-read here within 30 seconds; nothing is read while enabled is false (model selection only
-// needs it when Claude Code is chosen).
+// Whether each runtime is available on this machine (whether a runtime that is not bundled is installed and logged in). Answering it
+// runs the runtimes' CLIs on this machine; the server caches the result for 30 seconds, and likewise it is not re-read here within
+// 30 seconds; nothing is read while enabled is false (model selection only needs it when such a runtime is chosen).
 export function useRuntimes(enabled = true) {
   return useQuery({ queryKey: keys.runtimes, queryFn: () => call(api.GET('/runtimes')), staleTime: 30_000, enabled })
+}
+
+// The fixed definition of each runtime: name, model providers, capabilities. Reading it checks nothing on this machine and it changes
+// only when the server is upgraded, so it is read once. Components use it through useRuntimeLookup (lib/runtime.ts).
+export function useRuntimeDefinitions() {
+  return useQuery({ queryKey: keys.runtimeDefinitions, queryFn: () => call(api.GET('/runtime-definitions')), staleTime: Infinity })
 }
 
 // Re-check without the server's cache (refresh=true) and put the result straight into the useRuntimes cache.

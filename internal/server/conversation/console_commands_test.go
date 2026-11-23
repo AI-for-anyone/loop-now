@@ -39,11 +39,11 @@ func (m *maintExec) StopIdle(ctx context.Context, _ uuid.UUID, reason string) (b
 	return true, nil
 }
 
-func (m *maintExec) ExportSession(context.Context, uuid.UUID, string, string) (executor.SessionExport, error) {
+func (m *maintExec) ExportSession(context.Context, uuid.UUID, string, string, string) (executor.SessionExport, error) {
 	return executor.SessionExport{Filename: "s.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
 }
 
-func (m *maintExec) ListSessions(ctx context.Context, _ uuid.UUID, _ string) ([]executor.ManagedSession, error) {
+func (m *maintExec) ListSessions(ctx context.Context, _ uuid.UUID, _, _ string) ([]executor.ManagedSession, error) {
 	if m.listGate != nil {
 		m.entered <- "list"
 		select {
@@ -55,7 +55,7 @@ func (m *maintExec) ListSessions(ctx context.Context, _ uuid.UUID, _ string) ([]
 	return []executor.ManagedSession{}, nil
 }
 
-func (m *maintExec) ResolveSession(context.Context, uuid.UUID, string, string) (*executor.ManagedSession, error) {
+func (m *maintExec) ResolveSession(context.Context, uuid.UUID, string, string, string) (*executor.ManagedSession, error) {
 	return nil, nil
 }
 

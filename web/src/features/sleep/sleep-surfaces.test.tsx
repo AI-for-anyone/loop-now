@@ -6,6 +6,7 @@ import { makeTaskDetail } from '@/test/tasks'
 import { initialLiveState, isBusy, liveReducer } from '@/features/chat/live-state'
 import { buildSteps } from '@/features/chat/timeline-steps'
 import { TaskInstanceSleeps } from './TaskInstanceSleeps'
+import { runtimeName } from '@/test/runtimes'
 
 it('a new normal live sleep is not affected by an old null, a reconnect or a task scope; whether a registered sleep is still busy follows the original status', () => {
   const sleep = makeSleep()
@@ -40,7 +41,7 @@ it('the sleep Timeline shows the real lifecycle; an invalidated timer that never
   const steps = buildSteps(makeRun(), [
     { type: 'sleep', at: sleep.requestedAt, sleep },
     { type: 'ended', at: sleep.requestedAt, status: 'interrupted', endReason: 'sleep_superseded', errorCode: null },
-  ])
+  ], runtimeName)
   expect(steps[1].lines).toContain('Woke on schedule')
   expect(steps[1].field).toContain(sleep.id)
   expect(steps[2].tone).toBe('neutral')

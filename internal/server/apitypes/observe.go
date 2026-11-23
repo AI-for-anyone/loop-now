@@ -175,7 +175,8 @@ type TimelineMessageCancelledEntry struct {
 // TimelinePhaseEntry mirrors the TimelinePhase schema.
 type TimelinePhaseEntry struct {
 	TimelineBase
-	Phase string `json:"phase"`
+	Phase   string `json:"phase"`
+	Runtime string `json:"runtime"`
 }
 
 // TimelineCLIInstallEntry mirrors the TimelineCliInstall schema.
@@ -210,11 +211,11 @@ type TimelineWorkspaceSyncEntry struct {
 // TimelinePiStartedEntry mirrors the TimelinePiStarted schema.
 type TimelinePiStartedEntry struct {
 	TimelineBase
-	PID           int64   `json:"pid"`
-	StartupMs     int64   `json:"startupMs"`
-	Reason        string  `json:"reason"`
-	ConfigVersion int64   `json:"configVersion"`
-	Runtime       *string `json:"runtime,omitempty"`
+	PID           int64  `json:"pid"`
+	StartupMs     int64  `json:"startupMs"`
+	Reason        string `json:"reason"`
+	ConfigVersion int64  `json:"configVersion"`
+	Runtime       string `json:"runtime"`
 }
 
 // TimelinePiReusedEntry mirrors the TimelinePiReused schema.
@@ -222,26 +223,26 @@ type TimelinePiReusedEntry struct {
 	TimelineBase
 	PID              int64      `json:"pid"`
 	ProcessStartedAt *time.Time `json:"processStartedAt"`
-	Runtime          *string    `json:"runtime,omitempty"`
+	Runtime          string     `json:"runtime"`
 }
 
 // TimelinePiStoppedEntry mirrors the TimelinePiStopped schema.
 type TimelinePiStoppedEntry struct {
 	TimelineBase
-	PID      int64   `json:"pid"`
-	Reason   string  `json:"reason"`
-	UptimeMs int64   `json:"uptimeMs"`
-	Runtime  *string `json:"runtime,omitempty"`
+	PID      int64  `json:"pid"`
+	Reason   string `json:"reason"`
+	UptimeMs int64  `json:"uptimeMs"`
+	Runtime  string `json:"runtime"`
 }
 
 // TimelinePiExitedEntry mirrors the TimelinePiExited schema.
 type TimelinePiExitedEntry struct {
 	TimelineBase
-	PID        int64   `json:"pid"`
-	UptimeMs   int64   `json:"uptimeMs"`
-	Exit       string  `json:"exit"`
-	StderrTail string  `json:"stderrTail"`
-	Runtime    *string `json:"runtime,omitempty"`
+	PID        int64  `json:"pid"`
+	UptimeMs   int64  `json:"uptimeMs"`
+	Exit       string `json:"exit"`
+	StderrTail string `json:"stderrTail"`
+	Runtime    string `json:"runtime"`
 }
 
 // TimelineModelRateLimitEntry mirrors the TimelineModelRateLimit schema: the subscription quota status reported by

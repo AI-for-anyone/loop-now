@@ -1716,6 +1716,26 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /runtime-definitions:
+    get:
+      tags: [models]
+      operationId: listRuntimeDefinitions
+      x-access: console
+      summary: What each Agent runtime is, without checking this computer
+      description: |
+        The fixed definition of each runtime: its name, the model providers it runs, which runtime is the default, and
+        what it can do. Reading it starts no process and checks nothing on this computer, so it answers at once; whether
+        a runtime is installed and logged in is GET /runtimes. The list changes only when the server is upgraded.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Each runtime, pi first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuntimeDefinitionList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /model-providers/{providerId}/models:
     parameters:
       - $ref: "#/components/parameters/ProviderId"
@@ -10390,6 +10410,67 @@ components:
           type: array
           items: { $ref: "#/components/schemas/RuntimeStatus" }
 
+    RuntimeDefinitionList:
+      type: object
+      required: [runtimes]
+      additionalProperties: false
+      properties:
+        runtimes:
+          type: array
+          items: { $ref: "#/components/schemas/RuntimeDefinition" }
+
+    RuntimeDefinition:
+      description: The fixed definition of a runtime; nothing in it depends on this computer.
+      type: object
+      required: [id, name, providers, isDefault, capabilities]
+      additionalProperties: false
+      properties:
+        id: { $ref: "#/components/schemas/AgentRuntime" }
+        name:
+          type: string
+          description: The product name, shown as is in every language
+        providers:
+          type: array
+          items: { type: string }
+          uniqueItems: true
+          description: |
+            The model providers this runtime runs (ModelProvider.id). Empty for the default runtime, which runs every
+            provider that no other runtime lists.
+        isDefault:
+          type: boolean
+          description: True for exactly one runtime, the one that runs every model provider no other runtime lists
+        capabilities: { $ref: "#/components/schemas/RuntimeCapabilities" }
+
+    RuntimeCapabilities:
+      description: What a runtime can do. Thinking levels and image input are per model, in the model catalog.
+      type: object
+      required: [accounts, realHome, nativeCommands, pluginExtensions, bundled]
+      additionalProperties: false
+      properties:
+        accounts:
+          type: string
+          enum: [managed, local]
+          description: |
+            Whose login runs the model. managed: the accounts and credentials the platform keeps for the project or the
+            Agent. local: the login of the runtime's own CLI on this computer, which the platform neither reads nor
+            stores.
+        realHome:
+          type: boolean
+          description: |
+            Always runs with the user's real HOME. When false, the Agent has a HOME of its own unless "Use local logins"
+            is on.
+        nativeCommands:
+          type: boolean
+          description: Lists its own slash commands; GET /agents/{agentId}/commands then includes them besides the platform's.
+        pluginExtensions:
+          type: boolean
+          description: |
+            Loads the Agent-side extensions of granted plugins, and with them plugin model providers and extension
+            dialogs. Plugin Skills and MCP servers work on every runtime.
+        bundled:
+          type: boolean
+          description: Ships with the platform and needs no install or login on this computer; GET /runtimes always reports it as available.
+
     RuntimeStatus:
       type: object
       required: [id, available, version, binaryPath, unavailableReason, login, checkedAt]
@@ -12308,12 +12389,19 @@ components:
     TimelinePhase:
       description: A startup phase began
       type: object
-      required: [type, at, phase]
+      required: [type, at, phase, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [phase] }
         at: { type: string, format: date-time }
         phase: { type: string, enum: [waiting_slot, preparing, launching] }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: |
+            The runtime this run is being started on, recorded with the phase. Records written before it was recorded
+            get it when read, by a rule that applies to those old records only: the runtime of the first process entry
+            (pi_started or pi_reused) after this phase in the same run, where a process entry without one means pi; when
+            there is none, claude-code if the run ended with a runtime_* error code; otherwise pi.
 
     TimelineCliInstall:
       description: A CLI installation that actually ran; there is no such entry when the CLI was already installed or needed no installation
@@ -12366,7 +12454,7 @@ components:
     TimelinePiStarted:
       description: A new Pi process was started
       type: object
-      required: [type, at, pid, startupMs, reason, configVersion]
+      required: [type, at, pid, startupMs, reason, configVersion, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [pi_started] }
@@ -12383,12 +12471,12 @@ components:
         configVersion: { type: integer }
         runtime:
           $ref: "#/components/schemas/AgentRuntime"
-          description: Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi.
+          description: Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only.
 
     TimelinePiReused:
       description: An already running Pi process was reused
       type: object
-      required: [type, at, pid, processStartedAt]
+      required: [type, at, pid, processStartedAt, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [pi_reused] }
@@ -12397,12 +12485,12 @@ components:
         processStartedAt: { type: [string, "null"], format: date-time }
         runtime:
           $ref: "#/components/schemas/AgentRuntime"
-          description: Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi.
+          description: Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only.
 
     TimelinePiStopped:
       description: The platform stopped the Pi process
       type: object
-      required: [type, at, pid, reason, uptimeMs]
+      required: [type, at, pid, reason, uptimeMs, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [pi_stopped] }
@@ -12415,12 +12503,12 @@ components:
         uptimeMs: { type: integer, minimum: 0 }
         runtime:
           $ref: "#/components/schemas/AgentRuntime"
-          description: Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi.
+          description: Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only.
 
     TimelinePiExited:
       description: The Pi process exited unexpectedly
       type: object
-      required: [type, at, pid, uptimeMs, exit, stderrTail]
+      required: [type, at, pid, uptimeMs, exit, stderrTail, runtime]
       additionalProperties: false
       properties:
         type: { type: string, enum: [pi_exited] }
@@ -12433,7 +12521,7 @@ components:
           type: string
         runtime:
           $ref: "#/components/schemas/AgentRuntime"
-          description: Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi.
+          description: Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only.
 
     TimelineModelRateLimit:
       description: Subscription quota status reported by Claude Code (rate_limit_event); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run.

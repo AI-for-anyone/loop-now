@@ -474,6 +474,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runtime-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What each Agent runtime is, without checking this computer
+         * @description The fixed definition of each runtime: its name, the model providers it runs, which runtime is the default, and
+         *     what it can do. Reading it starts no process and checks nothing on this computer, so it answers at once; whether
+         *     a runtime is installed and logged in is GET /runtimes. The list changes only when the server is upgraded.
+         */
+        get: operations["listRuntimeDefinitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -3667,6 +3689,47 @@ export interface components {
         RuntimeList: {
             runtimes: components["schemas"]["RuntimeStatus"][];
         };
+        RuntimeDefinitionList: {
+            runtimes: components["schemas"]["RuntimeDefinition"][];
+        };
+        /** @description The fixed definition of a runtime; nothing in it depends on this computer. */
+        RuntimeDefinition: {
+            id: components["schemas"]["AgentRuntime"];
+            /** @description The product name, shown as is in every language */
+            name: string;
+            /**
+             * @description The model providers this runtime runs (ModelProvider.id). Empty for the default runtime, which runs every
+             *     provider that no other runtime lists.
+             */
+            providers: string[];
+            /** @description True for exactly one runtime, the one that runs every model provider no other runtime lists */
+            isDefault: boolean;
+            capabilities: components["schemas"]["RuntimeCapabilities"];
+        };
+        /** @description What a runtime can do. Thinking levels and image input are per model, in the model catalog. */
+        RuntimeCapabilities: {
+            /**
+             * @description Whose login runs the model. managed: the accounts and credentials the platform keeps for the project or the
+             *     Agent. local: the login of the runtime's own CLI on this computer, which the platform neither reads nor
+             *     stores.
+             * @enum {string}
+             */
+            accounts: "managed" | "local";
+            /**
+             * @description Always runs with the user's real HOME. When false, the Agent has a HOME of its own unless "Use local logins"
+             *     is on.
+             */
+            realHome: boolean;
+            /** @description Lists its own slash commands; GET /agents/{agentId}/commands then includes them besides the platform's. */
+            nativeCommands: boolean;
+            /**
+             * @description Loads the Agent-side extensions of granted plugins, and with them plugin model providers and extension
+             *     dialogs. Plugin Skills and MCP servers work on every runtime.
+             */
+            pluginExtensions: boolean;
+            /** @description Ships with the platform and needs no install or login on this computer; GET /runtimes always reports it as available. */
+            bundled: boolean;
+        };
         RuntimeStatus: {
             id: components["schemas"]["AgentRuntime"];
             /** @description For claude-code, true when claude was found and its version could be read (see login for whether it is logged in) */
@@ -5006,6 +5069,13 @@ export interface components {
             at: string;
             /** @enum {string} */
             phase: "waiting_slot" | "preparing" | "launching";
+            /**
+             * @description The runtime this run is being started on, recorded with the phase. Records written before it was recorded
+             *     get it when read, by a rule that applies to those old records only: the runtime of the first process entry
+             *     (pi_started or pi_reused) after this phase in the same run, where a process entry without one means pi; when
+             *     there is none, claude-code if the run ended with a runtime_* error code; otherwise pi.
+             */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description A CLI installation that actually ran; there is no such entry when the CLI was already installed or needed no installation */
         TimelineCliInstall: {
@@ -5070,8 +5140,8 @@ export interface components {
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description An already running Pi process was reused */
         TimelinePiReused: {
@@ -5085,8 +5155,8 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description The platform stopped the Pi process */
         TimelinePiStopped: {
@@ -5104,8 +5174,8 @@ export interface components {
              */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export";
             uptimeMs: number;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description The Pi process exited unexpectedly */
         TimelinePiExited: {
@@ -5121,8 +5191,8 @@ export interface components {
             exit: string;
             /** @description Tail of Pi's error output (length-limited) */
             stderrTail: string;
-            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
-            runtime?: components["schemas"]["AgentRuntime"];
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
+            runtime: components["schemas"]["AgentRuntime"];
         };
         /** @description Subscription quota status reported by Claude Code (rate_limit_event); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run. */
         TimelineModelRateLimit: {
@@ -10177,6 +10247,30 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listRuntimeDefinitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each runtime, pi first */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeDefinitionList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listModels: {

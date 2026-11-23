@@ -6,7 +6,6 @@ package runtimes
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -83,74 +82,39 @@ func (c *Checker) List(ctx context.Context, refresh bool) []Status {
 	}
 	c.mu.Unlock()
 	at := now().UTC()
-	out := []Status{c.pi(at), c.claude(ctx, at)}
+	out := []Status{}
+	for _, rt := range agentruntime.All() {
+		if version, ok := bundledVersions[rt.ID]; ok && rt.Capabilities.Bundled {
+			out = append(out, c.bundled(rt.ID, version(c), at))
+		} else if probe, ok := probes[rt.ID]; ok && !rt.Capabilities.Bundled {
+			out = append(out, probe(c, ctx, at))
+		}
+	}
 	c.mu.Lock()
 	c.cached, c.at = out, now()
 	c.mu.Unlock()
 	return append([]Status(nil), out...)
 }
 
-func (c *Checker) pi(at time.Time) Status {
-	s := Status{ID: agentruntime.Pi, Available: true, CheckedAt: at}
-	if c.PiVersion != nil {
-		if v := c.PiVersion(); v != "" {
-			s.Version = &v
+// bundledVersions reads the version of each bundled runtime; a bundled runtime is always available.
+var bundledVersions = map[string]func(*Checker) string{
+	agentruntime.Pi: func(c *Checker) string {
+		if c.PiVersion == nil {
+			return ""
 		}
-	}
-	return s
+		return c.PiVersion()
+	},
 }
 
-func (c *Checker) claude(ctx context.Context, at time.Time) Status {
-	s := Status{ID: agentruntime.ClaudeCode, CheckedAt: at}
-	reason := func(r string) Status {
-		s.UnavailableReason = &r
-		return s
+// probes check each runtime that is not bundled: whether it is installed, its version and its login.
+var probes = map[string]func(*Checker, context.Context, time.Time) Status{
+	agentruntime.ClaudeCode: (*Checker).claude,
+}
+
+func (c *Checker) bundled(id, version string, at time.Time) Status {
+	s := Status{ID: id, Available: true, CheckedAt: at}
+	if version != "" {
+		s.Version = &version
 	}
-	var dirs []string
-	if c.UserPath != nil {
-		dirs = c.UserPath(ctx)
-	}
-	bin := c.ClaudeBin
-	if bin == "" {
-		var err error
-		if bin, err = claudecli.Find(dirs); err != nil {
-			return reason(ReasonNotFound)
-		}
-	}
-	home := ""
-	if c.RealHome != nil {
-		if h, err := c.RealHome(); err == nil && filepath.IsAbs(h) {
-			home = h
-		}
-	}
-	if home == "" {
-		return reason(ReasonNotFound)
-	}
-	s.BinaryPath = &bin
-	var env []string
-	if c.HelperEnv != nil {
-		env = c.HelperEnv(ctx, home)
-	} else {
-		env = claudecli.Env(claudecli.EnvOptions{Home: home, Path: append(filepath.SplitList(c.ExecBasePath), dirs...)})
-	}
-	version, err := c.probe.Version(ctx, bin, env)
-	if err != nil {
-		return reason(ReasonVersionFailed)
-	}
-	s.Available, s.Version = true, &version
-	login := &Login{State: LoginUnknown}
-	if a, err := claudecli.AuthStatus(ctx, bin, env); err == nil {
-		login.State = LoginLoggedOut
-		if a.LoggedIn {
-			login.State = LoginLoggedIn
-		}
-		if a.AuthMethod != "" {
-			login.AuthMethod = &a.AuthMethod
-		}
-		if a.SubscriptionType != "" {
-			login.SubscriptionType = &a.SubscriptionType
-		}
-	}
-	s.Login = login
 	return s
 }

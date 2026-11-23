@@ -35,7 +35,7 @@ import (
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/executor/local"
-	"loop-now/internal/server/executor/local/pirpc"
+	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/httpapi"
 	"loop-now/internal/server/inbox"
@@ -433,6 +433,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
+	taskSource.ForkBaseline = a.Executor.ForkBaseline
 	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
@@ -712,16 +713,16 @@ func (h appHooks) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 // askDialog turns a confirm, select or input sent by an extension during a turn into a question from this Agent to the
 // console (plugins/SPEC.md §11), and waits for the answer, the deadline or the end of the turn; on error it responds as
 // cancelled.
-func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req pirpc.DialogRequest) pirpc.DialogResponse {
+func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req runturn.DialogRequest) runturn.DialogResponse {
 	if a.API == nil || a.API.Inbox == nil {
-		return pirpc.DialogResponse{Cancelled: true, Outcome: "cancelled"}
+		return runturn.DialogResponse{Cancelled: true, Outcome: "cancelled"}
 	}
 	ans, err := a.API.Inbox.AskDialog(ctx, inbox.Dialog{AgentID: agentID, RunID: runID, RequestID: req.ID, Method: req.Method, Title: req.Title,
 		Message: req.Message, Placeholder: req.Placeholder, Options: req.Options, Timeout: req.Timeout})
 	if err != nil {
 		a.Log.Warn("extension dialog question failed; answering as cancelled", "agentId", agentID, "runId", runID, "err", err)
 	}
-	return pirpc.DialogResponse{Cancelled: ans.Cancelled, Confirmed: ans.Confirmed, Value: ans.Value, Outcome: ans.Outcome, QuestionID: ans.QuestionID}
+	return runturn.DialogResponse{Cancelled: ans.Cancelled, Confirmed: ans.Confirmed, Value: ans.Value, Outcome: ans.Outcome, QuestionID: ans.QuestionID}
 }
 
 // providerState returns the state directory (per version) of a plugin provider subscription account and the paths that

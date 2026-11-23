@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { ModelPicker } from '@/components/ModelPicker'
-import { ClaudeCodeDifferences } from '@/features/agent-config/RuntimeNotes'
+import { RuntimeDifferences } from '@/features/agent-config/RuntimeNotes'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
 import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import type { Schemas } from '@/api/client'
@@ -15,6 +15,7 @@ import { useCreateAgent } from '@/api/queries'
 import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 
 // The New Agent dialog; the Agent is created in the current project or the platform. The list header and the first-use empty
@@ -22,6 +23,7 @@ import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: () => void }) {
   const navigate = useNavigate()
   const create = useCreateAgent(scopeKey(scope))
+  const runtimes = useRuntimeLookup()
   const [name, setName] = useState('')
   const [model, setModel] = useState<Schemas['ModelRef'] | null>(null)
   const [thinkingLevel, setThinkingLevel] = useState<Schemas['ThinkingLevel'] | null>(null)
@@ -59,7 +61,7 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
             {(selected, provider) => <>
               <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(create.error, field => field === 'thinkingLevel')} />
               {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(create.error, field => field === 'serviceTier')} />}
-              {provider?.runtime === 'claude-code' && <ClaudeCodeDifferences brief />}
+              <RuntimeDifferences runtime={runtimes.get(provider?.runtime)} brief />
             </>}
           </ModelPicker>
           <div className="grid gap-1.5">

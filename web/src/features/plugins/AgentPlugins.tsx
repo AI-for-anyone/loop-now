@@ -12,6 +12,7 @@ import { useScope } from '@/features/projects/scope-context'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
+import { useRuntimeLookup, type RuntimeDefinition } from '@/lib/runtime'
 import { projectBase } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { Quiet } from './parts'
@@ -30,25 +31,26 @@ const rowTrail = 'col-start-2 row-start-1 flex items-center gap-2 @min-[36rem]:c
 
 const usesAccounts = (agent: Schemas['Agent'], plugin: AgentPlugin) => agent.scope === 'project' && agent.projectId !== null && plugin.accountKinds.length > 0
 
-// For a Claude Code Agent: when the plugin's Agent side is only Pi extensions (no Skills, MCP servers or CLI folder), mark that it has no
-// effect on Claude Code.
+// For an Agent on a runtime that doesn't load plugins' Pi extensions (Claude Code): when the plugin's Agent side is only Pi extensions (no
+// Skills, MCP servers or CLI folder), mark that it has no effect on that runtime.
 // The components come from the manifest in the plugin details; if that can't be read, nothing is marked.
-function PiOnlyHint({ pluginId }: { pluginId: string }) {
+function PiOnlyHint({ pluginId, runtime }: { pluginId: string; runtime: RuntimeDefinition }) {
   const detail = usePlugin(pluginId)
   const parts = detail.data?.manifest.components
   if (!parts || parts.agentExtensions === 0 || parts.skills.length > 0 || parts.mcpServers.length > 0 || parts.bin.length > 0) return null
-  return <span className="min-w-0 truncate font-bold text-pink-text">· {text.piOnly}</span>
+  return <span className="min-w-0 truncate font-bold text-pink-text">· {text.piOnly(runtime.name)}</span>
 }
 
 // One-line summary: whether it is granted, and the names of the chosen accounts (once the account list has been read).
 function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const accounts = usePluginAccounts(agent.projectId ?? '', plugin.pluginId, usesAccounts(agent, plugin) && plugin.accountIds.length > 0)
   const names = (accounts.data?.accounts ?? []).filter((account) => plugin.accountIds.includes(account.id)).map((account) => account.name)
+  const runtime = useRuntimeLookup().get(agent.runtime)
   return (
     <span className={cn(rowSummary, 'gap-1.5 text-ink-700')}>
       {plugin.granted ? <span className="shrink-0 font-bold text-ink">{text.granted}</span> : <span className="shrink-0 text-ink-500">{text.notGranted}</span>}
       {plugin.granted && names.length > 0 && <span className="min-w-0 truncate">· {text.accountNames(t.plugins.confirm.list(names))}</span>}
-      {agent.runtime === 'claude-code' && <PiOnlyHint pluginId={plugin.pluginId} />}
+      {runtime && !runtime.capabilities.pluginExtensions && <PiOnlyHint pluginId={plugin.pluginId} runtime={runtime} />}
     </span>
   )
 }
@@ -263,7 +265,7 @@ function NotEnabled({ plugins, link }: { plugins: AgentPlugin[]; link: string | 
 }
 
 // The plugin section of the Agent config page: grant per plugin, and a project Agent also chooses accounts; grants take effect the next
-// time it starts (Pi or Claude Code).
+// time its runtime starts. The intro names the runtime when it loads plugins' Pi extensions (Pi), and is shown once the runtime is known.
 export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const scope = useScope()
   const query = useAgentPlugins(agent.id)
@@ -271,9 +273,10 @@ export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const available = plugins.filter((plugin) => plugin.available)
   const unavailable = plugins.filter((plugin) => !plugin.available)
   const link = scope.kind === 'project' && scope.project.id === agent.projectId ? `${projectBase(scope.project.name)}/plugins` : null
+  const runtime = useRuntimeLookup().get(agent.runtime)
   return (
     <Section id="plugins" title={t.plugins.agentTitle}>
-      <p className="text-[13.5px] text-ink-700">{agent.runtime === 'claude-code' ? text.introClaudeCode : text.intro}</p>
+      {runtime && <p className="text-[13.5px] text-ink-700">{runtime.capabilities.pluginExtensions ? text.intro(runtime.name) : text.introNoExtensions}</p>}
       <ErrorAlert error={query.error} />
       {query.isPending && <Quiet>{t.plugins.loading}</Quiet>}
       {query.isSuccess && plugins.length === 0 && <Quiet>{text.empty}</Quiet>}

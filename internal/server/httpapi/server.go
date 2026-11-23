@@ -138,6 +138,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/plugin-host/restart", "restartPluginHost", ConsoleAndExternal, s.restartPluginHost},
 		{"GET", "/local-mode-settings", "getLocalModeSettings", ConsoleOnly, s.getLocalModeSettings},
 		{"GET", "/runtimes", "listRuntimes", ConsoleOnly, s.listRuntimes},
+		{"GET", "/runtime-definitions", "listRuntimeDefinitions", ConsoleOnly, s.listRuntimeDefinitions},
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
 		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
 		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},

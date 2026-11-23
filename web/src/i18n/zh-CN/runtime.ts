@@ -2,18 +2,17 @@ import type { components } from '@/api/schema.gen'
 
 type S = components['schemas']
 
-// An Agent's runtime: the bundled Pi, or Claude Code installed on the user's machine (decided by the model provider).
+// An Agent's runtime (decided by the model provider). Names and capabilities come from GET /runtime-definitions (lib/runtime.ts); the
+// text here is built from a runtime's name and capabilities, except where a runtime has wording of its own, keyed by its id.
 export const runtime = {
-  names: { pi: 'Pi', 'claude-code': 'Claude Code' } satisfies Record<S['AgentRuntime'], string>,
-  // Badge in the sidebar and the Agent header, only for Claude Code Agents; Pi is the default and gets no badge.
-  badge: 'Claude Code',
-  badgeTitle: '运行时：本机的 Claude Code',
-  // The Claude Code provider in the model picker.
+  // Badge in the sidebar and the Agent header, only for runtimes installed on this computer (not bundled); the badge text is the name.
+  badgeTitle: (name: string) => `运行时：本机的 ${name}`,
+  // A provider run by a local CLI in the model picker, and the note when its runtime uses the login on this computer.
   providerOption: (name: string, count: number) => `${name}（本机，${count} 个模型）`,
-  providerNote: '用本机安装的 Claude Code 和你在本机的登录，平台不保存登录信息。',
-  // How it differs from Pi when Claude Code is selected on the config page.
+  providerNote: (name: string) => `用本机安装的 ${name} 和你在本机的登录，平台不保存登录信息。`,
+  // How a runtime differs from the bundled Pi, item by item from its capabilities, when it is selected.
   differences: {
-    title: '用 Claude Code 运行时',
+    title: (name: string) => `用 ${name} 运行时`,
     home: '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
     commands: '不经确认直接执行命令，与 Pi 的 Agent 相同。',
     plugins: '只含 Pi 扩展的插件对它不起作用；插件的技能和 MCP 工具可以用。',
@@ -29,7 +28,15 @@ export const runtime = {
   // Runtime status in global settings (GET /runtimes), plus the warning in the model picker.
   status: {
     title: 'Agent 运行时',
-    intro: 'Pi 随平台安装。Claude Code 用本机安装的 claude 和你在本机的登录，平台不读取、不保存它的登录信息。',
+    // One sentence per runtime, in the order of the definitions: the runtime's own sentence when it has one, otherwise by
+    // capabilities (bundled; installed here with the login here; installed here).
+    intro: {
+      bundled: (name: string) => `${name} 随平台安装。`,
+      local: (name: string) => `${name} 用本机的安装和你在本机的登录，平台不读取、不保存它的登录信息。`,
+      installed: (name: string) => `${name} 用本机的安装。`,
+      byRuntime: { 'claude-code': 'Claude Code 用本机安装的 claude 和你在本机的登录，平台不读取、不保存它的登录信息。' } as Partial<Record<S['AgentRuntime'], string>>,
+      separator: '',
+    },
     refresh: '重新检查',
     refreshing: '正在检查…',
     available: '可用',
@@ -41,15 +48,23 @@ export const runtime = {
     subscription: (type: string) => `订阅 ${type}`,
     checkedAt: (time: string) => `检查于 ${time}`,
     // Why it can't be used and how to fix it; in the model picker, pickerWarning appends the second half of the sentence.
+    // problemsByRuntime holds a runtime's own wording (its command, how to log in), problems the wording for any runtime.
     problems: {
-      not_found: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。',
-      version_failed: '运行 claude --version 失败：确认在终端里能正常运行 claude。',
-      unavailable: '本机的 Claude Code 现在不可用。',
-      logged_out: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。',
+      not_found: (name: string) => `本机没找到 ${name}：装好它，并确认在终端里能运行。`,
+      version_failed: (name: string) => `读取 ${name} 的版本失败：确认在终端里能正常运行它。`,
+      unavailable: (name: string) => `本机的 ${name} 现在不可用。`,
+      logged_out: (name: string) => `本机的 ${name} 没有登录：在本机终端里登录它。`,
     },
+    problemsByRuntime: {
+      'claude-code': {
+        not_found: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。',
+        version_failed: '运行 claude --version 失败：确认在终端里能正常运行 claude。',
+        logged_out: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。',
+      },
+    } as Partial<Record<S['AgentRuntime'], Partial<Record<'not_found' | 'version_failed' | 'unavailable' | 'logged_out', string>>>>,
     unknownLogin: '判断不了登录状态；Agent 运行失败时会如实报错。',
     pickerWarning: (problem: string) => `${problem}处理好之前，用它的 Agent 运行会失败。`,
   },
-  // Model account section: Claude Code needs no account.
-  account: '这个 Agent 用本机的 Claude Code 和你在本机的登录，不需要在平台配置账号，平台也不保存登录信息。',
+  // Model account section of an Agent whose runtime uses the login on this computer: it needs no account.
+  account: (name: string) => `这个 Agent 用本机的 ${name} 和你在本机的登录，不需要在平台配置账号，平台也不保存登录信息。`,
 } as const

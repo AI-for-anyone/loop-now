@@ -22,7 +22,6 @@ import (
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/executor"
-	"loop-now/internal/server/executor/local/pirpc"
 	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
@@ -51,7 +50,7 @@ type Options struct {
 	// Dialogs answers the confirm, select and input requests an extension sends during a turn (presented as console
 	// questions); when nil, every request is answered as cancelled. agentID is the Agent that runs (for a task turn,
 	// the task instance); ctx ends when this turn is no longer the process's current run or when the process exits.
-	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req pirpc.DialogRequest) pirpc.DialogResponse
+	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req runturn.DialogRequest) runturn.DialogResponse
 	LarkFactory               func(context.Context, LarkRuntimeRequest) (LarkRuntime, error)
 	GoogleResolver            cliauth.GrantResolver
 	GoogleRuntimeEntry        string
@@ -141,16 +140,11 @@ type proc struct {
 	authBridge          *modelauth.RuntimeBridge
 	log                 *slog.Logger
 	agentID             uuid.UUID
-	rt                  runtimeProcess // runtime process; the process table, stop, interrupt and running a turn use only this
-	client              *pirpc.Client  // Pi's RPC client, only for Pi-specific operations; nil for other runtimes
+	rt                  runtimeProcess // runtime process; the driver knows its concrete type, everything else uses only this
 	drv                 driver
 	runtimeIdentity     string      // runtime name plus its own fingerprint; a change means restart
-	runtimeBinary       string      // real path of the runtime executable (Claude Code)
-	runtimeVersion      string      // runtime version (Claude Code)
-	sessionID           string      // session ID the platform gave the runtime (Claude Code)
-	sessionStale        atomic.Bool // runtime switched (between Pi and Claude Code): do not record its session file back any more
-	initChecked         atomic.Bool // initial info reported by the process has been checked (Claude Code's Skill list)
-	sessionUntracked    atomic.Bool // runtime's session record not found (Claude Code): not a save failure; next start opens a new session
+	sessionStale        atomic.Bool // runtime switched: do not record its session file back any more
+	sessionUntracked    atomic.Bool // runtime's session record not found: not a save failure; next start opens a new session
 	version             int64
 	promptIdentity      string
 	localIdentity       string // fingerprint of local mode (directory and PATH switches); a change means restart with the new config
@@ -224,7 +218,12 @@ var StopReasons = []string{stopIdleTimeout, stopConfigChanged, stopEvicted, stop
 // idleStopReasons are the reasons StopIdle accepts.
 var idleStopReasons = []string{stopSessionReset, stopConsoleReload, stopSessionResumed}
 
-var _ executor.Executor = (*Executor)(nil)
+var (
+	_ executor.Executor           = (*Executor)(nil)
+	_ executor.IdleProcessStopper = (*Executor)(nil)
+	_ executor.SessionExporter    = (*Executor)(nil)
+	_ executor.SessionLister      = (*Executor)(nil)
+)
 
 // New creates the local executor.
 func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Installer, log *slog.Logger) *Executor {
@@ -278,7 +277,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	if err != nil {
 		return executor.Result{}, err
 	}
-	if req.Origin == executor.OriginConsoleCompact && isClaude(snap) {
+	if _, ok := e.driverFor(snap).(compactor); req.Origin == executor.OriginConsoleCompact && !ok {
 		return failed(executor.ErrRuntimeError, "The current runtime does not support Pi manual compaction.", snap.ConfigVersion), nil
 	}
 	if blocked, reason, err := e.beforeRun(runCtx, snap, req); err != nil {
@@ -359,9 +358,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	switch {
 	case exiting(p) && tr.ErrorCode != exitCode:
-		// A process that was sent SIGINT on interrupt (Claude Code) is sure to exit afterwards: remove it from the
-		// process table, so the next message continues the session in a new process instead of being written to this
-		// one and failing.
+		// A process that retires after an interrupt (Claude Code, sent SIGINT) is sure to exit afterwards: remove it
+		// from the process table, so the next message continues the session in a new process instead of being written
+		// to this one and failing.
 		e.retire(p)
 	case tr.ErrorCode == exitCode, !alive(p):
 		// The process has exited: remove it from the process table right away, so the next message starts a new process
@@ -457,7 +456,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 				return p, nil
 			}
 			delete(e.procs, snap.AgentID)
-			if p.drv.name() != e.driverFor(snap).name() {
+			if p.drv.runtime() != e.driverFor(snap).runtime() {
 				// The runtime changed: the session has been reset in the database, so the old process must not record
 				// its session file back when it stops.
 				p.sessionStale.Store(true)
@@ -494,7 +493,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		}
 		e.mu.Unlock()
 		if !waitingReported {
-			sink.Phase(executor.PhaseWaitingSlot)
+			sink.Phase(executor.PhaseWaitingSlot, e.driverFor(snap).runtime())
 			waitingReported = true
 		}
 		select {
@@ -584,7 +583,7 @@ func (e *Executor) removeWaiter(ch chan struct{}) {
 // launch prepares the config and starts the Pi process; startReason is no_process or config_changed.
 func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink executor.Sink, runID uuid.UUID, startReason string) (result *proc, err error) {
 	d := e.dirs(snap.AgentID)
-	sink.Phase(executor.PhasePreparing)
+	sink.Phase(executor.PhasePreparing, e.driverFor(snap).runtime())
 	if err := d.ensure(); err != nil {
 		return nil, err
 	}
@@ -602,7 +601,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if err != nil {
 		return nil, err
 	}
-	sink.Phase(executor.PhaseLaunching)
+	sink.Phase(executor.PhaseLaunching, e.driverFor(snap).runtime())
 	sessionFile := ""
 	if snap.Session.State == "active" && snap.Session.SessionFile != "" {
 		// Given a session file path that does not exist, Pi silently creates a new session, so we must check first.
@@ -652,8 +651,8 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, err
 	}
 	client := st.rt
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, client: st.client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
-		runtimeBinary: st.binary, runtimeVersion: st.version, sessionID: st.sessionID, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
+		version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity
@@ -675,6 +674,9 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		e.stop(p, stopCause{})
 		return nil, err
 	}
+	if nc, ok := drv.(nativeCommander); ok {
+		go e.cacheCommands(p, nc)
+	}
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
 		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason, "runtime": drv.runtime()})
@@ -688,10 +690,10 @@ func runtimeIdentity(drv driver, snap agentconfig.Snapshot) string {
 	return drv.name() + "\x00" + drv.identity(snap)
 }
 
-// exiting reports whether the process is already exiting (Claude Code, sent SIGINT on interrupt): such a process must
-// not be given new messages.
+// exiting reports whether the process is retiring after an interrupt (see retiringProcess): such a process must not be
+// given new messages.
 func exiting(p *proc) bool {
-	x, ok := p.rt.(interface{ Exiting() bool })
+	x, ok := p.rt.(retiringProcess)
 	return ok && x.Exiting()
 }
 
@@ -928,40 +930,12 @@ func waitDone(p *proc, d time.Duration) bool {
 	}
 }
 
-// procObserver passes the usage and events Pi reports to the executor's observer: those during a turn are tied to the
-// current run, the rest only to the Agent.
-type procObserver struct {
-	e *Executor
-	p *proc
-}
-
-func (o procObserver) runID(inTurn bool) *uuid.UUID {
-	if !inTurn {
-		return nil
-	}
-	return o.p.curRun.Load()
-}
-
-func (o procObserver) Usage(u pirpc.Usage, inTurn bool) {
-	eu := executor.Usage{Kind: u.Kind, Provider: u.Provider, Model: u.Model, ResponseModel: u.ResponseModel, StopReason: u.StopReason,
-		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, DurationMs: u.DurationMs}
-	if u.Kind == pirpc.UsageCompaction && eu.Provider == "" {
-		// Pi's automatic compaction uses the session's current model; the platform sets the model at startup and does
-		// not switch it midway.
-		eu.Provider, eu.Model = o.p.provider, o.p.model
-	}
-	if eu.Provider == "" || eu.Model == "" {
-		eu.Provider, eu.Model = "", ""
-	}
-	o.e.obs.Usage(o.p.agentID, o.runID(inTurn), eu)
-}
-
 // dialog hands a dialog to Options.Dialogs, limited to the turn that sent it: once this turn ends (the process moves on
 // to another run) it no longer waits for the answer.
-func (e *Executor) dialog(ctx context.Context, p *proc, req pirpc.DialogRequest) pirpc.DialogResponse {
+func (e *Executor) dialog(ctx context.Context, p *proc, req runturn.DialogRequest) runturn.DialogResponse {
 	run := p.curRun.Load()
 	if run == nil {
-		return pirpc.DialogResponse{Cancelled: true, Outcome: "cancelled"}
+		return runturn.DialogResponse{Cancelled: true, Outcome: "cancelled"}
 	}
 	runID := *run
 	ctx, cancel := context.WithCancel(ctx)
@@ -984,21 +958,27 @@ func (e *Executor) dialog(ctx context.Context, p *proc, req pirpc.DialogRequest)
 	return e.o.Dialogs(ctx, p.agentID, runID, req)
 }
 
-func (o procObserver) Notice(n pirpc.Notice, inTurn bool) {
+// notice records a runtime notice (see runturn.Notice) as a run event: one during a turn is tied to the current run,
+// the rest only to the Agent.
+func (e *Executor) notice(p *proc, n runturn.Notice, inTurn bool) {
 	typ := ""
 	switch n.Type {
-	case pirpc.NoticeRetryStarted:
+	case runturn.NoticeRetryStarted:
 		typ = store.EventModelRetryStarted
-	case pirpc.NoticeRetryEnded:
+	case runturn.NoticeRetryEnded:
 		typ = store.EventModelRetryEnded
-	case pirpc.NoticeCompaction:
+	case runturn.NoticeCompaction:
 		typ = store.EventContextCompaction
-	case pirpc.NoticeExtensionUI:
+	case runturn.NoticeExtensionUI:
 		typ = store.EventExtensionUI
 	default:
 		return
 	}
-	o.e.event(o.p.agentID, o.runID(inTurn), typ, n.Data)
+	var runID *uuid.UUID
+	if inTurn {
+		runID = p.curRun.Load()
+	}
+	e.event(p.agentID, runID, typ, n.Data)
 }
 
 // ---- Interrupt / Release / state / shutdown ----
@@ -1092,10 +1072,14 @@ func (e *Executor) Release(ctx context.Context, agentID uuid.UUID) error {
 	if err := clearProviderLinks(e.dirs(agentID)); err != nil {
 		return err
 	}
-	// The session records Claude Code keeps under ~/.claude for this workspace: first archive them into the Agent's own
-	// sessions directory, then delete them with claude purge. A failure is only logged and does not block deletion and
-	// cleanup.
-	e.purgeClaude(ctx, agentID)
+	// What runtimes keep outside the Agent's directories (for Claude Code, the session records under ~/.claude: first
+	// archived into the Agent's own sessions directory, then deleted with claude purge). Every runtime is asked, since
+	// the Agent may have used another runtime before; a failure is only logged and does not block deletion and cleanup.
+	for _, drv := range e.allDrivers() {
+		if pg, ok := drv.(purger); ok {
+			pg.purge(ctx, agentID)
+		}
+	}
 	return releaseHome(e.o.WorkRoot, agentID)
 }
 

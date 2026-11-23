@@ -65,7 +65,7 @@ func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink exec
 	q.running[req.AgentID] = ch
 	q.mu.Unlock()
 	defer func() { q.mu.Lock(); delete(q.running, req.AgentID); q.mu.Unlock() }()
-	sink.Phase(executor.PhaseLaunching)
+	sink.Phase(executor.PhaseLaunching, "pi")
 	sink.Running(1)
 	sink.Tool("t1", "bash", executor.ToolStarted)
 	sink.TextDelta("Hel")
@@ -106,7 +106,7 @@ func (q *quickExec) StopIdle(context.Context, uuid.UUID, string) (bool, error) {
 	}
 	return true, nil
 }
-func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, format string) (executor.SessionExport, error) {
+func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, _, format string) (executor.SessionExport, error) {
 	if q.exportErr != nil {
 		return executor.SessionExport{}, q.exportErr
 	}
@@ -115,8 +115,8 @@ func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, format stri
 	}
 	return executor.SessionExport{Filename: "session.html", ContentType: "text/html; charset=utf-8", Data: []byte("<html>exported</html>")}, nil
 }
-func (q *quickExec) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
-	all, err := q.ListSessions(ctx, agentID, currentFile)
+func (q *quickExec) ResolveSession(ctx context.Context, agentID uuid.UUID, runtime, sessionID, currentFile string) (*executor.ManagedSession, error) {
+	all, err := q.ListSessions(ctx, agentID, runtime, currentFile)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (q *quickExec) ResolveSession(ctx context.Context, agentID uuid.UUID, sessi
 	}
 	return nil, nil
 }
-func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
+func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, _, currentFile string) ([]executor.ManagedSession, error) {
 	if q.listErr != nil {
 		return nil, q.listErr
 	}

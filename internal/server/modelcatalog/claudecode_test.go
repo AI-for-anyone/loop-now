@@ -48,7 +48,7 @@ func TestClaudeCodeProviderIsPublished(t *testing.T) {
 	if _, ok := reg.Base().Provider(agentruntime.ClaudeCodeProvider); !ok {
 		t.Fatal("Base should also include the local CLI provider, used to check plugin providers for id clashes")
 	}
-	if agentruntime.ForProvider(agentruntime.ClaudeCodeProvider) != agentruntime.ClaudeCode || agentruntime.ForProvider("anthropic") != agentruntime.Pi {
+	if agentruntime.ForProvider(agentruntime.ClaudeCodeProvider).ID != agentruntime.ClaudeCode || agentruntime.ForProvider("anthropic").ID != agentruntime.Pi {
 		t.Fatal("the runtime should be decided by the provider")
 	}
 }

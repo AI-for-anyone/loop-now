@@ -434,8 +434,9 @@ func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID)
 	return r, started, nil
 }
 
-// SetRunPhase updates the phase while in the starting state and records a phase-started event.
-func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) error {
+// SetRunPhase updates the phase while in the starting state and records a phase-started event with the runtime the run
+// is being started on.
+func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase, runtime string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
 		err := tx.QueryRow(ctx, `UPDATE runs SET phase = $2 WHERE id = $1 AND status = 'starting' RETURNING agent_id`, runID, phase).Scan(&agentID)
@@ -445,7 +446,7 @@ func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) 
 		if err != nil {
 			return err
 		}
-		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &runID, Type: EventRunPhase, Data: map[string]any{"phase": phase}})
+		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &runID, Type: EventRunPhase, Data: map[string]any{"phase": phase, "runtime": runtime}})
 	})
 }
 

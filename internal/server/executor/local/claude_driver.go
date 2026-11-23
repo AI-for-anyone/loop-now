@@ -1,13 +1,17 @@
 package local
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,11 +66,31 @@ var claudeEfforts = map[string]bool{"low": true, "medium": true, "high": true, "
 // credentials), as a long-running process in stream-json mode.
 type claudeDriver struct{ e *Executor }
 
-func isClaude(snap agentconfig.Snapshot) bool {
-	return agentruntime.ForProvider(snap.Provider) == agentruntime.ClaudeCode
+// claudeProcess is a Claude Code process: the stream-json client plus what the driver keeps about this process.
+type claudeProcess struct {
+	*ccstream.Client
+	// binary and version are the real path and the version of the claude executable; sessionID is the session ID the
+	// platform gave this process.
+	binary, version, sessionID string
+	// initChecked: the Skill list claude reported has been checked (once per process).
+	initChecked atomic.Bool
 }
 
-func (claudeDriver) name() string { return "Claude Code" }
+// claudeOf is the Claude Code process of p; nil when p runs another runtime.
+func claudeOf(p *proc) *claudeProcess {
+	cp, _ := p.rt.(*claudeProcess)
+	return cp
+}
+
+// claudeVersion is the claude version of p's process; empty when unknown.
+func claudeVersion(p *proc) string {
+	if cp := claudeOf(p); cp != nil {
+		return cp.version
+	}
+	return ""
+}
+
+func (claudeDriver) name() string { return runtimeName(agentruntime.ClaudeCode) }
 
 func (claudeDriver) runtime() string { return agentruntime.ClaudeCode }
 
@@ -85,6 +109,70 @@ func claudeEffort(snap agentconfig.Snapshot) string {
 
 // refresh: Claude Code has no model cache file written by the platform.
 func (claudeDriver) refresh(agentconfig.Snapshot, agentDirs) error { return nil }
+
+// syncAssets rebuilds the plugin directory the platform gives Claude Code (--plugin-dir: loopctl, the Agent's Skill
+// copies and the granted plugins' Skills) and writes the plugin MCP servers into claude-mcp.json (--mcp-config, the same
+// format as Pi's mcp.json). Claude Code finds the Skills itself, so no directories are returned.
+func (cd claudeDriver) syncAssets(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) ([]string, error) {
+	if err := cd.e.syncClaudePlugin(ctx, snap, d); err != nil {
+		return nil, err
+	}
+	return nil, writeMCPConfig(d.claudeMCP, snap.Plugins)
+}
+
+func (claudeDriver) clearAssets(d agentDirs) error {
+	if err := os.RemoveAll(d.claudePlugin); err != nil {
+		return err
+	}
+	return removeIfExists(d.claudeMCP)
+}
+
+// modelCredentials: Claude Code uses its own local login; the platform writes no model credentials and no models.json.
+func (claudeDriver) modelCredentials(agentconfig.Snapshot, agentDirs, string) error { return nil }
+
+// purge archives and removes the session records Claude Code keeps under ~/.claude for this workspace (purgeClaude).
+func (cd claudeDriver) purge(ctx context.Context, agentID uuid.UUID) { cd.e.purgeClaude(ctx, agentID) }
+
+// forkBaseline reads the regular Claude Code session for a task fork: only the regular session's one
+// <session ID>.jsonl, which must be exactly one level below claude's session record directory (through os.Root); it
+// scans and reads nothing else under ~/.claude. At most maxBytes, and every line must be complete JSON.
+func (cd claudeDriver) forkBaseline(ctx context.Context, _ uuid.UUID, source string, maxBytes int64) ([]byte, error) {
+	projects := cd.e.ClaudeProjectsDir(ctx)
+	if !claudecli.InProjects(projects, source) {
+		return nil, errors.New("the regular session is not in the Claude Code session record directory")
+	}
+	rel, _ := filepath.Rel(projects, source)
+	root, err := os.OpenRoot(projects)
+	if err != nil {
+		return nil, errors.New("the Claude Code session record directory cannot be read")
+	}
+	defer root.Close()
+	info, err := root.Lstat(rel)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, errors.New("the regular session must be a plain file")
+	}
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, errors.New("the regular session cannot be read")
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil || int64(len(data)) > maxBytes {
+		return nil, errors.New("the regular session exceeds the size limit or cannot be read")
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, errors.New("the regular session has no valid records")
+	}
+	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		if !json.Valid(line) {
+			return nil, errors.New("the regular session contains incomplete records")
+		}
+	}
+	return data, nil
+}
 
 // claudeBinary finds claude: tests and explicit configuration use Options.ClaudeBin; otherwise it is looked up on the
 // PATH of the user's login shell (regardless of the “用本机的 CLI” ("Use local CLIs") switch).
@@ -271,7 +359,7 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if err := procgroup.Started(cmd); err != nil {
 		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
-	return started{rt: client, binary: bin, version: version, sessionID: sessionID}, nil
+	return started{rt: &claudeProcess{Client: client, binary: bin, version: version, sessionID: sessionID}}, nil
 }
 
 // claudeSessionArgs returns the session ID and arguments for this start: with a session record it continues that
@@ -308,8 +396,8 @@ func claudeEnv(env []string) []string {
 
 // attach hooks up usage and rate limit events.
 func (cd claudeDriver) attach(p *proc) {
-	if cc, ok := p.rt.(*ccstream.Client); ok {
-		cc.SetObserver(claudeObserver{e: cd.e, p: p})
+	if cp := claudeOf(p); cp != nil {
+		cp.SetObserver(claudeObserver{e: cd.e, p: p})
 	}
 }
 
@@ -323,12 +411,15 @@ func (claudeDriver) beforeTurn(context.Context, *proc, agentconfig.Snapshot) err
 // without an HTTP status it asks claude auth status whether the user is logged out; a start failure gets the version
 // and the end of the error output.
 func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
-	e := cd.e
+	e, cp := cd.e, claudeOf(p)
+	if cp == nil {
+		return tr
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	home, _ := e.o.RealHome()
 	env := e.claudeHelperEnv(ctx, home)
-	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, p.runtimeBinary, env, home), p.dirs.workspace, p.sessionID); path != "" {
+	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.dirs.workspace, cp.sessionID); path != "" {
 		p.sessMu.Lock()
 		p.sessionFile = path
 		p.sessMu.Unlock()
@@ -336,21 +427,15 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		// The session record written by claude was not found (for example on Windows, where it encodes the working
 		// directory differently from us): the turn ends normally and this is not treated as a save failure; the
 		// conversation continues as usual in this process, and the next start opens a new session.
-		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
+		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.dirs.workspace, "version", cp.version)
 	}
-	cc, _ := p.rt.(*ccstream.Client)
-	if cc != nil {
-		if init := cc.Init(); init != nil && !p.initChecked.Swap(true) {
-			checkClaudeSkills(p, init)
-		}
+	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) {
+		checkClaudeSkills(p, init)
 	}
 	switch tr.ErrorCode {
 	case executor.ErrRuntimeError:
-		if cc == nil {
-			break
-		}
-		if last := cc.LastResult(); last.TerminalReason == "api_error" && last.APIErrorStatus == nil {
-			if auth, err := claudecli.AuthStatus(ctx, p.runtimeBinary, env); err == nil && !auth.LoggedIn {
+		if last := cp.LastResult(); last.TerminalReason == "api_error" && last.APIErrorStatus == nil {
+			if auth, err := claudecli.AuthStatus(ctx, cp.binary, env); err == nil && !auth.LoggedIn {
 				tr.ErrorCode = executor.ErrRuntimeLoginRequired
 				tr.ErrorMessage = "Claude Code is not logged in on this computer. Run claude on this computer, log in, and try again."
 			}
@@ -360,7 +445,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		case <-p.rt.Done():
 		case <-time.After(e.o.StopGrace):
 		}
-		tr.ErrorMessage = strings.TrimSpace(fmt.Sprintf("Claude Code %s: %s %s", p.runtimeVersion, tr.ErrorMessage, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
+		tr.ErrorMessage = strings.TrimSpace(fmt.Sprintf("Claude Code %s: %s %s", cp.version, tr.ErrorMessage, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
 	}
 	return tr
 }
@@ -386,7 +471,7 @@ func (claudeDriver) exited() (string, string) {
 }
 
 func (claudeDriver) crashMessage(p *proc, stderrTail string) string {
-	return "Claude Code " + p.runtimeVersion + " process exited unexpectedly. " + stderrTail
+	return "Claude Code " + claudeVersion(p) + " process exited unexpectedly. " + stderrTail
 }
 
 // claudeObserver passes the usage Claude Code reports (one per model per turn) and rate limit events to the executor's
