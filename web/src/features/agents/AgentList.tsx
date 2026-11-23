@@ -68,8 +68,8 @@ function Skeleton() {
 }
 
 // The Agent group in the sidebar: a heading (AGENT in a project, platform AGENT in global) and a New button, with this scope's
-// Agents below. Each row is an overprinted avatar, the name, a runtime mark (Claude Code only), a status tag and a
-// “待你回复” (Needs your reply) sticker. Search only affects what is shown, not the periodic refresh or the Agent already open.
+// Agents below. Each row is an overprinted avatar, the name, a runtime mark (only for a runtime installed on this computer, such as
+// Claude Code), a status tag and a “待你回复” (Needs your reply) sticker. Search only affects what is shown, not the periodic refresh or the Agent already open.
 // While the project list hasn't loaded yet, scope is null: show only "loading", or the skeleton when the project list failed
 // because the server can't be reached (listError).
 export function AgentNavGroup({
