@@ -6,6 +6,7 @@ import { RequestId } from '@/components/RequestError'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
 import { describeError, requestIdOf } from '@/lib/errors'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
@@ -50,7 +51,8 @@ function Result({ run }: { run: Run }) {
 
 function Timeline({ timeline }: { timeline: Schemas['RunTimeline'] }) {
   const { run, entries, usage } = timeline
-  const steps = buildSteps(run, entries)
+  const runtimes = useRuntimeLookup()
+  const steps = buildSteps(run, entries, runtimes.name)
   const duration = runDurationMs(run)
   const meta = [
     run.model ? t.timeline.meta.model(run.model.provider, run.model.modelId) : t.timeline.meta.noModel,

@@ -8,6 +8,7 @@ import { InboxReminderLine } from '@/features/chat/InboxReminder'
 import { partyDisplay } from '@/features/inbox/participants'
 import { apiUrl } from '@/test/api'
 import { renderChat } from '@/test/chat'
+import { runtimeName } from '@/test/runtimes'
 
 const pluginParty = (overrides: Partial<Schemas['InboxParticipant']> = {}): Schemas['InboxParticipant'] => ({
   kind: 'plugin',
@@ -76,7 +77,7 @@ describe('Extension requests in the run record', () => {
       entry({ method: 'confirm', message: 'Close all tabs?', answered: 'answered', questionId: '76000000-0000-7000-8000-000000000001' }),
       entry({ method: 'select', message: 'Pick a branch', answered: 'expired', questionId: '76000000-0000-7000-8000-000000000002' }),
       entry({ method: 'editor', message: 'Edit the commit message', answered: 'cancelled' }),
-    ]).filter((step) => step.key.endsWith('extension_ui'))
+    ], runtimeName).filter((step) => step.key.endsWith('extension_ui'))
     expect(steps.map((s) => s.questionId ?? null)).toEqual([null, null, null, null, '76000000-0000-7000-8000-000000000001', '76000000-0000-7000-8000-000000000002', null])
     expect(steps.map((s) => [s.label, s.field, s.detail, s.lines, s.tone])).toEqual([
       ['Extension notice', 'Info', 'Browser opened', [], 'neutral'],
@@ -90,7 +91,7 @@ describe('Extension requests in the run record', () => {
   })
 
   it('a dialog request turned into a question has "View question", which jumps to that question in the chat', async () => {
-    const steps = buildSteps(null, [entry({ method: 'confirm', message: 'Close all tabs?', answered: 'answered', questionId: '76000000-0000-7000-8000-000000000001' })])
+    const steps = buildSteps(null, [entry({ method: 'confirm', message: 'Close all tabs?', answered: 'answered', questionId: '76000000-0000-7000-8000-000000000001' })], runtimeName)
     render(
       <>
         <div data-console-message-id="76000000-0000-7000-8000-000000000001">Original question</div>

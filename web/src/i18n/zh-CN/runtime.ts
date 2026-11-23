@@ -2,9 +2,9 @@ import type { components } from '@/api/schema.gen'
 
 type S = components['schemas']
 
-// An Agent's runtime: the bundled Pi, or Claude Code installed on the user's machine (decided by the model provider).
+// An Agent's runtime (decided by the model provider). Names and capabilities come from GET /runtime-definitions (lib/runtime.ts); the
+// text here is built from a runtime's name and capabilities, except where a runtime has wording of its own, keyed by its id.
 export const runtime = {
-  names: { pi: 'Pi', 'claude-code': 'Claude Code' } satisfies Record<S['AgentRuntime'], string>,
   // Badge in the sidebar and the Agent header, only for runtimes installed on this computer (not bundled); the badge text is the name.
   badgeTitle: (name: string) => `运行时：本机的 ${name}`,
   // A provider run by a local CLI in the model picker, and the note when its runtime uses the login on this computer.

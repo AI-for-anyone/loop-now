@@ -40,19 +40,6 @@ function modelLabel(provider: string | null, model: string | null): string {
 // Duration of a startup phase: until the next phase, the start of the reply, or the end.
 const PHASE_BOUNDARY: ReadonlySet<Entry['type']> = new Set(['phase', 'running', 'ended'])
 
-// The runtime on a process entry; old records don't have one, which means Pi.
-const runtimeName = (runtime: Runtime | undefined) => t.runtime.names[runtime ?? 'pi']
-
-// Which runtime a startup phase belongs to: taken from the process entry started or reused after it in this turn; when there is no
-// process entry (it failed before starting),
-// a runtime_* failure, which is specific to Claude Code, also identifies it; when neither is available, assume Pi.
-function launchRuntime(entries: Entry[], from: number): Runtime | undefined {
-  for (const entry of entries.slice(from + 1)) {
-    if (entry.type === 'pi_started' || entry.type === 'pi_reused') return entry.runtime
-  }
-  return entries.some((entry) => entry.type === 'ended' && entry.errorCode?.startsWith('runtime_')) ? 'claude-code' : undefined
-}
-
 // Subscription usage limits reported by Claude Code: info is the object exactly as claude gave it; fields may be missing or not of the
 // expected type, and missing ones are left out.
 // Unknown limit types and statuses are shown as is; the reset time is a timestamp in seconds (milliseconds and date strings are
@@ -83,7 +70,9 @@ function endedLabel(entry: Extract<Entry, { type: 'ended' }>): { label: string; 
 // Turn timeline entries into steps for the UI. When there is no queued entry (sent while idle, or a reply from before this feature
 // shipped), add a step at the run's queued time.
 // bash shows the actual command from the record; no other arguments or tool output are shown.
-export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entries: Entry[]): TimelineStep[] {
+// runtimeName gives a runtime's name (useRuntimeLookup().name). Startup phases and process entries carry their runtime; the server fills
+// it in for records written before it was recorded.
+export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entries: Entry[], runtimeName: (runtime: Runtime) => string): TimelineStep[] {
   const steps: TimelineStep[] = []
   const step = (entry: { type: string; at: string }, index: number, fields: Partial<TimelineStep> & { label: string }): TimelineStep => ({
     key: `${index}-${entry.type}`,
@@ -143,7 +132,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'phase': {
         const next = entries.slice(index + 1).find((other) => PHASE_BOUNDARY.has(other.type))
         const created = step(entry, index, {
-          label: entry.phase === 'launching' ? t.timeline.step.launching(runtimeName(launchRuntime(entries, index))) : (t.timeline.step[entry.phase] ?? t.common.unknown(entry.phase)),
+          label: entry.phase === 'launching' ? t.timeline.step.launching(runtimeName(entry.runtime)) : (t.timeline.step[entry.phase] ?? t.common.unknown(entry.phase)),
           field: t.timeline.field.phase(entry.phase),
           duration: next ? t.timeline.duration(ms(entry.at, next.at)) : null,
         })

@@ -1,4 +1,5 @@
 import type { Schemas } from '@/api/client'
+import { runtimeLookup } from '@/lib/runtime'
 
 const checkedAt = '2026-11-11T08:00:00Z'
 
@@ -22,3 +23,6 @@ export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
     ],
   }
 }
+
+// Runtime names as the default definitions give them, for building run log steps in tests.
+export const runtimeName = runtimeLookup(runtimeDefinitions().runtimes).name

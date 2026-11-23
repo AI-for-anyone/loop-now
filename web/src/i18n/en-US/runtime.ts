@@ -1,7 +1,6 @@
 import type { Messages } from '..'
 
 export const runtime = {
-  names: { pi: 'Pi', 'claude-code': 'Claude Code' },
   badgeTitle: (name: string) => `Runtime: ${name} on this computer`,
   providerOption: (name: string, count: number) => `${name} (this computer, ${count} ${count === 1 ? 'model' : 'models'})`,
   providerNote: (name: string) => `Uses the ${name} installed on this computer and your login there. The platform doesn't store login details.`,
