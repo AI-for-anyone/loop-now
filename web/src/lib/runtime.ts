@@ -1,6 +1,40 @@
+import { useMemo } from 'react'
 import type { Schemas } from '@/api/client'
+import { useRuntimeDefinitions } from '@/api/queries'
 
 export type AgentRuntime = Schemas['AgentRuntime']
+export type RuntimeDefinition = Schemas['RuntimeDefinition']
+
+// The console's one place that knows runtimes by id. Everything else asks this lookup for a runtime's name or capabilities (GET
+// /runtime-definitions) instead of comparing runtime ids, so adding a runtime adds no branches to the console;
+// scripts/check-runtime-ids.mjs enforces it.
+export interface RuntimeLookup {
+  // The definition of a runtime; undefined while the definitions are being read, when they cannot be read, or for an id the server
+  // does not define.
+  get: (id: AgentRuntime | null | undefined) => RuntimeDefinition | undefined
+  // The runtime that runs a model provider (contract RuntimeDefinition): the one that lists it, otherwise the default runtime.
+  forProvider: (providerId: string) => RuntimeDefinition | undefined
+  // The product name, shown as is in every language; the id until the definitions have been read.
+  name: (id: AgentRuntime) => string
+  // Why the definitions could not be read; null when they could, or are still being read.
+  error: unknown
+}
+
+export function runtimeLookup(definitions: readonly RuntimeDefinition[] | undefined, error: unknown = null): RuntimeLookup {
+  const list = definitions ?? []
+  const get = (id: AgentRuntime | null | undefined) => (id == null ? undefined : list.find((definition) => definition.id === id))
+  return {
+    get,
+    forProvider: (providerId) => list.find((definition) => definition.providers.includes(providerId)) ?? list.find((definition) => definition.isDefault),
+    name: (id) => get(id)?.name ?? id,
+    error,
+  }
+}
+
+export function useRuntimeLookup(): RuntimeLookup {
+  const { data, error } = useRuntimeDefinitions()
+  return useMemo(() => runtimeLookup(data?.runtimes, error), [data, error])
+}
 
 // The model provider id of the Claude Code runtime. The runtime is not set separately; the model provider decides it (contract
 // AgentRuntime): claude-code when the provider is claude-code, pi for everything else.
