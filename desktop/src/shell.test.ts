@@ -30,13 +30,13 @@ import { UpdateChecker, type Updater } from './updates'
 const dir = mkdtempSync(join(tmpdir(), 'loop-now-desktop-test-'))
 after(() => rmSync(dir, { recursive: true, force: true }))
 
-describe('崩溃重启', () => {
-  test('5 分钟内依次等 1、5、15 秒，第 4 次停下', () => {
+describe('Crash restarts', () => {
+  test('Within 5 minutes, waits 1, 5 and 15 seconds in turn and stops at the 4th crash', () => {
     const policy = new RestartPolicy()
     assert.deepEqual([policy.next(0), policy.next(1_000), policy.next(2_000), policy.next(3_000)], [1_000, 5_000, 15_000, null])
   })
 
-  test('超出 5 分钟的崩溃不再计数，手动重启清零', () => {
+  test('Crashes older than 5 minutes no longer count, and a manual restart resets the count', () => {
     const policy = new RestartPolicy()
     policy.next(0)
     policy.next(1_000)
@@ -47,8 +47,8 @@ describe('崩溃重启', () => {
   })
 })
 
-describe('端口', () => {
-  test('想用的端口空闲就用它，被占用或为 0 时交给系统选', async () => {
+describe('Port', () => {
+  test('Uses the wanted port when it is free, and lets the system choose when it is taken or 0', async () => {
     const holder = createServer()
     await new Promise<void>((resolve) => holder.listen(0, '127.0.0.1', resolve))
     const taken = (holder.address() as { port: number }).port
@@ -62,14 +62,14 @@ describe('端口', () => {
     assert.equal(await choosePort(0), 0)
   })
 
-  test('从就绪文件的地址取端口', () => {
+  test('Takes the port from the address in the ready file', () => {
     assert.equal(portOf('http://127.0.0.1:8781'), 8781)
     assert.equal(portOf('http://127.0.0.1'), undefined)
   })
 })
 
-describe('日志', () => {
-  test('超过上限就轮转，只保留 keep 份', () => {
+describe('Log', () => {
+  test('Rotates past the size limit and keeps only `keep` old files', () => {
     const file = join(dir, 'logs', 'server.log')
     const log = new RotatingLog(file, 10, 2)
     for (const chunk of ['aaaaaaaa\n', 'bbbbbbbb\n', 'cccccccc\n', 'dddddddd\n']) log.write(chunk)
@@ -80,7 +80,7 @@ describe('日志', () => {
     assert.equal(existsSync(`${file}.3`), false)
   })
 
-  test('末尾几行只算这次运行', () => {
+  test('The last lines cover only this run', () => {
     const log = new RotatingLog(join(dir, 'logs', 'tail.log'))
     log.write('old\n')
     log.resetTail()
@@ -90,9 +90,9 @@ describe('日志', () => {
   })
 })
 
-describe('导航', () => {
+describe('Navigation', () => {
   const origin = 'http://127.0.0.1:8780'
-  test('服务端自己的源留在窗口里，http、https、mailto 交给系统浏览器，其余不处理', () => {
+  test("The server's own origin stays in the window; http, https and mailto go to the system browser; anything else is ignored", () => {
     assert.equal(classifyNavigation('http://127.0.0.1:8780/projects', origin), 'app')
     assert.equal(classifyNavigation('http://127.0.0.1:8781/', origin), 'external')
     assert.equal(classifyNavigation('https://github.com/AI-for-anyone/loop-now', origin), 'external')
@@ -102,11 +102,11 @@ describe('导航', () => {
     assert.equal(classifyNavigation('not a url', origin), 'deny')
   })
 
-  test('新窗口不传源，同源页面也交给系统浏览器', () => {
+  test('A new window passes no origin, so even same-origin pages go to the system browser', () => {
     assert.equal(classifyNavigation('http://127.0.0.1:8780/projects'), 'external')
   })
 
-  test('授权弹窗只交一次：同一次导航的 did-start-navigation 与 will-navigate 只打开一个页面，about:blank 不算', () => {
+  test('An authorization popup is handed off once: did-start-navigation and will-navigate of the same navigation open one page, and about:blank does not count', () => {
     const opened: string[] = []
     const handOff = handOffOnce((url) => opened.push(url))
     const url = 'https://auth.openai.com/oauth/authorize?state=x'
@@ -118,7 +118,7 @@ describe('导航', () => {
   })
 })
 
-describe('配置', () => {
+describe('Profiles', () => {
   // A profile error is a LocalizedError: its message is the English text (the enUS table), and the zhCN table gives the Chinese one.
   const localized = (english: RegExp, chinese: RegExp) => (err: unknown) => {
     assert.ok(err instanceof LocalizedError)
@@ -128,13 +128,13 @@ describe('配置', () => {
     return true
   }
 
-  test('命令行参数优先于环境变量', () => {
+  test('The command line argument takes precedence over the environment variable', () => {
     assert.equal(profileArg(['electron', '.', '--profile=try'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'try')
     assert.equal(profileArg(['electron', '.'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'env')
     assert.equal(profileArg(['electron', '.'], {}), undefined)
   })
 
-  test('名字放在壳自己的位置，工作根在 HOME 之外', () => {
+  test("A named profile lives in the shell's own location, with the work root outside HOME", () => {
     const p = resolveProfile('try', '/Users/someone', {}, 'darwin')
     assert.equal(p.label, 'try')
     assert.equal(p.shellDir, '/Users/someone/Library/Application Support/Loop Now/try/shell')
@@ -146,7 +146,7 @@ describe('配置', () => {
     })
   })
 
-  test('默认配置也是一个配置，没有指定目录时从不落到服务端的默认目录', () => {
+  test("The default profile is a profile too: without specified directories it never falls back to the server's default directories", () => {
     const p = resolveProfile(defaultProfile, '/Users/someone', {}, 'darwin')
     assert.equal(p.dataDir, '/Users/someone/Library/Application Support/Loop Now/default/data')
     assert.equal(p.contextDir, '/Users/someone/Library/Application Support/Loop Now/default/context')
@@ -159,7 +159,7 @@ describe('配置', () => {
     )
   })
 
-  test('desktop.json 指定的目录换掉默认位置，交给服务端，日志首行标出', () => {
+  test('Directories specified in desktop.json replace the default locations, are passed to the server, and are noted on the first log line', () => {
     const p = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' }, 'darwin')
     assert.deepEqual(profileEnv(p), {
       LOOP_NOW_DATA_DIR: '/Users/someone/Library/Application Support/Loop Now/default/data',
@@ -174,7 +174,7 @@ describe('配置', () => {
     assert.deepEqual([all.shellDir, all.logDir, all.dataDir, all.contextDir, all.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/Users/someone/.loop_now', '/Users/someone/.loop_now/context', '/Users/Shared/w'])
   })
 
-  test('desktop.json 按配置名取指定的目录；没有文件、没有这一项时不指定，写错时报错', () => {
+  test('desktop.json gives directories by profile name; nothing is specified without the file or the entry, and a malformed entry is an error', () => {
     const file = join(dir, 'overrides.json')
     assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), {})
     writeFileSync(file, 'not json')
@@ -186,23 +186,23 @@ describe('配置', () => {
     assert.deepEqual(overridesFromFile(file, 'try', 'darwin'), {})
     assert.deepEqual(overridesFromFile(file, 'constructor', 'darwin'), {})
     for (const [entry, english, chinese] of [
-      [{ workRoot: 'loop-now' }, /^profiles\.default\.workRoot in desktop\.json should be an absolute path: "loop-now"$/, /^desktop\.json 的 profiles\.default\.workRoot 应是绝对路径："loop-now"$/],
-      [{ workRoot: 3 }, /should be an absolute path: 3$/, /应是绝对路径：3$/],
-      [{ workroot: '/Users/Shared/loop-now' }, /^profiles\.default in desktop\.json may only set workRoot, dataDir, contextDir; unknown key: workroot$/, /^desktop\.json 的 profiles\.default 只能写 workRoot、dataDir、contextDir，不认识 workroot$/],
-      ['/Users/Shared/loop-now', /^profiles\.default in desktop\.json should be an object\.$/, /^desktop\.json 的 profiles\.default 应是对象$/],
+      [{ workRoot: 'loop-now' }, /^profiles\.default\.workRoot in desktop\.json should be an absolute path: "loop-now"$/, /^desktop\.json 的 profiles\.default\.workRoot 应是绝对路径："loop-now"$/],  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
+      [{ workRoot: 3 }, /should be an absolute path: 3$/, /应是绝对路径：3$/],  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
+      [{ workroot: '/Users/Shared/loop-now' }, /^profiles\.default in desktop\.json may only set workRoot, dataDir, contextDir; unknown key: workroot$/, /^desktop\.json 的 profiles\.default 只能写 workRoot、dataDir、contextDir，不认识 workroot$/],  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
+      ['/Users/Shared/loop-now', /^profiles\.default in desktop\.json should be an object\.$/, /^desktop\.json 的 profiles\.default 应是对象$/],  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
     ] as const) {
       writeFileSync(file, JSON.stringify({ profiles: { default: entry } }))
       assert.throws(() => overridesFromFile(file, defaultProfile, 'darwin'), localized(english, chinese))
     }
   })
 
-  test('绝对路径时全部放在它下面', () => {
+  test('With an absolute path, everything goes under it', () => {
     const p = resolveProfile('/private/tmp/x/', undefined, {}, 'darwin')
     assert.deepEqual([p.label, p.root], ['x', '/private/tmp/x'])
     assert.deepEqual([p.shellDir, p.logDir, p.dataDir, p.contextDir, p.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/private/tmp/x/data', '/private/tmp/x/context', '/private/tmp/x/work'])
   })
 
-  test('从 Finder 打开时读 desktop.json 的 profile；没有或格式不对时为空', () => {
+  test('When opened from Finder, reads the profile from desktop.json; empty when missing or malformed', () => {
     const file = join(dir, 'desktop.json')
     assert.equal(profileFromFile(file), undefined)
     writeFileSync(file, JSON.stringify({ profile: 'try' }))
@@ -211,18 +211,18 @@ describe('配置', () => {
     assert.equal(profileFromFile(file), undefined)
   })
 
-  test('不合规的名字报错', () => {
+  test('An invalid name is an error', () => {
     assert.throws(() => resolveProfile('../live'))
     assert.throws(
       () => resolveProfile('Try'),
       localized(
         /^A profile name may only use lowercase letters, digits, underscores and hyphens, up to 32 characters: Try$/,
-        /^配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：Try$/,
+        /^配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：Try$/,  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
       ),
     )
   })
 
-  test('Windows：名字放在 %LOCALAPPDATA%\\Loop Now\\<名字>，日志也在其中，工作根在 platform.ts 定的位置', () => {
+  test('Windows: a named profile lives in %LOCALAPPDATA%\\Loop Now\\<name>, logs included, and the work root is where platform.ts puts it', () => {
     const env = { LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }
     const p = resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', env)
     assert.equal(p.label, 'try')
@@ -242,7 +242,7 @@ describe('配置', () => {
     assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', {}).dataDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data')
   })
 
-  test('Windows：绝对路径时全部放在它下面，末尾的反斜杠去掉；desktop.json 的目录也按 Windows 判断绝对路径', () => {
+  test('Windows: with an absolute path, everything goes under it without the trailing backslash; desktop.json directories are judged absolute by Windows rules too', () => {
     const p = resolveProfile('D:\\loop\\x\\', undefined, {}, 'win32', {})
     assert.deepEqual([p.label, p.root], ['x', 'D:\\loop\\x'])
     assert.deepEqual([p.shellDir, p.logDir, p.dataDir, p.contextDir, p.workRoot], ['D:\\loop\\x\\shell', 'D:\\loop\\x\\logs', 'D:\\loop\\x\\data', 'D:\\loop\\x\\context', 'D:\\loop\\x\\work'])
@@ -251,15 +251,15 @@ describe('配置', () => {
     writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'D:\\work\\' } } }))
     assert.deepEqual(overridesFromFile(file, defaultProfile, 'win32'), { workRoot: 'D:\\work' })
     writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'work' } } }))
-    assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), localized(/should be an absolute path: "work"$/, /应是绝对路径："work"$/))
+    assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), localized(/should be an absolute path: "work"$/, /应是绝对路径："work"$/))  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError)
     const migrated = resolveProfile(defaultProfile, 'C:\\Users\\someone', { workRoot: 'D:\\work' }, 'win32', {})
     assert.equal(profileEnv(migrated).LOOP_NOW_WORK_ROOT, 'D:\\work')
     assert.match(profileSummary(migrated), /work root D:\\work \(set in desktop\.json\)$/)
   })
 })
 
-describe('平台差异', () => {
-  test('Windows：系统标题栏、.ico 托盘图标、exe 文件名、任务栏 overlay、PATH 安装；macOS：hiddenInset、Template 图、Dock 角标、链接', () => {
+describe('Platform differences', () => {
+  test('Windows: system title bar, .ico tray icon, exe file names, taskbar overlay, PATH install; macOS: hiddenInset, template image, Dock badge, link', () => {
     assert.deepEqual(windowChrome('win32'), {})
     assert.deepEqual(windowChrome('darwin'), { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 16 } })
     assert.deepEqual([trayIcon('win32'), trayIcon('darwin')], ['tray.ico', 'trayTemplate.png'])
@@ -270,7 +270,7 @@ describe('平台差异', () => {
     assert.ok(existsSync(join(__dirname, '..', 'build', 'icon.ico')))
   })
 
-  test('未读数：macOS 设 Dock 角标；Windows 有未读就放 overlay，变多时闪任务栏', () => {
+  test('Unread count: macOS sets the Dock badge; Windows shows an overlay while anything is unread and flashes the taskbar when the count grows', () => {
     assert.deepEqual(badgePlan(0, 3, 'darwin'), { dock: 3 })
     assert.deepEqual(badgePlan(3, 0, 'darwin'), { dock: 0 })
     assert.deepEqual(badgePlan(0, 3, 'win32'), { overlay: true, flash: true })
@@ -283,9 +283,9 @@ describe('平台差异', () => {
   })
 })
 
-describe('服务端进程核对（孤儿清理）', () => {
+describe('Checking the server process (orphan cleanup)', () => {
   const bin = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\server\\loop-server.exe'
-  test('Windows：可执行文件路径不分大小写，启动时刻和壳记下的一致才算；pid 被复用时不认', () => {
+  test('Windows: the executable path is case-insensitive and the start time must match what the shell recorded; a reused pid is not ours', () => {
     const info = { command: bin.toUpperCase(), started: '133700000000000000' }
     assert.equal(isOurServer(info, bin, 4321, undefined, 'win32'), true)
     assert.equal(isOurServer(info, bin, 4321, { pid: 4321, started: '133700000000000000' }, 'win32'), true)
@@ -295,19 +295,19 @@ describe('服务端进程核对（孤儿清理）', () => {
     assert.equal(isOurServer(undefined, bin, 4321, undefined, 'win32'), false)
   })
 
-  test('macOS：命令行必须正好是可执行文件路径', () => {
+  test('macOS: the command line must be exactly the executable path', () => {
     const mac = '/Applications/Loop Now.app/Contents/Resources/server/loop-server'
     assert.equal(isOurServer({ command: mac, started: 'Wed Nov  5 10:00:00 2026' }, mac, 1, undefined, 'darwin'), true)
     assert.equal(isOurServer({ command: mac.toUpperCase(), started: '' }, mac, 1, undefined, 'darwin'), false)
     assert.equal(isOurServer({ command: `${mac} --x`, started: '' }, mac, 1, undefined, 'darwin'), false)
   })
 
-  test('Windows：握着服务端的 stdin 并带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，关 stdin 即优雅停止；macOS 不给 stdin', () => {
+  test("Windows: holds the server's stdin and sets LOOP_NOW_STOP_ON_STDIN_CLOSE=1, so closing stdin stops it gracefully; macOS gives no stdin", () => {
     assert.deepEqual(spawnPlan('win32'), { stdin: 'pipe', env: { LOOP_NOW_STOP_ON_STDIN_CLOSE: '1' } })
     assert.deepEqual(spawnPlan('darwin'), { stdin: 'ignore', env: {} })
   })
 
-  test('Windows：PowerShell 查进程的输出按 JSON 读；超时或孤儿用 taskkill 整棵树强制结束', () => {
+  test("Windows: PowerShell's process query output is read as JSON; on a timeout, or for an orphan, taskkill force-ends the whole tree", () => {
     assert.match(windowsProcessQuery(4321), /ProcessId=4321/)
     assert.deepEqual(parseWindowsProcess('{"ExecutablePath":"C:\\\\x\\\\loop-server.exe","Started":133700000000000000}'), { command: 'C:\\x\\loop-server.exe', started: '133700000000000000' })
     assert.equal(parseWindowsProcess('{"ExecutablePath":null,"Started":1}'), undefined)
@@ -316,8 +316,8 @@ describe('服务端进程核对（孤儿清理）', () => {
   })
 })
 
-describe('设置文件', () => {
-  test('读不到或格式不对时为空，更新时合并', () => {
+describe('Settings file', () => {
+  test('Empty when unreadable or malformed; an update merges', () => {
     const file = join(dir, 'settings', 'settings.json')
     const settings = new SettingsFile(file)
     assert.deepEqual(settings.read(), {})
@@ -330,81 +330,82 @@ describe('设置文件', () => {
   })
 })
 
-describe('托盘菜单', () => {
-  const s = stringsFor('zh-CN')
-  const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : '（不可点）'}`))
+describe('Tray menu', () => {
+  const s = stringsFor('en-US')
+  const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : ' (disabled)'}`))
   const profile = (name: string) => resolveProfile(name, '/Users/someone', {}, 'darwin')
 
-  test('运行中：状态行带主机和端口，可在浏览器打开；开了对外 TLS 端口时可看外部身份连接方式', () => {
+  test('While running: the status line shows host and port, the browser item works, and the external identity connection is available when the external TLS port is open', () => {
     assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s, true, undefined, 'https://127.0.0.1:8781')), [
-      '运行中 · 127.0.0.1:8780（不可点）',
-      '配置：默认（不可点）',
+      'Running · 127.0.0.1:8780 (disabled)',
+      'Profile: default (disabled)',
       '—',
-      '打开窗口',
-      '在默认浏览器打开',
+      'Open Window',
+      'Open in Browser',
       '—',
-      '查看日志',
-      '安装命令行工具…',
-      '外部身份连接方式…',
-      '重启服务',
+      'Show Logs',
+      'Install Command Line Tool…',
+      'External Identity Connection…',
+      'Restart Server',
       '—',
-      '退出 Loop Now',
+      'Quit Loop Now',
     ])
     // Disabled when the external port is not open (an older server's ready file has no externalUrl).
-    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s))[8], '外部身份连接方式…（不可点）')
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s))[8], 'External Identity Connection… (disabled)')
   })
 
-  test('启动中不能在浏览器打开、不能看连接方式、不能重启；第二行是当前配置', () => {
+  test('While starting: no browser, no connection details, no restart; the second line is the current profile', () => {
     const items = labels(trayItems('starting', undefined, profile('try'), s, true, undefined, 'https://127.0.0.1:8781'))
-    assert.deepEqual(items.slice(0, 2), ['正在启动…（不可点）', '配置：try（不可点）'])
-    assert.equal(items[4], '在默认浏览器打开（不可点）')
-    assert.equal(items[8], '外部身份连接方式…（不可点）')
-    assert.equal(items[9], '重启服务（不可点）')
+    assert.deepEqual(items.slice(0, 2), ['Starting… (disabled)', 'Profile: try (disabled)'])
+    assert.equal(items[4], 'Open in Browser (disabled)')
+    assert.equal(items[8], 'External Identity Connection… (disabled)')
+    assert.equal(items[9], 'Restart Server (disabled)')
   })
 
-  test('desktop.json 指定了目录时，配置行跟上实际用的路径', () => {
+  test('When desktop.json specifies directories, the profile line is followed by the paths actually used', () => {
     const migrated = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' }, 'darwin')
-    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', migrated, s))[1], '配置：默认 · 工作根 /Users/Shared/loop-now（不可点）')
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', migrated, s))[1], 'Profile: default · work root /Users/Shared/loop-now (disabled)')
     const all = resolveProfile('try', '/Users/someone', { contextDir: '/Volumes/c', dataDir: '/Volumes/d', workRoot: '/Volumes/w' }, 'darwin')
     assert.equal(
-      labels(trayItems('running', 'http://127.0.0.1:8780', all, stringsFor('en-US')))[1],
-      'Profile: try · work root /Volumes/w · data /Volumes/d · context /Volumes/c（不可点）',
+      labels(trayItems('running', 'http://127.0.0.1:8780', all, stringsFor('zh-CN')))[1],
+      '配置：try · 工作根 /Volumes/w · 数据目录 /Volumes/d · 上下文目录 /Volumes/c (disabled)',  // check-english: zh (asserts both languages: the Chinese tray text)
     )
   })
 
-  test('多次崩溃停下后可以手动重启', () => {
+  test('After stopping on repeated crashes, the server can be restarted by hand', () => {
     const items = labels(trayItems('crashed', undefined, undefined, s))
-    assert.equal(items[0], '已停止：多次崩溃（不可点）')
-    assert.equal(items[9], '重启服务')
+    assert.equal(items[0], 'Stopped after repeated crashes (disabled)')
+    assert.equal(items[9], 'Restart Server')
   })
 
-  test('开发时（没打包）不能安装命令行工具', () => {
-    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s, false))[7], '安装命令行工具…（不可点）')
+  test('In development (not packaged) the command line tool cannot be installed', () => {
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s, false))[7], 'Install Command Line Tool… (disabled)')
   })
 
-  test('中英文两套文字同形', () => {
+  test('The Chinese and English tables have the same shape', () => {
     const en = stringsFor('en-US')
-    assert.equal(stringsFor('zh-Hans-CN'), s)
-    assert.deepEqual(Object.keys(en.tray), Object.keys(s.tray))
-    assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', profile(defaultProfile), en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
-    assert.deepEqual(Object.keys(en.tray.dirs), Object.keys(s.tray.dirs))
-    assert.deepEqual(Object.keys(en.external), Object.keys(s.external))
-    assert.deepEqual(Object.keys(en), Object.keys(s))
-    assert.deepEqual(Object.keys(en.cli), Object.keys(s.cli))
-    assert.deepEqual(Object.keys(en.profile), Object.keys(s.profile))
+    const zh = stringsFor('zh-CN')
+    assert.equal(stringsFor('zh-Hans-CN'), zh)
+    assert.deepEqual(Object.keys(en.tray), Object.keys(zh.tray))
+    assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', profile(defaultProfile), en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000 (disabled)', 'Profile: default (disabled)'])
+    assert.deepEqual(Object.keys(en.tray.dirs), Object.keys(zh.tray.dirs))
+    assert.deepEqual(Object.keys(en.external), Object.keys(zh.external))
+    assert.deepEqual(Object.keys(en), Object.keys(zh))
+    assert.deepEqual(Object.keys(en.cli), Object.keys(zh.cli))
+    assert.deepEqual(Object.keys(en.profile), Object.keys(zh.profile))
   })
 
-  test('壳自己显示的错误按语言出文字，message 是英文；别的错误照原样显示', () => {
+  test('Errors the shell shows itself get text in the UI language and an English message; other errors are shown as they are', () => {
     const err = new LocalizedError((t) => t.cli.pathMissing('C:\\Program Files\\Loop Now\\resources\\bin'))
     assert.equal(err.message, 'The user PATH was written, but C:\\Program Files\\Loop Now\\resources\\bin is not in it.')
     assert.equal(errorText(err, stringsFor('en-US')), err.message)
-    assert.equal(errorText(err, s), 'PATH 写完后没有 C:\\Program Files\\Loop Now\\resources\\bin')
+    assert.equal(errorText(err, stringsFor('zh-CN')), 'PATH 写完后没有 C:\\Program Files\\Loop Now\\resources\\bin')  // check-english: zh (asserts both languages: the Chinese text of a LocalizedError from cli)
     assert.equal(errorText(new Error('Access is denied.'), s), 'Access is denied.')
   })
 })
 
-describe('外部身份连接方式', () => {
-  test('证书在壳的 tls 目录下；loopctl 配置命令带 https 地址、加引号的 CA 路径，令牌从标准输入读', () => {
+describe('External identity connection', () => {
+  test("The certificate is in the shell's tls directory; the loopctl config command carries the https address and the quoted CA path, and reads the token from standard input", () => {
     // The path separator follows the running platform (backslash on Windows), so the expected value is built with join too.
     const tlsDir = join('/Users/someone/Library/Application Support/Loop Now/default/shell', 'tls')
     const caFile = externalCertPath(tlsDir)
@@ -413,15 +414,15 @@ describe('外部身份连接方式', () => {
       loopctlConfigCommand('https://127.0.0.1:8781', '/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem'),
       'loopctl config set default --server https://127.0.0.1:8781 --ca-file "/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem" --token-stdin',
     )
-    const detail = stringsFor('zh-CN').external.detail('https://127.0.0.1:8781', caFile, 'CMD')
+    const detail = stringsFor('en-US').external.detail('https://127.0.0.1:8781', caFile, 'CMD')
     assert.match(detail, /https:\/\/127\.0\.0\.1:8781/)
     assert.match(detail, /cert\.pem/)
     assert.match(detail, /\nCMD\n/)
   })
 })
 
-describe('git 检测', () => {
-  test('xcode-select -p 失败时不运行 git（它只是占位，会弹系统的安装框）', async () => {
+describe('git detection', () => {
+  test("Does not run git when xcode-select -p fails (git is only a stub then and would open the system's install dialog)", async () => {
     const calls: string[] = []
     const usable = await gitUsable(async (file) => {
       calls.push(file)
@@ -431,12 +432,12 @@ describe('git 检测', () => {
     assert.deepEqual(calls, ['/usr/bin/xcode-select'])
   })
 
-  test('有命令行工具时以 git --version 为准', async () => {
+  test('With the command line tools installed, git --version decides', async () => {
     assert.equal(await gitUsable(async () => true, 'darwin'), true)
     assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git', 'darwin'), false)
   })
 
-  test('Windows：PATH 里找 git.exe，找到再跑 git --version，找不到就是没装，不碰 xcode-select', async () => {
+  test('Windows: looks for git.exe on PATH and runs git --version when found; not found means not installed, and xcode-select is never touched', async () => {
     const env = { PATH: 'C:\\Windows\\system32;C:\\Program Files\\Git\\cmd;' }
     const exists = (file: string) => file === 'C:\\Program Files\\Git\\cmd\\git.exe'
     assert.equal(findInPath('git.exe', env.PATH, 'win32', exists), 'C:\\Program Files\\Git\\cmd\\git.exe')
@@ -454,32 +455,32 @@ describe('git 检测', () => {
   })
 })
 
-describe('页面发来的通知与未读数', () => {
-  const ok = { id: 'm1', title: '待你回复：审查员', body: '要合并吗？', path: '/agents/a/chat' }
+describe('Notifications and unread count sent by the page', () => {
+  const ok = { id: 'm1', title: 'Waiting for your reply: reviewer', body: 'Merge it?', path: '/agents/a/chat' }
 
-  test('合规的通知原样收下，过长的标题与正文截断', () => {
+  test('A valid notification is taken as is; an overlong title and body are truncated', () => {
     assert.deepEqual(parseNotification(ok), ok)
     const long = parseNotification({ ...ok, title: 'x'.repeat(500), body: 'y'.repeat(900) })
     assert.equal(long?.title.length, 200)
     assert.equal(long?.body.length, 500)
   })
 
-  test('地址必须是控制台里的路径，其余丢掉', () => {
+  test('The address must be a path in the console; anything else is dropped', () => {
     for (const path of ['https://evil.example', '//evil.example/x', '/\\evil.example', 'agents/a', '']) assert.equal(parseNotification({ ...ok, path }), undefined, path)
     assert.equal(parseNotification({ ...ok, id: '' }), undefined)
     assert.equal(parseNotification('not an object'), undefined)
   })
 
-  test('未读数是非负整数', () => {
+  test('The unread count is a non-negative integer', () => {
     assert.equal(parseBadge(3), 3)
     assert.equal(parseBadge(0), 0)
     for (const v of [-1, 1.5, '3', null]) assert.equal(parseBadge(v), undefined)
   })
 })
 
-describe('安装命令行工具', () => {
+describe('Installing the command line tool', () => {
   // macOS only (Windows goes through PATH and creates no link; on Windows, readlink would also resolve a relative target to an absolute path).
-  test('看出链接是不存在、已指向自带的 loopctl，还是别的', { skip: process.platform === 'win32' && 'macOS 专用' }, async () => {
+  test('Tells whether the link is missing, already points to the bundled loopctl, or is something else', { skip: process.platform === 'win32' && 'macOS only' }, async () => {
     const target = '/Applications/Loop Now.app/Contents/Resources/bin/loopctl'
     const link = join(dir, 'cli', 'loopctl')
     mkdirSync(join(dir, 'cli'), { recursive: true })
@@ -494,7 +495,7 @@ describe('安装命令行工具', () => {
     assert.deepEqual(await linkState(link, target), { state: 'other' })
   })
 
-  test('Windows：看用户 PATH 里有没有随包的 bin 目录（不分大小写、末尾反斜杠不算），没有才追加', () => {
+  test("Windows: checks whether the user PATH has the bundled bin directory (case-insensitive, ignoring a trailing backslash) and appends it only when it doesn't", () => {
     const dir = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\bin'
     assert.equal(userPathHas(`C:\\Go\\bin;${dir}\\;D:\\x`, dir), true)
     assert.equal(userPathHas(dir.toUpperCase(), dir), true)
@@ -507,7 +508,7 @@ describe('安装命令行工具', () => {
     assert.doesNotMatch(script, /setx/i)
   })
 
-  test('AppleScript 里的路径转义后用 quoted form 交给 shell', () => {
+  test('In AppleScript the path is escaped and handed to the shell with quoted form', () => {
     assert.equal(
       installScript('/Applications/Loop "Now".app/x\\y'),
       'do shell script "mkdir -p " & quoted form of "/usr/local/bin" & " && ln -sfn " & quoted form of "/Applications/Loop \\"Now\\".app/x\\\\y" & " " & quoted form of "/usr/local/bin/loopctl" with administrator privileges',
@@ -515,7 +516,7 @@ describe('安装命令行工具', () => {
   })
 })
 
-describe('检查更新', () => {
+describe('Checking for updates', () => {
   const fake = () => {
     let listener: ((info: { version: string }) => void) | undefined
     const updater: Updater & { found: (version: string) => void; fail?: Error } = {
@@ -574,7 +575,7 @@ describe('检查更新', () => {
     return { version, fetched }
   }
 
-  test('正式版与预发布都检查、不设通道、不自动下载安装、不降级；同一版本只提示一次', () => {
+  test('Checks releases and prereleases, sets no channel, never downloads or installs by itself, never downgrades; a version is announced only once', () => {
     const updater = fake()
     const checker = new UpdateChecker(updater, () => undefined)
     assert.deepEqual([updater.autoDownload, updater.autoInstallOnAppQuit, updater.allowPrerelease, updater.allowDowngrade, updater.channel], [false, false, true, false, null])
@@ -588,15 +589,15 @@ describe('检查更新', () => {
     assert.equal(checker.available, '0.2.1')
   })
 
-  test('检查失败只记日志', async () => {
+  test('A failed check is only logged', async () => {
     const updater = fake()
     const notes: string[] = []
-    updater.fail = new Error('找不到 latest-mac.yml')
+    updater.fail = new Error('Cannot find latest-mac.yml')
     await new UpdateChecker(updater, (n) => notes.push(n)).check()
-    assert.deepEqual(notes, ['Update check failed: 找不到 latest-mac.yml'])
+    assert.deepEqual(notes, ['Update check failed: Cannot find latest-mac.yml'])
   })
 
-  test('已装正式版：最新的是预发布或正式版都检查得到', async () => {
+  test('With a release installed, the latest is found whether it is a prerelease or a release', async () => {
     // For a pre-release, rc-mac.yml is looked up first, falling back to latest-mac.yml.
     assert.deepEqual(await latestRelease('0.2.0', ['v0.3.0-rc.1', 'v0.2.1', 'v0.2.0']), {
       version: '0.3.0-rc.1',
@@ -608,7 +609,7 @@ describe('检查更新', () => {
     })
   })
 
-  test('Windows 读的是 latest.yml，同样只提示去下载页（打包配置里 win 不设 channel、不自动装）', async () => {
+  test('Windows reads latest.yml and likewise only points to the download page (the build config sets no channel and no auto install for win)', async () => {
     assert.deepEqual(await latestRelease('0.2.0', ['v0.2.1', 'v0.2.0'], 'win32'), { version: '0.2.1', fetched: ['.atom', '/download/v0.2.1/latest.yml'] })
     const saved = process.env.LOOP_NOW_DESKTOP_BUNDLE
     process.env.LOOP_NOW_DESKTOP_BUNDLE = dir
@@ -625,8 +626,8 @@ describe('检查更新', () => {
     }
   })
 
-  test('有新版本时菜单栏多一项去下载页', () => {
-    const items = trayItems('running', 'http://127.0.0.1:8780', undefined, stringsFor('zh-CN'), true, '0.2.0')
-    assert.deepEqual(items[2], { label: '有新版本 0.2.0，去下载…', enabled: true, action: 'update' })
+  test('With a new version, the menu bar gets an item for the download page', () => {
+    const items = trayItems('running', 'http://127.0.0.1:8780', undefined, stringsFor('en-US'), true, '0.2.0')
+    assert.deepEqual(items[2], { label: 'Version 0.2.0 is available — Download…', enabled: true, action: 'update' })
   })
 })

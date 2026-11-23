@@ -41,8 +41,8 @@ async function until<T>(what: string, fn: () => T | undefined | false, timeoutMs
   }
 }
 
-describe('官方插件 webhook', () => {
-  it('收件箱消息签名后 POST 到回调地址；重复送达不重发；按 recipients 过滤', async () => {
+describe('Official plugin webhook', () => {
+  it('Signs inbox messages and POSTs them to the callback URL; a repeated delivery is not sent again; filters by recipients', async () => {
     const received: { headers: IncomingMessage['headers']; body: string; url: string }[] = []
     const server = createServer(async (req, res) => {
       let body = ''
@@ -119,7 +119,7 @@ describe('官方插件 webhook', () => {
     }
   })
 
-  it('没有配置回调地址时直接确认，不写投递记录', async () => {
+  it('Without a callback URL it acknowledges at once and writes no delivery record', async () => {
     const host = await HostHarness.start()
     try {
       await host.load(officialPayload('webhook'))
@@ -132,8 +132,8 @@ describe('官方插件 webhook', () => {
   })
 })
 
-describe('官方插件 webhook 代管外部身份', () => {
-  it('代管身份的提问推送时带 answerUrl；对方签名后 POST 到回答入口，插件以该身份回答或回复', async () => {
+describe('Official plugin webhook managing external identities', () => {
+  it("A managed identity's question is pushed with answerUrl; the other side POSTs a signed answer to the answer entry, and the plugin answers or replies as that identity", async () => {
     const pushed: { body: string; headers: IncomingMessage['headers'] }[] = []
     const hook = createServer(async (req, res) => {
       let body = ''
@@ -149,12 +149,12 @@ describe('官方插件 webhook 代管外部身份', () => {
       calls.push({ method: req.method, url: req.url, body: parsed })
       res.setHeader('content-type', 'application/json')
       if (req.method === 'GET') {
-        res.end(JSON.stringify({ id: req.url!.split('/').pop(), threadId: 't1', text: `全文 ${req.url!.split('/').pop()}` }))
+        res.end(JSON.stringify({ id: req.url!.split('/').pop(), threadId: 't1', text: `Full text ${req.url!.split('/').pop()}` }))
         return
       }
       if (parsed?.optionId === 'stale') {
         res.statusCode = 409
-        res.end(JSON.stringify({ error: { code: 'already_answered', message: '这个提问已经回答过了' } }))
+        res.end(JSON.stringify({ error: { code: 'already_answered', message: 'this question has already been answered' } }))
         return
       }
       res.statusCode = 201
@@ -176,16 +176,16 @@ describe('官方插件 webhook 代管外部身份', () => {
       const question = {
         type: 'identity.inbound', identityId: identity, channelId: 'identity', messageId: 'q1', threadId: 't1',
         from: { kind: 'agent', agentId: 'a1', name: 'manager' }, nodeRunId: 'n1', isQuestion: true,
-        question: { id: 'q1', options: [{ id: 'yes', label: '发布' }, { id: 'no', label: '不发' }], allowText: true, deadline: null }, excerpt: '要不要发布？',
+        question: { id: 'q1', options: [{ id: 'yes', label: 'Publish' }, { id: 'no', label: 'Hold' }], allowText: true, deadline: null }, excerpt: 'Shall we publish?',
       }
       assert.deepEqual((await host.event('webhook', question)).payload, { ok: true })
       const first = await until('the pushed question', () => pushed[0])
       const sent = JSON.parse(first.body)
       assert.equal(sent.answerUrl, 'https://loop.example.com:8781/hooks/webhook/answer')
       assert.deepEqual(sent.question.options, question.question.options)
-      assert.equal(sent.text, '全文 q1', 'the push carries the full text')
+      assert.equal(sent.text, 'Full text q1', 'the push carries the full text')
       assert.ok(verifySignature({ secret, body: first.body, signature: first.headers['x-loop-now-signature'] as string, timestamp: first.headers['x-loop-now-timestamp'] as string }))
-      const plain = await host.event('webhook', { ...question, messageId: 'm2', isQuestion: false, question: null, excerpt: '发布完了告诉我' })
+      const plain = await host.event('webhook', { ...question, messageId: 'm2', isQuestion: false, question: null, excerpt: 'Tell me when it is published' })
       assert.deepEqual(plain.payload, { ok: true })
       await until('the pushed message', () => pushed[1])
       assert.equal(JSON.parse(pushed[1]!.body).answerUrl, 'https://loop.example.com:8781/hooks/webhook/answer', 'a regular message can also be replied to through the answer endpoint')
@@ -202,7 +202,7 @@ describe('官方插件 webhook 代管外部身份', () => {
         return { status: r.payload.value.status as number, body: JSON.parse(Buffer.from(r.payload.value.body, 'base64').toString()) }
       }
       assert.deepEqual(await answer({ messageId: 'q1', optionId: 'yes' }), { status: 200, body: { ok: true, messageId: 'r1', answered: true } })
-      assert.deepEqual(await answer({ messageId: 'm2', text: '好的' }), { status: 200, body: { ok: true, messageId: 'r2', answered: false } })
+      assert.deepEqual(await answer({ messageId: 'm2', text: 'OK' }), { status: 200, body: { ok: true, messageId: 'r2', answered: false } })
       assert.equal((await answer({ messageId: 'q1', text: 'late' })).status, 409, 'when the question is closed, a text answer is stored as a reply only')
       assert.deepEqual((await answer({ messageId: 'q1', optionId: 'stale' })).body.error.code, 'already_answered')
       assert.equal((await answer({ messageId: 'q1', optionId: 'yes' }, { sign: 'wrong-secret' })).status, 401)
@@ -213,7 +213,7 @@ describe('官方插件 webhook 代管外部身份', () => {
         calls.filter((c) => c.method === 'POST').map((c) => [c.method, c.url, c.body]),
         [
           ['POST', '/api/v1/inbox/messages/q1/reply', { asIdentityId: identity, optionId: 'yes' }],
-          ['POST', '/api/v1/inbox/messages/m2/reply', { text: '好的', asIdentityId: identity }],
+          ['POST', '/api/v1/inbox/messages/m2/reply', { text: 'OK', asIdentityId: identity }],
           ['POST', '/api/v1/inbox/messages/q1/reply', { asIdentityId: identity, text: 'late' }],
           ['POST', '/api/v1/inbox/messages/q1/reply', { asIdentityId: identity, optionId: 'stale' }],
         ],
@@ -229,7 +229,7 @@ describe('官方插件 webhook 代管外部身份', () => {
     }
   })
 
-  it('没有打开“代管外部身份”时不推送也不接受回答', async () => {
+  it('Without “Manage external identities” turned on, nothing is pushed and no answer is accepted', async () => {
     const host = await HostHarness.start()
     try {
       await host.load(officialPayload('webhook', { values: { url: 'http://127.0.0.1:9/in' }, secrets: { secret: 'whsec-x-0001' }, projects: {} }))
@@ -244,8 +244,8 @@ describe('官方插件 webhook 代管外部身份', () => {
   })
 })
 
-describe('官方插件 hello', () => {
-  it('平台侧在 run.ended 时写插件日志', async () => {
+describe('Official plugin hello', () => {
+  it('The platform side writes a plugin log on run.ended', async () => {
     const host = await HostHarness.start()
     try {
       assert.deepEqual((await host.load(officialPayload('hello'))).payload, { ok: true })
@@ -267,7 +267,7 @@ describe('官方插件 hello', () => {
   })
 })
 
-describe('validate 子命令', () => {
+describe('The validate subcommand', () => {
   const run = promisify(execFile)
   const validate = async (...args: string[]) => {
     try {
@@ -279,7 +279,7 @@ describe('validate 子命令', () => {
     }
   }
 
-  it('官方插件加载核对通过', async () => {
+  it('The official plugins pass the load check', async () => {
     for (const id of ['webhook', 'hello', 'playwright']) {
       const { code, result } = await validate(path.join(official, id), '--load', '--platform-version', '2026.11')
       assert.equal(code, 0)
@@ -288,7 +288,7 @@ describe('validate 子命令', () => {
     }
   })
 
-  it('--load 报出代码订阅了清单外的事件，插件输出不混进 JSON', async () => {
+  it('--load reports code that subscribes to an event outside the manifest, and plugin output stays out of the JSON', async () => {
     const p = fx.write('greedy', {
       'package.json': JSON.stringify({
         name: 'greedy',

@@ -16,9 +16,9 @@ const list: Schemas['AgentCommandList'] = {
   capturedAt: '2026-11-10T08:00:00Z',
   commands: [
     ...platformCommands(),
-    command('review', { description: '审查当前改动', pluginId: 'reviewer', pluginDisplayName: { 'zh-CN': '代码审查', 'en-US': 'Code review' } }),
-    command('skill:loopctl', { piSource: 'skill', description: '用 loopctl 管理 Agent <b>与任务</b>' }),
-    command('summarize', { piSource: 'prompt', description: '把对话写成摘要' }),
+    command('review', { description: 'Review the current changes', pluginId: 'reviewer', pluginDisplayName: { 'zh-CN': '代码审查', 'en-US': 'Code review' } }), // check-english: zh (LocalizedText: the Chinese entry is part of the data)
+    command('skill:loopctl', { piSource: 'skill', description: 'Manage Agents <b>and tasks</b> with loopctl' }),
+    command('summarize', { piSource: 'prompt', description: 'Write the conversation up as a summary' }),
   ],
 }
 
@@ -35,26 +35,26 @@ function setup(commands: () => Response = () => HttpResponse.json(list)) {
       return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
     }),
   )
-  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
-  return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: '消息' }), sent, reads: () => reads }
+  renderWithQuery(<Composer agentId="agent-1" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: 'Message' }), sent, reads: () => reads }
 }
 
-const options = () => within(screen.getByRole('listbox', { name: '命令' })).getAllByRole('option')
+const options = () => within(screen.getByRole('listbox', { name: 'Commands' })).getAllByRole('option')
 const labels = () => options().map((option) => option.querySelector('code')?.textContent)
 
-describe('输入框的 "/" 命令菜单', () => {
-  it('输入 "/" 才读取命令列表；每行是 /pi:<name>、来源、插件与说明（扩展原文按纯文本显示）；输入框指向选中的一项', async () => {
+describe('the "/" command menu of the input box', () => {
+  it('reads the command list only once "/" is typed; each row is /pi:<name>, source, plugin and description (the extension text shown as plain text); the input points at the selected item', async () => {
     const { user, input, reads } = setup()
-    await user.type(input, '你好')
+    await user.type(input, 'Hello')
     expect(screen.queryByRole('listbox')).toBeNull()
     expect(reads()).toBe(0)
     await user.clear(input)
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [session-id]', '/pi:review', '/pi:skill:loopctl', '/pi:summarize']))
     expect(reads()).toBe(1)
-    expect(options()[7]).toHaveTextContent('/pi:review扩展命令 · 插件 · 代码审查审查当前改动')
-    expect(options()[8]).toHaveTextContent('/pi:skill:loopctl技能用 loopctl 管理 Agent <b>与任务</b>')
-    expect(options()[9]).toHaveTextContent('/pi:summarize提示模板把对话写成摘要')
+    expect(options()[7]).toHaveTextContent('/pi:reviewExtension command · Plugin · Code reviewReview the current changes')
+    expect(options()[8]).toHaveTextContent('/pi:skill:loopctlSkillManage Agents <b>and tasks</b> with loopctl')
+    expect(options()[9]).toHaveTextContent('/pi:summarizePrompt templateWrite the conversation up as a summary')
     expect(options()[0]).toHaveAttribute('aria-selected', 'true')
     expect(input).toHaveAttribute('aria-activedescendant', options()[0].id)
     expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id)
@@ -62,21 +62,21 @@ describe('输入框的 "/" 命令菜单', () => {
   })
 
   // "Printed sheet" redesign: the menu is a small sheet, the selected item is yellow, and the source is written in a small label.
-  it('菜单是一张小纸；选中的一项是黄色；来源写在标签里：平台命令藏青底白字，Pi 的命令浅蓝底', async () => {
+  it('the menu is a small sheet; the selected item is yellow; the source is in a label: platform commands white on navy, Pi commands on light blue', async () => {
     const { user, input } = setup()
     await user.type(input, '/')
     await waitFor(() => expect(options()).toHaveLength(10))
-    const panel = screen.getByRole('listbox', { name: '命令' }).closest<HTMLElement>('[data-radix-popper-content-wrapper] > *')!
+    const panel = screen.getByRole('listbox', { name: 'Commands' }).closest<HTMLElement>('[data-radix-popper-content-wrapper] > *')!
     expect(panel).toHaveClass('bg-paper-raised', 'rounded-card', 'shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]')
     for (const option of options()) expect(option).toHaveClass('aria-selected:bg-riso-yellow')
     expect(options()[0]).not.toHaveClass('aria-selected:bg-tint-blue')
-    expect(within(options()[0]).getByText('平台命令')).toHaveClass('rounded-full', 'bg-ink', 'text-white')
-    expect(within(options()[7]).getByText('扩展命令 · 插件 · 代码审查')).toHaveClass('rounded-stamp', 'bg-tint-blue', 'text-ink')
+    expect(within(options()[0]).getByText('Platform command')).toHaveClass('rounded-full', 'bg-ink', 'text-white')
+    expect(within(options()[7]).getByText('Extension command · Plugin · Code review')).toHaveClass('rounded-stamp', 'bg-tint-blue', 'text-ink')
     // A dashed line separates the key hints at the bottom from the list.
     expect(panel.lastElementChild).toHaveClass('border-t-[1.5px]', 'border-dashed')
   })
 
-  it('按第一个词筛选：/pi: 写法开头的最前，其次是没写 pi: 的命令名开头，再次是名称或说明包含', async () => {
+  it('filters by the first word: those starting with the /pi: form first, then command names starting with it without pi:, then names or descriptions containing it', async () => {
     const { user, input } = setup()
     await user.type(input, '/pi:s')
     await waitFor(() => expect(labels()).toEqual(['/pi:skill:loopctl', '/pi:summarize']))
@@ -84,14 +84,14 @@ describe('输入框的 "/" 命令菜单', () => {
     await user.type(input, '/rev')
     await waitFor(() => expect(labels()).toEqual(['/pi:review']))
     await user.clear(input)
-    await user.type(input, '/摘要')
+    await user.type(input, '/summary')
     await waitFor(() => expect(labels()).toEqual(['/pi:summarize']))
     await user.clear(input)
     await user.type(input, '/nothing')
-    expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。')
+    expect(await screen.findByRole('status')).toHaveTextContent('No matching commands.')
   })
 
-  it('上下键移动，Enter 补全成 "/pi:<name> " 不发送；接着写参数，回车照常发出原文', async () => {
+  it('arrow keys move, Enter fills in "/pi:<name> " without sending; then type arguments and Enter sends the text as usual', async () => {
     const { user, input, sent } = setup()
     await user.type(input, '/pi:')
     await waitFor(() => expect(options()).toHaveLength(3))
@@ -101,28 +101,28 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(input).toHaveValue('/pi:skill:loopctl ')
     expect(screen.queryByRole('listbox')).toBeNull()
     expect(sent).toEqual([])
-    await user.type(input, '列出任务')
+    await user.type(input, 'list tasks')
     await user.keyboard('{Enter}')
-    await waitFor(() => expect(sent).toEqual([{ text: '/pi:skill:loopctl 列出任务' }]))
+    await waitFor(() => expect(sent).toEqual([{ text: '/pi:skill:loopctl list tasks' }]))
   })
 
-  it('Tab 与点击同样补全；已经写了参数时只换掉第一个词', async () => {
+  it('Tab and click fill in the same way; with arguments already typed only the first word is replaced', async () => {
     const { user, input } = setup()
     await user.type(input, '/pi:sum')
     await waitFor(() => expect(options()).toHaveLength(1))
     await user.keyboard('{Tab}')
     expect(input).toHaveValue('/pi:summarize ')
     await user.clear(input)
-    await user.type(input, '/rev 第二段')
+    await user.type(input, '/rev second part')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.keyboard('{Home}{ArrowRight}{ArrowRight}')
     await waitFor(() => expect(labels()).toEqual(['/pi:review']))
     await user.click(options()[0])
-    expect(input).toHaveValue('/pi:review 第二段')
+    expect(input).toHaveValue('/pi:review second part')
     expect(input).toHaveFocus()
   })
 
-  it('Esc 关掉菜单，回车照原文发出；改了第一个词再打开', async () => {
+  it('Esc closes the menu and Enter sends the text as typed; changing the first word opens it again', async () => {
     const { user, input, sent } = setup()
     await user.type(input, '/rev')
     await waitFor(() => expect(options()).toHaveLength(1))
@@ -134,85 +134,85 @@ describe('输入框的 "/" 命令菜单', () => {
     await waitFor(() => expect(sent).toEqual([{ text: '/revi' }]))
   })
 
-  it('Agent 还没运行过（capturedAt 为 null）：说明运行一次后才有列表，回车照常发出', async () => {
+  it('the Agent has never run (capturedAt is null): says the list appears after one run, Enter sends as usual', async () => {
     const { user, input, sent } = setup(() => HttpResponse.json(commandList()))
     await user.type(input, '/foo')
-    expect(await screen.findByRole('status')).toHaveTextContent('Agent 运行一次后才有命令列表。')
+    expect(await screen.findByRole('status')).toHaveTextContent('The command list appears after the Agent has run once.')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/foo' }]))
   })
 
-  it('没有 Pi 的 Agent（runtime 不是 pi）：没有匹配时说明它没有 Pi 命令，而不是“运行一次后才有”', async () => {
+  it('an Agent without Pi (runtime is not pi): with no match it says the Agent has no Pi commands, not “after it has run once”', async () => {
     const { user, input } = setup(() => HttpResponse.json(commandList(platformCommands(), { runtime: 'claude-code' })))
     await user.type(input, '/review')
-    expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。这个 Agent 用 Claude Code 运行，没有 Pi 命令。')
-    expect(screen.getByRole('status')).not.toHaveTextContent('运行一次后')
+    expect(await screen.findByRole('status')).toHaveTextContent('No matching commands. This Agent runs on Claude Code and has no Pi commands.')
+    expect(screen.getByRole('status')).not.toHaveTextContent('after the Agent has run once')
   })
 
-  it('Pi 的 Agent 读到过命令、只是没有匹配：只说没有匹配', async () => {
+  it('a Pi Agent whose commands were read but nothing matches: only says nothing matches', async () => {
     const { user, input } = setup()
     await user.type(input, '/zzz')
-    expect(await screen.findByRole('status')).toHaveTextContent(/^没有匹配的命令。$/)
+    expect(await screen.findByRole('status')).toHaveTextContent(/^No matching commands\.$/)
   })
 
-  it('读不到命令列表时说明原因，不挡发送', async () => {
+  it('when the command list cannot be read it says why and does not block sending', async () => {
     const { user, input, sent } = setup(() => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 }))
     await user.type(input, '/pi:review')
-    expect(await screen.findByRole('status')).toHaveTextContent(/^读不到命令列表：服务端内部错误/)
+    expect(await screen.findByRole('status')).toHaveTextContent(/^Couldn't load the command list: Internal server error/)
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/pi:review' }]))
   })
 
-  it('Claude Code 的 Agent：没有 /pi: 命令；能用的平台命令照常提示，/compact、/export、/resume 列在“现在不能用”里并写明原因', async () => {
+  it('a Claude Code Agent: no /pi: commands; usable platform commands are suggested as usual, /compact, /export and /resume are listed under “Not available now” with the reason', async () => {
     const { user, input, sent } = setup(() => HttpResponse.json(claudeCodeList()))
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy']))
-    const blocked = screen.getByRole('group', { name: '现在不能用' })
+    const blocked = screen.getByRole('group', { name: 'Not available now' })
     expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [session-id]'])
-    expect(within(blocked).getAllByText('这个 Agent 用 Claude Code 运行，没有 Pi 会话')).toHaveLength(3)
+    expect(within(blocked).getAllByText('This Agent runs on Claude Code and has no Pi session')).toHaveLength(3)
     expect(within(blocked).queryByRole('option')).toBeNull()
-    // When no command matches, it only says so; it does not say “运行一次后才有命令列表” (The command list appears after
-    // the Agent has run once), because this Agent has no Pi and would not get a list by running either.
+    // When no command matches, it only says so; it does not say “The command list appears after the Agent has run once”,
+    // because this Agent has no Pi and would not get a list by running either.
     await user.clear(input)
     await user.type(input, '/review')
-    expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。')
+    expect(await screen.findByRole('status')).toHaveTextContent('No matching commands.')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/review' }]))
   })
 
-  it('平台命令的说明用服务端给的中英说明，按界面语言取字；筛选也按这段说明', async () => {
+  it('platform command descriptions use the server\'s Chinese and English text, picked by UI language; filtering uses that text too', async () => {
     const [session] = platformCommands()
-    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: { 'zh-CN': '测一下网络', 'en-US': 'Check the network' } }
+    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: { 'zh-CN': '测一下网络', 'en-US': 'Check the network' } } // check-english: zh (LocalizedText: the Chinese entry is part of the data)
     const { user, input } = setup(() => HttpResponse.json(commandList([session, ping])))
-    await user.type(input, '/网络')
+    await user.type(input, '/network')
     await waitFor(() => expect(labels()).toEqual(['/ping [host]']))
-    expect(options()[0]).toHaveTextContent('/ping [host]平台命令测一下网络')
-    expect(options()[0]).not.toHaveTextContent('Check the network')
+    expect(options()[0]).toHaveTextContent('/ping [host]Platform commandCheck the network')
+    expect(options()[0]).not.toHaveTextContent('测一下网络') // check-english: zh (the zh-CN half of the two-language description must not show)
   })
 
-  it('内置命令只认服务端给的列表：没列的不显示，多列的照样显示（没有说明就不写说明）', async () => {
+  it('built-in commands follow only the server\'s list: unlisted ones are not shown, extra ones are shown as is (no description, none written)', async () => {
     const [session] = platformCommands()
     const ping = { ...session, name: 'ping', usage: '/ping [host]', description: null }
     const { user, input } = setup(() => HttpResponse.json(commandList([session, ping])))
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/ping [host]']))
-    expect(options()[0]).toHaveTextContent('/session平台命令查看当前会话、模型和进程状态')
+    expect(options()[0]).toHaveTextContent('/sessionPlatform commandShow the current session, model, and process')
     // When the server gives no description (null), none is shown, and the console does not fill one in with its own text.
-    expect(options()[1]).toHaveTextContent(/^\/ping \[host\]平台命令$/)
+    expect(options()[1]).toHaveTextContent(/^\/ping \[host\]Platform command$/)
     await user.keyboard('{ArrowDown}{Enter}')
     expect(input).toHaveValue('/ping')
   })
 
-  it('不可用的命令置灰列在下面、写明原因、不能选；上下键和回车只在可用的命令之间走', async () => {
+  it('unavailable commands are grayed out below with the reason and cannot be chosen; arrow keys and Enter move only among available commands', async () => {
     const commands = platformCommands({ compact: { available: false, unavailableReason: 'session_none' }, export: { available: false, unavailableReason: 'session_missing' } })
     const { user, input } = setup(() => HttpResponse.json(commandList(commands)))
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [session-id]']))
-    const blocked = screen.getByRole('group', { name: '现在不能用' })
-    expect(blocked).toHaveTextContent('/compact [instructions]平台命令还没有会话，先发一条消息')
-    expect(blocked).toHaveTextContent('/export [html|jsonl]平台命令会话文件丢失，先 /new 或 /resume')
+    const blocked = screen.getByRole('group', { name: 'Not available now' })
+    expect(blocked).toHaveTextContent('/compact [instructions]Platform commandNo session yet. Send a message first')
+    expect(blocked).toHaveTextContent('/export [html|jsonl]Platform commandThe session file is missing. Run /new or /resume first')
     for (const item of blocked.querySelectorAll('li')) expect(item).toHaveClass('text-ink-500')
     // Clicking an unavailable command does not fill it into the input.
     await user.click(within(blocked).getByText('/compact [instructions]'))
@@ -224,18 +224,18 @@ describe('输入框的 "/" 命令菜单', () => {
     await user.clear(input)
     await user.type(input, '/comp')
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
-    expect(screen.getByRole('group', { name: '现在不能用' })).toHaveTextContent('/compact [instructions]')
-    expect(input).not.toHaveAttribute('aria-activedescendant')    // No command can be chosen: the footer no longer says “↑↓ 选择 · Enter 或 Tab 补全” (↑↓ to choose · Enter or Tab to fill in) and instead tells the person that Enter sends the text as typed; screen readers read it too.
-    expect(screen.queryByText('↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent('匹配的命令现在都不能用，回车会照原文发出')
+    expect(screen.getByRole('group', { name: 'Not available now' })).toHaveTextContent('/compact [instructions]')
+    expect(input).not.toHaveAttribute('aria-activedescendant')    // No command can be chosen: the footer no longer says “↑↓ to choose · Enter or Tab to fill in” and instead tells the person that Enter sends the text as typed; screen readers read it too.
+    expect(screen.queryByText('↑↓ to choose · Enter or Tab to fill in · Esc to close')).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('None of the matching commands can be used now; Enter sends the text as typed')
   })
 
-  it('只认开头的 "/"：前面有空格、不在开头、光标离开第一个词时都不弹菜单', async () => {
+  it('only a leading "/" counts: no menu with a space before it, when not at the start, or when the caret leaves the first word', async () => {
     const { user, input } = setup()
     await user.type(input, ' /pi:review')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.clear(input)
-    await user.type(input, '看看 /pi:review')
+    await user.type(input, 'see /pi:review')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.clear(input)
     await user.type(input, '/pi:review src')
@@ -244,8 +244,8 @@ describe('输入框的 "/" 命令菜单', () => {
   })
 })
 
-describe('补全的规则', () => {
-  it('slashToken：开头的 "/" 词，光标在词里或紧跟其后', () => {
+describe('completion rules', () => {
+  it('slashToken: the leading "/" word, with the caret inside it or right after it', () => {
     expect(slashToken('/pi:re', 6)).toBe('/pi:re')
     expect(slashToken('/pi:re arg', 3)).toBe('/pi:re')
     expect(slashToken('/pi:re arg', 7)).toBeNull()
@@ -253,12 +253,12 @@ describe('补全的规则', () => {
     expect(slashToken('', 0)).toBeNull()
   })
 
-  it('applyCommand：换掉第一个词，保留后面的空白与文字；后面没有空白时补一个空格', () => {
+  it('applyCommand: replaces the first word, keeps the whitespace and text after it; adds a space when no whitespace follows', () => {
     expect(applyCommand('/re', command('review'))).toEqual({ text: '/pi:review ', caret: 11 })
-    expect(applyCommand('/re\n第二行', command('review'))).toEqual({ text: '/pi:review\n第二行', caret: 11 })
+    expect(applyCommand('/re\nsecond line', command('review'))).toEqual({ text: '/pi:review\nsecond line', caret: 11 })
   })
 
-  it('commandText：Pi 的命令写成 /pi:<name>；以后别的来源（如平台命令）写成 /<name>，补全与筛选随之', () => {
+  it('commandText: Pi commands are written /pi:<name>; other sources (such as platform commands) /<name>, and completion and filtering follow', () => {
     expect(commandText(command('skill:loopctl'))).toBe('/pi:skill:loopctl')
     // Platform commands are merged in the frontend with the Pi commands returned by the server.
     const platform = { ...command('session'), source: 'platform' as const, usage: '/session' }
@@ -267,7 +267,7 @@ describe('补全的规则', () => {
     expect(matchCommands([command('session'), platform], '/se')).toEqual([platform, command('session')])
   })
 
-  it('matchCommands：大小写不敏感，同一档保持原顺序', () => {
+  it('matchCommands: case-insensitive, keeps the original order within a tier', () => {
     expect(matchCommands(list.commands, '/PI:').map((item) => item.name)).toEqual(['review', 'skill:loopctl', 'summarize'])
     expect(matchCommands(list.commands, '/loop').map((item) => item.name)).toEqual(['skill:loopctl'])
   })

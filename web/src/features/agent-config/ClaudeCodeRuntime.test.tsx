@@ -10,21 +10,21 @@ import { thinkingOptions } from '@/test/thinking'
 
 // The runtime is determined by the model provider: choosing the local Claude Code means the Claude Code runtime; anything else is Pi.
 const region = (name: string) => screen.getByRole('region', { name })
-const saveButton = () => within(region('基本信息')).getByRole('button', { name: '保存' })
+const saveButton = () => within(region('Basics')).getByRole('button', { name: 'Save' })
 const option = (select: HTMLElement, value: string) => within(select).queryAllByRole('option').find((item) => (item as HTMLOptionElement).value === value) as HTMLOptionElement | undefined
-const providerNote = '用本机安装的 Claude Code 和你在本机的登录，平台不保存登录信息。'
-const differencesTitle = '用 Claude Code 运行时'
+const providerNote = 'Uses the Claude Code installed on this computer and your login there. The platform doesn\'t store login details.'
+const differencesTitle = 'Running on Claude Code'
 const claudeAgent = (overrides: Partial<Schemas['Agent']> = {}) => makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', ...overrides })
 const catalog = http.get(apiUrl('/model-providers'), () => HttpResponse.json(withClaudeCode))
 
-describe('选择 Claude Code', () => {
-  it('Pi 的 Agent 改选 Claude Code：注明用本机的登录、列出与 Pi 的不同，思考等级按目录、不显示速度档', async () => {
+describe('Choosing Claude Code', () => {
+  it('a Pi Agent switching to Claude Code: notes it uses the local login, lists the differences from Pi, takes thinking levels from the catalog and shows no speed tier', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({ agent, handlers: [catalog] })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
-    expect(option(select, 'claude-code')).toHaveTextContent(/^Claude Code（本机，2 个模型）$/)
+    expect(option(select, 'claude-code')).toHaveTextContent(/^Claude Code \(this computer, 2 models\)$/)
     expect(option(select, 'claude-code')).toBeEnabled()
     expect(within(basic).queryByText(providerNote)).toBeNull()
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
@@ -33,14 +33,14 @@ describe('选择 Claude Code', () => {
     expect(within(basic).getByText(providerNote)).toHaveAttribute('role', 'note')
     const differences = within(basic).getByRole('region', { name: differencesTitle })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
-      '不经确认直接执行命令，与 Pi 的 Agent 相同。',
-      '只含 Pi 扩展的插件对它不起作用；插件的技能和 MCP 工具可以用。',
-      '没有 /pi: 命令。',
+      'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
+      'It runs commands without asking first, the same as Pi Agents.',
+      'Plugins that only contain Pi extensions don\'t apply to it; plugin skills and MCP tools work.',
+      'There are no /pi: commands.',
     ])
     await chooseModel(user, basic, 'opus')
-    expect(thinkingOptions(basic)).toEqual(['默认（中）', '低', '中', '高', '更高', '最高'])
-    expect(within(basic).queryByLabelText('Codex 速度')).toBeNull()
+    expect(thinkingOptions(basic)).toEqual(['Default (Medium)', 'Low', 'Medium', 'High', 'Extra high', 'Max'])
+    expect(within(basic).queryByLabelText('Codex speed')).toBeNull()
 
     // Switching back to a Pi provider collapses the notes again.
     await user.selectOptions(select, 'anthropic')
@@ -48,7 +48,7 @@ describe('选择 Claude Code', () => {
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
   })
 
-  it('保存时运行时要变：先确认，取消不保存；确认后保存', async () => {
+  it('when saving changes the runtime: confirm first; cancelling does not save, confirming saves', async () => {
     const agent = makeAgent()
     const bodies: unknown[] = []
     let current = agent
@@ -64,26 +64,26 @@ describe('选择 Claude Code', () => {
         }),
       ],
     })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
     await user.selectOptions(select, 'claude-code')
     await chooseModel(user, basic, 'sonnet')
 
     await user.click(saveButton())
-    const dialog = await screen.findByRole('alertdialog', { name: '切换运行时？' })
-    expect(dialog).toHaveTextContent('运行时会从 Pi 换成 Claude Code。Agent 会从新会话开始：原会话保留，但不带到新会话里；原会话里等待中的 sleep 会取消。')
-    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Switch runtime?' })
+    expect(dialog).toHaveTextContent('The runtime changes from Pi to Claude Code. The Agent starts a new session: the current session is kept but not carried over, and pending sleeps in it are cancelled.')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(bodies).toEqual([])
 
     await user.click(saveButton())
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '切换并保存' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch and save' }))
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
-    expect(await within(basic).findByText('已保存')).toBeInTheDocument()
+    expect(await within(basic).findByText('Saved')).toBeInTheDocument()
   })
 
-  it('Claude Code 换回 Pi 的提供方同样要确认；同一运行时里换模型不确认', async () => {
+  it('switching from Claude Code back to a Pi provider also needs confirming; changing models within the same runtime does not', async () => {
     const agent = claudeAgent()
     const bodies: unknown[] = []
     const { user } = await renderConfig({
@@ -97,19 +97,19 @@ describe('选择 Claude Code', () => {
         }),
       ],
     })
-    const basic = region('基本信息')
+    const basic = region('Basics')
     await chooseModel(user, basic, 'opus')
     await user.click(saveButton())
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'opus' } }]))
     expect(screen.queryByRole('alertdialog')).toBeNull()
 
-    await user.selectOptions(within(basic).getByLabelText('模型提供方'), 'anthropic')
+    await user.selectOptions(within(basic).getByLabelText('Model provider'), 'anthropic')
     await chooseModel(user, basic, 'claude-haiku-5-5')
     await user.click(saveButton())
-    expect(await screen.findByRole('alertdialog', { name: '切换运行时？' })).toHaveTextContent('运行时会从 Claude Code 换成 Pi。')
+    expect(await screen.findByRole('alertdialog', { name: 'Switch runtime?' })).toHaveTextContent('The runtime changes from Claude Code to Pi.')
   })
 
-  it('Agent 正在回复时切换（409 agent_not_idle）：说明等这次回复结束后再切换', async () => {
+  it('switching while the Agent is replying (409 agent_not_idle): says to switch after this reply finishes', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({
       agent,
@@ -118,52 +118,52 @@ describe('选择 Claude Code', () => {
         http.patch(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('agent_not_idle', 'The Agent is replying; wait for the reply to finish before switching runtimes'), { status: 409 })),
       ],
     })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
     await user.selectOptions(select, 'claude-code')
     await chooseModel(user, basic, 'sonnet')
     await user.click(saveButton())
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '切换并保存' }))
-    expect(await within(basic).findByRole('alert')).toHaveTextContent(/^Agent 正在回复，等这次回复结束后再切换。$/)
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch and save' }))
+    expect(await within(basic).findByRole('alert')).toHaveTextContent(/^The Agent is replying\. Switch after this reply finishes\.$/)
     expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(within(basic).getByText('未保存')).toBeInTheDocument()
+    expect(within(basic).getByText('Unsaved')).toBeInTheDocument()
   })
 })
 
-describe('Claude Code 不需要账号', () => {
-  const account = '这个 Agent 用本机的 Claude Code 和你在本机的登录，不需要在平台配置账号，平台也不保存登录信息。'
+describe('Claude Code needs no account', () => {
+  const account = 'This Agent uses the Claude Code on this computer and your login there. It needs no account on the platform, and the platform doesn\'t store login details.'
 
-  it('平台 Agent：模型账号一节只有说明，没有登录、录入入口，也不查询登录状态', async () => {
+  it('platform Agent: the model account section only has a note, with no login or entry button, and the login status is not read', async () => {
     const agent = claudeAgent({ scope: 'platform', projectId: null })
     let authReads = 0
     await renderConfig({ agent, handlers: [catalog, http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => { authReads += 1; return HttpResponse.json({ credential: null, operation: null }) })] })
-    const section = region('模型账号凭证')
+    const section = region('Model account credential')
     expect(section).toHaveTextContent(account)
     expect(within(section).queryAllByRole('button')).toEqual([])
-    expect(within(section).queryByText('未设置')).toBeNull()
+    expect(within(section).queryByText('Not set')).toBeNull()
     expect(authReads).toBe(0)
   })
 
-  it('项目 Agent：不显示 Claude Code 的账号来源与去项目设置的入口', async () => {
+  it('project Agent: shows no Claude Code account source and no link to the project settings', async () => {
     // The default account sources include a claude-code entry (with no candidate accounts), matching the server.
     await renderConfig({ agent: claudeAgent(), handlers: [catalog] })
-    const section = region('模型账号凭证')
+    const section = region('Model account credential')
     expect(section).toHaveTextContent(account)
-    expect(section).not.toHaveTextContent('模型账号由项目维护')
+    expect(section).not.toHaveTextContent('Model accounts are managed by the project')
     await waitFor(() => expect(within(section).queryByRole('status')).toBeNull())
     expect(within(section).queryByRole('combobox')).toBeNull()
     expect(within(section).queryByRole('link')).toBeNull()
   })
 })
 
-describe('本机的 Claude Code 不可用或没登录', () => {
+describe('Local Claude Code unavailable or not logged in', () => {
   const runtimes = (list: Schemas['RuntimeList']) => {
     let reads = 0
     return { handler: http.get(apiUrl('/runtimes'), () => { reads += 1; return HttpResponse.json(list) }), reads: () => reads }
   }
 
-  it('选中时提醒，说明怎么处理、处理好之前运行会失败；仍然可以选并保存', async () => {
+  it('warns when chosen, saying how to fix it and that runs fail until then; it can still be chosen and saved', async () => {
     const agent = makeAgent()
     const status = runtimes(runtimeList({ available: false, version: null, binaryPath: null, unavailableReason: 'not_found', login: null }))
     const bodies: unknown[] = []
@@ -171,23 +171,23 @@ describe('本机的 Claude Code 不可用或没登录', () => {
       agent,
       handlers: [catalog, status.handler, http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json(claudeAgent({ id: agent.id })) })],
     })
-    const basic = region('基本信息')
-    const select = within(basic).getByLabelText('模型提供方')
+    const basic = region('Basics')
+    const select = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
     // The runtime status is not read while Claude Code is not selected.
     expect(status.reads()).toBe(0)
     await user.selectOptions(select, 'claude-code')
-    expect(await within(basic).findByText('本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。处理好之前，用它的 Agent 运行会失败。')).toHaveAttribute('role', 'note')
+    expect(await within(basic).findByText("claude wasn't found on this computer: install Claude Code and make sure claude runs in a terminal. Until then, Agents using it will fail to run.")).toHaveAttribute('role', 'note')
     await chooseModel(user, basic, 'sonnet')
     await user.click(saveButton())
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '切换并保存' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Switch and save' }))
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
   })
 
-  it('没登录时提醒在本机终端登录；已登录或登录状态判断不了时不提醒', async () => {
+  it('when logged out, says to log in from a terminal on this computer; no warning when logged in or when the login state is unknown', async () => {
     const loggedOut = runtimes(runtimeList({ login: { state: 'logged_out', authMethod: null, subscriptionType: null } }))
     const first = await renderConfig({ agent: claudeAgent(), handlers: [catalog, loggedOut.handler] })
-    expect(await within(region('基本信息')).findByText('本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。处理好之前，用它的 Agent 运行会失败。')).toBeInTheDocument()
+    expect(await within(region('Basics')).findByText("Claude Code isn't logged in on this computer: run claude in a terminal there and log in. Until then, Agents using it will fail to run.")).toBeInTheDocument()
     first.unmount()
 
     for (const login of [{ state: 'logged_in', authMethod: 'claude.ai', subscriptionType: 'max' }, { state: 'unknown', authMethod: null, subscriptionType: null }] as const) {
@@ -195,7 +195,7 @@ describe('本机的 Claude Code 不可用或没登录', () => {
       const view = await renderConfig({ agent: claudeAgent(), handlers: [catalog, status.handler] })
       await waitFor(() => expect(status.reads()).toBe(1))
       await new Promise((resolve) => setTimeout(resolve, 20))
-      expect(within(region('基本信息')).queryByText(/处理好之前，用它的 Agent 运行会失败/)).toBeNull()
+      expect(within(region('Basics')).queryByText(/Until then, Agents using it will fail to run/)).toBeNull()
       view.unmount()
     }
   })

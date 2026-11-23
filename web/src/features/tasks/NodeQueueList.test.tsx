@@ -17,11 +17,11 @@ import { tasksPath } from '@/api/tasks'
 
 const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
 const runI = '54000000-0000-7000-8000-000000000001', runQ = '54000000-0000-7000-8000-000000000002'
-const manager = agentParty({ id: '56000000-0000-7000-8000-000000000001', name: 'Manager', address: '测试项目/Manager' })
+const manager = agentParty({ id: '56000000-0000-7000-8000-000000000001', name: 'Manager', address: 'test-project/Manager' })
 const entry = (messageId: string, text: string, runId: string, whenBusy: Schemas['WhenBusy'] = 'queue', from: Schemas['InboxParticipant'] = consoleParty) => makeQueueItem({ kind: 'inbox', runId, messageId, from, text, whenBusy, queuedAt: taskTime })
-const m3 = entry('53000000-0000-7000-8000-000000000003', '立刻停下检查', runI, 'interrupt', manager)
-const m1 = entry('53000000-0000-7000-8000-000000000001', '补充一：先看日志', runQ)
-const m2 = entry('53000000-0000-7000-8000-000000000002', '补充二：再看配置', runQ)
+const m3 = entry('53000000-0000-7000-8000-000000000003', 'Stop now and check', runI, 'interrupt', manager)
+const m1 = entry('53000000-0000-7000-8000-000000000001', 'Note one: check the logs first', runQ)
+const m2 = entry('53000000-0000-7000-8000-000000000002', 'Note two: then check the config', runQ)
 const queueOf = (...items: Schemas['QueueItem'][]): Schemas['TaskNodeQueue'] => ({ taskId, nodeRunId: nodeId, runtimeId: node.runtimeId, items })
 const initial = queueOf(m3, m1, m2)
 const actionUrl = (operation: 'promote-to-interrupt' | 'cancel') => apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-messages/:messageId/${operation}`)
@@ -36,78 +36,78 @@ function setup({ queue = () => initial, messages = [] as Schemas['TaskMessage'][
   renderRoutes(routes, `${tasksPath(defaultProject.name)}/${taskId}`)
 }
 const stream = () => FakeEventSource.instances.find(source => source.url.endsWith(`/tasks/${taskId}/events`))!
-const queueList = () => screen.getByRole('region', { name: '排队消息' })
+const queueList = () => screen.getByRole('region', { name: 'Queued messages' })
 // One row per message; image thumbnails inside a row are list items too and are skipped.
 const rows = () => within(queueList()).getAllByRole('listitem').filter(li => li.hasAttribute('data-kind'))
 const rowTexts = () => rows().map(li => within(li).getByRole('button', { expanded: false }).textContent)
-const toggle = (name: '展开' | '收起') => within(queueList()).getByRole('button', { name, expanded: name === '收起' })
+const toggle = (name: 'Expand' | 'Collapse') => within(queueList()).getByRole('button', { name, expanded: name === 'Collapse' })
 // The node list starts collapsed to one line; open it to reach the rows.
 async function openQueue(user: ReturnType<typeof userEvent.setup>) {
-  await waitFor(() => expect(toggle('展开')).toBeVisible())
-  await user.click(toggle('展开'))
+  await waitFor(() => expect(toggle('Expand')).toBeVisible())
+  await user.click(toggle('Expand'))
   await waitFor(() => expect(rows()).toHaveLength(3))
 }
 type Body = Schemas['TaskNodeQueueActionInput']
 const receipt = (operation: Schemas['TaskNodeQueueActionReceipt']['operation'], messageId: string | null, body: Body, item: Schemas['QueueItem'] | null = null): Schemas['TaskNodeQueueActionReceipt'] => ({ actionId: body.actionId, taskId, nodeRunId: nodeId, agentId: body.expectedAgentId, runtimeId: body.expectedRuntimeId, operation, status: 'accepted', messageId, runId: runI, item })
 
-it('默认收成一行：排队总数、第一条的发送方与摘要（打断照常标明）和展开控件；展开后每条消息一行，可再收起', async () => {
+it('collapsed to one line by default: the queue count, the first message’s sender and summary (an interrupt marked as usual) and an expand control; expanded, one row per message, and it collapses again', async () => {
   setup()
   const user = userEvent.setup()
-  await waitFor(() => expect(toggle('展开')).toBeVisible())
+  await waitFor(() => expect(toggle('Expand')).toBeVisible())
   act(() => stream().open())
-  expect(within(queueList()).getByRole('heading', { name: '排队 3' })).toBeInTheDocument()
+  expect(within(queueList()).getByRole('heading', { name: 'Queued · 3' })).toBeInTheDocument()
   const summary = queueList().querySelector<HTMLElement>('[data-queue-summary]')!
-  expect(summary).toHaveTextContent('下一条处理Manager立刻停下检查'); expect(within(summary).getByText('Manager')).toBeVisible()
-  const list = document.getElementById(toggle('展开').getAttribute('aria-controls')!)!
+  expect(summary).toHaveTextContent('Up nextManagerStop now and check'); expect(within(summary).getByText('Manager')).toBeVisible()
+  const list = document.getElementById(toggle('Expand').getAttribute('aria-controls')!)!
   expect(list.tagName).toBe('OL'); expect(list).not.toBeVisible()
-  expect(within(queueList()).queryByRole('button', { name: '打断' })).toBeNull()
+  expect(within(queueList()).queryByRole('button', { name: 'Interrupt' })).toBeNull()
 
-  await user.click(toggle('展开'))
-  expect(toggle('收起')).toHaveAttribute('aria-controls', list.id); expect(list).toBeVisible()
+  await user.click(toggle('Expand'))
+  expect(toggle('Collapse')).toHaveAttribute('aria-controls', list.id); expect(list).toBeVisible()
   expect(queueList().querySelector('[data-queue-summary]')).toBeNull()
   expect(rows().map(li => li.getAttribute('data-kind'))).toEqual(['interrupt', 'queue', 'queue'])
-  expect(rowTexts()).toEqual(['立刻停下检查', '补充一：先看日志', '补充二：再看配置'])
+  expect(rowTexts()).toEqual(['Stop now and check', 'Note one: check the logs first', 'Note two: then check the config'])
   const [first, second, third] = rows()
-  // Another Agent's message: sender chip, cancel, no edit; already an interrupt, so no “打断” (Interrupt).
-  expect(within(first).getByText('Manager')).toBeVisible(); expect(within(first).getByText('下一条处理')).toBeVisible()
-  expect(within(first).queryByRole('button', { name: '打断' })).toBeNull()
-  expect(within(first).queryByRole('button', { name: '编辑这条排队消息' })).toBeNull()
-  expect(within(first).getByRole('button', { name: '取消这条排队消息' })).toBeEnabled()
-  for (const row of [second, third]) { expect(within(row).getByText('你')).toBeVisible(); expect(within(row).getByRole('button', { name: '打断' })).toBeEnabled(); expect(within(row).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled() }
+  // Another Agent's message: sender chip, cancel, no edit; already an interrupt, so no “Interrupt”.
+  expect(within(first).getByText('Manager')).toBeVisible(); expect(within(first).getByText('Up next')).toBeVisible()
+  expect(within(first).queryByRole('button', { name: 'Interrupt' })).toBeNull()
+  expect(within(first).queryByRole('button', { name: 'Edit this queued message' })).toBeNull()
+  expect(within(first).getByRole('button', { name: 'Cancel this queued message' })).toBeEnabled()
+  for (const row of [second, third]) { expect(within(row).getByText('You')).toBeVisible(); expect(within(row).getByRole('button', { name: 'Interrupt' })).toBeEnabled(); expect(within(row).getByRole('button', { name: 'Edit this queued message' })).toBeEnabled() }
   // The tray sits right above the node input.
-  expect(queueList().compareDocumentPosition(screen.getByLabelText('消息草稿')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(queueList().compareDocumentPosition(screen.getByLabelText('Message draft')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
   // Queue changes do not change the expanded state; once collapsed, it goes back to one line.
   act(() => stream().emit('task.node.queue.updated', queueOf(m1, m2), '15'))
-  await waitFor(() => expect(rows()).toHaveLength(2)); expect(toggle('收起')).toBeVisible()
-  await user.click(toggle('收起'))
-  expect(list).not.toBeVisible(); expect(queueList().querySelector('[data-queue-summary]')).toHaveTextContent(/^你补充一：先看日志$/)
+  await waitFor(() => expect(rows()).toHaveLength(2)); expect(toggle('Collapse')).toBeVisible()
+  await user.click(toggle('Collapse'))
+  expect(list).not.toBeVisible(); expect(queueList().querySelector('[data-queue-summary]')).toHaveTextContent(/^YouNote one: check the logs first$/)
   // When the list goes from non-empty to empty, the whole block disappears.
   act(() => stream().emit('task.node.queue.updated', queueOf(), '16'))
-  await waitFor(() => expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull())
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull())
   expect(document.querySelector('[data-node-queue]')).toBeNull()
 })
 
-it('打断任何发件人的消息：带新 actionId 与原目标，进行中禁用；列表以 task.node.queue.updated 为准', async () => {
+it('interrupts a message from any sender with a new actionId and the original target, disabled while pending; the list follows task.node.queue.updated', async () => {
   const bodies: { messageId: string; body: Body }[] = []
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
-  const other = entry('53000000-0000-7000-8000-000000000004', '别的 Agent 补充', runQ, 'queue', manager)
+  const other = entry('53000000-0000-7000-8000-000000000004', 'Note from another Agent', runQ, 'queue', manager)
   server.use(http.post(actionUrl('promote-to-interrupt'), async ({ params, request }) => { const body = await request.json() as Body; bodies.push({ messageId: String(params.messageId), body }); await gate; return HttpResponse.json(receipt('promote_inbox_message', String(params.messageId), body, other)) }))
   const user = userEvent.setup()
   setup({ queue: () => queueOf(m3, m1, other) }); await openQueue(user); act(() => stream().open())
   const target = rows()[2]
-  await user.click(within(target).getByRole('button', { name: '打断' }))
-  expect(within(target).getByRole('button', { name: '打断中…' })).toBeDisabled()
+  await user.click(within(target).getByRole('button', { name: 'Interrupt' }))
+  expect(within(target).getByRole('button', { name: 'Interrupting…' })).toBeDisabled()
   expect(bodies).toEqual([{ messageId: other.messageId, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/), expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId } }])
   await act(async () => release())
   act(() => stream().emit('task.node.queue.updated', queueOf(m3, { ...other, runId: runI, whenBusy: 'interrupt' }, m1), '20'))
-  await waitFor(() => expect(rowTexts()).toEqual(['立刻停下检查', '别的 Agent 补充', '补充一：先看日志']))
+  await waitFor(() => expect(rowTexts()).toEqual(['Stop now and check', 'Note from another Agent', 'Note one: check the logs first']))
   expect(rows().map(li => li.getAttribute('data-kind'))).toEqual(['interrupt', 'interrupt', 'queue'])
-  expect(within(rows()[1]).queryByRole('button', { name: '打断' })).toBeNull()
+  expect(within(rows()[1]).queryByRole('button', { name: 'Interrupt' })).toBeNull()
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
-it('已不在队列时 409：一行轻提示，不报错；结果不明时沿用原 actionId 重试', async () => {
+it('409 when no longer queued: a light one-line notice, not an error; when the result is unknown, the retry reuses the original actionId', async () => {
   const bodies: Body[] = []
   server.use(http.post(actionUrl('promote-to-interrupt'), async ({ params, request }) => {
     const body = await request.json() as Body; bodies.push(body)
@@ -117,31 +117,31 @@ it('已不在队列时 409：一行轻提示，不报错；结果不明时沿用
   const user = userEvent.setup()
   setup(); await openQueue(user); act(() => stream().open())
   const [, first, second] = rows()
-  await user.click(within(first).getByRole('button', { name: '打断' }))
-  expect(await screen.findByText('这条消息已被读取，不在排队中了')).toHaveAttribute('role', 'status')
+  await user.click(within(first).getByRole('button', { name: 'Interrupt' }))
+  expect(await screen.findByText('This message was already read and is no longer queued')).toHaveAttribute('role', 'status')
   expect(screen.queryByRole('alert')).toBeNull()
-  await user.click(within(second).getByRole('button', { name: '打断' }))
-  await user.click(await within(second).findByRole('button', { name: '重试打断' }))
+  await user.click(within(second).getByRole('button', { name: 'Interrupt' }))
+  await user.click(await within(second).findByRole('button', { name: 'Retry interrupt' }))
   await waitFor(() => expect(bodies).toHaveLength(3))
   expect(bodies[2]).toEqual(bodies[1])
-  await waitFor(() => expect(within(second).getByRole('button', { name: '打断' })).toBeEnabled())
+  await waitFor(() => expect(within(second).getByRole('button', { name: 'Interrupt' })).toBeEnabled())
 })
 
-it('结果不明时自动展开，期间收起了也能看到重试打断', async () => {
+it('expands by itself when the result is unknown, so the interrupt retry is visible even if the list was collapsed meanwhile', async () => {
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
   server.use(http.post(actionUrl('promote-to-interrupt'), async () => { await gate; return HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 }) }))
   const user = userEvent.setup()
   setup(); await openQueue(user); act(() => stream().open())
   const target = rows()[2]
-  await user.click(within(target).getByRole('button', { name: '打断' }))
-  await user.click(toggle('收起'))
-  expect(within(target).queryByRole('button', { name: '打断中…' })).toBeNull()
+  await user.click(within(target).getByRole('button', { name: 'Interrupt' }))
+  await user.click(toggle('Collapse'))
+  expect(within(target).queryByRole('button', { name: 'Interrupting…' })).toBeNull()
   await act(async () => release())
-  await waitFor(() => expect(toggle('收起')).toBeVisible())
-  expect(within(target).getByRole('button', { name: '重试打断' })).toBeVisible()
+  await waitFor(() => expect(toggle('Collapse')).toBeVisible())
+  expect(within(target).getByRole('button', { name: 'Retry interrupt' })).toBeVisible()
 })
 
-it('取消别人发来的消息；编辑自己发的消息：撤回后把原文放回节点草稿', async () => {
+it('cancels a message from someone else; editing your own message withdraws it and puts its text back in the node draft', async () => {
   const cancels: { messageId: string; body: Body }[] = []
   server.use(http.post(actionUrl('cancel'), async ({ params, request }) => {
     const body = await request.json() as Body; cancels.push({ messageId: String(params.messageId), body })
@@ -150,18 +150,18 @@ it('取消别人发来的消息；编辑自己发的消息：撤回后把原文�
   }))
   const user = userEvent.setup()
   setup(); await openQueue(user); act(() => stream().open())
-  await user.click(within(rows()[0]).getByRole('button', { name: '取消这条排队消息' }))
+  await user.click(within(rows()[0]).getByRole('button', { name: 'Cancel this queued message' }))
   await waitFor(() => expect(cancels.map(c => c.messageId)).toEqual([m3.messageId]))
   expect(cancels[0].body).toEqual({ actionId: expect.stringMatching(/^[\da-f-]{36}$/), expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId })
-  await user.type(screen.getByLabelText('消息草稿'), '新写的')
-  await user.click(within(rows()[1]).getByRole('button', { name: '编辑这条排队消息' }))
-  await waitFor(() => expect(screen.getByLabelText('消息草稿')).toHaveValue('新写的\n补充一：先看日志'))
+  await user.type(screen.getByLabelText('Message draft'), 'newly written')
+  await user.click(within(rows()[1]).getByRole('button', { name: 'Edit this queued message' }))
+  await waitFor(() => expect(screen.getByLabelText('Message draft')).toHaveValue('newly written\nNote one: check the logs first'))
   expect(cancels.map(c => c.messageId)).toEqual([m3.messageId, m1.messageId])
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
-it('节点有进行中的回复、草稿为空时可以停止这一轮；这一轮已结束时一行轻提示', async () => {
-  const running: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000010', nodeRunId: nodeId, runId: runQ, role: 'assistant', origin: 'task_node', text: '正在调整', status: 'running', createdAt: taskTime }
+it('with a reply in progress on the node and an empty draft, the turn can be stopped; if the turn has already ended, a light one-line notice', async () => {
+  const running: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000010', nodeRunId: nodeId, runId: runQ, role: 'assistant', origin: 'task_node', text: 'Adjusting', status: 'running', createdAt: taskTime }
   const stops: { runId: string; body: Body }[] = []
   server.use(http.post(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/runs/:runId/stop`), async ({ params, request }) => {
     const body = await request.json() as Body; stops.push({ runId: String(params.runId), body })
@@ -170,60 +170,60 @@ it('节点有进行中的回复、草稿为空时可以停止这一轮；这一�
   }))
   const user = userEvent.setup()
   setup({ queue: () => queueOf(), messages: [running] })
-  await user.click(await screen.findByRole('button', { name: '停止当前回复' }))
+  await user.click(await screen.findByRole('button', { name: 'Stop the current reply' }))
   await waitFor(() => expect(stops).toEqual([{ runId: runQ, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/), expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId } }]))
-  expect(screen.getByText('只停止当前回复')).toBeInTheDocument()
-  await user.type(screen.getByLabelText('消息草稿'), '先别停')
-  expect(screen.queryByRole('button', { name: '停止当前回复' })).toBeNull()
-  await user.clear(screen.getByLabelText('消息草稿'))
-  await user.click(screen.getByRole('button', { name: '停止当前回复' }))
-  expect(await screen.findByText('这次回复已经结束')).toHaveAttribute('role', 'status')
+  expect(screen.getByText('Stop the current reply only')).toBeInTheDocument()
+  await user.type(screen.getByLabelText('Message draft'), 'do not stop yet')
+  expect(screen.queryByRole('button', { name: 'Stop the current reply' })).toBeNull()
+  await user.clear(screen.getByLabelText('Message draft'))
+  await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
+  expect(await screen.findByText('This reply has already ended')).toHaveAttribute('role', 'status')
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
-it('节点对话隐藏排队中即作废的轮次（用户行与空回复行），被人停止的一轮标明已停止', async () => {
+it('the node conversation hides turns voided while queued (user rows and empty reply rows), and a turn stopped by a person is marked Stopped', async () => {
   const at = (s: number) => `2026-10-14T08:00:0${s}Z`
   const message = (id: string, role: 'user' | 'assistant', text: string, runId: string, s: number, extra: Partial<Schemas['TaskMessage']> = {}): Schemas['TaskMessage'] => ({ id, nodeRunId: nodeId, runId, role, origin: 'inbox_reminder', text, status: 'interrupted', createdAt: at(s), ...extra })
   setup({ queue: () => queueOf(), messages: [
-    message('55000000-0000-7000-8000-000000000001', 'user', '已并入打断的提醒原文', runQ, 1, { voidReason: 'merged_into_interrupt' }),
+    message('55000000-0000-7000-8000-000000000001', 'user', 'reminder text merged into an interrupt', runQ, 1, { voidReason: 'merged_into_interrupt' }),
     message('55000000-0000-7000-8000-000000000002', 'assistant', '', runQ, 2, { voidReason: 'merged_into_interrupt' }),
-    message('55000000-0000-7000-8000-000000000004', 'user', '被取消的提醒原文', runQ, 3, { voidReason: 'user_cancelled' }),
-    message('55000000-0000-7000-8000-000000000003', 'user', '其他原因结束的提醒', runI, 4),
-    message('55000000-0000-7000-8000-000000000005', 'assistant', '停在一半', runI, 5, { origin: 'task_node', errorCode: 'user_stopped' }),
+    message('55000000-0000-7000-8000-000000000004', 'user', 'cancelled reminder text', runQ, 3, { voidReason: 'user_cancelled' }),
+    message('55000000-0000-7000-8000-000000000003', 'user', 'reminder that ended for another reason', runI, 4),
+    message('55000000-0000-7000-8000-000000000005', 'assistant', 'stopped halfway', runI, 5, { origin: 'task_node', errorCode: 'user_stopped' }),
   ] })
-  await screen.findByText('其他原因结束的提醒')
-  expect(screen.queryByText('已并入打断的提醒原文')).toBeNull()
-  expect(screen.queryByText('被取消的提醒原文')).toBeNull()
+  await screen.findByText('reminder that ended for another reason')
+  expect(screen.queryByText('reminder text merged into an interrupt')).toBeNull()
+  expect(screen.queryByText('cancelled reminder text')).toBeNull()
   expect(document.querySelector('[data-message-id="task:55000000-0000-7000-8000-000000000002"]')).toBeNull()
   const stopped = document.querySelector<HTMLElement>('[data-message-id="task:55000000-0000-7000-8000-000000000005"]')!
-  expect(within(stopped).getByText('已停止')).toBeInTheDocument()
-  expect(within(stopped).queryByText(/执行错误/)).toBeNull()
-  expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
+  expect(within(stopped).getByText('Stopped')).toBeInTheDocument()
+  expect(within(stopped).queryByText(/Run error/)).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
 })
 
-it('排队中的节点消息只在托盘里，开始处理后才进入对话；已取消的照常显示最终状态', async () => {
+it('queued node messages are only in the tray and enter the conversation once processing starts; cancelled ones show their final state as usual', async () => {
   const record = (id: string, text: string, extra: Partial<Schemas['InboxMessage']> = {}) => { const base = taskInboxRecord(); return { ...base, message: { ...base.message, id, threadId: id, text, ...extra } } }
-  const queued = record(m1.messageId!, m1.text), cancelled = record('53000000-0000-7000-8000-000000000009', '已经取消的补充', { cancelledAt: taskTime })
+  const queued = record(m1.messageId!, m1.text), cancelled = record('53000000-0000-7000-8000-000000000009', 'note that was already cancelled', { cancelledAt: taskTime })
   setup({ queue: () => queueOf(m1), inbox: [queued, cancelled] })
-  await waitFor(() => expect(toggle('展开')).toBeVisible())
+  await waitFor(() => expect(toggle('Expand')).toBeVisible())
   const bubble = (id: string) => document.querySelector(`[data-conversation-scroll] [data-message-id="inbox:${id}"]`)
   await waitFor(() => expect(bubble(cancelled.message.id)).not.toBeNull())
-  expect(within(bubble(cancelled.message.id) as HTMLElement).getByText('已被人取消')).toBeInTheDocument()
+  expect(within(bubble(cancelled.message.id) as HTMLElement).getByText('Cancelled by someone')).toBeInTheDocument()
   expect(bubble(queued.message.id)).toBeNull()
   // Processing starts: it leaves the queue list and enters the conversation stream.
   act(() => stream().emit('task.node.queue.updated', queueOf(), '40'))
   await waitFor(() => expect(bubble(queued.message.id)).not.toBeNull())
-  expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
 })
 
-it('排队中的节点轮次（平台提醒与空回复）不在对话里，开始后才出现', async () => {
+it('queued node turns (a platform reminder and an empty reply) are not in the conversation and appear only once they start', async () => {
   const turn = (id: string, role: 'user' | 'assistant', text: string, status: Schemas['TaskMessage']['status']): Schemas['TaskMessage'] => ({ id, nodeRunId: nodeId, runId: runQ, role, origin: 'inbox_reminder', text, status, createdAt: taskTime })
-  const work: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000020', nodeRunId: nodeId, runId: runI, role: 'assistant', origin: 'task_node', text: '正在调整账本', status: 'running', createdAt: taskTime }
+  const work: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000020', nodeRunId: nodeId, runId: runI, role: 'assistant', origin: 'task_node', text: 'Adjusting the ledger', status: 'running', createdAt: taskTime }
   // A queued platform reminder turn; its body is the server's placeholder
   // text (replaced with the reminder text only when it starts running).
   const prompt = turn('55000000-0000-7000-8000-000000000021', 'user', 'Platform reminder', 'queued'), reply = turn('55000000-0000-7000-8000-000000000022', 'assistant', '', 'queued')
   setup({ queue: () => queueOf(m1), messages: [work, prompt, reply] })
-  await screen.findByText('正在调整账本')
+  await screen.findByText('Adjusting the ledger')
   const row = (id: string) => document.querySelector(`[data-conversation-scroll] [data-message-id="task:${id}"]`)
   expect(screen.queryByText('Platform reminder')).toBeNull()
   expect(row(reply.id)).toBeNull()
@@ -232,10 +232,10 @@ it('排队中的节点轮次（平台提醒与空回复）不在对话里，开�
   expect(await screen.findByText('Platform reminder')).toBeInTheDocument()
 })
 
-it('收到 snapshot（首次或重连）后重新读取一次排队列表；读取开始后收到的事件不被旧读取覆盖', async () => {
+it('rereads the queue list once after a snapshot (first or after reconnecting); events received after the read started are not overwritten by the old read', async () => {
   let reads = 0
   setup({ queue: () => { reads++; return initial } })
-  await waitFor(() => expect(toggle('展开')).toBeVisible())
+  await waitFor(() => expect(toggle('Expand')).toBeVisible())
   const before = reads
   act(() => stream().emit('snapshot', { task: detail }, '30'))
   await waitFor(() => expect(reads).toBe(before + 1))

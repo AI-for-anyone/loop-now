@@ -16,7 +16,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function objectAt(value: unknown, label: string): Record<string, unknown> {
   if (!isObject(value)) {
-    throw new Error(`契约对象缺失或无效：${label}`)
+    throw new Error(`Contract object is missing or invalid: ${label}`)
   }
   return value
 }
@@ -34,19 +34,19 @@ function sseEventsFromContract(
     const schema = objectAt(value, `${path}.${name}`)
     const ref = schema.$ref
     if (typeof ref !== 'string' || !/^#\/components\/schemas\/\w+$/.test(ref)) {
-      throw new Error(`事件 schema 引用无效：${path}.${name}`)
+      throw new Error(`Event schema reference is invalid: ${path}.${name}`)
     }
     return [name, ref.slice('#/components/schemas/'.length)]
   }))
 }
 
-describe('事件名与契约一致', () => {
-  it('控制台处理的事件名恰好是 x-sse-events 中的事件名', () => {
+describe('event names match the contract', () => {
+  it('the event names the console handles are exactly the event names in x-sse-events', () => {
     const contract = sseEventsFromContract()
     expect([...AGENT_EVENT_NAMES].sort()).toEqual(Object.keys(contract).sort())
   })
 
-  it('每个事件对应 Sse 开头的 schema', () => {
+  it('each event maps to a schema whose name starts with Sse', () => {
     const contract = sseEventsFromContract()
     expect(contract).toEqual({
       snapshot: 'SseSnapshot',
@@ -61,13 +61,13 @@ describe('事件名与契约一致', () => {
     })
   })
 
-  it('概览处理的事件名恰好是 /overview/events 的 x-sse-events 中的事件名', () => {
+  it('the event names the overview handles are exactly the event names in x-sse-events of /overview/events', () => {
     const contract = sseEventsFromContract('/overview/events')
     expect([...OVERVIEW_EVENT_NAMES].sort()).toEqual(Object.keys(contract).sort())
     expect(contract).toEqual({ snapshot: 'SseOverviewSnapshot', 'agent.status': 'SseAgentStatus', 'agent.removed': 'SseAgentRemoved' })
   })
 
-  it('收件箱处理的事件名恰好是 /inbox/events 的 x-sse-events 中的事件名', () => {
+  it('the event names the inbox handles are exactly the event names in x-sse-events of /inbox/events', () => {
     const contract = sseEventsFromContract('/inbox/events')
     expect([...INBOX_EVENT_NAMES].sort()).toEqual(Object.keys(contract).sort())
     expect(contract).toEqual({
@@ -80,7 +80,7 @@ describe('事件名与契约一致', () => {
   })
 })
 
-it('任务与项目列表事件名/schema与正式契约一致', () => {
+it('task and project task list event names and schemas match the contract', () => {
   const task = sseEventsFromContract('/tasks/{taskId}/events')
   expect(Object.keys(task).sort()).toEqual([...TASK_EVENT_NAMES].sort())
   expect(task).toEqual({ snapshot: 'TaskSnapshotEvent', 'task.updated': 'TaskUpdatedEvent', 'node.updated': 'TaskNodeUpdatedEvent', 'message.created': 'TaskMessage', 'task.inbox.updated': 'TaskNodeInboxRecord', 'artifact.published': 'TaskArtifactEvent', 'sleep.updated': 'SseSleepUpdated', 'task.node.queue.updated': 'TaskNodeQueue' })
@@ -89,7 +89,7 @@ it('任务与项目列表事件名/schema与正式契约一致', () => {
   expect(project).toEqual({ snapshot: 'TaskProjectSnapshotEvent', 'task.updated': 'TaskUpdatedEvent' })
 })
 
-describe('契约解析器严格限定目标 GET', () => {
+describe('the contract parser keeps strictly to the target GET', () => {
   const taskPath = '/tasks/{taskId}/events'
   const fixture = {
     paths: {
@@ -98,24 +98,24 @@ describe('契约解析器严格限定目标 GET', () => {
     },
   }
 
-  it('合法带引号 JSON-in-YAML 不会读取下一个项目端点', () => {
+  it('valid quoted JSON-in-YAML does not read the next project endpoint', () => {
     expect(sseEventsFromContract(taskPath, JSON.stringify(fixture))).toEqual({ 'task.inbox.updated': 'TaskNodeInboxRecord' })
   })
 
-  it('目标 GET 缺事件扩展时失败，不向后扫描其它端点', () => {
+  it('fails when the target GET lacks the event extension, without scanning on to other endpoints', () => {
     const source = structuredClone(fixture)
     const missing = { paths: { ...source.paths, [taskPath]: { get: {} } } }
     expect(() => sseEventsFromContract(taskPath, JSON.stringify(missing))).toThrow('get.x-sse-events')
   })
 
-  it('不存在的路径不回退到其它端点', () => {
+  it('a path that does not exist does not fall back to another endpoint', () => {
     expect(() => sseEventsFromContract('/missing', JSON.stringify(fixture))).toThrow('/missing')
   })
 
-  it('非法或缺失 schema 引用不能静默略过', () => {
+  it('an invalid or missing schema reference is not silently skipped', () => {
     for (const schema of [{}, { $ref: '#/components/parameters/TaskNodeInboxRecord' }, { $ref: null }]) {
       const source = { paths: { [taskPath]: { get: { 'x-sse-events': { 'task.inbox.updated': schema } } } } }
-      expect(() => sseEventsFromContract(taskPath, JSON.stringify(source))).toThrow('schema 引用无效')
+      expect(() => sseEventsFromContract(taskPath, JSON.stringify(source))).toThrow('schema reference is invalid')
     }
   })
 })

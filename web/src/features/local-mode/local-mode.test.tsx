@@ -17,30 +17,30 @@ import { baseHandlers } from '@/test/shell'
 
 const limits = { maxBytes: 1 << 20, extensions: ['.md'] }
 const region = (name: string) => screen.findByRole('region', { name })
-const cautions = ['改动直接落在真实文件上：Agent 在这些目录里做的修改直接写进你的文件，任务里也一样，不走任务副本。', '这份清单是告诉 Agent 去哪里干活，不是访问隔离：不在清单里的目录，Agent 同样能读写。']
+const cautions = ['Changes land on the real files: what an Agent changes in these directories is written straight to your files, in tasks too, without going through a task copy.', 'This list tells Agents where to work; it doesn\'t isolate access. Agents can read and write directories that aren\'t on it just the same.']
 
-describe('全局设置：本机模式', () => {
-  it('四个开关各有说明，按下即保存那一项；失败时开关保持原状并说明原因', async () => {
+describe('Global settings: local mode', () => {
+  it('each of the four switches has a description and saves its own item when pressed; on failure the switch stays as it was and the reason is shown', async () => {
     const local = localModeBackend({ settings: { git: false } })
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
     renderRoutes(routes, '/settings')
-    const card = await region('本机模式')
-    const directories = await within(card).findByRole('switch', { name: '绑定本机目录' })
-    const git = within(card).getByRole('switch', { name: '用本机的 git 身份' })
-    const cli = within(card).getByRole('switch', { name: '用本机的 CLI' })
-    const logins = within(card).getByRole('switch', { name: '用本机的登录状态' })
+    const card = await region('Local mode')
+    const directories = await within(card).findByRole('switch', { name: 'Bind local directories' })
+    const git = within(card).getByRole('switch', { name: 'Use local git identity' })
+    const cli = within(card).getByRole('switch', { name: 'Use local CLIs' })
+    const logins = within(card).getByRole('switch', { name: 'Use local logins' })
     expect(within(card).getAllByRole('switch')).toEqual([directories, git, cli, logins])
-    expect(within(card).getByText('让 Agent 直接用这台电脑上已有的东西。四项各自开关：前三项默认开启，“用本机的登录状态”默认关闭，要你自己打开。')).toBeInTheDocument()
-    expect(within(card).getByText(/“绑定本机目录”“用本机的 CLI”和“用本机的登录状态”在 Agent 处理下一条消息时生效/)).toBeInTheDocument()
+    expect(within(card).getByText('Lets Agents use what is already on this computer. Each of the four has its own switch: the first three are on by default, and "Use local logins" stays off until you turn it on.')).toBeInTheDocument()
+    expect(within(card).getByText(/"Bind local directories", "Use local CLIs" and "Use local logins" take effect when an Agent handles its next message/)).toBeInTheDocument()
     expect(directories).toBeChecked()
     expect(git).not.toBeChecked()
     expect(cli).toBeChecked()
-    expect(git).toHaveAccessibleDescription(/HTTPS 地址可以用这台电脑上已保存的 git 凭证.*SSH 地址用 ~\/\.ssh 下的密钥不受这个开关影响/)
-    expect(cli).toHaveAccessibleDescription(/登录状态仍用 Loop Now 里配置的账号.*要沿用，另外打开“用本机的登录状态”/)
+    expect(git).toHaveAccessibleDescription(/HTTPS addresses can use the git credentials saved on this computer.*SSH keys under ~\/\.ssh work either way/)
+    expect(cli).toHaveAccessibleDescription(/still sign in with the accounts configured in Loop Now.*To use those, also turn on "Use local logins"/)
     expect(logins).not.toBeChecked()
-    expect(logins).toHaveAccessibleDescription(/等同以你本人的身份操作，所有 Agent 共用这些登录；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号/)
-    expect(directories).toHaveAccessibleDescription(/关闭后清单保留，但不再告诉任何 Agent/)
+    expect(logins).toHaveAccessibleDescription(/which is the same as acting as you, and all Agents share them\. CLIs with an account configured for the Agent in Loop Now still use that account/)
+    expect(directories).toHaveAccessibleDescription(/When off, the lists are kept but no Agent is told about them/)
 
     await user.click(git)
     await waitFor(() => expect(git).toBeChecked())
@@ -53,26 +53,26 @@ describe('全局设置：本机模式', () => {
     expect(local.state.requests.at(-1)).toEqual({ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { cli: false } })
   })
 
-  it('打开“用本机的登录状态”先确认，写明以你本人的身份操作、所有 Agent 共用、已配账号的 CLI 不变；取消则不保存', async () => {
+  it('turning on “Use local logins” asks for confirmation first, stating that it acts as you, is shared by all Agents and leaves CLIs with a configured account unchanged; cancelling saves nothing', async () => {
     const local = localModeBackend()
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
     renderRoutes(routes, '/settings')
-    const logins = await within(await region('本机模式')).findByRole('switch', { name: '用本机的登录状态' })
+    const logins = await within(await region('Local mode')).findByRole('switch', { name: 'Use local logins' })
 
     await user.click(logins)
-    let dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
-    expect(dialog).toHaveTextContent('Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作。')
-    expect(dialog).toHaveTextContent('所有 Agent 共用这些登录，任务里的 Agent 也一样。')
-    expect(dialog).toHaveTextContent('Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。')
-    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    let dialog = await screen.findByRole('alertdialog', { name: 'Turn on "Use local logins"?' })
+    expect(dialog).toHaveTextContent('Agents use your logins for the tools on this computer, which is the same as acting as you.')
+    expect(dialog).toHaveTextContent('All Agents share these logins, including Agents in tasks.')
+    expect(dialog).toHaveTextContent('CLIs with an account configured for the Agent in Loop Now still use that account.')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(logins).not.toBeChecked()
     expect(local.state.requests).toEqual([])
 
     await user.click(logins)
-    dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
-    await user.click(within(dialog).getByRole('button', { name: '打开' }))
+    dialog = await screen.findByRole('alertdialog', { name: 'Turn on "Use local logins"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     await waitFor(() => expect(logins).toBeChecked())
     expect(local.state.requests).toEqual([{ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { logins: true } }])
@@ -84,101 +84,101 @@ describe('全局设置：本机模式', () => {
     expect(local.state.requests.at(-1)).toEqual({ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { logins: false } })
   })
 
-  it('确认后保存失败：错误留在确认框里，开关保持关闭', async () => {
+  it('saving fails after confirmation: the error stays in the confirmation dialog and the switch stays off', async () => {
     const local = localModeBackend()
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
     renderRoutes(routes, '/settings')
-    const card = await region('本机模式')
-    const logins = await within(card).findByRole('switch', { name: '用本机的登录状态' })
+    const card = await region('Local mode')
+    const logins = await within(card).findByRole('switch', { name: 'Use local logins' })
     local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', 'Failed to write the settings'), { status: 500 })
     await user.click(logins)
-    const dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
-    await user.click(within(dialog).getByRole('button', { name: '打开' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Turn on "Use local logins"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on' }))
     expect(await within(dialog).findByRole('alert')).toBeInTheDocument()
     expect(logins).not.toBeChecked()
     // The card no longer shows the same error a second time, and none is left behind after the confirmation dialog closes.
     expect(within(card).queryByRole('alert', { hidden: true })).toBeNull()
-    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(within(card).queryByRole('alert')).toBeNull()
   })
 })
 
-describe('项目设置：本机目录', () => {
-  const project = makeProject({ name: '模型接入' })
+describe('Project settings: local directories', () => {
+  const project = makeProject({ name: 'model-access' })
   const path = `/p/${encodeURIComponent(project.name)}/settings`
   function setup(init: Parameters<typeof localModeBackend>[0] = {}) {
-    const local = localModeBackend({ projects: { [project.id]: { revision: 2, directories: [dir('/Users/me/code/app', '主仓库'), dir('/Users/me/missing-dir')] } }, ...init })
+    const local = localModeBackend({ projects: { [project.id]: { revision: 2, directories: [dir('/Users/me/code/app', 'Main repo'), dir('/Users/me/missing-dir')] } }, ...init })
     server.use(...local.handlers, ...projectBackend({ projects: [defaultProject, project] }).handlers)
     return { local, user: userEvent.setup(), ...renderRoutes(routes, path) }
   }
-  const rows = async () => within(await screen.findByRole('list', { name: '本机目录列表' })).getAllByRole('listitem')
+  const rows = async () => within(await screen.findByRole('list', { name: 'Local directories' })).getAllByRole('listitem')
 
-  it('列出路径与备注，目录不存在的那一行标出来；如实说明改动落在真实文件上、清单不是访问隔离', async () => {
+  it('lists paths and notes and marks the row whose directory doesn\'t exist; states plainly that changes land on the real files and that the list doesn\'t isolate access', async () => {
     setup()
-    const card = await region('本机目录')
+    const card = await region('Local directories')
     const [app, missing] = await rows()
     expect(app).toHaveTextContent('/Users/me/code/app')
-    expect(app).toHaveTextContent('主仓库')
-    expect(within(app).queryByText('目录不存在')).toBeNull()
-    expect(within(missing).getByText('目录不存在')).toBeInTheDocument()
-    expect(within(missing).getByText('这一项暂不告诉 Agent。')).toBeInTheDocument()
+    expect(app).toHaveTextContent('Main repo')
+    expect(within(app).queryByText('Doesn\'t exist')).toBeNull()
+    expect(within(missing).getByText('Doesn\'t exist')).toBeInTheDocument()
+    expect(within(missing).getByText('Agents aren\'t told about this one for now.')).toBeInTheDocument()
     for (const caution of cautions) expect(within(card).getByText(caution)).toBeInTheDocument()
     // While the switch is on, there is no hint that the list is not in effect for now.
-    expect(within(card).queryByText(/已关闭/)).toBeNull()
+    expect(within(card).queryByText(/is off/)).toBeNull()
   })
 
-  it('添加：整份清单带修订号保存，新目录不存在也照常保存并在行内标出', async () => {
+  it('add: saves the whole list with its revision; a new directory that doesn\'t exist is saved as usual and marked in its row', async () => {
     const { local, user } = setup()
-    await user.click(await within(await region('本机目录')).findByRole('button', { name: '添加目录' }))
-    const dialog = await screen.findByRole('dialog', { name: '添加本机目录' })
-    await user.type(within(dialog).getByLabelText('绝对路径'), '  /Users/me/missing-new  ')
-    await user.type(within(dialog).getByLabelText('备注（可选）'), '   ')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await user.click(await within(await region('Local directories')).findByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    await user.type(within(dialog).getByLabelText('Absolute path'), '  /Users/me/missing-new  ')
+    await user.type(within(dialog).getByLabelText('Note (optional)'), '   ')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.state.requests).toEqual([{
       method: 'PUT',
       path: `/api/v1/projects/${project.id}/local-directories`,
-      body: { expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: '主仓库' }, { path: '/Users/me/missing-dir', note: null }, { path: '/Users/me/missing-new', note: null }] },
+      body: { expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: 'Main repo' }, { path: '/Users/me/missing-dir', note: null }, { path: '/Users/me/missing-new', note: null }] },
     }])
     const added = (await rows())[2]
     expect(added).toHaveTextContent('/Users/me/missing-new')
-    expect(within(added).getByText('目录不存在')).toBeInTheDocument()
+    expect(within(added).getByText('Doesn\'t exist')).toBeInTheDocument()
   })
 
-  it('编辑与移除：只改那一行；移除前说明不会删除文件', async () => {
+  it('edit and remove: only that row changes; before removing, says that no files are deleted', async () => {
     const { local, user } = setup()
-    await user.click(await screen.findByRole('button', { name: '编辑 /Users/me/code/app' }))
-    const dialog = await screen.findByRole('dialog', { name: '编辑本机目录' })
-    const save = within(dialog).getByRole('button', { name: '保存' })
+    await user.click(await screen.findByRole('button', { name: 'Edit /Users/me/code/app' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit local directory' })
+    const save = within(dialog).getByRole('button', { name: 'Save' })
     expect(save).toBeDisabled()
-    const note = within(dialog).getByLabelText('备注（可选）')
+    const note = within(dialog).getByLabelText('Note (optional)')
     await user.clear(note)
-    await user.type(note, '前端')
+    await user.type(note, 'Frontend')
     await user.click(save)
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: '前端' }, { path: '/Users/me/missing-dir', note: null }] })
-    expect((await rows())[0]).toHaveTextContent('前端')
+    expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: 'Frontend' }, { path: '/Users/me/missing-dir', note: null }] })
+    expect((await rows())[0]).toHaveTextContent('Frontend')
 
-    await user.click(screen.getByRole('button', { name: '移除 /Users/me/missing-dir' }))
-    const confirm = await screen.findByRole('alertdialog', { name: '从清单移除“/Users/me/missing-dir”？' })
-    expect(confirm).toHaveTextContent('只从清单里移除，不会删除这个目录或其中的文件。')
-    await user.click(within(confirm).getByRole('button', { name: '移除' }))
+    await user.click(screen.getByRole('button', { name: 'Remove /Users/me/missing-dir' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Remove "/Users/me/missing-dir" from the list?' })
+    expect(confirm).toHaveTextContent('This only removes it from the list. The directory and its files aren\'t deleted.')
+    await user.click(within(confirm).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 3, directories: [{ path: '/Users/me/code/app', note: '前端' }] })
+    expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 3, directories: [{ path: '/Users/me/code/app', note: 'Frontend' }] })
     expect(await rows()).toHaveLength(1)
   })
 
-  it('服务端的字段错误显示在改动那一行的输入框下，对话框保留输入', async () => {
+  it('a field error from the server shows under the input of the changed row, and the dialog keeps the input', async () => {
     const { local, user } = setup()
     local.state.failNextPut = () =>
       HttpResponse.json(errorBody('validation_failed', 'directories[2].path: Must be an absolute path', { fields: [{ field: 'directories[2].path', message: 'Must be an absolute path' }] }), { status: 422 })
-    await user.click(await screen.findByRole('button', { name: '添加目录' }))
-    const dialog = await screen.findByRole('dialog', { name: '添加本机目录' })
-    const input = within(dialog).getByLabelText('绝对路径')
+    await user.click(await screen.findByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    const input = within(dialog).getByLabelText('Absolute path')
     await user.type(input, 'code/app')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(await within(dialog).findByText('Must be an absolute path')).toBeInTheDocument()
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toHaveValue('code/app')
@@ -186,72 +186,72 @@ describe('项目设置：本机目录', () => {
     expect(within(dialog).queryByRole('alert')).toBeNull()
   })
 
-  it('清单在别处改过（412）时读取最新内容并说明；再保存时套在新清单上', async () => {
+  it('when the list was changed elsewhere (412), loads the latest version and says so; saving again applies the change to the new list', async () => {
     const { local, user } = setup()
-    await user.click(await screen.findByRole('button', { name: '添加目录' }))
-    const dialog = await screen.findByRole('dialog', { name: '添加本机目录' })
-    await user.type(within(dialog).getByLabelText('绝对路径'), '/srv/data')
+    await user.click(await screen.findByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    await user.type(within(dialog).getByLabelText('Absolute path'), '/srv/data')
     local.state.projects.set(project.id, { revision: 3, directories: [dir('/Users/me/other')] })
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
-    expect(await within(dialog).findByText('清单刚在别处被修改，已读取最新内容；请核对后再保存一次。')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByText('The list was just changed elsewhere and the latest version has been loaded. Check it, then save again.')).toBeInTheDocument()
     // While the dialog is open the rest of the page is hidden from screen readers, so query
     // with hidden to see that the list behind it has already been replaced with the latest one.
-    await waitFor(() => expect(within(screen.getByRole('list', { name: '本机目录列表', hidden: true })).getAllByRole('listitem', { hidden: true }).map((row) => row.getAttribute('aria-label'))).toEqual(['/Users/me/other']))
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(within(screen.getByRole('list', { name: 'Local directories', hidden: true })).getAllByRole('listitem', { hidden: true }).map((row) => row.getAttribute('aria-label'))).toEqual(['/Users/me/other']))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 3, directories: [{ path: '/Users/me/other', note: null }, { path: '/srv/data', note: null }] })
   })
 
-  it('“绑定本机目录”关着时说明清单暂不交给 Agent，并链到全局设置', async () => {
+  it('with “Bind local directories” off, says that Agents aren\'t given the list for now and links to global settings', async () => {
     const { user, router } = setup({ settings: { directories: false } })
-    const card = await region('本机目录')
-    const note = await within(card).findByText(/全局设置里的“绑定本机目录”已关闭：清单照常保存，但不会告诉任何 Agent。/)
+    const card = await region('Local directories')
+    const note = await within(card).findByText(/"Bind local directories" is off in global settings: the list is still saved, but no Agent is told about it\./)
     expect(await rows()).toHaveLength(2)
-    await user.click(within(note).getByRole('link', { name: '去全局设置' }))
+    await user.click(within(note).getByRole('link', { name: 'Open global settings' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
     expect(router.state.location.hash).toBe('#local-mode')
   })
 })
 
-describe('Agent 配置：本机目录', () => {
-  it('继承自项目的条目只读并标明来源；Agent 自己的可以编辑，保存只替换自己的', async () => {
+describe('Agent config: local directories', () => {
+  it('entries inherited from the project are read-only and show where they come from; the Agent\'s own entries can be edited, and saving replaces only its own', async () => {
     const agent = makeAgent()
     const local = localModeBackend({
-      projects: { [defaultProject.id]: { revision: 1, directories: [dir('/Users/me/shared', '项目资料')] } },
+      projects: { [defaultProject.id]: { revision: 1, directories: [dir('/Users/me/shared', 'Project docs')] } },
       agents: { [agent.id]: { revision: 4, directories: [dir('/Users/me/own')], projectId: defaultProject.id } },
     })
     const { user } = await renderConfig({ agent, handlers: local.handlers })
-    const section = await region('本机目录')
-    const inherited = await within(section).findByRole('region', { name: '来自项目“测试项目”' })
+    const section = await region('Local directories')
+    const inherited = await within(section).findByRole('region', { name: 'From project "test-project"' })
     expect(inherited).toHaveTextContent('/Users/me/shared')
-    expect(inherited).toHaveTextContent('项目资料')
+    expect(inherited).toHaveTextContent('Project docs')
     expect(within(inherited).queryByRole('button')).toBeNull()
-    expect(within(inherited).getByRole('link', { name: '在项目设置中修改' })).toHaveAttribute('href', `/p/${encodeURIComponent('测试项目')}/settings`)
+    expect(within(inherited).getByRole('link', { name: 'Edit in project settings' })).toHaveAttribute('href', `/p/${encodeURIComponent('test-project')}/settings`)
     for (const caution of cautions) expect(within(section).getByText(caution)).toBeInTheDocument()
 
-    const own = within(section).getByRole('list', { name: '本机目录列表' })
+    const own = within(section).getByRole('list', { name: 'Local directories' })
     expect(within(own).getAllByRole('listitem').map((row) => row.getAttribute('aria-label'))).toEqual(['/Users/me/own'])
-    await user.click(within(section).getByRole('button', { name: '添加目录' }))
-    const dialog = await screen.findByRole('dialog', { name: '添加本机目录' })
-    await user.type(within(dialog).getByLabelText('绝对路径'), '/Users/me/notes')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await user.click(within(section).getByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    await user.type(within(dialog).getByLabelText('Absolute path'), '/Users/me/notes')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.state.requests).toEqual([{ method: 'PUT', path: `/api/v1/agents/${agent.id}/local-directories`, body: { expectedRevision: 4, directories: [{ path: '/Users/me/own', note: null }, { path: '/Users/me/notes', note: null }] } }])
     expect(within(inherited).getAllByRole('listitem')).toHaveLength(1)
   })
 
-  it('平台 Agent 没有继承的条目', async () => {
-    const agent = makeAgent({ scope: 'platform', projectId: null, name: '平台助手' })
+  it('a platform Agent has no inherited entries', async () => {
+    const agent = makeAgent({ scope: 'platform', projectId: null, name: 'Platform assistant' })
     const local = localModeBackend({ agents: { [agent.id]: { revision: 0, directories: [], projectId: null } } })
     await renderConfig({ agent, handlers: local.handlers })
-    const section = await region('本机目录')
-    expect(await within(section).findByText('还没有登记本机目录。')).toBeInTheDocument()
-    expect(within(section).getByText('告诉这个 Agent 可以去这些本机目录干活。')).toBeInTheDocument()
+    const section = await region('Local directories')
+    expect(await within(section).findByText('No local directories yet.')).toBeInTheDocument()
+    expect(within(section).getByText('Tells this Agent that it can work in these local directories.')).toBeInTheDocument()
     expect(within(section).queryByRole('region')).toBeNull()
   })
 })
 
-describe('从 Git 拉取失败：本机 git 身份的提示', () => {
+describe('Pull from Git fails: hints about the local git identity', () => {
   const HTTPS = 'https://code.example.net/team/app.git'
   const SSH = 'git@code.example.net:team/app.git'
   const failedPull = (errorCode: GitPull['errorCode'], url: string): GitPull => ({
@@ -268,50 +268,50 @@ describe('从 Git 拉取失败：本机 git 身份的提示', () => {
     const base = createMockFolder({ key: 'w', preset: 'workspace', latency: 0, git: true })
     const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode, url)] } }
     const view = renderRoutes([
-      { path: '/', element: <FileManager source={source} rootLabel="开发助手 的文件夹" limits={limits} className="h-[600px]" /> },
-      { path: '/settings', element: <p>全局设置</p> },
+      { path: '/', element: <FileManager source={source} rootLabel="dev-helper's folder" limits={limits} className="h-[600px]" /> },
+      { path: '/settings', element: <p>Global settings</p> },
     ], '/')
     return { reads, ...view }
   }
 
-  it('HTTPS 地址认证失败且开关关着：提示去打开，链到全局设置的本机模式', async () => {
+  it('HTTPS authentication fails with the switch off: hints to turn it on and links to local mode in global settings', async () => {
     const { router } = setup('auth_failed', HTTPS, false)
-    expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
+    expect(await screen.findByText('Pull failed: Authentication failed')).toBeInTheDocument()
     const hint = await screen.findByRole('note')
-    expect(hint).toHaveTextContent('“用本机的 git 身份”没有打开，HTTPS 地址的拉取用不到这台电脑上已保存的 git 凭证。')
-    await userEvent.setup().click(within(hint).getByRole('link', { name: '去全局设置打开' }))
+    expect(hint).toHaveTextContent('"Use local git identity" is off, so pulls from HTTPS addresses can\'t use the git credentials saved on this computer.')
+    await userEvent.setup().click(within(hint).getByRole('link', { name: 'Turn it on in global settings' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
     expect(router.state.location.hash).toBe('#local-mode')
   })
 
-  it('HTTPS 地址认证失败但开关开着：不额外提示，照常可以看 git 输出', async () => {
+  it('HTTPS authentication fails with the switch on: no extra hint, and the git output can be viewed as usual', async () => {
     const { reads } = setup('auth_failed', HTTPS, true)
-    expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 git 输出' })).toBeInTheDocument()
+    expect(await screen.findByText('Pull failed: Authentication failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View git output' })).toBeInTheDocument()
     await waitFor(() => expect(reads.count).toBe(1))
     expect(screen.queryByRole('note')).toBeNull()
   })
 
-  it('SSH 地址认证失败：开关关着也不提示去打开（~/.ssh 的密钥不受开关影响），照常看 git 输出', async () => {
+  it('SSH authentication fails: no hint to turn the switch on even when it is off (keys under ~/.ssh don\'t depend on it), and the git output can be viewed as usual', async () => {
     const { reads } = setup('auth_failed', SSH, false)
-    expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 git 输出' })).toBeInTheDocument()
+    expect(await screen.findByText('Pull failed: Authentication failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View git output' })).toBeInTheDocument()
     expect(screen.queryByRole('note')).toBeNull()
     expect(reads.count).toBe(0)
   })
 
-  it('SSH 主机未确认：不论开关，都提示先在本机终端核对指纹', async () => {
+  it('SSH host not verified: whatever the switch, hints to check the fingerprint in a local terminal first', async () => {
     const { reads } = setup('host_key_unverified', SSH, false)
-    expect(await screen.findByText('拉取失败：SSH 主机密钥未确认')).toBeInTheDocument()
+    expect(await screen.findByText('Pull failed: SSH host key not verified')).toBeInTheDocument()
     const hint = await screen.findByRole('note')
-    expect(hint).toHaveTextContent('ssh -T git@主机名')
+    expect(hint).toHaveTextContent('ssh -T git@hostname')
     expect(within(hint).queryByRole('link')).toBeNull()
     expect(reads.count).toBe(0)
   })
 
-  it('其他失败不读取开关、不提示', async () => {
+  it('other failures neither read the switch nor show a hint', async () => {
     const { reads } = setup('clone_failed', HTTPS, false)
-    expect(await screen.findByText('拉取失败：无法克隆仓库')).toBeInTheDocument()
+    expect(await screen.findByText('Pull failed: Couldn\'t clone the repository')).toBeInTheDocument()
     expect(screen.queryByRole('note')).toBeNull()
     expect(reads.count).toBe(0)
   })

@@ -19,7 +19,7 @@ function renderCard() {
 }
 
 describe('ModelSettingsCard', () => {
-  it('保存原生 JSON，并在修订冲突时保留草稿核对', async () => {
+  it('saves the raw JSON, and on a revision conflict keeps the draft for review', async () => {
     let settings = { modelsJson: '{"providers":{}}', revision: 1 }
     const writes: unknown[] = []
     server.use(
@@ -37,25 +37,25 @@ describe('ModelSettingsCard', () => {
     renderCard()
     const editor = await screen.findByLabelText('models.json')
     await replaceJSON(user, editor, '{ "providers": {} }')
-    await user.click(screen.getByRole('button', { name: '保存模型配置' }))
-    await screen.findByText('已保存')
+    await user.click(screen.getByRole('button', { name: 'Save model settings' }))
+    await screen.findByText('Saved')
     expect(settings.revision).toBe(2)
 
     settings = { modelsJson: '{"providers":{"other":{}}}', revision: 3 }
     await user.keyboard('{Control>}{End}{/Control}')
     await user.type(editor, ' ')
-    await user.click(screen.getByRole('button', { name: '保存模型配置' }))
-    await screen.findByRole('group', { name: '核对模型配置差异' })
+    await user.click(screen.getByRole('button', { name: 'Save model settings' }))
+    await screen.findByRole('group', { name: 'Review model configuration differences' })
     expect(editor.textContent?.trim()).toBe('{ "providers": {} }')
     expect(editor.textContent).not.toBe('{ "providers": {} }')
-    expect(screen.getByText('服务器文本 · 修订 3')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '已核对修订 3，保留草稿继续编辑' }))
-    await user.click(screen.getByRole('button', { name: '保存模型配置' }))
+    expect(screen.getByText('Server text · revision 3')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Revision 3 reviewed; keep my draft and continue editing' }))
+    await user.click(screen.getByRole('button', { name: 'Save model settings' }))
     await waitFor(() => expect(settings.revision).toBe(4))
     expect(writes.map(value => (value as { expectedRevision: number }).expectedRevision)).toEqual([1, 2, 3])
   })
 
-  it('即时定位 JSON 语法错误并阻止无效保存', async () => {
+  it('points to JSON syntax errors right away and blocks saving invalid JSON', async () => {
     const writes: unknown[] = []
     server.use(
       http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),
@@ -65,15 +65,15 @@ describe('ModelSettingsCard', () => {
     renderCard()
     const editor = await screen.findByLabelText('models.json')
     await replaceJSON(user, editor, '{\n  "providers": {\n')
-    const location = await screen.findByRole('button', { name: /第 3 行，第 1 列/ })
-    expect(screen.getByRole('alert', { name: 'JSON 语法错误' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '保存模型配置' })).toBeDisabled()
+    const location = await screen.findByRole('button', { name: /Line 3, column 1/ })
+    expect(screen.getByRole('alert', { name: 'JSON syntax errors' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save model settings' })).toBeDisabled()
     await user.click(location)
     expect(editor).toHaveFocus()
     expect(writes).toEqual([])
   })
 
-  it('在编辑器旁展示服务端校验错误且保留草稿', async () => {
+  it('shows server validation errors next to the editor and keeps the draft', async () => {
     server.use(
       http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),
       http.put(apiUrl('/model-settings'), () => HttpResponse.json(errorBody('validation_failed', 'modelsJson: Pi rejected the model configuration', { fields: [{ field: 'modelsJson', message: 'Pi rejected the model configuration' }] }), { status: 422 })),
@@ -82,24 +82,24 @@ describe('ModelSettingsCard', () => {
     renderCard()
     const editor = await screen.findByLabelText('models.json')
     await replaceJSON(user, editor, '{"providers":{"draft":{}}}')
-    await user.click(screen.getByRole('button', { name: '保存模型配置' }))
-    await screen.findByText('配置未保存，草稿已保留。')
-    await user.click(screen.getByText('查看校验详情'))
+    await user.click(screen.getByRole('button', { name: 'Save model settings' }))
+    await screen.findByText('Configuration was not saved. Your draft is preserved.')
+    await user.click(screen.getByText('View validation details'))
     expect(screen.getByText(/Pi rejected the model configuration/)).toBeInTheDocument()
     expect(editor.textContent).toBe('{"providers":{"draft":{}}}')
   })
 
-  it('从完整示例合并 Provider，同名时必须明确确认', async () => {
+  it('merges a provider from a full example, and a provider with the same name needs explicit confirmation', async () => {
     server.use(http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{"my-openai":{"baseUrl":"keep"},"other":{"keep":true}}}', revision: 1 })))
     const user = userEvent.setup()
     renderCard()
     const editor = await screen.findByLabelText('models.json')
-    await user.click(screen.getByRole('button', { name: '示例与字段说明' }))
-    const example = await screen.findByRole('region', { name: '最小 OpenAI 兼容 Provider' })
-    await user.click(within(example).getByRole('button', { name: '合并到草稿' }))
+    await user.click(screen.getByRole('button', { name: 'Examples and field guide' }))
+    const example = await screen.findByRole('region', { name: 'Minimal OpenAI-compatible provider' })
+    await user.click(within(example).getByRole('button', { name: 'Merge into draft' }))
     expect(editor.textContent).toContain('keep')
-    await user.click(within(example).getByRole('button', { name: '替换同名 Provider 并插入' }))
-    await screen.findByText('已插入“最小 OpenAI 兼容 Provider”，请检查后保存。')
+    await user.click(within(example).getByRole('button', { name: 'Replace matching provider and insert' }))
+    await screen.findByText('Inserted “Minimal OpenAI-compatible provider”. Review it before saving.')
     expect(editor.textContent).not.toContain('"baseUrl": "keep"')
     expect(editor.textContent).toContain('my-openai')
     expect(editor.textContent).toContain('other')

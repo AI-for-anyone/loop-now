@@ -37,31 +37,31 @@ function replyingTurn(text: string, reply: string) {
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
-describe('历史请求进行中到达的事件', () => {
-  it('加载更早的消息时回复结束：请求结果不覆盖结束事件', async () => {
-    const { question, ended, reply } = replyingTurn('新问题', '最终回复')
+describe('Events that arrive while a history request is in flight', () => {
+  it('a reply ends while older messages load: the request result does not overwrite the end event', async () => {
+    const { question, ended, reply } = replyingTurn('New question', 'Final reply')
     const gate = deferred()
     const { emit } = await renderChat({
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           if (!new URL(request.url).searchParams.get('before')) return HttpResponse.json(makeMessagePage([question], { hasMore: true, turnsBefore: 1, turnsTotal: 2 }))
           await gate.promise
-          return HttpResponse.json(makeMessagePage(turn('旧问题', '旧回答'), { turnsTotal: 2 }))
+          return HttpResponse.json(makeMessagePage(turn('Old question', 'Old answer'), { turnsTotal: 2 }))
         }),
       ],
     })
-    expect(await screen.findByText('新问题')).toBeInTheDocument()
+    expect(await screen.findByText('New question')).toBeInTheDocument()
     fireEvent.scroll(screen.getByRole('log'))
-    expect(await screen.findByText('正在加载更早的消息…')).toBeInTheDocument()
+    expect(await screen.findByText('Loading earlier messages…')).toBeInTheDocument()
     await emit('run.ended', { run: ended, message: reply })
     gate.resolve()
-    expect(await screen.findByText('旧问题')).toBeInTheDocument()
-    expect(screen.getByText('最终回复')).toBeInTheDocument()
-    expect(screen.queryByText('回复中')).toBeNull()
+    expect(await screen.findByText('Old question')).toBeInTheDocument()
+    expect(screen.getByText('Final reply')).toBeInTheDocument()
+    expect(screen.queryByText('Replying')).toBeNull()
   })
 
-  it('快照触发的重新获取进行中回复结束：以结束事件为准', async () => {
-    const { run, question, ended, reply } = replyingTurn('问题', '最终回复')
+  it('a reply ends while a snapshot-triggered refetch is in flight: the end event wins', async () => {
+    const { run, question, ended, reply } = replyingTurn('Question', 'Final reply')
     const gate = deferred()
     let calls = 0
     const { agent, emit } = await renderChat({
@@ -74,18 +74,18 @@ describe('历史请求进行中到达的事件', () => {
         }),
       ],
     })
-    expect(await screen.findByText('问题')).toBeInTheDocument()
-    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '写到'))
+    expect(await screen.findByText('Question')).toBeInTheDocument()
+    await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, 'Writing'))
     await waitFor(() => expect(calls).toBe(2))
     await emit('run.ended', { run: ended, message: reply })
     gate.resolve()
     await settle()
-    expect(screen.getByText('最终回复')).toBeInTheDocument()
-    expect(screen.queryByText('回复中')).toBeNull()
+    expect(screen.getByText('Final reply')).toBeInTheDocument()
+    expect(screen.queryByText('Replying')).toBeNull()
   })
 
-  it('首次加载完成之前到达的事件不丢失', async () => {
-    const { question, ended, reply } = replyingTurn('问题', '最终回复')
+  it('events that arrive before the first load completes are not lost', async () => {
+    const { question, ended, reply } = replyingTurn('Question', 'Final reply')
     const gate = deferred()
     const { emit } = await renderChat({
       handlers: [
@@ -96,18 +96,18 @@ describe('历史请求进行中到达的事件', () => {
       ],
     })
     // The queue tray only follows the server's queue list; here the next turn, already started, is used to check that no event is lost.
-    const later = makeMessage({ text: '后来的问题', run: makeRun({ status: 'starting', phase: 'launching', startedAt: '2026-10-12T09:00:00Z', endedAt: null }) })
+    const later = makeMessage({ text: 'Later question', run: makeRun({ status: 'starting', phase: 'launching', startedAt: '2026-10-12T09:00:00Z', endedAt: null }) })
     await emit('run.ended', { run: ended, message: reply })
     await emit('message.created', { message: later })
     gate.resolve()
-    expect(await screen.findByText('问题')).toBeInTheDocument()
-    expect(screen.getByText('最终回复')).toBeInTheDocument()
-    expect(screen.getByText('后来的问题')).toBeInTheDocument()
-    expect(screen.queryByText('回复中')).toBeNull()
+    expect(await screen.findByText('Question')).toBeInTheDocument()
+    expect(screen.getByText('Final reply')).toBeInTheDocument()
+    expect(screen.getByText('Later question')).toBeInTheDocument()
+    expect(screen.queryByText('Replying')).toBeNull()
   })
 
-  it('首次加载进行中收到快照：快照之后重新获取历史', async () => {
-    const { question, ended, reply } = replyingTurn('问题', '最终回复')
+  it('a snapshot arrives during the first load: the history is fetched again after the snapshot', async () => {
+    const { question, ended, reply } = replyingTurn('Question', 'Final reply')
     const gate = deferred()
     let calls = 0
     const { agent, emit } = await renderChat({
@@ -126,14 +126,14 @@ describe('历史请求进行中到达的事件', () => {
     })
     await emit('snapshot', snapshot(agent.id, {}))
     gate.resolve()
-    expect(await screen.findByText('最终回复')).toBeInTheDocument()
+    expect(await screen.findByText('Final reply')).toBeInTheDocument()
     await settle()
     expect(calls).toBe(2)
-    expect(screen.getByText('最终回复')).toBeInTheDocument()
-    expect(screen.queryByText('回复中')).toBeNull()
+    expect(screen.getByText('Final reply')).toBeInTheDocument()
+    expect(screen.queryByText('Replying')).toBeNull()
   })
 
-  it('发送结果在重新获取进行中到达时不丢失', async () => {
+  it('a send result that arrives while a refetch is in flight is not lost', async () => {
     const gate = deferred()
     let calls = 0
     const { agent, user, emit } = await renderChat({
@@ -141,7 +141,7 @@ describe('历史请求进行中到达的事件', () => {
         http.get(apiUrl('/agents/:agentId/messages'), async () => {
           calls += 1
           if (calls > 1) await gate.promise
-          return HttpResponse.json(makeMessagePage(turn('之前的问题', '之前的回答')))
+          return HttpResponse.json(makeMessagePage(turn('Earlier question', 'Earlier answer')))
         }),
         http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           const body = (await request.json()) as Schemas['SendMessageInput']
@@ -150,33 +150,33 @@ describe('历史请求进行中到达的事件', () => {
         }),
       ],
     })
-    expect(await screen.findByText('之前的回答')).toBeInTheDocument()
+    expect(await screen.findByText('Earlier answer')).toBeInTheDocument()
     // While the event stream is disconnected (so message.created is not
     // received), a snapshot triggers a refetch, and a message is sent meanwhile.
     await emit('snapshot', snapshot(agent.id, {}))
     await waitFor(() => expect(calls).toBe(2))
-    await user.type(screen.getByLabelText('消息'), '新消息')
-    await user.click(screen.getByRole('button', { name: '发送' }))
-    await waitFor(() => expect(screen.getByLabelText('消息')).toHaveValue(''))
+    await user.type(screen.getByLabelText('Message'), 'New message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByLabelText('Message')).toHaveValue(''))
     gate.resolve()
     await settle()
-    expect(screen.getByText('新消息')).toBeInTheDocument()
+    expect(screen.getByText('New message')).toBeInTheDocument()
   })
 })
 
-describe('加载更早的消息与重新获取', () => {
-  it('快照要求的重新获取进行中时不加载更早的消息，以免取消这次对账', async () => {
+describe('Loading older messages and refetching', () => {
+  it('does not load older messages while a refetch requested by a snapshot is in flight, so the reconciliation is not cancelled', async () => {
     const gate = deferred()
     let calls = 0
     let olderCalls = 0
-    const first = turn('旧问题', '旧回答')
-    const missed = turn('断线期间的问题', '断线期间的回答')
+    const first = turn('Old question', 'Old answer')
+    const missed = turn('Question while disconnected', 'Answer while disconnected')
     const { agent, emit } = await renderChat({
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           if (new URL(request.url).searchParams.get('before')) {
             olderCalls += 1
-            return HttpResponse.json(makeMessagePage(turn('更早的问题', '更早的回答'), { turnsTotal: 3 }))
+            return HttpResponse.json(makeMessagePage(turn('Older question', 'Older answer'), { turnsTotal: 3 }))
           }
           calls += 1
           if (calls === 1) return HttpResponse.json(makeMessagePage(first, { hasMore: true, turnsBefore: 1, turnsTotal: 2 }))
@@ -185,18 +185,18 @@ describe('加载更早的消息与重新获取', () => {
         }),
       ],
     })
-    expect(await screen.findByText('旧回答')).toBeInTheDocument()
+    expect(await screen.findByText('Old answer')).toBeInTheDocument()
     await emit('snapshot', snapshot(agent.id, {}))
     await waitFor(() => expect(calls).toBe(2))
     fireEvent.scroll(screen.getByRole('log'))
     await settle()
     gate.resolve()
-    expect(await screen.findByText('断线期间的回答')).toBeInTheDocument()
+    expect(await screen.findByText('Answer while disconnected')).toBeInTheDocument()
     expect(olderCalls).toBe(0)
     // Once the refetch has completed, older messages can be loaded again.
     fireEvent.scroll(screen.getByRole('log'))
-    expect(await screen.findByText('更早的回答')).toBeInTheDocument()
-    expect(screen.getByText('断线期间的回答')).toBeInTheDocument()
+    expect(await screen.findByText('Older answer')).toBeInTheDocument()
+    expect(screen.getByText('Answer while disconnected')).toBeInTheDocument()
     expect(olderCalls).toBe(1)
   })
 })

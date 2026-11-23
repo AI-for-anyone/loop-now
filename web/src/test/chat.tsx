@@ -39,7 +39,7 @@ export async function renderChat(setup: ChatSetup = {}) {
   // may appear later than the conversation area, so wait until it exists before returning.
   const source = await waitFor(() => {
     const found = FakeEventSource.instances.find((s) => s.url.endsWith(`/agents/${agent.id}/events`))
-    if (!found) throw new Error('对话事件流还没有建立')
+    if (!found) throw new Error('The chat event stream has not been set up')
     return found
   })
   const emit = async (type: string, data: unknown, id?: string) => {

@@ -11,13 +11,13 @@ import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { ModelCredentialSection } from './ModelCredentialSection'
 
-const area = () => screen.getByRole('region', { name: '模型账号凭证' })
+const area = () => screen.getByRole('region', { name: 'Model account credential' })
 const codex = () => makeAgent({ scope: 'platform', projectId: null, model: { provider: 'openai-codex', modelId: 'gpt-5-codex' }, modelCredential: makeModelAccount() })
 const directory = http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, codexProvider] }))
 afterEach(() => vi.restoreAllMocks())
 
-describe('按正式提供方接口认证', () => {
-  it('发起绑定配置版本、窗口拦截后只重开授权、成功以服务端保存元数据为准', async () => {
+describe('Authenticating through the official provider API', () => {
+  it('starting is bound to the config version; after a blocked window only the authorization is reopened; success follows the metadata the server saved', async () => {
     const agent = codex(), starts: unknown[] = []
     let state: Schemas['ModelAuthState'] = { credential: agent.modelCredential, operation: null }
     const popup = { opener: window, closed: false, location: { replace: vi.fn() }, close: vi.fn() }
@@ -28,68 +28,68 @@ describe('按正式提供方接口认证', () => {
         starts.push(await request.json()); state = { ...state, operation: makeModelLogin(agent.id) }; return HttpResponse.json(state.operation)
       }),
     ] })
-    const relogin = await within(area()).findByRole('button', { name: '重新登录' })
+    const relogin = await within(area()).findByRole('button', { name: 'Log in again' })
     await waitFor(() => expect(relogin).toBeEnabled()); await user.click(relogin)
-    await within(area()).findByText('等待浏览器授权')
+    await within(area()).findByText('Waiting for browser authorization')
     expect(starts).toEqual([{ provider: 'openai-codex', expectedConfigVersion: 1 }])
     expect(within(area()).getByText(/fixture-old@example.test/)).toBeInTheDocument()
     expect(relogin).toBeDisabled()
-    expect(within(area()).getByText(/授权页未打开/)).toBeInTheDocument()
+    expect(within(area()).getByText(/The authorization page didn't open/)).toBeInTheDocument()
     open.mockReturnValue(popup as unknown as Window)
-    await user.click(within(area()).getByRole('button', { name: '打开授权页' }))
+    await user.click(within(area()).getByRole('button', { name: 'Open authorization page' }))
     expect(popup.location.replace).toHaveBeenCalledOnce(); expect(starts).toHaveLength(1)
-    expect(within(area()).queryByText('本次登录成功')).toBeNull()
+    expect(within(area()).queryByText('Login succeeded')).toBeNull()
     state = { credential: makeModelAccount({ accountLabel: 'fixture-new@example.test' }), operation: makeModelLogin(agent.id, { status: 'succeeded', authorizationUrl: null }) }
     await act(() => client.invalidateQueries({ queryKey: modelAuthKey(agent.id, agent.model.provider, 1) }))
-    expect(await within(area()).findByText('本次登录成功')).toBeInTheDocument()
+    expect(await within(area()).findByText('Login succeeded')).toBeInTheDocument()
     expect(within(area()).getByText(/fixture-new@example.test/)).toBeInTheDocument()
     expect(within(area()).queryByText(/fixture-old@example.test/)).toBeNull()
     expect(router.state.location.pathname + router.state.location.search).not.toContain('authorize')
     expect(document.body.innerHTML).not.toContain('client_id=fixture-only')
     expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain('client_id=fixture-only')
-    expect(screen.queryByLabelText('环境变量名')).toBeNull()
+    expect(screen.queryByLabelText('Environment variable name')).toBeNull()
   })
 
-  it('重新登录请求失败时不把上一次成功当成本次成功', async () => {
+  it('when the re-login request fails, the previous success is not taken as this one', async () => {
     const agent = codex()
     const { user } = await renderConfig({ agent, handlers: [directory,
       http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: makeModelLogin(agent.id, { status: 'succeeded', authorizationUrl: null }) })),
       http.post(apiUrl(`/agents/${agent.id}/model-auth/operations`), () => HttpResponse.json(errorBody('internal_error', 'The auth helper is unavailable'), { status: 503 })),
     ] })
     vi.spyOn(window, 'open').mockReturnValue(null)
-    await user.click(await within(area()).findByRole('button', { name: '重新登录' }))
-    expect(await within(area()).findByText('本次登录失败')).toBeInTheDocument()
-    expect(within(area()).queryByText('本次登录成功')).toBeNull()
+    await user.click(await within(area()).findByRole('button', { name: 'Log in again' }))
+    expect(await within(area()).findByText('Login failed')).toBeInTheDocument()
+    expect(within(area()).queryByText('Login succeeded')).toBeNull()
     expect(within(area()).getByText(/fixture-old@example.test/)).toBeInTheDocument()
   })
 
-  it.each(['failed', 'expired', 'cancelled'] as const)('恢复%s操作，旧账号保持并可重新发起', async status => {
+  it.each(['failed', 'expired', 'cancelled'] as const)('restores a %s operation; the old account is kept and the login can be started again', async status => {
     const agent = codex()
     await renderConfig({ agent, handlers: [directory, http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: makeModelLogin(agent.id, { status, authorizationUrl: null, errorCode: status === 'failed' ? 'auth_port_busy' : null }) }))] })
-    expect(await within(area()).findByRole('button', { name: '重新发起登录' })).toBeEnabled()
+    expect(await within(area()).findByRole('button', { name: 'Start login again' })).toBeEnabled()
     expect(within(area()).getByText(/fixture-old@example.test/)).toBeInTheDocument()
-    expect(within(area()).getByText('已登录', { exact: true })).toBeInTheDocument()
-    if (status === 'failed') expect(within(area()).getByText(/端口已被占用/)).toBeInTheDocument()
+    expect(within(area()).getByText('Logged in', { exact: true })).toBeInTheDocument()
+    if (status === 'failed') expect(within(area()).getByText(/port is in use/)).toBeInTheDocument()
   })
 
-  it('取消必须等服务端确认，失败保留等待与旧账号，重复取消不提交', async () => {
+  it('cancelling waits for the server to confirm; a failure keeps the waiting state and the old account; a repeated cancel is not submitted', async () => {
     const agent = codex(); let cancelCalls = 0
     let finish: ((response: Response) => void) | undefined
     const { user } = await renderConfig({ agent, handlers: [directory,
       http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: makeModelLogin(agent.id) })),
       http.post(apiUrl(`/agents/${agent.id}/model-auth/operations/:operationId/cancel`), async () => { cancelCalls++; return await new Promise<Response>(resolve => { finish = resolve }) }),
     ] })
-    await user.click(await within(area()).findByRole('button', { name: '取消登录' }))
-    expect(await within(area()).findByRole('button', { name: '正在取消…' })).toBeDisabled()
-    expect(within(area()).queryByText('本次登录已取消')).toBeNull()
-    await user.click(within(area()).getByRole('button', { name: '正在取消…' })); expect(cancelCalls).toBe(1)
+    await user.click(await within(area()).findByRole('button', { name: 'Cancel login' }))
+    expect(await within(area()).findByRole('button', { name: 'Cancelling…' })).toBeDisabled()
+    expect(within(area()).queryByText('Login cancelled')).toBeNull()
+    await user.click(within(area()).getByRole('button', { name: 'Cancelling…' })); expect(cancelCalls).toBe(1)
     await act(async () => finish?.(HttpResponse.json(errorBody('internal_error', 'The cancellation did not finish'), { status: 500 })))
     await within(area()).findByRole('alert')
-    expect(within(area()).getByText('等待浏览器授权')).toBeInTheDocument()
+    expect(within(area()).getByText('Waiting for browser authorization')).toBeInTheDocument()
     expect(within(area()).getByText(/fixture-old@example.test/)).toBeInTheDocument()
   })
 
-  it('切Agent时迟到发起响应不导航、不污染新Agent，切provider不显示旧操作', async () => {
+  it('a late start response after switching Agents does not navigate or leak into the new Agent; switching providers does not show the old operation', async () => {
     const a = codex(), b = codex(); b.modelCredential = null
     let finish: ((response: Response) => void) | undefined
     server.use(directory,
@@ -99,40 +99,40 @@ describe('按正式提供方接口认证', () => {
     const popup = { opener: window, closed: false, location: { replace: vi.fn() }, close: vi.fn() }
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
     const { rerender, client } = renderWithQuery(<ModelCredentialSection key={a.id} agent={a} />)
-    const user = userEvent.setup(); await user.click(await within(area()).findByRole('button', { name: '重新登录' }))
+    const user = userEvent.setup(); await user.click(await within(area()).findByRole('button', { name: 'Log in again' }))
     await waitFor(() => expect(finish).toBeDefined())
     rerender(<ModelCredentialSection key={b.id} agent={b} />)
-    await within(area()).findByRole('button', { name: '登录 Codex' })
+    await within(area()).findByRole('button', { name: 'Log in to Codex' })
     await act(async () => finish?.(HttpResponse.json(makeModelLogin(a.id))))
     expect(popup.location.replace).not.toHaveBeenCalled(); expect(popup.close).toHaveBeenCalled()
-    expect(within(area()).queryByText('等待浏览器授权')).toBeNull()
+    expect(within(area()).queryByText('Waiting for browser authorization')).toBeNull()
     const other = { ...b, model: { provider: 'anthropic', modelId: 'claude' } }
     await act(async () => client.setQueryData(modelAuthKey(b.id, 'anthropic', 1), { credential: null, operation: makeModelLogin(b.id) }))
     rerender(<ModelCredentialSection key={`${b.id}:anthropic`} agent={other} />)
-    expect(within(area()).queryByText('等待浏览器授权')).toBeNull()
+    expect(within(area()).queryByText('Waiting for browser authorization')).toBeNull()
   })
 
-  it('API Key使用provider/key写入，不再有env字段或秘密缓存；取消清空', async () => {
+  it('the API key is written with provider/key, with no env field or secret cache; cancelling clears it', async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null }); let body: unknown = null, credential: Schemas['CredentialMeta'] | null = null
     const { user, client } = await renderConfig({ agent, handlers: [
       http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential, operation: null })),
       http.put(apiUrl(`/agents/${agent.id}/model-credential`), async ({ request }) => { body = await request.json(); credential = makeModelAccount({ provider: 'anthropic', authMethod: 'api_key', accountLabel: null }); return HttpResponse.json(credential) }),
     ] })
-    await user.click(await within(area()).findByRole('button', { name: '录入 API Key' }))
-    await user.type(screen.getByLabelText('API Key'), 'fixture-secret-key'); await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(await within(area()).findByRole('button', { name: 'Enter API key' }))
+    await user.type(screen.getByLabelText('API Key'), 'fixture-secret-key'); await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(body).toEqual({ provider: 'anthropic', key: 'fixture-secret-key', expectedConfigVersion: 1 })
     expect(JSON.stringify(client.getMutationCache().getAll().map(m => m.state))).not.toContain('fixture-secret-key')
     expect(JSON.stringify(client.getQueryCache().getAll().map(q => q.state))).not.toContain('fixture-secret-key')
     expect(document.body.innerHTML).not.toContain('fixture-secret-key')
-    await user.click(within(area()).getByRole('button', { name: '替换 API Key' })); await user.type(screen.getByLabelText('API Key'), 'cancelled-key'); await user.click(screen.getByRole('button', { name: '取消' }))
-    await user.click(within(area()).getByRole('button', { name: '替换 API Key' })); expect(screen.getByLabelText('API Key')).toHaveValue('')
+    await user.click(within(area()).getByRole('button', { name: 'Replace API key' })); await user.type(screen.getByLabelText('API Key'), 'cancelled-key'); await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(within(area()).getByRole('button', { name: 'Replace API key' })); expect(screen.getByLabelText('API Key')).toHaveValue('')
   })
 
-  it('不属于项目的 Agent 用着没有 OAuth 登录的插件提供方：说明暂未开放控制台认证，也不给登录按钮', async () => {
+  it('an Agent outside any project using a plugin provider without OAuth login: says console login is not available yet and shows no login button', async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' }, modelCredential: null })
     await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli', { authMethods: [] })] }))] })
-    expect(await within(area()).findByText('当前提供方暂未开放控制台认证。')).toBeInTheDocument()
-    expect(within(area()).queryByRole('button', { name: /登录/ })).toBeNull()
+    expect(await within(area()).findByText('Console login isn\'t available for this provider yet.')).toBeInTheDocument()
+    expect(within(area()).queryByRole('button', { name: /log ?in/i })).toBeNull()
   })
 })

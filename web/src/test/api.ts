@@ -20,7 +20,7 @@ const now = '2026-10-12T08:00:00Z'
 
 // One item in the queue tray. By default, a message the console sent in the conversation, queued normally.
 export function makeQueueItem(overrides: Partial<Schemas['QueueItem']> = {}): Schemas['QueueItem'] {
-  return { kind: 'run', runId: id(), messageId: null, from: { kind: 'console', id: null, address: '@console', name: '控制台', deleted: false, pluginId: null, channelId: null }, text: '排队的消息', images: [], whenBusy: 'queue', queuedAt: '2026-10-12T08:00:00Z', ...overrides }
+  return { kind: 'run', runId: id(), messageId: null, from: { kind: 'console', id: null, address: '@console', name: 'Console', deleted: false, pluginId: null, channelId: null }, text: 'A queued message', images: [], whenBusy: 'queue', queuedAt: '2026-10-12T08:00:00Z', ...overrides }
 }
 
 export function makeRun(overrides: Partial<Schemas['Run']> = {}): Schemas['Run'] {
@@ -46,7 +46,7 @@ export function makeRun(overrides: Partial<Schemas['Run']> = {}): Schemas['Run']
 }
 
 export function makeMessage(overrides: Partial<Schemas['Message']> = {}): Schemas['Message'] {
-  return { id: id(), role: 'user', origin: 'console', text: '你好', createdAt: now, sessionEpoch: 1, run: makeRun(), ...overrides }
+  return { id: id(), role: 'user', origin: 'console', text: 'Hello', createdAt: now, sessionEpoch: 1, run: makeRun(), ...overrides }
 }
 
 // One page of conversation history (matching the contract). Turn counts default to treating "this page is the whole history": no
@@ -65,7 +65,7 @@ export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['A
     scope: 'project',
     projectId: context.project.id,
     isManager: false,
-    name: '开发助手',
+    name: 'dev-helper',
     // The server builds the address from the name; fixtures default to null (the contract allows it: it
     // is null when the name doesn't meet the naming rules), and tests that need an address supply one.
     address: null,
@@ -131,8 +131,8 @@ export const limits: Schemas['Limits'] = {
 }
 
 export const context: Schemas['Context'] = {
-  organization: { id: id(), name: '测试组织' },
-  project: { id: id(), organizationId: id(), name: '测试项目' },
+  organization: { id: id(), name: 'test-org' },
+  project: { id: id(), organizationId: id(), name: 'test-project' },
   limits,
 }
 
@@ -149,7 +149,7 @@ export const defaultProject: Schemas['Project'] = {
 }
 
 export function makeProject(overrides: Partial<Schemas['Project']> = {}): Schemas['Project'] {
-  return { ...defaultProject, id: id(), name: '模型接入', isDefault: false, ...overrides }
+  return { ...defaultProject, id: id(), name: 'model-access', isDefault: false, ...overrides }
 }
 
 export const projectsUrl = apiUrl('/projects')

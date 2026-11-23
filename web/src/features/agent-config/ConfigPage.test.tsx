@@ -9,37 +9,37 @@ import { modelOptions } from '@/test/model-picker'
 
 const region = (name: string) => screen.getByRole('region', { name })
 
-describe('版面', () => {
-  it('“当前回复使用修改前的配置”与生效说明在同一张便签里', async () => {
+describe('Layout', () => {
+  it('"The current reply uses the config from before the change" sits in the same sticky note as the effect notice', async () => {
     await renderConfig({
       agent: makeAgent({ configVersion: 3 }),
       status: { busy: true, currentRun: makeRun({ status: 'running', configVersion: 2 }) },
     })
-    const stale = await screen.findByText('当前回复使用修改前的配置。')
-    expect(stale.closest('[role="note"]')).toHaveTextContent('修改从下一条派发的消息开始生效，进行中的回复不受影响。')
+    const stale = await screen.findByText('The current reply uses the config from before the change.')
+    expect(stale.closest('[role="note"]')).toHaveTextContent('Changes take effect from the next dispatched message; a reply in progress is not affected.')
   })
 
-  it('复制内部 ID，成功后显示已复制', async () => {
+  it('copies the internal ID and shows Copied on success', async () => {
     const { agent, user } = await renderConfig()
-    const basic = region('基本信息')
-    await user.click(within(basic).getByRole('button', { name: '复制' }))
+    const basic = region('Basics')
+    await user.click(within(basic).getByRole('button', { name: 'Copy' }))
     await expect(navigator.clipboard.readText()).resolves.toBe(agent.id)
-    expect(within(basic).getByRole('button', { name: '已复制' })).toBeInTheDocument()
+    expect(within(basic).getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
   // jsdom does no layout, so we can only confirm that the scroll area is a positioning
   // container; that the whole page does not get stretched taller is checked in a browser.
-  it('页面的滚动区是定位容器，区块里的读屏说明不会撑高整页', async () => {
+  it('the page scroll area is a positioning container, so screen-reader text in sections does not stretch the whole page', async () => {
     await renderConfig()
-    expect(region('基本信息').closest('.overflow-y-auto')).toHaveClass('relative')
+    expect(region('Basics').closest('.overflow-y-auto')).toHaveClass('relative')
   })
 })
 
 // "Printed sheet" redesign, step 2: numbered sections, yellow sticky notes and the section ruler in the stub.
-describe('改版的版式', () => {
-  const sections = ['基本信息', 'Prompt', '本机目录', '模型账号凭证', 'Skills', '可用 CLI', '插件权限', '删除 Agent']
+describe('Redesigned layout', () => {
+  const sections = ['Basics', 'Prompt', 'Local directories', 'Model account credential', 'Skills', 'Available CLIs', 'Plugin grants', 'Delete Agent']
 
-  it('八个区块按顺序编号 01–08：编号是空心的装饰，标题加一笔黄色记号笔；区块之间是虚线，第一个上面没有', async () => {
+  it('the eight sections are numbered 01–08 in order: the number is a hollow decoration and the title gets a yellow marker stroke; dashed lines separate the sections, with none above the first', async () => {
     await renderConfig()
     sections.forEach((name, index) => {
       const section = region(name)
@@ -53,58 +53,58 @@ describe('改版的版式', () => {
     })
   })
 
-  it('区块不再是一张张卡片，直接排在纸上；删除 Agent 一区沿用红色', async () => {
+  it('sections are no longer separate cards but sit directly on the paper; the Delete Agent section stays red', async () => {
     await renderConfig()
-    expect(region('基本信息')).not.toHaveClass('shadow-print-rest')
-    expect(region('基本信息')).not.toHaveClass('bg-paper-raised')
-    const danger = region('删除 Agent')
-    expect(within(danger).getByRole('heading', { level: 2, name: '删除 Agent' })).toHaveClass('text-red-text')
+    expect(region('Basics')).not.toHaveClass('shadow-print-rest')
+    expect(region('Basics')).not.toHaveClass('bg-paper-raised')
+    const danger = region('Delete Agent')
+    expect(within(danger).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveClass('text-red-text')
     expect(danger.querySelector('[data-section-number]')).toHaveClass('[-webkit-text-stroke:1.6px_var(--red-text)]')
     expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
   })
 
-  it('内部 ID 写在虚线框里，复制按钮是带藏青描边的黄色小方块', async () => {
+  it('the internal ID sits in a dashed box, and the copy button is a small yellow square with a navy outline', async () => {
     const { agent } = await renderConfig()
-    const id = within(region('基本信息')).getByText(agent.id)
+    const id = within(region('Basics')).getByText(agent.id)
     expect(id.parentElement).toHaveClass('border-dashed', 'rounded-input')
-    expect(within(region('基本信息')).getByRole('button', { name: '复制' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
+    expect(within(region('Basics')).getByRole('button', { name: 'Copy' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
   })
 
   // jsdom does no layout: positions are confirmed with a browser check (the note under “模型提供方”
   // (Model provider) in the left column no longer pushes “模型” (Model) in the right column down).
-  it('同一行的两栏字段按顶部对齐：一栏下面的说明往下长，不把旁边那栏往下推', async () => {
+  it('two fields in the same row align to the top: a note under one grows downward without pushing the other column down', async () => {
     await renderConfig()
-    const basic = region('基本信息')
+    const basic = region('Basics')
     // Internal ID and display name share a row.
-    expect(within(basic).getByLabelText('显示名称').closest('.grid')!.parentElement).toHaveClass('items-start')
+    expect(within(basic).getByLabelText('Display name').closest('.grid')!.parentElement).toHaveClass('items-start')
     // Model provider and model share a row (the grid inside the model picker).
-    expect(within(basic).getByLabelText('模型提供方').closest('.grid')!.parentElement).toHaveClass('items-start')
+    expect(within(basic).getByLabelText('Model provider').closest('.grid')!.parentElement).toHaveClass('items-start')
   })
 
-  it('正文一栏与目录都在纸张里，用纸张的细滚动条，不隐藏滚动条（目录尺不是滚动位置）', async () => {
+  it('the body column and the contents are both inside the paper and use its thin scrollbar, without hiding scrollbars (the contents ruler is not a scroll position)', async () => {
     await renderConfig()
-    const sheet = region('基本信息').closest('[data-sheet]')!
+    const sheet = region('Basics').closest('[data-sheet]')!
     expect(sheet).toHaveClass('riso-scrollbar')
-    const body = region('基本信息').closest('.overflow-y-auto')!
-    const toc = screen.getByRole('navigation', { name: '目录' })
+    const body = region('Basics').closest('.overflow-y-auto')!
+    const toc = screen.getByRole('navigation', { name: 'Contents' })
     for (const area of [body, toc]) {
       expect(sheet).toContainElement(area as HTMLElement)
       expect(area.className).not.toMatch(/no-scrollbar/)
     }
   })
 
-  it('“下一条消息生效”的提示是一张黄色便签', async () => {
+  it('the "takes effect from the next message" notice is a yellow sticky note', async () => {
     await renderConfig()
-    const note = screen.getByText('修改从下一条派发的消息开始生效，进行中的回复不受影响。').closest('[role="note"]')!
+    const note = screen.getByText('Changes take effect from the next dispatched message; a reply in progress is not affected.').closest('[role="note"]')!
     expect(note).toHaveClass('riso-tilt', '[--tilt-bg:var(--riso-yellow)]')
     expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('目录在纸张右侧的票根里：右缘一排刻度，每项是“名称 编号 短刻度”，当前一项用黄色记号笔加粉色箭头标出', async () => {
+  it('the contents sit in the stub on the right of the paper: a row of ticks along the right edge, each entry is "name number short tick", and the current entry is marked with a yellow marker and a pink arrow', async () => {
     await renderConfig()
-    const toc = screen.getByRole('navigation', { name: '目录' })
+    const toc = screen.getByRole('navigation', { name: 'Contents' })
     expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
-    expect(within(toc).getByText('目录')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(toc).getByText('Contents')).toHaveAttribute('aria-hidden', 'true')
     // A row of ticks along the right edge (decoration).
     expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-3')
     expect(toc.querySelector('[data-ruler-mark]')).toBeNull()
@@ -113,64 +113,64 @@ describe('改版的版式', () => {
     expect(current.closest('li')!.querySelector('[data-ruler-mark]')).not.toBeNull()
     expect(toc.querySelectorAll('[data-ruler-mark]')).toHaveLength(1)
     // The Delete Agent entry is red.
-    expect(within(toc).getByRole('link', { name: '删除 Agent' })).toHaveClass('text-red-text')
+    expect(within(toc).getByRole('link', { name: 'Delete Agent' })).toHaveClass('text-red-text')
   })
 })
 
-describe('分区目录', () => {
-  const toc = () => screen.getByRole('navigation', { name: '目录' })
+describe('Section contents', () => {
+  const toc = () => screen.getByRole('navigation', { name: 'Contents' })
   const tocLink = (name: string) => within(toc()).getByRole('link', { name })
   const highlighted = () => within(toc()).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'location')
 
-  it('按顺序列出八个区块；点击目录项跳转到对应区块，焦点落在区块标题', async () => {
+  it('lists the eight sections in order; clicking an entry jumps to its section and focuses the section title', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
     try {
       const { user, router } = await renderConfig()
       expect(within(toc()).getAllByRole('link').map((link) => link.textContent)).toEqual([
-        '01基本信息',
+        '01Basics',
         '02Prompt',
-        '03本机目录',
-        '04模型账号凭证',
+        '03Local directories',
+        '04Model account credential',
         '05Skills',
-        '06可用 CLI',
-        '07插件权限',
-        '08删除 Agent',
+        '06Available CLIs',
+        '07Plugin grants',
+        '08Delete Agent',
       ])
-      await user.click(tocLink('可用 CLI'))
-      const clis = region('可用 CLI')
-      expect(within(clis).getByRole('heading', { level: 2, name: '可用 CLI' })).toHaveFocus()
+      await user.click(tocLink('Available CLIs'))
+      const clis = region('Available CLIs')
+      expect(within(clis).getByRole('heading', { level: 2, name: 'Available CLIs' })).toHaveFocus()
       expect(scroll.mock.contexts).toContain(clis)
       // The URL does not change.
       expect(router.state.location.pathname).toMatch(/\/config$/)
       expect(router.state.location.hash).toBe('')
 
-      await user.click(tocLink('删除 Agent'))
-      expect(within(region('删除 Agent')).getByRole('heading', { level: 2, name: '删除 Agent' })).toHaveFocus()
+      await user.click(tocLink('Delete Agent'))
+      expect(within(region('Delete Agent')).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveFocus()
     } finally {
       scroll.mockRestore()
     }
   })
 
-  it('高亮当前可见的区块，多个同时可见时取靠前的一个', async () => {
+  it('highlights the visible section, taking the earliest one when several are visible', async () => {
     await renderConfig()
     expect(highlighted()).toHaveLength(0)
-    act(() => FakeIntersectionObserver.trigger(region('可用 CLI'), true))
-    expect(highlighted()).toEqual([tocLink('可用 CLI')])
+    act(() => FakeIntersectionObserver.trigger(region('Available CLIs'), true))
+    expect(highlighted()).toEqual([tocLink('Available CLIs')])
     act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
     expect(highlighted()).toEqual([tocLink('Skills')])
     act(() => FakeIntersectionObserver.trigger(region('Skills'), false))
-    expect(highlighted()).toEqual([tocLink('可用 CLI')])
+    expect(highlighted()).toEqual([tocLink('Available CLIs')])
     // When all of them have left the viewport, the last highlight is kept.
-    act(() => FakeIntersectionObserver.trigger(region('可用 CLI'), false))
-    expect(highlighted()).toEqual([tocLink('可用 CLI')])
+    act(() => FakeIntersectionObserver.trigger(region('Available CLIs'), false))
+    expect(highlighted()).toEqual([tocLink('Available CLIs')])
   })
 
-  it('浏览器不支持 IntersectionObserver 时不高亮，跳转仍然可用', async () => {
+  it('without IntersectionObserver support nothing is highlighted, but jumping still works', async () => {
     vi.stubGlobal('IntersectionObserver', undefined)
     try {
       const { user } = await renderConfig()
-      await user.click(tocLink('可用 CLI'))
-      expect(within(region('可用 CLI')).getByRole('heading', { level: 2, name: '可用 CLI' })).toHaveFocus()
+      await user.click(tocLink('Available CLIs'))
+      expect(within(region('Available CLIs')).getByRole('heading', { level: 2, name: 'Available CLIs' })).toHaveFocus()
       expect(highlighted()).toHaveLength(0)
     } finally {
       vi.unstubAllGlobals()
@@ -178,52 +178,52 @@ describe('分区目录', () => {
   })
 })
 
-describe('名称、模型与 Prompt', () => {
-  it('显示只读的内部 ID；先选提供方，模型选项只列该提供方的模型', async () => {
+describe('Name, model and Prompt', () => {
+  it("shows the read-only internal ID; the provider is chosen first and the model options list only that provider's models", async () => {
     const { agent, user } = await renderConfig()
-    const basic = region('基本信息')
+    const basic = region('Basics')
     expect(within(basic).getByText(agent.id)).toBeInTheDocument()
-    const provider = within(basic).getByLabelText('模型提供方')
+    const provider = within(basic).getByLabelText('Model provider')
     await waitFor(() => expect(provider).toHaveValue('anthropic'))
     await user.selectOptions(provider, 'openai')
-    await waitFor(() => expect(within(basic).getByRole('combobox', { name: '模型' })).toBeEnabled())
-    expect(await modelOptions(user, basic)).toEqual(['GPT X（gpt-x）'])
+    await waitFor(() => expect(within(basic).getByRole('combobox', { name: 'Model' })).toBeEnabled())
+    expect(await modelOptions(user, basic)).toEqual(['GPT X (gpt-x)'])
   })
 
-  it('当前模型不在目录中时标明', async () => {
+  it('marks the current model when it is not in the catalog', async () => {
     await renderConfig({ agent: makeAgent({ model: { provider: 'anthropic', modelId: 'retired-model' } }) })
-    const basic = region('基本信息')
-    expect(await within(basic).findByText('当前模型不在服务端的模型目录中')).toBeInTheDocument()
+    const basic = region('Basics')
+    expect(await within(basic).findByText('The current model isn\'t in the server\'s model catalog')).toBeInTheDocument()
     expect(within(basic).getByText('anthropic / retired-model')).toBeInTheDocument()
   })
 
-  it('离开前有未保存的 Prompt 时请人确认', async () => {
+  it('asks for confirmation before leaving with an unsaved Prompt', async () => {
     const { user, router } = await renderConfig()
-    await user.type(screen.getByLabelText('Agent Prompt'), '新的提示')
-    await user.click(screen.getByRole('link', { name: '对话' }))
+    await user.type(screen.getByLabelText('Agent prompt'), 'New prompt')
+    await user.click(screen.getByRole('link', { name: 'Chat' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent('有未保存的修改')
+    expect(dialog).toHaveTextContent('You have unsaved changes')
     expect(router.state.location.pathname).toMatch(/\/config$/)
-    await user.click(within(dialog).getByRole('button', { name: '离开' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Leave' }))
     await waitFor(() => expect(router.state.location.pathname).toMatch(/\/chat$/))
   })
 
-  it('改名重复时在名称旁显示原因', async () => {
+  it('a duplicate name shows the reason next to the name', async () => {
     const { agent, user } = await renderConfig({
       handlers: [http.patch(apiUrl('/agents/:agentId'), () => HttpResponse.json(errorBody('name_conflict', 'dup'), { status: 409 }))],
     })
-    const name = screen.getByLabelText('显示名称')
+    const name = screen.getByLabelText('Display name')
     await user.clear(name)
-    await user.type(name, '重名')
-    await user.click(within(region('基本信息')).getByRole('button', { name: '保存' }))
-    expect(await screen.findByText('项目内已有同名的 Agent，请换一个名称')).toBeInTheDocument()
-    expect(name).toHaveValue('重名')
+    await user.type(name, 'Duplicate name')
+    await user.click(within(region('Basics')).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('The project already has an Agent with this name. Pick another.')).toBeInTheDocument()
+    expect(name).toHaveValue('Duplicate name')
     void agent
   })
 })
 
-describe('名称规则', () => {
-  it('改名不符合命名规则时先在本地提示，不提交', async () => {
+describe('Name rules', () => {
+  it('a name that breaks the naming rules is reported locally and not submitted', async () => {
     let calls = 0
     const agent = makeAgent()
     const { user } = await renderConfig({
@@ -235,18 +235,18 @@ describe('名称规则', () => {
         }),
       ],
     })
-    const name = screen.getByLabelText('显示名称')
+    const name = screen.getByLabelText('Display name')
     await user.clear(name)
-    await user.type(name, '@开发')
-    await user.click(within(region('基本信息')).getByRole('button', { name: '保存' }))
-    expect(await screen.findByText('名称不能以“@”开头')).toBeInTheDocument()
-    expect(name).toHaveValue('@开发')
+    await user.type(name, '@dev')
+    await user.click(within(region('Basics')).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Names can\'t start with "@"')).toBeInTheDocument()
+    expect(name).toHaveValue('@dev')
     expect(calls).toBe(0)
   })
 })
 
-describe('配置生效说明', () => {
-  it('常驻说明；回复进行中保存时提示不影响当前回复', async () => {
+describe('Config effect notice', () => {
+  it('the notice is always shown; saving during a reply says the current reply is not affected', async () => {
     let saved: unknown = null
     const agent = makeAgent()
     let current = agent
@@ -257,33 +257,33 @@ describe('配置生效说明', () => {
         http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
         http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
           saved = await request.json()
-          current = { ...agent, name: '新的', configVersion: 2 }
+          current = { ...agent, name: 'New name', configVersion: 2 }
           return HttpResponse.json(current)
         }),
       ],
     })
-    expect(screen.getByText('修改从下一条派发的消息开始生效，进行中的回复不受影响。')).toBeInTheDocument()
-    await user.clear(screen.getByLabelText('显示名称'))
-    await user.type(screen.getByLabelText('显示名称'), '新的')
-    await user.click(within(region('基本信息')).getByRole('button', { name: '保存' }))
-    expect(await screen.findByText('已保存。当前回复不受影响，修改从下一条消息开始生效。')).toBeInTheDocument()
-    expect(saved).toEqual({ name: '新的' })
+    expect(screen.getByText('Changes take effect from the next dispatched message; a reply in progress is not affected.')).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Display name'))
+    await user.type(screen.getByLabelText('Display name'), 'New name')
+    await user.click(within(region('Basics')).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved. The current reply is not affected; changes take effect from the next message.')).toBeInTheDocument()
+    expect(saved).toEqual({ name: 'New name' })
   })
 
-  it('当前回复使用修改前的配置时另行提示', async () => {
+  it('a separate notice shows when the current reply uses the config from before the change', async () => {
     await renderConfig({
       agent: makeAgent({ configVersion: 3 }),
       status: { busy: true, currentRun: makeRun({ status: 'running', configVersion: 2 }) },
     })
-    expect(await screen.findByText('当前回复使用修改前的配置。')).toBeInTheDocument()
+    expect(await screen.findByText('The current reply uses the config from before the change.')).toBeInTheDocument()
   })
 })
 
-describe('Agent 的 Skills 副本', () => {
+describe("The Agent's Skill copies", () => {
   const template: Schemas['SkillTemplateSummary'] = {
     id: 'tpl-1',
     name: 'pdf-tools',
-    description: '处理 PDF',
+    description: 'Works with PDFs',
     fileCount: 2,
     createdAt: '2026-10-12T00:00:00Z',
     updatedAt: '2026-10-12T00:00:00Z',
@@ -291,7 +291,7 @@ describe('Agent 的 Skills 副本', () => {
   const copy = (overrides: Partial<Schemas['AgentSkillSummary']> = {}): Schemas['AgentSkillSummary'] => ({
     id: 'as-1',
     name: 'pdf-tools',
-    description: '处理 PDF',
+    description: 'Works with PDFs',
     sourceTemplateId: 'tpl-1',
     fileCount: 2,
     copiedAt: '2026-10-12T00:00:00Z',
@@ -299,7 +299,7 @@ describe('Agent 的 Skills 副本', () => {
     ...overrides,
   })
 
-  it('从库中添加模板', async () => {
+  it('adds a template from the library', async () => {
     let copied: Schemas['AgentSkillSummary'][] = []
     const agent = makeAgent()
     const { user } = await renderConfig({
@@ -313,13 +313,13 @@ describe('Agent 的 Skills 副本', () => {
         }),
       ],
     })
-    await user.click(within(region('Skills')).getByRole('button', { name: '从库中添加' }))
-    await user.click(within(await screen.findByRole('listitem', { name: 'pdf-tools' })).getByRole('button', { name: '添加' }))
+    await user.click(within(region('Skills')).getByRole('button', { name: 'Add from library' }))
+    await user.click(within(await screen.findByRole('listitem', { name: 'pdf-tools' })).getByRole('button', { name: 'Add' }))
     const item = await within(region('Skills')).findByRole('listitem', { name: 'pdf-tools' })
-    expect(item).toHaveTextContent('来源模板：pdf-tools')
+    expect(item).toHaveTextContent('Source template: pdf-tools')
   })
 
-  it('添加同名 Skill 时提示先移除已有的', async () => {
+  it('adding a Skill with a name already in use says to remove the existing one first', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({
       agent,
@@ -327,13 +327,13 @@ describe('Agent 的 Skills 副本', () => {
       agentSkills: [copy()],
       handlers: [http.post(apiUrl(`/agents/${agent.id}/skills`), () => HttpResponse.json(errorBody('name_conflict', 'dup'), { status: 409 }))],
     })
-    await user.click(within(region('Skills')).getByRole('button', { name: '从库中添加' }))
+    await user.click(within(region('Skills')).getByRole('button', { name: 'Add from library' }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(within(dialog).getByRole('listitem', { name: 'pdf-tools' })).getByRole('button', { name: '添加' }))
-    expect(await within(dialog).findByText('这个 Agent 已有同名的 Skill，请先移除已有的 Skill 再添加。')).toBeInTheDocument()
+    await user.click(within(within(dialog).getByRole('listitem', { name: 'pdf-tools' })).getByRole('button', { name: 'Add' }))
+    expect(await within(dialog).findByText('This Agent already has a Skill with this name. Remove it first, then add.')).toBeInTheDocument()
   })
 
-  it('重新复制覆盖前确认，说明会覆盖改过的 SKILL.md', async () => {
+  it('asks before recopying over the Skill and says edits to SKILL.md will be overwritten', async () => {
     let recopied = 0
     const agent = makeAgent()
     const { user } = await renderConfig({
@@ -347,57 +347,57 @@ describe('Agent 的 Skills 副本', () => {
         }),
       ],
     })
-    await user.click(await within(region('Skills')).findByRole('button', { name: '用库中最新版重新复制' }))
+    await user.click(await within(region('Skills')).findByRole('button', { name: 'Copy the latest from the library' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent('包括你对 SKILL.md 的修改')
+    expect(dialog).toHaveTextContent('including your edits to SKILL.md')
     expect(recopied).toBe(0)
-    await user.click(within(dialog).getByRole('button', { name: '用库中最新版重新复制' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Copy the latest from the library' }))
     await waitFor(() => expect(recopied).toBe(1))
   })
 
-  it('来源模板已删除时不可重新复制，编辑与移除仍可用', async () => {
+  it('when the source template is deleted, recopying is unavailable while editing and removing still work', async () => {
     await renderConfig({ agentSkills: [copy({ sourceTemplateId: null })] })
     const item = await within(region('Skills')).findByRole('listitem', { name: 'pdf-tools' })
-    expect(within(item).getByRole('button', { name: '用库中最新版重新复制' })).toBeDisabled()
-    expect(within(item).getAllByText(/来源模板已删除/).length).toBeGreaterThan(0)
-    expect(within(item).getByRole('button', { name: '编辑 SKILL.md' })).toBeEnabled()
-    expect(within(item).getByRole('button', { name: '移除' })).toBeEnabled()
+    expect(within(item).getByRole('button', { name: 'Copy the latest from the library' })).toBeDisabled()
+    expect(within(item).getAllByText(/Source template deleted/).length).toBeGreaterThan(0)
+    expect(within(item).getByRole('button', { name: 'Edit SKILL.md' })).toBeEnabled()
+    expect(within(item).getByRole('button', { name: 'Remove' })).toBeEnabled()
   })
 
-  it('从 Agent 移除 Skill 会删掉这个 Agent 自己的副本（连同改过的 SKILL.md），确认框盖“不可撤销”印章', async () => {
+  it("removing a Skill from the Agent deletes the Agent's own copy (including an edited SKILL.md), so the confirmation carries the \"Irreversible\" stamp", async () => {
     const { user } = await renderConfig({ agentSkills: [copy()] })
     const item = await within(region('Skills')).findByRole('listitem', { name: 'pdf-tools' })
-    await user.click(within(item).getByRole('button', { name: '移除' }))
-    const dialog = await screen.findByRole('alertdialog', { name: '从 Agent 移除 Skill「pdf-tools」？' })
-    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
-    expect(within(dialog).getByText('不可撤销')).toBeInTheDocument()
+    await user.click(within(item).getByRole('button', { name: 'Remove' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove Skill "pdf-tools" from the Agent?' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('Danger')
+    expect(within(dialog).getByText('Irreversible')).toBeInTheDocument()
   })
 
-  it('在线编辑副本的 SKILL.md', async () => {
+  it("edits the copy's SKILL.md online", async () => {
     let content: unknown = null
     const agent = makeAgent()
     const { user } = await renderConfig({
       agent,
       agentSkills: [copy()],
       handlers: [
-        http.get(apiUrl(`/agents/${agent.id}/skills/as-1`), () => HttpResponse.json({ ...copy(), files: [], skillMd: '---\nname: pdf-tools\n---\n旧' })),
+        http.get(apiUrl(`/agents/${agent.id}/skills/as-1`), () => HttpResponse.json({ ...copy(), files: [], skillMd: '---\nname: pdf-tools\n---\nOld' })),
         http.put(apiUrl(`/agents/${agent.id}/skills/as-1/skill-md`), async ({ request }) => {
           content = await request.json()
           return HttpResponse.json({ ...copy(), files: [], skillMd: '' })
         }),
       ],
     })
-    await user.click(await within(region('Skills')).findByRole('button', { name: '编辑 SKILL.md' }))
+    await user.click(await within(region('Skills')).findByRole('button', { name: 'Edit SKILL.md' }))
     const editor = await screen.findByLabelText('SKILL.md')
-    await waitFor(() => expect(editor).toHaveValue('---\nname: pdf-tools\n---\n旧'))
-    await user.type(editor, '新')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }))
-    await waitFor(() => expect(content).toEqual({ content: '---\nname: pdf-tools\n---\n旧新' }))
+    await waitFor(() => expect(editor).toHaveValue('---\nname: pdf-tools\n---\nOld'))
+    await user.type(editor, ' new')
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(content).toEqual({ content: '---\nname: pdf-tools\n---\nOld new' }))
   })
 })
 
-describe('可用 CLI', () => {
-  it('添加没有模板的 CLI：只作标记，没有凭证录入', async () => {
+describe('Available CLIs', () => {
+  it('adding a CLI without a template: marker only, no credential entry', async () => {
     let added: string | null = null
     const agent = makeAgent()
     let current = agent
@@ -412,74 +412,74 @@ describe('可用 CLI', () => {
         }),
       ],
     })
-    const clis = region('可用 CLI')
-    await user.type(within(clis).getByLabelText('CLI 名称'), 'jq')
-    await user.click(within(clis).getByRole('button', { name: '添加 CLI' }))
+    const clis = region('Available CLIs')
+    await user.type(within(clis).getByLabelText('CLI name'), 'jq')
+    await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
     await waitFor(() => expect(added).toBe('jq'))
     const item = await within(clis).findByRole('listitem', { name: 'jq' })
-    expect(item).toHaveTextContent('只作标记，不安装，不注入凭证')
-    expect(within(item).queryByRole('button', { name: /凭证/ })).toBeNull()
+    expect(item).toHaveTextContent('Marker only: not installed, no credential injected')
+    expect(within(item).queryByRole('button', { name: /credential/i })).toBeNull()
   })
 
-  it('网络错误时保留输入并显示无法连接', async () => {
+  it('a network error keeps the input and says the server cannot be reached', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({ agent, handlers: [http.put(apiUrl(`/agents/${agent.id}/clis/:cli`), () => HttpResponse.error())] })
-    const clis = region('可用 CLI')
-    await user.type(within(clis).getByLabelText('CLI 名称'), 'gh')
-    await user.click(within(clis).getByRole('button', { name: '添加 CLI' }))
-    expect(await within(clis).findByText('无法连接服务端')).toBeInTheDocument()
-    expect(within(clis).getByLabelText('CLI 名称')).toHaveValue('gh')
+    const clis = region('Available CLIs')
+    await user.type(within(clis).getByLabelText('CLI name'), 'gh')
+    await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
+    expect(await within(clis).findByText('Can\'t reach the server')).toBeInTheDocument()
+    expect(within(clis).getByLabelText('CLI name')).toHaveValue('gh')
   })
 
-  it('名称不合法时不提交', async () => {
+  it('an invalid name is not submitted', async () => {
     const { user } = await renderConfig()
-    const clis = region('可用 CLI')
-    await user.type(within(clis).getByLabelText('CLI 名称'), 'Bad Name')
-    await user.click(within(clis).getByRole('button', { name: '添加 CLI' }))
-    expect(await within(clis).findByText(/只能使用小写字母/)).toBeInTheDocument()
+    const clis = region('Available CLIs')
+    await user.type(within(clis).getByLabelText('CLI name'), 'Bad Name')
+    await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
+    expect(await within(clis).findByText(/Use only lowercase letters/)).toBeInTheDocument()
   })
 
-  it('移除项目 CLI 保留共享账号及已有任务权限', async () => {
+  it('removing a project CLI keeps the shared accounts and the grants of running tasks', async () => {
     const { user } = await renderConfig({ agent: makeAgent({ clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] }) })
-    const item = within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })
-    await user.click(within(item).getByRole('button', { name: '移除' }))
-    expect(await screen.findByRole('alertdialog')).toHaveTextContent('项目共享账号保留。已有任务继续沿用启动时的权限和凭证。')
+    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })
+    await user.click(within(item).getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent("the project's shared accounts are kept. Running tasks keep the grants and credentials they started with.")
   })
 })
 
-describe('移除 CLI 的“不可撤销”印章', () => {
+describe('The "Irreversible" stamp when removing a CLI', () => {
   // Removal can't be undone only when the stored credential is deleted along with it; a removal without a credential,
   // or at project level, can be added back, so it gets no stamp (it still looks like a dangerous action).
   const removeDialog = async (agent: Parameters<typeof makeAgent>[0]) => {
     const { user } = await renderConfig({ agent: makeAgent(agent) })
-    await user.click(within(within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })).getByRole('button', { name: '移除' }))
+    await user.click(within(within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })).getByRole('button', { name: 'Remove' }))
     return screen.findByRole('alertdialog')
   }
-  it('平台 Agent 移除带凭证的 CLI：凭证一起删除，盖印章', async () => {
+  it('a platform Agent removing a CLI with a credential: the credential is deleted too, so the stamp shows', async () => {
     const dialog = await removeDialog({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] })
-    expect(within(dialog).getByText('不可撤销')).toBeInTheDocument()
+    expect(within(dialog).getByText('Irreversible')).toBeInTheDocument()
   })
-  it('没有录入凭证的 CLI、项目 CLI：不盖印章', async () => {
+  it('a CLI without a credential, and a project CLI: no stamp', async () => {
     let dialog = await removeDialog({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: null }] })
-    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
-    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('Danger')
+    expect(within(dialog).queryByText('Irreversible')).not.toBeInTheDocument()
     cleanup()
     dialog = await removeDialog({ clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] })
-    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Irreversible')).not.toBeInTheDocument()
   })
 })
 
-describe('凭证只写不读', () => {
-  it('已录入的 gh 凭证只显示状态与元数据', async () => {
+describe('Credentials are write-only', () => {
+  it('a saved gh credential shows only its status and metadata', async () => {
     await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] }) })
-    const item = within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })
-    expect(within(item).getByText('已设置')).toBeInTheDocument()
-    expect(within(item).getByText('注入的环境变量：GH_TOKEN')).toBeInTheDocument()
-    expect(within(item).getByText(/更新于/)).toBeInTheDocument()
-    expect(await within(item).findByText('内置模板 v2.100.0')).toBeInTheDocument()
+    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })
+    expect(within(item).getByText('Set')).toBeInTheDocument()
+    expect(within(item).getByText('Injected environment variables: GH_TOKEN')).toBeInTheDocument()
+    expect(within(item).getByText(/Updated/)).toBeInTheDocument()
+    expect(await within(item).findByText('Built-in template v2.100.0')).toBeInTheDocument()
   })
 
-  it('录入 lark-cli 凭证：遮蔽输入，品牌默认 feishu，保存后清空，明文不留在页面与存储中', async () => {
+  it('entering a lark-cli credential: masked input, brand defaults to feishu, cleared after saving, and the plain text stays neither on the page nor in storage', async () => {
     let body: unknown = null
     const agent = makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'lark-cli', hasTemplate: true, credential: null }] })
     let current = agent
@@ -494,36 +494,36 @@ describe('凭证只写不读', () => {
         }),
       ],
     })
-    const item = within(region('可用 CLI')).getByRole('listitem', { name: 'lark-cli' })
-    expect((await within(item).findAllByRole('note'))[0]).toHaveTextContent('宿主用户本人的飞书身份')
-    await user.click(within(item).getByRole('button', { name: '录入凭证' }))
+    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'lark-cli' })
+    expect((await within(item).findAllByRole('note'))[0]).toHaveTextContent("the host user's own Lark identity")
+    await user.click(within(item).getByRole('button', { name: 'Enter credential' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('App Secret')).toHaveAttribute('type', 'password')
-    expect(within(dialog).getByLabelText('品牌')).toHaveValue('feishu')
+    expect(within(dialog).getByLabelText('Brand')).toHaveValue('feishu')
     await user.type(within(dialog).getByLabelText('App ID'), 'cli_app_id')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
-    expect(await within(dialog).findByText('请填写此项')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByText('Required')).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('App Secret'), 'super-secret-value')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(body).toEqual({ fields: { appId: 'cli_app_id', appSecret: 'super-secret-value', brand: 'feishu' } }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(await within(item).findByText('已设置')).toBeInTheDocument()
+    expect(await within(item).findByText('Set')).toBeInTheDocument()
     expect(document.body.innerHTML).not.toContain('super-secret-value')
     expect(router.state.location.pathname + router.state.location.search).not.toContain('super-secret-value')
     expect(JSON.stringify({ ...localStorage })).not.toContain('super-secret-value')
     expect(JSON.stringify({ ...sessionStorage })).not.toContain('super-secret-value')
   })
 
-  it('凭证不可用时提示重新录入', async () => {
+  it('an unavailable credential asks to be entered again', async () => {
     await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ status: 'unavailable' }) }] }) })
-    expect(within(region('可用 CLI')).getByText('不可用，需要重新录入')).toBeInTheDocument()
+    expect(within(region('Available CLIs')).getByText('Unavailable; enter it again')).toBeInTheDocument()
   })
 
 
 })
 
-describe('删除 Agent', () => {
-  it('空闲时确认后删除，回到列表', async () => {
+describe('Delete Agent', () => {
+  it('when idle, deletes after confirming and goes back to the list', async () => {
     let deleted = false
     const agent = makeAgent()
     const { user, router } = await renderConfig({
@@ -538,35 +538,35 @@ describe('删除 Agent', () => {
         }),
       ],
     })
-    const danger = region('删除 Agent')
-    await waitFor(() => expect(within(danger).getByRole('button', { name: '删除这个 Agent' })).toBeEnabled())
-    await user.click(within(danger).getByRole('button', { name: '删除这个 Agent' }))
+    const danger = region('Delete Agent')
+    await waitFor(() => expect(within(danger).getByRole('button', { name: 'Delete this Agent' })).toBeEnabled())
+    await user.click(within(danger).getByRole('button', { name: 'Delete this Agent' }))
     const confirm = await screen.findByRole('alertdialog')
-    expect(confirm).toHaveTextContent('对话历史保留备查')
-    expect(confirm).toHaveTextContent('项目共享账号保留')
-    await user.click(within(confirm).getByRole('button', { name: '删除' }))
+    expect(confirm).toHaveTextContent('conversation history is kept for reference')
+    expect(confirm).toHaveTextContent("The project's shared accounts are kept")
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deleted).toBe(true))
     await waitFor(() => expect(router.state.location.pathname).toBe(defaultAgentsPath))
   })
 
-  it('有排队消息时不可删除并说明原因', async () => {
+  it('with queued messages, deleting is unavailable and the reason is shown', async () => {
     await renderConfig({ status: { busy: true, queued: { interrupt: 0, normal: 1 } } })
-    const danger = region('删除 Agent')
-    await waitFor(() => expect(within(danger).getByText(/只有在 Agent 空闲时才能删除/)).toBeInTheDocument())
-    expect(within(danger).getByRole('button', { name: '删除这个 Agent' })).toBeDisabled()
+    const danger = region('Delete Agent')
+    await waitFor(() => expect(within(danger).getByText(/An Agent can only be deleted while idle/)).toBeInTheDocument())
+    expect(within(danger).getByRole('button', { name: 'Delete this Agent' })).toBeDisabled()
   })
 
-  it('删除时恰好变忙，显示原因', async () => {
+  it('turning busy just as it is deleted shows the reason', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({
       agent,
       handlers: [http.delete(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('agent_not_idle', 'busy'), { status: 409 }))],
     })
-    const danger = region('删除 Agent')
-    await waitFor(() => expect(within(danger).getByRole('button', { name: '删除这个 Agent' })).toBeEnabled())
-    await user.click(within(danger).getByRole('button', { name: '删除这个 Agent' }))
+    const danger = region('Delete Agent')
+    await waitFor(() => expect(within(danger).getByRole('button', { name: 'Delete this Agent' })).toBeEnabled())
+    await user.click(within(danger).getByRole('button', { name: 'Delete this Agent' }))
     const confirm = await screen.findByRole('alertdialog')
-    await user.click(within(confirm).getByRole('button', { name: '删除' }))
-    expect(await within(confirm).findByText(/Agent 不空闲/)).toBeInTheDocument()
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    expect(await within(confirm).findByText(/The Agent isn't idle/)).toBeInTheDocument()
   })
 })

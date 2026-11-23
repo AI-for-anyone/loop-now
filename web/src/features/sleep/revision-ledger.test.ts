@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { RevisionLedger } from './revision-ledger'
 
-it('新sleep不被旧null、旧终态或重复同版本清除；更高版本可结束', () => {
+it('a new sleep is not cleared by an old null, an old terminal state or a repeat of the same revision; a higher revision can end it', () => {
   const ledger = new RevisionLedger<string | null>()
   ledger.observe('normal/A', 10, 'sleep-first')
   ledger.observe('normal/A', 11, null)
@@ -14,7 +14,7 @@ it('新sleep不被旧null、旧终态或重复同版本清除；更高版本可�
   expect(ledger.current('normal/A')?.value).toBeNull()
 })
 
-it('task旧HTTP空列表不能清掉事件已知的新sleep，新快照清除后旧事件不复活', () => {
+it('an old empty task HTTP list cannot clear a new sleep known from events; once a new snapshot clears it, old events do not bring it back', () => {
   const ledger = new RevisionLedger<string | null>()
   ledger.acceptOwner('task/T', 20)
   ledger.observe('task/T/runtime/R', 5, 'sleep-first')
@@ -28,7 +28,7 @@ it('task旧HTTP空列表不能清掉事件已知的新sleep，新快照清除后
   expect(ledger.observe('task/T/runtime/R', 7, 'sleep-second')).toBe(true)
 })
 
-it('normal、同配置的两任务及不同runtime保留独立版本', () => {
+it('normal sleep, two tasks with the same config and different runtimes keep separate revisions', () => {
   const ledger = new RevisionLedger<string | null>()
   ledger.observe('normal/A', 30, 'normal')
   ledger.observe('task/T1/runtime/R1', 4, 'one')

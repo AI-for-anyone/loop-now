@@ -7,12 +7,12 @@ import { server } from '@/test/server'
 
 const entry = (path: string, type: Schemas['FolderEntry']['type'] = 'file'): Schemas['FolderEntry'] => ({ name: path.split('/').at(-1)!, path, type, size: type === 'file' ? 5 : null, modifiedAt: '2026-10-25T08:00:00Z', symlinkTarget: null })
 
-describe('文件夹接口', () => {
+describe('folder API', () => {
   it.each([
     ['agent', { kind: 'agent', agentId: 'a1' }, '/agents/a1/folder'],
     ['project', { kind: 'project', projectId: 'p1' }, '/projects/p1/context-folder'],
     ['global', { kind: 'global' }, '/context-folder'],
-  ] as const)('%s：一层的内容按 path、cursor、limit 读取', async (_, scope, prefix) => {
+  ] as const)('%s: reads the entries of one level by path, cursor and limit', async (_, scope, prefix) => {
     let query: URLSearchParams | null = null
     server.use(http.get(apiUrl(`${prefix}/entries`), ({ request }) => {
       query = new URL(request.url).searchParams
@@ -23,7 +23,7 @@ describe('文件夹接口', () => {
     expect(Object.fromEntries(query!)).toEqual({ path: 'docs', limit: '500', cursor: 'c1' })
   })
 
-  it('读取原始内容；保存以原始字节 PUT，create 表示只新建', async () => {
+  it('reads the raw content; saves with a PUT of the raw bytes, where create means create only', async () => {
     const puts: { query: Record<string, string>; type: string | null; body: string }[] = []
     server.use(
       http.get(apiUrl('/agents/a1/folder/content'), () => new HttpResponse(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]), { headers: { 'Content-Type': 'application/octet-stream' } })),
@@ -34,15 +34,15 @@ describe('文件夹接口', () => {
     )
     const source = folderSource({ kind: 'agent', agentId: 'a1' })
     expect(new Uint8Array(await (await source.read('AGENTS.md')).arrayBuffer())).toEqual(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]))
-    expect(await source.write('AGENTS.md', '# 说明\n', true)).toEqual(entry('AGENTS.md'))
-    await source.write('AGENTS.md', '# 改过\n', false)
+    expect(await source.write('AGENTS.md', '# Notes\n', true)).toEqual(entry('AGENTS.md'))
+    await source.write('AGENTS.md', '# Changed\n', false)
     expect(puts).toEqual([
-      { query: { path: 'AGENTS.md', create: 'true' }, type: 'application/octet-stream', body: '# 说明\n' },
-      { query: { path: 'AGENTS.md', create: 'false' }, type: 'application/octet-stream', body: '# 改过\n' },
+      { query: { path: 'AGENTS.md', create: 'true' }, type: 'application/octet-stream', body: '# Notes\n' },
+      { query: { path: 'AGENTS.md', create: 'false' }, type: 'application/octet-stream', body: '# Changed\n' },
     ])
   })
 
-  it('已存在时 409 path_conflict；新建文件夹、移动与删除的请求', async () => {
+  it('409 path_conflict when it already exists; the requests for new folder, move and delete', async () => {
     const calls: string[] = []
     server.use(
       http.put(apiUrl('/context-folder/content'), () => HttpResponse.json(errorBody('path_conflict', 'Already exists'), { status: 409 })),
@@ -59,7 +59,7 @@ describe('文件夹接口', () => {
     expect(source.git).toBeUndefined()
   })
 
-  it('上传逐个文件 PUT（覆盖同名），失败时与其他请求一样给出错误码', async () => {
+  it('upload PUTs file by file (overwriting the same name); a failure gives an error code like any other request', async () => {
     const puts: string[] = []
     server.use(http.put(apiUrl('/projects/p1/context-folder/content'), ({ request }) => {
       const query = new URL(request.url).searchParams
@@ -73,7 +73,7 @@ describe('文件夹接口', () => {
     expect(source.contentURL('docs/a b.md')).toMatch(/\/projects\/p1\/context-folder\/content\?path=docs%2Fa\+b\.md$/)
   })
 
-  it('Agent 的文件夹：从 Git 拉取带新的 actionId；最近的拉取记录新的在前', async () => {
+  it('Agent folder: a pull from Git carries a new actionId; recent pulls come newest first', async () => {
     const bodies: Schemas['FolderGitPullInput'][] = []
     const pull: Schemas['FolderGitPull'] = { id: 'op1', agentId: 'a1', url: 'https://github.com/acme/x.git', branch: 'main', path: 'x', status: 'queued', errorCode: null, errorMessage: null, createdAt: '2026-10-25T08:00:00Z', finishedAt: null }
     let limit: string | null = null

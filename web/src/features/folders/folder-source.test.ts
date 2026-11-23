@@ -9,21 +9,21 @@ const bytes = (...parts: (string | number[])[]) => {
   return out.buffer
 }
 
-describe('文本判断与原有格式', () => {
-  it('去掉 BOM、把 CRLF 统一为 LF，并记下原有格式；写回时照原样恢复', () => {
-    const decoded = decodeText(bytes([0xef, 0xbb, 0xbf], '# 标题\r\n- 一行\r\n'))!
-    expect(decoded).toEqual({ text: '# 标题\n- 一行\n', format: { bom: true, crlf: true } })
-    expect(encodeText(decoded.text + '- 新行\n', decoded.format)).toBe('﻿# 标题\r\n- 一行\r\n- 新行\r\n')
+describe('text detection and original format', () => {
+  it('strips the BOM, turns CRLF into LF and records the original format; restores it when writing back', () => {
+    const decoded = decodeText(bytes([0xef, 0xbb, 0xbf], '# 标题\r\n- 一行\r\n'))! // check-english: zh (BOM and CRLF round trip of non-ASCII text)
+    expect(decoded).toEqual({ text: '# 标题\n- 一行\n', format: { bom: true, crlf: true } }) // check-english: zh (BOM and CRLF round trip of non-ASCII text)
+    expect(encodeText(decoded.text + '- 新行\n', decoded.format)).toBe('﻿# 标题\r\n- 一行\r\n- 新行\r\n') // check-english: zh (BOM and CRLF round trip of non-ASCII text)
     expect(decodeText(bytes('plain\n'))).toEqual({ text: 'plain\n', format: { bom: false, crlf: false } })
   })
 
-  it('前 8 KiB 里有 NUL 或不是合法的 UTF-8 时当作二进制', () => {
+  it('treats a file as binary when its first 8 KiB contain NUL or are not valid UTF-8', () => {
     expect(decodeText(bytes([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]))).toBeNull()
     expect(decodeText(bytes([0xff, 0xfe, 0x41]))).toBeNull()
   })
 })
 
-it('名称与路径校验、在线编辑的条件', () => {
+it('name and path checks, and when online editing is allowed', () => {
   expect([nameProblem(''), nameProblem('a/b'), nameProblem('..'), nameProblem('notes.md')]).toEqual(['empty', 'slash', 'dots', null])
   expect([folderPath(' /docs/archive/ '), folderPath(''), folderPath('a/../b'), folderPath('a//b')]).toEqual(['docs/archive', '', null, null])
   const limits = { maxBytes: 1024, extensions: ['.md', '.go'] }

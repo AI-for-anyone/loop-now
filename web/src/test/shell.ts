@@ -31,4 +31,4 @@ export const sidebarLinks = () => within(sidebar()).getAllByRole('link')
 export const currentSidebarLinks = () => sidebarLinks().filter((link) => link.getAttribute('aria-current') === 'page')
 export const scopeSwitcher = (name: string) => within(sidebar()).getByRole('button', { name: t.shell.scope.label(name) })
 // Navigating makes the sidebar re-render for the new scope; for a query right afterwards, use this async variant to wait a tick.
-export const findScopeSwitcher = (name: string) => within(sidebar()).findByRole('button', { name: `切换范围，当前：${name}` })
+export const findScopeSwitcher = (name: string) => within(sidebar()).findByRole('button', { name: t.shell.scope.label(name) })

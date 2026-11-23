@@ -16,7 +16,7 @@ afterEach(() => {
 
 // The browser starts reading the blob asynchronously, only after the click: if the URL is revoked right away,
 // Firefox and Safari may not be able to read the content, and the download fails while the UI still reports success.
-it('触发下载之后不立刻撤销 blob 地址，过一会儿再撤销', async () => {
+it('does not revoke the blob URL right after starting the download, only a while later', async () => {
   const revoke = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:session' })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke })

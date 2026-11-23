@@ -29,7 +29,7 @@ function setup(initial?: Schemas['TaskDetail']) {
     http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params, request }) => {
       const node = String(params.node); calls.push({ node, cursor: new URL(request.url).searchParams.get('cursor') })
-      return HttpResponse.json({ messages: [node === nodeId ? message : makeTaskMessage(node, '历史节点回复')], nextCursor: null })
+      return HttpResponse.json({ messages: [node === nodeId ? message : makeTaskMessage(node, 'history node reply')], nextCursor: null })
     }))
   const emit = (type: string, data: unknown, id = '1') => {
     const es = FakeEventSource.instances.find((s) => s.url.endsWith(`/tasks/${taskId}/events`))!
@@ -42,229 +42,229 @@ const detailPath = () => `${tasksPath(defaultProject.name)}/${taskId}`
 async function renderDetail() {
   const env = setup()
   const result = renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
+  await screen.findByRole('heading', { name: 'General task acceptance' })
   env.open()
-  await screen.findByText('任务实例的回复')
+  await screen.findByText('Reply from the task instance')
   return { ...env, env, ...result, user: userEvent.setup() }
 }
 
-describe('项目任务', () => {
-  it('列表只显示项目事实，责任Agent不代表执行中，左侧栏的任务是当前项', async () => {
+describe('project tasks', () => {
+  it('the list shows only project facts, a responsible Agent does not mean running, and Tasks is the current item in the sidebar', async () => {
     const env = setup(); renderRoutes(routes, tasksPath(defaultProject.name)); env.open()
-    expect(await screen.findByRole('link', { name: '通用任务验收' })).toHaveAttribute('href', detailPath())
-    const nav = screen.getByRole('navigation', { name: '主导航' })
-    expect(within(nav).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['任务'])
-    // Since the redesign, “阻塞” (Blocked) also appears in the status label and the stub, so only look at this row in the list.
-    expect(within(screen.getByRole('list', { name: '任务' })).getByText('阻塞')).toBeVisible()
+    expect(await screen.findByRole('link', { name: 'General task acceptance' })).toHaveAttribute('href', detailPath())
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' })
+    expect(within(nav).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['Tasks'])
+    // Since the redesign, “Blocked” also appears in the status label and the stub, so only look at this row in the list.
+    expect(within(screen.getByRole('list', { name: 'Tasks' })).getByText('Blocked')).toBeVisible()
   })
-  it('平台先选择项目，不默选默认项目', async () => {
+  it('the platform scope asks for a project first and does not preselect the default project', async () => {
     setup(); lastScope.set('platform'); const { router } = renderRoutes(routes, '/tasks')
-    expect(await screen.findByRole('dialog')).toHaveTextContent('选择项目查看任务')
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Choose a project to see its tasks')
     expect(router.state.location.pathname).toBe('/tasks')
     await userEvent.click(screen.getByRole('link', { name: defaultProject.name }))
     await waitFor(() => expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name)))
   })
-  it('缺省任务入口使用最近项目', async () => {
+  it('the default tasks entry uses the most recent project', async () => {
     setup(); lastScope.set(defaultProject.id); const { router } = renderRoutes(routes, '/tasks')
-    await screen.findByRole('link', { name: '通用任务验收' })
+    await screen.findByRole('link', { name: 'General task acceptance' })
     expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name))
   })
-  it('任务详情的页头：标题前是空心的“#12”（不算进标题），面包屑是项目›任务›#12，旁边是状态印章与归档状态，右边是红色描边的“取消任务”', async () => {
+  it('task detail header: a hollow “#12” before the title (not part of the title), the breadcrumb project›Tasks›#12, the status stamp and archive state beside it, and a red-outlined “Cancel task” on the right', async () => {
     setup(); renderRoutes(routes, detailPath())
-    const heading = await screen.findByRole('heading', { level: 1, name: '通用任务验收' })
+    const heading = await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
     const number = heading.previousElementSibling!
     expect(number).toHaveTextContent(/^#12$/)
     expect(number).toHaveAttribute('aria-hidden', 'true')
     expect(number).toHaveClass('font-display-latin', 'text-transparent')
     const header = heading.closest('header')!
-    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›任务›#12`)
-    expect(within(header).getByRole('link', { name: '任务' })).toHaveAttribute('href', tasksPath(defaultProject.name))
-    expect(within(header).getByText('阻塞')).toHaveClass('riso-tilt', 'text-red-text')
-    expect(within(header).getByText('尚未归档')).toBeInTheDocument()
-    expect(within(header).getByRole('button', { name: '取消任务' })).toHaveClass('border-red-text')
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Tasks›#12`)
+    expect(within(header).getByRole('link', { name: 'Tasks' })).toHaveAttribute('href', tasksPath(defaultProject.name))
+    expect(within(header).getByText('Blocked')).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(header).getByText('Not archived yet')).toBeInTheDocument()
+    expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass('border-red-text')
   })
-  it('错误项目不显示任务详情', async () => {
+  it('a task of another project does not show its details', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
-    expect(await screen.findByRole('alert')).toHaveTextContent('这个任务不属于当前项目')
-    expect(screen.queryByRole('button', { name: '重试当前节点' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent("This task doesn't belong to the current project")
+    expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
   })
-  it('空列表没有新建任务操作', async () => {
+  it('an empty list has no create-task action', async () => {
     setup(); server.use(http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks: [], nextCursor: null })))
-    renderRoutes(routes, tasksPath(defaultProject.name)); expect(await screen.findByText(/还没有任务/)).toBeVisible()
-    expect(screen.queryByRole('button', { name: /新建任务/ })).not.toBeInTheDocument()
+    renderRoutes(routes, tasksPath(defaultProject.name)); expect(await screen.findByText(/No tasks yet/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: /New task/ })).not.toBeInTheDocument()
   })
 })
 
-describe('节点记录与更新', () => {
+describe('node records and updates', () => {
   it('initial record and graph navigation preserve the original task action locator', async () => {
     setup()
     const key = `taskLarkSwitch.${taskId}`, original = '30000000-0000-7000-8000-000000000001'
     const { router } = renderRoutes(routes, `${detailPath()}?${key}=${original}`)
-    await screen.findByText('任务实例的回复')
+    await screen.findByText('Reply from the task instance')
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('record')).toBe(nodeId))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
-    await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('step')).toBe('finish'))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
     expect(new URLSearchParams(router.state.location.search).has('record')).toBe(false)
-    await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('record')).toBe(nodeId))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
   })
-  it('同step连续历次对话、分组资料与旧record锚点保留，不因SSE切换', async () => {
+  it('consecutive conversations of the same step, grouped materials and the old record anchor are kept and not switched by SSE', async () => {
     const { user, router, env } = await renderDetail()
-    expect(screen.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
-    expect(await screen.findByText('历史节点回复')).toBeVisible()
-    expect(screen.getByText('任务实例的回复')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: /执行分界 · 第 1 次访问/ }))
-    expect(screen.getByRole('tab', { name: '节点资料' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText(/历史成功结果/)).toBeVisible()
-    expect(screen.getByText(/仅供检查，不作为成功结果/)).toBeVisible()
-    await user.click(screen.getByRole('link', { name: /01 质量检查 · 第 1 次的输出/ }))
+    expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByText('history node reply')).toBeVisible()
+    expect(screen.getByText('Reply from the task instance')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: /Run boundary · Visit 1/ }))
+    expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/Earlier successful result/)).toBeVisible()
+    expect(screen.getByText(/for inspection only and is not passed downstream as a success/)).toBeVisible()
+    await user.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
     expect(router.state.location.search).toContain(oldNodeId)
-    expect(screen.getByText('任务实例的回复')).toBeVisible()
-    expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveAttribute('readonly')
-    expect(screen.queryByRole('button', { name: '重试当前节点' })).not.toBeInTheDocument()
+    expect(screen.getByText('Reply from the task instance')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
     env.detail = { ...env.detail, task: { ...env.detail.task, status: 'running', version: 3 } }
     env.emit('task.updated', { task: env.detail.task }, '2')
-    await waitFor(() => expect(screen.getByText('查看当前节点')).toBeVisible())
+    await waitFor(() => expect(screen.getByText('View current node')).toBeVisible())
     expect(router.state.location.search).toContain(oldNodeId)
     expect(env.calls.every(c => c.node === nodeId || c.node === oldNodeId)).toBe(true)
   })
-  it('节点会话的滚动区是定位容器，里面绝对定位的说明文字不会撑高整页', async () => {
+  it('the node conversation scroll area is the positioning container, so absolutely positioned text inside it does not stretch the whole page', async () => {
     await renderDetail()
     expect(document.querySelector('[data-conversation-scroll]')).toHaveClass('relative')
   })
-  it('消息同ID全文更新后不重复气泡，十进制事件ID不会按字典序比较', async () => {
+  it('a full-text update with the same message ID does not duplicate the bubble, and decimal event IDs are not compared in dictionary order', async () => {
     const { env } = await renderDetail()
-    env.message = { ...env.message, text: '更新后的最终文字' }
+    env.message = { ...env.message, text: 'final text after the update' }
     env.emit('message.created', env.message, '10')
-    expect(await screen.findByText('更新后的最终文字')).toBeVisible()
+    expect(await screen.findByText('final text after the update')).toBeVisible()
     env.emit('message.created', env.message, '10')
-    expect(screen.getAllByText('更新后的最终文字')).toHaveLength(1)
+    expect(screen.getAllByText('final text after the update')).toHaveLength(1)
     expect(acceptTaskEvent('9', '10')).toBe(true); expect(acceptTaskEvent('10', '9')).toBe(false)
   })
-  it('关闭问题不开放回答，成果下载使用平台路径，归档状态独立显示', async () => {
-    const d = makeTaskDetail(defaultProject.id); d.cleanup = 'archived'; d.task.status = 'cancelled'; d.nodes[1].question = { id: nodeId, threadId: taskId, messageId: oldNodeId, text: '确认结果吗', status: 'closed', canAnswer: false }
-    setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: '通用任务验收' }); await userEvent.click(screen.getByText('待回答问题 · 已关闭')); expect(screen.getByText('确认结果吗')).toBeVisible()
-    expect(screen.queryByRole('link', { name: '前往回答' })).not.toBeInTheDocument()
-    expect(screen.getByText('记录已归档，副本已回收')).toBeVisible()
-    await userEvent.click(screen.getByRole('tab', { name: '节点资料' })); await userEvent.click(screen.getByText('第 1 次访问 · 第 1 次尝试')); expect(screen.getByRole('link', { name: '下载' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
+  it('a closed question cannot be answered, artifact downloads use the platform path, and the archive state shows on its own', async () => {
+    const d = makeTaskDetail(defaultProject.id); d.cleanup = 'archived'; d.task.status = 'cancelled'; d.nodes[1].question = { id: nodeId, threadId: taskId, messageId: oldNodeId, text: 'Confirm the result?', status: 'closed', canAnswer: false }
+    setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: 'General task acceptance' }); await userEvent.click(screen.getByText('Open question · Closed')); expect(screen.getByText('Confirm the result?')).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
+    expect(screen.getByText('Records archived; copies reclaimed')).toBeVisible()
+    await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); await userEvent.click(screen.getByText('Visit 1 · attempt 1')); expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
   })
-  it('已选记录失效明确说明，不静默切到另一条', async () => {
+  it('an invalid selected record is stated plainly instead of silently switching to another one', async () => {
     setup(); renderRoutes(routes, detailPath() + '?record=missing')
-    expect(await screen.findByText('找不到指定记录，请重新选择节点。')).toBeVisible()
-    expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
+    expect(await screen.findByText('Can\'t find that record. Pick the node again.')).toBeVisible()
+    expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
   })
-  it('失联禁用控制操作，焦点刷新补齐事实', async () => {
+  it('losing the connection disables control actions, and a focus refresh fills in the facts', async () => {
     const { env, client } = await renderDetail()
     const es = FakeEventSource.instances.find((s) => s.url.endsWith(`/tasks/${taskId}/events`))!
-    act(() => es.interrupt()); expect(screen.getByRole('button', { name: '重试当前节点' })).toBeDisabled()
+    act(() => es.interrupt()); expect(screen.getByRole('button', { name: 'Retry current node' })).toBeDisabled()
     env.detail = { ...env.detail, cleanup: 'pending' }
     act(() => window.dispatchEvent(new Event('focus')))
     await waitFor(() => expect(client.getQueryData<Schemas['TaskDetail']>(taskKeys.detail(taskId))?.cleanup).toBe('pending'))
   })
 })
 
-describe('控制动作', () => {
-  it('重试保留说明，陈旧目标不改投新节点，写动作不自动重试', async () => {
+describe('control actions', () => {
+  it('retry keeps the note, a stale target is not redirected to the new node, and write actions are not retried automatically', async () => {
     const { env, user } = await renderDetail(); const bodies: Schemas['TaskRetryInput'][] = []
     server.use(http.post(apiUrl(`/tasks/${taskId}/retry`), async ({ request }) => { bodies.push(await request.json() as Schemas['TaskRetryInput']); return HttpResponse.json(errorBody('task_conflict', 'The old record has changed'), { status: 409 }) }))
-    await user.click(screen.getByRole('button', { name: '重试当前节点' })); const dialog = screen.getByRole('alertdialog')
-    await user.type(within(dialog).getByRole('textbox'), '保留这段说明')
+    await user.click(screen.getByRole('button', { name: 'Retry current node' })); const dialog = screen.getByRole('alertdialog')
+    await user.type(within(dialog).getByRole('textbox'), 'keep this note')
     env.detail = { ...env.detail, task: { ...env.detail.task, currentNodeRunId: oldNodeId, version: 3 } }
     env.emit('task.updated', { task: env.detail.task }, '3')
-    await user.click(within(dialog).getByRole('button', { name: '重试当前节点' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Retry current node' }))
     await within(dialog).findByText(/The old record has changed/)
-    expect(within(dialog).getByRole('textbox')).toHaveValue('保留这段说明')
-    expect(bodies).toHaveLength(1); expect(bodies[0].expectedNodeRunId).toBe(nodeId); expect(bodies[0].note).toBe('保留这段说明')
+    expect(within(dialog).getByRole('textbox')).toHaveValue('keep this note')
+    expect(bodies).toHaveLength(1); expect(bodies[0].expectedNodeRunId).toBe(nodeId); expect(bodies[0].note).toBe('keep this note')
   })
-  it('取消后仍显示归档处理中，不把已接受冒充清理完成', async () => {
+  it('after cancelling, archiving still shows as in progress, and accepted is not passed off as cleanup done', async () => {
     const { env, user } = await renderDetail(); let calls = 0
     server.use(http.post(apiUrl(`/tasks/${taskId}/cancel`), async ({ request }) => { expect(await request.json()).toHaveProperty('actionId'); calls++; env.detail = { ...env.detail, task: { ...env.detail.task, status: 'cancelled', version: 3 }, cleanup: 'pending' }; return HttpResponse.json(env.detail) }))
-    await user.click(screen.getByRole('button', { name: '取消任务' })); await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '取消任务' }))
-    expect(await screen.findByText('正在归档与回收')).toBeVisible(); expect(calls).toBe(1)
-    expect(screen.queryByRole('button', { name: '重试当前节点' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel task' })); await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel task' }))
+    expect(await screen.findByText('Archiving and reclaiming')).toBeVisible(); expect(calls).toBe(1)
+    expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
   })
 })
 
-it('任务会话按任务与nodeRun隔离，分页按cursor继续且同ID只保留最新值', async () => {
+it('task conversations are isolated by task and nodeRun, paging continues by cursor, and only the latest value of an ID is kept', async () => {
   const env = setup()
   const otherTask = '00000000-0000-7000-8000-000000000555'
-  server.use(http.get(apiUrl(`/tasks/${otherTask}/nodes/${nodeId}/messages`), () => HttpResponse.json({ messages: [makeTaskMessage(nodeId, '另一任务的消息')], nextCursor: null })))
+  server.use(http.get(apiUrl(`/tasks/${otherTask}/nodes/${nodeId}/messages`), () => HttpResponse.json({ messages: [makeTaskMessage(nodeId, 'message of another task')], nextCursor: null })))
   const { result } = renderHookWithQuery(() => ({ first: useTaskMessages(taskId, nodeId), second: useTaskMessages(otherTask, nodeId) }))
-  await waitFor(() => expect(result.current.second.data?.pages[0].messages[0].text).toBe('另一任务的消息'))
+  await waitFor(() => expect(result.current.second.data?.pages[0].messages[0].text).toBe('message of another task'))
   expect(result.current.first.data?.pages[0].messages[0].text).toBe(env.message.text)
 })
-it('节点消息分页读取后用同ID更新，不把其他节点的消息混入当前记录', async () => {
+it('paged node messages update by the same ID, and messages of other nodes are not mixed into the current record', async () => {
   const env = setup()
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/messages`), ({ request }) => {
     const next = new URL(request.url).searchParams.has('cursor')
-    return HttpResponse.json(next ? { messages: [{ ...env.message, text: '分页后的更新' }, makeTaskMessage(oldNodeId, '不属于当前节点')], nextCursor: null } : { messages: [env.message], nextCursor: 'page-2' })
+    return HttpResponse.json(next ? { messages: [{ ...env.message, text: 'update after paging' }, makeTaskMessage(oldNodeId, 'not from the current node')], nextCursor: null } : { messages: [env.message], nextCursor: 'page-2' })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
-  await userEvent.click(screen.getByRole('button', { name: '加载更多' }))
-  expect(await screen.findByText('分页后的更新')).toBeVisible()
-  expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
-  expect(screen.queryByText('不属于当前节点')).not.toBeInTheDocument()
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
+  await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+  expect(await screen.findByText('update after paging')).toBeVisible()
+  expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
+  expect(screen.queryByText('not from the current node')).not.toBeInTheDocument()
 })
-it('项目任务事件能发现新任务，重连后重取列表', async () => {
+it('project task events discover new tasks, and the list is fetched again after reconnecting', async () => {
   const env = setup(); let summaries = [env.detail.task]
   server.use(http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks: summaries, nextCursor: null })))
-  renderRoutes(routes, tasksPath(defaultProject.name)); await screen.findByRole('link', { name: '通用任务验收' })
+  renderRoutes(routes, tasksPath(defaultProject.name)); await screen.findByRole('link', { name: 'General task acceptance' })
   const stream = FakeEventSource.instances.find((s) => s.url.endsWith(`/projects/${defaultProject.id}/tasks/events`))!
-  act(() => stream.open()); summaries = [...summaries, { ...env.detail.task, id: oldNodeId, title: 'Manager新建的任务' }]
+  act(() => stream.open()); summaries = [...summaries, { ...env.detail.task, id: oldNodeId, title: 'Task created by the Manager' }]
   act(() => stream.emit('task.updated', { task: summaries[1] }, '9'))
-  expect(await screen.findByRole('link', { name: 'Manager新建的任务' })).toBeVisible()
-  summaries = [{ ...env.detail.task, title: '断线期间更新的任务' }]
+  expect(await screen.findByRole('link', { name: 'Task created by the Manager' })).toBeVisible()
+  summaries = [{ ...env.detail.task, title: 'Task updated while disconnected' }]
   act(() => { stream.interrupt(); stream.open() })
-  expect(await screen.findByRole('link', { name: '断线期间更新的任务' })).toBeVisible()
+  expect(await screen.findByRole('link', { name: 'Task updated while disconnected' })).toBeVisible()
 })
-it('项目改名按稳定ID跟随，保留任务及节点记录的深链接', async () => {
+it('a project rename is followed by its stable ID, keeping deep links to the task and node record', async () => {
   const { client, router } = await renderDetail()
-  server.use(http.get(projectsUrl, () => HttpResponse.json({ projects: [{ ...defaultProject, name: '任务项目改名' }] })))
+  server.use(http.get(projectsUrl, () => HttpResponse.json({ projects: [{ ...defaultProject, name: 'Renamed task project' }] })))
   await act(() => client.invalidateQueries({ queryKey: ['projects'] }))
-  await waitFor(() => expect(decodeURIComponent(router.state.location.pathname)).toContain('/p/任务项目改名/tasks/'))
+  await waitFor(() => expect(decodeURIComponent(router.state.location.pathname)).toContain('/p/Renamed task project/tasks/'))
   expect(router.state.location.search).toContain(nodeId)
 })
-it('流程尺上的步骤可以用键盘选中；画布的拖动、缩放与定位控件都不再有', async () => {
+it('steps on the workflow ruler can be selected with the keyboard; the canvas drag, zoom and locate controls are gone', async () => {
   const detail = makeTaskDetail(defaultProject.id)
-  detail.workflow.steps.push({ ...detail.workflow.steps[0], id: 'revise', title: '返工处理' })
-  detail.workflow.edges.push({ id: 'branch', from: 'check', to: 'revise', label: '需要修订' }, { id: 'return', from: 'revise', to: 'check', label: '再次检查', maxTraversals: 2 })
+  detail.workflow.steps.push({ ...detail.workflow.steps[0], id: 'revise', title: 'Rework' })
+  detail.workflow.edges.push({ id: 'branch', from: 'check', to: 'revise', label: 'needs revision' }, { id: 'return', from: 'revise', to: 'check', label: 'check again', maxTraversals: 2 })
   setup(detail); const { router } = renderRoutes(routes, detailPath())
-  const ruler = await screen.findByRole('navigation', { name: '固定流程' })
-  const button = within(ruler).getByRole('button', { name: /返工处理/ })
+  const ruler = await screen.findByRole('navigation', { name: 'Workflow' })
+  const button = within(ruler).getByRole('button', { name: /Rework/ })
   button.focus(); await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(router.state.location.search).toContain('step=revise'))
   // The new URL reaches the page only inside a transition; wait for the page to catch up.
-  expect(await screen.findByText('这个节点尚未被访问。')).toBeVisible()
+  expect(await screen.findByText('This node hasn\'t been visited yet.')).toBeVisible()
   // A step that has not been visited has no chat panel: the sheet shows only a one-line
   // note, and the stub still holds the workflow ruler (as a different element).
-  const after = screen.getByRole('navigation', { name: '固定流程' })
-  expect(within(after).getByRole('button', { name: /返工处理/ })).toHaveAttribute('aria-pressed', 'true')
-  for (const name of ['适应视图', '定位当前', '放大画布', '缩小画布']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('流程画布，可拖动或使用方向键平移')).not.toBeInTheDocument()
+  const after = screen.getByRole('navigation', { name: 'Workflow' })
+  expect(within(after).getByRole('button', { name: /Rework/ })).toHaveAttribute('aria-pressed', 'true')
+  for (const name of ['Fit view', 'Locate current', 'Zoom in', 'Zoom out']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Workflow canvas; drag or use the arrow keys to pan')).not.toBeInTheDocument()
   expect(within(after).getAllByRole('button')).toHaveLength(3)
 })
-it('窄屏（票根隐藏）时，索引标签上方是一排步骤小标签，点一下同样选中这一步', async () => {
+it('on narrow screens (stub hidden), a row of small step tags sits above the index tabs, and a click selects that step too', async () => {
   const original = window.matchMedia
   window.matchMedia = ((query: string) => ({ matches: query === narrowQuery, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia
   try {
     setup(); const { router } = renderRoutes(routes, detailPath())
-    await screen.findByRole('heading', { name: '通用任务验收' })
-    const [chips, ruler] = screen.getAllByRole('navigation', { name: '固定流程' })
+    await screen.findByRole('heading', { name: 'General task acceptance' })
+    const [chips, ruler] = screen.getAllByRole('navigation', { name: 'Workflow' })
     expect(chips).toHaveAttribute('data-workflow-chips')
-    expect(chips.compareDocumentPosition(screen.getByRole('tablist', { name: '节点记录' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(chips.compareDocumentPosition(screen.getByRole('tablist', { name: 'Node record' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(ruler).toHaveClass('max-nav:hidden')
-    await userEvent.click(within(chips).getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(within(chips).getByRole('button', { name: /Submit report/ }))
     await waitFor(() => expect(router.state.location.search).toContain('step=finish'))
   } finally {
     window.matchMedia = original
   }
 })
-it('节点资料：正在看的一次是展开的小票，其余折叠；来自其他访问的输入是链接，产物是带下载按钮的文件卡片，可以回到这次的对话', async () => {
+it('node materials: the visit being viewed is an expanded ticket and the others are folded; inputs from other visits are links, artifacts are file cards with a download button, and you can go back to this conversation', async () => {
   const { user } = await renderDetail()
-  await user.click(screen.getByRole('tab', { name: '节点资料' }))
+  await user.click(screen.getByRole('tab', { name: 'Node materials' }))
   const viewing = document.querySelector(`[data-material-record="${nodeId}"]`) as HTMLDetailsElement
   const older = document.querySelector(`[data-material-record="${oldNodeId}"]`) as HTMLDetailsElement
   expect(viewing.open).toBe(true)
@@ -272,79 +272,79 @@ it('节点资料：正在看的一次是展开的小票，其余折叠；来自�
   expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-ink')
   // The yellow highlighter marks on the three subheadings Input, Output and Artifacts cover only the text.
-  for (const name of ['输入', '输出', '产物']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
-  expect(within(viewing).getByRole('note')).toHaveTextContent('仅供检查，不作为成功结果')
-  expect(within(viewing).getByRole('link', { name: '01 质量检查 · 第 1 次的输出' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
-  await user.click(within(older).getByText('第 1 次访问 · 第 1 次尝试'))
-  const download = within(older).getByRole('link', { name: '下载' })
-  expect(download).toHaveAccessibleDescription('已保存报告.txt')
+  for (const name of ['Inputs', 'Output', 'Artifacts']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
+  expect(within(viewing).getByRole('note')).toHaveTextContent('for inspection only and is not passed downstream as a success')
+  expect(within(viewing).getByRole('link', { name: '01 Quality check · output of visit 1' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
+  await user.click(within(older).getByText('Visit 1 · attempt 1'))
+  const download = within(older).getByRole('link', { name: 'Download' })
+  expect(download).toHaveAccessibleDescription('saved-report.txt')
   expect(download.closest('li')).toHaveClass('border-2', 'border-ink')
-  await user.click(within(viewing).getByRole('button', { name: '回到这次的对话' }))
-  expect(screen.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
+  await user.click(within(viewing).getByRole('button', { name: 'Back to this conversation' }))
+  expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
 })
-it('同一Agent执行另一个节点时切换消息范围，不沿用前一节点会话', async () => {
+it('when the same Agent runs another node, the message scope switches instead of reusing the previous node conversation', async () => {
   const env = setup()
   const otherId = '00000000-0000-7000-8000-000000000401'
   const otherRun = '00000000-0000-7000-8000-000000000402'
-  env.detail = { ...env.detail, nodes: [...env.detail.nodes, { ...env.detail.nodes[1], id: otherId, stepId: 'finish', status: 'completed', visit: 1, inputs: { from: '另一个节点输入' }, output: { report: '另一个节点结果' }, runIds: [otherRun] }] }
-  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${otherId}/messages`), () => HttpResponse.json({ messages: [{ ...makeTaskMessage(otherId, '同一Agent的另一个节点会话'), runId: otherRun }], nextCursor: null })))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
-  await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
-  expect(await screen.findByText('同一Agent的另一个节点会话')).toBeVisible()
-  expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: '节点资料' })); expect(screen.getByText(/另一个节点输入/)).toBeVisible()
+  env.detail = { ...env.detail, nodes: [...env.detail.nodes, { ...env.detail.nodes[1], id: otherId, stepId: 'finish', status: 'completed', visit: 1, inputs: { from: 'input of another node' }, output: { report: 'result of another node' }, runIds: [otherRun] }] }
+  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${otherId}/messages`), () => HttpResponse.json({ messages: [{ ...makeTaskMessage(otherId, 'another node conversation of the same Agent'), runId: otherRun }], nextCursor: null })))
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
+  await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
+  expect(await screen.findByText('another node conversation of the same Agent')).toBeVisible()
+  expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); expect(screen.getByText(/input of another node/)).toBeVisible()
 })
 
 it('a failed task turn shows the copy for its error code; the server sentence only restates it', async () => {
   const env = setup(); env.message = { ...env.message, status: 'failed', errorCode: 'pi_error', errorMessage: 'Pi returned an error.' }
   renderRoutes(routes, detailPath())
-  expect(await screen.findByText('Agent 报告错误')).toBeVisible()
+  expect(await screen.findByText('Agent reported an error')).toBeVisible()
   expect(screen.queryByText(/Pi returned an error/)).toBeNull()
 })
 
 // The missing endpoint is recognized by the server's signal (details.reason unknown_endpoint) and, for older servers, by their fixed
-// text; once recognized, task events no longer re-read the capability (gets stays 1).
+// text (that case is in src/zh-CN/features/tasks/tasks.zh.test.tsx); once recognized, task events no longer re-read the capability
+// (gets stays 1).
 it.each([
   [404, 'not_found', 'No such endpoint: GET /api/v1/tasks/…/message-capability', true, { reason: 'unknown_endpoint' }],
-  [404, 'not_found', '接口不存在', true, undefined],
   [404, 'not_found', 'Node run not found', false, undefined],
   [401, 'unauthenticated', 'A console identity is required', false, undefined],
   [403, 'forbidden', 'No permission to act on this node', false, undefined],
   [500, 'internal_error', 'Cannot check the target right now', false, undefined],
-] as const)('capability失败%s/%s安全禁发并保留草稿，只有接口缺失是旧服务', async (status, code, message, unsupported, details) => {
+] as const)('capability failure %s/%s disables sending safely and keeps the draft; only a missing endpoint means an old server', async (status, code, message, unsupported, details) => {
   const env = setup(); let gets = 0
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message, details ? { details: details as never } : {}), { status }) }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
-  const box = screen.getByRole('textbox', { name: '消息草稿' })
-  await userEvent.type(box, '原节点草稿')
-  expect(await screen.findByText(unsupported ? '当前服务尚未启用节点消息' : new RegExp(message))).toBeVisible()
-  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
+  const box = screen.getByRole('textbox', { name: 'Message draft' })
+  await userEvent.type(box, 'original node draft')
+  expect(await screen.findByText(unsupported ? 'Node messages aren\'t enabled on this server yet' : new RegExp(message))).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
   env.emit('node.updated', { node: env.detail.nodes[1] }, '20')
-  await waitFor(() => expect(box).toHaveValue('原节点草稿'))
+  await waitFor(() => expect(box).toHaveValue('original node draft'))
   if (unsupported) { await new Promise(resolve => setTimeout(resolve, 120)); expect(gets).toBe(1) }
-  expect(screen.queryByText(unsupported ? `资源不存在或已删除：${message}` : '当前服务尚未启用节点消息')).not.toBeInTheDocument()
+  expect(screen.queryByText(unsupported ? `Not found, or already deleted: ${message}` : 'Node messages aren\'t enabled on this server yet')).not.toBeInTheDocument()
 })
 
-it('新attempt和任务结束保留原nodeRun草稿，只有手动选新执行才出现新空稿', async () => {
+it('a new attempt or the end of the task keeps the original nodeRun draft; a new empty draft appears only when you pick the new run yourself', async () => {
   const { env, user, router } = await renderDetail()
-  await user.type(screen.getByRole('textbox', { name: '消息草稿' }), '只给旧执行的草稿')
+  await user.type(screen.getByRole('textbox', { name: 'Message draft' }), 'draft only for the old run')
   const next = { ...env.detail.nodes[1], id: '00000000-0000-7000-8000-000000000901', attempt: 2 }
   env.detail = { ...env.detail, nodes: [...env.detail.nodes, next], task: { ...env.detail.task, currentNodeRunId: next.id, version: 4 } }
   env.emit('node.updated', { node: next }, '21')
-  await waitFor(() => expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveAttribute('readonly'))
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('只给旧执行的草稿')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly'))
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('draft only for the old run')
   expect(router.state.location.search).toContain(nodeId)
-  await user.click(screen.getByRole('button', { name: '查看当前节点' }))
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('')
-  expect(screen.getByText('只给旧执行的草稿')).toBeInTheDocument()
-  await user.type(screen.getByRole('textbox', { name: '消息草稿' }), '新执行自己的草稿')
+  await user.click(screen.getByRole('button', { name: 'View current node' }))
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('')
+  expect(screen.getByText('draft only for the old run')).toBeInTheDocument()
+  await user.type(screen.getByRole('textbox', { name: 'Message draft' }), 'own draft of the new run')
   env.detail = { ...env.detail, task: { ...env.detail.task, status: 'completed', version: 5 } }
   env.emit('task.updated', { task: env.detail.task }, '22')
-  await waitFor(() => expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveAttribute('readonly'))
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('新执行自己的草稿')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly'))
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('own draft of the new run')
 })
 
-it('SSE高频期间只串行dirty校准，不取消饥饿，校准后旧响应不覆盖新全文', async () => {
+it('during frequent SSE events dirty reconciles run one at a time without starving by cancelling, and after reconciling an old response does not overwrite the new full text', async () => {
   const env = setup(); let count = 0, pending = 0, max = 0
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
@@ -353,241 +353,241 @@ it('SSE高频期间只串行dirty校准，不取消饥饿，校准后旧响应�
     const current = count
     if (current === 2) await gate
     pending--
-    return HttpResponse.json({ messages: [makeTaskMessage(nodeId, current < 3 ? '较早的全文' : '已校准的新全文')], nextCursor: null })
+    return HttpResponse.json({ messages: [makeTaskMessage(nodeId, current < 3 ? 'earlier full text' : 'reconciled new full text')], nextCursor: null })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('较早的全文')
+  renderRoutes(routes, detailPath()); await screen.findByText('earlier full text')
   env.emit('message.created', {}, '1')
   await waitFor(() => expect(count).toBe(2))
   for (let i = 2; i <= 25; i++) env.emit('message.created', {}, String(i))
   release()
-  expect(await screen.findByText('已校准的新全文')).toBeVisible()
+  expect(await screen.findByText('reconciled new full text')).toBeVisible()
   expect(max).toBe(1); expect(count).toBe(3)
-  expect(screen.queryByText('较早的全文')).not.toBeInTheDocument()
+  expect(screen.queryByText('earlier full text')).not.toBeInTheDocument()
 })
 
-it('重连从首cursor校准所有已加载页，部分页不删除已看消息', async () => {
+it('reconnecting reconciles all loaded pages from the first cursor, and a partial page does not delete messages already seen', async () => {
   const env = setup(); let refreshed = false; const cursors: (string | null)[] = []
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/messages`), ({ request }) => {
     const cursor = new URL(request.url).searchParams.get('cursor'); cursors.push(cursor)
-    return HttpResponse.json(cursor ? { messages: [makeTaskMessage(nodeId, refreshed ? '旧页错误已校准' : '旧页原内容', 'older-page-id')], nextCursor: null } : { messages: refreshed ? [] : [env.message], nextCursor: 'independent-cursor' })
+    return HttpResponse.json(cursor ? { messages: [makeTaskMessage(nodeId, refreshed ? 'old page error reconciled' : 'old page original content', 'older-page-id')], nextCursor: null } : { messages: refreshed ? [] : [env.message], nextCursor: 'independent-cursor' })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
-  await userEvent.click(screen.getByRole('button', { name: '加载更多' }))
-  await screen.findByText('旧页原内容')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
+  await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+  await screen.findByText('old page original content')
   refreshed = true; cursors.length = 0
   act(() => { const es = FakeEventSource.instances.find(s => s.url.endsWith(`/tasks/${taskId}/events`))!; es.interrupt(); es.open() })
-  expect(await screen.findByText('旧页错误已校准')).toBeVisible()
+  expect(await screen.findByText('old page error reconciled')).toBeVisible()
   expect(cursors).toEqual([null, 'independent-cursor'])
-  expect(screen.getByText('任务实例的回复')).toBeVisible()
+  expect(screen.getByText('Reply from the task instance')).toBeVisible()
 })
 
-it('两执行段各自加载超过50条，cursor和缺口互不借用，点击节点重新默认对话', async () => {
+it('two run segments each load more than 50 messages without sharing cursors or gaps, and clicking a node goes back to the conversation by default', async () => {
   setup(); const cursors: { node: string; cursor: string | null }[] = []
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params, request }) => {
     const node = String(params.node), cursor = new URL(request.url).searchParams.get('cursor'); cursors.push({ node, cursor })
-    return HttpResponse.json({ messages: Array.from({ length: cursor ? 2 : 50 }, (_, index) => makeTaskMessage(node, `${node === nodeId ? '当前段' : '历史段'}第${cursor ? 50 + index : index}条`, `${node}-${cursor ?? 'first'}-${index}`)), nextCursor: cursor ? null : `cursor-for-${node}` })
+    return HttpResponse.json({ messages: Array.from({ length: cursor ? 2 : 50 }, (_, index) => makeTaskMessage(node, `${node === nodeId ? 'current segment' : 'history segment'} #${cursor ? 50 + index : index}`, `${node}-${cursor ?? 'first'}-${index}`)), nextCursor: cursor ? null : `cursor-for-${node}` })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('当前段第49条'); await screen.findByText('历史段第49条')
-  const gaps = screen.getAllByText('本次执行还有消息未加载。'); expect(gaps).toHaveLength(2)
-  await userEvent.click(screen.getAllByRole('button', { name: '加载更多' })[0])
-  await screen.findByText('历史段第51条')
+  renderRoutes(routes, detailPath()); await screen.findByText('current segment #49'); await screen.findByText('history segment #49')
+  const gaps = screen.getAllByText('Some messages from this run haven\'t loaded yet.'); expect(gaps).toHaveLength(2)
+  await userEvent.click(screen.getAllByRole('button', { name: 'Load more' })[0])
+  await screen.findByText('history segment #51')
   expect(cursors).toContainEqual({ node: oldNodeId, cursor: `cursor-for-${oldNodeId}` })
   expect(cursors).not.toContainEqual({ node: nodeId, cursor: `cursor-for-${oldNodeId}` })
-  await userEvent.click(screen.getByRole('button', { name: '加载更多' }))
-  await screen.findByText('当前段第51条')
+  await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+  await screen.findByText('current segment #51')
   expect(cursors).toContainEqual({ node: nodeId, cursor: `cursor-for-${nodeId}` })
-  await userEvent.click(screen.getByRole('tab', { name: '节点资料' }))
-  await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
-  expect(screen.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
-  expect(screen.getByText('历史段第51条')).toBeVisible()
+  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
+  await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
+  expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByText('history segment #51')).toBeVisible()
 })
 
-it('跨step来源链接定位原record而保留该step所有段，最新异常组默认展开', async () => {
+it('a source link across steps locates the original record while keeping all segments of that step, and the latest failed group is expanded by default', async () => {
   const env = setup(), thirdId = '00000000-0000-7000-8000-000000000903'
   const third = { ...env.detail.nodes[1], id: thirdId, stepId: 'finish', visit: 1, attempt: 1, inputVersions: [{ input: 'review', nodeRunId: oldNodeId }] }
   env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentNodeRunId: thirdId } }
   const { router } = renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
-  await userEvent.click(screen.getByRole('tab', { name: '节点资料' }))
-  expect(screen.getByText(/仅供检查，不作为成功结果/)).toBeVisible()
-  await userEvent.click(screen.getByRole('link', { name: /01 质量检查 · 第 1 次的输出/ }))
+  await screen.findByRole('heading', { name: 'General task acceptance' })
+  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
+  expect(screen.getByText(/for inspection only and is not passed downstream as a success/)).toBeVisible()
+  await userEvent.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
   await waitFor(() => expect(router.state.location.search).toContain(`record=${oldNodeId}`))
   expect(router.state.location.search).toContain('step=check')
-  expect(await screen.findByText('任务实例的回复')).toBeVisible()
-  expect(screen.getByText('历史节点回复')).toBeVisible()
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveAttribute('readonly')
-  await userEvent.click(screen.getByRole('tab', { name: '节点资料' }))
-  expect(screen.getByText(/历史成功结果/)).toBeVisible()
+  expect(await screen.findByText('Reply from the task instance')).toBeVisible()
+  expect(screen.getByText('history node reply')).toBeVisible()
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
+  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
+  expect(screen.getByText(/Earlier successful result/)).toBeVisible()
 })
 
-it('等待状态保留平台事实、固定原因和原题权限，不显示历史重试', async () => {
+it('the waiting state keeps the platform facts, the fixed reason and the original question permission, and shows no retry for history', async () => {
   const detail = makeTaskDetail(defaultProject.id)
   detail.task.status = 'waiting'; detail.nodes[1].status = 'waiting'
-  detail.nodes[1].reason = '等待Manager确认原问题'
-  detail.nodes[1].question = { id: oldNodeId, messageId: oldNodeId, threadId: taskId, text: 'Manager的原问题', status: 'open', canAnswer: false }
+  detail.nodes[1].reason = 'Waiting for the Manager to confirm the original question'
+  detail.nodes[1].question = { id: oldNodeId, messageId: oldNodeId, threadId: taskId, text: 'Original question from the Manager', status: 'open', canAnswer: false }
   setup(detail); renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
+  await screen.findByRole('heading', { name: 'General task acceptance' })
   const status = document.querySelector('[data-node-status]') as HTMLElement
-  expect(within(status).getByText('等待回复')).toBeVisible()
-  expect(within(status).getAllByText('等待Manager确认原问题')[0]).toBeVisible()
-  await userEvent.click(within(status).getByText('待回答问题 · 待回答'))
-  expect(within(status).getByText('当前身份不能回答这个问题。')).toBeVisible()
-  expect(screen.queryByRole('link', { name: '前往回答' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: '重试当前节点' })).not.toBeInTheDocument()
-  const tab = screen.getByRole('tab', { name: '对话' }); tab.focus(); await userEvent.keyboard('{ArrowRight}')
-  expect(screen.getByRole('tab', { name: '节点资料' })).toHaveFocus()
+  expect(within(status).getByText('Waiting for reply')).toBeVisible()
+  expect(within(status).getAllByText('Waiting for the Manager to confirm the original question')[0]).toBeVisible()
+  await userEvent.click(within(status).getByText('Open question · Open'))
+  expect(within(status).getByText('Your current identity can\'t answer this question.')).toBeVisible()
+  expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
+  const tab = screen.getByRole('tab', { name: 'Conversation' }); tab.focus(); await userEvent.keyboard('{ArrowRight}')
+  expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveFocus()
 })
 
-it('旧后端能力缺失后窗口focus重新取同一正式GET，可恢复而不改草稿或目标', async () => {
+it('after an old backend lacks the capability, window focus fetches the same formal GET again and can recover without changing the draft or target', async () => {
   setup(); let ready = false, count = 0
   const detail = makeTaskDetail(defaultProject.id)
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => { count++; return ready ? HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: 'The original session is unavailable', handlingHint: 'Check the task instance' }) : HttpResponse.json(unknownEndpointBody(), { status: 404 }) }))
-  renderRoutes(routes, detailPath()); await screen.findByText('当前服务尚未启用节点消息')
-  await userEvent.type(screen.getByRole('textbox', { name: '消息草稿' }), '升级前草稿')
+  renderRoutes(routes, detailPath()); await screen.findByText('Node messages aren\'t enabled on this server yet')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message draft' }), 'draft from before the upgrade')
   ready = true; act(() => window.dispatchEvent(new Event('focus')))
   expect(await screen.findByText('The original session is unavailable · Check the task instance')).toBeVisible()
-  expect(screen.queryByText('当前服务尚未启用节点消息')).not.toBeInTheDocument()
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('升级前草稿')
+  expect(screen.queryByText('Node messages aren\'t enabled on this server yet')).not.toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('draft from before the upgrade')
   expect(count).toBe(2)
 })
 
-it('未知发送结果跨节点查看保留原动作，回原执行手动确认不新建action', async () => {
+it('an unknown send result keeps the original action while other nodes are viewed, and confirming it by hand back on the original run creates no new action', async () => {
   const env = setup(); const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: env.detail.nodes[1].agentId, runtimeId: env.detail.nodes[1].runtimeId, canSend: true, reason: null, handlingHint: null })),
     http.post(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/inbox-messages`), async ({ request }) => {
       const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body)
       return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed'), { status: 500 }) : HttpResponse.json(taskInboxReceipt(body), { status: 201 })
     }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复'); env.open()
-  await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeEnabled())
-  await userEvent.type(screen.getByRole('textbox', { name: '消息草稿' }), '原动作草稿')
-  await userEvent.click(screen.getByRole('button', { name: '发送' })); await screen.findByRole('button', { name: '重试确认原消息' })
-  await userEvent.click(screen.getByRole('button', { name: /提交报告/ })); await screen.findByText('这个节点尚未被访问。')
-  await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
-  const retry = await screen.findByRole('button', { name: '重试确认原消息' })
-  expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveValue('原动作草稿')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance'); env.open()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled())
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message draft' }), 'original action draft')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' })); await screen.findByRole('button', { name: 'Retry checking the original message' })
+  await userEvent.click(screen.getByRole('button', { name: /Submit report/ })); await screen.findByText('This node hasn\'t been visited yet.')
+  await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
+  const retry = await screen.findByRole('button', { name: 'Retry checking the original message' })
+  expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('original action draft')
   expect(bodies).toHaveLength(1)
   await waitFor(() => expect(retry).toBeEnabled()); await userEvent.click(retry)
   await screen.findByText(inboxCopy.accepted)
   expect(bodies).toHaveLength(2); expect(bodies[1]).toEqual(bodies[0])
 })
 
-it('console_node普通消息显示你，平台初始化与提醒来源保持，不把控制台冒充平台', async () => {
+it('a plain console_node message shows You, platform init and reminder sources stay as they are, and the console is not passed off as the platform', async () => {
   setup()
   const messages = [
-    { ...makeTaskMessage(nodeId, '普通控制台消息', 'console-message'), role: 'user', origin: 'console_node' },
-    { ...makeTaskMessage(nodeId, '平台初始化消息', 'platform-message'), role: 'user', origin: 'task_node' },
-    { ...makeTaskMessage(nodeId, 'Inbox提醒消息', 'reminder-message'), role: 'user', origin: 'inbox_reminder' },
+    { ...makeTaskMessage(nodeId, 'plain console message', 'console-message'), role: 'user', origin: 'console_node' },
+    { ...makeTaskMessage(nodeId, 'platform init message', 'platform-message'), role: 'user', origin: 'task_node' },
+    { ...makeTaskMessage(nodeId, 'Inbox reminder message', 'reminder-message'), role: 'user', origin: 'inbox_reminder' },
   ]
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/messages`), () => HttpResponse.json({ messages, nextCursor: null })))
   renderRoutes(routes, detailPath())
-  const consoleRow = (await screen.findByText('普通控制台消息')).closest('li')!
-  expect(within(consoleRow).getByText('你')).toBeVisible(); expect(within(consoleRow).queryByText('平台')).not.toBeInTheDocument()
-  expect(within(screen.getByText('平台初始化消息').closest('li')!).getByText('平台')).toBeVisible()
-  expect(within(screen.getByText('Inbox提醒消息').closest('li')!).getByText(/平台提醒/)).toBeVisible()
+  const consoleRow = (await screen.findByText('plain console message')).closest('li')!
+  expect(within(consoleRow).getByText('You')).toBeVisible(); expect(within(consoleRow).queryByText('Platform')).not.toBeInTheDocument()
+  expect(within(screen.getByText('platform init message').closest('li')!).getByText('Platform')).toBeVisible()
+  expect(within(screen.getByText('Inbox reminder message').closest('li')!).getByText(/Platform reminder/)).toBeVisible()
 })
 
 // "Printed sheet" redesign, step 3: the task list sits on the sheet, the status
 // filters are index tabs along the sheet's top edge, and the progress is in the stub.
-describe('纸张上的任务列表', () => {
+describe('task list on the sheet', () => {
   const summaryOf = (detail: Schemas['TaskDetail'], overrides: Partial<Schemas['TaskSummary']>): Schemas['TaskSummary'] => ({ ...detail.task, ...overrides })
   async function renderList(counts = { preparing: 0, running: 1, waiting: 1, blocked: 1 }, nextCursor: string | null = null) {
     const env = setup()
     const base = env.detail
     const tasks = [
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: '整理本周用户反馈', status: 'running', reason: null, currentStepId: 'triage' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: '导出超时修复方案', status: 'blocked', reason: '等你确认超时上限后继续', currentStepId: 'review' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: '周报初稿', status: 'completed', reason: null, currentStepId: 'publish' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: '等用户回答的任务', status: 'waiting', reason: '等待回答', currentStepId: null }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: '取消了的任务', status: 'cancelled', reason: null, currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: 'Sort user feedback for this week', status: 'running', reason: null, currentStepId: 'triage' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: 'Export timeout fix plan', status: 'blocked', reason: 'Continues once you confirm the timeout limit', currentStepId: 'review' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: 'Weekly report draft', status: 'completed', reason: null, currentStepId: 'publish' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: 'Task waiting for a user answer', status: 'waiting', reason: 'Waiting for an answer', currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: 'Cancelled task', status: 'cancelled', reason: null, currentStepId: null }),
     ]
     server.use(
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks/counts`), () => HttpResponse.json(counts)),
-      http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(makeAgent({ id: base.task.currentAgentId!, name: '任务检查员' }))] })),
+      http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(makeAgent({ id: base.task.currentAgentId!, name: 'task-checker' }))] })),
     )
     renderRoutes(routes, tasksPath(defaultProject.name))
-    const list = await screen.findByRole('list', { name: '任务' })
+    const list = await screen.findByRole('list', { name: 'Tasks' })
     env.open()
     return { list, user: userEvent.setup() }
   }
   const rowOf = (title: string) => screen.getByRole('link', { name: title }).closest('li')!
-  const tabs = () => screen.getByRole('group', { name: '状态筛选' })
+  const tabs = () => screen.getByRole('group', { name: 'Status filter' })
 
-  it('页头是页面标题：面包屑是项目名称，标题“任务”，旁边是说明与实时状态', async () => {
+  it('the header is the page title: the breadcrumb is the project name and the title is “Tasks”, with the description and live status beside it', async () => {
     await renderList()
-    const header = screen.getByRole('heading', { level: 1, name: '任务' }).closest('header')!
-    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›任务`)
+    const header = screen.getByRole('heading', { level: 1, name: 'Tasks' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Tasks`)
     expect(within(header).getByRole('link', { name: defaultProject.name })).toHaveAttribute('href', `/?project=${encodeURIComponent(defaultProject.name)}`)
-    expect(within(header).getByText('本项目的任务，由项目 Manager 创建')).toBeInTheDocument()
-    expect(await within(header).findByText('实时更新中')).toBeInTheDocument()
+    expect(within(header).getByText('This project\'s tasks, created by the project Manager')).toBeInTheDocument()
+    expect(await within(header).findByText('Live')).toBeInTheDocument()
   })
 
-  it('状态筛选是纸张上沿的索引标签，带数量；选中的是黄色；只筛选已经读到的任务', async () => {
+  it('status filters are index tabs along the top edge of the sheet with counts; the selected one is yellow; they filter only the tasks read so far', async () => {
     const { list, user } = await renderList()
     const buttons = within(tabs()).getAllByRole('button')
     // In progress and Blocked use the server's counts (unfinished tasks); Completed and All count the tasks read so far.
-    expect(buttons.map((button) => button.textContent)).toEqual(['全部5', '进行中2', '阻塞1', '已完成1'])
+    expect(buttons.map((button) => button.textContent)).toEqual(['All5', 'In progress2', 'Blocked1', 'Completed1'])
     expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
     expect(buttons[0]).toHaveClass('bg-riso-yellow', 'h-10')
     expect(buttons[1]).toHaveClass('bg-paper-tab')
     expect(within(list).getAllByRole('listitem')).toHaveLength(5)
     await user.click(buttons[1])
     expect(buttons[1]).toHaveAttribute('aria-pressed', 'true')
-    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['整理本周用户反馈', '等用户回答的任务'])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Sort user feedback for this week', 'Task waiting for a user answer'])
     await user.click(buttons[2])
-    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['导出超时修复方案'])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Export timeout fix plan'])
     await user.click(buttons[3])
-    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['周报初稿'])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Weekly report draft'])
   })
 
-  it('还有更多页没读到时，按已读到的任务算的数字后面加“+”', async () => {
+  it('while more pages are unread, the counts based on the tasks read so far get a “+”', async () => {
     await renderList(undefined, 'next')
-    await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['全部5+', '进行中2', '阻塞1', '已完成1+']))
+    await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['All5+', 'In progress2', 'Blocked1', 'Completed1+']))
   })
 
-  it('每个任务一行：标题加副标题（原因），状态（执行中荧光粉胶囊、阻塞倾斜的红色印章、已完成浅绿胶囊），等宽的当前节点，责任 Agent，等宽的更新时间', async () => {
+  it('one row per task: a title with a subtitle (the reason), the status (running a fluorescent-pink pill, blocked a tilted red stamp, completed a light-green pill), the current node in monospace, the responsible Agent, and the update time in monospace', async () => {
     await renderList()
-    const running = rowOf('整理本周用户反馈')
+    const running = rowOf('Sort user feedback for this week')
     expect(running).toHaveClass('border-b-[1.5px]', 'border-dashed')
-    expect(within(running).getByText('执行中')).toHaveClass('bg-riso-pink', 'rounded-full')
+    expect(within(running).getByText('Running')).toHaveClass('bg-riso-pink', 'rounded-full')
     expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-tint-blue')
     expect(running.querySelector('time')).toHaveClass('font-mono')
-    const blocked = rowOf('导出超时修复方案')
-    expect(within(blocked).getByText('等你确认超时上限后继续')).toBeInTheDocument()
-    const stamp = within(blocked).getByText('阻塞').closest('[data-task-state]')!
+    const blocked = rowOf('Export timeout fix plan')
+    expect(within(blocked).getByText('Continues once you confirm the timeout limit')).toBeInTheDocument()
+    const stamp = within(blocked).getByText('Blocked').closest('[data-task-state]')!
     expect(stamp).toHaveAttribute('data-task-state', 'blocked')
     expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
-    expect(within(rowOf('周报初稿')).getByText('已完成')).toHaveClass('bg-tint-green', 'text-green-text')
+    expect(within(rowOf('Weekly report draft')).getByText('Completed')).toHaveClass('bg-tint-green', 'text-green-text')
     // The responsible Agent has an avatar (two small overprinted circles).
-    expect(within(running).getByText('任务检查员').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
+    expect(within(running).getByText('task-checker').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('编号是第一列：表头“编号”，每行是等宽粗体的浅墨色“#12”，和标题在同一组里，窄屏不会和标题分开', async () => {
+  it('the number is the first column: the header says “No.” and each row has a monospace bold light-ink “#12” in the same group as the title, so narrow screens do not split them', async () => {
     const { list } = await renderList()
     const header = list.previousElementSibling!
     expect(header).toHaveAttribute('aria-hidden', 'true')
-    expect(header.firstElementChild).toHaveTextContent(/^编号$/)
+    expect(header.firstElementChild).toHaveTextContent(/^No\.$/)
     expect(header.firstElementChild).toHaveClass('flex-[0_0_34px]')
-    const running = rowOf('整理本周用户反馈')
+    const running = rowOf('Sort user feedback for this week')
     // First column, so screen readers read the column name first; the number and the title sit in the same non-wrapping group.
     const group = running.firstElementChild!
     expect(group).toHaveClass('flex-nowrap')
-    expect(group).toContainElement(within(running).getByRole('link', { name: '整理本周用户反馈' }))
+    expect(group).toContainElement(within(running).getByRole('link', { name: 'Sort user feedback for this week' }))
     const number = group.firstElementChild!
-    expect(number).toHaveTextContent(/^编号#12$/)
+    expect(number).toHaveTextContent(/^No\.#12$/)
     expect(number).toHaveClass('flex-[0_0_34px]', 'font-mono', 'text-[12px]', 'font-bold', 'text-ink-500')
-    expect(within(number as HTMLElement).getByText('编号')).toHaveClass('sr-only')
-    expect(within(list).getAllByRole('listitem').map((row) => row.firstElementChild!.firstElementChild!.textContent)).toEqual(['编号#12', '编号#11', '编号#10', '编号#9', '编号#8'])
+    expect(within(number as HTMLElement).getByText('No.')).toHaveClass('sr-only')
+    expect(within(list).getAllByRole('listitem').map((row) => row.firstElementChild!.firstElementChild!.textContent)).toEqual(['No.#12', 'No.#11', 'No.#10', 'No.#9', 'No.#8'])
   })
 
-  it('票根“进度”里是进行中、阻塞、已完成三个大数字；窄屏不显示', async () => {
+  it('the “Progress” stub holds three big numbers for in progress, blocked and completed; hidden on narrow screens', async () => {
     await renderList()
-    const stub = screen.getByRole('complementary', { name: '进度' })
+    const stub = screen.getByRole('complementary', { name: 'Progress' })
     expect(stub).toHaveClass('max-nav:hidden')
-    await waitFor(() => expect(within(stub).getByText('进行中').previousElementSibling).toHaveTextContent(/^2$/))
-    expect(within(stub).getByText('阻塞').previousElementSibling).toHaveTextContent(/^1$/)
-    expect(within(stub).getByText('已完成').previousElementSibling).toHaveTextContent(/^1$/)
-    expect(within(stub).getByText('阻塞').previousElementSibling).toHaveClass('text-red-text')
+    await waitFor(() => expect(within(stub).getByText('in progress').previousElementSibling).toHaveTextContent(/^2$/))
+    expect(within(stub).getByText('blocked').previousElementSibling).toHaveTextContent(/^1$/)
+    expect(within(stub).getByText('completed').previousElementSibling).toHaveTextContent(/^1$/)
+    expect(within(stub).getByText('blocked').previousElementSibling).toHaveClass('text-red-text')
   })
 })

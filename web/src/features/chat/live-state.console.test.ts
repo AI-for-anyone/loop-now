@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { makeMessage, makeRun } from '@/test/api'
 import { initialLiveState, liveReducer } from './live-state'
 
-it('compact 用终态 run.updated 结束执行，不伪造对话消息', () => {
+it('compact ends the run with a final run.updated and does not fake a chat message', () => {
   const running = makeRun({ status: 'running', endedAt: null })
   const existing = makeMessage({ run: running })
   let state = liveReducer(initialLiveState, { type: 'event', event: { type: 'run.updated', id: '1-0', data: { run: running } } })
@@ -13,7 +13,7 @@ it('compact 用终态 run.updated 结束执行，不伪造对话消息', () => {
   expect(state.runs[running.id]?.status).toBe('completed')
 })
 
-it('普通完成仍通过 run.ended 记录非空回复', () => {
+it('a normal completion still records the non-empty reply through run.ended', () => {
   const running = makeRun({ status: 'running', endedAt: null })
   const completed = { ...running, status: 'completed' as const }
   const reply = makeMessage({ role: 'assistant', run: completed })

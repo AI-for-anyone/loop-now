@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { CredentialFields } from '@/features/project-credentials/CredentialFields'
-import { fieldsOf } from './schema-form'
+import { fieldsOf } from '@/features/plugins/schema-form'
 
 // The Chinese UI picks the zh-CN text of a LocalizedText label; a plain string (counted as English) is shown as is.
 const en = (english: string, chinese: string) => ({ 'en-US': english, 'zh-CN': chinese })

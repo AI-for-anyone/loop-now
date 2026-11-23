@@ -55,10 +55,10 @@ function timelineHandler(agentId: string, build: () => Schemas['RunTimeline']) {
 }
 
 // The expandable run record inside a reply.
-const recordToggle = () => screen.getByRole('button', { name: /^运行记录/ })
+const recordToggle = () => screen.getByRole('button', { name: /^Run log/ })
 
-describe('运行记录时间线', () => {
-  it('默认收起，展开后按顺序显示两次 bash 的实际命令、用时和结果，不展示输出，末尾是完成与合计', async () => {
+describe('run log timeline', () => {
+  it('collapsed by default; expanded it shows the two bash calls in order with the actual command, duration and result, no output, ending with completion and total', async () => {
     const agent = makeAgent()
     const run = makeRun({
       queuedAt: at(0),
@@ -92,29 +92,29 @@ describe('运行记录时间线', () => {
     const timeline = timelineHandler(agent.id, () => ({ run, entries, usage: run.usage }))
     const { user } = await renderChat({
       agent,
-      messages: [makeMessage({ text: '跑一下测试', run }), makeMessage({ role: 'assistant', text: '测试跑完了', run })],
+      messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })],
       handlers: [timeline.handler],
     })
     const toggle = await waitFor(recordToggle)
-    expect(toggle).toHaveTextContent('运行记录 · 9.4 s · 1,234 token')
+    expect(toggle).toHaveTextContent('Run log · 9.4 s · 1,234 tokens')
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(timeline.calls).toEqual([])
 
     await user.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const panel = document.getElementById(toggle.getAttribute('aria-controls')!)!
-    await within(panel).findByText('运行记录')
+    await within(panel).findByText('Run log')
     expect(timeline.calls).toEqual([run.id])
     expect(panel).toHaveTextContent(run.id)
-    expect(panel).toHaveTextContent('model=anthropic / claude-sonnet-5-5 · 配置 v7 · 空闲时发送')
-    expect(panel).toHaveTextContent('合计 9.4 s')
+    expect(panel).toHaveTextContent('model=anthropic / claude-sonnet-5-5 · Config v7 · Sent while idle')
+    expect(panel).toHaveTextContent('Total 9.4 s')
 
     const labels = within(panel)
       .getAllByRole('listitem')
       .filter((item) => item.hasAttribute('data-tone'))
       .map((item) => item.querySelector('.font-black')!.textContent)
-    expect(labels).toEqual(['入队', '派发', '等待执行名额', '准备运行环境', '同步配置与文件夹', 'Pi 启动', '开始回复', '模型调用', '工具 bash', '模型调用', '工具 bash', '完成'])
-    const bashSteps = within(panel).getAllByText('工具 bash').map((label) => label.closest('li')!)
+    expect(labels).toEqual(['Queued', 'Dispatched', 'Waiting for a run slot', 'Preparing the environment', 'Sync config and folders', 'Pi start', 'Started replying', 'Model call', 'Tool bash', 'Model call', 'Tool bash', 'Completed'])
+    const bashSteps = within(panel).getAllByText('Tool bash').map((label) => label.closest('li')!)
     expect(bashSteps[0]).toHaveTextContent('400 ms')
     expect(bashSteps[0]).toHaveAttribute('data-tone', 'ok')
     expect(bashSteps[0].querySelector('code')?.textContent).toBe('pwd')
@@ -122,16 +122,16 @@ describe('运行记录时间线', () => {
     expect(bashSteps[1]).toHaveTextContent('state=failed')
     expect(bashSteps[1]).toHaveAttribute('data-tone', 'fail')
     expect(bashSteps[1].querySelector('code')?.textContent).toBe('printf "line one\\n"\nexit 1')
-    expect(within(panel).getByText('Pi 启动').closest('li')).toHaveTextContent('复用常驻的 Pi 进程，PID 48213。')
-    expect(within(panel).getByText('入队').closest('li')).toHaveTextContent('Agent 空闲，直接派发。')
-    expect(panel).toHaveTextContent('token 用量')
-    expect(panel).toHaveTextContent('输入 1,200')
-    expect(panel).toHaveTextContent('模型调用 1 次')
-    expect(panel).toHaveTextContent('回复正常结束。')
+    expect(within(panel).getByText('Pi start').closest('li')).toHaveTextContent('Reused the resident Pi process, PID 48213.')
+    expect(within(panel).getByText('Queued').closest('li')).toHaveTextContent('The Agent was idle, so this was dispatched right away.')
+    expect(panel).toHaveTextContent('Token usage')
+    expect(panel).toHaveTextContent('Input 1,200')
+    expect(panel).toHaveTextContent('1 model call')
+    expect(panel).toHaveTextContent('The reply finished normally.')
     expect(panel).not.toHaveTextContent(/args|arguments|output=|tools\[/i)
   })
 
-  it('同步失败的回复：显示失败的来源与原因，没有“开始回复”', async () => {
+  it('a reply whose sync failed: shows the failed source and the reason, no “Started replying”', async () => {
     const agent = makeAgent()
     const run = makeRun({
       status: 'failed',
@@ -159,49 +159,49 @@ describe('运行记录时间线', () => {
       { type: 'ended', at: at(2), status: 'failed', endReason: null, errorCode: 'workspace_sync_failed' },
     ]
     const timeline = timelineHandler(agent.id, () => ({ run, entries, usage: run.usage }))
-    const { user } = await renderChat({ agent, messages: [makeMessage({ text: '你好', run })], handlers: [timeline.handler] })
+    const { user } = await renderChat({ agent, messages: [makeMessage({ text: 'Hello', run })], handlers: [timeline.handler] })
     await user.click(await waitFor(recordToggle))
     const panel = document.getElementById(recordToggle().getAttribute('aria-controls')!)!
-    const sync = (await within(panel).findByText('同步配置与文件夹')).closest('li')!
-    expect(sync).toHaveTextContent('同步失败：Failed to clone repo')
-    expect(sync).toHaveTextContent('docs：资料已同步（写入 2 个，删除 1 个）')
-    expect(sync).toHaveTextContent('repo：失败（Authentication failed）')
+    const sync = (await within(panel).findByText('Sync config and folders')).closest('li')!
+    expect(sync).toHaveTextContent('Sync failed: Failed to clone repo')
+    expect(sync).toHaveTextContent('docs: files synced (2 written, 1 deleted)')
+    expect(sync).toHaveTextContent('repo: failed (Authentication failed)')
     expect(sync).toHaveAttribute('data-tone', 'fail')
-    expect(within(panel).queryByText('开始回复')).toBeNull()
+    expect(within(panel).queryByText('Started replying')).toBeNull()
     expect(panel).toHaveTextContent('errorCode=workspace_sync_failed · errorMessage="Failed to clone repo"')
-    expect(panel).toHaveTextContent('失败：工作区同步失败（Failed to clone repo）')
+    expect(panel).toHaveTextContent('Failed: Workspace sync failed (Failed to clone repo)')
   })
 
-  it('回复进行中展开后，又调用了一次工具：不需要重新展开就出现在时间线中', async () => {
+  it('expanded while the reply is in progress, another tool call appears in the timeline without expanding again', async () => {
     const agent = makeAgent()
     const run = makeRun({ status: 'running', queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: null })
     let entries: Entry[] = [{ type: 'dispatched', at: at(0) }, { type: 'running', at: at(1) }, tool(2, 't1', 'succeeded', 300)]
     const timeline = timelineHandler(agent.id, () => ({ run, entries, usage: run.usage }))
     const { user, emit } = await renderChat({
       agent,
-      messages: [makeMessage({ text: '你好', run })],
+      messages: [makeMessage({ text: 'Hello', run })],
       status: { busy: true, currentRun: run },
       handlers: [timeline.handler],
     })
     await emit('snapshot', { status: makeStatus(agent.id, { busy: true, currentRun: run, processState: 'busy' }), currentText: '', queuedRuns: [], queueItems: [] })
     const toggle = await waitFor(recordToggle)
-    expect(toggle).toHaveTextContent(/^运行记录 · 已用 /)
+    expect(toggle).toHaveTextContent(/^Run log · .+ so far/)
     await user.click(toggle)
     const panel = document.getElementById(toggle.getAttribute('aria-controls')!)!
-    await within(panel).findByText('工具 bash')
-    expect(within(panel).queryByText('完成')).toBeNull()
+    await within(panel).findByText('Tool bash')
+    expect(within(panel).queryByText('Completed')).toBeNull()
 
     entries = [...entries, tool(5, 't2', 'started', null, 'sleep 1')]
     await emit('run.tool', { runId: run.id, toolCallId: 't2', toolName: 'bash', state: 'started', at: at(5) })
-    await waitFor(() => expect(within(panel).getAllByText('工具 bash')).toHaveLength(2))
-    const running = within(panel).getAllByText('工具 bash')[1].closest('li')!
-    expect(running).toHaveTextContent('进行中')
+    await waitFor(() => expect(within(panel).getAllByText('Tool bash')).toHaveLength(2))
+    const running = within(panel).getAllByText('Tool bash')[1].closest('li')!
+    expect(running).toHaveTextContent('Running')
     expect(running.querySelector('code')?.textContent).toBe('sleep 1')
     expect(running).toHaveAttribute('data-tone', 'warn')
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('本功能上线前的回复只有部分时间点，只显示已有内容', async () => {
+  it('replies from before this feature have only some time points; shows only what exists', async () => {
     const agent = makeAgent()
     const run = makeRun({ status: 'interrupted', endReason: 'user_interrupt', queuedAt: at(0), startedAt: at(0), runningAt: null, endedAt: at(3) })
     const entries: Entry[] = [
@@ -209,27 +209,27 @@ describe('运行记录时间线', () => {
       { type: 'ended', at: at(3), status: 'interrupted', endReason: 'user_interrupt', errorCode: null },
     ]
     const timeline = timelineHandler(agent.id, () => ({ run, entries, usage: run.usage }))
-    const { user } = await renderChat({ agent, messages: [makeMessage({ text: '你好', run })], handlers: [timeline.handler] })
+    const { user } = await renderChat({ agent, messages: [makeMessage({ text: 'Hello', run })], handlers: [timeline.handler] })
     await user.click(await waitFor(recordToggle))
     const panel = document.getElementById(recordToggle().getAttribute('aria-controls')!)!
-    expect(await within(panel).findByText('派发')).toBeInTheDocument()
-    expect(within(panel).getAllByText('已打断').length).toBeGreaterThan(0)
+    expect(await within(panel).findByText('Dispatched')).toBeInTheDocument()
+    expect(within(panel).getAllByText('Interrupted').length).toBeGreaterThan(0)
     expect(panel).toHaveTextContent('endReason=user_interrupt')
     expect(within(panel).queryByRole('alert')).toBeNull()
   })
 })
 
 // "Printed sheet" redesign: the toggle bar is styled as a segmented receipt.
-describe('运行记录的触发条', () => {
+describe('run log toggle bar', () => {
   const parts = (toggle: HTMLElement) => [...toggle.querySelectorAll('[data-receipt-part]')].map((part) => part.textContent)
 
-  it('结束后分成三段：名称｜耗时｜token，数值用等宽字；按钮的名称不变', async () => {
+  it('once ended splits into three parts: name | duration | tokens, numbers in monospace; the button name is unchanged', async () => {
     const agent = makeAgent()
     const run = makeRun({ queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(9.4), usage: usage(1200, 34) })
-    await renderChat({ agent, messages: [makeMessage({ text: '跑一下测试', run }), makeMessage({ role: 'assistant', text: '测试跑完了', run })] })
+    await renderChat({ agent, messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })] })
     const toggle = await waitFor(recordToggle)
-    expect(toggle).toHaveAccessibleName('运行记录 · 9.4 s · 1,234 token')
-    expect(parts(toggle)).toEqual(['运行记录', '9.4 s', '1,234 token'])
+    expect(toggle).toHaveAccessibleName('Run log · 9.4 s · 1,234 tokens')
+    expect(parts(toggle)).toEqual(['Run log', '9.4 s', '1,234 tokens'])
     const [name, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
     for (const part of [name, duration, tokens]) expect(part).toHaveAttribute('aria-hidden', 'true')
     expect(name).not.toHaveClass('font-mono')
@@ -239,14 +239,14 @@ describe('运行记录的触发条', () => {
     expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
   })
 
-  it('进行中只有两段：名称｜已用时间', async () => {
+  it('in progress has only two parts: name | elapsed time', async () => {
     const agent = makeAgent()
     const run = makeRun({ status: 'running', queuedAt: new Date(Date.now() - 5000).toISOString(), endedAt: null })
-    const { emit } = await renderChat({ agent, messages: [makeMessage({ text: '你好', run })], status: { busy: true, currentRun: run } })
+    const { emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Hello', run })], status: { busy: true, currentRun: run } })
     await emit('snapshot', { status: makeStatus(agent.id, { busy: true, currentRun: run, processState: 'busy' }), currentText: '', queuedRuns: [], queueItems: [] })
     const toggle = await waitFor(recordToggle)
     expect(parts(toggle)).toHaveLength(2)
-    expect(parts(toggle)[0]).toBe('运行记录')
-    expect(parts(toggle)[1]).toMatch(/^已用 /)
+    expect(parts(toggle)[0]).toBe('Run log')
+    expect(parts(toggle)[1]).toMatch(/^.+ so far$/)
   })
 })

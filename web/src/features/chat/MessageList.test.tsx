@@ -86,7 +86,7 @@ function clampScrollTop() {
 function pagesOf(...texts: string[]): MessagePages {
   const messages = texts.flatMap((text, i) => {
     const run = makeRun({ startedAt: `2026-10-12T08:00:0${i}Z` })
-    return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `${text}的回答`, run })]
+    return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `Answer to ${text}`, run })]
   })
   return { pages: [makeMessagePage(messages, { hasMore: true })], pageParams: [null] }
 }
@@ -101,16 +101,16 @@ function List({ pages, live, ...rest }: Omit<ComponentProps<typeof MessageList>,
 
 const props = { live: initialLiveState, hasOlder: true, loadingOlder: false, refreshing: false }
 
-describe('对话区滚动', () => {
+describe('conversation area scrolling', () => {
   // jsdom does no layout, so we can only confirm that the scroll area is a positioning container; that the whole
   // page does not get stretched taller is checked with browser screenshots (.local-build/chat-scroll-fix).
-  it('滚动区是定位容器，里面绝对定位的说明文字（未读圆点等）不会撑高整页', () => {
-    render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
+  it('the scroll area is a positioning container, so absolutely positioned notes inside it (unread dots and so on) do not stretch the page', () => {
+    render(<List {...props} pages={pagesOf('Question')} onLoadOlder={() => {}} />)
     expect(screen.getByRole('log')).toHaveClass('relative')
   })
 
-  it('停在底部时，内容变高（图片加载完成、工具标记换行）也保持贴底', () => {
-    render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
+  it('when resting at the bottom it stays stuck to the bottom as the content grows (an image finishes loading, tool markers wrap)', () => {
+    render(<List {...props} pages={pagesOf('Question')} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     expect(log.scrollTop).toBe(1000)
     metrics.scrollHeight = 1300
@@ -118,9 +118,9 @@ describe('对话区滚动', () => {
     expect(log.scrollTop).toBe(1300)
   })
 
-  it('程序贴底后内容一下子变高很多，迟到的滚动事件不取消贴底', () => {
+  it('when the content grows a lot right after a programmatic stick to the bottom, a late scroll event does not cancel sticking', () => {
     clampScrollTop()
-    render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
+    render(<List {...props} pages={pagesOf('Question')} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     expect(log.scrollTop).toBe(500)
     // When the reply ends, the tool markers wrap and the final text appears, so the content grows by
@@ -131,9 +131,9 @@ describe('对话区滚动', () => {
     expect(log.scrollTop).toBe(800)
   })
 
-  it('人往上滚离开底部后不再贴底，滚回底部附近后恢复贴底', () => {
+  it('after a person scrolls up away from the bottom it stops sticking, and sticks again after scrolling back near the bottom', () => {
     clampScrollTop()
-    render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
+    render(<List {...props} pages={pagesOf('Question')} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     log.scrollTop = 300
     fireEvent.scroll(log)
@@ -147,8 +147,8 @@ describe('对话区滚动', () => {
     expect(log.scrollTop).toBe(1100)
   })
 
-  it('离开底部后，内容变高不改变位置', () => {
-    render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
+  it('away from the bottom, growing content does not change the position', () => {
+    render(<List {...props} pages={pagesOf('Question')} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     log.scrollTop = 200
     fireEvent.scroll(log)
@@ -157,9 +157,9 @@ describe('对话区滚动', () => {
     expect(log.scrollTop).toBe(200)
   })
 
-  it('加载更早的消息后，按开始加载时的内容高度补偿，保持原来看到的位置', () => {
+  it('after loading earlier messages compensates by the content height at the start of loading, keeping the view in place', () => {
     const onLoadOlder = vi.fn()
-    const newer = pagesOf('新问题')
+    const newer = pagesOf('New question')
     const { rerender } = render(<List {...props} pages={newer} onLoadOlder={onLoadOlder} />)
     const log = screen.getByRole('log')
     log.scrollTop = 300
@@ -172,32 +172,32 @@ describe('对话区滚动', () => {
     expect(onLoadOlder).toHaveBeenCalledTimes(1)
     rerender(<List {...props} loadingOlder pages={newer} onLoadOlder={onLoadOlder} />)
     // An older page is inserted at the top, adding 500 to the content.
-    const older = pagesOf('旧问题')
+    const older = pagesOf('Old question')
     metrics.scrollHeight = 1700
     rerender(<List {...props} pages={{ pages: [...newer.pages, ...older.pages], pageParams: [null, 'x'] }} onLoadOlder={onLoadOlder} />)
-    expect(screen.getByText('旧问题')).toBeInTheDocument()
+    expect(screen.getByText('Old question')).toBeInTheDocument()
     expect(log.scrollTop).toBe(500)
   })
 
-  it('整页重新获取进行中时不加载更早的消息', () => {
+  it('does not load earlier messages while the whole page is being refetched', () => {
     const onLoadOlder = vi.fn()
-    render(<List {...props} refreshing pages={pagesOf('问题')} onLoadOlder={onLoadOlder} />)
+    render(<List {...props} refreshing pages={pagesOf('Question')} onLoadOlder={onLoadOlder} />)
     const log = screen.getByRole('log')
     log.scrollTop = 0
     fireEvent.scroll(log)
-    fireEvent.click(screen.getByRole('button', { name: '加载更早的消息' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load earlier messages' }))
     expect(onLoadOlder).not.toHaveBeenCalled()
   })
 })
 
-describe('回复的显示', () => {
-  it('回复进行中显示输出光标与静态的状态文字，结束后不再显示光标', () => {
+describe('how replies show', () => {
+  it('while replying shows the output cursor and static status text; after it ends the cursor is gone', () => {
     const run = makeRun({ status: 'running', endedAt: null })
-    const live: LiveState = { ...initialLiveState, current: { run, text: '写到一半' } }
+    const live: LiveState = { ...initialLiveState, current: { run, text: 'Half written' } }
     const history = (messages: ReturnType<typeof makeMessage>[]): MessagePages => ({ pages: [makeMessagePage(messages)], pageParams: [null] })
-    const { container, rerender } = render(<List {...props} live={live} pages={history([makeMessage({ text: '问题', run })])} onLoadOlder={() => {}} />)
-    expect(screen.getByText('写到一半')).toBeInTheDocument()
-    expect(screen.getByText('回复中')).toBeInTheDocument()
+    const { container, rerender } = render(<List {...props} live={live} pages={history([makeMessage({ text: 'Question', run })])} onLoadOlder={() => {}} />)
+    expect(screen.getByText('Half written')).toBeInTheDocument()
+    expect(screen.getByText('Replying')).toBeInTheDocument()
     expect(container.querySelector('.riso-cursor')?.className).toContain('motion-reduce:animate-none')
     expect(container.querySelector('[class*="animate-spin"]')).toBeNull()
 
@@ -205,16 +205,16 @@ describe('回复的显示', () => {
     rerender(
       <List
         {...props}
-        pages={history([makeMessage({ text: '问题', run: ended }), makeMessage({ role: 'assistant', text: '写完了', run: ended })])}
+        pages={history([makeMessage({ text: 'Question', run: ended }), makeMessage({ role: 'assistant', text: 'All written', run: ended })])}
         onLoadOlder={() => {}}
       />,
     )
-    expect(screen.getByText('写完了')).toBeInTheDocument()
-    expect(screen.queryByText('回复中')).toBeNull()
+    expect(screen.getByText('All written')).toBeInTheDocument()
+    expect(screen.queryByText('Replying')).toBeNull()
     expect(container.querySelector('.riso-cursor')).toBeNull()
   })
 
-  it('/pi: 扩展命令由 Pi 直接处理（piCommand.handled）且没有输出：用户消息照原文显示，回复处说明命令已执行、没有回复；展开成提示的命令照常显示回复', () => {
+  it('a /pi: extension command handled by Pi itself (piCommand.handled) with no output: the user message shows as typed, the reply says the command ran with no reply; commands expanded into a prompt show their reply as usual', () => {
     const handled = makeRun({ startedAt: '2026-10-12T08:00:00Z', piCommand: { name: 'review', handled: true, notices: [], truncated: false } })
     const expanded = makeRun({ startedAt: '2026-10-12T08:00:01Z', piCommand: { name: 'skill:triage', handled: false, notices: [], truncated: false } })
     const plain = makeRun({ startedAt: '2026-10-12T08:00:02Z' })
@@ -224,8 +224,8 @@ describe('回复的显示', () => {
         pages={{
           pages: [makeMessagePage([
             makeMessage({ text: '/pi:review src/', run: handled }), makeMessage({ role: 'assistant', text: '', run: handled }),
-            makeMessage({ text: '/pi:skill:triage 看看', run: expanded }), makeMessage({ role: 'assistant', text: '分好类了', run: expanded }),
-            makeMessage({ text: '普通问题', run: plain }), makeMessage({ role: 'assistant', text: '', run: plain }),
+            makeMessage({ text: '/pi:skill:triage take a look', run: expanded }), makeMessage({ role: 'assistant', text: 'Sorted into categories', run: expanded }),
+            makeMessage({ text: 'A plain question', run: plain }), makeMessage({ role: 'assistant', text: '', run: plain }),
           ])],
           pageParams: [null],
         }}
@@ -233,16 +233,16 @@ describe('回复的显示', () => {
       />,
     )
     expect(screen.getByText('/pi:review src/')).toBeInTheDocument()
-    expect(screen.getByText('/pi:skill:triage 看看')).toBeInTheDocument()
-    expect(screen.getByText('分好类了')).toBeInTheDocument()
-    expect(screen.getAllByText('命令已执行，没有回复')).toHaveLength(1)
+    expect(screen.getByText('/pi:skill:triage take a look')).toBeInTheDocument()
+    expect(screen.getByText('Sorted into categories')).toBeInTheDocument()
+    expect(screen.getAllByText('Command ran; no reply')).toHaveLength(1)
   })
 
-  it('扩展命令的输出（notices）按顺序显示成等宽纯文本，保留换行与空格；警告与错误写明级别；截断时说明；有输出就不说"没有回复"', () => {
+  it('extension command output (notices) shows in order as monospace plain text, keeping line breaks and spaces; warnings and errors name their level; truncation is noted; with output it does not say "no reply"', () => {
     const usage = 'Weekly Limit (SuperGrok)\n   Used       1%\n   Reset      Nov 14, 04:41 EST'
     const run = makeRun({
       startedAt: '2026-10-12T08:00:00Z',
-      piCommand: { name: 'grok-cli-usage', handled: true, truncated: true, notices: [{ level: 'info', message: usage }, { level: 'warning', message: '额度快用完了 <b>注意</b>' }, { level: 'error', message: '读取月度额度失败' }] },
+      piCommand: { name: 'grok-cli-usage', handled: true, truncated: true, notices: [{ level: 'info', message: usage }, { level: 'warning', message: 'Quota almost used up <b>careful</b>' }, { level: 'error', message: 'Failed to read the monthly quota' }] },
     })
     const { container } = render(
       <List
@@ -252,44 +252,44 @@ describe('回复的显示', () => {
       />,
     )
     const blocks = [...container.querySelectorAll('[data-pi-command-notices] pre')]
-    expect(blocks.map((block) => block.textContent)).toEqual([usage, '额度快用完了 <b>注意</b>', '读取月度额度失败'])
+    expect(blocks.map((block) => block.textContent)).toEqual([usage, 'Quota almost used up <b>careful</b>', 'Failed to read the monthly quota'])
     expect(blocks[0].className).toContain('whitespace-pre-wrap')
     expect(blocks[0].className).toContain('font-mono')
-    expect(blocks[1].parentElement).toHaveTextContent(/^警告/)
-    expect(blocks[2].parentElement).toHaveTextContent(/^错误/)
-    expect(blocks[0].parentElement).not.toHaveTextContent(/^(警告|错误)/)
+    expect(blocks[1].parentElement).toHaveTextContent(/^Warning/)
+    expect(blocks[2].parentElement).toHaveTextContent(/^Error/)
+    expect(blocks[0].parentElement).not.toHaveTextContent(/^(Warning|Error)/)
     expect(container.querySelector('[data-pi-command-notices] b')).toBeNull()
-    expect(screen.getByText('输出过长，已截断')).toBeInTheDocument()
-    expect(screen.queryByText('命令已执行，没有回复')).toBeNull()
+    expect(screen.getByText('The output was too long and has been truncated')).toBeInTheDocument()
+    expect(screen.queryByText('Command ran; no reply')).toBeNull()
   })
 
-  it('执行进行中没有输出；结束事件带来 notices 后一次显示，不用另取时间线', () => {
+  it('no output while running; the notices brought by the end event show at once, without fetching the timeline', () => {
     const running = makeRun({ status: 'running', endedAt: null, piCommand: { name: 'grok-cli-usage', handled: true, notices: [], truncated: false } })
     const user = makeMessage({ text: '/pi:grok-cli-usage', run: running })
     const history: MessagePages = { pages: [makeMessagePage([user])], pageParams: [null] }
     const live: LiveState = { ...initialLiveState, current: { run: running, text: '' } }
     const { container, rerender } = render(<List {...props} live={live} pages={history} onLoadOlder={() => {}} />)
     expect(container.querySelector('[data-pi-command-notices]')).toBeNull()
-    expect(screen.queryByText('命令已执行，没有回复')).toBeNull()
+    expect(screen.queryByText('Command ran; no reply')).toBeNull()
     const ended = { ...running, status: 'completed' as const, endedAt: '2026-10-12T08:00:30Z', piCommand: { name: 'grok-cli-usage', handled: true, notices: [{ level: 'info' as const, message: 'Used 1%' }], truncated: false } }
     const next = liveReducer(live, { type: 'event', event: { type: 'run.ended', id: '5-0', data: { run: ended, message: makeMessage({ role: 'assistant', text: '', run: ended }) } } })
     rerender(<List {...props} live={next} pages={history} onLoadOlder={() => {}} />)
     expect(container.querySelector('[data-pi-command-notices] pre')?.textContent).toBe('Used 1%')
   })
 
-  it('打断消息在用户消息上方标明“打断”', () => {
+  it('an interrupt message is marked “Interrupt” above the user message', () => {
     const run = makeRun({ whenBusy: 'interrupt' })
     render(
       <List
         {...props}
-        pages={{ pages: [makeMessagePage([makeMessage({ text: '先停下', run }), makeMessage({ role: 'assistant', text: '好的', run })])], pageParams: [null] }}
+        pages={{ pages: [makeMessagePage([makeMessage({ text: 'Stop first', run }), makeMessage({ role: 'assistant', text: 'OK', run })])], pageParams: [null] }}
         onLoadOlder={() => {}}
       />,
     )
-    expect(screen.getByText('打断')).toBeInTheDocument()
+    expect(screen.getByText('Interrupt')).toBeInTheDocument()
   })
 
-  it('被打断的那一轮：没结束的工具变灰标明已打断，随后一道“已打断，先处理这条”，打断消息的气泡为粉色', () => {
+  it('the interrupted turn: unfinished tools turn gray marked interrupted, followed by an “Interrupted; handling this first” divider, and the interrupt message bubble is pink', () => {
     const interrupted = makeRun({
       status: 'interrupted',
       endReason: 'user_interrupt',
@@ -304,41 +304,41 @@ describe('回复的显示', () => {
     const interrupt = makeRun({ whenBusy: 'interrupt', startedAt: '2026-10-12T08:01:01Z' })
     const later = makeRun({ whenBusy: 'interrupt', startedAt: '2026-10-12T08:02:00Z' })
     const messages = [
-      makeMessage({ text: '跑测试', run: interrupted }),
-      makeMessage({ role: 'assistant', text: '先跑一遍', run: interrupted }),
-      makeMessage({ text: '先跑 lint', run: interrupt }),
-      makeMessage({ role: 'assistant', text: '好', run: interrupt }),
-      makeMessage({ text: '上一轮正常结束', run: later }),
+      makeMessage({ text: 'Run the tests', run: interrupted }),
+      makeMessage({ role: 'assistant', text: 'Running them once', run: interrupted }),
+      makeMessage({ text: 'Run lint first', run: interrupt }),
+      makeMessage({ role: 'assistant', text: 'Sure', run: interrupt }),
+      makeMessage({ text: 'The previous turn ended normally', run: later }),
     ]
     const { container } = render(<List {...props} pages={{ pages: [makeMessagePage(messages)], pageParams: [null] }} onLoadOlder={() => {}} />)
-    const tools = within(screen.getAllByRole('list', { name: '工具调用' })[0]).getAllByRole('listitem')
-    expect(tools[0]).toHaveTextContent('read成功')
-    expect(tools[1]).toHaveTextContent('bash已打断')
+    const tools = within(screen.getAllByRole('list', { name: 'Tool calls' })[0]).getAllByRole('listitem')
+    expect(tools[0]).toHaveTextContent('readSucceeded')
+    expect(tools[1]).toHaveTextContent('bashInterrupted')
     expect(tools[1].querySelector('[data-interrupted]')).toHaveClass('border-dashed')
     expect(container.querySelector('[data-slot="tool-spinner"]')).toBeNull()
     // It appears only once, after the turn that was interrupted; there is
     // none before an interrupting message whose previous turn ended normally.
-    const dividers = screen.getAllByRole('separator', { name: '已打断，先处理这条' })
+    const dividers = screen.getAllByRole('separator', { name: 'Interrupted; handling this first' })
     expect(dividers).toHaveLength(1)
-    const bubble = screen.getByText('先跑 lint')
+    const bubble = screen.getByText('Run lint first')
     expect(dividers[0].compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(bubble).toHaveClass('border-riso-pink', 'bg-tint-pink-2')
-    expect(screen.getByText('跑测试')).toHaveClass('bg-tint-pink')
+    expect(screen.getByText('Run the tests')).toHaveClass('bg-tint-pink')
   })
 
-  it('会话分隔线是带剪刀的粉色虚线裁切线，与“打断”分隔线同一种样式', () => {
+  it('the session divider is a pink dashed cut line with scissors, the same style as the “interrupt” divider', () => {
     const before = makeRun({ status: 'interrupted', endReason: 'user_interrupt', startedAt: '2026-10-12T08:00:00Z', endedAt: '2026-10-12T08:01:00Z' })
     const interrupt = makeRun({ whenBusy: 'interrupt', startedAt: '2026-10-12T08:01:01Z' })
     const reopened = makeRun({ startedAt: '2026-10-12T09:00:00Z' })
     const messages = [
-      makeMessage({ text: '第一问', run: before }),
-      makeMessage({ text: '先做这个', run: interrupt }),
-      makeMessage({ text: '重开后的问题', run: reopened, sessionEpoch: 2 }),
+      makeMessage({ text: 'First question', run: before }),
+      makeMessage({ text: 'Do this first', run: interrupt }),
+      makeMessage({ text: 'Question after the new session', run: reopened, sessionEpoch: 2 }),
     ]
     render(<List {...props} pages={{ pages: [makeMessagePage(messages)], pageParams: [null] }} onLoadOlder={() => {}} />)
-    const session = screen.getByRole('separator', { name: '会话已切换，页面历史保留' })
-    const interrupted = screen.getByRole('separator', { name: '已打断，先处理这条' })
-    expect(session).toHaveTextContent(/^会话已切换，页面历史保留$/)
+    const session = screen.getByRole('separator', { name: 'Session switched; page history is kept' })
+    const interrupted = screen.getByRole('separator', { name: 'Interrupted; handling this first' })
+    expect(session).toHaveTextContent(/^Session switched; page history is kept$/)
     for (const divider of [session, interrupted]) {
       const lines = divider.querySelectorAll('[data-cut-line]')
       expect(lines).toHaveLength(2)
@@ -348,57 +348,57 @@ describe('回复的显示', () => {
     // The cut line has a pair of scissors at its left end; the interrupt divider's icon is still a lightning bolt.
     expect(session.querySelector('svg')).toHaveClass('lucide-scissors')
     expect(interrupted.querySelector('svg')).toHaveClass('lucide-zap')
-    expect(session.compareDocumentPosition(screen.getByText('重开后的问题')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(session.compareDocumentPosition(screen.getByText('Question after the new session')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('被 Inbox 唤醒的那一轮：发送者标明为平台提醒，与操作者发的消息区分开，随后是回复', () => {
+  it('a turn woken by the Inbox: the sender is marked as a platform reminder, distinct from messages the operator sent, followed by the reply', () => {
     const run = makeRun()
-    const reminder = makeMessage({ origin: 'inbox_reminder', text: '你有 2 条未读 Inbox 消息，运行 loopctl inbox list --unread 查看。', run })
+    const reminder = makeMessage({ origin: 'inbox_reminder', text: 'You have 2 unread Inbox messages. Run loopctl inbox list --unread to see them.', run })
     render(
       <List
         {...props}
-        pages={{ pages: [makeMessagePage([reminder, makeMessage({ role: 'assistant', text: '我去看看', run })])], pageParams: [null] }}
+        pages={{ pages: [makeMessagePage([reminder, makeMessage({ role: 'assistant', text: 'I will take a look', run })])], pageParams: [null] }}
         onLoadOlder={() => {}}
       />,
     )
     const note = screen.getByRole('note')
-    expect(note).toHaveTextContent(/^平台提醒.+收到 Inbox 消息/)
+    expect(note).toHaveTextContent(/^Platform reminder.+Received an Inbox message/)
     expect(note).not.toHaveTextContent('loopctl')
-    expect(note).not.toHaveTextContent('你有 2 条未读')
-    expect(screen.queryByText(/^你\s*·/)).toBeNull()
-    expect(screen.getByText('我去看看')).toBeInTheDocument()
+    expect(note).not.toHaveTextContent('You have 2 unread')
+    expect(screen.queryByText(/^You\s*·/)).toBeNull()
+    expect(screen.getByText('I will take a look')).toBeInTheDocument()
   })
 })
 
-it('sleep_wake 是一行淡色唤醒信息：时间、睡了多久与说明；平台指令和 sleep ID 不在正文里；提前唤醒的消息只带一个小标记', () => {
+it('sleep_wake is one faint wake line: time, how long it slept and the note; the platform instruction and the sleep ID are not in the text; a message that woke it early only gets a small marker', () => {
   const timer = '00000000-0000-7000-8000-000000005001', early = '00000000-0000-7000-8000-000000005002'
   const source = makeRun({ endedAt: '2026-10-26T08:00:00Z' }), wake = makeRun({ wakeSleepId: timer, endedAt: '2026-10-26T08:05:20Z' }), consoleRun = makeRun({ wakeSleepId: early })
   const pages: MessagePages = { pages: [makeMessagePage([
-    makeMessage({ text: '每 5 分钟看一次 CI', run: source, createdAt: '2026-10-26T07:59:50Z' }),
-    makeMessage({ role: 'assistant', text: '还没跑完，先 sleep', run: source, createdAt: '2026-10-26T07:59:55Z' }),
+    makeMessage({ text: 'Check CI every 5 minutes', run: source, createdAt: '2026-10-26T07:59:50Z' }),
+    makeMessage({ role: 'assistant', text: 'Not done yet, sleeping first', run: source, createdAt: '2026-10-26T07:59:55Z' }),
     makeMessage({ origin: 'sleep_wake', text: `Platform notice: your sleep is due; continue in the original conversation. sleepId=${timer}; note: check CI status for the budget fixture\nthen report`, run: wake, createdAt: '2026-10-26T08:05:03Z' }),
-    makeMessage({ role: 'assistant', text: '已继续', run: wake, createdAt: '2026-10-26T08:05:04Z' }),
-    makeMessage({ origin: 'console', text: '真实控制台留言', run: consoleRun, createdAt: '2026-10-26T08:06:00Z' }),
+    makeMessage({ role: 'assistant', text: 'Continued', run: wake, createdAt: '2026-10-26T08:05:04Z' }),
+    makeMessage({ origin: 'console', text: 'A real console message', run: consoleRun, createdAt: '2026-10-26T08:06:00Z' }),
   ])], pageParams: [null] }
   render(<List {...props} pages={pages} onLoadOlder={() => {}} />)
   const line = screen.getByRole('note')
-  expect(line).toHaveTextContent(/^sleep 到期唤醒·.+·睡了 5 分钟·check CI status for the budget fixture then report$/u)
+  expect(line).toHaveTextContent(/^Woke up on schedule·.+·Slept 5 min·check CI status for the budget fixture then report$/u)
   expect(line).not.toHaveTextContent(/Platform notice|sleepId|5001/u)
-  expect(line).toHaveAttribute('title', `check CI status for the budget fixture then report\nsleep ${timer}`)
+  expect(line).toHaveAttribute('title', `check CI status for the budget fixture then report\nSleep ${timer}`)
   expect(line.className).not.toMatch(/riso-tilt|riso-yellow/)
-  expect(screen.getByText('真实控制台留言')).toBeVisible()
-  expect(screen.getByText('提前唤醒 sleep').closest('[data-early-wake]')).toHaveAttribute('title', `sleep ${early}`)
-  expect(screen.queryByText(/唤醒关联/u)).toBeNull()
+  expect(screen.getByText('A real console message')).toBeVisible()
+  expect(screen.getByText('Woke early').closest('[data-early-wake]')).toHaveAttribute('title', `Sleep ${early}`)
+  expect(screen.queryByText(/Wake ref/u)).toBeNull()
 })
 
-it('前一轮不是刚结束的那一轮时不写睡了多久；对不上格式的唤醒原文只放在悬停提示里', () => {
+it('does not say how long it slept when the previous turn is not the one that just ended; a wake text that does not match the format goes only into the hover tooltip', () => {
   const wake = makeRun({ wakeSleepId: 'sleep-timer' })
   const pages: MessagePages = { pages: [makeMessagePage([
-    makeMessage({ origin: 'sleep_wake', text: '计时器提醒原文', run: wake }),
-    makeMessage({ role: 'assistant', text: '已继续', run: wake }),
+    makeMessage({ origin: 'sleep_wake', text: 'Raw timer reminder', run: wake }),
+    makeMessage({ role: 'assistant', text: 'Continued', run: wake }),
   ])], pageParams: [null] }
   render(<List {...props} pages={pages} onLoadOlder={() => {}} />)
   const line = screen.getByRole('note')
-  expect(line).toHaveTextContent(/^sleep 到期唤醒·[^·]+$/u)
-  expect(line).toHaveAttribute('title', '计时器提醒原文\nsleep sleep-timer')
+  expect(line).toHaveTextContent(/^Woke up on schedule·[^·]+$/u)
+  expect(line).toHaveAttribute('title', 'Raw timer reminder\nSleep sleep-timer')
 })

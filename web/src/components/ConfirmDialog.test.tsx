@@ -16,62 +16,62 @@ function deferred() {
 
 const notIdle = new ApiError({ status: 409, code: 'agent_not_idle' })
 
-describe('确认框', () => {
-  it('提交进行中按 Esc 不关闭，失败原因显示在确认框中', async () => {
+describe('Confirmation dialog', () => {
+  it('Esc does not close it while submitting; the failure reason shows in the dialog', async () => {
     const request = deferred()
     const onOpenChange = vi.fn()
     const user = userEvent.setup()
-    render(<ConfirmDialog open onOpenChange={onOpenChange} title="删除？" confirmLabel="删除" onConfirm={() => request.promise} />)
+    render(<ConfirmDialog open onOpenChange={onOpenChange} title="Delete?" confirmLabel="Delete" onConfirm={() => request.promise} />)
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: '删除' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await user.keyboard('{Escape}')
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
 
     request.reject(notIdle)
-    expect(await within(dialog).findByText(/Agent 不空闲/)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/The Agent isn't idle/)).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 
-  it('成功后调用 onOpenChange(false)', async () => {
+  it('calls onOpenChange(false) on success', async () => {
     const onOpenChange = vi.fn()
     const user = userEvent.setup()
-    render(<ConfirmDialog open onOpenChange={onOpenChange} title="删除？" confirmLabel="删除" onConfirm={async () => {}} />)
-    await user.click(screen.getByRole('button', { name: '删除' }))
+    render(<ConfirmDialog open onOpenChange={onOpenChange} title="Delete?" confirmLabel="Delete" onConfirm={async () => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
-  it('再次打开时不显示上次留下的错误', async () => {
+  it('does not show the error left from last time when opened again', async () => {
     const user = userEvent.setup()
-    const props = { onOpenChange: () => {}, title: '替换？', confirmLabel: '替换', onConfirm: () => Promise.reject(notIdle) }
+    const props = { onOpenChange: () => {}, title: 'Replace?', confirmLabel: 'Replace', onConfirm: () => Promise.reject(notIdle) }
     const { rerender } = render(<ConfirmDialog open {...props} />)
-    await user.click(screen.getByRole('button', { name: '替换' }))
-    expect(await screen.findByText(/Agent 不空闲/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+    expect(await screen.findByText(/The Agent isn't idle/)).toBeInTheDocument()
     // The parent closes the confirmation dialog directly (without going through onOpenChange), then opens it again.
     rerender(<ConfirmDialog open={false} {...props} />)
     rerender(<ConfirmDialog open {...props} />)
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
-    expect(screen.queryByText(/Agent 不空闲/)).toBeNull()
+    expect(screen.queryByText(/The Agent isn't idle/)).toBeNull()
   })
 
-  it('删除一类的确认（destructive）：顶边标签“危险操作”，标题旁一个“不可撤销”斜印章，确认按钮是红色；普通确认是“确认”，没有印章', () => {
-    const { unmount } = render(<ConfirmDialog open onOpenChange={() => {}} title="卸载 Grok CLI？" confirmLabel="卸载" destructive onConfirm={() => {}} />)
-    let dialog = screen.getByRole('alertdialog', { name: '卸载 Grok CLI？' })
-    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
-    expect(within(dialog).getByText('不可撤销')).toHaveClass('riso-tilt', 'text-red-text')
-    expect(within(dialog).getByRole('button', { name: '卸载' })).toHaveAttribute('data-variant', 'destructive')
+  it('delete-type confirmation (destructive): top-edge label “Danger”, a tilted “Irreversible” stamp next to the title, a red confirm button; a plain confirmation says “Confirm” and has no stamp', () => {
+    const { unmount } = render(<ConfirmDialog open onOpenChange={() => {}} title="Uninstall Grok CLI?" confirmLabel="Uninstall" destructive onConfirm={() => {}} />)
+    let dialog = screen.getByRole('alertdialog', { name: 'Uninstall Grok CLI?' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('Danger')
+    expect(within(dialog).getByText('Irreversible')).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(dialog).getByRole('button', { name: 'Uninstall' })).toHaveAttribute('data-variant', 'destructive')
     unmount()
-    render(<ConfirmDialog open onOpenChange={() => {}} title="重试当前节点" confirmLabel="重试" onConfirm={() => {}} />)
-    dialog = screen.getByRole('alertdialog', { name: '重试当前节点' })
-    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('确认')
-    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+    render(<ConfirmDialog open onOpenChange={() => {}} title="Retry current node" confirmLabel="Retry" onConfirm={() => {}} />)
+    dialog = screen.getByRole('alertdialog', { name: 'Retry current node' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('Confirm')
+    expect(within(dialog).queryByText('Irreversible')).not.toBeInTheDocument()
   })
 
-  it('只是解除关联、能重新加回来的危险操作（irreversible=false）：仍是“危险操作”标签和红色按钮，但不盖“不可撤销”印章', () => {
-    render(<ConfirmDialog open onOpenChange={() => {}} title="从清单移除 /work/docs？" confirmLabel="移除" destructive irreversible={false} onConfirm={() => {}} />)
-    const dialog = screen.getByRole('alertdialog', { name: '从清单移除 /work/docs？' })
-    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
-    expect(within(dialog).getByRole('button', { name: '移除' })).toHaveAttribute('data-variant', 'destructive')
-    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+  it('a dangerous action that only unlinks something and can be added back (irreversible=false): still the “Danger” label and red button, but no “Irreversible” stamp', () => {
+    render(<ConfirmDialog open onOpenChange={() => {}} title="Remove /work/docs from the list?" confirmLabel="Remove" destructive irreversible={false} onConfirm={() => {}} />)
+    const dialog = screen.getByRole('alertdialog', { name: 'Remove /work/docs from the list?' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('Danger')
+    expect(within(dialog).getByRole('button', { name: 'Remove' })).toHaveAttribute('data-variant', 'destructive')
+    expect(within(dialog).queryByText('Irreversible')).not.toBeInTheDocument()
   })
 })

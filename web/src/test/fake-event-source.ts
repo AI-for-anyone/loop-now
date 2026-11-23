@@ -25,7 +25,7 @@ export class FakeEventSource {
 
   static latest(): FakeEventSource {
     const source = FakeEventSource.instances.at(-1)
-    if (!source) throw new Error('没有创建过 EventSource')
+    if (!source) throw new Error('No EventSource has been created')
     return source
   }
 

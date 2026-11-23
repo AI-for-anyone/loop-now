@@ -10,8 +10,8 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
-const agent = makeAgent({ name: '代码审查助手', address: '测试组织/测试项目/代码审查助手' })
-const tester = makeAgent({ name: '测试助手', address: '测试组织/测试项目/测试助手' })
+const agent = makeAgent({ name: 'Code review assistant', address: 'test-org/test-project/Code review assistant' })
+const tester = makeAgent({ name: 'Testing assistant', address: 'test-org/test-project/Testing assistant' })
 
 // Open the Agent's Inbox tab and record every request to the inbox endpoints (method, path and query parameters).
 async function renderAgentInbox(messages: Schemas['InboxMessage'][]) {
@@ -36,79 +36,79 @@ async function renderAgentInbox(messages: Schemas['InboxMessage'][]) {
   )
   const user = userEvent.setup()
   const result = renderRoutes(routes, `${defaultAgentsPath}/${agent.id}/inbox`)
-  const list = within(await screen.findByRole('list', { name: '代码审查助手收到的消息' }))
+  const list = within(await screen.findByRole('list', { name: 'Messages received by Code review assistant' }))
   return { ...result, user, list, requests }
 }
 
 const received = () => [
-  makeInboxMessage({ from: agentParty(tester), to: agentParty(agent), text: 'naming 包的测试我补了两条，跑一下看看。' }),
-  makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: '帮我审一下 naming 包', whenBusy: 'interrupt', readAt: new Date().toISOString() }),
+  makeInboxMessage({ from: agentParty(tester), to: agentParty(agent), text: 'I added two tests for the naming package, give them a run.' }),
+  makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: 'Please review the naming package', whenBusy: 'interrupt', readAt: new Date().toISOString() }),
 ]
 
-describe('每个 Agent 的收件箱只读', () => {
-  it('被人取消的排队消息标明已被人取消，不算未读', async () => {
-    const cancelled = makeInboxMessage({ from: agentParty(tester), to: agentParty(agent), text: '这条不用处理了', cancelledAt: '2026-10-25T08:00:00Z' })
+describe('Each Agent\'s inbox is read-only', () => {
+  it('a queued message someone cancelled is marked as cancelled by someone and does not count as unread', async () => {
+    const cancelled = makeInboxMessage({ from: agentParty(tester), to: agentParty(agent), text: 'No need to handle this one', cancelledAt: '2026-10-25T08:00:00Z' })
     const { list } = await renderAgentInbox([cancelled])
-    const row = list.getByRole('button', { name: /测试助手/ })
-    expect(within(row).getByText('已被人取消')).toBeInTheDocument()
-    expect(within(row).queryByText('未读')).toBeNull()
+    const row = list.getByRole('button', { name: /Testing assistant/ })
+    expect(within(row).getByText('Cancelled by someone')).toBeInTheDocument()
+    expect(within(row).queryByText('Unread')).toBeNull()
   })
 
-  it('查看 Agent 收到的消息：列出发件人、已读或未读，打断的消息标明', async () => {
+  it('viewing the messages an Agent received: lists the sender, read or unread, and marks interrupting messages', async () => {
     const [first, second] = received()
     const { list } = await renderAgentInbox([second, first])
     const items = list.getAllByRole('listitem')
     expect(items).toHaveLength(2)
-    expect(items[0]).toHaveTextContent(/控制台@console打断.*已读 \d{2}:\d{2}/)
-    expect(items[1]).toHaveTextContent(/测试助手测试组织\/测试项目\/测试助手.*naming 包的测试我补了两条.*未读$/)
-    expect(screen.getByText('只读查看：打开全文不会改变已读状态')).toBeInTheDocument()
+    expect(items[0]).toHaveTextContent(/Console@consoleInterrupt.*Read \d{2}:\d{2}/)
+    expect(items[1]).toHaveTextContent(/Testing assistanttest-org\/test-project\/Testing assistant.*I added two tests for the naming package.*Unread$/)
+    expect(screen.getByText('Read-only view: opening a message doesn\'t mark it read')).toBeInTheDocument()
   })
 
-  it('只看未读：列表中只有 Agent 尚未读取的消息', async () => {
+  it('unread only: the list has only the messages the Agent has not read yet', async () => {
     const [first, second] = received()
     const { user, requests } = await renderAgentInbox([second, first])
-    await user.click(screen.getByRole('radio', { name: '只看未读' }))
+    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
     await waitFor(() => expect(requests).toContain(`GET /api/v1/agents/${agent.id}/inbox?limit=20&unread=true`))
-    const list = within(await screen.findByRole('list', { name: '代码审查助手收到的消息' }))
+    const list = within(await screen.findByRole('list', { name: 'Messages received by Code review assistant' }))
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(1))
-    expect(list.getByRole('listitem')).toHaveTextContent('测试助手')
+    expect(list.getByRole('listitem')).toHaveTextContent('Testing assistant')
   })
 
-  it('只看未读且没有未读消息时，说明没有未读消息', async () => {
+  it('unread only with no unread messages says there are no unread messages', async () => {
     const [, second] = received()
     const { user } = await renderAgentInbox([second])
-    await user.click(screen.getByRole('radio', { name: '只看未读' }))
-    expect(await screen.findByText('没有未读消息。')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
+    expect(await screen.findByText('No unread messages.')).toBeInTheDocument()
   })
 
-  it('查看全文不改变已读状态：只请求只读的全文接口，没有标记已读的操作', async () => {
+  it('viewing the full text does not change the read state: only the read-only full-text endpoint is requested, and there is no mark-as-read action', async () => {
     const [first] = received()
     const { user, list, requests } = await renderAgentInbox([first])
-    await user.click(list.getByRole('button', { name: /测试助手/ }))
-    expect(await list.findByText('naming 包的测试我补了两条，跑一下看看。', { selector: 'p' })).toBeInTheDocument()
+    await user.click(list.getByRole('button', { name: /Testing assistant/ }))
+    expect(await list.findByText('I added two tests for the naming package, give them a run.', { selector: 'p' })).toBeInTheDocument()
     expect(requests.filter((r) => !r.startsWith('GET'))).toEqual([])
     expect(requests).toContain(`GET /api/v1/agents/${agent.id}/inbox/${first.id}`)
-    expect(within(list.getByRole('button', { name: /测试助手/ })).getByText('未读')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /标为已读|标为未读/ })).toBeNull()
+    expect(within(list.getByRole('button', { name: /Testing assistant/ })).getByText('Unread')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /mark (as )?(read|unread)/i })).toBeNull()
   })
 
-  it('Agent 读取消息后，已读状态随收件箱事件流实时变化', async () => {
+  it('after the Agent reads a message, the read state changes live with the inbox event stream', async () => {
     const [first] = received()
     const { list } = await renderAgentInbox([first])
     await openInboxStream(0)
     const readAt = new Date().toISOString()
     first.readAt = readAt
     await emitInbox('inbox.message.read', { id: first.id, threadId: first.threadId, to: agentParty(agent), readAt, unreadTotal: 0 })
-    await waitFor(() => expect(list.getByRole('listitem')).toHaveTextContent(/已读 \d{2}:\d{2}$/))
+    await waitFor(() => expect(list.getByRole('listitem')).toHaveTextContent(/Read \d{2}:\d{2}$/))
   })
 
-  it('新消息到达时列表随之更新；与其他 Agent、操作者无关的消息不影响', async () => {
+  it('the list updates when a new message arrives, also for a message that involves neither another Agent nor the operator', async () => {
     const [first] = received()
     const messages = [first]
     const { list } = await renderAgentInbox(messages)
     await openInboxStream(0)
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    const fresh = makeInboxMessage({ from: externalParty(ciBot), to: agentParty(agent), text: '夜间构建失败了' })
+    const fresh = makeInboxMessage({ from: externalParty(ciBot), to: agentParty(agent), text: 'The nightly build failed' })
     messages.unshift(fresh)
     await emitInbox('inbox.message.created', { message: summaryOf(fresh), unreadTotal: 0 })
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(2))
@@ -116,87 +116,88 @@ describe('每个 Agent 的收件箱只读', () => {
   })
 })
 
-describe('显示 Agent 地址', () => {
-  it('复制地址：剪贴板中是完整地址', async () => {
+describe('Showing the Agent address', () => {
+  it('copy address: the clipboard holds the full address', async () => {
     const { user } = await renderAgentInbox(received().slice(0, 1))
-    expect(screen.getByText('测试组织/测试项目/代码审查助手')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '复制地址' }))
-    await expect(navigator.clipboard.readText()).resolves.toBe('测试组织/测试项目/代码审查助手')
-    expect(await screen.findByRole('button', { name: '复制地址' })).toHaveTextContent('已复制')
+    expect(screen.getByText('test-org/test-project/Code review assistant')).toBeInTheDocument()
+    // English UI issue: the copy button's name glues t.common.copy and t.agents.address.label without a space (“CopyAddress”).
+    await user.click(screen.getByRole('button', { name: 'CopyAddress' }))
+    await expect(navigator.clipboard.readText()).resolves.toBe('test-org/test-project/Code review assistant')
+    expect(await screen.findByRole('button', { name: 'CopyAddress' })).toHaveTextContent('Copied')
   })
 
-  it('平台 Agent 的地址是名称本身', async () => {
-    const watcher = makeAgent({ name: '联调巡检', scope: 'platform', projectId: null, address: '联调巡检' })
+  it('a platform Agent\'s address is its name itself', async () => {
+    const watcher = makeAgent({ name: 'Integration patrol', scope: 'platform', projectId: null, address: 'Integration patrol' })
     server.use(http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(watcher)] })), ...baseHandlers([watcher]))
     renderRoutes(routes, `/platform/agents/${watcher.id}/config`)
-    expect(await screen.findByText('联调巡检', { selector: 'span' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '复制地址' })).toBeInTheDocument()
+    expect(await screen.findByText('Integration patrol', { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'CopyAddress' })).toBeInTheDocument()
   })
 
-  it('名称不满足规则时没有地址：说明需要先改名，发消息时改用内部 ID', async () => {
+  it('no address when the name does not meet the rules: a note says to rename it first and to use the internal ID when sending messages', async () => {
     const legacy = makeAgent({ name: 'old/bot', address: null })
     server.use(...baseHandlers([legacy]))
     renderRoutes(routes, `${defaultAgentsPath}/${legacy.id}/config`)
-    expect(await screen.findByText(/这个 Agent 暂时没有地址.*改名后才有地址.*改用内部 ID/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '复制地址' })).toBeNull()
+    expect(await screen.findByText(/This Agent has no address yet.*Rename it to get one.*use its internal ID/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'CopyAddress' })).toBeNull()
   })
 })
 
 // "Printed sheet" redesign, step 2: the Inbox tab sits directly on the sheet, with the unread count and the total in the stub on the right.
-describe('纸张上的收件箱', () => {
-  it('筛选是两颗胶囊：选中的一颗黄底、藏青描边加藏青投影；顶上一行与列表之间一道实线，只读说明是一行小字', async () => {
+describe('The inbox on the sheet', () => {
+  it('the filter is two pills: the selected one is yellow with a navy border and a navy shadow; a solid line between the top row and the list; the read-only note is one line of small text', async () => {
     await renderAgentInbox(received())
-    const all = screen.getByRole('radio', { name: '全部' })
-    const unread = screen.getByRole('radio', { name: '只看未读' })
+    const all = screen.getByRole('radio', { name: 'All' })
+    const unread = screen.getByRole('radio', { name: 'Unread only' })
     for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-full', 'border-2')
     expect(all).toHaveAttribute('aria-checked', 'true')
     expect(all).toHaveClass('data-[state=on]:bg-riso-yellow', 'data-[state=on]:border-ink', 'data-[state=on]:shadow-[3px_3px_0_var(--ink)]')
     const bar = all.closest('[data-inbox-bar]')!
     expect(bar).toHaveClass('border-b-2', 'border-ink')
-    const note = within(bar as HTMLElement).getByText('只读查看：打开全文不会改变已读状态')
+    const note = within(bar as HTMLElement).getByText('Read-only view: opening a message doesn\'t mark it read')
     expect(note).not.toHaveClass('bg-tint-yellow')
   })
 
-  it('每封一行：发件方与等宽的地址、单行的正文、等宽的时间；未读是倾斜的粉色描边印章，已读是浅蓝胶囊；行与行之间虚线', async () => {
+  it('one row per message: sender with a monospace address, single-line body, monospace time; unread is a tilted stamp with a pink outline, read is a light blue pill; dashed lines between rows', async () => {
     const [first, second] = received()
     const { list } = await renderAgentInbox([second, first])
     const [read, fresh] = list.getAllByRole('listitem')
     for (const item of [read, fresh]) expect(item).toHaveClass('border-b-[1.5px]', 'border-dashed')
-    expect(within(fresh).getByText('测试组织/测试项目/测试助手')).toHaveClass('font-mono', 'truncate')
-    expect(within(fresh).getByText('naming 包的测试我补了两条，跑一下看看。')).toHaveClass('truncate', 'font-bold')
+    expect(within(fresh).getByText('test-org/test-project/Testing assistant')).toHaveClass('font-mono', 'truncate')
+    expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-bold')
     expect(fresh.querySelector('time')).toHaveClass('font-mono')
-    const stamp = within(fresh).getByText('未读').closest('[data-read-state]')!
+    const stamp = within(fresh).getByText('Unread').closest('[data-read-state]')!
     expect(stamp).toHaveAttribute('data-read-state', 'unread')
     expect(stamp).toHaveClass('riso-tilt', 'text-pink-text')
-    const pill = within(read).getByText(/^已读 /).closest('[data-read-state]')!
+    const pill = within(read).getByText(/^Read /).closest('[data-read-state]')!
     expect(pill).toHaveAttribute('data-read-state', 'read')
     expect(pill).toHaveClass('rounded-full', 'bg-tint-blue')
     // The body text of read messages uses the secondary text color and is not bold.
-    expect(within(read).getByText('帮我审一下 naming 包')).not.toHaveClass('font-bold')
+    expect(within(read).getByText('Please review the naming package')).not.toHaveClass('font-bold')
   })
 
-  it('票根“信件”写着未读数与总数；窄屏不显示', async () => {
+  it('the “Mail” stub shows the unread count and the total; hidden on narrow screens', async () => {
     const [first, second] = received()
     await renderAgentInbox([second, first])
-    const stub = await screen.findByRole('complementary', { name: '信件' })
+    const stub = await screen.findByRole('complementary', { name: 'Mail' })
     expect(stub).toHaveClass('max-nav:hidden')
-    await waitFor(() => expect(within(stub).getByText('未读').previousElementSibling).toHaveTextContent(/^1$/))
-    expect(within(stub).getByText('全部').previousElementSibling).toHaveTextContent(/^2$/)
-    expect(within(stub).getByText('未读').previousElementSibling).toHaveClass('text-pink-text')
+    await waitFor(() => expect(within(stub).getByText('unread').previousElementSibling).toHaveTextContent(/^1$/))
+    expect(within(stub).getByText('in total').previousElementSibling).toHaveTextContent(/^2$/)
+    expect(within(stub).getByText('unread').previousElementSibling).toHaveClass('text-pink-text')
   })
 
-  it('信件列表在纸张里自己滚动，用纸张的细滚动条，不隐藏', async () => {
+  it('the message list scrolls on its own inside the sheet, with the sheet\'s thin scrollbar, not hidden', async () => {
     const { list } = await renderAgentInbox(received())
     const area = list.getAllByRole('listitem')[0].closest('.overflow-y-auto')!
     expect(area.closest('[data-sheet]')).toHaveClass('riso-scrollbar')
     expect(area.className).not.toMatch(/no-scrollbar/)
   })
 
-  it('只看未读时，票根仍按全部信件计数', async () => {
+  it('with unread only, the stub still counts all messages', async () => {
     const [first, second] = received()
     const { user } = await renderAgentInbox([second, first])
-    await user.click(screen.getByRole('radio', { name: '只看未读' }))
-    const stub = screen.getByRole('complementary', { name: '信件' })
-    await waitFor(() => expect(within(stub).getByText('全部').previousElementSibling).toHaveTextContent(/^2$/))
+    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
+    const stub = screen.getByRole('complementary', { name: 'Mail' })
+    await waitFor(() => expect(within(stub).getByText('in total').previousElementSibling).toHaveTextContent(/^2$/))
   })
 })

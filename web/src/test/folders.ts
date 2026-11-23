@@ -14,21 +14,21 @@ const dir = (minutesAgo = 600): Node => ({ kind: 'dir', children: new Map(), mod
 const text = (body: string, minutesAgo = 120): Node => ({ kind: 'file', bytes: new Blob([body], { type: 'text/plain' }), modifiedAt: at(minutesAgo) })
 const binary = (size: number, minutesAgo = 120): Node => { const bytes = new Uint8Array(size); bytes[1] = 0; bytes[0] = 0x7f; return { kind: 'file', bytes: new Blob([bytes]), modifiedAt: at(minutesAgo) } }
 
-const AGENTS_MD = `# server 的工作说明
+const AGENTS_MD = `# Working notes for server
 
-你负责 Loop Now 服务端（Go）的开发与维护。
+You develop and maintain the Loop Now server (Go).
 
-## 开始之前
-- 先读 \`handoff/notes.md\`，了解上一轮停在哪里。
-- 改动前跑一遍 \`go test ./internal/server/...\`，记下原有的失败。
+## Before you start
+- Read \`handoff/notes.md\` first to see where the last round stopped.
+- Run \`go test ./internal/server/...\` before changing anything, and note the failures that are already there.
 
-## 约定
-- 接口以 \`api/openapi.yaml\` 为准，改接口先改契约。
-- 不提交、不部署；完成后在 Inbox 里回报 Manager。
-- 测试只跑与改动有关的部分，结果如实写进交接说明。
+## Conventions
+- \`api/openapi.yaml\` is the source of truth: change the contract before the endpoint.
+- Don't commit or deploy; report to the Manager in the Inbox when done.
+- Run only the tests related to the change, and write the results into the handoff notes as they are.
 `
 
-const GO_MAIN = `// loop-server 是 Loop Now 的服务端。配置全部来自环境变量。
+const GO_MAIN = `// loop-server is the Loop Now server. All configuration comes from environment variables.
 package main
 
 import (
@@ -45,7 +45,7 @@ import (
 func main() {
 \tcfg, err := config.Load(os.Getenv)
 \tif err != nil {
-\t\tfmt.Fprintln(os.Stderr, "配置有误，拒绝启动：", err)
+\t\tfmt.Fprintln(os.Stderr, "invalid configuration, refusing to start:", err)
 \t\tos.Exit(2)
 \t}
 \tctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -63,13 +63,13 @@ func main() {
 
 const BUDGET_GO = `package tasks
 
-// Budget 记下一次任务的用量上限与已用量；写入顺序：先账本，后事件。
+// Budget records a task's usage limit and usage so far; write order: ledger first, then events.
 type Budget struct {
 \tLimit int64
 \tUsed  int64
 }
 
-// Spend 扣减用量，超过上限时返回 false，不改动已用量。
+// Spend deducts usage; over the limit it returns false and leaves the usage unchanged.
 func (b *Budget) Spend(n int64) bool {
 \tif b.Used+n > b.Limit {
 \t\treturn false
@@ -87,7 +87,7 @@ export const keys = {
   messages: (agentId: string) => ['messages', agentId] as const,
 }
 
-// 一个 Agent 的详情；切换 Agent 时按 ID 重新获取。
+// An Agent's details, fetched again by ID when switching Agents.
 export function useAgent(agentId: string) {
   return useQuery({
     queryKey: keys.agent(agentId),
@@ -114,7 +114,7 @@ function put(root: Node, path: string, node: Node) {
 function workspace(): Node {
   const root = dir(5)
   put(root, 'AGENTS.md', text(AGENTS_MD, 30))
-  put(root, 'README.md', text('# loop-now\n\nLoop Now 服务端与控制台。\n', 2000))
+  put(root, 'README.md', text('# loop-now\n\nThe Loop Now server and console.\n', 2000))
   put(root, '.gitignore', text('node_modules/\n.local-build/\n*.log\n', 9000))
   put(root, 'go.mod', text('module loop-now\n\ngo 1.25\n', 4000))
   put(root, 'Makefile', text('test:\n\tgo test ./...\n', 4000))
@@ -134,8 +134,8 @@ function workspace(): Node {
     const name = i < names.length ? names[i] : `pkg-${String(i).padStart(3, '0')}`
     put(root, `web/node_modules/${name}/package.json`, text(`{ "name": "${name}" }\n`, 3000))
   }
-  put(root, 'handoff/notes.md', text('# 交接\n\n- budget 账本的写入顺序已改完，测试待跑。\n', 8))
-  put(root, 'docs/design.md', text('# 设计\n', 5000))
+  put(root, 'handoff/notes.md', text('# Handoff\n\n- The budget ledger write order is done; the tests still need a run.\n', 8))
+  put(root, 'docs/design.md', text('# Design\n', 5000))
   put(root, 'docs/screenshots/queue.png', { kind: 'file', bytes: new Blob([new Uint8Array(48213)], { type: 'image/png' }), modifiedAt: at(80), image: PNG_SVG })
   put(root, 'data/fixtures.bin', binary(262144, 7000))
   put(root, 'logs/server.log', text('x'.repeat(1_400_000), 1))
@@ -148,18 +148,18 @@ function workspace(): Node {
 function project(): Node {
   const root = dir(60)
   const areas = ['billing', 'search', 'auth', 'gateway', 'ledger', 'notify', 'report', 'import']
-  for (let i = 1; i <= 164; i++) put(root, `svc-${String(i).padStart(3, '0')}-${areas[i % areas.length]}/README.md`, text('# 服务说明\n', 4000 + i))
-  put(root, 'conventions.md', text('# 项目约定\n\n- 提交前先跑测试。\n', 90))
-  put(root, 'glossary.md', text('# 术语\n', 900))
+  for (let i = 1; i <= 164; i++) put(root, `svc-${String(i).padStart(3, '0')}-${areas[i % areas.length]}/README.md`, text('# Service notes\n', 4000 + i))
+  put(root, 'conventions.md', text('# Project conventions\n\n- Run the tests before committing.\n', 90))
+  put(root, 'glossary.md', text('# Glossary\n', 900))
   return root
 }
 
 function global(): Node {
   const root = dir(240)
-  put(root, 'AGENTS.md', text('# 全局约定\n\n所有 Agent 都会读到这里。\n\n- 回复用中文。\n- 不输出或提交凭证。\n', 600))
-  put(root, 'reference/style.md', text('# 文风\n', 3000))
-  put(root, 'reference/api-errors.md', text('# 错误码\n', 3000))
-  put(root, 'templates/handoff.md', text('# 交接模板\n', 3000))
+  put(root, 'AGENTS.md', text('# Global conventions\n\nEvery Agent reads this.\n\n- Reply in English.\n- Never print or commit credentials.\n', 600))
+  put(root, 'reference/style.md', text('# Style\n', 3000))
+  put(root, 'reference/api-errors.md', text('# Error codes\n', 3000))
+  put(root, 'templates/handoff.md', text('# Handoff template\n', 3000))
   return root
 }
 
@@ -195,23 +195,23 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
   const ensureDir = (path: string): Extract<Node, { kind: 'dir' }> => {
     let cur: Node = root
     for (const part of segmentsOf(path)) {
-      if (cur.kind !== 'dir') throw new Error(`不是文件夹：${part}`)
+      if (cur.kind !== 'dir') throw new Error(`Not a folder: ${part}`)
       if (!cur.children.has(part)) cur.children.set(part, dir(0))
       cur = cur.children.get(part)!
     }
-    if (cur.kind !== 'dir') throw new Error(`不是文件夹：${path}`)
+    if (cur.kind !== 'dir') throw new Error(`Not a folder: ${path}`)
     return cur
   }
   const entryOf = (path: string, node: Node): FolderEntry => ({
     name: nameOf(path), path, type: node.kind, size: node.kind === 'file' ? node.bytes.size : null, modifiedAt: node.modifiedAt, symlinkTarget: node.kind === 'symlink' ? node.target : null,
   })
-  const conflict = (name: string) => Object.assign(new Error(`已存在同名的文件或文件夹：${name}`), { code: 'path_conflict' })
+  const conflict = (name: string) => Object.assign(new Error(`A file or folder with this name already exists: ${name}`), { code: 'path_conflict' })
   return {
     key,
     async list(path, cursor) {
       await wait()
       const node = find(path)
-      if (!node || node.kind !== 'dir') throw new Error(`文件夹不存在：${path || '/'}`)
+      if (!node || node.kind !== 'dir') throw new Error(`Folder not found: ${path || '/'}`)
       const all = [...node.children.entries()].map(([name, child]) => entryOf(joinPath(path, name), child)).sort((a, b) => (a.type === 'dir') === (b.type === 'dir') ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)
       const start = cursor ? Number(cursor) : 0
       return { path, entries: all.slice(start, start + pageSize), nextCursor: start + pageSize < all.length ? String(start + pageSize) : null }
@@ -220,7 +220,7 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
       await wait()
       let node = find(path)
       if (node?.kind === 'symlink') node = find(node.target)
-      if (!node || node.kind !== 'file') throw new Error(`文件不存在：${path}`)
+      if (!node || node.kind !== 'file') throw new Error(`File not found: ${path}`)
       return node.bytes
     },
     async write(path, body, create) {
@@ -228,7 +228,7 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
       const parent = ensureDir(parentOf(path))
       const existing = parent.children.get(nameOf(path))
       if (create && existing) throw conflict(nameOf(path))
-      if (existing && existing.kind !== 'file') throw new Error('目标是文件夹或软链接，不能写入')
+      if (existing && existing.kind !== 'file') throw new Error('The target is a folder or a symlink and cannot be written')
       const node: Node = { kind: 'file', bytes: typeof body === 'string' ? new Blob([body], { type: 'text/plain' }) : body, modifiedAt: new Date().toISOString() }
       parent.children.set(nameOf(path), node)
       return entryOf(path, node)
@@ -244,8 +244,8 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
     async move(from, to) {
       await wait()
       const node = find(from)
-      if (!node || from === '') throw new Error(`不存在：${from}`)
-      if (within(to, from)) throw new Error('不能移动到它自己里面')
+      if (!node || from === '') throw new Error(`Not found: ${from}`)
+      if (within(to, from)) throw new Error('Can\'t move a folder into itself')
       const target = ensureDir(parentOf(to))
       if (target.children.has(nameOf(to))) throw conflict(nameOf(to))
       ;(find(parentOf(from)) as Extract<Node, { kind: 'dir' }>).children.delete(nameOf(from))
@@ -254,7 +254,7 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
     },
     async remove(path) {
       await wait()
-      if (path === '') throw new Error('不能删除根目录')
+      if (path === '') throw new Error('Can\'t delete the root folder')
       ;(find(parentOf(path)) as Extract<Node, { kind: 'dir' }>).children.delete(nameOf(path))
     },
     async upload(target, item, onProgress) {
@@ -280,7 +280,7 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
           setTimeout(() => {
             if (url.includes('fail')) Object.assign(pull, { status: 'failed', errorCode: 'clone_failed', errorMessage: "fatal: could not read Username for 'https://github.com': terminal prompts disabled", finishedAt: new Date().toISOString() })
             else {
-              put(root, joinPath(path, 'README.md'), text('# budget-ledger\n\n账本服务。\n', 0))
+              put(root, joinPath(path, 'README.md'), text('# budget-ledger\n\nThe ledger service.\n', 0))
               put(root, joinPath(path, 'ledger/ledger.go'), text('package ledger\n', 0))
               Object.assign(pull, { status: 'succeeded', finishedAt: new Date().toISOString() })
             }

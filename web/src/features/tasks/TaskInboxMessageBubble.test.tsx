@@ -5,26 +5,26 @@ import { makeInboxMessage, consoleParty, externalParty, makeIdentity } from '@/t
 import type { Schemas } from '@/api/client'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
 
-const agent: Schemas['InboxParticipant'] = { kind: 'agent', id: '00000000-0000-7000-8000-000000000104', address: '项目/原任务Agent#任务', name: '原任务Agent', deleted: false, pluginId: null, channelId: null }
-it('真实Inbox未读状态只取readAt，不把接收当已读/已回复，不开放回答表单', () => {
-  const message = makeInboxMessage({ from: consoleParty, to: agent, text: '只读真实Inbox正文' })
+const agent: Schemas['InboxParticipant'] = { kind: 'agent', id: '00000000-0000-7000-8000-000000000104', address: 'project/Original task Agent#task', name: 'Original task Agent', deleted: false, pluginId: null, channelId: null }
+it('the real Inbox unread state comes only from readAt, received is not treated as read or replied, and no answer form opens', () => {
+  const message = makeInboxMessage({ from: consoleParty, to: agent, text: 'read-only real Inbox text' })
   renderWithQuery(<TaskInboxMessageBubble message={message} />)
-  expect(screen.getByText('已接收，Agent 未读')).toBeVisible(); expect(screen.queryByText('Agent 已读取')).toBeNull(); expect(screen.queryByRole('textbox')).toBeNull(); expect(screen.queryByText('Inbox 回复')).toBeNull()
+  expect(screen.getByText('Received; unread by the Agent')).toBeVisible(); expect(screen.queryByText('Read by the Agent')).toBeNull(); expect(screen.queryByRole('textbox')).toBeNull(); expect(screen.queryByText('Inbox reply')).toBeNull()
 })
-it('已读只表示真实读取，原sender与显式inReplyTo确定Inbox回复来源', () => {
-  const message = makeInboxMessage({ from: agent, to: consoleParty, text: '真正通过Inbox回复', inReplyTo: 'original-message-id' })
+it('read means only an actual read, and the original sender and an explicit inReplyTo determine where an Inbox reply comes from', () => {
+  const message = makeInboxMessage({ from: agent, to: consoleParty, text: 'actually replied through the Inbox', inReplyTo: 'original-message-id' })
   renderWithQuery(<TaskInboxMessageBubble message={message} />)
-  expect(screen.getByText('原任务Agent')).toBeVisible(); expect(screen.getByText('Inbox 回复')).toBeVisible(); expect(screen.getByText(/original-message-id/)).toBeVisible(); expect(screen.queryByText('Agent 工作输出')).toBeNull()
+  expect(screen.getByText('Original task Agent')).toBeVisible(); expect(screen.getByText('Inbox reply')).toBeVisible(); expect(screen.getByText(/original-message-id/)).toBeVisible(); expect(screen.queryByText('Agent work output')).toBeNull()
 })
-it('已删除Agent保留原地址显示，不借当前配置猜sender', () => {
-  const message = makeInboxMessage({ from: { ...agent, name: '已删除 Agent', deleted: true }, to: consoleParty, text: '保留的历史回复', inReplyTo: 'original-id' })
+it('a deleted Agent keeps showing its original address, without guessing the sender from the current config', () => {
+  const message = makeInboxMessage({ from: { ...agent, name: 'Deleted Agent', deleted: true }, to: consoleParty, text: 'kept history reply', inReplyTo: 'original-id' })
   renderWithQuery(<TaskInboxMessageBubble message={message} />)
-  expect(screen.getByText('已删除 Agent')).toBeVisible(); expect(screen.getByText('原任务Agent#任务')).toBeVisible()
+  expect(screen.getByText('Deleted Agent')).toBeVisible(); expect(screen.getByText('Original task Agent#task')).toBeVisible()
 })
-it('任务外部Inbox仍保留完整正文和图片，不使用普通聊天摘要', () => {
-  const text = '完整的任务消息。'.repeat(30)
+it('an external task Inbox message keeps its full text and images, without the regular chat summary', () => {
+  const text = 'The full task message.'.repeat(30)
   const message = makeInboxMessage({ from: externalParty(makeIdentity()), to: agent, text, images: [{ id: '00000000-0000-7000-8000-000000000105', mimeType: 'image/png', size: 4, width: 1, height: 1 }] })
   renderWithQuery(<TaskInboxMessageBubble message={message} />)
   expect(screen.getByRole('note')).toHaveTextContent(text)
-  expect(screen.getByRole('list', { name: '消息图片' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('/message-images/00000000-0000-7000-8000-000000000105'))
+  expect(screen.getByRole('list', { name: 'Message images' }).querySelector('img')).toHaveAttribute('src', expect.stringContaining('/message-images/00000000-0000-7000-8000-000000000105'))
 })

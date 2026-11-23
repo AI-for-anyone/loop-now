@@ -16,8 +16,8 @@ const account = larkUserAccount()
 function props(): TaskLarkAccountSwitchProps {
   return { task: detail.task, node, reviewKey: 'server-review-one', accounts: [account], eligible: true,
     members: [
-      { identity: node, title: '部署提测', originalPermission: '已允许', oldBinding: '原bot V1' },
-      { identity: { agentId: 'followup-agent', agentName: '结果跟进员', runtimeId: 'followup-runtime' }, title: '结果跟进', originalPermission: '已允许', oldBinding: '跟进bot V3' },
+      { identity: node, title: 'Deploy for QA', originalPermission: 'Allowed', oldBinding: 'original bot V1' },
+      { identity: { agentId: 'followup-agent', agentName: 'Results follow-up agent', runtimeId: 'followup-runtime' }, title: 'Results follow-up', originalPermission: 'Allowed', oldBinding: 'follow-up bot V3' },
     ], onConfirm: vi.fn().mockResolvedValue(undefined), onRecover: vi.fn().mockResolvedValue(undefined) }
 }
 async function openAndSelect() {
@@ -33,8 +33,8 @@ describe('task Lark switch UI, injected action only', () => {
     const d = screen.getByRole('alertdialog')
     expect(within(d).getByRole('combobox')).toHaveValue('')
     expect(within(d).getByRole('button', { name: copy.confirm })).toBeDisabled()
-    expect(within(d).getByText(/原bot V1/)).toBeInTheDocument()
-    expect(within(d).getByText(/跟进bot V3/)).toBeInTheDocument()
+    expect(within(d).getByText(/original bot V1/)).toBeInTheDocument()
+    expect(within(d).getByText(/follow-up bot V3/)).toBeInTheDocument()
     expect(within(d).getByText(/followup-agent · followup-runtime/)).toBeInTheDocument()
     expect(within(d).getByText(copy.preserve)).toBeInTheDocument()
     expect(within(d).getByText(copy.followup)).toBeInTheDocument()

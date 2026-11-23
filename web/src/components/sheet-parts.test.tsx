@@ -8,95 +8,95 @@ import { RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
 import { StickyNote } from './StickyNote'
 
 // Shared parts of the "printed sheet" redesign: sheet, index tab, stub and ruler, numbered section heading, yellow sticky note.
-describe('纸张', () => {
-  it('内容放在一张纸上：浅纸底、藏青描边、大圆角、孔版蓝实色投影，右侧给投影留出位置', () => {
-    render(<Sheet data-testid="sheet">正文</Sheet>)
+describe('Sheet', () => {
+  it('puts the content on a sheet: light paper, navy border, large radius, solid riso-blue shadow, room on the right for the shadow', () => {
+    render(<Sheet data-testid="sheet">Body</Sheet>)
     const sheet = screen.getByTestId('sheet')
-    expect(sheet).toHaveTextContent('正文')
+    expect(sheet).toHaveTextContent('Body')
     expect(sheet).toHaveAttribute('data-sheet')
     expect(sheet).toHaveClass('bg-paper-raised', 'border-2', 'border-ink', 'rounded-panel', 'shadow-print-dialog', 'overflow-hidden', 'mr-1.5')
     // The sheet surface also carries the main area's very faint paper grain.
     expect(sheet).toHaveClass('riso-grain')
   })
 
-  it('纸张里的滚动条是细的藏青半透明滚动条（纸张自己和里面所有会滚动的区域），不用系统的灰色滚动条', () => {
-    render(<Sheet data-testid="sheet"><div className="overflow-y-auto">正文</div></Sheet>)
+  it('scrollbars in the sheet are thin translucent navy ones (the sheet itself and every scrolling area inside it), not the grey system scrollbars', () => {
+    render(<Sheet data-testid="sheet"><div className="overflow-y-auto">Body</div></Sheet>)
     expect(screen.getByTestId('sheet')).toHaveClass('riso-scrollbar')
   })
 
-  it('调用方可以追加类名与属性', () => {
+  it('the caller can add class names and attributes', () => {
     render(<Sheet data-testid="sheet" className="flex-1" aria-busy="true" />)
     expect(screen.getByTestId('sheet')).toHaveClass('flex-1', 'bg-paper-raised')
     expect(screen.getByTestId('sheet')).toHaveAttribute('aria-busy', 'true')
   })
 })
 
-describe('索引标签', () => {
+describe('Index tabs', () => {
   const tabs = (path: string) =>
     render(
       <MemoryRouter initialEntries={[path]}>
-        <IndexTabs aria-label="开发助手">
-          <IndexTabLink to="/chat">对话</IndexTabLink>
-          <IndexTabLink to="/config">配置</IndexTabLink>
+        <IndexTabs aria-label="dev-helper">
+          <IndexTabLink to="/chat">Chat</IndexTabLink>
+          <IndexTabLink to="/config">Config</IndexTabLink>
         </IndexTabs>
       </MemoryRouter>,
     )
 
-  it('是一组带名称的导航链接，当前页标出来', () => {
+  it('is a named group of navigation links with the current page marked', () => {
     tabs('/config')
-    const nav = screen.getByRole('navigation', { name: '开发助手' })
-    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['对话', '配置'])
-    expect(within(nav).getByRole('link', { name: '配置' })).toHaveAttribute('aria-current', 'page')
-    expect(within(nav).getByRole('link', { name: '对话' })).not.toHaveAttribute('aria-current')
+    const nav = screen.getByRole('navigation', { name: 'dev-helper' })
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config'])
+    expect(within(nav).getByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Chat' })).not.toHaveAttribute('aria-current')
   })
 
-  it('当前页是黄色、高 40px；其余是米灰色、高 34px；都只有上、左、右三边描边', () => {
+  it('the current page is yellow and 40px tall; the others are beige-grey and 34px tall; all have a border on the top, left and right only', () => {
     tabs('/chat')
-    const current = screen.getByRole('link', { name: '对话' })
-    const other = screen.getByRole('link', { name: '配置' })
+    const current = screen.getByRole('link', { name: 'Chat' })
+    const other = screen.getByRole('link', { name: 'Config' })
     expect(current).toHaveClass('h-10', 'bg-riso-yellow', 'text-ink', 'border-2', 'border-b-0', 'border-ink')
     expect(other).toHaveClass('h-[34px]', 'bg-paper-tab', 'text-ink-700', 'border-2', 'border-b-0', 'border-ink')
   })
 
-  it('窄屏时标签收窄，放不下还可以横向滚动，不把整页撑宽', () => {
+  it('on narrow screens the tabs get narrower and scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
-    expect(screen.getByRole('navigation', { name: '开发助手' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
-    expect(screen.getByRole('link', { name: '对话' })).toHaveClass('max-sm:px-2.5')
-    expect(screen.getByRole('link', { name: '配置' })).toHaveClass('max-sm:px-2.5')
+    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
+    expect(screen.getByRole('link', { name: 'Chat' })).toHaveClass('max-sm:px-2.5')
+    expect(screen.getByRole('link', { name: 'Config' })).toHaveClass('max-sm:px-2.5')
   })
 
-  it('按钮式的分页（状态筛选、分类）用同一套样式', () => {
+  it('button-style tabs (status filters, categories) use the same styles', () => {
     expect(indexTabClass(true)).toContain('bg-riso-yellow')
     expect(indexTabClass(false)).toContain('bg-paper-tab')
     expect(indexTabClass(true)).not.toContain('bg-paper-tab')
   })
 })
 
-describe('票根与尺子', () => {
-  it('票根有一个小标题，用虚线和正文隔开，窄屏不显示', () => {
+describe('Stub and ruler', () => {
+  it('the stub has a small heading separated from the body by a dashed line, and is hidden on narrow screens', () => {
     render(
-      <Stub label="概况" data-testid="stub">
-        <span>4 个文件</span>
+      <Stub label="Overview" data-testid="stub">
+        <span>4 files</span>
       </Stub>,
     )
     const stub = screen.getByTestId('stub')
-    expect(stub).toHaveTextContent('概况4 个文件')
+    expect(stub).toHaveTextContent('Overview4 files')
     expect(stub).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
-    expect(screen.getByText('概况')).not.toHaveAttribute('aria-hidden')
+    expect(screen.getByText('Overview')).not.toHaveAttribute('aria-hidden')
   })
 
-  it('票根作为导航区时用 aria-label 命名，可见的小标题不再重复读出', () => {
+  it('a stub used as a navigation region is named with aria-label, and its visible heading is not read out again', () => {
     render(
-      <Stub as="nav" aria-label="对话轮次" label="轮次">
-        <button type="button">第一轮</button>
+      <Stub as="nav" aria-label="Conversation turns" label="TURNS">
+        <button type="button">Turn 1</button>
       </Stub>,
     )
-    const nav = screen.getByRole('navigation', { name: '对话轮次' })
-    expect(within(nav).getByText('轮次')).toHaveAttribute('aria-hidden', 'true')
-    expect(within(nav).getByRole('button', { name: '第一轮' })).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Conversation turns' })
+    expect(within(nav).getByText('TURNS')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(nav).getByRole('button', { name: 'Turn 1' })).toBeInTheDocument()
   })
 
-  it('尺子的刻度和记号笔都是装饰，读屏不读', () => {
+  it('the ruler ticks and highlighter mark are decoration, hidden from screen readers', () => {
     render(
       <>
         <RulerTicks data-testid="ticks" />
@@ -113,8 +113,8 @@ describe('票根与尺子', () => {
   })
 })
 
-describe('编号分区', () => {
-  it('空心编号是装饰，窄屏不显示', () => {
+describe('Numbered section', () => {
+  it('the hollow number is decoration and hidden on narrow screens', () => {
     render(<HollowNumber data-testid="number">25</HollowNumber>)
     const number = screen.getByTestId('number')
     expect(number).toHaveTextContent('25')
@@ -122,44 +122,44 @@ describe('编号分区', () => {
     expect(number).toHaveClass('max-nav:hidden', 'text-transparent')
   })
 
-  it('分区是一个以标题命名的区域：左侧两位编号，标题是二级标题加一笔黄色记号笔', () => {
+  it('a section is a region named by its title: a two-digit number on the left, the title is a level-2 heading with a yellow highlighter stroke', () => {
     render(
-      <NumberedSection number={3} title="本机目录">
-        <p>分区内容</p>
+      <NumberedSection number={3} title="Local directories">
+        <p>Section content</p>
       </NumberedSection>,
     )
-    const region = screen.getByRole('region', { name: '本机目录' })
-    expect(within(region).getByRole('heading', { level: 2, name: '本机目录' })).toHaveClass('font-display-cn', 'riso-marker')
+    const region = screen.getByRole('region', { name: 'Local directories' })
+    expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass('font-display-cn', 'riso-marker')
     expect(within(region).getByText('03')).toHaveAttribute('aria-hidden', 'true')
-    expect(region).toHaveTextContent('分区内容')
+    expect(region).toHaveTextContent('Section content')
   })
 
-  it('标题后面可以跟一段说明和靠右的操作；从第二个分区起上方一道虚线', () => {
+  it('the title can be followed by a note and right-aligned actions; from the second section on there is a dashed line above', () => {
     const { rerender } = render(
-      <NumberedSection number={1} title="用量" meta={<span>单位：token</span>} actions={<button type="button">今天</button>}>
-        <p>分区内容</p>
+      <NumberedSection number={1} title="Usage" meta={<span>Unit: tokens</span>} actions={<button type="button">Today</button>}>
+        <p>Section content</p>
       </NumberedSection>,
     )
-    const region = screen.getByRole('region', { name: '用量' })
-    const heading = within(region).getByRole('heading', { level: 2, name: '用量' })
-    expect(heading.parentElement).toContainElement(within(region).getByText('单位：token'))
-    expect(within(region).getByRole('button', { name: '今天' }).parentElement).toHaveClass('sm:ml-auto')
+    const region = screen.getByRole('region', { name: 'Usage' })
+    const heading = within(region).getByRole('heading', { level: 2, name: 'Usage' })
+    expect(heading.parentElement).toContainElement(within(region).getByText('Unit: tokens'))
+    expect(within(region).getByRole('button', { name: 'Today' }).parentElement).toHaveClass('sm:ml-auto')
     expect(region.querySelector('[data-section-number]')).toHaveTextContent('01')
     expect(region).not.toHaveClass('border-t-2')
     rerender(
-      <NumberedSection number={2} title="用量">
-        <p>分区内容</p>
+      <NumberedSection number={2} title="Usage">
+        <p>Section content</p>
       </NumberedSection>,
     )
-    expect(screen.getByRole('region', { name: '用量' })).toHaveClass('border-t-2', 'border-dashed')
+    expect(screen.getByRole('region', { name: 'Usage' })).toHaveClass('border-t-2', 'border-dashed')
   })
 })
 
-describe('黄色便签', () => {
-  it('是一条说明（role=note），带一个装饰用的信息图标', () => {
-    render(<StickyNote>修改从下一条消息开始生效。</StickyNote>)
+describe('Yellow sticky note', () => {
+  it('is a note (role=note) with a decorative info icon', () => {
+    render(<StickyNote>Changes take effect from the next message.</StickyNote>)
     const note = screen.getByRole('note')
-    expect(note).toHaveTextContent('修改从下一条消息开始生效。')
+    expect(note).toHaveTextContent('Changes take effect from the next message.')
     expect(note).toHaveClass('riso-tilt')
     expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
