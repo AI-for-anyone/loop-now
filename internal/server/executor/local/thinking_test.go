@@ -23,7 +23,7 @@ func TestThinkingLevelLaunchReuseAndDefaultReset(t *testing.T) {
 	h.e.mu.Lock()
 	p := h.e.procs[id]
 	h.e.mu.Unlock()
-	state, e := p.client.GetState(context.Background())
+	state, e := piClient(p).GetState(context.Background())
 	if e != nil || state.ThinkingLevel != "high" {
 		t.Fatal("launch level", state, e)
 	}
@@ -38,7 +38,7 @@ func TestThinkingLevelLaunchReuseAndDefaultReset(t *testing.T) {
 	h.e.mu.Lock()
 	same := h.e.procs[id]
 	h.e.mu.Unlock()
-	state, e = p.client.GetState(context.Background())
+	state, e = piClient(p).GetState(context.Background())
 	if e != nil || same != p || state.ThinkingLevel != "medium" {
 		t.Fatal("default reset retained old explicit level", state, e)
 	}
@@ -91,7 +91,7 @@ func TestInterruptDuringThinkingPreparationNeverPrompts(t *testing.T) {
 	h.e.mu.Lock()
 	p := h.e.procs[id]
 	h.e.mu.Unlock()
-	stats, e := p.client.Call(context.Background(), "get_session_stats", nil)
+	stats, e := piClient(p).Call(context.Background(), "get_session_stats", nil)
 	if e != nil {
 		t.Fatal(e)
 	}

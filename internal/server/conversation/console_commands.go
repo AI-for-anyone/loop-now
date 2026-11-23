@@ -203,7 +203,8 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	if format != "html" && format != "jsonl" {
 		return executor.SessionExport{}, apperr.Invalid("format", "Must be html or jsonl.")
 	}
-	if err := s.RequireCommand(ctx, agentID, "export"); err != nil {
+	runtime, err := s.requireSessionCommand(ctx, agentID, "export")
+	if err != nil {
 		return executor.SessionExport{}, err
 	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
@@ -225,7 +226,7 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	if !ok {
 		return executor.SessionExport{}, unsupportedExecutor("exporting sessions.")
 	}
-	out, err := exporter.ExportSession(ctx, agentID, sess.SessionFile, format)
+	out, err := exporter.ExportSession(ctx, agentID, runtime, sess.SessionFile, format)
 	if err != nil {
 		if mapped := consoleCommandError(err); mapped != err {
 			return executor.SessionExport{}, mapped
@@ -239,7 +240,8 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 // model. It only lists while the Agent is idle (the same condition as resuming), but does not hold the busy lock while
 // reading files: the list is read-only, and runs that start meanwhile are not affected.
 func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]executor.ManagedSession, error) {
-	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
+	runtime, err := s.requireSessionCommand(ctx, agentID, "resume")
+	if err != nil {
 		return nil, err
 	}
 	sess, err := s.st.IdleSession(ctx, agentID)
@@ -250,13 +252,14 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 	if !ok {
 		return nil, unsupportedExecutor("listing sessions.")
 	}
-	sessions, err := lister.ListSessions(ctx, agentID, sess.SessionFile)
+	sessions, err := lister.ListSessions(ctx, agentID, runtime, sess.SessionFile)
 	return sessions, consoleCommandError(err)
 }
 
 // ResumeSession stops the old idle Pi and then resumes a verified managed session; it only switches the model context.
 func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionID string) (apitypes.SessionInfo, error) {
-	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
+	runtime, err := s.requireSessionCommand(ctx, agentID, "resume")
+	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
@@ -273,7 +276,7 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	if !ok {
 		return apitypes.SessionInfo{}, unsupportedExecutor("resuming sessions.")
 	}
-	target, err := lister.ResolveSession(ctx, agentID, sessionID, sess.SessionFile)
+	target, err := lister.ResolveSession(ctx, agentID, runtime, sessionID, sess.SessionFile)
 	if err != nil {
 		return apitypes.SessionInfo{}, consoleCommandError(err)
 	}
@@ -400,12 +403,19 @@ func (s *Service) RequireCommand(ctx context.Context, agentID uuid.UUID, name st
 	if !sessionCommands[name] {
 		return nil
 	}
+	_, err := s.requireSessionCommand(ctx, agentID, name)
+	return err
+}
+
+// requireSessionCommand is RequireCommand for a session command, returning the id of the Agent's runtime.
+func (s *Service) requireSessionCommand(ctx context.Context, agentID uuid.UUID, name string) (string, error) {
 	agent, err := s.st.GetAgent(ctx, agentID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if runtime := agentruntime.ForProvider(agent.ModelProvider); !runtime.Capabilities.HasSessionCommand(name) {
-		return apperr.Conflict(apperr.CodeConsoleCommandFailed, runtime.Name+" Agents do not support /"+name+". This command only works in Pi sessions.")
+	runtime := agentruntime.ForProvider(agent.ModelProvider)
+	if !runtime.Capabilities.HasSessionCommand(name) {
+		return "", apperr.Conflict(apperr.CodeConsoleCommandFailed, runtime.Name+" Agents do not support /"+name+". This command only works in Pi sessions.")
 	}
-	return nil
+	return runtime.ID, nil
 }

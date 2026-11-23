@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/folders"
 )
 
@@ -26,13 +27,14 @@ var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "
 // changes to an entry take effect only the next time Pi restarts; it also plays no part in deciding whether to restart
 // (changes to the list of local directories trigger a restart through snap.Local.Identity).
 //
-// Claude Code does not read AGENTS.md (and the platform also stops it from reading CLAUDE.md in the working directory),
-// so for the Claude Code runtime the verbatim text of the Agent's own entry goes into this section too, using the same
-// candidate names as Pi and taking the first one that exists.
+// A runtime that does not read AGENTS.md by itself (capability readsEntryFile; Claude Code, which the platform also
+// stops from reading CLAUDE.md in the working directory) gets the verbatim text of the Agent's own entry in this section
+// too, using the same candidate names as Pi and taking the first one that exists.
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
+	runtime := agentruntime.ForProvider(snap.Provider)
 	ownEntry, ownContent := "", ""
-	if isClaude(snap) {
+	if !runtime.Capabilities.ReadsEntryFile {
 		var err error
 		if ownEntry, ownContent, err = readOwnEntry(d.workspace); err != nil {
 			return "", err
@@ -60,9 +62,9 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 		own = "Your folder in this task (your working directory; copied from your regular folder when the task started and reclaimed when the task ends)"
 	}
 	entry := filepath.Join(layer, "AGENTS.md")
-	runtimeName, loaded := "Pi", "already loaded by Pi if it exists"
-	if isClaude(snap) {
-		runtimeName, loaded = "Claude Code", "its content is included below if it exists"
+	runtimeName, loaded := runtime.Name, "already loaded by "+runtime.Name+" if it exists"
+	if !runtime.Capabilities.ReadsEntryFile {
+		loaded = "its content is included below if it exists"
 	}
 	var b strings.Builder
 	b.WriteString("## Folders and context\n\n")

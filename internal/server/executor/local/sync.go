@@ -104,33 +104,28 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 
 // syncConfig rebuilds Skills and the Prompt, writes credential files and syncs workspace sources, in that order.
 func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, p *prepared, ghBin string, outcomes *[]sourceOutcome) error {
-	// 2. Skills and the Prompt are overwritten as a whole from the config. Claude Code's Skills go in the plugin
-	// directory the platform gives it.
-	claude := isClaude(snap)
+	// 2. Skills and the Prompt are overwritten as a whole from the config. Each runtime puts the Skills and the plugin
+	// MCP servers where it reads them; what other runtimes would read is removed, so a switch leaves nothing behind.
+	drv := e.driverFor(snap)
+	for _, other := range e.allDrivers() {
+		if other.runtime() != drv.runtime() {
+			if err := other.clearAssets(d); err != nil {
+				return err
+			}
+		}
+	}
 	var err error
-	if claude {
-		if err := e.syncClaudePlugin(ctx, snap, d); err != nil {
-			return err
-		}
-	} else {
-		if p.skillDirs, err = e.syncSkills(ctx, snap, d.skills); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(d.claudePlugin); err != nil {
-			return err
-		}
+	if p.skillDirs, err = drv.syncAssets(ctx, snap, d); err != nil {
+		return err
 	}
 	if err := removeStrayEntries(d); err != nil {
 		return err
 	}
-	if err := writePluginMCP(d, snap.Plugins, claude); err != nil {
-		return err
-	}
 	// “用本机的登录状态” ("Use local logins"): the runtime's HOME is the user's real home directory; d.home does not change,
-	// and credential files, cleanup and reclaiming only ever use d.home. The Claude Code runtime always works this way
-	// (it can only use the user's own local login), regardless of the global switch.
+	// and credential files, cleanup and reclaiming only ever use d.home. A runtime with the realHome capability (Claude
+	// Code, which can only use the user's own local login) always works this way, regardless of the global switch.
 	loginHome := ""
-	if snap.Local.Logins || claude {
+	if snap.Local.Logins || capabilities(snap).RealHome {
 		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
 			return fail(executor.ErrInternal, "Could not read the server user's home directory (\"Use local logins\" needs it).")
 		}
@@ -146,27 +141,13 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	} else if err := os.Remove(d.prompt); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// 3. Model credentials go into a separate Pi cache; CLI credentials keep the template rules. A plugin provider's
-	// subscription account is instead linked to the account's state directory (the previous links are removed first).
+	// 3. Model credentials are written by the runtime (for Pi, a separate cache, or links to a plugin provider's
+	// subscription account; the previous links are removed first); CLI credentials keep the template rules.
 	if err := clearProviderLinks(d); err != nil {
 		return fail(executor.ErrCredentialUnavailable, "Could not remove the old links of the subscription account: %v", err)
 	}
-	switch {
-	case claude:
-		// Claude Code uses its own local login; the platform writes no model credentials and no models.json.
-	case snap.ProviderState != nil:
-		if err := e.linkProviderState(snap, d, loginHome); err != nil {
-			return err
-		}
-	default:
-		if err := seedModelAuth(snap, d); err != nil {
-			return fail(executor.ErrCredentialUnavailable, "Could not write the model credential cache.")
-		}
-	}
-	if !claude {
-		if err := syncModelsJSON(snap, d); err != nil {
-			return fail(executor.ErrCredentialUnavailable, "Could not write the model configuration cache.")
-		}
+	if err := drv.modelCredentials(snap, d, loginHome); err != nil {
+		return err
 	}
 	// CLI credential files are deleted first, then written.
 	if err := e.syncCredentialFiles(snap, d); err != nil {

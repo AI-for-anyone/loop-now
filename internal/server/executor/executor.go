@@ -100,11 +100,11 @@ type IdleProcessStopper interface {
 	StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error)
 }
 
-// SessionExporter is implemented by executors that can export from a managed Pi session. sessionFile is the current
-// session file recorded in the database; the caller has already confirmed that this is a Pi Agent and that the session
-// is available.
+// SessionExporter is implemented by executors that can export an Agent's session. runtime is the Agent's runtime id;
+// sessionFile is the current session file recorded in the database; the caller has already confirmed that the runtime
+// has the export session command and that the session is available.
 type SessionExporter interface {
-	ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (SessionExport, error)
+	ExportSession(ctx context.Context, agentID uuid.UUID, runtime, sessionFile, format string) (SessionExport, error)
 }
 
 // ManagedSession is a valid Pi session in the managed sessions directory; Path is used only inside the server.
@@ -117,11 +117,12 @@ type ManagedSession struct {
 	Current   bool
 }
 
-// SessionLister enumerates resumable Pi sessions and must not start a process to do so. ResolveSession finds a session
-// by its full ID (reading only the file header) and returns nil when there is none or the ID is ambiguous.
+// SessionLister enumerates an Agent's resumable sessions and must not start a process to do so. runtime is the Agent's
+// runtime id. ResolveSession finds a session by its full ID (reading only the file header) and returns nil when there
+// is none or the ID is ambiguous.
 type SessionLister interface {
-	ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]ManagedSession, error)
-	ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*ManagedSession, error)
+	ListSessions(ctx context.Context, agentID uuid.UUID, runtime, currentFile string) ([]ManagedSession, error)
+	ResolveSession(ctx context.Context, agentID uuid.UUID, runtime, sessionID, currentFile string) (*ManagedSession, error)
 }
 
 // Request is the input of one run.

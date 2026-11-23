@@ -65,13 +65,13 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 		t.Fatalf("preparing the session failed: %+v", res)
 	}
 	session := h.sessionFile(id)
-	jsonl, err := h.e.ExportSession(context.Background(), id, session, "jsonl")
+	jsonl, err := h.e.ExportSession(context.Background(), id, "pi", session, "jsonl")
 	if err != nil || jsonl.ContentType != "application/x-ndjson" || !strings.Contains(string(jsonl.Data), "echo: hello") {
 		t.Fatalf("unexpected JSONL export: %+v %v", jsonl, err)
 	}
 	pid := h.pid(id)
 	// Even with an idle process, pi --export is used and that process is left alone.
-	html, err := h.e.ExportSession(context.Background(), id, session, "html")
+	html, err := h.e.ExportSession(context.Background(), id, "pi", session, "html")
 	if err != nil || html.ContentType != "text/html; charset=utf-8" || string(html.Data) != "<html>exported session</html>" || filepath.Ext(html.Filename) != ".html" {
 		t.Fatalf("unexpected HTML export: %+v %v", html, err)
 	}
@@ -98,7 +98,7 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 		t.Fatalf("should return false when there is no process: %v %v", stopped, err)
 	}
 	// Without a process, export does not start the runtime either.
-	if _, err := h.e.ExportSession(context.Background(), id, session, "html"); err != nil || h.pid(id) != 0 {
+	if _, err := h.e.ExportSession(context.Background(), id, "pi", session, "html"); err != nil || h.pid(id) != 0 {
 		t.Fatalf("export without a process: %v pid=%d", err, h.pid(id))
 	}
 	leftovers, err := filepath.Glob(filepath.Join(d.tmp, "loop-now-export-*.html"))
@@ -120,15 +120,15 @@ func TestConsoleExportChecksSessionFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := h.e.ExportSession(ctx, id, outside, "jsonl"); err == nil || !strings.Contains(err.Error(), "sessions") {
+	if _, err := h.e.ExportSession(ctx, id, "pi", outside, "jsonl"); err == nil || !strings.Contains(err.Error(), "sessions") {
 		t.Fatalf("a file outside the sessions directory must be rejected: %v", err)
 	}
 	gone := filepath.Join(h.e.dirs(id).sessions, "gone.jsonl")
-	if _, err := h.e.ExportSession(ctx, id, gone, "html"); !errors.Is(err, executor.ErrNoSession) {
+	if _, err := h.e.ExportSession(ctx, id, "pi", gone, "html"); !errors.Is(err, executor.ErrNoSession) {
 		t.Fatalf("a session file that is gone should be ErrNoSession: %v", err)
 	}
 	h.env["FAKEPI_EXPORT_FAIL"] = "1"
-	if _, err := h.e.ExportSession(ctx, id, h.sessionFile(id), "html"); err == nil || !strings.Contains(err.Error(), "pi --export") {
+	if _, err := h.e.ExportSession(ctx, id, "pi", h.sessionFile(id), "html"); err == nil || !strings.Contains(err.Error(), "pi --export") {
 		t.Fatalf("a failing pi --export should report an error: %v", err)
 	}
 	leftovers, _ := filepath.Glob(filepath.Join(h.e.dirs(id).tmp, "loop-now-export-*.html"))
@@ -175,7 +175,7 @@ func TestListSessionsValidatesHeadersSortsAndMarksCurrent(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(d.sessions, "escape.jsonl")); err != nil {
 		t.Skipf("cannot create symlinks in this environment: %v", err)
 	}
-	sessions, err := h.e.ListSessions(context.Background(), id, older)
+	sessions, err := h.e.ListSessions(context.Background(), id, "pi", older)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestListSessionsExtractsUserTextMetadata(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(d.sessions, "metadata.jsonl"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sessions, err := h.e.ListSessions(context.Background(), id, "")
+	sessions, err := h.e.ListSessions(context.Background(), id, "pi", "")
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("reading the session metadata failed: %+v %v", sessions, err)
 	}
@@ -240,7 +240,7 @@ func TestListSessionsRejectsDuplicateIDs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sessions, err := h.e.ListSessions(context.Background(), id, "")
+	sessions, err := h.e.ListSessions(context.Background(), id, "pi", "")
 	if err != nil || len(sessions) != 0 {
 		t.Fatalf("a duplicate ID should not make restore guess the target: %+v %v", sessions, err)
 	}
@@ -318,7 +318,7 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
 	ctx := context.Background()
-	if _, err := h.e.ExportSession(ctx, id, "", "jsonl"); !errors.Is(err, executor.ErrNoSession) {
+	if _, err := h.e.ExportSession(ctx, id, "pi", "", "jsonl"); !errors.Is(err, executor.ErrNoSession) {
 		t.Fatalf("should be ErrNoSession without a session: %v", err)
 	}
 	free, err := h.e.reserveMaintenance(ctx, id)
@@ -329,11 +329,11 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	if _, err := h.e.StopIdle(ctx, id, "console_reload"); !errors.Is(err, executor.ErrMaintenanceBusy) || !errors.Is(err, ErrRuntimeBusy) {
 		t.Fatalf("StopIdle during maintenance should be ErrMaintenanceBusy: %v", err)
 	}
-	if _, err := h.e.ExportSession(ctx, id, "/x.jsonl", "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
+	if _, err := h.e.ExportSession(ctx, id, "pi", "/x.jsonl", "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
 		t.Fatalf("export during maintenance should be ErrMaintenanceBusy: %v", err)
 	}
 	// Listing sessions only reads files, so it also works while maintenance is in progress.
-	if _, err := h.e.ListSessions(ctx, id, ""); err != nil {
+	if _, err := h.e.ListSessions(ctx, id, "pi", ""); err != nil {
 		t.Fatalf("listing sessions should not be affected by maintenance: %v", err)
 	}
 }
@@ -415,7 +415,7 @@ func TestListSessionsReadsOnlyHeadAndTail(t *testing.T) {
 	}
 	list := func() executor.ManagedSession {
 		t.Helper()
-		sessions, err := h.e.ListSessions(context.Background(), id, "")
+		sessions, err := h.e.ListSessions(context.Background(), id, "pi", "")
 		if err != nil || len(sessions) != 1 {
 			t.Fatalf("list sessions: %+v %v", sessions, err)
 		}
@@ -461,12 +461,12 @@ func TestResolveSessionByHeader(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	got, err := h.e.ResolveSession(ctx, id, "target", "")
+	got, err := h.e.ResolveSession(ctx, id, "pi", "target", "")
 	if err != nil || got == nil || filepath.Base(got.Path) != "a.jsonl" {
 		t.Fatalf("find the session by ID: %+v %v", got, err)
 	}
 	for _, missing := range []string{"dup", "unknown"} {
-		if got, err := h.e.ResolveSession(ctx, id, missing, ""); err != nil || got != nil {
+		if got, err := h.e.ResolveSession(ctx, id, "pi", missing, ""); err != nil || got != nil {
 			t.Fatalf("%s should not be found: %+v %v", missing, got, err)
 		}
 	}

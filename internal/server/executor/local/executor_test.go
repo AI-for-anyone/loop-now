@@ -234,7 +234,7 @@ func (h *harness) pid(id uuid.UUID) int {
 	h.e.mu.Lock()
 	defer h.e.mu.Unlock()
 	if p := h.e.procs[id]; p != nil {
-		return p.client.Pid()
+		return p.rt.Pid()
 	}
 	return 0
 }
