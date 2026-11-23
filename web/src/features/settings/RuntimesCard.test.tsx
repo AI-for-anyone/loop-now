@@ -6,7 +6,7 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { apiUrl, errorBody } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
-import { runtimeList } from '@/test/runtimes'
+import { runtimeDefinitions, runtimeList, runtimeStatus } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { RuntimesCard } from './RuntimesCard'
 
@@ -81,5 +81,35 @@ describe('Agent runtimes in global settings', () => {
   it('shows the reason when the runtimes cannot be read', async () => {
     setup(() => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Internal server error')
+  })
+})
+
+// A runtime the contract does not have yet, defined like Claude Code (installed here, its own login) but with no wording of its own.
+const codex = (status: Partial<Schemas['RuntimeStatus']> = {}) => ({
+  definition: { ...runtimeDefinitions().runtimes[1], id: 'codex', name: 'Codex', providers: ['codex'] } as unknown as Schemas['RuntimeDefinition'],
+  status: { ...runtimeStatus('claude-code'), id: 'codex', binaryPath: '/usr/local/bin/codex', ...status } as unknown as Schemas['RuntimeStatus'],
+})
+
+describe('describing the runtimes from their definitions', () => {
+  it('one sentence per runtime in the order of the definitions: Pi as bundled, Claude Code in its own words', async () => {
+    setup(runtimeList())
+    await claude()
+    expect(screen.getByText(/ships with the platform/)).toHaveTextContent(/^Pi ships with the platform\. Claude Code uses the claude installed on this computer and your login there; the platform doesn't read or store its login\.$/)
+  })
+
+  it('a runtime without wording of its own is described and warned about by its name and capabilities', async () => {
+    const extra = codex(notFound)
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...runtimeDefinitions().runtimes, extra.definition] })))
+    setup({ runtimes: [...runtimeList().runtimes, extra.status] })
+    const card = await screen.findByRole('region', { name: 'Codex' })
+    expect(screen.getByText(/ships with the platform/)).toHaveTextContent(/ Codex uses its installation and your login on this computer; the platform doesn't read or store its login\.$/)
+    expect(within(card).getByRole('note')).toHaveTextContent(/^Codex wasn't found on this computer: install it and make sure it runs in a terminal\.$/)
+  })
+
+  it('until the definitions are read, a runtime goes by its id and there is no description', async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 })))
+    setup(runtimeList())
+    expect(await screen.findByRole('region', { name: 'claude-code' })).toHaveTextContent(/^claude-codeVersion 2\.1\.0/)
+    expect(screen.queryByText(/ships with the platform/)).toBeNull()
   })
 })

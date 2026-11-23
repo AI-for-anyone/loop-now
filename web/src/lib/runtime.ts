@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Schemas } from '@/api/client'
 import { useRuntimeDefinitions } from '@/api/queries'
+import { t } from '@/i18n'
 
 export type AgentRuntime = Schemas['AgentRuntime']
 export type RuntimeDefinition = Schemas['RuntimeDefinition']
@@ -48,10 +49,17 @@ export function runtimeOfProvider(providerId: string, providers?: readonly Schem
 
 export type RuntimeProblem = 'not_found' | 'version_failed' | 'unavailable' | 'logged_out'
 
-// Why Claude Code cannot be used on this machine: claude not found, version unreadable, not logged in. An undeterminable login state
-// (unknown) does not count; if a run fails, the server reports the error as it is.
+// Why a runtime cannot be used on this machine: not found, version unreadable, not logged in. An undeterminable login state (unknown)
+// does not count; if a run fails, the server reports the error as it is.
 export function runtimeProblem(status: Schemas['RuntimeStatus'] | undefined): RuntimeProblem | null {
   if (!status) return null
   if (!status.available) return status.unavailableReason ?? 'unavailable'
   return status.login?.state === 'logged_out' ? 'logged_out' : null
+}
+
+// What is wrong and how to fix it: the runtime's own wording when the copy has one (its command, how to log in), otherwise the wording
+// for any runtime.
+export function runtimeProblemText(runtime: Pick<RuntimeDefinition, 'id' | 'name'>, problem: RuntimeProblem): string {
+  const copy = t.runtime.status
+  return copy.problemsByRuntime[runtime.id]?.[problem] ?? copy.problems[problem](runtime.name)
 }

@@ -16,7 +16,8 @@ in English, next to its code. A file here mirrors the path of the code it tests 
   - date, time and number formats and Chinese units (秒, 分, 小时, 万): `i18n/zh-table.zh.test.ts`;
   - joins with Chinese punctuation (、, ：, （）) in copy functions: `i18n/zh-table.zh.test.ts`, the deleted sender's
     full-width brackets in `features/chat/InboxReminder.zh.test.tsx`, the error code copy joined with the server detail in
-    `lib/errors.zh.test.ts`;
+    `lib/errors.zh.test.ts`, and the sentences describing each runtime in global settings, joined without a space:
+    `features/settings/RuntimesCard.zh.test.tsx`;
   - the chat input writes Enter as 回车, only there: `features/chat/Composer.zh.test.tsx`;
   - footnotes use the UI copy instead of the Markdown renderer's built-in English: `features/chat/Markdown.zh.test.tsx`;
   - names the console gives itself (console, platform, deleted parties) whatever the server sends:
