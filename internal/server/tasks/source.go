@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -21,7 +20,6 @@ import (
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/auth"
-	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/content"
@@ -65,8 +63,12 @@ type Source struct {
 	// ProviderState gives the state of plugin provider subscription accounts (the version captured by the task
 	// snapshot); paths that follow the account use the plugin's current version.
 	ProviderState agentconfig.ProviderStateFunc
-	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (task forks on the
-	// Claude Code runtime copy their baseline from there); when nil, this is not supported.
+	// ForkBaseline reads the regular session of a base Agent for a task fork, through the driver of the Agent's runtime,
+	// and returns what the instance's baseline file holds (at most maxBytes); when nil, task forks of a session are not
+	// supported.
+	ForkBaseline func(ctx context.Context, runtime string, agentID uuid.UUID, sessionFile string, maxBytes int64) ([]byte, error)
+	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (a retired instance's
+	// Claude Code session is archived from there); when nil, this is not supported.
 	ClaudeProjects func(context.Context) string
 }
 
@@ -282,13 +284,15 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 			return errors.New("the regular session file is missing; cannot create the task fork")
 		}
 		if session.State == "active" && session.SessionFile != "" {
-			copyFn := s.copyBaseline
-			if agentruntime.ForProvider(snapshot.Configuration().Provider).ID == agentruntime.ClaudeCode {
-				copyFn = func(inst store.TaskInstance, source string) (string, error) {
-					return s.copyClaudeBaseline(ctx, inst, source)
-				}
+			if s.ForkBaseline == nil {
+				return errors.New("task forks of a session are not configured")
 			}
-			path, err := copyFn(inst, session.SessionFile)
+			runtime := agentruntime.ForProvider(snapshot.Configuration().Provider).ID
+			data, err := s.ForkBaseline(ctx, runtime, inst.AgentID, session.SessionFile, s.MaxSessionBytes)
+			if err != nil {
+				return err
+			}
+			path, err := s.writeBaseline(inst, data)
 			if err != nil {
 				return err
 			}
@@ -344,94 +348,6 @@ func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 		s.Log.Info("copied the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
 	}
 	return nil
-}
-
-func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, error) {
-	rootPath := filepath.Join(s.WorkRoot, "agents", inst.AgentID.String(), "sessions")
-	rel, err := filepath.Rel(rootPath, source)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", errors.New("the regular session is not in the Agent's session directory")
-	}
-	root, err := os.OpenRoot(rootPath)
-	if err != nil {
-		return "", errors.New("the regular session directory cannot be read")
-	}
-	defer root.Close()
-	info, err := root.Lstat(rel)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("the regular session must be a plain file")
-	}
-	f, err := root.Open(rel)
-	if err != nil {
-		return "", errors.New("the regular session cannot be read")
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
-	if err != nil || int64(len(data)) > s.MaxSessionBytes {
-		return "", errors.New("the regular session exceeds the size limit or cannot be read")
-	}
-	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
-	if len(bytes.TrimSpace(data)) == 0 {
-		return "", errors.New("the regular session has no valid records")
-	}
-	for i, line := range lines {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var entry map[string]any
-		if json.Unmarshal(line, &entry) != nil {
-			return "", errors.New("the regular session contains incomplete records")
-		}
-		if i == 0 && entry["type"] != "session" {
-			return "", errors.New("the regular session header is invalid")
-		}
-	}
-	return s.writeBaseline(inst, data)
-}
-
-// copyClaudeBaseline makes the task fork baseline for the Claude Code runtime: it only reads the regular session's one
-// <session ID>.jsonl (which must be exactly one level below claude's session record directory), and does not scan or
-// read anything else under ~/.claude; every line must be complete JSON. The file is copied to the platform's own
-// directory, and the task instance forks from it on its first start.
-func (s *Source) copyClaudeBaseline(ctx context.Context, inst store.TaskInstance, source string) (string, error) {
-	if s.ClaudeProjects == nil {
-		return "", errors.New("the Claude Code session record directory is not configured")
-	}
-	projects := s.ClaudeProjects(ctx)
-	if !claudecli.InProjects(projects, source) {
-		return "", errors.New("the regular session is not in the Claude Code session record directory")
-	}
-	rel, _ := filepath.Rel(projects, source)
-	root, err := os.OpenRoot(projects)
-	if err != nil {
-		return "", errors.New("the Claude Code session record directory cannot be read")
-	}
-	defer root.Close()
-	info, err := root.Lstat(rel)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("the regular session must be a plain file")
-	}
-	f, err := root.Open(rel)
-	if err != nil {
-		return "", errors.New("the regular session cannot be read")
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
-	if err != nil || int64(len(data)) > s.MaxSessionBytes {
-		return "", errors.New("the regular session exceeds the size limit or cannot be read")
-	}
-	if len(bytes.TrimSpace(data)) == 0 {
-		return "", errors.New("the regular session has no valid records")
-	}
-	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte{'\n'}) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		if !json.Valid(line) {
-			return "", errors.New("the regular session contains incomplete records")
-		}
-	}
-	return s.writeBaseline(inst, data)
 }
 
 // writeBaseline writes the baseline to the platform's task-baselines/<task>/<Agent>.jsonl (writing a temporary file

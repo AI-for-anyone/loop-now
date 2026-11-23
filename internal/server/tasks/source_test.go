@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,103 +13,26 @@ import (
 	"loop-now/internal/server/store"
 )
 
-func TestBaselineCopiesCompleteSessionAndRejectsInvalidPaths(t *testing.T) {
+// The baseline a task instance forks from is written to the platform's own task-baselines/<task>/<Agent>.jsonl as a
+// copy of what the runtime's driver read (ending in one newline); a later change to the source does not reach it. What
+// the drivers accept is tested in executor/local (fork_baseline_test.go).
+func TestWriteBaseline(t *testing.T) {
 	src := &Source{WorkRoot: t.TempDir(), MaxSessionBytes: 4096}
 	inst := store.TaskInstance{ID: uuid.New(), AgentID: uuid.New(), TaskID: uuid.New()}
-	dir := filepath.Join(src.WorkRoot, "agents", inst.AgentID.String(), "sessions")
-	if e := os.MkdirAll(dir, 0o700); e != nil {
-		t.Fatal(e)
-	}
-	session := filepath.Join(dir, "source.jsonl")
 	valid := []byte("{\"type\":\"session\",\"id\":\"fixture\"}\n{\"type\":\"message\",\"id\":\"m\"}\n")
-	if e := os.WriteFile(session, valid, 0o600); e != nil {
-		t.Fatal(e)
-	}
-	target, e := src.copyBaseline(inst, session)
-	if e != nil {
-		t.Fatal(e)
+	read := bytes.Clone(valid)
+	target, e := src.writeBaseline(inst, read)
+	if e != nil || filepath.Dir(target) != filepath.Join(src.WorkRoot, "task-baselines", inst.TaskID.String()) || filepath.Base(target) != inst.AgentID.String()+".jsonl" {
+		t.Fatal("baseline target", target, e)
 	}
 	copy, e := os.ReadFile(target)
 	if e != nil || !bytes.Equal(copy, valid) {
 		t.Fatal("baseline copy differs", e)
 	}
-	if e = os.WriteFile(session, []byte("changed"), 0o600); e != nil {
-		t.Fatal(e)
-	}
-	copy, _ = os.ReadFile(target)
-	if !bytes.Equal(copy, valid) {
+	copy[0] = 'x'
+	read[0] = 'x'
+	if again, _ := os.ReadFile(target); !bytes.Equal(again, valid) {
 		t.Fatal("baseline aliases source")
-	}
-	for _, invalid := range []string{"", " \n", "{\"type\":\"message\"}\n", "{\"type\":\"session\"}\n{broken"} {
-		if e = os.WriteFile(session, []byte(invalid), 0o600); e != nil {
-			t.Fatal(e)
-		}
-		if _, e = src.copyBaseline(inst, session); e == nil {
-			t.Fatal("invalid baseline accepted", invalid)
-		}
-	}
-	outside := filepath.Join(t.TempDir(), "outside")
-	if e = os.WriteFile(outside, valid, 0o600); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = src.copyBaseline(inst, outside); e == nil {
-		t.Fatal("other directory accepted")
-	}
-	link := filepath.Join(dir, "link")
-	if e = os.Symlink(outside, link); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = src.copyBaseline(inst, link); e == nil {
-		t.Fatal("symlink accepted")
-	}
-	if e = os.WriteFile(session, bytes.Repeat([]byte("a"), 4097), 0o600); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = src.copyBaseline(inst, session); e == nil {
-		t.Fatal("oversize baseline accepted")
-	}
-}
-
-// Fork baseline for the Claude Code runtime: only the <session ID>.jsonl one level below claude's session record
-// directory is read, and it is copied to the platform's own directory; rejected when it is not there, its name is not a
-// session ID, it has an incomplete line, or it exceeds the limit; rejected when no session record directory is
-// configured.
-func TestCopyClaudeBaseline(t *testing.T) {
-	work, projects := t.TempDir(), t.TempDir()
-	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
-	inst := store.TaskInstance{ID: uuid.New(), TaskID: uuid.New(), AgentID: uuid.New()}
-	id := uuid.NewString()
-	dir := filepath.Join(projects, "-work-agents-x-workspace")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	session := filepath.Join(dir, id+".jsonl")
-	if err := os.WriteFile(session, []byte("{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	target, err := src.copyClaudeBaseline(context.Background(), inst, session)
-	if err != nil || filepath.Dir(target) != filepath.Join(work, "task-baselines", inst.TaskID.String()) {
-		t.Fatalf("baseline: %q %v", target, err)
-	}
-	if b, _ := os.ReadFile(target); string(b) != "{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n" {
-		t.Fatalf("baseline content: %q", b)
-	}
-	outside := filepath.Join(t.TempDir(), id+".jsonl")
-	_ = os.WriteFile(outside, []byte("{}\n"), 0o600)
-	notID := filepath.Join(dir, "notes.jsonl")
-	_ = os.WriteFile(notID, []byte("{}\n"), 0o600)
-	broken := filepath.Join(dir, uuid.NewString()+".jsonl")
-	_ = os.WriteFile(broken, []byte("{\"type\":\"user\"}\n{\"type\":"), 0o600)
-	big := filepath.Join(dir, uuid.NewString()+".jsonl")
-	_ = os.WriteFile(big, []byte(strings.Repeat("{}\n", 1000)), 0o600)
-	for name, path := range map[string]string{"not in the session record directory": outside, "name is not a session ID": notID, "incomplete line": broken, "over the size limit": big, "nested too deep": filepath.Join(dir, "x", id+".jsonl")} {
-		if _, err := src.copyClaudeBaseline(context.Background(), inst, path); err == nil {
-			t.Errorf("%s should be rejected", name)
-		}
-	}
-	src.ClaudeProjects = nil
-	if _, err := src.copyClaudeBaseline(context.Background(), inst, session); err == nil {
-		t.Fatal("should be rejected when no session record directory is configured")
 	}
 }
 
