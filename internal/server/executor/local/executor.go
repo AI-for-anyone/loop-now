@@ -51,7 +51,7 @@ type Options struct {
 	// Dialogs answers the confirm, select and input requests an extension sends during a turn (presented as console
 	// questions); when nil, every request is answered as cancelled. agentID is the Agent that runs (for a task turn,
 	// the task instance); ctx ends when this turn is no longer the process's current run or when the process exits.
-	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req pirpc.DialogRequest) pirpc.DialogResponse
+	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req runturn.DialogRequest) runturn.DialogResponse
 	LarkFactory               func(context.Context, LarkRuntimeRequest) (LarkRuntime, error)
 	GoogleResolver            cliauth.GrantResolver
 	GoogleRuntimeEntry        string
@@ -958,10 +958,10 @@ func (o procObserver) Usage(u pirpc.Usage, inTurn bool) {
 
 // dialog hands a dialog to Options.Dialogs, limited to the turn that sent it: once this turn ends (the process moves on
 // to another run) it no longer waits for the answer.
-func (e *Executor) dialog(ctx context.Context, p *proc, req pirpc.DialogRequest) pirpc.DialogResponse {
+func (e *Executor) dialog(ctx context.Context, p *proc, req runturn.DialogRequest) runturn.DialogResponse {
 	run := p.curRun.Load()
 	if run == nil {
-		return pirpc.DialogResponse{Cancelled: true, Outcome: "cancelled"}
+		return runturn.DialogResponse{Cancelled: true, Outcome: "cancelled"}
 	}
 	runID := *run
 	ctx, cancel := context.WithCancel(ctx)
@@ -984,16 +984,16 @@ func (e *Executor) dialog(ctx context.Context, p *proc, req pirpc.DialogRequest)
 	return e.o.Dialogs(ctx, p.agentID, runID, req)
 }
 
-func (o procObserver) Notice(n pirpc.Notice, inTurn bool) {
+func (o procObserver) Notice(n runturn.Notice, inTurn bool) {
 	typ := ""
 	switch n.Type {
-	case pirpc.NoticeRetryStarted:
+	case runturn.NoticeRetryStarted:
 		typ = store.EventModelRetryStarted
-	case pirpc.NoticeRetryEnded:
+	case runturn.NoticeRetryEnded:
 		typ = store.EventModelRetryEnded
-	case pirpc.NoticeCompaction:
+	case runturn.NoticeCompaction:
 		typ = store.EventContextCompaction
-	case pirpc.NoticeExtensionUI:
+	case runturn.NoticeExtensionUI:
 		typ = store.EventExtensionUI
 	default:
 		return

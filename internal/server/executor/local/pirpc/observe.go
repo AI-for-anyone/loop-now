@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
+	"loop-now/internal/server/executor/local/runturn"
 )
 
 // Usage is one usage report from Pi (the Usage of Pi 1.1.0 pi-ai, see dist/types.d.ts). Cost fields are not parsed.
@@ -32,20 +32,15 @@ const (
 	UsageOther      = "other"
 )
 
-// Notice is a Pi event that is useful for run records: automatic retries and context compaction.
-type Notice struct {
-	Type string // see the Notice constants
-	Data map[string]any
-}
+// Notice is a Pi event that is useful for run records (see runturn.Notice).
+type Notice = runturn.Notice
 
-// Notice types.
+// Notice types, see runturn.
 const (
-	NoticeRetryStarted = "retry_started"
-	NoticeRetryEnded   = "retry_ended"
-	NoticeCompaction   = "compaction"
-	// NoticeExtensionUI is an extension's ctx.ui call: notifications, status, and dialogs the platform has answered
-	// with the default value.
-	NoticeExtensionUI = "extension_ui"
+	NoticeRetryStarted = runturn.NoticeRetryStarted
+	NoticeRetryEnded   = runturn.NoticeRetryEnded
+	NoticeCompaction   = runturn.NoticeCompaction
+	NoticeExtensionUI  = runturn.NoticeExtensionUI
 )
 
 // Observer receives usage and events whether or not a turn is in progress; inTurn tells whether it happened during a
@@ -240,27 +235,11 @@ func (c *Client) observeCompaction(line []byte) {
 // (undefined for select, input and editor; false for confirm), so the turn does not get stuck.
 var dialogMethods = map[string]bool{"select": true, "confirm": true, "input": true, "editor": true}
 
-// DialogRequest is one dialog request from an extension.
-type DialogRequest struct {
-	ID          string
-	Method      string // confirm, select, input
-	Title       string
-	Message     string
-	Placeholder string
-	Options     []string
-	Timeout     time.Duration // the request's own timeout; zero when it has none
-}
+// DialogRequest is one dialog request from an extension (see runturn.DialogRequest).
+type DialogRequest = runturn.DialogRequest
 
-// DialogResponse is the extension_ui_response sent back to Pi: Cancelled, or Confirmed for confirm, or Value for select
-// and input. Outcome is recorded in the run event's answered field (answered, cancelled, expired); QuestionID is the
-// matching console question.
-type DialogResponse struct {
-	Cancelled  bool
-	Confirmed  bool
-	Value      string
-	Outcome    string
-	QuestionID *uuid.UUID
-}
+// DialogResponse is the extension_ui_response sent back to Pi (see runturn.DialogResponse).
+type DialogResponse = runturn.DialogResponse
 
 // Dialogs handles extension dialogs that need a person to answer; it blocks until there is an answer, the dialog
 // expires or ctx ends (ctx ends when the Pi process exits).

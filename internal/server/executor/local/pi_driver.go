@@ -119,7 +119,9 @@ func (pd piDriver) attach(p *proc) {
 	e := pd.e
 	p.client.SetObserver(procObserver{e: e, p: p})
 	if e.o.Dialogs != nil {
-		p.client.SetDialogs(func(ctx context.Context, req pirpc.DialogRequest) pirpc.DialogResponse { return e.dialog(ctx, p, req) })
+		p.client.SetDialogs(func(ctx context.Context, req runturn.DialogRequest) runturn.DialogResponse {
+			return e.dialog(ctx, p, req)
+		})
 	}
 }
 
