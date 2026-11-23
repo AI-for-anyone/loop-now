@@ -18,6 +18,7 @@ import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import { copyText } from '@/lib/clipboard'
 import { describeError } from '@/lib/errors'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { applyCommand, matchCommands, slashToken, type Command } from './slash-commands'
 import { SlashCommandMenu } from './SlashCommandMenu'
 
@@ -118,6 +119,10 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuRequested || gate)
+  // The runtime the command list states, as the runtime definitions describe it.
+  const runtimes = useRuntimeLookup()
+  const listRuntime = runtimes.get(commands.data?.runtime)
+  const listError = commands.error ?? (commands.data && !listRuntime ? runtimes.error : null)
   const listed = commands.data?.commands ?? []
   // Don't lock the input box when the list can't be read: let /resume through anyway and let the server decide (after the session is
   // lost, /resume is the only way out that keeps the context).
@@ -136,14 +141,15 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || ((!disabled || commands.isError) && images.length === 0))
   const menuStatus = matched.length > 0
     ? null
-    : commands.error
-      ? t.chat.commands.failed(describeError(commands.error))
-      : !commands.data
+    : listError
+      ? t.chat.commands.failed(describeError(listError))
+      : !commands.data || !listRuntime
         ? t.chat.commands.loading
-        // The list states the runtime: a non-Pi Agent has no Pi commands (no matter how many times it runs); only for a Pi Agent that
-        // has never started do we say “运行一次后才有” (The command list appears after the Agent has run once).
-        : commands.data.runtime !== 'pi'
-          ? t.chat.commands.noPi(t.runtime.names[commands.data.runtime])
+        // The list states the runtime: an Agent whose runtime lists no commands of its own (Claude Code) has no Pi commands, no matter
+        // how many times it runs; only when the runtime does and the Agent has never started do we say “运行一次后才有” (The command
+        // list appears after the Agent has run once).
+        : !listRuntime.capabilities.nativeCommands
+          ? t.chat.commands.noPi(listRuntime.name)
           : commands.data.capturedAt === null
             ? t.chat.commands.notCaptured
             : t.chat.commands.noMatch

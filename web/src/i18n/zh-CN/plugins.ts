@@ -414,11 +414,12 @@ export const plugins = {
   },
   // Plugins section of the Agent config page.
   agent: {
-    intro: '授权后下次启动 Pi 生效，不打断当前回合。',
-    // Agent on the Claude Code runtime: there is no Pi; what starts is Claude Code.
-    introClaudeCode: '授权后下次启动生效，不打断当前回合。',
-    // Agent on the Claude Code runtime: the plugin's Agent side has only Pi extensions (no skills, MCP servers or command directories).
-    piOnly: 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用',
+    // Agent on a runtime that loads plugins' Pi extensions (Pi): named, since that is what starts.
+    intro: (runtime: string) => `授权后下次启动 ${runtime} 生效，不打断当前回合。`,
+    // Agent on a runtime that doesn't load Pi extensions (Claude Code): there is no Pi to name.
+    introNoExtensions: '授权后下次启动生效，不打断当前回合。',
+    // Same Agent: the plugin's Agent side has only Pi extensions (no skills, MCP servers or command directories).
+    piOnly: (runtime: string) => `Agent 侧只有 Pi 扩展，对 ${runtime} 不起作用`,
     empty: '还没有安装插件。',
     granted: '已授权',
     notGranted: '未授权',

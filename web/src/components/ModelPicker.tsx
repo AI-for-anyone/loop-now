@@ -7,7 +7,7 @@ import { t } from '@/i18n'
 import { describeError } from '@/lib/errors'
 import { localizedText } from '@/lib/localized-text'
 import { selectClass } from '@/lib/field'
-import { runtimeProblem } from '@/lib/runtime'
+import { runtimeProblem, runtimeProblemText, useRuntimeLookup, type RuntimeDefinition } from '@/lib/runtime'
 import { FieldError } from './ErrorAlert'
 
 interface ModelPickerProps {
@@ -53,16 +53,18 @@ function unavailableNote(provider: Provider, agentId: string | undefined): strin
 // or ID.
 // When a plugin provider cannot be picked right now, its option carries the reason and is disabled (all plugins disabled globally only
 // shows a hint and does not disable it).
-// With the local Claude Code picked: explain that it uses this machine's installation and login and needs no account; add a warning when
-// it is not installed properly or not logged in on this machine (it can still be picked).
+// With a provider picked whose runtime is installed on this computer (not bundled, such as Claude Code): when that runtime uses the login
+// on this computer, explain that it uses this machine's installation and login and needs no account; add a warning when it is not
+// installed properly or not logged in on this machine (it can still be picked).
 export function ModelPicker({ value, onChange, error, children, agentId }: ModelPickerProps) {
   const providerId = useId()
   const modelLabelId = useId()
   const providers = useModelProviders(agentId)
   const [provider, setProvider] = useState<string | null>(value?.provider ?? null)
   const models = useModels(provider)
-  const claudeCode = providers.data?.providers.find((p) => p.id === provider)?.runtime === 'claude-code'
-  const runtimes = useRuntimes(claudeCode)
+  const runtime = useRuntimeLookup().get(providers.data?.providers.find((p) => p.id === provider)?.runtime)
+  const installed = runtime !== undefined && !runtime.capabilities.bundled
+  const runtimes = useRuntimes(installed)
   // Remember the model last picked for each provider: it is restored when switching to another provider and back, even a model that is
   // not in the catalog.
   const [chosen, setChosen] = useState<Record<string, Schemas['ModelRef']>>(() => (value ? { [value.provider]: value } : {}))
@@ -118,8 +120,8 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
           ))}
         </select>
         {note && <p role="note" className="text-[13.5px] font-bold text-ink-700">{note}</p>}
-        {current?.runtime === 'claude-code' && <p role="note" className="text-[13.5px] text-ink-700">{t.runtime.providerNote}</p>}
-        {claudeCode && <RuntimeWarning status={runtimes.data?.runtimes.find((runtime) => runtime.id === 'claude-code')} />}
+        {installed && runtime.capabilities.accounts === 'local' && <p role="note" className="text-[13.5px] text-ink-700">{t.runtime.providerNote(runtime.name)}</p>}
+        {installed && <RuntimeWarning runtime={runtime} status={runtimes.data?.runtimes.find((status) => status.id === runtime.id)} />}
       </div>
       {provider && models.isError && <CatalogUnavailable error={models.error} value={value?.provider === provider ? value : null} />}
       {provider && !models.isError && (
@@ -151,13 +153,13 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
   )
 }
 
-// The local Claude Code cannot be used right now (not found, version unreadable, not logged in): the same explanation as in global
-// settings, plus a note that runs will fail until it is fixed.
+// The runtime installed on this computer cannot be used right now (not found, version unreadable, not logged in): the same explanation as
+// in global settings, plus a note that runs will fail until it is fixed.
 // No warning when the runtime status cannot be read or the login state cannot be determined.
-function RuntimeWarning({ status }: { status: Schemas['RuntimeStatus'] | undefined }) {
+function RuntimeWarning({ runtime, status }: { runtime: RuntimeDefinition; status: Schemas['RuntimeStatus'] | undefined }) {
   const problem = runtimeProblem(status)
   if (!problem) return null
-  return <p role="note" className="rounded-input bg-tint-yellow px-3 py-2 text-[13.5px] font-bold text-ink">{t.runtime.status.pickerWarning(t.runtime.status.problems[problem])}</p>
+  return <p role="note" className="rounded-input bg-tint-yellow px-3 py-2 text-[13.5px] font-bold text-ink">{t.runtime.status.pickerWarning(runtimeProblemText(runtime, problem))}</p>
 }
 
 // The provider list or a provider's model list cannot be fetched: show the reason, and keep showing the current model.

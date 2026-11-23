@@ -393,9 +393,9 @@ export const plugins = {
     settingsLink: 'Manage project plugins',
   },
   agent: {
-    intro: "Grants take effect the next time Pi starts; the current turn isn't interrupted.",
-    introClaudeCode: "Grants take effect the next time the Agent starts; the current turn isn't interrupted.",
-    piOnly: 'Its Agent side is only Pi extensions, which have no effect on Claude Code',
+    intro: (runtime: string) => `Grants take effect the next time ${runtime} starts; the current turn isn't interrupted.`,
+    introNoExtensions: "Grants take effect the next time the Agent starts; the current turn isn't interrupted.",
+    piOnly: (runtime: string) => `Its Agent side is only Pi extensions, which have no effect on ${runtime}`,
     empty: 'No plugins installed yet.',
     granted: 'Granted',
     notGranted: 'Not granted',

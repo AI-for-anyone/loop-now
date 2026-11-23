@@ -157,6 +157,20 @@ describe('Claude Code needs no account', () => {
   })
 })
 
+describe('model account section when the runtime definitions cannot be read', () => {
+  const failing = http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 }))
+
+  it('says why instead of guessing whether the Agent needs an account, in both scopes', async () => {
+    for (const agent of [claudeAgent({ scope: 'platform', projectId: null }), claudeAgent()]) {
+      const view = await renderConfig({ agent, handlers: [catalog, failing] })
+      const section = await screen.findByRole('region', { name: 'Model account credential' })
+      await waitFor(() => expect(within(section).getByRole('alert')).toHaveTextContent('Internal server error'))
+      expect(section).not.toHaveTextContent(/needs no account|Model accounts are managed by the project/)
+      view.unmount()
+    }
+  })
+})
+
 describe('Local Claude Code unavailable or not logged in', () => {
   const runtimes = (list: Schemas['RuntimeList']) => {
     let reads = 0

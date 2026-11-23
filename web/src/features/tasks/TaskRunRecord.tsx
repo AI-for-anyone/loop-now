@@ -6,6 +6,7 @@ import { ToolList } from '@/features/chat/RunStatus'
 import { TimelineSteps, UsageBlock } from '@/features/chat/TimelineBody'
 import { buildSteps, runDurationMs } from '@/features/chat/timeline-steps'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
 import { turnErrorText } from './turn-error'
@@ -15,6 +16,7 @@ const copy = t.taskInbox
 export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: { taskId: string; nodeRunId: string; runId: string; agentId: string; runtimeId: string }) {
   const timeline = useTaskRunTimeline(taskId, nodeRunId, runId, agentId, runtimeId)
   const [open, setOpen] = useState(false), panelId = useId()
+  const runtimes = useRuntimeLookup()
   const pages = timeline.data?.pages ?? [], latest = pages.at(-1)
   // Refetch revisits the loaded cursor range. Each page is one committed slice;
   // usage is the same full-turn total and is displayed once, never added up.
@@ -29,7 +31,7 @@ export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: 
     <ErrorAlert error={nodeMessagesUnsupported(timeline.error) ? null : timeline.error} />{nodeMessagesUnsupported(timeline.error) && <p role="status" className="text-xs">{copy.toolsUnsupported}</p>}
     {open && latest && <div id={panelId} className="min-w-0 overflow-hidden rounded-[16px] bg-white shadow-[3px_3px_0_rgb(24_38_94/.12)]">
       <div className="grid gap-1 bg-tint-blue p-3 text-xs [overflow-wrap:anywhere]"><strong>{latest.run.id}</strong><span>{latest.run.executionMode === 'task_node' ? copy.workMode : latest.run.executionMode === 'task_conversation' ? copy.chatMode : copy.unknownMode} · {t.tasks.messageStatuses[latest.run.status]}</span>{(latest.run.errorCode || latest.run.errorMessage) && <p>{turnErrorText(latest.run.errorCode, latest.run.errorMessage)}</p>}</div>
-      <TimelineSteps steps={buildSteps(null, entries)} />
+      <TimelineSteps steps={buildSteps(null, entries, runtimes.name)} />
       {timeline.hasNextPage && <div className="p-3"><p className="text-xs">{copy.timelinePartial}</p><Button variant="secondary" size="sm" disabled={timeline.isFetching} onClick={() => void timeline.fetchNextPage({ cancelRefetch: false })}>{copy.timelineMore}</Button></div>}
       <UsageBlock usage={latest.usage} />
     </div>}

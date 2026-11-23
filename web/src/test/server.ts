@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node'
 import { apiUrl, defaultProject, projectsUrl, unknownEndpointBody } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
 import { commandList } from './commands'
-import { runtimeList } from './runtimes'
+import { runtimeDefinitions, runtimeList } from './runtimes'
 
 // Each test registers its own endpoint handlers with server.use(...). The left sidebar is always present and polls health
 // on a timer, and both scope switching and Agent pages read the project list, so by default there is a healthy health
@@ -18,6 +18,8 @@ export const server = setupServer(
   http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json(commandList())),
   // Runtimes: by default the local Claude Code is installed and logged in.
   http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList())),
+  // Runtime definitions: Pi (bundled, the default) and the local Claude Code, as the server defines them.
+  http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(runtimeDefinitions())),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.

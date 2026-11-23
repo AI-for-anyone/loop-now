@@ -1,4 +1,5 @@
 import type { Schemas } from '@/api/client'
+import { runtimeLookup } from '@/lib/runtime'
 
 const checkedAt = '2026-11-11T08:00:00Z'
 
@@ -12,3 +13,16 @@ export function runtimeStatus(id: Schemas['AgentRuntime'], overrides: Partial<Sc
 export function runtimeList(claudeCode: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeList'] {
   return { runtimes: [runtimeStatus('pi'), runtimeStatus('claude-code', claudeCode)] }
 }
+
+// Fixture for GET /runtime-definitions: the two runtimes as the server defines them.
+export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
+  return {
+    runtimes: [
+      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true } },
+      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false } },
+    ],
+  }
+}
+
+// Runtime names as the default definitions give them, for building run log steps in tests.
+export const runtimeName = runtimeLookup(runtimeDefinitions().runtimes).name
