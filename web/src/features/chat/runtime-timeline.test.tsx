@@ -13,7 +13,7 @@ describe('process entries in the run log name the runtime', () => {
   it('Claude Code process entries: the start phase and the process steps all say Claude Code; an old Pi process stopped in the same turn still says Pi', () => {
     const entries: Entry[] = [
       { type: 'pi_stopped', at: at(0), pid: 100, reason: 'config_changed', uptimeMs: 60_000, runtime: 'pi' },
-      { type: 'phase', at: at(1), phase: 'launching' },
+      { type: 'phase', at: at(1), phase: 'launching', runtime: 'claude-code' },
       { type: 'pi_started', at: at(2), pid: 200, startupMs: 900, reason: 'no_process', configVersion: 3, runtime: 'claude-code' },
       { type: 'pi_exited', at: at(5), pid: 200, uptimeMs: 3000, exit: 'signal: killed', stderrTail: '', runtime: 'claude-code' },
     ]
@@ -24,7 +24,7 @@ describe('process entries in the run log name the runtime', () => {
 
   it('reuses the resident Claude Code process; when the platform later stops it, it also says Claude Code', () => {
     const steps = buildSteps(null, [
-      { type: 'phase', at: at(0), phase: 'launching' },
+      { type: 'phase', at: at(0), phase: 'launching', runtime: 'claude-code' },
       { type: 'pi_reused', at: at(1), pid: 300, processStartedAt: at(-600), runtime: 'claude-code' },
       { type: 'pi_stopped', at: at(9), pid: 300, reason: 'abort_timeout', uptimeMs: 609_000, runtime: 'claude-code' },
     ])
@@ -34,7 +34,7 @@ describe('process entries in the run log name the runtime', () => {
 
   it('old records without runtime: always treated as Pi', () => {
     const steps = buildSteps(null, [
-      { type: 'phase', at: at(0), phase: 'launching' },
+      { type: 'phase', at: at(0), phase: 'launching', runtime: 'pi' },
       { type: 'pi_started', at: at(1), pid: 1, startupMs: 10, reason: 'config_changed', configVersion: 1 },
       { type: 'pi_stopped', at: at(9), pid: 1, reason: 'idle_timeout', uptimeMs: 8000 },
     ])
@@ -43,12 +43,12 @@ describe('process entries in the run log name the runtime', () => {
   })
 
   it('failed before starting, with no process entry: runtime_* failures say Claude Code; other failures are treated as Pi', () => {
-    const failed = (errorCode: Schemas['RunErrorCode']): Entry[] => [
-      { type: 'phase', at: at(0), phase: 'launching' },
+    const failed = (errorCode: Schemas['RunErrorCode'], runtime: Schemas['AgentRuntime']): Entry[] => [
+      { type: 'phase', at: at(0), phase: 'launching', runtime },
       { type: 'ended', at: at(1), status: 'failed', endReason: null, errorCode },
     ]
-    expect(buildSteps(null, failed('runtime_unavailable'))[0].label).toBe('Claude Code start')
-    expect(buildSteps(null, failed('pi_start_failed'))[0].label).toBe('Pi start')
+    expect(buildSteps(null, failed('runtime_unavailable', 'claude-code'))[0].label).toBe('Claude Code start')
+    expect(buildSteps(null, failed('pi_start_failed', 'pi'))[0].label).toBe('Pi start')
   })
 })
 
