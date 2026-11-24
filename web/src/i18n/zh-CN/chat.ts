@@ -113,6 +113,8 @@ export const chat = {
     noReply: '命令已执行',
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
+    // Compacted, on a runtime that doesn't report the tokens before and after (Codex).
+    compacted: '上下文已压缩',
     // Cases where Pi didn't compact but finished normally.
     compactSkipped: {
       too_small: '会话内容太少，不用压缩',

@@ -100,6 +100,8 @@ export const chat = {
     noReply: 'Command completed',
     session: (session) => `Session ${session.status.session.state} · epoch ${session.status.session.epoch} · model ${session.model.provider}/${session.model.modelId} · thinking ${session.thinkingLevel} · process ${session.status.processState} · queued ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before, after) => `Context compacted: ${before} → about ${after} tokens`,
+    // Compacted, on a runtime that doesn't report the tokens before and after (Codex).
+    compacted: 'Context compacted',
     compactSkipped: {
       too_small: 'The session is too short to need compacting',
       already_compacted: 'Nothing new since the last compaction, so there is nothing to compact',

@@ -30,6 +30,8 @@ function Outcome({ run, compaction }: { run: Schemas['Run']; compaction: Schemas
   if (compaction.outcome === 'skipped' && compaction.skipReason) return <p>{t.chat.commands.compactSkipped[compaction.skipReason]}</p>
   if (compaction.outcome === 'compacted' && compaction.tokensBefore != null && compaction.estimatedTokensAfter != null)
     return <p>{t.chat.commands.compact(compaction.tokensBefore, compaction.estimatedTokensAfter)}</p>
+  // The runtime compacted but doesn't report the tokens (Codex).
+  if (compaction.outcome === 'compacted') return <p>{t.chat.commands.compacted}</p>
   return <p>{t.chat.commands.noReply}</p>
 }
 
