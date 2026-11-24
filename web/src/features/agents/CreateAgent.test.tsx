@@ -9,7 +9,8 @@ import { pluginProvider, providers, catalogHandlers, withClaudeCode } from '@/te
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { sidebar } from '@/test/shell'
-import { chooseModel } from '@/test/model-picker'
+import { codexProvider } from '@/test/model-auth'
+import { chooseModel, chooseRunner, findRunnerPicker, openProvider } from '@/test/model-picker'
 import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
 
 function setup(onCreate: (body: Schemas['AgentCreate']) => Response) {
@@ -39,10 +40,7 @@ async function fill(user: ReturnType<typeof userEvent.setup>, name: string, pick
   await user.click(await within(sidebar()).findByRole('button', { name: 'New Agent' }))
   const dialog = await screen.findByRole('dialog')
   await user.type(within(dialog).getByLabelText('Display name'), name)
-  if (pickModel) {
-    await user.selectOptions(await within(dialog).findByLabelText('Model provider'), 'anthropic')
-    await chooseModel(user, dialog, 'claude-sonnet-5-5')
-  }
+  if (pickModel) await chooseModel(user, dialog, 'claude-sonnet-5-5', { runtime: 'Pi', provider: 'anthropic' })
   return dialog
 }
 
@@ -54,7 +52,8 @@ describe('Creating an Agent', () => {
     server.use(http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json({ providerId: 'anthropic', models: [model] })))
     const dialog = await fill(user, 'Thinking assistant')
     expect(thinkingChoice(dialog)).toBe('Default (Low)')
-    expect(thinkingOptions(dialog)).toEqual(['Default (Low)', 'Low', 'High'])
+    // The ruler lists the highest level first.
+    expect(thinkingOptions(dialog)).toEqual(['Default (Low)', 'High', 'Low'])
     await chooseThinking(user, dialog, 'High')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(created).toEqual({ name: 'Thinking assistant', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, thinkingLevel: 'high' }))
@@ -64,18 +63,17 @@ describe('Creating an Agent', () => {
     let created: Schemas['AgentCreate'] | null = null
     const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, serviceTier: body.serviceTier }), { status: 201 }) })
     server.use(
-      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', source: 'builtin', modelCount: 1, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
+      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, codexProvider] })),
       http.get(apiUrl('/model-providers/openai-codex/models'), () => HttpResponse.json({ providerId: 'openai-codex', models: [{ id: 'gpt-a', name: 'GPT A', reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['medium', 'high'], defaultThinkingLevel: 'medium' }] })),
     )
     const dialog = await fill(user, 'Speed assistant', false)
-    const provider = within(dialog).getByLabelText('Model provider')
-    await user.selectOptions(provider, 'openai-codex'); await chooseModel(user, dialog, 'gpt-a')
+    await chooseModel(user, dialog, 'gpt-a', { runtime: 'Pi', provider: 'openai-codex' })
     expect(within(dialog).getByLabelText('Codex speed')).toHaveDisplayValue('Standard')
     await user.selectOptions(within(dialog).getByLabelText('Codex speed'), 'priority')
     await user.type(within(dialog).getByLabelText('Prompt'), 'Keep this draft')
-    await user.selectOptions(provider, 'anthropic'); await chooseModel(user, dialog, 'claude-sonnet-5-5')
+    await chooseModel(user, dialog, 'claude-sonnet-5-5', { provider: 'anthropic' })
     expect(within(dialog).queryByLabelText('Codex speed')).toBeNull()
-    await user.selectOptions(provider, 'openai-codex')
+    await chooseModel(user, dialog, 'gpt-a')
     expect(within(dialog).getByLabelText('Codex speed')).toHaveDisplayValue('Standard')
     expect(within(dialog).getByLabelText('Prompt')).toHaveValue('Keep this draft')
     await user.selectOptions(within(dialog).getByLabelText('Codex speed'), 'ultrafast')
@@ -98,25 +96,26 @@ describe('Creating an Agent', () => {
     await waitFor(() => expect(within(list).getByRole('link', { name: /dev-helper/ })).toHaveAttribute('aria-current', 'page'))
   })
 
-  it('a plugin provider cannot be picked at create time: the option is disabled and says to grant the plugin after creating, and the catalog request has no agentId', async () => {
-    let query: string | null = null
+  it('a plugin provider cannot be picked at create time: its models are disabled and the row says to grant the plugin after creating; the catalog is asked for the project, not an Agent', async () => {
+    const queries: URLSearchParams[] = []
     const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
     server.use(
       http.get(apiUrl('/model-providers'), ({ request }) => {
-        query = new URL(request.url).search
+        queries.push(new URL(request.url).searchParams)
         return HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli')] })
       }),
+      http.get(apiUrl('/model-providers/grok-cli/models'), () => HttpResponse.json({ providerId: 'grok-cli', models: [{ id: 'grok-4', name: 'Grok 4', reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] }] })),
     )
     const dialog = await fill(user, 'Grok assistant', false)
-    const select = await within(dialog).findByLabelText('Model provider')
-    const grok = await waitFor(() => {
-      const found = within(select).getAllByRole('option').find((item) => (item as HTMLOptionElement).value === 'grok-cli')
-      if (!found) throw new Error('grok-cli is not in the catalog yet')
-      return found
-    })
-    expect(grok).toBeDisabled()
-    expect(grok).toHaveTextContent('Grok CLI · grok-cli (plugin "Grok subscription", 2 models) — grant the plugin after creating, then choose')
-    expect(query).toBe('')
+    await chooseRunner(user, dialog, 'Pi')
+    await openProvider(user, dialog, 'grok-cli')
+    expect(within(dialog).getByRole('treeitem', { name: 'grok-cli, Grok CLI · Grok subscription, grant the plugin after creating, then choose' })).toBeInTheDocument()
+    const grok = await within(dialog).findByRole('treeitem', { name: 'Grok 4 (grok-4)' })
+    expect(grok).toHaveAttribute('aria-disabled', 'true')
+    await user.click(grok)
+    expect(grok).toHaveAttribute('aria-selected', 'false')
+    expect(queries.some((query) => query.get('projectId') === context.project.id)).toBe(true)
+    expect(queries.some((query) => query.has('agentId'))).toBe(false)
   })
 
   it('Claude Code on this computer can be picked directly: notes that it uses the local login, shows no speed tier, and creates with the selection', async () => {
@@ -124,24 +123,21 @@ describe('Creating an Agent', () => {
     const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, runtime: 'claude-code' }), { status: 201 }) })
     server.use(http.get(apiUrl('/model-providers'), () => HttpResponse.json(withClaudeCode)))
     const dialog = await fill(user, 'Local assistant', false)
-    const select = await within(dialog).findByLabelText('Model provider')
-    const option = await within(select).findByRole('option', { name: 'Claude Code (this computer, 2 models)' })
-    expect(option).toBeEnabled()
-    await user.selectOptions(select, 'claude-code')
-    expect(within(dialog).getByText('Uses the Claude Code installed on this computer and your login there. The platform doesn\'t store login details.')).toHaveAttribute('role', 'note')
+    // Found on this computer and ready, Claude Code is the first runtime and the one looked at to begin with.
+    expect(within(await findRunnerPicker(dialog)).getAllByRole('tab')[0]).toHaveAccessibleName('Claude Code, Ready')
+    expect(await within(dialog).findByText('Uses the Claude Code installed on this computer and your login there. The platform doesn\'t store login details.')).toBeInTheDocument()
+    await chooseModel(user, dialog, 'sonnet')
     // The two points you need to know the moment you choose it; plugins and /pi: commands are explained only on the Config page.
     const differences = within(dialog).getByRole('region', { name: 'Running on Claude Code' })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
       'It runs commands without asking first, the same as Pi Agents.',
     ])
-    await chooseModel(user, dialog, 'sonnet')
     expect(within(dialog).queryByLabelText('Codex speed')).toBeNull()
     await chooseThinking(user, dialog, 'Max')
-    await user.selectOptions(select, 'anthropic')
+    await chooseModel(user, dialog, 'claude-sonnet-5-5', { runtime: 'Pi', provider: 'anthropic' })
     expect(within(dialog).queryByRole('region', { name: 'Running on Claude Code' })).toBeNull()
-    await user.selectOptions(select, 'claude-code')
-    await chooseModel(user, dialog, 'sonnet')
+    await chooseModel(user, dialog, 'sonnet', { runtime: 'Claude Code' })
     await chooseThinking(user, dialog, 'Max')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(created).toEqual({ name: 'Local assistant', model: { provider: 'claude-code', modelId: 'sonnet' }, thinkingLevel: 'max' }))
@@ -165,7 +161,7 @@ describe('Creating an Agent', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     expect(await within(dialog).findByText('The project already has an Agent with this name. Pick another.')).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Display name')).toHaveValue('dev-helper')
-    expect(within(dialog).getByRole('combobox', { name: 'Model' })).toHaveTextContent('claude-sonnet-5-5')
+    expect(within(dialog).getByRole('treeitem', { name: 'Claude Sonnet 5.5 (claude-sonnet-5-5)' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('on a network error, says the server is unreachable and keeps the input', async () => {
@@ -222,7 +218,8 @@ describe('Creating an Agent', () => {
     const { user } = setup(() => HttpResponse.json({}, { status: 201 }))
     server.use(http.get(apiUrl('/model-providers/openai/models'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 })))
     const dialog = await fill(user, 'dev-helper', false)
-    await user.selectOptions(await within(dialog).findByLabelText('Model provider'), 'openai')
+    await chooseRunner(user, dialog, 'Pi')
+    await openProvider(user, dialog, 'openai')
     expect(await within(dialog).findByText('Couldn\'t load the model catalog, so the model can\'t be changed right now.')).toBeInTheDocument()
     expect(within(dialog).getByText(/^Reason: Internal server error/)).toBeInTheDocument()
   })

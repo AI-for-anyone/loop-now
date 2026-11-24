@@ -5,7 +5,7 @@ import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, defaultAgentsPath, errorBody, makeAgent, makeRun, toListItem } from '@/test/api'
 import { credentialMeta, larkTemplate, renderConfig } from '@/test/config'
 import { FakeIntersectionObserver } from '@/test/intersection-observer'
-import { modelOptions } from '@/test/model-picker'
+import { openProvider, runnerTab } from '@/test/model-picker'
 
 const region = (name: string) => screen.getByRole('region', { name })
 
@@ -72,13 +72,11 @@ describe('Redesigned layout', () => {
 
   // jsdom does no layout: positions are confirmed with a browser check (the note under “模型提供方”
   // (Model provider) in the left column no longer pushes “模型” (Model) in the right column down).
-  it('two fields in the same row align to the top: a note under one grows downward without pushing the other column down', async () => {
+  it('the internal ID and the display name share a row aligned to the top: a note under one grows downward without pushing the other down', async () => {
     await renderConfig()
     const basic = region('Basics')
     // Internal ID and display name share a row.
     expect(within(basic).getByLabelText('Display name').closest('.grid')!.parentElement).toHaveClass('items-start')
-    // Model provider and model share a row (the grid inside the model picker).
-    expect(within(basic).getByLabelText('Model provider').closest('.grid')!.parentElement).toHaveClass('items-start')
   })
 
   it('the body column and the contents are both inside the paper and use its thin scrollbar, without hiding scrollbars (the contents ruler is not a scroll position)', async () => {
@@ -179,22 +177,21 @@ describe('Section contents', () => {
 })
 
 describe('Name, model and Prompt', () => {
-  it("shows the read-only internal ID; the provider is chosen first and the model options list only that provider's models", async () => {
+  it("shows the read-only internal ID; who runs it comes first, and a provider lists only its own models", async () => {
     const { agent, user } = await renderConfig()
     const basic = region('Basics')
     expect(within(basic).getByText(agent.id)).toBeInTheDocument()
-    const provider = within(basic).getByLabelText('Model provider')
-    await waitFor(() => expect(provider).toHaveValue('anthropic'))
-    await user.selectOptions(provider, 'openai')
-    await waitFor(() => expect(within(basic).getByRole('combobox', { name: 'Model' })).toBeEnabled())
-    expect(await modelOptions(user, basic)).toEqual(['GPT X (gpt-x)'])
+    expect(await runnerTab(basic, 'Pi')).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(within(basic).getByRole('treeitem', { name: 'Claude Sonnet 5.5 (claude-sonnet-5-5)' })).toHaveAttribute('aria-selected', 'true'))
+    await openProvider(user, basic, 'openai')
+    const openai = within(basic).getAllByRole('treeitem').find((row) => row.getAttribute('aria-label') === 'openai')!
+    expect(within(openai).getAllByRole('treeitem').map((row) => row.getAttribute('aria-label'))).toEqual(['GPT X (gpt-x)'])
   })
 
   it('marks the current model when it is not in the catalog', async () => {
     await renderConfig({ agent: makeAgent({ model: { provider: 'anthropic', modelId: 'retired-model' } }) })
     const basic = region('Basics')
-    expect(await within(basic).findByText('The current model isn\'t in the server\'s model catalog')).toBeInTheDocument()
-    expect(within(basic).getByText('anthropic / retired-model')).toBeInTheDocument()
+    expect(await within(basic).findByText("anthropic / retired-model, used now, isn't in the model catalog")).toHaveAttribute('role', 'note')
   })
 
   it('asks for confirmation before leaving with an unsaved Prompt', async () => {

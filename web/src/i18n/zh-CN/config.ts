@@ -11,36 +11,23 @@ export const config = {
     title: '基本信息',
     id: '内部 ID',
     name: '显示名称',
-    provider: '模型提供方',
-    model: '模型',
-    modelFilter: '按名称或 ID 过滤',
-    providerPlaceholder: '选择提供方',
-    modelPlaceholder: '选择模型',
-    modelEmpty: '没有匹配的模型',
     modelCount: (count: number) => `${count} 个模型`,
-    providerOption: (id: string, count: number) => `${id}（${count} 个模型）`,
-    // Provider registered by a plugin's Pi extension: the display name comes from the extension
-    // (untrusted text, shown as is), followed by the id and the plugin that registered it.
-    pluginProviderOption: (name: string | null, id: string, plugin: string, count: number) => `${name && name !== id ? `${name} · ${id}` : id}（插件「${plugin}」，${count} 个模型）`,
-    unavailableOption: (option: string, reason: string) => `${option} — ${reason}`,
-    // Short note after the option; plugins_disabled doesn't block saving, it only warns.
+    // Short reason on a plugin provider's row in the runner picker; plugins_disabled doesn't block saving, it only warns.
     pluginUnavailable: {
       create: '创建后授权插件再选择',
       plugin_not_enabled: '项目未启用该插件',
       agent_not_granted: '插件未授权给这个 Agent',
       plugins_disabled: '插件已全部停用',
     },
-    // Note below the picker when the selected provider is a plugin provider that can't be used right now.
+    // Note below the runner picker when the chosen provider is a plugin provider that can't be used right now.
     pluginUnavailableNote: {
       plugin_not_enabled: (plugin: string) => `项目还没有启用插件「${plugin}」。在项目的插件页启用它、再在本页的“插件权限”一节授权给这个 Agent 后才能选。`,
       agent_not_granted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。`,
       plugins_disabled: '全局设置里已停用全部插件：可以保存，但 Agent 启动时会失败。',
     },
     modelOption: (name: string, id: string) => (name === id ? id : `${name}（${id}）`),
-    notInCatalog: '当前模型不在服务端的模型目录中',
     catalogUnavailable: '无法获取模型目录，暂时不能修改模型。',
     catalogReason: (reason: string) => `原因：${reason}`,
-    currentModel: '当前模型：',
     serviceTier: { title: 'Codex 速度', levels: { default: '标准', priority: 'Fast', ultrafast: 'Ultrafast' }, help: '可用性与额度消耗取决于所选模型和账号。' },
     thinking: {
       title: '思考等级',
