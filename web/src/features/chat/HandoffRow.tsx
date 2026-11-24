@@ -4,8 +4,10 @@ import { RuntimeMark } from '@/components/runner-picker/RuntimeMark'
 import { t } from '@/i18n'
 import { useRuntimeLookup, type AgentRuntime } from '@/lib/runtime'
 
-// Where the conversation was handed to another runtime: a relay ticket between two blue dashed rules (the pink cut line stays for a
-// session that started over). It names both runtimes with their marks and says how much of the saved conversation went along.
+// Where the conversation was handed over: a relay ticket between two blue dashed rules (the pink cut line stays for a session the user
+// started over). By why it happened (ContextHandoff.reason): a change of runtime names both runtimes with their marks; a lost session
+// and a task's start name the runtime's new session and say why in a line of their own. Every kind says how much of the saved
+// conversation went along.
 export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) {
   const lookup = useRuntimeLookup()
   const copy = t.chat.handoff
@@ -15,8 +17,12 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
       ? [copy.whole(handoff.includedMessages)]
       : [copy.included(handoff.includedMessages), copy.omitted(handoff.omittedMessages)]
   if (handoff.images > 0) parts.push(copy.images(handoff.images))
-  // The change was undone after the other runtime had run a message: a new session of the same runtime gets the conversation.
-  const renewed = handoff.fromRuntime === handoff.toRuntime
+  // A new session of the same runtime gets the conversation: the session was lost, a task started, or a change of runtime was undone
+  // after the other runtime had run a message.
+  const renewed = handoff.reason !== 'runtime_changed' || handoff.fromRuntime === handoff.toRuntime
+  const said = parts.join(copy.separator)
+  const label = handoff.reason === 'session_lost' ? copy.lostLabel(to, said) : handoff.reason === 'task_start' ? copy.taskLabel(to, said) : renewed ? copy.renewedLabel(to, said) : copy.label(from, to, said)
+  const why = handoff.reason === 'session_lost' ? copy.lost : handoff.reason === 'task_start' ? copy.task : null
   const side = (id: AgentRuntime, name: string) => {
     const runtime = lookup.get(id)
     return (
@@ -27,7 +33,7 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
     )
   }
   return (
-    <div role="separator" aria-label={renewed ? copy.renewedLabel(to, parts.join(copy.separator)) : copy.label(from, to, parts.join(copy.separator))} className="flex items-center gap-3">
+    <div role="separator" aria-label={label} className="flex items-center gap-3">
       <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-riso-blue/70" />
       <div aria-hidden="true" className="grid justify-items-center gap-1">
         <span className="inline-flex items-center gap-2.5 rounded-full border-2 border-ink bg-paper-raised py-1 pr-3.5 pl-1.5 text-ink shadow-[3px_3px_0_var(--riso-blue)]">
@@ -42,6 +48,7 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
             </>
           )}
         </span>
+        {why && <span className="text-center text-[12.5px] font-black text-ink">{why}</span>}
         <span className="text-center text-[12px] font-bold text-ink-700">{parts.join(' · ')}</span>
       </div>
       <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-riso-blue/70" />

@@ -103,6 +103,9 @@ type Options struct {
 	ClaudeBin string
 	// CodexBin is the codex executable; empty means look it up on the PATH of the user's login shell (UserPath).
 	CodexBin string
+	// GrokBin and AntigravityBin are the grok and agy executables; empty means look them up on the PATH of the user's
+	// login shell (UserPath).
+	GrokBin, AntigravityBin string
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
@@ -115,6 +118,7 @@ type TokenIssuer interface {
 // Executor is the local executor.
 type Executor struct {
 	sessionCache sync.Map // session file path -> sessionMeta (for the /resume list)
+	acpLogins    sync.Map // ACP runtime id -> its last login conclusion (acpcli.LoggedIn, LoggedOut or Unknown)
 	o            Options
 	src          Source
 	tmpl         *clitemplate.Catalog
@@ -614,7 +618,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &runID); mErr != nil {
 				return nil, mErr
 			}
-			return nil, fail(executor.ErrSessionMissing, "The recorded session file %s no longer exists. Confirm reopening the session in the console first.", snap.Session.SessionFile)
+			return nil, fail(executor.ErrSessionMissing, "The recorded session file %s no longer exists; the next message starts a new session with the saved conversation.", snap.Session.SessionFile)
 		}
 		sessionFile = snap.Session.SessionFile
 	}
@@ -824,7 +828,7 @@ func (e *Executor) watch(p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	if !p.stopping.Load() {
+	if !p.stopping.Load() && !exiting(p) {
 		// Read curRun first: discard sets exitRun before clearing curRun, so at least one of them matches.
 		run := p.curRun.Load()
 		if run == nil {

@@ -22,7 +22,6 @@ export const overview = {
     summaryLabel: '运行状态汇总',
     busy: '回复中',
     idle: '空闲',
-    sessionMissing: '会话丢失',
     queued: '排队中',
     queuedNote: (interrupt: number, normal: number) => `打断 ${interrupt} 条 · 普通 ${normal} 条`,
     names: (names: string[], total: number) => (total > names.length ? `${names.join('、')} 等 ${total} 个` : names.join('、')),
@@ -98,7 +97,6 @@ export const overview = {
     interruptedReason: '人发送打断消息，终止了这条回复。',
     restartReason: '服务端在回复过程中重启，回复未完成。',
     view: '查看回复',
-    handle: '去处理',
     // Failed manual compaction (Anomaly.compaction is not null): the stamp and the actions switch
     // to compaction wording, and the command of this compaction is written after the reason.
     compactionFailed: '压缩失败',

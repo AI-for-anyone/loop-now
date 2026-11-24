@@ -128,7 +128,8 @@ export function useRuntimes(enabled = true) {
 }
 
 // The fixed definition of each runtime: name, model providers, capabilities. Reading it checks nothing on this machine and it changes
-// only when the server is upgraded, so it is read once. Components use it through useRuntimeLookup (lib/runtime.ts).
+// only when the server is upgraded or a local ACP command is added, changed or removed (api/acp-commands.ts reads it again then), so it
+// is read once. Components use it through useRuntimeLookup (lib/runtime.ts).
 export function useRuntimeDefinitions() {
   return useQuery({ queryKey: keys.runtimeDefinitions, queryFn: () => call(api.GET('/runtime-definitions')), staleTime: Infinity })
 }
@@ -593,10 +594,6 @@ export function useSendMessage(agentId: string) {
   return useMutation<SendOutcome, ApiError, Schemas['SendMessageInput']>({
     mutationFn: (body) => call(api.POST('/agents/{agentId}/messages', { ...agentPath(agentId), body })),
   })
-}
-
-export function useResetSession(agentId: string) {
-  return useAgentMutation(agentId, () => call(api.POST('/agents/{agentId}/session/reset', agentPath(agentId))), [keys.agentStatus(agentId)])
 }
 
 export function useCreateSkillFromArchive() {

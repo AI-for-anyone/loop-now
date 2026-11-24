@@ -21,8 +21,10 @@ func TestListRuntimes(t *testing.T) {
 	got := decode[struct {
 		Runtimes []runtimes.Status `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtimes?refresh=true", nil))
-	if len(got.Runtimes) != 3 || got.Runtimes[1].ID != "claude-code" || !got.Runtimes[1].Available || got.Runtimes[1].Login.State != "logged_in" ||
-		got.Runtimes[2].ID != "codex" || got.Runtimes[2].Available || *got.Runtimes[2].UnavailableReason != "not_found" {
+	if len(got.Runtimes) != 5 || got.Runtimes[1].ID != "claude-code" || !got.Runtimes[1].Available || got.Runtimes[1].Login.State != "logged_in" ||
+		got.Runtimes[2].ID != "codex" || got.Runtimes[2].Available || *got.Runtimes[2].UnavailableReason != "not_found" ||
+		got.Runtimes[3].ID != "grok" || got.Runtimes[3].Available || *got.Runtimes[3].UnavailableReason != "not_found" ||
+		got.Runtimes[4].ID != "antigravity" || got.Runtimes[4].Available || *got.Runtimes[4].UnavailableReason != "not_found" {
 		t.Fatalf("runtimes: %+v", got)
 	}
 	e.expect(422, "GET", "/runtimes?refresh=maybe", nil, "X-Contract-Invalid-Request", "1")
@@ -41,7 +43,9 @@ func TestListRuntimeDefinitions(t *testing.T) {
 			Capabilities map[string]any `json:"capabilities"`
 		} `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtime-definitions", nil))
-	if len(got.Runtimes) != 3 || got.Runtimes[0].ID != "pi" || !got.Runtimes[0].IsDefault || len(got.Runtimes[0].Providers) != 0 ||
+	if len(got.Runtimes) != 5 || got.Runtimes[0].ID != "pi" ||
+		got.Runtimes[3].ID != "grok" || got.Runtimes[3].Name != "Grok" || len(got.Runtimes[3].Providers) != 1 || got.Runtimes[3].Providers[0] != "grok-cli" ||
+		got.Runtimes[4].ID != "antigravity" || got.Runtimes[4].Name != "Antigravity" || len(got.Runtimes[4].Providers) != 1 || got.Runtimes[4].Providers[0] != "antigravity-cli" || !got.Runtimes[0].IsDefault || len(got.Runtimes[0].Providers) != 0 ||
 		got.Runtimes[2].ID != "codex" || got.Runtimes[2].Name != "Codex" || len(got.Runtimes[2].Providers) != 1 || got.Runtimes[2].Providers[0] != "codex-cli" ||
 		got.Runtimes[1].ID != "claude-code" || got.Runtimes[1].Name != "Claude Code" || got.Runtimes[1].IsDefault ||
 		len(got.Runtimes[1].Providers) != 1 || got.Runtimes[1].Providers[0] != "claude-code" {
@@ -58,9 +62,14 @@ func TestRuntimesRefreshReadsModelsAgain(t *testing.T) {
 	e := newEnv(t)
 	calls := 0
 	e.api.RefreshLocalModels = func(context.Context) { calls++ }
+	var nudged []string
+	e.api.ModelListRead = func(provider string) { nudged = append(nudged, provider) }
 	e.expect(200, "GET", "/runtimes", nil)
 	if calls != 0 {
-		t.Fatalf("a plain read must not read the models: %d", calls)
+		t.Fatalf("a plain read must not wait for the models: %d", calls)
+	}
+	if len(nudged) != 1 || nudged[0] != "" {
+		t.Fatalf("a plain read lets old model lists and login conclusions be read again in the background: %v", nudged)
 	}
 	e.expect(200, "GET", "/runtimes?refresh=true", nil)
 	if calls != 1 {

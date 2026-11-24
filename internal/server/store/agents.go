@@ -370,25 +370,14 @@ func (s *Store) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path s
 	return s.RecordRuntimeSessionFile(ctx, agentID, agentruntime.ForProvider(a.ModelProvider).ID, path)
 }
 
-// MarkSessionMissing marks the session as missing (only takes effect for an active session) and records a
-// session-missing event; runID is the run that discovered it was missing.
+// MarkSessionMissing is called when the runtime can no longer continue the Agent's active session (its file or
+// thread is gone); runID is the run that found it. The session does not wait for the person to confirm a new one:
+// it becomes a new start that carries the saved conversation (a session_lost handoff, see loseSessionTx), under the
+// same session number, and a session.lost event records it.
 func (s *Store) MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID *uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		var file *string
-		var epoch int
-		err := tx.QueryRow(ctx, `UPDATE agent_sessions SET state = 'missing', updated_at = $2 WHERE agent_id = $1 AND state = 'active'
-			RETURNING session_file, epoch`, agentID, tx.Now()).Scan(&file, &epoch)
-		if errors.Is(err, db.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		data := map[string]any{"epoch": epoch}
-		if file != nil {
-			data["sessionFile"] = *file
-		}
-		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: runID, Type: EventSessionMissing, Data: data})
+		_, err := s.loseSessionTx(ctx, tx, agentID, runID, "active")
+		return err
 	})
 }
 

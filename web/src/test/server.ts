@@ -23,6 +23,8 @@ export const server = setupServer(
   http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) => HttpResponse.json({ providerId: String(params.providerId), models: [] })),
   // Runtime definitions: Pi (bundled, the default) and the local Claude Code, as the server defines them.
   http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(runtimeDefinitions())),
+  // No local ACP command added.
+  http.get(apiUrl('/acp-commands'), () => HttpResponse.json({ commands: [] })),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.

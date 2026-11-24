@@ -179,6 +179,7 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   plugin_blocked: true,
   plugin_failed: true,
   plugin_timeout: true,
+  runtime_in_use: true,
   cli_auth_in_progress: true,
   credential_selection_mode_conflict: true,
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,8 +124,9 @@ func TestMessageQueuedDuringConsoleCommandStartsWhenItEnds(t *testing.T) {
 
 // After /new reopens the session it must immediately schedule a reminder for Inbox messages received while the session
 // was lost: the lock is released first, so the reminder can acquire it and start right away.
-func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
-	e, m := newMaintEnv(t)
+// A lost session does not hold the Inbox back: the reminder for a message delivered then starts right away.
+func TestLostSessionStartsUnreadReminderRightAway(t *testing.T) {
+	e, _ := newMaintEnv(t)
 	ctx := context.Background()
 	if err := e.st.RecordSessionFile(ctx, e.agent, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
@@ -133,19 +135,9 @@ func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.deliver("message while the session was lost", "queue")
-	select {
-	case got := <-e.ex.started:
-		t.Fatalf("no reminder should be scheduled while the session is lost: %q", got)
-	case <-time.After(100 * time.Millisecond):
+	if got := e.waitAnyStarted(); !strings.Contains(got, "message while the session was lost") {
+		t.Fatalf("the reminder starts: %q", got)
 	}
-	info, err := e.svc.NewSession(ctx, e.agent)
-	if err != nil || info.State != "none" {
-		t.Fatalf("new session: %+v %v", info, err)
-	}
-	if reason := <-m.entered; reason != "session_reset" {
-		t.Fatalf("stop reason: %s", reason)
-	}
-	e.waitAnyStarted()
 	e.waitIdle()
 }
 

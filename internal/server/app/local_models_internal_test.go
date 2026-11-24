@@ -21,10 +21,10 @@ func (c *fakeClock) add(d time.Duration) {
 
 // A read of the model lists starts one background read of Codex's list once the list is older than maxAge, or than
 // staleAge when the last read could not refresh it online; the read itself does not wait.
-func TestCodexModelReaderReadsAgainInTheBackground(t *testing.T) {
+func TestLocalModelReaderReadsAgainInTheBackground(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1000, 0)}
 	reads := make(chan chan bool, 4)
-	r := &codexModelReader{maxAge: time.Minute, staleAge: 10 * time.Second, now: clock.Now,
+	r := &localModelReader{maxAge: time.Minute, staleAge: 10 * time.Second, now: clock.Now,
 		read: func(context.Context) bool {
 			reply := make(chan bool)
 			reads <- reply

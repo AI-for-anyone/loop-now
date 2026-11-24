@@ -6,6 +6,7 @@ export const images = {
   name: (index: number, width: number, height: number) => `Image ${index} · ${width}×${height}`,
   receiptMismatch: "The upload receipt doesn't match the original image; your draft was kept.",
   add: 'Add image',
+  modelRefuses: "This model doesn't take images",
   selectFile: 'Choose an image file',
   help: 'Paste a screenshot, drag one in, or choose a PNG, JPEG, or WebP image.',
   preview: 'Images to send',

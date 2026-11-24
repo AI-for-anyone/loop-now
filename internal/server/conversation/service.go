@@ -94,6 +94,11 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.recoverAfterRestart(ctx); err != nil {
 		return err
 	}
+	if healed, err := s.st.HealMissingSessions(ctx); err != nil {
+		return err
+	} else if len(healed) > 0 {
+		s.log.Info("sessions an earlier version left missing continue with the saved conversation", "agents", len(healed))
+	}
 	s.reconcile(ctx)
 	s.wg.Go(s.reconcileLoop)
 	return nil
@@ -537,6 +542,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.Origin == "sleep_wake" {
 		s.emitMessage(ctx, agentID, msg, run)
 	}
+	s.recordDispatch(ctx, agentID, run.ID)
 	if run.Origin == "inbox_reminder" {
 		text, void, err := s.prepareReminder(ctx, agentID, run)
 		if err != nil {
@@ -598,19 +604,32 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if command != "" {
 		message = piMessage
 	}
-	// After a change of runtime, the new runtime gets the saved conversation with this message, in a block between the
-	// run ID line and the message. A Pi command or a manual compaction goes to the runtime as it is, without it; the
-	// handoff then waits for the next message.
-	if pending, err := s.st.DispatchHandoff(ctx, agentID, run.ID); err != nil {
-		s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
-	} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
-		if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {
-			message = executor.RunIDLine(run.ID) + block + "\n\n" + prompt
-			sink.handoff = record
+	// After a change of runtime, or when the runtime's own session was lost, the runtime gets the saved conversation
+	// with this message, in a block between the run ID line and the message. A Pi command or a manual compaction goes
+	// to the runtime as it is, without it; the handoff then waits for the next message.
+	send := func() (executor.Result, error) {
+		message := message
+		if pending, err := s.st.DispatchHandoff(ctx, agentID, run.ID); err != nil {
+			s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
+		} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
+			if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {
+				message = executor.RunIDLine(run.ID) + block + "\n\n" + prompt
+				sink.handoff = record
+			}
+		}
+		return s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
+			Origin: run.Origin, MessageID: trigger}, sink)
+	}
+	res, err := send()
+	// A session the runtime can no longer continue does not stop the conversation: the store has turned it into a new
+	// start (a handoff with reason session_lost, shown like any other), and the message is sent again, once, now
+	// carrying the saved conversation. A compaction is not: there is nothing left to compact.
+	if err == nil && res.ErrorCode == executor.ErrSessionMissing && ctx.Err() == nil {
+		s.emitSession(ctx, agentID)
+		if run.Origin != executor.OriginConsoleCompact {
+			res, err = send()
 		}
 	}
-	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
-		Origin: run.Origin, MessageID: trigger}, sink)
 	if err != nil {
 		if ctx.Err() != nil {
 			return res, command
@@ -618,6 +637,21 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}, command
 	}
 	return res, command
+}
+
+// recordDispatch records who the run is dispatched to (from the Agent's configuration now), so a run that fails before
+// it starts still names its runtime; the executor's report when the reply begins replaces it.
+func (s *Service) recordDispatch(ctx context.Context, agentID, runID uuid.UUID) {
+	a, err := s.st.GetAgent(ctx, agentID)
+	if err != nil {
+		return
+	}
+	sel := store.RunSelection{Runtime: agentruntime.ForProvider(a.ModelProvider).ID, Provider: a.ModelProvider, ModelID: a.ModelID, ThinkingLevel: a.ThinkingLevel}
+	if err := s.st.SetRunSelection(ctx, runID, sel); err != nil {
+		s.log.Warn("failed to record who the run is dispatched to", "agentId", agentID, "runId", runID, "err", err)
+		return
+	}
+	s.emitRun(ctx, agentID, runID)
 }
 
 // handoffBlock writes the saved conversation for a pending handoff, with the record of what it carries. It is empty
@@ -639,22 +673,20 @@ func (s *Service) handoffBlock(ctx context.Context, agentID, runID uuid.UUID, pe
 		}
 		return "", nil
 	}
-	messages := make([]contexthandoff.Message, 0, len(entries))
-	for _, e := range entries {
-		m := contexthandoff.Message{ID: e.ID, Role: e.Role, Origin: e.Origin, Status: e.RunStatus, Text: e.Text, Images: e.Images, CreatedAt: e.CreatedAt}
-		for _, t := range e.Tools {
-			m.Tools = append(m.Tools, contexthandoff.Tool{Name: t.Name, Calls: t.Calls, Failed: t.Failed})
-		}
-		messages = append(messages, m)
-	}
+	messages := store.HandoffMessages(entries)
 	to := agentruntime.ForProvider(a.ModelProvider)
 	from := pending.From
 	if rt, ok := agentruntime.ByID(pending.From); ok {
 		from = rt.Name
 	}
 	budget := contexthandoff.ClampBudget(s.o.HandoffBudget)
-	block := contexthandoff.Build(messages, from, to.Name, budget)
-	return block.Text, &store.HandoffRecord{ID: pending.ID, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
+	// A session lost on one runtime, then a change to another, reaches the new one as a change of runtime.
+	reason, kind := store.HandoffRuntimeChanged, contexthandoff.RuntimeChanged
+	if pending.Reason == store.HandoffSessionLost && pending.From == to.ID {
+		reason, kind = store.HandoffSessionLost, contexthandoff.SessionLost
+	}
+	block := contexthandoff.BuildFor(kind, messages, from, to.Name, budget)
+	return block.Text, &store.HandoffRecord{ID: pending.ID, Reason: reason, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
 		OmittedMessages: block.Omitted, Images: block.Images, Bytes: block.Bytes, BudgetBytes: budget}
 }
 

@@ -1,10 +1,9 @@
 import { useOutletContext } from 'react-router'
 import type { Schemas } from '@/api/client'
 
-// The state shown by the status sticker in the header: whether the session is lost, whether the Agent is busy, and the
-// phase text of the current run (null when no run is in progress).
+// The state shown by the status sticker in the header: whether the Agent is busy, and the phase text of the current run (null when no
+// run is in progress).
 export interface AgentStickerState {
-  sessionMissing: boolean
   busy: boolean
   phase: string | null
   sleep?: Schemas['SleepInfo'] | null

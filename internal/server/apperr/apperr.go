@@ -32,6 +32,7 @@ const (
 	CodeAgentNotIdle                    = "agent_not_idle"
 	CodeSessionMissing                  = "session_missing"
 	CodeSessionNone                     = "session_none"
+	CodeRuntimeInUse                    = "runtime_in_use"
 	CodeConsoleCommandFailed            = "console_command_failed"
 	CodeTemplateDeleted                 = "template_deleted"
 	CodeNameConflict                    = "name_conflict"

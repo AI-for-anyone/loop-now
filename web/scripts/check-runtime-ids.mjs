@@ -5,7 +5,11 @@
 // side holds a runtime: its type is the API's AgentRuntime, or wider (every runtime id fits in it), or a plain string.
 // Checked: ===, !==, == and !=, and the case labels of a switch. A value of another type that shares a word with a
 // runtime id, such as a command's source ('platform' | 'pi'), is not a runtime and is not reported.
-// The runtime ids are read from the generated API types, so a new runtime is covered without changing this check.
+// The contract's AgentRuntime is a plain string (each local ACP command a person adds is a runtime of its own), so the ids are
+// read from the lookup's list of the built-in runtimes (BUILT_IN_RUNTIMES in src/lib/runtime.ts): a new built-in runtime is
+// covered once it is listed there, and the check stops if the list is gone rather than checking nothing.
+// The runtimes people add are named acp-<command id>. Telling them apart by that prefix is a comparison too: any literal
+// starting with it (a string, a template, a pattern) is reported; the console asks the lookup instead (acpCommandId).
 // Checked files are those of tsconfig.app.json (so not tests or test helpers), except the lookup itself.
 // Runs as part of npm run lint.
 import path from 'node:path'
@@ -16,6 +20,9 @@ const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // The one file that may compare runtime ids.
 export const LOOKUP = 'src/lib/runtime.ts'
 const SCHEMA = 'src/api/schema.gen.ts'
+const LIST = 'BUILT_IN_RUNTIMES'
+// The prefix of the runtimes people add (contract AgentRuntime: acp- followed by the command's id).
+const ADDED_PREFIX = 'acp-'
 const EQUALITY = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken])
 
 function loadProgram(root) {
@@ -25,27 +32,34 @@ function loadProgram(root) {
   return ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, noEmit: true } })
 }
 
-// The members of components['schemas']['AgentRuntime'] in the generated API types.
-function runtimeIds(program, checker, root) {
-  const schema = program.getSourceFile(path.join(root, SCHEMA))
-  const components = schema?.statements.find((node) => ts.isInterfaceDeclaration(node) && node.name.text === 'components')
-  if (!components) throw new Error(`${SCHEMA}: interface components not found`)
-  const property = (type, name) => {
-    const symbol = checker.getPropertyOfType(type, name)
-    if (!symbol) throw new Error(`${SCHEMA}: ${name} not found`)
-    return checker.getTypeOfSymbolAtLocation(symbol, components)
+// The ids in the lookup's `export const BUILT_IN_RUNTIMES = [...] as const`.
+function runtimeIds(program, root) {
+  const lookup = program.getSourceFile(path.join(root, LOOKUP))
+  let list
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === LIST) list = node.initializer
+    else ts.forEachChild(node, visit)
   }
-  const runtime = property(property(checker.getTypeAtLocation(components.name), 'schemas'), 'AgentRuntime')
-  const ids = (runtime.isUnion() ? runtime.types : [runtime]).filter((type) => type.isStringLiteral()).map((type) => type.value)
-  if (ids.length === 0) throw new Error(`${SCHEMA}: AgentRuntime has no string members`)
+  if (lookup) visit(lookup)
+  while (list && (ts.isAsExpression(list) || ts.isSatisfiesExpression(list) || ts.isParenthesizedExpression(list))) list = list.expression
+  if (!list || !ts.isArrayLiteralExpression(list)) throw new Error(`${LOOKUP}: ${LIST} (an array of the built-in runtime ids) not found`)
+  const ids = list.elements.filter((element) => ts.isStringLiteral(element)).map((element) => element.text)
+  if (ids.length === 0) throw new Error(`${LOOKUP}: ${LIST} has no runtime ids`)
   return ids
+}
+
+// A literal naming the prefix of the runtimes people add: its text, or null.
+function addedPrefix(node, file) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)) return node.text.startsWith(ADDED_PREFIX) ? node.getText(file) : null
+  if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) return node.getText(file).includes(ADDED_PREFIX) ? node.getText(file) : null
+  return null
 }
 
 // Returns the runtime ids and every comparison of one outside the lookup, as { file, line, column, id, text }.
 export function findRuntimeComparisons(root = web) {
   const program = loadProgram(root)
   const checker = program.getTypeChecker()
-  const ids = runtimeIds(program, checker, root)
+  const ids = runtimeIds(program, root)
   const idOf = (node) => {
     const type = checker.getTypeAtLocation(node)
     return type.isStringLiteral() && ids.includes(type.value) ? type.value : null
@@ -61,11 +75,13 @@ export function findRuntimeComparisons(root = web) {
   for (const file of program.getSourceFiles()) {
     const relative = path.relative(root, file.fileName).split(path.sep).join('/')
     if (file.isDeclarationFile || relative.startsWith('..') || relative === SCHEMA || relative === LOOKUP) continue
-    const report = (node, id) => {
+    const report = (node, id, text = node.getText(file)) => {
       const { line, character } = file.getLineAndCharacterOfPosition(node.getStart(file))
-      found.push({ file: relative, line: line + 1, column: character + 1, id, text: node.getText(file).replace(/\s+/g, ' ') })
+      found.push({ file: relative, line: line + 1, column: character + 1, id, text: text.replace(/\s+/g, ' ') })
     }
     const visit = (node) => {
+      const prefix = addedPrefix(node, file)
+      if (prefix) report(node, ADDED_PREFIX, prefix)
       if (ts.isBinaryExpression(node) && EQUALITY.has(node.operatorToken.kind)) {
         const left = idOf(node.left), right = idOf(node.right)
         if (left && !right && holdsRuntime(node.right)) report(node, left)
@@ -83,10 +99,13 @@ export function findRuntimeComparisons(root = web) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { ids, found } = findRuntimeComparisons()
-  for (const item of found) console.error(`${item.file}:${item.line}:${item.column}: compares the runtime id '${item.id}': ${item.text}`)
+  for (const item of found) {
+    const what = item.id === ADDED_PREFIX ? `names the prefix of added runtimes '${ADDED_PREFIX}'` : `compares the runtime id '${item.id}'`
+    console.error(`${item.file}:${item.line}:${item.column}: ${what}: ${item.text}`)
+  }
   if (found.length > 0) {
-    console.error(`\n${found.length} comparison(s) of a runtime id. Ask the runtime lookup (${LOOKUP}) for the runtime's name or a capability instead.`)
+    console.error(`\n${found.length} comparison(s) of a runtime id. Ask the runtime lookup (${LOOKUP}) for the runtime's name or a capability (an added one has acpCommandId) instead.`)
     process.exit(1)
   }
-  console.log(`check-runtime-ids: no runtime id (${ids.join(', ')}) is compared outside ${LOOKUP}.`)
+  console.log(`check-runtime-ids: no runtime id (${ids.join(', ')}) or the prefix of added runtimes ('${ADDED_PREFIX}') is compared outside ${LOOKUP}.`)
 }

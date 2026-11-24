@@ -28,22 +28,20 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
   return keyword === '' || searchableText(agent).some((text) => text.toLowerCase().includes(keyword))
 }
 
-// At most one status tag on the right of each row, by priority: session lost, replying, sleep, Manager. Nothing is shown when idle.
+// At most one status tag on the right of each row, by priority: replying, sleep, Manager. Nothing is shown when idle.
 // On the blue background, sleep and Manager use a semi-transparent navy background; when their row is selected (yellow
 // background) they become a pill with white text on solid navy, because the semi-transparent one is hard to read on yellow.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
   const quiet = current ? 'rounded-full bg-ink px-2 text-white' : 'bg-ink/45 text-white'
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
   const [label, tone, title] =
-    agent.sessionState === 'missing'
-      ? [t.agents.sessionMissing, 'bg-tint-red text-red-text', undefined]
-      : agent.busy
-        ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
-        : sleeping
-          ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
-          : agent.isManager
-            ? [t.agents.manager, quiet, t.agents.managerTitle]
-            : [null, '', undefined]
+    agent.busy
+      ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
+      : sleeping
+        ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
+        : agent.isManager
+          ? [t.agents.manager, quiet, t.agents.managerTitle]
+          : [null, '', undefined]
   if (!label) return null
   return (
     <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-black whitespace-nowrap', tone)}>

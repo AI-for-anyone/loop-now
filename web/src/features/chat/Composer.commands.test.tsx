@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { createRef } from 'react'
 import { Composer, type ComposerHandle } from './Composer'
 import { apiUrl, makeMessage, makeRun } from '@/test/api'
-import { claudeCodeList, commandList } from '@/test/commands'
+import { commandList } from '@/test/commands'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
@@ -239,29 +239,6 @@ it('Esc closes the suggestions and keeps the command; Enter still sends directly
   await waitFor(() => expect(sent).toEqual([{ text: '/reload' }]))
 })
 
-it('when the session is missing, the command suggestions offer only /resume', async () => {
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  // The input is enabled only after the command list has been fetched and confirms that /resume is available right now.
-  const box = screen.getByRole('textbox', { name: 'Message' })
-  expect(box).toBeDisabled()
-  await waitFor(() => expect(box).toBeEnabled())
-  await userEvent.type(box, '/')
-  expect(screen.getAllByRole('option')).toHaveLength(1)
-  expect(screen.getByRole('option', { name: /\/resume/ })).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: /\/new/ })).not.toBeInTheDocument()
-})
-
-it('when the session is missing and /resume is unavailable (a Claude Code Agent), the input stays disabled, leaving no dead end where the only thing to type is a command sure to be rejected', async () => {
-  let reads = 0
-  server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(claudeCodeList()) }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  await waitFor(() => expect(reads).toBe(1))
-  await new Promise((resolve) => setTimeout(resolve, 30))
-  expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-})
-
 it('when the command list cannot be fetched, /new is still confirmed before sending', async () => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(
@@ -303,22 +280,6 @@ it('completing a platform command keeps the arguments already written', async ()
   await userEvent.click(screen.getByRole('option', { name: /\/compact/ }))
   expect(box).toHaveValue('/compact Keep the key decisions')
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-})
-
-it('when the session is missing and the command list cannot be read: does not lock the input, still lets /resume through (the server decides), and says in the menu that the list could not be read', async () => {
-  server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  const box = screen.getByRole('textbox', { name: 'Message' })
-  await waitFor(() => expect(box).toBeEnabled())
-  await userEvent.type(box, '/res')
-  expect(await screen.findByRole('status')).toHaveTextContent(/^Couldn't load the command list: /)
-  await userEvent.clear(box)
-  await userEvent.type(box, '/resume')
-  await userEvent.keyboard('{Escape}')
-  expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
-  await userEvent.clear(box)
-  await userEvent.type(box, 'Hello')
-  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
 })
 
 it('when the command list still has to be fetched before sending, the send button is disabled first to show it is working', async () => {
