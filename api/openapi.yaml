@@ -5080,6 +5080,77 @@ paths:
         inbox.message.cancelled: { $ref: "#/components/schemas/SseInboxMessageCancelled" }
         inbox.question.updated: { $ref: "#/components/schemas/SseInboxMessageCreated" }
 
+  /events:
+    get:
+      tags: [inbox]
+      operationId: streamMultiplexedEvents
+      x-access: console
+      summary: Several event streams over one connection (SSE)
+      description: |
+        `text/event-stream` carrying any set of the five event streams, so one connection serves every view of a
+        browser (a browser keeps at most six connections to one address). Each stream behaves exactly as its own
+        endpoint: the same access rules, the same snapshot and resume rules, the same events and data, in the same
+        order within the stream. Streams are named in `stream`:
+
+        - `agent:<agentId>`: GET /agents/{agentId}/events
+        - `overview`, `overview:platform`, `overview:project:<projectId>`: GET /overview/events without a scope, with
+          platform=true, or with projectId
+        - `inbox`: GET /inbox/events
+        - `task:<taskId>`: GET /tasks/{taskId}/events
+        - `project-tasks:<projectId>`: GET /projects/{projectId}/tasks/events
+
+        Every event of a stream comes as an `event` whose data is a MultiplexedEvent: the stream's name, the event's own
+        id in that stream, its event name and its data (the schema the stream's own endpoint lists for that name in
+        `x-sse-events`). Events of different streams interleave; within a stream their order is kept.
+
+        The SSE `id` of each event is a combined cursor: `<stream>=<id>` pairs separated by `;`, one for each stream
+        that has started (sent its snapshot, or resumed), with the stream's latest id. On a reconnect the browser sends
+        it back as `Last-Event-ID`, and every stream resumes after its own id (or starts with its snapshot when that id
+        is beyond the stream's retention range, as on its own endpoint). A stream of the request with no pair in the
+        cursor starts with its snapshot; pairs of streams not requested are ignored, and so is a pair that cannot be
+        read. To change the set of streams, close the connection and open a new one with the new `stream` list and
+        the `id` of the last event received as `cursor`: streams in both sets go on where they were, nothing is lost or
+        repeated; new ones start with their snapshot. Removing a stream's pair from the cursor makes it start with a
+        fresh snapshot.
+
+        A stream that cannot be opened (its Agent, task or project does not exist, its scope is invalid, the task
+        service is not running) or cannot be read any more ends with a `stream.error` naming it; the other streams go
+        on. Keep-alives are comment lines.
+      parameters:
+        - name: stream
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 64
+            items: { type: string, minLength: 1, maxLength: 128 }
+          description: The streams to carry, by name (see above); repeated names count once
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 16384 }
+          description: A combined cursor (the id of an event this endpoint sent earlier), for a new connection; Last-Event-ID takes precedence
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+      x-sse-events:
+        event: { $ref: "#/components/schemas/MultiplexedEvent" }
+        stream.error: { $ref: "#/components/schemas/MultiplexedStreamError" }
+
   /external-identities:
     get:
       tags: [external-identities]
@@ -13257,6 +13328,33 @@ components:
         byTask:
           type: array
           items: { $ref: "#/components/schemas/InboxPendingTaskCount" }
+
+    MultiplexedEvent:
+      description: One event of a stream carried by GET /events
+      type: object
+      required: [stream, id, event, data]
+      additionalProperties: false
+      properties:
+        stream: { type: string, description: "The stream's name, as requested" }
+        id: { type: string, description: "The event's id in its own stream (what its own endpoint sends as the SSE id)" }
+        event: { type: string, description: "The event's name in its own stream" }
+        data:
+          description: The event's data, as the stream's own endpoint lists it for that name in x-sse-events
+
+    MultiplexedStreamError:
+      description: A stream carried by GET /events that could not be opened or read; it is no longer followed on this connection
+      type: object
+      required: [stream, error]
+      additionalProperties: false
+      properties:
+        stream: { type: string }
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            message: { type: string }
 
     SseInboxSnapshot:
       type: object
