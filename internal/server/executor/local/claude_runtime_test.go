@@ -472,6 +472,25 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	}
 }
 
+// A saved session is recorded with the runtime that wrote it, so the platform can tell a late save by the runtime the
+// Agent changed away from (a reply that was in progress during the change) from the current runtime's session.
+func TestSessionRecordedWithItsRuntime(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	id := h.agent(nil)
+	if res, _ := h.exec(id, "pi turn"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("Pi: %+v", res)
+	}
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = "claude-code", "haiku" })
+	if res, _ := h.exec(id, "claude turn"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("Claude Code: %+v", res)
+	}
+	h.src.mu.Lock()
+	defer h.src.mu.Unlock()
+	if got := h.src.recordRuntimes[id]; len(got) < 2 || got[0] != "pi" || got[len(got)-1] != "claude-code" {
+		t.Fatalf("runtimes the sessions were recorded with: %v", got)
+	}
+}
+
 // purgeLog returns the purge calls logged by fakeclaude.
 func (h *claudeHarness) purgeLog() []string {
 	b, _ := os.ReadFile(filepath.Join(h.realHome, ".fakeclaude-purge.log"))

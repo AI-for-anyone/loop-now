@@ -45,6 +45,8 @@ type AgentSession struct {
 	State       string // none / active / missing
 	Epoch       int
 	UpdatedAt   time.Time
+	// Handoff is a change of runtime whose conversation has not reached the new runtime yet; nil when none is pending.
+	Handoff *PendingHandoff
 }
 
 // AgentListItem is a list item: the configuration plus lightweight status.
@@ -255,36 +257,6 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 
 func sameThinking(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
-// switchRuntimeTx is called when a model provider change switches the runtime (between Pi and Claude Code): the new
-// runtime starts from a new session, and the old session is neither migrated nor deleted. The session is reset
-// (session sequence number plus one) and any sleep in this session is cancelled, the same as a confirmed session
-// restart; returns agent_not_idle when a run is in progress, because otherwise that run would record the old
-// runtime's session back when it ends.
-func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, from, to string) error {
-	var active bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses+`)`, agentID).Scan(&active); err != nil {
-		return err
-	}
-	if active {
-		return apperr.Conflict(apperr.CodeAgentNotIdle, "The Agent is replying. Wait for this reply to end before switching the runtime.")
-	}
-	if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
-		return err
-	}
-	var epoch int
-	err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
-		WHERE agent_id = $1 RETURNING epoch`, agentID, tx.Now()).Scan(&epoch)
-	if errors.Is(err, db.ErrNoRows) {
-		return nil // no session row (should not happen; it exists from Agent creation): no session to reset
-	}
-	if err != nil {
-		return err
-	}
-	return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,
-		Data: map[string]any{"fromEpoch": epoch - 1, "toEpoch": epoch, "reason": "runtime_changed",
-			"fromRuntime": agentruntime.ForProvider(from).ID, "toRuntime": agentruntime.ForProvider(to).ID}})
-}
-
 // AgentBusy reports whether the Agent has a run in progress.
 func (s *Store) AgentBusy(ctx context.Context, id uuid.UUID) (bool, error) {
 	var busy bool
@@ -367,18 +339,30 @@ func bumpConfig(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
 	var file *string
-	err := s.Pool.QueryRow(ctx, `SELECT session_file, state, epoch, updated_at FROM agent_sessions WHERE agent_id = $1`, agentID).
-		Scan(&file, &sess.State, &sess.Epoch, &sess.UpdatedAt)
+	var handoff []byte
+	err := s.Pool.QueryRow(ctx, `SELECT session_file, state, epoch, updated_at, handoff FROM agent_sessions WHERE agent_id = $1`, agentID).
+		Scan(&file, &sess.State, &sess.Epoch, &sess.UpdatedAt, &handoff)
 	if file != nil {
 		sess.SessionFile = *file
 	}
-	return sess, notFoundIfNoRows(err, "Agent session")
+	if err != nil {
+		return sess, notFoundIfNoRows(err, "Agent session")
+	}
+	sess.Handoff, err = parseHandoff(handoff)
+	return sess, err
 }
 
-// RecordSessionFile records a session file confirmed to be written to disk and sets the state to active.
+// RecordSessionFile records a session file of the Agent's current runtime confirmed to be written to disk and sets the
+// state to active (see RecordRuntimeSessionFile).
 func (s *Store) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', updated_at = $3 WHERE agent_id = $1`, agentID, path, s.Pool.Now())
-	return err
+	a, err := s.GetAgent(ctx, agentID)
+	if IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.RecordRuntimeSessionFile(ctx, agentID, agentruntime.ForProvider(a.ModelProvider).ID, path)
 }
 
 // MarkSessionMissing marks the session as missing (only takes effect for an active session) and records a
@@ -418,7 +402,7 @@ func (s *Store) ResetSession(ctx context.Context, agentID uuid.UUID) (AgentSessi
 		if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
+		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, handoff = NULL, updated_at = $2
 			WHERE agent_id = $1 RETURNING state, epoch, updated_at`, agentID, tx.Now()).Scan(&sess.State, &sess.Epoch, &sess.UpdatedAt); err != nil {
 			return err
 		}
@@ -447,7 +431,7 @@ func (s *Store) ResumeSession(ctx context.Context, agentID uuid.UUID, expectedFi
 		if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = $3, state = 'active', epoch = epoch + 1, updated_at = $4
+		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = $3, state = 'active', epoch = epoch + 1, handoff = NULL, updated_at = $4
 			WHERE agent_id = $1 AND session_file IS $2 RETURNING session_file, state, epoch, updated_at`, agentID, expectedFileArg, targetFile, tx.Now()).
 			Scan(&sess.SessionFile, &sess.State, &sess.Epoch, &sess.UpdatedAt); errors.Is(err, db.ErrNoRows) {
 			return apperr.Conflict(apperr.CodeConsoleCommandFailed, "The current session has changed. List the sessions again before resuming.")

@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/coord"
@@ -69,7 +70,7 @@ type Service struct {
 	sleepRevisions  sync.Map
 	dispatchGates   sync.Map // AgentID -> chan struct{}; a task fork blocks dispatching new turns, not the current one
 	commands        sync.Map // RunID -> *consoleCommandRun; a manual compaction request waits for its run to end
-	sessions        sync.Map // AgentID -> apitypes.SessionInfo; the session.updated most recently pushed
+	sessions        sync.Map // AgentID -> sessionPush; the session.updated most recently pushed
 
 	// InboxCancelled is called after an Inbox message has been cancelled by a person and the transaction has committed
 	// (it appends an Inbox event); when nil, nothing is pushed.
@@ -868,16 +869,33 @@ func (s *Service) emitSession(ctx context.Context, agentID uuid.UUID) {
 	s.EmitAgentStatus(agentID)
 }
 
-// publishSession pushes session.updated on the Agent's event stream. When force is false it only pushes if the session
-// state or epoch differs from the last push: it is called on every recomputation of the overview status, so every
-// session change gets a session.updated, including none becoming active after the first reply and the reopen caused by
-// changing the model and thereby the runtime (neither goes through a session command).
+// sessionPush is the session.updated most recently pushed for an Agent, with the runtime the Agent had then.
+type sessionPush struct {
+	info    apitypes.SessionInfo
+	runtime string
+}
+
+// publishSession pushes session.updated on the Agent's event stream; see publishSessionOn.
 func (s *Service) publishSession(ctx context.Context, agentID uuid.UUID, info apitypes.SessionInfo, force bool) {
-	if last, ok := s.sessions.Load(agentID); ok && !force && last.(apitypes.SessionInfo) == info {
+	s.publishSessionOn(ctx, agentID, info, "", force)
+}
+
+// publishSessionOn pushes session.updated on the Agent's event stream. When force is false it only pushes if the
+// session state or epoch, or the Agent's runtime, differs from the last push: it is called on every recomputation of
+// the overview status, so every session change gets a session.updated, including none becoming active after the first
+// reply and a change of runtime (which keeps the session number; neither goes through a session command). An empty
+// runtime keeps the one of the last push.
+func (s *Service) publishSessionOn(ctx context.Context, agentID uuid.UUID, info apitypes.SessionInfo, runtime string, force bool) {
+	last, ok := s.sessions.Load(agentID)
+	prev, _ := last.(sessionPush)
+	if runtime == "" {
+		runtime = prev.runtime
+	}
+	if ok && !force && prev.info == info && prev.runtime == runtime {
 		return
 	}
 	if s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: info.State, Epoch: info.Epoch}) {
-		s.sessions.Store(agentID, info)
+		s.sessions.Store(agentID, sessionPush{info: info, runtime: runtime})
 	}
 }
 
@@ -943,7 +961,7 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 		return
 	}
 	s.appendOverview(ctx, apitypes.EventAgentStatus, apitypes.SseAgentStatus{Agent: item})
-	s.publishSession(ctx, agentID, item.Status.Session, false)
+	s.publishSessionOn(ctx, agentID, item.Status.Session, agentruntime.ForProvider(item.Model.Provider).ID, false)
 }
 
 func (s *Service) appendOverview(ctx context.Context, typ string, payload any) {

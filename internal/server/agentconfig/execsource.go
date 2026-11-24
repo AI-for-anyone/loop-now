@@ -311,9 +311,10 @@ func (s *Service) MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, proc
 	return s.Store.MarkSourceSynced(ctx, sourceID, processed)
 }
 
-// RecordSessionFile records a session file that has been written to disk.
-func (s *Service) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
-	return s.Store.RecordSessionFile(ctx, agentID, path)
+// RecordSessionFile records a session file that the given runtime has written to disk (see
+// store.RecordRuntimeSessionFile).
+func (s *Service) RecordSessionFile(ctx context.Context, agentID uuid.UUID, runtime, path string) error {
+	return s.Store.RecordRuntimeSessionFile(ctx, agentID, runtime, path)
 }
 
 // MarkSessionMissing marks the session as lost; runID is the run that found it missing.

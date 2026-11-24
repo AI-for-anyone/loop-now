@@ -157,8 +157,9 @@ func TestListAgentCommands(t *testing.T) {
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/commands", nil)
 }
 
-// Changing the model switched the runtime, so the session is reopened: the Agent's event stream has session.updated,
-// and the console reloads the command list on it.
+// Changing the model switched the runtime: the Agent's event stream has session.updated, and the console reloads the
+// command list on it. The session number stays (the conversation is carried over, not started again), so the push
+// comes from the change of runtime itself, also for an Agent that has not talked yet.
 func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
@@ -167,6 +168,15 @@ func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
 	events, closeEvents := readSSE(t, e, path, "")
 	defer closeEvents()
 	_ = next(t, events) // snapshot
+	// Let the pushes caused by creating the Agent arrive first: the session (none, epoch 1) has then been pushed, and
+	// only the change of runtime can push it again.
+	for quiet := false; !quiet; {
+		select {
+		case <-events:
+		case <-time.After(time.Second):
+			quiet = true
+		}
+	}
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
 	for range 20 {
 		ev := next(t, events)
@@ -177,9 +187,9 @@ func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
 		if err := json.Unmarshal([]byte(ev.data), &u); err != nil {
 			t.Fatal(err)
 		}
-		if u.Epoch == 2 && u.State == "none" {
+		if u.Epoch == 1 && u.State == "none" {
 			return
 		}
 	}
-	t.Fatal("after switching runtime a session.updated with session epoch 2 should arrive")
+	t.Fatal("after switching runtime a session.updated with session epoch 1 should arrive")
 }

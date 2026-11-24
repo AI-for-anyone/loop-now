@@ -48,9 +48,15 @@ type Run struct {
 	// Compaction holds the instructions and result of a manual compaction (origin console_compact) (JSON, see
 	// Compaction); empty otherwise.
 	Compaction []byte
-	Tools      []ToolEvent
-	Usage      UsageTotals
-	Model      *ModelRef // provider and model of the last assistant call; nil when there is none
+	// Selection is who ran the turn (JSON, see RunSelection and SelectionInfo); empty until the reply began and for
+	// older runs.
+	Selection []byte
+	// ContextHandoff is the selection of the conversation the turn carried to a new runtime (JSON, see HandoffRecord
+	// and HandoffInfo); empty for other runs.
+	ContextHandoff []byte
+	Tools          []ToolEvent
+	Usage          UsageTotals
+	Model          *ModelRef // provider and model of the last assistant call; nil when there is none
 }
 
 // ToolEvent is the status record of one tool call (without arguments or output).
@@ -90,7 +96,8 @@ func runColumnsOf(prefix string) string {
 	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, coalesce($.user_message_id, '00000000-0000-0000-0000-000000000000'), $.config_version, $.instance_id, $.priority,
 	coalesce($.when_busy, ''), $.queue_seq, $.status, coalesce($.phase, ''), coalesce($.end_reason, ''), coalesce($.error_code, ''),
 	coalesce($.error_message, ''), $.queued_at, $.started_at, $.running_at, $.abort_requested_at, $.ended_at,
-	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id, $.pi_command, $.pi_command_handled, $.pi_command_notices, $.compaction`)
+	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id, $.pi_command, $.pi_command_handled, $.pi_command_notices, $.compaction,
+	$.selection, $.context_handoff`)
 }
 
 var runColumns = runColumnsOf("")
@@ -98,7 +105,8 @@ var runColumns = runColumnsOf("")
 func runFields(r *Run) []any {
 	return []any{&r.ID, &r.AgentID, &r.UserMessageID, &r.ConfigVersion, &r.InstanceID, &r.Priority, &r.WhenBusy, &r.QueueSeq, &r.Status,
 		&r.Phase, &r.EndReason, &r.ErrorCode, &r.ErrorMessage, &r.QueuedAt, &r.StartedAt,
-		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID, &r.PiCommand, &r.PiCommandHandled, &r.PiCommandNotices, &r.Compaction}
+		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID, &r.PiCommand, &r.PiCommandHandled, &r.PiCommandNotices, &r.Compaction,
+		&r.Selection, &r.ContextHandoff}
 }
 
 func scanRun(row db.Scanner) (Run, error) {
@@ -453,21 +461,7 @@ func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase, runtime
 // SetRunRunning turns a run into running (a run being interrupted stays aborting), and records the config version
 // actually used, the time it started replying, and the event.
 func (s *Store) SetRunRunning(ctx context.Context, runID uuid.UUID, configVersion int64) error {
-	return s.inTx(ctx, func(tx *db.Tx) error {
-		var agentID uuid.UUID
-		var runningAt time.Time
-		err := tx.QueryRow(ctx, `UPDATE runs SET status = CASE WHEN status = 'aborting' THEN status ELSE 'running' END,
-				phase = NULL, config_version = $2, running_at = coalesce(running_at, $3)
-			WHERE id = $1 AND status IN ('starting', 'aborting') AND running_at IS NULL RETURNING agent_id, running_at`, runID, configVersion, tx.Now()).Scan(&agentID, &runningAt)
-		if errors.Is(err, db.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &runID, Type: EventRunRunning, At: runningAt,
-			Data: map[string]any{"configVersion": configVersion}})
-	})
+	return s.SetRunRunningWith(ctx, runID, configVersion, RunStart{})
 }
 
 // MarkAborting turns the Agent's run in progress into aborting, records the time the interrupt was requested and the
@@ -609,6 +603,9 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 			data["errorCode"] = end.ErrorCode
 		}
 		if err = s.insertEvent(ctx, tx, LifecycleEvent{AgentID: run.AgentID, RunID: &run.ID, Type: EventRunEnded, At: *run.EndedAt, Data: data}); err != nil {
+			return err
+		}
+		if err = endDeliveredHandoffTx(ctx, tx, run); err != nil {
 			return err
 		}
 		_, err = s.FinishSleepTx(ctx, tx, nil, run.ID, end.Status)
