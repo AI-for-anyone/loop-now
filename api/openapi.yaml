@@ -1572,12 +1572,30 @@ paths:
         version number or push event; the console reads it again after these operations).
         With agentId, providers whose source is plugin also give `unavailableReason`, the reason this Agent cannot use them
         right now (read it again after project enablement or grants change, too).
+        With agentId, projectId or scope=platform, every provider gives `usable` (see ModelProvider.usable); at most one
+        of the three may be given (422 otherwise). Read it again after accounts, keys or logins change.
+        With include=models, every provider also carries its models, so a picker can search all models at once.
       parameters:
         - name: agentId
           in: query
           required: false
-          description: Marks for plugin providers whether this Agent can use them; returns 404 if the Agent does not exist
+          description: Marks for plugin providers whether this Agent can use them, and for every provider whether this Agent has an account or key for it; returns 404 if the Agent does not exist
           schema: { type: string, format: uuid }
+        - name: projectId
+          in: query
+          required: false
+          description: For a new Agent in this project (no Agent yet), whether the project has an account for each provider; returns 404 if the project does not exist
+          schema: { type: string, format: uuid }
+        - name: scope
+          in: query
+          required: false
+          description: platform asks the same for a new platform Agent (no Agent yet), which has no keys or logins of its own until they are entered
+          schema: { type: string, enum: [platform] }
+        - name: include
+          in: query
+          required: false
+          description: models adds each provider's models (ModelProvider.models)
+          schema: { type: string, enum: [models] }
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -10325,6 +10343,7 @@ components:
         - apiKeyEnvVars
         - modelCount
         - authMethods
+        - usable
       additionalProperties: false
       properties:
         id:
@@ -10389,6 +10408,25 @@ components:
             $ref: '#/components/schemas/ModelAuthMethod'
           uniqueItems: true
           description: Explicit authentication methods the platform supports; OAuth login is console only and currently supports openai-codex and plugin providers (plugin providers support only oauth).
+        usable:
+          type: [boolean, "null"]
+          description: |
+            Whether the Agent (or a new Agent in the project, or a new platform Agent) can run this provider right now
+            without entering an account, key or login first; null when the query has none of agentId, projectId and
+            scope.
+            true: the provider needs nothing (authMethods is empty), or the platform keeps a usable one: for a project
+            Agent or a project, at least one project model account for this provider (when there are several, a run
+            may still ask which one to use); for a platform Agent, its own model key or login for this provider, or an
+            older single key with one of its environment variables. A new platform Agent has none yet, so only
+            providers that need nothing are true.
+            A provider whose runtime uses its own local login (RuntimeCapabilities.accounts is local, such as
+            claude-code) is always true: the platform keeps no account for it, and whether that runtime is installed
+            and logged in on this computer is GET /runtimes.
+            A plugin provider with a non-null unavailableReason is false.
+        models:
+          description: Present only with include=models; the same list as GET /model-providers/{providerId}/models
+          type: array
+          items: { $ref: "#/components/schemas/Model" }
 
     AgentRuntime:
       type: string
@@ -10420,9 +10458,9 @@ components:
           items: { $ref: "#/components/schemas/RuntimeDefinition" }
 
     RuntimeDefinition:
-      description: The fixed definition of a runtime; nothing in it depends on this computer.
+      description: The fixed definition of a runtime; nothing in it depends on this computer, except that setup is given for the operating system the server runs on.
       type: object
-      required: [id, name, providers, isDefault, capabilities]
+      required: [id, name, providers, isDefault, capabilities, setup]
       additionalProperties: false
       properties:
         id: { $ref: "#/components/schemas/AgentRuntime" }
@@ -10440,6 +10478,30 @@ components:
           type: boolean
           description: True for exactly one runtime, the one that runs every model provider no other runtime lists
         capabilities: { $ref: "#/components/schemas/RuntimeCapabilities" }
+        setup:
+          description: How a person sets this runtime up on this computer when GET /runtimes says it is not ready; null for a runtime that needs no setup (the bundled Pi)
+          oneOf:
+            - $ref: "#/components/schemas/RuntimeSetup"
+            - type: "null"
+
+    RuntimeSetup:
+      description: |
+        Commands a person runs in a terminal, for the operating system the server runs on. The console shows them; nothing
+        runs them for the user.
+      type: object
+      required: [install, login, docsUrl]
+      additionalProperties: false
+      properties:
+        install:
+          type: [string, "null"]
+          description: The command that installs the runtime's CLI (for example on Windows a PowerShell command); null when there is none to show
+        login:
+          type: [string, "null"]
+          description: The command that logs the CLI in; null when it needs no login
+        docsUrl:
+          type: [string, "null"]
+          format: uri
+          description: The vendor's setup page, for other ways to install
 
     RuntimeCapabilities:
       description: What a runtime can do. Thinking levels and image input are per model, in the model catalog.
@@ -10795,10 +10857,14 @@ components:
 
     AgentUpdate:
       description: |
-        Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime): the
-        new runtime starts with a new session and the session number goes up by one (the session reset event's reason is
-        runtime_changed), any sleep in the current session is cancelled, and the old session is neither migrated nor
-        deleted. Returns 409 agent_not_idle while the Agent has a reply in progress.
+        Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime). It is
+        accepted at any time, also while the Agent is replying, and applies from the next message dispatched. The new
+        runtime starts its own session and is given a selection of the saved conversation with its first message
+        (Run.contextHandoff); the session number does not change, sleeps are kept, and the old runtime's session is
+        neither migrated nor deleted. When the runtime is changed back before the new one has run any message, the
+        earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
+        keeps that runtime's session. Records from before this behaviour show a session reset with reason
+        runtime_changed at each change of runtime.
       type: object
       additionalProperties: false
       minProperties: 1
@@ -11327,7 +11393,7 @@ components:
 
     Run:
       type: object
-      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model]
+      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model, selection]
       additionalProperties: false
       properties:
         triggerInboxMessageId:
@@ -11419,6 +11485,69 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ModelRef"
             - type: "null"
+        selection:
+          description: |
+            Who ran this turn: the runtime, model provider, model and thinking level the message was handed over with,
+            recorded when the reply began (runningAt). Neighbouring turns with a different provider or model on the same
+            runtime show a change of model; a change of runtime shows as contextHandoff instead. Null until the reply
+            begins, for turns that never began, and for turns recorded before it was kept.
+          oneOf:
+            - $ref: "#/components/schemas/RunSelection"
+            - type: "null"
+        contextHandoff:
+          description: |
+            Present only on a turn that carried the saved conversation over to a new runtime (see ContextHandoff); omitted
+            on every other run.
+          $ref: "#/components/schemas/ContextHandoff"
+
+    RunSelection:
+      description: The runtime, model and thinking level a turn was handed over with.
+      type: object
+      required: [runtime, provider, modelId, thinkingLevel]
+      additionalProperties: false
+      properties:
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        provider: { type: string, description: ModelProvider.id }
+        modelId: { type: string }
+        thinkingLevel:
+          description: The Agent's thinking level when the turn began; null means the model's default
+          oneOf:
+            - $ref: "#/components/schemas/ThinkingLevel"
+            - type: "null"
+
+    ContextHandoff:
+      description: |
+        A selection of the saved conversation, given to a new runtime with the first message after the Agent's runtime
+        changed. The new runtime starts its own session and does not see the earlier runtime's memory; the selection is
+        a marked block in the prompt before this turn's message (after the run ID line). The stored message stays the
+        user's own text, and the message itself is never shortened.
+        The conversation is everything saved for this Agent since the user last started over (/new or resuming another
+        session). When it fits the budget it goes whole; otherwise the first request, the most recent requests and
+        answers, and as many earlier messages as fit are kept, in order and in full (partial text of failed or
+        interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
+        tool state and images are not carried. The block says how many messages were left out, and the Agent can read
+        them with `loopctl conversation`.
+        The block goes with every message until one of them reaches the new runtime and its session is saved, so a turn
+        that fails before that (for example because the runtime is not logged in) does not lose it; each turn that
+        carried it has this record.
+      type: object
+      required: [fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      additionalProperties: false
+      properties:
+        fromRuntime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message
+        toRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        includedMessages: { type: integer, minimum: 0, description: Saved messages carried over in full }
+        omittedMessages: { type: integer, minimum: 0, description: Saved messages left out to stay within the budget }
+        images: { type: integer, minimum: 0, description: Images in the saved conversation; they are counted in the block but never carried }
+        bytes: { type: integer, minimum: 0, description: Size of the block in UTF-8 bytes }
+        budgetBytes:
+          type: integer
+          minimum: 0
+          description: |
+            The budget the block was selected for, counted as one token per UTF-8 byte (default 16000; the server's
+            LOOP_NOW_CONTEXT_HANDOFF_TOKENS changes it, clamped to 1024-64000)
 
     UsageTotals:
       description: Sum of a number of usage records; total = input + output + cacheRead + cacheWrite
@@ -12280,6 +12409,7 @@ components:
         - $ref: "#/components/schemas/TimelineAbortRequested"
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
+        - $ref: "#/components/schemas/TimelineContextHandoff"
         - $ref: "#/components/schemas/TimelineExtensionUI"
         - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
@@ -12305,6 +12435,7 @@ components:
           abort_requested: "#/components/schemas/TimelineAbortRequested"
           ended: "#/components/schemas/TimelineEnded"
           session_missing: "#/components/schemas/TimelineSessionMissing"
+          context_handoff: "#/components/schemas/TimelineContextHandoff"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
           model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
@@ -12651,6 +12782,22 @@ components:
         type: { type: string, enum: [session_missing] }
         at: { type: string, format: date-time }
         sessionFile: { type: [string, "null"] }
+
+    TimelineContextHandoff:
+      description: The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff)
+      type: object
+      required: [type, at, fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [context_handoff] }
+        at: { type: string, format: date-time }
+        fromRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        toRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        includedMessages: { type: integer, minimum: 0 }
+        omittedMessages: { type: integer, minimum: 0 }
+        images: { type: integer, minimum: 0 }
+        bytes: { type: integer, minimum: 0 }
+        budgetBytes: { type: integer, minimum: 0 }
 
     PrincipalKind:
       description: Identity kind. console is the console operator, external is an external identity, agent is an Agent

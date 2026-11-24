@@ -16,6 +16,7 @@ type runtimeDefinition struct {
 	Providers    []string                  `json:"providers"`
 	IsDefault    bool                      `json:"isDefault"`
 	Capabilities agentruntime.Capabilities `json:"capabilities"`
+	Setup        *agentruntime.Setup       `json:"setup"`
 }
 
 // listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and

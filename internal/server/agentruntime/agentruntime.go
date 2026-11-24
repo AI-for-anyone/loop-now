@@ -60,6 +60,14 @@ type Capabilities struct {
 	ReadsEntryFile bool `json:"-"`
 }
 
+// Setup is how a person sets a runtime up on this computer: commands for a terminal, shown by the console and never run
+// by the platform. Nil fields mean there is nothing to show.
+type Setup struct {
+	Install *string `json:"install"`
+	Login   *string `json:"login"`
+	DocsURL *string `json:"docsUrl"`
+}
+
 // HasSessionCommand reports whether the session command name (without "/") works on this runtime.
 func (c Capabilities) HasSessionCommand(name string) bool {
 	return slices.Contains(c.SessionCommands, name)

@@ -45,6 +45,30 @@ type Run struct {
 	Tools            []ToolEvent    `json:"tools"`
 	Usage            UsageTotals    `json:"usage"`
 	Model            *ModelRef      `json:"model"`
+	// Selection is who ran the turn (runtime, provider, model, thinking level), recorded when the reply began; null
+	// before that and for older records.
+	Selection *RunSelection `json:"selection"`
+	// ContextHandoff is set only on a turn that carried the saved conversation over to a new runtime.
+	ContextHandoff *ContextHandoff `json:"contextHandoff,omitempty"`
+}
+
+// RunSelection mirrors the RunSelection schema.
+type RunSelection struct {
+	Runtime       string  `json:"runtime"`
+	Provider      string  `json:"provider"`
+	ModelID       string  `json:"modelId"`
+	ThinkingLevel *string `json:"thinkingLevel"`
+}
+
+// ContextHandoff mirrors the ContextHandoff schema.
+type ContextHandoff struct {
+	FromRuntime      string `json:"fromRuntime"`
+	ToRuntime        string `json:"toRuntime"`
+	IncludedMessages int    `json:"includedMessages"`
+	OmittedMessages  int    `json:"omittedMessages"`
+	Images           int    `json:"images"`
+	Bytes            int    `json:"bytes"`
+	BudgetBytes      int    `json:"budgetBytes"`
 }
 
 // UsageTotals mirrors the UsageTotals schema.
