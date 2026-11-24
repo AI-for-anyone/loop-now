@@ -73,6 +73,8 @@ type CompactionResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
 	Skipped              string
+	// NoCounts means the runtime compacted but reports no token counts (Codex).
+	NoCounts bool
 }
 
 // SessionExport is session download content that has been read and whose origin has been verified.

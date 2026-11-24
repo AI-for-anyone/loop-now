@@ -101,6 +101,8 @@ type Options struct {
 	RealHome func() (string, error)
 	// ClaudeBin is the claude executable; empty means look it up on the PATH of the user's login shell (UserPath).
 	ClaudeBin string
+	// CodexBin is the codex executable; empty means look it up on the PATH of the user's login shell (UserPath).
+	CodexBin string
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,

@@ -9076,8 +9076,8 @@ components:
           description: too_small, the session has too little content to need compaction; already_compacted, nothing new since the last compaction; cancelled_by_extension, an extension cancelled this compaction. null when outcome is not skipped
           type: [string, "null"]
           enum: [too_small, already_compacted, cancelled_by_extension, null]
-        tokensBefore: { type: [integer, "null"], format: int64, minimum: 0, description: "Context tokens before compaction; set only when compacted" }
-        estimatedTokensAfter: { type: [integer, "null"], format: int64, minimum: 0, description: "Context tokens after compaction as estimated by Pi; set only when compacted" }
+        tokensBefore: { type: [integer, "null"], format: int64, minimum: 0, description: "Context tokens before compaction; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)" }
+        estimatedTokensAfter: { type: [integer, "null"], format: int64, minimum: 0, description: "Context tokens after compaction as estimated by the runtime; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)" }
 
     Run:
       type: object

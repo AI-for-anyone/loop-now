@@ -36,6 +36,8 @@ type agentDirs struct {
 	// is its --mcp-config file.
 	claudePlugin string
 	claudeMCP    string
+	// codexSkills is the Skill directory the platform gives Codex (an extra Skill root).
+	codexSkills string
 }
 
 func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
@@ -53,6 +55,7 @@ func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
 
 		claudePlugin: filepath.Join(root, "claude-plugin"),
 		claudeMCP:    filepath.Join(root, "claude-mcp.json"),
+		codexSkills:  filepath.Join(root, "codex-skills"),
 	}
 }
 

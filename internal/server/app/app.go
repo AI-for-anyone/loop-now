@@ -510,7 +510,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
-		Runtimes:   &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: os.UserHomeDir, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv},
+		Runtimes: &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: os.UserHomeDir, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv,
+			CodexEnv: a.Executor.CodexHelperEnv},
 		PiCommands: a.Executor.Commands,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
@@ -519,6 +520,9 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
+	if cfg.CodexModelsRefresh > 0 {
+		go a.codexModelRefresher(baseCtx, models, cfg.CodexModelsRefresh)
+	}
 	// Folders: mark interrupted pulls as failed and empty the trash; before any Pi starts, replay once the manual edits
 	// from retired folder sources that never reached disk.
 	if err = a.Folders.Start(ctx); err != nil {

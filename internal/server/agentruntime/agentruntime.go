@@ -1,5 +1,5 @@
-// Package agentruntime is the registry of Agent runtimes: which programs can run an Agent (the bundled Pi, the Claude
-// Code installed on the user's computer), which model providers each one runs, and what each one can do. The runtime
+// Package agentruntime is the registry of Agent runtimes: which programs can run an Agent (the bundled Pi, and the Claude
+// Code and Codex installed on the user's computer), which model providers each one runs, and what each one can do. The runtime
 // is not stored separately; the model provider decides it.
 //
 // Code outside this package and the executor's driver files asks the registry about a capability and never compares a
@@ -12,11 +12,17 @@ import "slices"
 const (
 	Pi         = "pi"
 	ClaudeCode = "claude-code"
+	Codex      = "codex"
 )
 
 // ClaudeCodeProvider is the model provider id of the Claude Code runtime: models come from the claude installed on the
 // user's computer, using its own login.
 const ClaudeCodeProvider = "claude-code"
+
+// CodexProvider is the model provider id of the Codex runtime: models come from the codex installed on the user's
+// computer, using its own login (the openai-codex provider is a different thing, run by Pi with an account the
+// platform keeps).
+const CodexProvider = "codex-cli"
 
 // Accounts says whose login runs the model.
 type Accounts string
@@ -98,6 +104,12 @@ func (r Runtime) SetupOn(goos string) *Setup {
 	return r.Setup(goos)
 }
 
+// codexSetup is Codex's install through npm (the same on every system) and its login, from its documentation.
+func codexSetup(string) *Setup {
+	install, login, docs := "npm install -g @openai/codex", "codex login", "https://developers.openai.com/codex/cli"
+	return &Setup{Install: &install, Login: &login, DocsURL: &docs}
+}
+
 // claudeCodeSetup is Claude Code's native installer and login, from its setup documentation.
 func claudeCodeSetup(goos string) *Setup {
 	install := "curl -fsSL https://claude.ai/install.sh | bash"
@@ -125,6 +137,17 @@ var registry = []Runtime{
 		Providers:    []string{ClaudeCodeProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
 		Setup:        claudeCodeSetup,
+	},
+	{
+		// Codex runs as `codex app-server` with the user's Codex home (CODEX_HOME) and the Agent's own HOME: its login
+		// is found through CODEX_HOME alone. It reads AGENTS.md in the working directory itself.
+		ID:        Codex,
+		Name:      "Codex",
+		Providers: []string{CodexProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, SessionCommands: []string{CommandCompact}, TaskFork: true,
+			ReadsEntryFile: true},
+		Setup:      codexSetup,
+		MinVersion: "0.167.0",
 	},
 }
 

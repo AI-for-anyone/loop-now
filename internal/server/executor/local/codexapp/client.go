@@ -101,6 +101,8 @@ type Client struct {
 	turn     *turn
 	observer Observer
 	closed   bool
+	// lastStarted reports whether the latest turn started (the server gave it an id).
+	lastStarted bool
 
 	done    chan struct{}
 	exitErr error

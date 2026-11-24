@@ -102,10 +102,14 @@ func (c *Client) runTurn(ctx context.Context, threadID string, sink runturn.Sink
 	c.turn = t
 	c.mu.Unlock()
 	defer func() {
+		t.mu.Lock()
+		started := t.id != ""
+		t.mu.Unlock()
 		c.mu.Lock()
 		if c.turn == t {
 			c.turn = nil
 		}
+		c.lastStarted = started
 		c.mu.Unlock()
 	}()
 	ch, err := c.request(method, params)
@@ -158,6 +162,13 @@ func (c *Client) Interrupt() error {
 	t.mu.Unlock()
 	t.sendInterrupt()
 	return nil
+}
+
+// LastTurnStarted reports whether the latest turn started: Codex gave it an id, so the thread is saved.
+func (c *Client) LastTurnStarted() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastStarted
 }
 
 // InTurn reports whether a turn is in progress.

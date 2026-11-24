@@ -158,6 +158,7 @@ type started struct {
 var drivers = map[string]func(*Executor) driver{
 	agentruntime.Pi:         func(e *Executor) driver { return piDriver{e: e} },
 	agentruntime.ClaudeCode: func(e *Executor) driver { return claudeDriver{e: e} },
+	agentruntime.Codex:      func(e *Executor) driver { return codexDriver{e: e} },
 }
 
 // driverFor returns the driver of the runtime that runs this config (decided by its model provider).
