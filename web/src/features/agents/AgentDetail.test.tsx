@@ -11,6 +11,7 @@ import { makeSleep } from '@/test/sleep'
 import { providers } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
+import { acpCommandDefinition, acpRuntimeId, runtimeDefinitions } from '@/test/runtimes'
 import { baseHandlers } from '@/test/shell'
 
 const heading = (name: string) => screen.findByRole('heading', { level: 1, name })
@@ -198,6 +199,15 @@ describe('Header and tab layout', () => {
     expect(title).toHaveClass('nav:text-[40px]', 'nav:leading-none', 'nav:[text-shadow:3px_3px_0_var(--riso-pink)]')
     expect(within(header).getByTitle('Project Manager')).toHaveTextContent('Manager')
     await waitFor(() => expect(header.querySelector('[data-agent-status]')).toHaveTextContent('Idle'))
+  })
+
+  it('an Agent on a command a person added shows the command\'s name in the model tag, not its runtime id and "default"', async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...runtimeDefinitions().runtimes, acpCommandDefinition()] })))
+    const { header } = await open(makeAgent({ name: 'Agent H', model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId }))
+    const tag = await within(header).findByText('Hermes', { selector: '.font-mono' })
+    expect(tag).toHaveClass('bg-tint-blue')
+    expect(header).not.toHaveTextContent(acpRuntimeId)
+    expect(header).not.toHaveTextContent('default')
   })
 
   it('the model sits in a monospace light-blue tag; the address sits in a dashed box, and the button next to it copies the address and says it was copied', async () => {
