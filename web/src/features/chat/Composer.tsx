@@ -367,7 +367,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   // stamp on the right (it turns into a navy stop button when busy and the input box is empty).
   // The input box has a light paper fill and a navy border, and is a pill when it has one line; the reply bar and images waiting to be
   // sent sit inside the same border, above the text line.
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu runtimeName={listRuntime?.name} open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
     <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
       {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}

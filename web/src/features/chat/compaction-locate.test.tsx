@@ -80,6 +80,14 @@ describe('Locating a manual compaction', () => {
     expect(within(card()!).queryByText('Compaction failed')).toBeNull()
   })
 
+  it('a compaction on a runtime that does not report the tokens (Codex) says it compacted, without numbers', async () => {
+    const run = compactionRun({ status: 'completed', errorCode: null, errorMessage: null, compaction: { instructions: '', outcome: 'compacted', skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })
+    await openCompaction(run)
+    await waitFor(() => expect(card()).not.toBeNull())
+    expect(card()).toHaveTextContent('Context compacted')
+    expect(card()).not.toHaveTextContent('Command completed')
+  })
+
   it('does not fetch an extra run log when the located run is a normal reply', async () => {
     const agent = makeAgent()
     const messages = turn('A normal question', 1)

@@ -52,6 +52,17 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Agents can run on Codex
+
+- A new runtime: the Codex CLI installed on your computer, with your own `codex login`. The platform neither reads nor stores the login. It appears in "Who runs it" as Codex, with the models your account can use (read from Codex itself, again every 10 minutes and when you choose "Check again").
+- It needs Codex 0.167.0 or later; an older one shows "Too old" with the command to update.
+- The Agent's conversations are kept by Codex in your own Codex history (`~/.codex`); deleting the Agent archives them there, it does not delete them.
+- Codex loads your own Codex settings (your MCP servers, your skills in `~/.codex`) together with your login. The Agent runs with its own home directory, so `gh`, `git` and other commands do not use your logins unless "Use local logins" is on.
+- It runs commands without asking first, like the other runtimes. Skills, plugin MCP tools, `/compact`, tasks and changing runtime in the middle of a conversation work. Not offered yet: the `ultra` thinking level, the fast service tier, `/export` and `/resume`.
+- When Codex says it is logged in but the login was revoked, the status still shows "logged in"; the first message then fails and says to run `codex login`.
+- Console: errors name the runtime that failed instead of always saying Claude Code; "session file missing" is now "session not found"; each local CLI has its own mark in the sidebar.
+- API: `AgentRuntime` gains `codex`, the provider is `codex-cli`; `minVersion` on runtime definitions; `version_unsupported` as a reason a runtime is unavailable.
+
 ### Pick who runs an Agent, and change it at any message
 
 - Creating an Agent now starts with "Who runs it": the CLIs found on this computer come first, with their state (ready, not installed, not logged in), and the bundled Pi comes last with its model providers, those you can use now on top. A runtime that is not ready shows the command to install it or log in. Models are searchable, across all of Pi's providers too.

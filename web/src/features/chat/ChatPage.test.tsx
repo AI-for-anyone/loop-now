@@ -452,7 +452,7 @@ describe('Missing session file and confirming a new session', () => {
         }),
       ],
     })
-    expect(await screen.findByText('Session file missing')).toBeInTheDocument()
+    expect(await screen.findByText('Session not found')).toBeInTheDocument()
     expect(screen.getByText(/further messages will fail/)).toBeInTheDocument()
     expect(screen.getByLabelText('Message')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
@@ -461,7 +461,7 @@ describe('Missing session file and confirming a new session', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Start a new session' }))
     await waitFor(() => expect(resetCalls).toBe(1))
     await emit('session.updated', { state: 'none', epoch: 2 })
-    await waitFor(() => expect(screen.queryByText('Session file missing')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Session not found')).toBeNull())
     expect(screen.getByLabelText('Message')).toBeEnabled()
     void agent
   })

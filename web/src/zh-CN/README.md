@@ -19,6 +19,8 @@ in English, next to its code. A file here mirrors the path of the code it tests 
     `lib/errors.zh.test.ts`, and the sentences describing each runtime in global settings, joined without a space:
     `features/settings/RuntimesCard.zh.test.tsx`;
   - the chat input writes Enter as 回车, only there: `features/chat/Composer.zh.test.tsx`;
+  - a runtime's failures space its Latin name off, and write an unknown runtime as 运行时 without spaces:
+    `features/chat/run-error.zh.test.ts`;
   - footnotes use the UI copy instead of the Markdown renderer's built-in English: `features/chat/Markdown.zh.test.tsx`;
   - names the console gives itself (console, platform, deleted parties) whatever the server sends:
     `features/inbox/participants.zh.test.ts`;

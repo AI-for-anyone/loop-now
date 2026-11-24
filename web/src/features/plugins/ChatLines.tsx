@@ -21,6 +21,8 @@ function platformReply(result: Schemas['ConsoleCommandResult']): string {
       const compaction = result.compactRun?.compaction
       if (compaction?.outcome === 'skipped' && compaction.skipReason) return text.compactSkipped[compaction.skipReason]
       if (compaction?.outcome === 'compacted' && compaction.tokensBefore != null && compaction.estimatedTokensAfter != null) return text.compact(compaction.tokensBefore, compaction.estimatedTokensAfter)
+      // The runtime compacted but doesn't report the tokens (Codex).
+      if (compaction?.outcome === 'compacted') return text.compacted
       return text.noReply
     }
     case 'reload':

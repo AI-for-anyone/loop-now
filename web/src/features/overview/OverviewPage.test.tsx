@@ -136,7 +136,7 @@ describe('Run status', () => {
     const { snapshot } = await renderOverview()
     await snapshot([failed, done])
     const table = screen.getByRole('table')
-    expect(within(table).getByText('A').closest('tr')).toHaveTextContent('Last reply failed: Session file missing')
+    expect(within(table).getByText('A').closest('tr')).toHaveTextContent('Last reply failed: Session not found')
     expect(within(table).getByText('A').closest('tr')).toHaveTextContent('errorCode=session_missing')
     expect(within(table).getByText('B').closest('tr')).toHaveTextContent('Last reply completed')
   })

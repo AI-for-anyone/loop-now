@@ -19,8 +19,10 @@ const usageText = (command: Command) => command.usage ?? commandText(command)
 // status: a one-line explanation while loading, when loading failed, when there's no list yet, or when nothing matches; when present,
 // no commands are listed.
 // blocked: platform commands that match but can't be used right now (runtime doesn't support it, no session yet, session file
-// missing), grayed out below with the reason, not selectable.
-export function SlashCommandMenu({ open, listId, optionId, items, blocked = [], active, status, onActive, onChoose, onDismiss, children }: {
+// missing), grayed out below with the reason, not selectable. runtimeName: the runtime the command list is for, named in the reason a
+// command is unsupported.
+export function SlashCommandMenu({ runtimeName, open, listId, optionId, items, blocked = [], active, status, onActive, onChoose, onDismiss, children }: {
+  runtimeName?: string
   open: boolean
   listId: string
   optionId: (index: number) => string
@@ -95,7 +97,11 @@ export function SlashCommandMenu({ open, listId, optionId, items, blocked = [], 
                           <code className="min-w-0 font-mono text-[13px] font-bold [overflow-wrap:anywhere]">{usageText(command)}</code>
                           <span className="rounded-full bg-ink/45 px-2 text-[11px] leading-[18px] font-black text-white">{text.platform}</span>
                         </span>
-                        {command.unavailableReason && <span className="text-[12.5px] leading-snug [overflow-wrap:anywhere]">{text.unavailable.reasons[command.unavailableReason]}</span>}
+                        {command.unavailableReason && (
+                          <span className="text-[12.5px] leading-snug [overflow-wrap:anywhere]">
+                            {command.unavailableReason === 'runtime_unsupported' && runtimeName ? text.unavailable.runtimeUnsupported(runtimeName) : text.unavailable.reasons[command.unavailableReason]}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

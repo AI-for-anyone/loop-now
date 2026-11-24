@@ -1,7 +1,14 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { makeRun } from '@/test/api'
+import type { Schemas } from '@/api/client'
+import { apiUrl, makeRun } from '@/test/api'
+import { renderWithQuery } from '@/test/render'
+import { withCodex } from '@/test/runtimes'
+import { server } from '@/test/server'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
+
+const onClaudeCode: Schemas['RunSelection'] = { runtime: 'claude-code', provider: 'claude-code', modelId: 'haiku', thinkingLevel: null }
 
 describe('ToolList', () => {
   it('shows only the latest state of a tool call that changed state several times', () => {
@@ -57,7 +64,7 @@ describe('outcome stamp of a reply', () => {
 
   it('failed uses a red stamp plus a light red note block giving the reason', () => {
     const run = makeRun({ status: 'failed', errorCode: 'pi_exited', errorMessage: 'exit status 137' })
-    render(
+    renderWithQuery(
       <>
         <RunStatusBadge run={run} />
         <FailureNote run={run} />
@@ -71,19 +78,29 @@ describe('outcome stamp of a reply', () => {
   })
 
   it.each([
-    ['runtime_unavailable', 'claude: command not found', 'Failed: claude wasn\'t found on this computer: install Claude Code and make sure claude runs in a terminal (claude: command not found)'],
-    ['runtime_login_required', 'Not logged in', 'Failed: Claude Code isn\'t logged in on this computer: run claude in a terminal there and log in (Not logged in)'],
-    ['runtime_start_failed', 'claude 2.1.0: exit status 1', 'Failed: Claude Code couldn\'t start (claude 2.1.0: exit status 1)'],
+    ['runtime_unavailable', 'claude: command not found', "Failed: Claude Code can't be used on this computer: it wasn't found, its version couldn't be read, or it's too old (claude: command not found)"],
+    ['runtime_login_required', 'Not logged in', "Failed: Claude Code isn't logged in on this computer, or its login has expired: log in again in a terminal there, then try again (Not logged in)"],
+    ['runtime_start_failed', 'claude 2.1.0: exit status 1', "Failed: Claude Code couldn't start (claude 2.1.0: exit status 1)"],
     ['runtime_exited', 'signal: killed', 'Failed: The Claude Code process exited unexpectedly during this turn (signal: killed)'],
     ['runtime_error', 'usage limit reached', 'Failed: Claude Code reported an error for this turn (usage limit reached)'],
-  ] as const)('Claude Code runtime failure %s: says what to do or what happened, with the server\'s message', (errorCode, errorMessage, text) => {
-    render(<FailureNote run={makeRun({ status: 'failed', errorCode, errorMessage })} />)
-    expect(screen.getByRole('status')).toHaveTextContent(text)
+  ] as const)('a runtime failure %s names the runtime the turn was handed to, with the server\'s message', async (errorCode, errorMessage, text) => {
+    renderWithQuery(<FailureNote run={makeRun({ status: 'failed', errorCode, errorMessage, selection: onClaudeCode })} />)
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(text))
+  })
+
+  it("a turn that failed before it began names the Agent's runtime; with no runtime known it says “the runtime”", async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex())))
+    const run = makeRun({ status: 'failed', errorCode: 'runtime_login_required', errorMessage: 'unauthorized', selection: null })
+    const { unmount } = renderWithQuery(<FailureNote run={run} runtime="codex" />)
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Failed: Codex isn't logged in on this computer, or its login has expired"))
+    unmount()
+    renderWithQuery(<FailureNote run={run} />)
+    expect(screen.getByRole('status')).toHaveTextContent("Failed: The runtime isn't logged in on this computer, or its login has expired")
   })
 
   it('a normal completion shows no stamp and no note block', () => {
     const run = makeRun({ status: 'completed' })
-    const { container } = render(
+    const { container } = renderWithQuery(
       <>
         <RunStatusBadge run={run} />
         <FailureNote run={run} />

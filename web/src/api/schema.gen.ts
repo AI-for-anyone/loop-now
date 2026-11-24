@@ -460,11 +460,13 @@ export interface paths {
         };
         /**
          * Whether each Agent runtime is available on this computer
-         * @description pi is the bundled Pi and is always available. claude-code is the Claude Code installed on the user's computer: claude
-         *     is looked up in the PATH of the server user's login shell and claude --version is run;
-         *     the login state is answered by claude auth status itself (the platform neither reads nor stores its credentials), and
-         *     only whether it is logged in, the login method and the subscription type are given; email and organization are not
-         *     returned.
+         * @description pi is the bundled Pi and is always available. The other runtimes are CLIs installed on the user's computer
+         *     (claude-code: claude; codex: codex): the CLI is looked up in the PATH of the server user's login shell and its
+         *     --version is run; a version older than RuntimeDefinition.minVersion is reported as version_unsupported. The login
+         *     state is answered by the CLI itself (claude auth status, codex login status; the platform neither reads nor stores
+         *     its credentials), and only whether it is logged in, the login method and the subscription type are given; email
+         *     and organization are not returned. A CLI can report a login that its service has since revoked; runs then fail
+         *     with runtime_login_required.
          *     When the login state cannot be determined, state is unknown, and errors are then reported as they are only when a run
          *     fails (runtime_login_required and so on). Results are cached for 30 seconds; refresh=true checks again.
          */
@@ -1364,8 +1366,8 @@ export interface paths {
          * @description A message that starts with `/` and has no images is first matched against the built-in platform commands
          *     `/session`, `/new`, `/compact [instructions]`, `/reload`, `/copy`, `/export [html|jsonl]` and
          *     `/resume [full ID]`; if none matches, it goes to the plugin `console.command`. `/compact`, `/export` and
-         *     `/resume` apply only to Pi sessions: for a Claude Code Agent these commands return 409 `console_command_failed`
-         *     and create no run. When the Agent is not idle (a reply in progress, queued messages, or the runtime doing other
+         *     `/resume` work only where the Agent's runtime supports them (GET /agents/{agentId}/commands says which: Pi all
+         *     three, Codex `/compact`, Claude Code none); otherwise they return 409 `console_command_failed` and create no run. When the Agent is not idle (a reply in progress, queued messages, or the runtime doing other
          *     maintenance such as a task fork), these platform commands always return 409 `agent_not_idle` without details,
          *     never `agent_busy` (which is for ordinary messages, to "choose interrupt or queue"): `/new`, `/reload`,
          *     `/compact`, `/resume` (both listing and resuming). `/session` and `/copy` are read-only and work as usual while
@@ -1437,8 +1439,9 @@ export interface paths {
          * Export the current managed Pi session
          * @description jsonl is the session file as is; html is generated from the session file by Pi's `--export` (without starting
          *     the Pi runtime or touching a live idle process), and the page contains no system prompt or tool definitions.
-         *     Returns 409 `agent_not_idle` (without details) when the Agent is not idle. A Claude Code Agent has no Pi session
-         *     and returns 409 `console_command_failed`; when the session file no longer exists, returns 409 `session_none`.
+         *     Returns 409 `agent_not_idle` (without details) when the Agent is not idle. An Agent whose runtime has no Pi session
+         *     (Claude Code, Codex) returns 409 `console_command_failed`; when the session file no longer exists, returns 409
+         *     `session_none`.
          */
         get: operations["exportAgentSession"];
         put?: never;
@@ -3512,18 +3515,18 @@ export interface components {
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
          *     - workspace_sync_failed: syncing the workspace failed (such as a failed clone)
-         *     - session_missing: the session file is missing
+         *     - session_missing: the session is missing (its file, or for Codex its thread, no longer exists)
          *     - pi_start_failed: Pi failed to start or timed out while starting
          *     - pi_exited: the Pi process exited unexpectedly
          *     - pi_error: Pi reported that this turn ended with an error
          *     - internal_error: internal server error (such as the database being temporarily unavailable); this reply could not run
          *     - plugin_blocked: a plugin rejected this turn's operation, or the run conditions changed
          *     - image_unsupported: the model actually used for this turn does not support images; the turn neither sent the images nor switched models
-         *     - runtime_unavailable: the Claude Code runtime is not available on this computer (claude is not on the login shell's PATH, or its version cannot be read)
-         *     - runtime_login_required: Claude Code on this computer is not logged in; the user must log in on this computer and try again
-         *     - runtime_start_failed: Claude Code exited before the first turn started, or timed out while starting (the message includes the version and the tail of the error output)
-         *     - runtime_exited: the Claude Code process exited unexpectedly during this turn
-         *     - runtime_error: Claude Code reported that this turn ended with an error (such as the usage limit being used up)
+         *     - runtime_unavailable: the runtime's CLI (Claude Code, Codex) is not available on this computer (not on the login shell's PATH, its version cannot be read, or it is older than the runtime's minVersion)
+         *     - runtime_login_required: the runtime's CLI on this computer is not logged in, or its login was revoked; the user must log in on this computer and try again
+         *     - runtime_start_failed: the runtime's CLI exited before the first turn started, or timed out while starting (the message includes the version and the tail of the error output)
+         *     - runtime_exited: the runtime's CLI process exited unexpectedly during this turn
+         *     - runtime_error: the runtime's CLI reported that this turn ended with an error (such as the usage limit being used up)
          * @enum {string}
          */
         RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported" | "runtime_unavailable" | "runtime_login_required" | "runtime_start_failed" | "runtime_exited" | "runtime_error";
@@ -3642,12 +3645,13 @@ export interface components {
              *     plugin has been granted to that Agent, and the account is logged in under that Agent's own model credential
              *     (POST /agents/{agentId}/model-auth/operations). Otherwise updating the Agent returns 422, and it cannot be
              *     chosen directly when creating an Agent.
-             *     local_cli is a model provided by a CLI installed on the user's computer (currently only claude-code, the
-             *     local Claude Code); it uses the CLI's own local login, needs no account, and the platform stores no token;
-             *     both project Agents and platform Agents can choose it. Model ids are Claude Code aliases (fable, opus,
-             *     sonnet, haiku), and the thinking level is Claude Code's effort (low to max). Whether it is installed and
-             *     logged in on this computer is shown by GET /runtimes; it can be chosen even when not installed, and runs
-             *     then fail with runtime_*.
+             *     local_cli is a model provided by a CLI installed on the user's computer (claude-code: the local Claude Code;
+             *     codex-cli: the local Codex); it uses the CLI's own local login, needs no account, and the platform stores no
+             *     token; both project Agents and platform Agents can choose it. For claude-code the model ids are Claude Code
+             *     aliases (fable, opus, sonnet, haiku); for codex-cli they are the models the local Codex lists for its login
+             *     (none when Codex is not installed or cannot list them). The thinking level is the CLI's reasoning effort
+             *     (low to max). Whether it is installed and logged in on this computer is shown by GET /runtimes; it can be
+             *     chosen even when not installed, and runs then fail with runtime_*.
              * @enum {string}
              */
             source: "builtin" | "config" | "plugin" | "local_cli";
@@ -3697,15 +3701,17 @@ export interface components {
             models?: components["schemas"]["Model"][];
         };
         /**
-         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code installed
-         *     on the user's computer (claude is looked up on the login shell's PATH), using its own local login; the platform
-         *     neither reads nor stores its credentials. The runtime follows from the model provider and is not set separately:
-         *     it is claude-code when model.provider is claude-code, and pi otherwise. Under Claude Code there are no Pi
-         *     extensions (/pi: commands, extension conversations, plugin providers); plugin Skills and MCP servers work as
-         *     usual.
+         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code and codex
+         *     the unmodified Codex installed on the user's computer (looked up on the login shell's PATH; Codex runs as
+         *     `codex app-server`), each using its own local login; the platform neither reads nor stores their credentials.
+         *     The runtime follows from the model provider and is not set separately: claude-code when model.provider is
+         *     claude-code, codex when it is codex-cli, and pi otherwise (the openai-codex provider runs on Pi). Under Claude
+         *     Code and Codex there are no Pi extensions (/pi: commands, extension conversations, plugin providers); plugin
+         *     Skills and MCP servers work as usual. A Codex Agent's conversation is kept in the user's own Codex home (it
+         *     shows in the user's Codex history); deleting the Agent archives it there.
          * @enum {string}
          */
-        AgentRuntime: "pi" | "claude-code";
+        AgentRuntime: "pi" | "claude-code" | "codex";
         RuntimeList: {
             runtimes: components["schemas"]["RuntimeStatus"][];
         };
@@ -3725,6 +3731,11 @@ export interface components {
             /** @description True for exactly one runtime, the one that runs every model provider no other runtime lists */
             isDefault: boolean;
             capabilities: components["schemas"]["RuntimeCapabilities"];
+            /**
+             * @description The oldest version of the runtime's CLI the platform supports (the version it was tested with); GET /runtimes
+             *     reports an older one as version_unsupported. null when there is no minimum (the bundled Pi, Claude Code).
+             */
+            minVersion: string | null;
             /** @description How a person sets this runtime up on this computer when GET /runtimes says it is not ready; null for a runtime that needs no setup (the bundled Pi) */
             setup: components["schemas"]["RuntimeSetup"] | null;
         };
@@ -3769,29 +3780,30 @@ export interface components {
         };
         RuntimeStatus: {
             id: components["schemas"]["AgentRuntime"];
-            /** @description For claude-code, true when claude was found and its version could be read (see login for whether it is logged in) */
+            /** @description For a CLI runtime, true when the CLI was found and its version could be read and is supported (see login for whether it is logged in) */
             available: boolean;
-            /** @description For pi, the version of the bundled Pi; for claude-code, the version number from claude --version */
+            /** @description For pi, the version of the bundled Pi; for a CLI runtime, the version number from its --version */
             version: string | null;
-            /** @description The real path of claude after resolving symlinks; null for pi and when claude was not found */
+            /** @description The real path of the CLI after resolving symlinks; null for pi and when the CLI was not found */
             binaryPath: string | null;
             /**
-             * @description not_found means claude is not on the login shell's PATH; version_failed means running claude --version failed
+             * @description not_found means the CLI is not on the login shell's PATH; version_failed means running its --version failed;
+             *     version_unsupported means it is older than RuntimeDefinition.minVersion (version still says which it is)
              * @enum {string|null}
              */
-            unavailableReason: "not_found" | "version_failed" | null;
-            /** @description Present only for claude-code when claude was found; null for pi and when claude was not found */
+            unavailableReason: "not_found" | "version_failed" | "version_unsupported" | null;
+            /** @description Present only for a CLI runtime whose CLI was found and is supported; null for pi and otherwise */
             login: components["schemas"]["RuntimeLogin"] | null;
             /** Format: date-time */
             checkedAt: string;
         };
         RuntimeLogin: {
             /**
-             * @description From claude auth status; unknown when it cannot run or its output is not recognized
+             * @description From the CLI's own check (claude auth status, codex login status); unknown when it cannot run or its output is not recognized
              * @enum {string}
              */
             state: "logged_in" | "logged_out" | "unknown";
-            /** @description Login method, such as claude.ai */
+            /** @description Login method, such as claude.ai (Claude Code) or chatgpt and api_key (Codex) */
             authMethod: string | null;
             /** @description Subscription type, such as max */
             subscriptionType: string | null;
@@ -3970,7 +3982,7 @@ export interface components {
             expectedPromptVersion: number;
         };
         /**
-         * @description Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime). It is
+         * @description Changing model.provider to one that another runtime runs switches the runtime (see AgentRuntime). It is
          *     accepted at any time, also while the Agent is replying, and applies from the next message dispatched. The new
          *     runtime starts its own session and is given a selection of the saved conversation with its first message
          *     (Run.contextHandoff); the session number does not change, sleeps are kept, and the old runtime's session is
@@ -5324,7 +5336,7 @@ export interface components {
             /** @description Runtime of this process (Claude Code processes are recorded in these event types too). Records written before it was recorded get pi when read; this rule applies to those old records only. */
             runtime: components["schemas"]["AgentRuntime"];
         };
-        /** @description Subscription quota status reported by Claude Code (rate_limit_event); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run. */
+        /** @description Subscription quota status reported by the runtime's CLI (Claude Code's rate_limit_event, Codex's account rate limits); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run. */
         TimelineModelRateLimit: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -5457,6 +5469,7 @@ export interface components {
             type: "session_missing";
             /** Format: date-time */
             at: string;
+            /** @description The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex) */
             sessionFile: string | null;
         };
         /** @description The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff) */
@@ -7886,7 +7899,7 @@ export interface components {
             };
         };
         AgentCommandList: {
-            /** @description The Agent's current runtime. Only pi has Pi commands; other runtimes (claude-code) list no Pi commands, and capturedAt is always null */
+            /** @description The Agent's current runtime. Only pi has Pi commands; other runtimes (claude-code, codex) list no Pi commands, and capturedAt is always null */
             runtime: components["schemas"]["AgentRuntime"];
             /**
              * Format: date-time
@@ -8230,12 +8243,12 @@ export interface components {
             skipReason: "too_small" | "already_compacted" | "cancelled_by_extension" | null;
             /**
              * Format: int64
-             * @description Context tokens before compaction; set only when compacted
+             * @description Context tokens before compaction; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)
              */
             tokensBefore: number | null;
             /**
              * Format: int64
-             * @description Context tokens after compaction as estimated by Pi; set only when compacted
+             * @description Context tokens after compaction as estimated by the runtime; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)
              */
             estimatedTokensAfter: number | null;
         };

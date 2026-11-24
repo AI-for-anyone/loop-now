@@ -50,10 +50,12 @@ function introOf(definitions: readonly RuntimeDefinition[]): string {
 }
 
 function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
-  const name = useRuntimeLookup().name(runtime.id)
+  const lookup = useRuntimeLookup()
+  const name = lookup.name(runtime.id)
   const problem = runtimeProblem(runtime)
   const login = runtime.login
-  const account = login ? [login.authMethod, login.subscriptionType && text.subscription(login.subscriptionType)].filter(Boolean).join(' · ') : ''
+  const method = login?.authMethod ? (text.authMethods[login.authMethod] ?? login.authMethod) : null
+  const account = login ? [method, login.subscriptionType && text.subscription(login.subscriptionType)].filter(Boolean).join(' · ') : ''
   return (
     // Redesign: a white card with a 2px navy outline and a solid navy offset shadow; the name is in display type, followed by
     // a status pill and the version number in monospace.
@@ -78,7 +80,7 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
       )}
       {problem && (
         <Alert variant="warning" role="note" className="text-[13.5px]">
-          <AlertDescription className="text-[13.5px] text-ink">{runtimeProblemText({ id: runtime.id, name }, problem)}</AlertDescription>
+          <AlertDescription className="text-[13.5px] text-ink">{runtimeProblemText({ id: runtime.id, name, minVersion: lookup.get(runtime.id)?.minVersion ?? null }, problem, runtime.version)}</AlertDescription>
         </Alert>
       )}
       {login?.state === 'unknown' && <p className="text-[13px] text-ink-700">{text.unknownLogin}</p>}

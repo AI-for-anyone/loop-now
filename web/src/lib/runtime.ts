@@ -40,10 +40,10 @@ export function useRuntimeLookup(): RuntimeLookup {
   return useMemo(() => runtimeLookup(data?.runtimes, error), [data, error])
 }
 
-export type RuntimeProblem = 'not_found' | 'version_failed' | 'unavailable' | 'logged_out'
+export type RuntimeProblem = 'not_found' | 'version_failed' | 'version_unsupported' | 'unavailable' | 'logged_out'
 
-// Why a runtime cannot be used on this machine: not found, version unreadable, not logged in. An undeterminable login state (unknown)
-// does not count; if a run fails, the server reports the error as it is.
+// Why a runtime cannot be used on this machine: not found, version unreadable, older than the runtime supports, not logged in. An
+// undeterminable login state (unknown) does not count; if a run fails, the server reports the error as it is.
 export function runtimeProblem(status: Schemas['RuntimeStatus'] | undefined): RuntimeProblem | null {
   if (!status) return null
   if (!status.available) return status.unavailableReason ?? 'unavailable'
@@ -51,9 +51,10 @@ export function runtimeProblem(status: Schemas['RuntimeStatus'] | undefined): Ru
 }
 
 // What is wrong and how to fix it: the runtime's own wording when the copy has one (its command, how to log in), otherwise the wording
-// for any runtime.
-export function runtimeProblemText(runtime: Pick<RuntimeDefinition, 'id' | 'name'>, problem: RuntimeProblem): string {
+// for any runtime. A CLI that is too old is said with the version it needs (minVersion) and the one found (version, from GET /runtimes).
+export function runtimeProblemText(runtime: Pick<RuntimeDefinition, 'id' | 'name' | 'minVersion'>, problem: RuntimeProblem, version: string | null = null): string {
   const copy = t.runtime.status
+  if (problem === 'version_unsupported') return copy.versionUnsupported(runtime.name, runtime.minVersion, version)
   return copy.problemsByRuntime[runtime.id]?.[problem] ?? copy.problems[problem](runtime.name)
 }
 
@@ -96,10 +97,11 @@ export function railOrder(definitions: readonly RuntimeDefinition[], readiness: 
 }
 
 // The glyph inside a runtime's mark (components/runner-picker/RuntimeMark.tsx), as strokes on its 32×32 grid: a terminal prompt for Claude
-// Code, π for Pi. The mark's shape and the glyph's color follow the runtime's capabilities; a runtime without a glyph here is marked with
+// Code, a pair of braces for Codex, π for Pi. The mark's shape and the glyph's color follow the runtime's capabilities; a runtime without a glyph here is marked with
 // its initial.
 const glyphs: Partial<Record<AgentRuntime, readonly string[]>> = {
   'claude-code': ['M9.5 14.5l4.2 3.6-4.2 3.6', 'M16.4 22.4h6.4'],
+  codex: ['M12.8 12.6c-1.5 0-2.2.7-2.2 2v1.5c0 .9-.5 1.5-1.5 1.6 1 .1 1.5.7 1.5 1.6v1.5c0 1.3.7 2 2.2 2', 'M17.4 12.6c1.5 0 2.2.7 2.2 2v1.5c0 .9.5 1.5 1.5 1.6-1 .1-1.5.7-1.5 1.6v1.5c0 1.3-.7 2-2.2 2'],
   pi: ['M9.6 12.2c1.3-.9 2.6-1.2 4.2-1.2h8.8', 'M13.6 11.4c-.2 4-.9 7.4-2.4 10.4', 'M19.4 11.4c-.4 3.4-.3 6.3.4 8.2.5 1.3 1.6 1.9 2.8 1.3'],
 }
 
