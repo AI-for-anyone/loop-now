@@ -59,6 +59,9 @@ function resetTime(value: unknown): string | null {
   return Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : null
 }
 
+// Sizes as a short figure: 9.8K, 16K.
+const kilo = (value: number) => (value >= 1000 ? `${+(value / 1000).toFixed(1)}K` : String(value))
+
 function endedLabel(entry: Extract<Entry, { type: 'ended' }>): { label: string; tone: StepTone } {
   if (entry.status === 'completed') return { label: t.timeline.step.ended.completed, tone: 'ok' }
   if (entry.status === 'failed') return { label: t.timeline.step.ended.failed, tone: 'fail' }
@@ -216,6 +219,21 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
         break
       case 'running':
         steps.push(step(entry, index, { label: t.timeline.step.running, field: t.timeline.field.running, tone: 'run' }))
+        break
+      case 'context_handoff':
+        steps.push(
+          step(entry, index, {
+            label: t.timeline.step.context_handoff,
+            detail: t.timeline.detail.handoff(
+              t.chat.handoff.route(runtimeName(entry.fromRuntime), runtimeName(entry.toRuntime)),
+              entry.includedMessages,
+              entry.omittedMessages,
+              entry.images,
+              kilo(entry.bytes),
+              kilo(entry.budgetBytes),
+            ),
+          }),
+        )
         break
       case 'tool': {
         const command = entry.toolName === 'bash' && entry.command?.trim() ? entry.command : null

@@ -6,6 +6,7 @@ import { keys } from '@/api/queries'
 import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { providers, renderConfig } from '@/test/config'
 import { chooseModel } from '@/test/model-picker'
+import { codexProvider } from '@/test/model-auth'
 import { thinkingChoice, thinkingPicker } from '@/test/thinking'
 
 const catalog: Schemas['Model'][] = ['gpt-a', 'gpt-b'].map(id => ({ id, name: id, reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'medium' }))
@@ -16,7 +17,7 @@ async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
   let current = makeAgent({ model: { provider: 'openai-codex', modelId: 'gpt-a' }, serviceTier: tier, thinkingLevel: 'high' })
   const agent = current, writes: Schemas['AgentUpdate'][] = []
   const view = await renderConfig({ agent, handlers: [
-    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', source: 'builtin', modelCount: 2, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
+    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { ...codexProvider, modelCount: 2 }] })),
     http.get(apiUrl('/model-providers/openai-codex/models'), () => HttpResponse.json({ providerId: 'openai-codex', models: catalog })),
     http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
     http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
@@ -51,19 +52,19 @@ it('going back to Standard sends null, a later name-only change does not carry t
 it('switching to another provider hides and clears the speed while keeping the name draft; the Prompt is not touched', async () => {
   const { user, writes } = await setup('priority')
   await user.type(within(basic()).getByLabelText('Display name'), '2')
-  await user.selectOptions(within(basic()).getByLabelText('Model provider'), 'anthropic')
-  await chooseModel(user, basic(), 'claude-sonnet-5-5')
+  await chooseModel(user, basic(), 'claude-sonnet-5-5', { provider: 'anthropic' })
   expect(within(basic()).queryByLabelText('Codex speed')).toBeNull()
   expect(within(basic()).getByLabelText('Display name')).toHaveValue('dev-helper2')
   await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ name: 'dev-helper2', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, thinkingLevel: null, serviceTier: null }]))
 })
-it('switching models within the same provider keeps the speed; it is not tied to the thinking default', async () => {
+it('switching models within the same provider keeps the speed, and the thinking level the new model also has', async () => {
   const { user, writes } = await setup('ultrafast')
   await chooseModel(user, basic(), 'gpt-b')
   expect(picker()).toHaveDisplayValue('Ultrafast')
+  expect(thinkingChoice(basic())).toBe('High')
   await user.click(save())
-  await waitFor(() => expect(writes).toEqual([{ model: { provider: 'openai-codex', modelId: 'gpt-b' }, thinkingLevel: null }]))
+  await waitFor(() => expect(writes).toEqual([{ model: { provider: 'openai-codex', modelId: 'gpt-b' } }]))
 })
 it('a 422 field error keeps the speed and other drafts and does not roll back on its own', async () => {
   const { user, writes } = await setup(null, true)

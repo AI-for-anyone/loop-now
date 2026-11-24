@@ -18,6 +18,9 @@ export const server = setupServer(
   http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json(commandList())),
   // Runtimes: by default the local Claude Code is installed and logged in.
   http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList())),
+  // A provider's models: none by default (the message box's runner chip reads those of the Agent's provider); tests that need models
+  // register catalogHandlers or their own.
+  http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) => HttpResponse.json({ providerId: String(params.providerId), models: [] })),
   // Runtime definitions: Pi (bundled, the default) and the local Claude Code, as the server defines them.
   http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(runtimeDefinitions())),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),

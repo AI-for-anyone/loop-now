@@ -33,6 +33,7 @@ export const timeline = {
     process_started: (runtime: string) => `${runtime} 启动`,
     process_stopped: (runtime: string) => `${runtime} 进程停止`,
     process_exited: (runtime: string) => `${runtime} 进程意外退出`,
+    context_handoff: '对话已交接',
     running: '开始回复',
     tool: (name: string) => `工具 ${name}`,
     model_call: {
@@ -76,6 +77,10 @@ export const timeline = {
     processReused: (runtime: string, pid: number) => `复用常驻的 ${runtime} 进程，PID ${pid}。`,
     processStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}，${reason}，运行了 ${uptime}。`,
     processExited: (pid: number, exit: string, uptime: string) => `PID ${pid}，${exit}，运行了 ${uptime}。`,
+    // The selection of the saved conversation given to a new runtime: route, what went along, and its size against the budget (one token
+    // per byte).
+    handoff: (route: string, included: number, omitted: number, images: number, used: string, budget: string) =>
+      [route, [`带过去 ${included} 条`, omitted > 0 ? `省略 ${omitted} 条` : null, images > 0 ? `${images} 张图片没带` : null].filter(Boolean).join('，'), `预算 ${budget}，用了 ${used}`].join(' · '),
     // Subscription limits reported by Claude Code (info is passed through from claude as is, so
     // fields may be missing): limit type, status, reset time; unknown values are shown as is.
     rateLimit: {

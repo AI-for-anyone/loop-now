@@ -71,6 +71,20 @@ export const chat = {
     failed: '失败',
   } satisfies Record<S['ToolState'], string>,
   sessionDivider: '会话已切换，页面历史保留',
+  // Where the conversation was handed to another runtime (Run.contextHandoff), and where the model changed on the same runtime.
+  handoff: {
+    route: (from: string, to: string) => `${from} → ${to}`,
+    label: (from: string, to: string, parts: string) => `对话从 ${from} 交给了 ${to}：${parts}`,
+    // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
+    renewed: (runtime: string) => `${runtime} · 新会话`,
+    renewedLabel: (runtime: string, parts: string) => `对话交给了 ${runtime} 的新会话：${parts}`,
+    whole: (count: number) => `之前的 ${count} 条全部带过去`,
+    included: (count: number) => `带过去 ${count} 条`,
+    omitted: (count: number) => `省略 ${count} 条`,
+    images: (count: number) => `${count} 张图片没带`,
+    separator: '，',
+  },
+  modelChange: (from: string, to: string) => `模型从 ${from} 换成了 ${to}`,
   commands: {
     menuLabel: '命令',
     loading: '正在读取命令…',

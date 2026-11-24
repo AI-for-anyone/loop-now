@@ -92,3 +92,21 @@ export function buildTurns(
     .map(({ turn }) => turn)
   return { turns, queued, hiddenNew: hiddenRuns.size }
 }
+
+// The handover of the conversation to another runtime to show before a turn: the turn's own record (Run.contextHandoff), unless the turn
+// before carried the same one (the block goes again with each message until one reaches the new runtime, so a failed try and its retry
+// both carry it; it is shown once, before the first).
+export function handoffBefore(previous: Turn | undefined, turn: Turn): Schemas['ContextHandoff'] | null {
+  const handoff = turn.run.contextHandoff
+  if (!handoff) return null
+  const earlier = previous?.run.contextHandoff
+  return earlier && earlier.fromRuntime === handoff.fromRuntime && earlier.toRuntime === handoff.toRuntime ? null : handoff
+}
+
+// A change of model on the same runtime between two neighbouring turns (Run.selection): from and to. Nothing when either turn has no
+// selection (it never began, or it was recorded before selections were kept), or when the runtime changed (the handover shows that).
+export function modelChangeBefore(previous: Turn | undefined, turn: Turn): { from: Schemas['RunSelection']; to: Schemas['RunSelection'] } | null {
+  const from = previous?.run.selection, to = turn.run.selection
+  if (!from || !to || turn.run.contextHandoff || from.runtime !== to.runtime) return null
+  return from.provider !== to.provider || from.modelId !== to.modelId ? { from, to } : null
+}

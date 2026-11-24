@@ -1,16 +1,14 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { IdField } from '@/components/IdField'
-import { ModelPicker } from '@/components/ModelPicker'
+import { RunnerPicker } from '@/components/runner-picker/RunnerPicker'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
-import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import { ApiError, type Schemas } from '@/api/client'
 import { invalidateModelCatalog, useModelProviders, useUpdateAgent } from '@/api/queries'
 import { t } from '@/i18n'
@@ -37,7 +35,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const [serviceTier, setServiceTier] = useState<Schemas['CodexServiceTier'] | null>(serverTier)
   const [notice, setNotice] = useState<string | null>(null)
   const [nameRule, setNameRule] = useState<string | undefined>(undefined)
-  const [confirmingSwitch, setConfirmingSwitch] = useState(false)
+  const runnerLabel = useId()
 
   // The server values the form is based on. When the server refreshes with new values, fields the person hasn't edited follow the
   // latest values, and edited fields keep the person's input.
@@ -68,22 +66,19 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const tierChanged = serviceTier !== serverTier
   const dirty = name !== agent.name || modelChanged || thinkingChanged || tierChanged
   useDirtyForm('basic', dirty)
-  // The runtime is determined by the model provider: if the selected provider uses a different runtime, saving switches it (a new
-  // session starts), so confirm first. The catalog says which runtime runs the provider; without it (the provider can't be changed then),
-  // the runtime definitions do.
+  // The runtime is determined by the model provider: the catalog says which runtime runs it; without the catalog, the runtime definitions
+  // do. Saving a provider of another runtime switches the runtime from the next message, and the conversation goes with it.
   const nextRuntime = model ? (providers.data?.providers.find((provider) => provider.id === model.provider)?.runtime ?? runtimes.forProvider(model.provider)?.id ?? agent.runtime) : agent.runtime
-  const switchesRuntime = modelChanged && nextRuntime !== agent.runtime
 
   const save = () => {
     setNotice(null)
     const ruleError = name !== agent.name ? nameRuleError(name) : undefined
     setNameRule(ruleError)
     if (ruleError) return
-    if (switchesRuntime) setConfirmingSwitch(true)
-    else void submit()
+    void submit()
   }
 
-  // Failures don't throw: the confirm dialog closes as usual and the error shows in this section (field errors next to their inputs).
+  // Failures don't throw: the error shows in this section (field errors next to their inputs).
   const submit = async () => {
     const body: Schemas['AgentUpdate'] = {}
     if (name !== agent.name) body.name = name
@@ -110,8 +105,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   return (
     <Section id="basic" title={t.config.basic.title}>
-      {/* Internal ID and display name sit in two columns on one row and wrap when narrow; model provider and model are laid out in two
-          columns the same way (the grid inside ModelPicker).
+      {/* Internal ID and display name sit in two columns on one row and wrap when narrow; the runner picker spans the width below them.
           Fields on the same row align to the top: help text under one column grows downward without pushing the neighboring column down. */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-start gap-4">
         <IdField label={t.config.basic.id} id={agent.id} />
@@ -121,16 +115,29 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
           <FieldError message={nameError} />
         </div>
       </div>
-      <div className="[&>div]:grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] [&>div]:gap-4 [&>div>p]:col-span-full">
-        <ModelPicker agentId={agent.id} value={model} onChange={next => { if (!sameModel(next, model)) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={fieldMessages(update.error, isModelField)}>
-          {(selected, provider) => <>
-            <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(update.error, field => field === 'thinkingLevel')} />
-            {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, field => field === 'serviceTier')} />}
-            {/* Shown as soon as a provider is selected (even before a model is chosen); when the catalog is unavailable, go by the model in
-                the form or the Agent's current runtime. */}
-            <RuntimeDifferences runtime={runtimes.get(provider?.runtime ?? nextRuntime)} className="col-span-full" />
-          </>}
-        </ModelPicker>
+      <div className="grid gap-2">
+        <span id={runnerLabel} className="text-[13.5px] leading-snug font-black">{t.runtime.picker.label}</span>
+        <RunnerPicker
+          labelledBy={runnerLabel}
+          agentId={agent.id}
+          value={model}
+          thinkingLevel={thinkingLevel}
+          invalid={Boolean(fieldMessages(update.error, isModelField))}
+          onChoose={(choice) => {
+            if (choice.model.provider !== 'openai-codex') setServiceTier(null)
+            setModel(choice.model)
+            setThinkingLevel(choice.thinkingLevel)
+          }}
+          onThinkingChange={setThinkingLevel}
+        />
+        <FieldError message={fieldMessages(update.error, isModelField)} />
+        <FieldError message={fieldMessages(update.error, (field) => field === 'thinkingLevel')} />
+      </div>
+      {/* The Codex speed for openai-codex, and how the chosen runtime differs from the bundled one (going by the model in the form, or the
+          Agent's current runtime when the catalog is unavailable). */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-start gap-4 empty:hidden">
+        {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, (field) => field === 'serviceTier')} />}
+        <RuntimeDifferences runtime={runtimes.get(nextRuntime)} className="col-span-full" />
       </div>
       <p className="text-xs text-ink-500">{t.config.basic.thinking.nextRun}</p>
       {notIdle ? (
@@ -157,14 +164,6 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
           {update.isPending ? t.common.saving : t.common.save}
         </Button>
       </div>
-      <ConfirmDialog
-        open={confirmingSwitch}
-        onOpenChange={setConfirmingSwitch}
-        title={t.runtime.switch.title}
-        body={t.runtime.switch.body(runtimes.name(agent.runtime), runtimes.name(nextRuntime))}
-        confirmLabel={t.runtime.switch.confirm}
-        onConfirm={submit}
-      />
     </Section>
   )
 }
