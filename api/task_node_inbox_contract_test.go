@@ -79,7 +79,7 @@ func TestTaskNodeInboxFormalContract(t *testing.T) {
 	check("TaskNodeInboxRecord", record, true)
 	check("TaskNodeInboxPage", map[string]any{"items": []any{record}, "nextCursor": nil}, true)
 	check("TaskNodeInboxPage", map[string]any{"items": nil, "nextCursor": nil}, false)
-	summary := map[string]any{"id": id, "origin": "inbox_reminder", "executionMode": "task_conversation", "status": "running", "queuedAt": now, "startedAt": now, "endedAt": nil, "errorCode": nil, "errorMessage": nil}
+	summary := map[string]any{"id": id, "origin": "inbox_reminder", "executionMode": "task_conversation", "status": "running", "queuedAt": now, "startedAt": now, "endedAt": nil, "errorCode": nil, "errorMessage": nil, "usageReported": false}
 	usage := map[string]any{"calls": 0, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0}
 	timeline := map[string]any{"taskId": id, "nodeRunId": id, "agentId": id, "runtimeId": id, "run": summary, "entries": []any{}, "usage": usage, "nextCursor": nil}
 	check("TaskNodeRunTimeline", timeline, true)

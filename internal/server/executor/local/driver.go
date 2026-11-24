@@ -180,6 +180,9 @@ func (e *Executor) driverByID(id string) driver {
 	if build := drivers[id]; build != nil {
 		return build(e)
 	}
+	if rt, ok := agentruntime.ByID(id); ok && rt.Command != nil {
+		return acpDriver{e: e, f: localCommandFlavor(rt)}
+	}
 	return nil
 }
 

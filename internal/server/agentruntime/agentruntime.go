@@ -6,7 +6,14 @@
 // runtime id (a test enforces this), so adding a runtime means one registry entry and one driver.
 package agentruntime
 
-import "slices"
+import (
+	"maps"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/google/uuid"
+)
 
 // Runtime ids, matching AgentRuntime in the OpenAPI spec.
 const (
@@ -103,6 +110,58 @@ type Runtime struct {
 	// MinVersion is the oldest version of the runtime's CLI the platform supports (the version it was tested with);
 	// empty when there is no minimum. The status probe reports an older CLI as unsupported.
 	MinVersion string
+	// Command is set for a runtime that runs a local ACP command a person added (see LocalCommandRuntime).
+	Command *LocalCommand
+	// CommandID is that command's id.
+	CommandID uuid.UUID
+}
+
+// LocalCommand is a program on this computer that speaks the Agent Client Protocol over stdio, added by a person: an
+// executable (a name on the login shell's PATH or an absolute path), its arguments passed as is, and environment
+// variables added for it.
+type LocalCommand struct {
+	Command string
+	Args    []string
+	Env     map[string]string
+}
+
+// LocalCommandPrefix starts the id of a runtime that runs a local ACP command.
+const LocalCommandPrefix = "acp-"
+
+// LocalCommandRuntimeID is the id of the runtime (and of its one model provider) that runs the local ACP command id.
+func LocalCommandRuntimeID(id uuid.UUID) string { return LocalCommandPrefix + id.String() }
+
+// LocalCommandRuntime is the registry entry of a local ACP command: it runs the provider of its own id, with the
+// program's own login on this computer; it cannot copy a session for a task.
+func LocalCommandRuntime(id uuid.UUID, name string, cmd LocalCommand) Runtime {
+	rid := LocalCommandRuntimeID(id)
+	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Command: &cmd, CommandID: id}
+}
+
+var (
+	localMu sync.RWMutex
+	local   []Runtime
+)
+
+// SetLocalCommands replaces the runtimes of the local ACP commands (after the registry's own, in the given order).
+func SetLocalCommands(runtimes []Runtime) {
+	out := make([]Runtime, 0, len(runtimes))
+	for _, r := range runtimes {
+		if r.Command != nil && strings.HasPrefix(r.ID, LocalCommandPrefix) {
+			out = append(out, r.clone())
+		}
+	}
+	localMu.Lock()
+	local = out
+	localMu.Unlock()
+}
+
+// entries is the registry followed by the local ACP commands.
+func entries() []Runtime {
+	localMu.RLock()
+	defer localMu.RUnlock()
+	return append(slices.Clone(registry), local...)
 }
 
 // SetupOn returns how to set the runtime up on the operating system goos; nil when it needs no setup.
@@ -191,10 +250,11 @@ var registry = []Runtime{
 	},
 }
 
-// All returns every runtime, the default one first. The result is a copy.
+// All returns every runtime, the default one first, then the local ACP commands. The result is a copy.
 func All() []Runtime {
-	out := make([]Runtime, len(registry))
-	for i, r := range registry {
+	all := entries()
+	out := make([]Runtime, len(all))
+	for i, r := range all {
 		out[i] = r.clone()
 	}
 	return out
@@ -202,7 +262,7 @@ func All() []Runtime {
 
 // ByID returns the runtime whose id is id; ok is false when there is none.
 func ByID(id string) (Runtime, bool) {
-	for _, r := range registry {
+	for _, r := range entries() {
 		if r.ID == id {
 			return r.clone(), true
 		}
@@ -213,7 +273,7 @@ func ByID(id string) (Runtime, bool) {
 // ForProvider returns the runtime that runs an Agent using the model provider named provider: the runtime that lists
 // it, otherwise the default runtime.
 func ForProvider(provider string) Runtime {
-	for _, r := range registry {
+	for _, r := range entries() {
 		if slices.Contains(r.Providers, provider) {
 			return r.clone()
 		}
@@ -240,5 +300,10 @@ func Known(id string) bool {
 func (r Runtime) clone() Runtime {
 	r.Providers = slices.Clone(r.Providers)
 	r.Capabilities.SessionCommands = slices.Clone(r.Capabilities.SessionCommands)
+	if r.Command != nil {
+		c := *r.Command
+		c.Args, c.Env = slices.Clone(c.Args), maps.Clone(c.Env)
+		r.Command = &c
+	}
 	return r
 }

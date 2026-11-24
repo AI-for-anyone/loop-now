@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/acpcli"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/testutil/fakeacpbin"
 )
@@ -68,5 +71,24 @@ func TestACPStatus(t *testing.T) {
 		if s := statusOf(t, missing.List(context.Background(), true), id); s.Available || s.UnavailableReason == nil || *s.UnavailableReason != "not_found" {
 			t.Fatalf("%s not found: %+v", id, s)
 		}
+	}
+}
+
+// A local ACP command is available when its executable is there; its version and login are not checked.
+func TestLocalCommandStatus(t *testing.T) {
+	bin := fakeacpbin.Path(t)
+	found, missing := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	agentruntime.SetLocalCommands([]agentruntime.Runtime{
+		agentruntime.LocalCommandRuntime(found, "Found", agentruntime.LocalCommand{Command: bin}),
+		agentruntime.LocalCommandRuntime(missing, "Missing", agentruntime.LocalCommand{Command: "no-such-agent"}),
+	})
+	t.Cleanup(func() { agentruntime.SetLocalCommands(nil) })
+	c := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, UserPath: func(context.Context) []string { return []string{t.TempDir()} }}
+	list := c.List(context.Background(), true)
+	if s := statusOf(t, list, agentruntime.LocalCommandRuntimeID(found)); !s.Available || s.BinaryPath == nil || *s.BinaryPath != bin || s.Version != nil || s.Login == nil || s.Login.State != "unknown" {
+		t.Fatalf("found: %+v", s)
+	}
+	if s := statusOf(t, list, agentruntime.LocalCommandRuntimeID(missing)); s.Available || s.UnavailableReason == nil || *s.UnavailableReason != "not_found" {
+		t.Fatalf("missing: %+v", s)
 	}
 }

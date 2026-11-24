@@ -5,6 +5,8 @@ import (
 	goruntime "runtime"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/runtimes"
@@ -19,6 +21,7 @@ type runtimeDefinition struct {
 	Capabilities agentruntime.Capabilities `json:"capabilities"`
 	Setup        *agentruntime.Setup       `json:"setup"`
 	MinVersion   *string                   `json:"minVersion"`
+	AcpCommandID *uuid.UUID                `json:"acpCommandId"`
 }
 
 // listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and
@@ -34,6 +37,10 @@ func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) 
 			Setup: rt.SetupOn(goruntime.GOOS)}
 		if rt.MinVersion != "" {
 			def.MinVersion = &rt.MinVersion
+		}
+		if rt.Command != nil {
+			id := rt.CommandID
+			def.AcpCommandID = &id
 		}
 		list = append(list, def)
 	}

@@ -62,7 +62,7 @@ func loggedOut() bool {
 func main() {
 	if f := os.Getenv("FAKEACP_ARGS_FILE"); f != "" {
 		env := map[string]string{}
-		for _, k := range []string{"HOME", "XAI_API_KEY", "GEMINI_API_KEY", "GROK_HOME"} {
+		for _, k := range []string{"HOME", "XAI_API_KEY", "GEMINI_API_KEY", "GROK_HOME", "FAKEACP_PROBE"} {
 			if v, ok := os.LookupEnv(k); ok {
 				env[k] = v
 			}

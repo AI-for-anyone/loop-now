@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/testutil/fakeacpbin"
 )
@@ -281,5 +282,45 @@ func TestACPLoginRequired(t *testing.T) {
 		if res, _ := h.exec(h.acpAgent(nil), "hello"); res.ErrorCode != executor.ErrRuntimeLoginRequired || !strings.Contains(res.ErrorMessage, command) {
 			t.Fatalf("%s: %+v", flavor, res)
 		}
+	}
+}
+
+// A local ACP command a person added runs like the others: its executable with its own arguments and the environment
+// they gave it, the program's default model, the Skills listed in the platform prompt; changing the command restarts
+// the process and the session continues.
+func TestLocalACPCommand(t *testing.T) {
+	h := newACPHarness(t, "agy", nil)
+	cmdID := uuid.Must(uuid.NewV7())
+	set := func(args ...string) {
+		agentruntime.SetLocalCommands([]agentruntime.Runtime{agentruntime.LocalCommandRuntime(cmdID, "My Agent",
+			agentruntime.LocalCommand{Command: fakeacpbin.Path(t), Args: args, Env: map[string]string{"FAKEACP_PROBE": "given"}})})
+	}
+	set("acp")
+	t.Cleanup(func() { agentruntime.SetLocalCommands(nil) })
+	id := h.agent(func(s *agentconfig.Snapshot) {
+		s.Provider, s.ModelID = agentruntime.LocalCommandRuntimeID(cmdID), "default"
+	})
+	res, _ := h.exec(id, "hello")
+	d := h.e.dirs(id)
+	if res.Outcome != executor.OutcomeCompleted || !strings.Contains(res.Text, filepath.Join(d.acpSkills, "loopctl", "SKILL.md")) || !strings.HasSuffix(res.Text, "hello") {
+		t.Fatalf("first turn: %+v", res)
+	}
+	if session, runtimes := h.recorded(id); session == "" || len(runtimes) == 0 || runtimes[0] != agentruntime.LocalCommandRuntimeID(cmdID) {
+		t.Fatalf("recorded for the command's runtime: %q %v", session, runtimes)
+	}
+	starts := h.starts()
+	if len(starts) != 1 || !slices.Equal(starts[0].Args, []string{"acp"}) || starts[0].Env["FAKEACP_PROBE"] != "given" || starts[0].Env["HOME"] != h.realHome {
+		t.Fatalf("the command as given: %+v", starts)
+	}
+	res, _ = h.exec(id, "fake:config")
+	var cfg struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal([]byte(res.Text), &cfg); err != nil || cfg.Model != "" {
+		t.Fatalf("the program's default model is left as it is: %+v %v", cfg, err)
+	}
+	set("--verbose", "acp")
+	if res, _ := h.exec(id, "fake:history"); res.Text != "history=2" || len(h.starts()) != 2 || !slices.Equal(h.starts()[1].Args, []string{"--verbose", "acp"}) {
+		t.Fatalf("a changed command restarts and the session continues: %+v %+v", res, h.starts())
 	}
 }

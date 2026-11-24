@@ -78,6 +78,13 @@ type Checker struct {
 	at     time.Time
 }
 
+// Forget drops the cached results, so the next List checks again (the runtimes changed).
+func (c *Checker) Forget() {
+	c.mu.Lock()
+	c.cached = nil
+	c.mu.Unlock()
+}
+
 // List returns the status of each runtime; when refresh is false, results within the cache duration are reused.
 func (c *Checker) List(ctx context.Context, refresh bool) []Status {
 	now := time.Now
@@ -98,6 +105,8 @@ func (c *Checker) List(ctx context.Context, refresh bool) []Status {
 			out = append(out, c.bundled(rt.ID, version(c), at))
 		} else if probe, ok := probes[rt.ID]; ok && !rt.Capabilities.Bundled {
 			out = append(out, probe(c, ctx, at))
+		} else if rt.Command != nil {
+			out = append(out, c.localCommand(ctx, at, rt))
 		}
 	}
 	c.mu.Lock()

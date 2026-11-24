@@ -16,6 +16,16 @@ var localSources = map[string]func() []Provider{
 	agentruntime.Antigravity: func() []Provider { return []Provider{AntigravityProvider(nil)} },
 }
 
+// LocalCommandDefaultModel is the one model of a local ACP command's provider: whatever model the program uses by
+// default (its own model list is known only once a session is open).
+const LocalCommandDefaultModel = "default"
+
+// LocalCommandProvider is the catalog of a local ACP command's runtime: one provider of the runtime's id and name, with
+// the program's default model.
+func LocalCommandProvider(rt agentruntime.Runtime) Provider {
+	return LocalCLIProvider(rt.ID, rt.Name, []LocalModel{{ID: LocalCommandDefaultModel, Name: "Default model"}})
+}
+
 // withLocal returns base plus the providers the runtimes bring themselves (in registry order): the ones a runtime's
 // CLI listed (listed, by runtime id) or else its local source. The ids of those providers are reserved: providers in
 // base with the same id (custom ones from models.json) are not published.
@@ -25,10 +35,13 @@ func withLocal(base *Catalog, listed map[string][]Provider) *Catalog {
 	}
 	var local []Provider
 	for _, rt := range agentruntime.All() {
-		if providers, ok := listed[rt.ID]; ok {
+		switch providers, ok := listed[rt.ID]; {
+		case ok:
 			local = append(local, providers...)
-		} else if source := localSources[rt.ID]; source != nil {
-			local = append(local, source()...)
+		case rt.Command != nil:
+			local = append(local, LocalCommandProvider(rt))
+		case localSources[rt.ID] != nil:
+			local = append(local, localSources[rt.ID]()...)
 		}
 	}
 	reserved := map[string]bool{}
