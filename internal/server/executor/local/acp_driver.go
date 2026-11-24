@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,18 @@ type acpFlavor struct {
 	killOnStop bool
 	// emptyLoadIsMissing: loading a session the agent does not have succeeds without history; otherwise it fails.
 	emptyLoadIsMissing bool
+	// command is set for a local ACP command a person added: its executable is command.Command (a name on the login
+	// shell's PATH or an absolute path), its environment adds command.Env, and it has no version to check.
+	command *agentruntime.LocalCommand
+}
+
+// localCommandFlavor runs a local ACP command: its own arguments, the program's default model, Skills listed in the
+// platform prompt, a stop by session/cancel (then the executor's kill after the timeout), and a session that loads
+// without history counted as missing (an agent replays the history of a session it has).
+func localCommandFlavor(rt agentruntime.Runtime) acpFlavor {
+	cmd := *rt.Command
+	return acpFlavor{runtime: rt.ID, binary: cmd.Command, emptyLoadIsMissing: true, command: &cmd,
+		args: func(agentconfig.Snapshot, agentDirs) []string { return slices.Clone(cmd.Args) }}
 }
 
 // grokFlavor: `grok agent --always-approve --model M --reasoning-effort E --plugin-dir D stdio`. Grok's cancel is not
@@ -170,9 +183,16 @@ type acpInstructionsRecord struct {
 func (ad acpDriver) name() string    { return runtimeName(ad.f.runtime) }
 func (ad acpDriver) runtime() string { return ad.f.runtime }
 
-// identity: the model and effort are given when the process starts (Grok) or the session opens (Antigravity).
-func (acpDriver) identity(snap agentconfig.Snapshot) string {
-	return snap.ModelID + "\x00" + acpEffort(snap)
+// identity: the model and effort are given when the process starts (Grok) or the session opens (Antigravity); a local
+// command restarts when the command changes.
+func (ad acpDriver) identity(snap agentconfig.Snapshot) string {
+	id := snap.ModelID + "\x00" + acpEffort(snap)
+	if c := ad.f.command; c != nil {
+		b, _ := json.Marshal(c)
+		sum := sha256.Sum256(b)
+		id += "\x00" + hex.EncodeToString(sum[:])
+	}
+	return id
 }
 
 func (acpDriver) refresh(agentconfig.Snapshot, agentDirs) error { return nil }
@@ -210,7 +230,12 @@ func (acpDriver) keepsSessions() bool { return true }
 // otherwise it is looked up on the PATH of the user's login shell.
 func (e *Executor) acpBinary(ctx context.Context, f acpFlavor) (string, error) {
 	explicit := e.o.GrokBin
-	if f.runtime == agentruntime.Antigravity {
+	switch {
+	case f.command != nil && filepath.IsAbs(f.binary):
+		explicit = f.binary
+	case f.command != nil:
+		explicit = ""
+	case f.runtime == agentruntime.Antigravity:
 		explicit = e.o.AntigravityBin
 	}
 	if explicit != "" {
@@ -269,12 +294,20 @@ func (ad acpDriver) start(ctx context.Context, spec startSpec) (started, error) 
 	if home, err := e.o.RealHome(); err != nil || !filepath.IsAbs(home) {
 		return started{}, fail(executor.ErrInternal, "Could not read the server user's home directory (%s needs this computer's login).", ad.name())
 	}
-	version, err := ad.acpVersion(ctx, bin)
-	if err != nil {
-		return started{}, err
+	version := ""
+	if ad.f.command == nil {
+		if version, err = ad.acpVersion(ctx, bin); err != nil {
+			return started{}, err
+		}
 	}
 	cmd := exec.Command(bin, ad.f.args(snap, d)...)
 	cmd.Env = acpEnv(spec.env)
+	if c := ad.f.command; c != nil {
+		// The environment a person gave the command is added as is (it may hold a key the program needs).
+		for _, k := range slices.Sorted(maps.Keys(c.Env)) {
+			cmd.Env = append(cmd.Env, k+"="+c.Env[k])
+		}
+	}
 	cmd.Dir = d.workspace
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
@@ -350,7 +383,7 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 			ap.handoff = &h
 		}
 	}
-	if ad.f.modelInSession {
+	if ad.f.modelInSession && snap.ModelID != modelcatalog.LocalCommandDefaultModel {
 		if err := ap.SetModel(ctx, ap.sessionID, snap.ModelID); err != nil {
 			return ad.startFailure(p, err)
 		}
@@ -388,6 +421,9 @@ func (ad acpDriver) startFailure(p *proc, err error) error {
 }
 
 func (ad acpDriver) loginMessage() string {
+	if ad.f.login == "" {
+		return fmt.Sprintf("%s on this computer is not logged in. Log in with the program itself on this computer and try again.", ad.name())
+	}
 	return fmt.Sprintf("%s on this computer is not logged in. Run %s on this computer and try again.", ad.name(), ad.f.login)
 }
 

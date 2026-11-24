@@ -3,6 +3,8 @@ package agentruntime
 import (
 	"slices"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // The registry is well formed: unique ids and names, exactly one default runtime listed first, no provider claimed by
@@ -94,5 +96,34 @@ func TestCodexSetup(t *testing.T) {
 		if s == nil || *s.Install != "npm install -g @openai/codex" || *s.Login != "codex login" || s.DocsURL == nil {
 			t.Fatalf("%s: %+v", goos, s)
 		}
+	}
+}
+
+// A local ACP command is a runtime of its own, after the registry's, running the provider of its own id; the registry
+// hands out copies.
+func TestLocalCommands(t *testing.T) {
+	id := uuid.Must(uuid.NewV7())
+	rt := LocalCommandRuntime(id, "My Agent", LocalCommand{Command: "my-agent", Args: []string{"acp"}, Env: map[string]string{"K": "v"}})
+	SetLocalCommands([]Runtime{rt})
+	t.Cleanup(func() { SetLocalCommands(nil) })
+	rid := LocalCommandRuntimeID(id)
+	all := All()
+	if last := all[len(all)-1]; last.ID != rid || last.Name != "My Agent" || last.CommandID != id || last.IsDefault() {
+		t.Fatalf("listed last: %+v", last)
+	}
+	got, ok := ByID(rid)
+	if !ok || got.Command == nil || got.Command.Command != "my-agent" || got.Capabilities.Accounts != AccountsLocal || got.Capabilities.TaskFork {
+		t.Fatalf("by id: %+v %v", got, ok)
+	}
+	if ForProvider(rid).ID != rid || !Known(rid) {
+		t.Fatal("its provider runs on it")
+	}
+	got.Command.Args[0], got.Command.Env["K"] = "changed", "changed"
+	if again, _ := ByID(rid); again.Command.Args[0] != "acp" || again.Command.Env["K"] != "v" {
+		t.Fatalf("a copy: %+v", again.Command)
+	}
+	SetLocalCommands(nil)
+	if Known(rid) || ForProvider(rid).ID != Pi {
+		t.Fatal("removed")
 	}
 }

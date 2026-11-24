@@ -1,10 +1,13 @@
 package store_test
 
 import (
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
@@ -436,5 +439,44 @@ func TestHealMissingSessions(t *testing.T) {
 	}
 	if healed, err := e.s.HealMissingSessions(e.ctx); err != nil || len(healed) != 0 {
 		t.Fatalf("nothing left: %v %v", healed, err)
+	}
+}
+
+// Local ACP commands are kept with their arguments and environment; one that an Agent's provider names cannot be
+// removed.
+func TestACPCommands(t *testing.T) {
+	e := newRecEnv(t)
+	c, err := e.s.CreateACPCommand(e.ctx, "My Agent", "my-agent", []string{"--profile", "acp"}, map[string]string{"B": "2", "A": "1"})
+	if err != nil || c.Name != "My Agent" || c.Command != "my-agent" || !slices.Equal(c.Args, []string{"--profile", "acp"}) || !slices.Equal(c.EnvNames(), []string{"A", "B"}) ||
+		c.Runtime() != "acp-"+c.ID.String() {
+		t.Fatalf("create: %+v %v", c, err)
+	}
+	name, three, changed := "Renamed", "3", "changed"
+	u, err := e.s.UpdateACPCommand(e.ctx, c.ID, store.ACPCommandPatch{Name: &name, Env: map[string]*string{"C": &three, "A": nil, "B": &changed}})
+	if err != nil || u.Name != "Renamed" || u.Command != "my-agent" || !slices.Equal(u.EnvNames(), []string{"B", "C"}) || u.Env["C"] != "3" || u.Env["B"] != "changed" {
+		t.Fatalf("update merges the environment: %+v %v", u, err)
+	}
+	list, err := e.s.ACPCommands(e.ctx)
+	if err != nil || len(list) != 1 || list[0].ID != c.ID {
+		t.Fatalf("list: %+v %v", list, err)
+	}
+	provider, model := c.Runtime(), "default"
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: &provider, ModelID: &model}); err != nil {
+		t.Fatal(err)
+	}
+	err = e.s.DeleteACPCommand(e.ctx, c.ID)
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeRuntimeInUse {
+		t.Fatalf("in use: %v", err)
+	}
+	if d, ok := ae.Details.(store.RuntimeInUseDetails); !ok || len(d.Agents) != 1 || d.Agents[0].ID != e.agent || d.Agents[0].Name == "" || d.Agents[0].ProjectID == nil {
+		t.Fatalf("the Agents that use it: %+v", ae.Details)
+	}
+	e.switchTo("anthropic", "claude-x")
+	if err := e.s.DeleteACPCommand(e.ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.DeleteACPCommand(e.ctx, c.ID); !apperr.Is(err, apperr.CodeNotFound) {
+		t.Fatalf("gone: %v", err)
 	}
 }

@@ -2,6 +2,8 @@ package runtimes
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"time"
 
 	"loop-now/internal/server/acpcli"
@@ -64,5 +66,35 @@ func (c *Checker) acp(ctx context.Context, at time.Time, id string) Status {
 		state = LoginLoggedOut
 	}
 	s.Login = &Login{State: state}
+	return s
+}
+
+// localCommand checks a local ACP command a person added: available when its executable is there (an absolute path,
+// or a name on the login shell's PATH). Its version and login are not checked: not every program answers --version,
+// and ACP tells the login only once a session is open.
+func (c *Checker) localCommand(ctx context.Context, at time.Time, rt agentruntime.Runtime) Status {
+	s := Status{ID: rt.ID, CheckedAt: at}
+	bin := rt.Command.Command
+	if filepath.IsAbs(bin) {
+		if info, err := os.Stat(bin); err != nil || !info.Mode().IsRegular() {
+			r := ReasonNotFound
+			s.UnavailableReason = &r
+			return s
+		}
+	} else {
+		var dirs []string
+		if c.UserPath != nil {
+			dirs = c.UserPath(ctx)
+		}
+		found, err := acpcli.Find(bin, dirs)
+		if err != nil {
+			r := ReasonNotFound
+			s.UnavailableReason = &r
+			return s
+		}
+		bin = found
+	}
+	s.BinaryPath, s.Available = &bin, true
+	s.Login = &Login{State: LoginUnknown}
 	return s
 }

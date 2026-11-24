@@ -35,6 +35,14 @@ func (r *Registry) SetLocalProviders(runtime string, providers []Provider) {
 
 func (r *Registry) Snapshot() *Catalog { return r.current.Load() }
 
+// RuntimesChanged rebuilds the catalog after the runtimes changed (a local ACP command was added, changed or removed),
+// so their providers come and go.
+func (r *Registry) RuntimesChanged() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.current.Store(withPlugins(withLocal(r.base, r.local), r.plugins))
+}
+
 // Replace replaces the Pi catalog part; plugin providers are kept.
 func (r *Registry) Replace(c *Catalog) {
 	r.mu.Lock()
