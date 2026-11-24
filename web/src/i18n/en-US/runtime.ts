@@ -87,6 +87,7 @@ export const runtime = {
     notInCatalog: (ref: string) => `${ref}, used now, isn't in the model catalog`,
     noThinking: 'This model has no thinking levels',
     fixedThinking: "This model's thinking level is fixed: it comes with the model",
+    programThinking: 'The program sets its own thinking level',
     noModel: 'Pick a model first',
     chip: {
       label: (summary: string) => `Runs on: ${summary}. Open to change`,

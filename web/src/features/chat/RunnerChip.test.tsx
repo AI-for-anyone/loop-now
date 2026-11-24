@@ -15,8 +15,9 @@ const model = (id: string, name: string, thinking = levels): Schemas['Model'] =>
 const models: Record<string, Schemas['Model'][]> = {
   'claude-code': [model('haiku', 'Claude Haiku (latest)', ['low', 'medium', 'high', 'xhigh', 'max']), model('opus', 'Claude Opus (latest)', ['low', 'medium', 'high', 'xhigh', 'max'])],
   anthropic: [model('claude-sonnet-5-5', 'Claude Sonnet 5.5'), model('claude-haiku-5-5', 'Claude Haiku 5.5')],
-  openai: [model('gpt-x', 'GPT X')],
   'openai-codex': [model('gpt-a', 'GPT A')],
+  // A model with one level only (off): nothing to choose, so the chip names no level.
+  openai: [model('gpt-x', 'GPT X'), { ...model('gpt-plain', 'GPT Plain', ['off']), reasoning: false, defaultThinkingLevel: 'off' }],
 }
 
 // The chat page of an Agent, with the catalog and a record of every change saved from the chip.
@@ -54,6 +55,11 @@ describe('who runs it, on the message box', () => {
     await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi', thinkingLevel: 'high' }))
     await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: anthropic · claude-sonnet-5-5 · High. Open to change'))
     expect(chip()).toHaveAttribute('title', 'Run by Pi (built in) · provider anthropic · model Claude Sonnet 5.5 (claude-sonnet-5-5) · thinking High')
+  })
+
+  it('a model with one level only (off) has no level to name', async () => {
+    await setup(makeAgent({ model: { provider: 'openai', modelId: 'gpt-plain' }, runtime: 'pi', thinkingLevel: null }))
+    await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: openai · gpt-plain. Open to change'))
   })
 
   it('choosing a model in the popover saves at once, with the level the new model has, and says it applies from the next message', async () => {

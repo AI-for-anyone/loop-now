@@ -5,6 +5,7 @@ import { t } from '@/i18n'
 import { describeError } from '@/lib/errors'
 import { canRun, railOrder, runtimeReadiness, statusOf, useRuntimeLookup, type AgentRuntime, type RuntimeDefinition } from '@/lib/runtime'
 import type { ScopeKey } from '@/lib/scope'
+import { choosableLevels } from '@/lib/thinking'
 import { cn } from '@/lib/utils'
 import { ModelList } from './ModelList'
 import { blocks, unavailableNote, unavailableOf } from './provider-access'
@@ -142,7 +143,9 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
 
   const chosen = value ? modelKey(value.provider, value.modelId) : null
   const chosenModel = value ? models.get(value.provider)?.find((model) => model.id === value.modelId) : undefined
-  const levels = chosenModel?.thinkingLevels ?? []
+  const levels = choosableLevels(chosenModel)
+  // A model with nothing to choose says why: a program a person added decides for itself; a model that thinks has its level built in.
+  const noLevelsNote = !chosenModel ? null : lookup.get(valueRuntime)?.acpCommandId ? t.runtime.picker.programThinking : chosenModel.reasoning ? t.runtime.picker.fixedThinking : t.runtime.picker.noThinking
 
   // The keyboard's row: kept while it is still listed, otherwise the chosen model, otherwise the first row.
   const [active, setActive] = useState<string | null>(null)
@@ -157,7 +160,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
     })
   const choose = (provider: Provider, model: Schemas['Model']) => {
     if (blocked(provider)) return
-    onChoose({ model: { provider: provider.id, modelId: model.id }, thinkingLevel: thinkingLevel !== null && model.thinkingLevels?.includes(thinkingLevel) ? thinkingLevel : null })
+    onChoose({ model: { provider: provider.id, modelId: model.id }, thinkingLevel: thinkingLevel !== null && choosableLevels(model).includes(thinkingLevel) ? thinkingLevel : null })
   }
   const browse = (id: AgentRuntime) => {
     setPicked(id)
@@ -255,7 +258,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           value={thinkingLevel}
           levels={levels}
           defaultLevel={chosenModel?.defaultThinkingLevel}
-          hint={!value ? t.runtime.picker.noModel : chosenModel && levels.length === 0 ? (chosenModel.reasoning ? t.runtime.picker.fixedThinking : t.runtime.picker.noThinking) : null}
+          hint={!value ? t.runtime.picker.noModel : levels.length === 0 ? noLevelsNote : null}
           onChange={onThinkingChange}
         />
       </div>

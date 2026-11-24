@@ -105,6 +105,8 @@ export const runtime = {
     noThinking: '这个模型不分思考等级',
     // A model that thinks at a level of its own (Antigravity's models carry it in their id).
     fixedThinking: '这个模型的思考等级是固定的，已含在模型里',
+    // A local ACP command a person added: its one model is the program's own default.
+    programThinking: '思考等级由这个程序自己决定',
     noModel: '先选模型',
     // The chip on the message box that says who runs the Agent now and opens the picker; a choice is saved at once.
     chip: {

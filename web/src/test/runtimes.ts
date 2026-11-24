@@ -69,3 +69,26 @@ export const withAllRuntimes = (): Schemas['RuntimeDefinitionList'] => ({ runtim
 export function acpStatus(id: 'grok' | 'antigravity', overrides: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeStatus'] {
   return { id, available: true, version: id === 'grok' ? '1.0.88' : '1.5.14', binaryPath: id === 'grok' ? '/usr/local/bin/grok' : '/usr/local/bin/agy', unavailableReason: null, login: { state: 'logged_in', authMethod: null, subscriptionType: null }, checkedAt, ...overrides }
 }
+
+// A local ACP command a person added (contract AcpCommand): its runtime and model provider are both acp-<command id>, it uses the
+// program's own login, and its one model is the program's default, with no thinking level to choose and no images.
+export const acpCommandId = '7a0c4e2b-5d1f-4e8a-9b3c-2f6d8e1a4c05'
+export const acpRuntimeId = `acp-${acpCommandId}`
+export const acpCommandDefinition = (commandId = acpCommandId, name = 'Hermes'): Schemas['RuntimeDefinition'] => ({
+  id: `acp-${commandId}`,
+  name,
+  providers: [`acp-${commandId}`],
+  isDefault: false,
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false },
+  minVersion: null,
+  setup: null,
+  acpCommandId: commandId,
+})
+export function acpCommandStatus(commandId = acpCommandId, overrides: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeStatus'] {
+  return { id: `acp-${commandId}`, available: true, version: null, binaryPath: '/usr/local/bin/hermes', unavailableReason: null, login: { state: 'unknown', authMethod: null, subscriptionType: null }, checkedAt, ...overrides }
+}
+export const acpDefaultModel: Schemas['Model'] = { id: 'default', name: 'Default model', reasoning: false, thinkingLevels: ['off'], defaultThinkingLevel: 'off', contextWindow: 0, maxTokens: 0, input: ['text'] }
+export function acpCommand(overrides: Partial<Schemas['AcpCommand']> = {}): Schemas['AcpCommand'] {
+  const id = overrides.id ?? acpCommandId
+  return { id, runtime: `acp-${id}`, name: 'Hermes', command: 'hermes', args: ['acp', '--stdio'], envNames: ['HERMES_API_KEY'], createdAt: checkedAt, updatedAt: checkedAt, ...overrides }
+}
