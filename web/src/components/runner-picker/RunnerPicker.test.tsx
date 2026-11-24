@@ -306,6 +306,9 @@ describe('runner picker', () => {
     useCatalog({ runtimes: [...runtimeList().runtimes, acpCommandStatus(undefined, { available: false, binaryPath: null, unavailableReason: 'not_found', login: null }), found] }, [provider(found.id, { source: 'local_cli', runtime: found.id, authMethods: [], modelCount: 1 })])
     const user = userEvent.setup()
     renderWithQuery(<Picker />)
+    // Its stamp says the program can't be found, not that something isn't installed.
+    expect(await runnerTab(document.body, 'Hermes')).toHaveAccessibleName(/^Hermes, Not found/)
+    expect(await runnerTab(document.body, 'Hermes')).toHaveTextContent('Not found')
     await chooseRunner(user, document.body, 'Hermes')
     expect(await screen.findByText("hermes wasn't found on this computer: check the command is spelled right and runs in a terminal, or give its absolute path.")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Edit this command in Global settings' })).toHaveAttribute('href', '/settings#settings-runtimes')

@@ -89,6 +89,8 @@ export const runtime = {
     unknown: '状态未知',
     // Short stamps on a runtime that cannot run here; the full reason is in the setup panel.
     problem: { not_found: '没装', version_failed: '运行不了', version_unsupported: '版本太旧', unavailable: '用不了', logged_out: '没登录' },
+    // The stamp of a command a person added whose program isn't found.
+    addedNotFound: '找不到',
     bundled: '内置',
     bundledNote: '用 API key 或其他订阅',
     current: '当前',

@@ -72,6 +72,7 @@ export const runtime = {
     checking: 'Checking…',
     unknown: 'Status unknown',
     problem: { not_found: 'Not installed', version_failed: "Won't run", version_unsupported: 'Too old', unavailable: 'Unavailable', logged_out: 'Logged out' },
+    addedNotFound: 'Not found',
     bundled: 'Built in',
     bundledNote: 'Uses an API key or another subscription',
     current: 'Current',
