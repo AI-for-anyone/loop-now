@@ -234,7 +234,7 @@ describe('the "/" command menu of the input box', () => {
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [session-id]']))
     const blocked = screen.getByRole('group', { name: 'Not available now' })
     expect(blocked).toHaveTextContent('/compact [instructions]Platform commandNo session yet. Send a message first')
-    expect(blocked).toHaveTextContent('/export [html|jsonl]Platform commandThe session file is missing. Run /new or /resume first')
+    expect(blocked).toHaveTextContent("/export [html|jsonl]Platform commandThe session can't be found. Run /new or /resume first")
     for (const item of blocked.querySelectorAll('li')) expect(item).toHaveClass('text-ink-500')
     // Clicking an unavailable command does not fill it into the input.
     await user.click(within(blocked).getByText('/compact [instructions]'))

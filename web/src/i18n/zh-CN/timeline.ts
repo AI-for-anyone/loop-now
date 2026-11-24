@@ -50,7 +50,7 @@ export const timeline = {
     stop_requested: '被人停止',
     promoted: { interrupt: '已转为打断', queue: '已转为排队' } satisfies Record<S['WhenBusy'], string>,
     message_cancelled: '一条 Inbox 消息被取消',
-    session_missing: '会话文件丢失',
+    session_missing: '会话找不到了',
     model_rate_limit: '订阅额度',
     ended: {
       completed: '完成',
@@ -102,7 +102,8 @@ export const timeline = {
     },
     toolRunning: '进行中',
     commandUnavailable: '未记录命令',
-    sessionFile: (file: string) => `会话文件：${file}`,
+    // The session's reference: a file for Pi and Claude Code, a thread for Codex.
+    sessionFile: (file: string) => `会话：${file}`,
     completed: '回复正常结束。',
   },
   field: {

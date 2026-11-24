@@ -142,7 +142,7 @@ export const stats = {
       credential_unavailable: 'Credential unavailable',
       cli_install_failed: 'CLI install failed',
       workspace_sync_failed: 'Workspace sync failed',
-      session_missing: 'Session file missing',
+      session_missing: 'Session not found',
       pi_start_failed: 'Pi failed to start',
       pi_exited: 'Pi process exited unexpectedly',
       pi_error: 'The model service kept failing after retries',

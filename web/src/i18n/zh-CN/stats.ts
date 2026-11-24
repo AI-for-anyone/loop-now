@@ -149,7 +149,7 @@ export const stats = {
       credential_unavailable: '凭证不可用',
       cli_install_failed: 'CLI 安装失败',
       workspace_sync_failed: '工作区同步失败',
-      session_missing: '会话文件丢失',
+      session_missing: '会话找不到了',
       pi_start_failed: 'Pi 启动失败',
       pi_exited: 'Pi 进程异常退出',
       pi_error: '模型服务报错，重试后仍失败',

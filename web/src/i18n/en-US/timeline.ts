@@ -49,7 +49,7 @@ export const timeline = {
     stop_requested: 'Stopped by a person',
     promoted: { interrupt: 'Promoted to interrupt', queue: 'Switched to queue' },
     message_cancelled: 'An Inbox message was cancelled',
-    session_missing: 'Session file missing',
+    session_missing: 'Session not found',
     model_rate_limit: 'Subscription limit',
     ended: {
       completed: 'Completed',
@@ -106,7 +106,8 @@ export const timeline = {
     },
     toolRunning: 'Running',
     commandUnavailable: 'Command not recorded',
-    sessionFile: (file: string) => `Session file: ${file}`,
+    // The session's reference: a file for Pi and Claude Code, a thread for Codex.
+    sessionFile: (file: string) => `Session: ${file}`,
     completed: 'The reply finished normally.',
   },
   field: {
