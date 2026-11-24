@@ -63,6 +63,19 @@ export function ModelList(props: ModelListProps) {
     target?.scrollIntoView?.({ block: 'nearest' })
   })
 
+  // Open on the chosen model: once it is listed, scroll the list (only the list, not the page) so it sits in view.
+  const listRef = useRef<HTMLUListElement>(null)
+  const placed = useRef(false)
+  useEffect(() => {
+    const list = listRef.current
+    if (placed.current || !list || !chosen) return
+    const row = document.getElementById(rowId(chosen))
+    if (!row) return
+    placed.current = true
+    const top = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop
+    if (top + row.offsetHeight > list.clientHeight) list.scrollTop = Math.max(0, top - list.clientHeight / 3)
+  })
+
   const go = (target: number) => {
     const row = stops[Math.max(0, Math.min(stops.length - 1, target))]
     if (!row) return
@@ -174,7 +187,7 @@ export function ModelList(props: ModelListProps) {
           className="h-10 w-full min-w-0 rounded-full border-0 bg-white pr-4 pl-10 text-[14px] text-ink shadow-[inset_0_0_0_2px_var(--ink)] outline-none placeholder:text-ink-500 focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
         />
       </div>
-      <ul id={treeId} role="tree" aria-label={copy.models} className="riso-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
+      <ul ref={listRef} id={treeId} role="tree" aria-label={copy.models} className="riso-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
         {blocks.map((block, blockIndex) => {
           if (block.section) {
             // A group heading, set like a margin note: small caps on a rule.

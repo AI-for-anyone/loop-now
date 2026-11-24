@@ -77,6 +77,8 @@ interface ComposerProps {
   connection?: ReactNode
   // Provided by the chat page when a reply is in progress.
   stop?: StopControl
+  // Who runs the Agent now (the runner chip), at the start of the line below the input box.
+  runner?: ReactNode
   reply?: QuestionReply
 }
 
@@ -90,7 +92,7 @@ const platformNames = (list: CommandList | undefined) => (list ? new Set(list.co
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -395,10 +397,11 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
         {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
       </div>
-      {/* The line below: on the left the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
+      {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
           right the live connection status. On wide screens it lines up with the left edge of the input box. */}
       <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
+          {runner}
           {status}
           {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
         </div>

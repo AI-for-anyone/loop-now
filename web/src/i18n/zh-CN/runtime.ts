@@ -86,6 +86,18 @@ export const runtime = {
     thinking: '思考',
     noThinking: '这个模型不分思考等级',
     noModel: '先选模型',
+    // The chip on the message box that says who runs the Agent now and opens the picker; a choice is saved at once.
+    chip: {
+      label: (summary: string) => `谁来跑：${summary}。点开更换`,
+      detail: (runtime: string, where: string, provider: string, model: string, level: string | null) =>
+        `由 ${runtime}（${where}）运行 · 提供方 ${provider} · 模型 ${model}${level ? ` · 思考等级 ${level}` : ''}`,
+      local: '本机',
+      bundled: '内置',
+      title: '谁来跑',
+      hint: '选了立刻保存，从下一条消息起生效',
+      saving: '正在保存…',
+      saved: '已换好，下一条消息起生效',
+    },
     // A runtime that is not ready: the command for this computer from the server (RuntimeDefinition.setup), then check again.
     setup: {
       title: (name: string) => `先把 ${name} 准备好`,

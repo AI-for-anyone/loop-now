@@ -70,6 +70,17 @@ export const runtime = {
     thinking: 'Thinking',
     noThinking: 'This model has no thinking levels',
     noModel: 'Pick a model first',
+    chip: {
+      label: (summary: string) => `Runs on: ${summary}. Open to change`,
+      detail: (runtime: string, where: string, provider: string, model: string, level: string | null) =>
+        `Run by ${runtime} (${where}) · provider ${provider} · model ${model}${level ? ` · thinking ${level}` : ''}`,
+      local: 'this computer',
+      bundled: 'built in',
+      title: 'Runs on',
+      hint: 'A choice is saved at once and applies from the next message',
+      saving: 'Saving…',
+      saved: 'Changed; applies from the next message',
+    },
     setup: {
       title: (name: string) => `Set up ${name} first`,
       install: 'Install it: run this in a terminal on this computer',
