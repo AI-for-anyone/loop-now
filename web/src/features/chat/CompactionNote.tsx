@@ -5,6 +5,7 @@ import { t } from '@/i18n'
 import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { cn } from '@/lib/utils'
 import { RunRecord } from './RunRecord'
+import { runErrorText, useRunRuntimeName } from './run-status-text'
 import { runStartedAt } from './time'
 
 const text = t.chat.compactionNote
@@ -12,8 +13,9 @@ const text = t.chat.compactionNote
 // The outcome of this compaction: on failure, the reason (stamp + error); when cancelled or interrupted, say so as it is;
 // when completed normally, the tokens before and after compaction, or the reason nothing was compacted.
 function Outcome({ run, compaction }: { run: Schemas['Run']; compaction: Schemas['RunCompaction'] }) {
+  const runtimeName = useRunRuntimeName()
   if (run.status === 'failed') {
-    const reason = run.errorCode ? (t.chat.runError[run.errorCode] ?? t.common.unknown(run.errorCode)) : t.errors.unknown
+    const reason = runErrorText(run.errorCode, runtimeName(run))
     return (
       <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <Badge variant="stamp" tone="danger" className="[--stamp-tilt:-2deg]">

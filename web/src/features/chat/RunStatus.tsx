@@ -3,7 +3,8 @@ import { Badge } from '@/components/ui/badge'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { isInProgress } from './live-state'
-import { runStatusText } from './run-status-text'
+import type { AgentRuntime } from '@/lib/runtime'
+import { runStatusText, useRunRuntimeName } from './run-status-text'
 
 type Run = Schemas['Run']
 
@@ -36,13 +37,14 @@ export function RunStatusBadge({ run }: { run: Run }) {
 }
 
 // A failed reply also gets a light red note block: the localized explanation of the failure reason and the error message from the
-// server.
-export function FailureNote({ run }: { run: Run }) {
+// server. runtime: the Agent's runtime, named when the turn failed before it began.
+export function FailureNote({ run, runtime }: { run: Run; runtime?: AgentRuntime }) {
+  const runtimeName = useRunRuntimeName(runtime)
   if (run.status !== 'failed') return null
   return (
     <div role="status" className="flex items-start gap-2.5 self-start rounded-input bg-tint-red px-4 py-3 text-[14.5px] leading-[1.7]">
       <CircleAlertIcon aria-hidden="true" className="mt-1 size-4 shrink-0 text-red-text" />
-      <span className="font-black [overflow-wrap:anywhere] text-red-text">{runStatusText(run)}</span>
+      <span className="font-black [overflow-wrap:anywhere] text-red-text">{runStatusText(run, runtimeName(run))}</span>
     </div>
   )
 }

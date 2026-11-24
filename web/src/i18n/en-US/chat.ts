@@ -52,11 +52,13 @@ export const chat = {
     plugin_blocked: 'A plugin blocked this turn',
     image_unsupported: "The current model doesn't accept images",
     internal_error: 'Internal server error',
-    runtime_unavailable: "claude wasn't found on this computer: install Claude Code and make sure claude runs in a terminal",
-    runtime_login_required: "Claude Code isn't logged in on this computer: run claude in a terminal there and log in",
-    runtime_start_failed: "Claude Code couldn't start",
-    runtime_exited: 'The Claude Code process exited unexpectedly during this turn',
-    runtime_error: 'Claude Code reported an error for this turn',
+  },
+  runtimeError: {
+    runtime_unavailable: (name: string | null) => `${name ?? 'The runtime'} can't be used on this computer: it wasn't found, its version couldn't be read, or it's too old`,
+    runtime_login_required: (name: string | null) => `${name ?? 'The runtime'} isn't logged in on this computer, or its login has expired: log in again in a terminal there, then try again`,
+    runtime_start_failed: (name: string | null) => `${name ?? 'The runtime'} couldn't start`,
+    runtime_exited: (name: string | null) => `The ${name ?? 'runtime'} process exited unexpectedly during this turn`,
+    runtime_error: (name: string | null) => `${name ?? 'The runtime'} reported an error for this turn`,
   },
   tool: {
     started: 'Running',
@@ -88,7 +90,8 @@ export const chat = {
     unavailable: {
       title: 'Not available now',
       onlyBlocked: 'None of the matching commands can be used now; Enter sends the text as typed',
-      reasons: { runtime_unsupported: 'This Agent runs on Claude Code and has no Pi session', session_none: 'No session yet. Send a message first', session_missing: 'The session file is missing. Run /new or /resume first' },
+      runtimeUnsupported: (runtime: string) => `This Agent runs on ${runtime}, which doesn't support this command`,
+      reasons: { runtime_unsupported: "This Agent's runtime doesn't support this command", session_none: 'No session yet. Send a message first', session_missing: 'The session file is missing. Run /new or /resume first' },
     },
     source: { extension: 'Extension command', prompt: 'Prompt template', skill: 'Skill' } as Record<string, string>,
     plugin: (name: string) => `Plugin · ${name}`,

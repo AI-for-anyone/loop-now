@@ -26,3 +26,23 @@ export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
 
 // Runtime names as the default definitions give them, for building run log steps in tests.
 export const runtimeName = runtimeLookup(runtimeDefinitions().runtimes).name
+
+// Codex as the server defines it once its driver lands (CODEX-DESIGN.md): a CLI on this computer with its own login, no commands of its
+// own, no Pi extensions, and a lowest supported version.
+export const codexDefinition: Schemas['RuntimeDefinition'] = {
+  id: 'codex',
+  name: 'Codex',
+  providers: ['codex-cli'],
+  isDefault: false,
+  capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false },
+  minVersion: '0.167.0',
+  setup: { install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: 'https://developers.openai.com/codex/cli' },
+}
+
+// GET /runtime-definitions with Codex as well.
+export const withCodex = (): Schemas['RuntimeDefinitionList'] => ({ runtimes: [...runtimeDefinitions().runtimes, codexDefinition] })
+
+// The status of Codex on this computer: installed, logged in with a ChatGPT account, unless overridden.
+export function codexStatus(overrides: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeStatus'] {
+  return { id: 'codex', available: true, version: '0.170.0', binaryPath: '/usr/local/bin/codex', unavailableReason: null, login: { state: 'logged_in', authMethod: 'chatgpt', subscriptionType: null }, checkedAt, ...overrides }
+}

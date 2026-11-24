@@ -2,6 +2,8 @@ import type { components } from '@/api/schema.gen'
 import { formatDayClock, formatBytes, formatMonthDayClock } from './format'
 
 type S = components['schemas']
+// The failures of a runtime's CLI (runtime_*), worded with the runtime's name.
+type RuntimeErrorCode = Extract<S['RunErrorCode'], `runtime_${string}`>
 
 export const chat = {
   loadingOlder: '正在加载更早的消息…',
@@ -57,14 +59,16 @@ export const chat = {
     plugin_blocked: '插件阻止了本轮执行',
     image_unsupported: '当前模型不支持图片输入',
     internal_error: '服务端内部错误',
-    // Failures of the Claude Code runtime: the first two tell the person how to fix it on
-    // their machine, the rest say plainly what happened; the server's errorMessage follows.
-    runtime_unavailable: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude',
-    runtime_login_required: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录',
-    runtime_start_failed: 'Claude Code 没能启动',
-    runtime_exited: 'Claude Code 进程在这一轮中意外退出',
-    runtime_error: 'Claude Code 报告这一轮出错',
-  } satisfies Record<S['RunErrorCode'], string>,
+  } satisfies Record<Exclude<S['RunErrorCode'], RuntimeErrorCode>, string>,
+  // A runtime's failures name the runtime that failed (its name, or "运行时" when it isn't known); a login that has expired reads the same
+  // as one that never happened.
+  runtimeError: {
+    runtime_unavailable: (name: string | null) => `本机的 ${name ?? '运行时'} 用不了：没找到它、读不出版本，或版本太旧`,
+    runtime_login_required: (name: string | null) => `本机的 ${name ?? '运行时'} 没有登录，或登录已失效：在本机终端重新登录后再试`,
+    runtime_start_failed: (name: string | null) => `${name ?? '运行时'} 没能启动`,
+    runtime_exited: (name: string | null) => `${name ?? '运行时'} 进程在这一轮中意外退出`,
+    runtime_error: (name: string | null) => `${name ?? '运行时'} 报告这一轮出错`,
+  } satisfies Record<RuntimeErrorCode, (name: string | null) => string>,
   tool: {
     started: '进行中',
     succeeded: '成功',
@@ -96,7 +100,8 @@ export const chat = {
     unavailable: {
       title: '现在不能用',
       onlyBlocked: '匹配的命令现在都不能用，回车会照原文发出',
-      reasons: { runtime_unsupported: '这个 Agent 用 Claude Code 运行，没有 Pi 会话', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
+      runtimeUnsupported: (runtime: string) => `这个 Agent 用 ${runtime} 运行，不支持这条命令`,
+      reasons: { runtime_unsupported: '这个 Agent 的运行时不支持这条命令', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
     },
     source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
     plugin: (name: string) => `插件 · ${name}`,

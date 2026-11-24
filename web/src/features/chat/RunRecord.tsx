@@ -10,7 +10,7 @@ import { useRuntimeLookup } from '@/lib/runtime'
 import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
-import { isVoidedRun, runStatusText } from './run-status-text'
+import { isVoidedRun, runStatusText, useRunRuntimeName } from './run-status-text'
 import { buildSteps, runDurationMs } from './timeline-steps'
 import { TimelineSteps, UsageBlock } from './TimelineBody'
 
@@ -20,6 +20,7 @@ const ENDED: ReadonlySet<Run['status']> = new Set(['completed', 'failed', 'inter
 
 // Outcome: stamp, field and reason. The reason text reuses the chat page's chat.failure and chat.status.*.
 function Result({ run }: { run: Run }) {
+  const runtimeName = useRunRuntimeName()
   if (!ENDED.has(run.status)) return null
   const restart = run.status === 'interrupted' && run.endReason === 'server_restart'
   const stopped = run.status === 'interrupted' && run.endReason === 'user_stopped'
@@ -44,7 +45,7 @@ function Result({ run }: { run: Run }) {
         {style.label}
       </Badge>
       <span className="font-mono text-[11.5px] [overflow-wrap:anywhere]">{field}</span>
-      <span className="text-[13.5px] [overflow-wrap:anywhere]">{runStatusText(run) ?? t.timeline.detail.completed}</span>
+      <span className="text-[13.5px] [overflow-wrap:anywhere]">{runStatusText(run, runtimeName(run)) ?? t.timeline.detail.completed}</span>
     </div>
   )
 }

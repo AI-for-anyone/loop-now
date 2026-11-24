@@ -1,7 +1,9 @@
 import { act, render, screen, within } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeRun, makeStatus } from '@/test/api'
+import { createTestQueryClient } from '@/test/render'
 import { makeSleep } from '@/test/sleep'
 import { makeAgentOverview, makeUsageRow } from '@/test/overview'
 import { initialOverviewState, overviewReducer, summarize, type OverviewState } from './overview-state'
@@ -24,7 +26,8 @@ describe('Uptime and time used in this reply keep counting on the page', () => {
     })
     const live: OverviewState = { ...initialOverviewState, synced: true, connection: 'open', agents: [agent] }
     const router = createMemoryRouter([{ path: '/', element: <RunStatusSection live={live} /> }])
-    render(<RouterProvider router={router} />)
+    // The section names a failed turn's runtime through the runtime lookup, which reads the runtime definitions.
+    render(<QueryClientProvider client={createTestQueryClient()}><RouterProvider router={router} /></QueryClientProvider>)
     const row = within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
     expect(row).toHaveTextContent('up 3 min 0 s')
     expect(row).toHaveTextContent('30 s elapsed')
