@@ -85,21 +85,24 @@ const (
 	// EnvStopOnStdinClose, when true, treats EOF (or an error) on standard input like receiving SIGTERM: the shell that
 	// started the server can stop it gracefully by closing the write end. Windows has no termination signal that can be
 	// delivered, so the desktop shell relies on this; off by default, and interactive runs do not read standard input.
-	EnvStopOnStdinClose   = "LOOP_NOW_STOP_ON_STDIN_CLOSE"
-	EnvMaxUploadFile      = "LOOP_NOW_MAX_UPLOAD_FILE"
-	EnvMaxFolderUpload    = "LOOP_NOW_MAX_FOLDER_UPLOAD"
-	EnvMaxSkillArchive    = "LOOP_NOW_MAX_SKILL_ARCHIVE"
-	EnvMaxSkillEntries    = "LOOP_NOW_MAX_SKILL_ENTRIES"
-	EnvMaxCredential      = "LOOP_NOW_MAX_CREDENTIAL"
-	EnvMaxMessage         = "LOOP_NOW_MAX_MESSAGE"
-	EnvMaxInboxMessage    = "LOOP_NOW_MAX_INBOX_MESSAGE"
-	EnvInboxQuestionTTL   = "LOOP_NOW_INBOX_QUESTION_TTL"
-	EnvInboxPreviewChars  = "LOOP_NOW_INBOX_PREVIEW_CHARS"
-	EnvInboxPageMax       = "LOOP_NOW_INBOX_PAGE_MAX"
-	EnvLoopctlDistDir     = "LOOP_NOW_LOOPCTL_DIST_DIR"
-	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
-	EnvExternalTLSCert    = "LOOP_NOW_EXTERNAL_TLS_CERT"
-	EnvExternalTLSKey     = "LOOP_NOW_EXTERNAL_TLS_KEY"
+	EnvStopOnStdinClose  = "LOOP_NOW_STOP_ON_STDIN_CLOSE"
+	EnvMaxUploadFile     = "LOOP_NOW_MAX_UPLOAD_FILE"
+	EnvMaxFolderUpload   = "LOOP_NOW_MAX_FOLDER_UPLOAD"
+	EnvMaxSkillArchive   = "LOOP_NOW_MAX_SKILL_ARCHIVE"
+	EnvMaxSkillEntries   = "LOOP_NOW_MAX_SKILL_ENTRIES"
+	EnvMaxCredential     = "LOOP_NOW_MAX_CREDENTIAL"
+	EnvMaxMessage        = "LOOP_NOW_MAX_MESSAGE"
+	EnvMaxInboxMessage   = "LOOP_NOW_MAX_INBOX_MESSAGE"
+	EnvInboxQuestionTTL  = "LOOP_NOW_INBOX_QUESTION_TTL"
+	EnvInboxPreviewChars = "LOOP_NOW_INBOX_PREVIEW_CHARS"
+	EnvInboxPageMax      = "LOOP_NOW_INBOX_PAGE_MAX"
+	// EnvContextHandoffTokens is the budget, in tokens counted as one per UTF-8 byte, of the conversation carried to a
+	// new runtime after a change of runtime (clamped to 1024..64000).
+	EnvContextHandoffTokens = "LOOP_NOW_CONTEXT_HANDOFF_TOKENS"
+	EnvLoopctlDistDir       = "LOOP_NOW_LOOPCTL_DIST_DIR"
+	EnvExternalListenAddr   = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
+	EnvExternalTLSCert      = "LOOP_NOW_EXTERNAL_TLS_CERT"
+	EnvExternalTLSKey       = "LOOP_NOW_EXTERNAL_TLS_KEY"
 	// EnvExternalTLSSelfSigned is a directory: the external port uses a self-signed certificate maintained by the
 	// server itself instead (cert.pem and key.pem in the directory, generated when missing or expired). It is mutually
 	// exclusive with the certificate/private key pair. The desktop shell uses it to open the external port, and loopctl
@@ -200,6 +203,8 @@ type Config struct {
 	InboxQuestionTTL  time.Duration
 	InboxPreviewChars int // number of body characters in an Inbox preview
 	InboxPageMax      int // maximum number of items per page in the Inbox list
+	// ContextHandoffTokens is the budget of the conversation carried to a new runtime (see EnvContextHandoffTokens).
+	ContextHandoffTokens int
 	// LoopctlDistDir is the root directory of the loopctl build output; <version>/manifest.json in it must match the
 	// server's version.
 	// When unset, loopctl-dist next to loop-server (the release bundle) is used; if neither exists, startup is refused.
@@ -339,6 +344,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		InboxQuestionTTL:      p.duration(EnvInboxQuestionTTL, "168h"),
 		InboxPreviewChars:     p.integer(EnvInboxPreviewChars, 200),
 		InboxPageMax:          p.integer(EnvInboxPageMax, 100),
+		ContextHandoffTokens:  p.integer(EnvContextHandoffTokens, 16000),
 		LoopctlDistDir:        p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
 		ExternalListenAddr:    p.str(EnvExternalListenAddr, ""),
 		ExternalTLSCert:       p.str(EnvExternalTLSCert, ""),

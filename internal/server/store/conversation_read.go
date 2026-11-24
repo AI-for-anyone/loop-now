@@ -108,9 +108,9 @@ func (s *Store) ReadConversation(ctx context.Context, agentID uuid.UUID, q Conve
 	return page, err
 }
 
-func conversationRows(ctx context.Context, tx *db.Tx, agentID uuid.UUID, epoch int, cond string, seq int64, limit int) ([]ConversationEntry, error) {
+func conversationRows(ctx context.Context, tx *db.Tx, agentID uuid.UUID, epoch int, cond string, arg any, limit int) ([]ConversationEntry, error) {
 	rows, err := tx.Query(ctx, `SELECT m.id, m.seq, m.role, r.origin, m.text, m.created_at, m.run_id, r.status, m.images
-		FROM conversation_messages m JOIN runs r ON r.id = m.run_id WHERE `+conversationCond+` AND `+cond+` LIMIT $4`, agentID, epoch, seq, limit)
+		FROM conversation_messages m JOIN runs r ON r.id = m.run_id WHERE `+conversationCond+` AND `+cond+` LIMIT $4`, agentID, epoch, arg, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -192,4 +192,22 @@ func fillToolUse(ctx context.Context, tx *db.Tx, entries []ConversationEntry) er
 		}
 	}
 	return nil
+}
+
+// HandoffConversation returns the Agent's whole current conversation before the given run (that run's own message is
+// the new request, sent apart), oldest first: what a change of runtime carries over.
+func (s *Store) HandoffConversation(ctx context.Context, agentID, run uuid.UUID) ([]ConversationEntry, error) {
+	var out []ConversationEntry
+	err := s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
+		var epoch int
+		if err := tx.QueryRow(ctx, `SELECT epoch FROM agent_sessions WHERE agent_id = $1`, agentID).Scan(&epoch); err != nil {
+			return notFoundIfNoRows(err, "Agent session")
+		}
+		var err error
+		if out, err = conversationRows(ctx, tx, agentID, epoch, `m.run_id <> $3 ORDER BY m.seq ASC`, run, -1); err != nil {
+			return err
+		}
+		return fillToolUse(ctx, tx, out)
+	})
+	return out, err
 }

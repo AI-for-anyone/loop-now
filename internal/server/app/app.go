@@ -459,7 +459,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 
 	a.Conv = conversation.New(a.Store, a.Coord, a.Executor, conversation.Options{
-		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, ReconcileInterval: cfg.ReconcileInterval,
+		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, ReconcileInterval: cfg.ReconcileInterval, HandoffBudget: cfg.ContextHandoffTokens,
 	}, log)
 	taskSource.PauseNormal = a.Conv.PauseDispatch
 	taskSource.FreezeNormal = a.Executor.FreezeForFork

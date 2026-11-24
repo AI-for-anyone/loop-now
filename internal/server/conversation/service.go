@@ -20,6 +20,7 @@ import (
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/contexthandoff"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/reqid"
@@ -34,6 +35,9 @@ type Options struct {
 	// for when the interrupt notification is lost); 0 means 10 seconds.
 	AbortPollInterval time.Duration
 	ReconcileInterval time.Duration
+	// HandoffBudget is the budget of the conversation carried to a new runtime after a change of runtime (see
+	// contexthandoff); 0 means the default.
+	HandoffBudget int
 }
 
 func (o Options) abortPollInterval() time.Duration {
@@ -594,6 +598,17 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if command != "" {
 		message = piMessage
 	}
+	// After a change of runtime, the new runtime gets the saved conversation with this message, in a block between the
+	// run ID line and the message. A Pi command or a manual compaction goes to the runtime as it is, without it; the
+	// handoff then waits for the next message.
+	if pending, err := s.st.DispatchHandoff(ctx, agentID); err != nil {
+		s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
+	} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
+		if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {
+			message = executor.RunIDLine(run.ID) + block + "\n\n" + prompt
+			sink.handoff = record
+		}
+	}
 	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
 		Origin: run.Origin, MessageID: trigger}, sink)
 	if err != nil {
@@ -603,6 +618,44 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}, command
 	}
 	return res, command
+}
+
+// handoffBlock writes the saved conversation for a pending handoff, with the record of what it carries. It is empty
+// when there is nothing saved to carry, and the handoff then ends.
+func (s *Service) handoffBlock(ctx context.Context, agentID, runID uuid.UUID, pending *store.PendingHandoff) (string, *store.HandoffRecord) {
+	a, err := s.st.GetAgent(ctx, agentID)
+	if err != nil {
+		s.log.Warn("failed to read the Agent for the handoff; the message goes without it", "agentId", agentID, "runId", runID, "err", err)
+		return "", nil
+	}
+	entries, err := s.st.HandoffConversation(ctx, agentID, runID)
+	if err != nil {
+		s.log.Warn("failed to read the conversation for the handoff; the message goes without it", "agentId", agentID, "runId", runID, "err", err)
+		return "", nil
+	}
+	if len(entries) == 0 {
+		if err := s.st.EndHandoff(ctx, agentID, pending.ID); err != nil {
+			s.log.Warn("failed to end an empty handoff", "agentId", agentID, "err", err)
+		}
+		return "", nil
+	}
+	messages := make([]contexthandoff.Message, 0, len(entries))
+	for _, e := range entries {
+		m := contexthandoff.Message{ID: e.ID, Role: e.Role, Origin: e.Origin, Status: e.RunStatus, Text: e.Text, Images: e.Images, CreatedAt: e.CreatedAt}
+		for _, t := range e.Tools {
+			m.Tools = append(m.Tools, contexthandoff.Tool{Name: t.Name, Calls: t.Calls, Failed: t.Failed})
+		}
+		messages = append(messages, m)
+	}
+	to := agentruntime.ForProvider(a.ModelProvider)
+	from := pending.From
+	if rt, ok := agentruntime.ByID(pending.From); ok {
+		from = rt.Name
+	}
+	budget := contexthandoff.ClampBudget(s.o.HandoffBudget)
+	block := contexthandoff.Build(messages, from, to.Name, budget)
+	return block.Text, &store.HandoffRecord{ID: pending.ID, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
+		OmittedMessages: block.Omitted, Images: block.Images, Bytes: block.Bytes, BudgetBytes: budget}
 }
 
 // finish writes the end of the run to the database and returns a function that announces the end (final event, missing
@@ -712,6 +765,8 @@ type runSink struct {
 	s       *Service
 	agentID uuid.UUID
 	runID   uuid.UUID
+	// handoff is what the message carried after a change of runtime; nil when it carried nothing.
+	handoff *store.HandoffRecord
 }
 
 func (k *runSink) Phase(phase, runtime string) {
@@ -722,9 +777,18 @@ func (k *runSink) Phase(phase, runtime string) {
 	k.s.emitRun(ctx, k.agentID, k.runID)
 }
 
-func (k *runSink) Running(configVersion int64) {
+func (k *runSink) Running(configVersion int64, sel executor.Selection) {
 	ctx := k.s.ctx
-	if err := k.s.st.SetRunRunning(ctx, k.runID, configVersion); err != nil {
+	var start store.RunStart
+	if sel.Runtime != "" {
+		start.Selection = &store.RunSelection{Runtime: sel.Runtime, Provider: sel.Provider, ModelID: sel.ModelID, ThinkingLevel: sel.ThinkingLevel}
+	}
+	if k.handoff != nil && sel.Runtime != "" {
+		carried := *k.handoff
+		carried.ToRuntime = sel.Runtime // the runtime that actually took the message
+		start.Handoff = &carried
+	}
+	if err := k.s.st.SetRunRunningWith(ctx, k.runID, configVersion, start); err != nil {
 		k.s.log.Warn("failed to update the run status", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)

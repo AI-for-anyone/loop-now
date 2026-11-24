@@ -272,3 +272,9 @@ func endDeliveredHandoffTx(ctx context.Context, tx *db.Tx, run Run) error {
 	_, err := tx.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND state = 'active' AND handoff->>'id' = $2`, run.AgentID, h.ID.String())
 	return err
 }
+
+// EndHandoff ends the given pending handoff without carrying anything (there was nothing saved to carry).
+func (s *Store) EndHandoff(ctx context.Context, agentID, id uuid.UUID) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND handoff->>'id' = $2`, agentID, id.String())
+	return err
+}

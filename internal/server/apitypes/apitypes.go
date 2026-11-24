@@ -310,6 +310,13 @@ func FromRun(r store.Run) Run {
 		}
 	}
 	out.Compaction = CompactionOf(r)
+	if sel := r.SelectionInfo(); sel != nil {
+		out.Selection = &RunSelection{Runtime: sel.Runtime, Provider: sel.Provider, ModelID: sel.ModelID, ThinkingLevel: sel.ThinkingLevel}
+	}
+	if h := r.HandoffInfo(); h != nil {
+		out.ContextHandoff = &ContextHandoff{FromRuntime: h.FromRuntime, ToRuntime: h.ToRuntime, IncludedMessages: h.IncludedMessages,
+			OmittedMessages: h.OmittedMessages, Images: h.Images, Bytes: h.Bytes, BudgetBytes: h.BudgetBytes}
+	}
 	if r.Status != "starting" {
 		out.Phase = nil
 	}

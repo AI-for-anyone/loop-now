@@ -246,7 +246,7 @@ func TestBlockedTaskInboxReplyDoesNotResumeWorkflow(t *testing.T) {
 	calls := 0
 	s.Executor = &controlledExecutor{execute: func(ctx context.Context, r executor.Request, sink executor.Sink) (executor.Result, error) {
 		calls++
-		sink.Running(1)
+		sink.Running(1, executor.Selection{})
 		sink.TextDelta("Here is the explanation")
 		return executor.Result{Outcome: "completed", Text: "Here is the explanation"}, nil
 	}}
@@ -284,7 +284,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 	}
 	mainStarted, sideDone := make(chan struct{}), make(chan struct{})
 	s.Executor = &controlledExecutor{execute: func(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
-		sink.Running(1)
+		sink.Running(1, executor.Selection{})
 		if req.AgentID == p.RuntimeID {
 			close(mainStarted)
 			<-ctx.Done()

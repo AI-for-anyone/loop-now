@@ -341,7 +341,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	r.prompting = true
 	r.mu.Unlock()
-	sink.Running(snap.ConfigVersion)
+	sink.Running(snap.ConfigVersion, executor.Selection{Runtime: p.drv.runtime(), Provider: snap.Provider, ModelID: snap.ModelID, ThinkingLevel: snap.ThinkingLevel})
 	if req.Origin == executor.OriginConsoleCompact {
 		return e.compact(ctx, p, r, req, snap), nil
 	}
