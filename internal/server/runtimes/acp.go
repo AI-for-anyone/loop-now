@@ -59,7 +59,13 @@ func (c *Checker) acp(ctx context.Context, at time.Time, id string) Status {
 	}
 	s.Available = true
 	state := LoginUnknown
-	switch cli.login(ctx, bin, env) {
+	conclusion := ""
+	if c.ACPLogin != nil {
+		conclusion = c.ACPLogin(id) // kept by the background read of the model list: nothing goes online here
+	} else {
+		conclusion = cli.login(ctx, bin, env)
+	}
+	switch conclusion {
 	case acpcli.LoggedIn:
 		state = LoginLoggedIn
 	case acpcli.LoggedOut:

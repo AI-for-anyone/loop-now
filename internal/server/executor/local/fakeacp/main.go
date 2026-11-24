@@ -5,6 +5,7 @@
 // found.") or, for agy, succeeds empty, as the real ones do. FAKEACP_LOAD_SILENT=1 replays a session's history but
 // never answers session/load (as Grok sometimes does). $FAKEACP_HOME/.logged-out makes models report logged out and
 // prompts fail with auth_required. FAKEACP_ARGS_FILE gets one line per start (JSON: arguments and environment).
+// FAKEACP_SLOW (a duration) delays --version and models; FAKEACP_HANG=grok or agy makes them hang for that flavor.
 //
 // The first "fake:" word of a prompt decides the reply:
 //
@@ -74,6 +75,15 @@ func main() {
 		}
 	}
 	args := os.Args[1:]
+	if len(args) > 0 && (args[0] == "--version" || args[0] == "models") {
+		// FAKEACP_SLOW delays these short commands; FAKEACP_HANG=<flavor> makes them hang for that flavor.
+		if d, err := time.ParseDuration(os.Getenv("FAKEACP_SLOW")); err == nil {
+			time.Sleep(d)
+		}
+		if os.Getenv("FAKEACP_HANG") == flavor() {
+			select {}
+		}
+	}
 	switch {
 	case len(args) > 0 && args[0] == "--version":
 		if flavor() == "agy" {

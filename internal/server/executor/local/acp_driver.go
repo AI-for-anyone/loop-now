@@ -520,8 +520,12 @@ func (ad acpDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		p.sessionFile = ap.sessionID
 		p.sessMu.Unlock()
 	}
-	if tr.ErrorCode == executor.ErrRuntimeLoginRequired {
+	switch {
+	case tr.ErrorCode == executor.ErrRuntimeLoginRequired:
 		tr.ErrorMessage = ad.loginMessage()
+		ad.e.noteACPLogin(ad.f.runtime, acpcli.LoggedOut)
+	case tr.Outcome == runturn.OutcomeCompleted:
+		ad.e.noteACPLogin(ad.f.runtime, acpcli.LoggedIn)
 	}
 	return tr
 }
@@ -538,9 +542,28 @@ func (ad acpDriver) crashMessage(p *proc, stderrTail string) string {
 	return strings.TrimSpace(ad.name() + " " + version + " process exited unexpectedly. " + stderrTail)
 }
 
+// ACPLoginState is the last login conclusion for an ACP runtime (acpcli.LoggedIn, LoggedOut or Unknown), kept by the
+// background read of its model list (ACPModels) and corrected by turns; empty when there is none yet. The runtime
+// status reads it instead of running grok models or agy models, which go online.
+func (e *Executor) ACPLoginState(runtime string) string {
+	v, _ := e.acpLogins.Load(runtime)
+	s, _ := v.(string)
+	return s
+}
+
+// noteACPLogin keeps a login conclusion; an unknown one does not replace a conclusion already kept.
+func (e *Executor) noteACPLogin(runtime, state string) {
+	if state == acpcli.Unknown {
+		e.acpLogins.LoadOrStore(runtime, state)
+		return
+	}
+	e.acpLogins.Store(runtime, state)
+}
+
 // ACPModels returns the models the runtime's CLI on this computer lists for its login, for the model catalog: Grok's
 // from a short-lived agent's initialize (with each model's reasoning efforts), Antigravity's from agy models (each
-// thinking level a model id of its own).
+// thinking level a model id of its own). It also keeps the runtime's login conclusion (ACPLoginState): Antigravity's
+// from the same agy models, Grok's from grok models run alongside.
 func (e *Executor) ACPModels(ctx context.Context, runtime string) ([]modelcatalog.LocalModel, error) {
 	f, ok := acpFlavorOf(runtime)
 	if !ok {
@@ -556,6 +579,7 @@ func (e *Executor) ACPModels(ctx context.Context, runtime string) ([]modelcatalo
 	}
 	if f.runtime == agentruntime.Antigravity {
 		list, err := acpcli.AntigravityModels(ctx, bin, env)
+		e.noteACPLogin(f.runtime, acpcli.AntigravityLoginOf(list, err))
 		if err != nil {
 			return nil, err
 		}
@@ -565,7 +589,11 @@ func (e *Executor) ACPModels(ctx context.Context, runtime string) ([]modelcatalo
 		}
 		return out, nil
 	}
-	return e.grokModels(ctx, bin, env)
+	login := make(chan string, 1)
+	go func() { login <- acpcli.GrokLogin(ctx, bin, env) }()
+	models, err := e.grokModels(ctx, bin, env)
+	e.noteACPLogin(f.runtime, <-login)
+	return models, err
 }
 
 // grokModels reads the models Grok lists in its initialize (_meta.modelState) from a short-lived agent.

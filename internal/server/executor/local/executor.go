@@ -118,6 +118,7 @@ type TokenIssuer interface {
 // Executor is the local executor.
 type Executor struct {
 	sessionCache sync.Map // session file path -> sessionMeta (for the /resume list)
+	acpLogins    sync.Map // ACP runtime id -> its last login conclusion (acpcli.LoggedIn, LoggedOut or Unknown)
 	o            Options
 	src          Source
 	tmpl         *clitemplate.Catalog

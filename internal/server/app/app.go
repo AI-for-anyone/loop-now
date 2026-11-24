@@ -568,6 +568,10 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			}
 			wg.Wait()
 		}
+		// The runtime status reads Grok's and Antigravity's login from these reads instead of going online itself.
+		if a.API.Runtimes != nil {
+			a.API.Runtimes.ACPLogin = a.Executor.ACPLoginState
+		}
 		a.API.ModelListRead = func(provider string) {
 			for runtime, r := range readers {
 				if provider == "" || runtimeListsProvider(runtime, provider) {

@@ -168,7 +168,11 @@ func AntigravityModels(ctx context.Context, bin string, env []string) ([]Model, 
 
 // AntigravityLogin tells the login state from agy models: a list means logged in, a failure that says so means not.
 func AntigravityLogin(ctx context.Context, bin string, env []string) string {
-	models, err := AntigravityModels(ctx, bin, env)
+	return AntigravityLoginOf(AntigravityModels(ctx, bin, env))
+}
+
+// AntigravityLoginOf tells the login state from the answer of agy models.
+func AntigravityLoginOf(models []Model, err error) string {
 	switch {
 	case err == nil && len(models) > 0:
 		return LoggedIn
