@@ -4,7 +4,49 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-## Unreleased
+## v0.2.7
+
+Besides Pi and Claude Code, Agents can now run on Codex, Grok, Antigravity or any ACP command you add, all with your own login on this computer; you pick who runs an Agent from the message box before any message, and the conversation carries over. All console tabs share one live connection, so several open tabs no longer freeze the browser. The console redesign reaches task details, plugin details and dialogs; platform Agents can use model providers from plugins; logs and error messages are in English.
+
+### Pick who runs an Agent, and change it at any message
+
+- Creating an Agent now starts with "Who runs it": the CLIs found on this computer come first, with their state (ready, not installed, not logged in), and the bundled Pi comes last with its model providers, those you can use now on top. A runtime that is not ready shows the command to install it or log in. Models are searchable, across all of Pi's providers too.
+- The same picker is on the Agent's config page and in the message box. The message box shows who runs the Agent now; choosing there saves at once and applies from the next message, also while the Agent is replying. The choice stays until you change it, and messages nobody types (from other Agents, wake-ups) use it too.
+- Changing the runtime no longer starts the conversation over. The new runtime gets the saved conversation with your next message: all of it when it is short, otherwise your first request, the most recent messages and a one-line summary of tool use per turn, up to a budget (16,000 tokens by default, `LOOP_NOW_CONTEXT_HANDOFF_TOKENS`). Reasoning, tool state and images are not carried. The conversation shows where it happened and how many messages went along; a change of model alone shows a small divider.
+- Changing the runtime and straight back, before a message reached the new one, simply continues the earlier session. `/new` still starts clean.
+- Pending sleeps are no longer cancelled by a change of runtime; the wake-up goes to the new one.
+- An Agent can read its own saved conversation with `loopctl conversation`.
+- API: `Run.selection` and `Run.contextHandoff`, a `context_handoff` timeline entry, `usable` and `?include=models` on `GET /model-providers`, `setup` on runtime definitions, `GET /conversation` in the Agent API. Changing the runtime during a reply no longer returns 409.
+- Downgrading: an older version runs on the new database but does not know a handoff that is still pending; it starts the conversation over on a change of runtime, as before.
+
+### Agents can run on Codex
+
+- A new runtime: the Codex CLI installed on your computer, with your own `codex login`. The platform neither reads nor stores the login. It appears in "Who runs it" as Codex, with the models your account can use (read from Codex itself, again every 10 minutes and when you choose "Check again").
+- It needs Codex 0.167.0 or later; an older one shows "Too old" with the command to update.
+- The Agent's conversations are kept by Codex in your own Codex history (`~/.codex`); deleting the Agent archives them there, it does not delete them.
+- Codex loads your own Codex settings (your MCP servers, your skills in `~/.codex`) together with your login. The Agent runs with its own home directory, so `gh`, `git` and other commands do not use your logins unless "Use local logins" is on.
+- It runs commands without asking first, like the other runtimes. Skills, plugin MCP tools, `/compact`, tasks and changing runtime in the middle of a conversation work. Not offered yet: the `ultra` thinking level, the fast service tier, `/export` and `/resume`.
+- When Codex says it is logged in but the login was revoked, the status still shows "logged in"; the first message then fails and says to run `codex login`.
+- Console: errors name the runtime that failed instead of always saying Claude Code; "session file missing" is now "session not found"; each local CLI has its own mark in the sidebar.
+- API: `AgentRuntime` gains `codex`, the provider is `codex-cli`; `minVersion` on runtime definitions; `version_unsupported` as a reason a runtime is unavailable.
+
+### Agents can run on Grok, Antigravity, and any ACP command you add
+
+- Two more runtimes that use CLIs installed on your computer and your own logins there: Grok (`grok agent stdio`) and Antigravity (`agy acp`). Both speak the Agent Client Protocol (ACP). The platform neither reads nor stores their logins. They appear in "Who runs it" with the models each CLI lists.
+- You can add any other program that speaks ACP in Settings → Agent runtimes → "ACP commands you added": a name, the command, its arguments and environment variables. It runs on this computer as the server's user, so add only programs you trust. Saved variable values are never shown again. A command cannot be deleted while Agents use it; the page lists them.
+- Limits of these runtimes: they report no token usage (a turn says "no usage data"); their conversations stay in the CLI's own history and are not removed when an Agent is deleted, because the protocol has no way to do it; `/compact`, `/export` and `/resume` are not available; tasks start from a selection of the regular conversation instead of a copy of the session. Antigravity's model names include the thinking level, so there is none to choose. A command you add has one model, "Default model", and takes no images.
+- When a session can no longer be found (its file was deleted, or the CLI lost it), the next message now starts a new session with the saved conversation, and the conversation shows a line saying so. Before, the Agent stopped until you confirmed starting over. This applies to Pi, Claude Code and Codex as well; the red "session lost" notice and its confirmation are gone.
+- A turn records which runtime it was meant for from the moment it is sent, so a turn that fails before starting names the right one; the overview's problem list and task turns name it too.
+- A process that exits because you stopped a turn is no longer recorded as an unexpected exit.
+- The message box does not accept images for a model that takes none.
+- API: `AgentRuntime` is now a plain string (`grok`, `antigravity`, and `acp-<id>` for a command you added); `/acp-commands`; `Run.usageReported`; a `reason` on handoffs (`runtime_changed`, `session_lost`, `task_start`); `runtime` on problems and task messages; error code `runtime_in_use`.
+
+### Several console tabs no longer freeze the browser
+
+- A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.
+- All live updates of all tabs now travel over one connection, whatever the tabs show: the inbox, the overview, any number of Agents and tasks.
+- Nothing changes in what a tab shows. Where the browser has no shared workers, each tab uses one connection of its own.
+- API: `GET /events` carries any set of the existing event streams on one connection; the five separate stream endpoints stay.
 
 ### Console redesign (step 5)
 
@@ -51,45 +93,6 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An official plugin that is already installed keeps the labels stored at installation until it is reinstalled or updated.
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
-
-### Agents can run on Grok, Antigravity, and any ACP command you add
-
-- Two more runtimes that use CLIs installed on your computer and your own logins there: Grok (`grok agent stdio`) and Antigravity (`agy acp`). Both speak the Agent Client Protocol (ACP). The platform neither reads nor stores their logins. They appear in "Who runs it" with the models each CLI lists.
-- You can add any other program that speaks ACP in Settings → Agent runtimes → "ACP commands you added": a name, the command, its arguments and environment variables. It runs on this computer as the server's user, so add only programs you trust. Saved variable values are never shown again. A command cannot be deleted while Agents use it; the page lists them.
-- Limits of these runtimes: they report no token usage (a turn says "no usage data"); their conversations stay in the CLI's own history and are not removed when an Agent is deleted, because the protocol has no way to do it; `/compact`, `/export` and `/resume` are not available; tasks start from a selection of the regular conversation instead of a copy of the session. Antigravity's model names include the thinking level, so there is none to choose. A command you add has one model, "Default model", and takes no images.
-- When a session can no longer be found (its file was deleted, or the CLI lost it), the next message now starts a new session with the saved conversation, and the conversation shows a line saying so. Before, the Agent stopped until you confirmed starting over. This applies to Pi, Claude Code and Codex as well; the red "session lost" notice and its confirmation are gone.
-- A turn records which runtime it was meant for from the moment it is sent, so a turn that fails before starting names the right one; the overview's problem list and task turns name it too.
-- A process that exits because you stopped a turn is no longer recorded as an unexpected exit.
-- The message box does not accept images for a model that takes none.
-- API: `AgentRuntime` is now a plain string (`grok`, `antigravity`, and `acp-<id>` for a command you added); `/acp-commands`; `Run.usageReported`; a `reason` on handoffs (`runtime_changed`, `session_lost`, `task_start`); `runtime` on problems and task messages; error code `runtime_in_use`.
-### Several console tabs no longer freeze the browser
-
-- A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.
-- All live updates of all tabs now travel over one connection, whatever the tabs show: the inbox, the overview, any number of Agents and tasks.
-- Nothing changes in what a tab shows. Where the browser has no shared workers, each tab uses one connection of its own.
-- API: `GET /events` carries any set of the existing event streams on one connection; the five separate stream endpoints stay.
-
-### Agents can run on Codex
-
-- A new runtime: the Codex CLI installed on your computer, with your own `codex login`. The platform neither reads nor stores the login. It appears in "Who runs it" as Codex, with the models your account can use (read from Codex itself, again every 10 minutes and when you choose "Check again").
-- It needs Codex 0.167.0 or later; an older one shows "Too old" with the command to update.
-- The Agent's conversations are kept by Codex in your own Codex history (`~/.codex`); deleting the Agent archives them there, it does not delete them.
-- Codex loads your own Codex settings (your MCP servers, your skills in `~/.codex`) together with your login. The Agent runs with its own home directory, so `gh`, `git` and other commands do not use your logins unless "Use local logins" is on.
-- It runs commands without asking first, like the other runtimes. Skills, plugin MCP tools, `/compact`, tasks and changing runtime in the middle of a conversation work. Not offered yet: the `ultra` thinking level, the fast service tier, `/export` and `/resume`.
-- When Codex says it is logged in but the login was revoked, the status still shows "logged in"; the first message then fails and says to run `codex login`.
-- Console: errors name the runtime that failed instead of always saying Claude Code; "session file missing" is now "session not found"; each local CLI has its own mark in the sidebar.
-- API: `AgentRuntime` gains `codex`, the provider is `codex-cli`; `minVersion` on runtime definitions; `version_unsupported` as a reason a runtime is unavailable.
-
-### Pick who runs an Agent, and change it at any message
-
-- Creating an Agent now starts with "Who runs it": the CLIs found on this computer come first, with their state (ready, not installed, not logged in), and the bundled Pi comes last with its model providers, those you can use now on top. A runtime that is not ready shows the command to install it or log in. Models are searchable, across all of Pi's providers too.
-- The same picker is on the Agent's config page and in the message box. The message box shows who runs the Agent now; choosing there saves at once and applies from the next message, also while the Agent is replying. The choice stays until you change it, and messages nobody types (from other Agents, wake-ups) use it too.
-- Changing the runtime no longer starts the conversation over. The new runtime gets the saved conversation with your next message: all of it when it is short, otherwise your first request, the most recent messages and a one-line summary of tool use per turn, up to a budget (16,000 tokens by default, `LOOP_NOW_CONTEXT_HANDOFF_TOKENS`). Reasoning, tool state and images are not carried. The conversation shows where it happened and how many messages went along; a change of model alone shows a small divider.
-- Changing the runtime and straight back, before a message reached the new one, simply continues the earlier session. `/new` still starts clean.
-- Pending sleeps are no longer cancelled by a change of runtime; the wake-up goes to the new one.
-- An Agent can read its own saved conversation with `loopctl conversation`.
-- API: `Run.selection` and `Run.contextHandoff`, a `context_handoff` timeline entry, `usable` and `?include=models` on `GET /model-providers`, `setup` on runtime definitions, `GET /conversation` in the Agent API. Changing the runtime during a reply no longer returns 409.
-- Downgrading: an older version runs on the new database but does not know a handoff that is still pending; it starts the conversation over on a change of runtime, as before.
 
 ### Fixes
 
