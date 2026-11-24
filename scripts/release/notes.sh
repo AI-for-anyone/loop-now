@@ -20,6 +20,12 @@ tag="$1"
 version="${tag#v}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# blank TEXT: true when TEXT has nothing but whitespace. Uses tr rather than ${TEXT//[[:space:]]/}: in bash 3.2 (macOS)
+# that substitution takes time roughly cubic in the length, minutes for a 16 KB section.
+blank() {
+	[ -z "$(printf '%s' "$1" | tr -d '[:space:]')" ]
+}
+
 # section FILE: this version's section of a changelog file, without its heading; empty when the file or section is missing.
 section() {
 	[ -f "$1" ] || return 0
@@ -36,11 +42,11 @@ section() {
 }
 
 notes="$(section "$root/CHANGELOG.md")"
-if [ -z "${notes//[[:space:]]/}" ] && [ "$(git -C "$root" cat-file -t "refs/tags/$tag" 2>/dev/null)" = tag ]; then
+if blank "$notes" && [ "$(git -C "$root" cat-file -t "refs/tags/$tag" 2>/dev/null)" = tag ]; then
 	notes="$(git -C "$root" for-each-ref "refs/tags/$tag" --format='%(contents:subject)%0a%0a%(contents:body)')"
 	[ "$(printf '%s' "$notes" | tr -d '[:space:]')" = "$tag" ] && notes=""
 fi
-if [ -z "${notes//[[:space:]]/}" ]; then
+if blank "$notes"; then
 	echo "The release notes are empty: add a \"## $tag\" section to CHANGELOG.md, or write an annotation with git tag -a $tag." >&2
 	exit 1
 fi
@@ -49,7 +55,7 @@ printf '%s\n' "$notes" | sed '/[^[:space:]]/,$!d'
 
 # The Chinese supplement, when this version has one.
 chinese="$(section "$root/CHANGELOG.zh-CN.md")"
-if [ -n "${chinese//[[:space:]]/}" ]; then
+if ! blank "$chinese"; then
 	printf '\n---\n\n## 中文\n\n'
 	printf '%s\n' "$chinese" | sed '/[^[:space:]]/,$!d'
 fi
