@@ -112,6 +112,9 @@ func TestTaskNodeRecordScopeAndHistory(t *testing.T) {
 	if e != nil || totals.Total != 0 || totals.Calls != 0 {
 		t.Fatal("empty usage", e)
 	}
+	if empty, e := (&runrecord.Service{Store: s}).TaskNodeTimeline(ctx, task, node, turn.ID, "", 100); e != nil || empty.Run.UsageReported {
+		t.Fatal("a turn without usage records reported no usage", e)
+	}
 	t.Log("actual TEST schema: scoped historical authority, equal-time paging, cleanup history, empty usage")
 	// Model-call entries must come from task usage rows, not normal run history.
 	_, e = s.Pool.Exec(ctx, `INSERT INTO usage_records(id,agent_id,task_id,task_turn_id,kind,provider,model,input,output,cache_read,cache_write) VALUES($1,$2,$3,$4,'assistant','fixture-provider','captured-model',7,11,0,0)`, uuid.New(), agent, task, turn.ID)
@@ -119,7 +122,7 @@ func TestTaskNodeRecordScopeAndHistory(t *testing.T) {
 		t.Fatal(e)
 	}
 	timeline, e := (&runrecord.Service{Store: s}).TaskNodeTimeline(ctx, task, node, turn.ID, "", 100)
-	if e != nil || timeline.Usage.Total != 18 || timeline.Usage.Calls != 1 {
+	if e != nil || timeline.Usage.Total != 18 || timeline.Usage.Calls != 1 || !timeline.Run.UsageReported {
 		t.Fatal("task usage summary", e)
 	}
 	found := false

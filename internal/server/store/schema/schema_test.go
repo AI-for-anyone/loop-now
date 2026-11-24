@@ -79,10 +79,10 @@ func TestBaselineShape(t *testing.T) {
 	if !slices.Equal(inEvents, eventsTables) {
 		t.Errorf("events.db tables = %v, want %v", inEvents, eventsTables)
 	}
-	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables), and
-	// migration 2 adds the 3 tables for local mode.
-	if len(ts) != 93 {
-		t.Errorf("%d tables in total, want 93", len(ts))
+	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables),
+	// migration 2 adds the 3 tables for local mode, and migration 13 the local ACP commands.
+	if len(ts) != 94 {
+		t.Errorf("%d tables in total, want 94", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
@@ -127,7 +127,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 12
+const latestVersion = 13
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.

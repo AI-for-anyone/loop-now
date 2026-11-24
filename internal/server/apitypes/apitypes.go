@@ -44,7 +44,10 @@ type Run struct {
 	EndedAt          *time.Time     `json:"endedAt"`
 	Tools            []ToolEvent    `json:"tools"`
 	Usage            UsageTotals    `json:"usage"`
-	Model            *ModelRef      `json:"model"`
+	// UsageReported says whether the runtime reported usage for this run (it has usage records); false means the zeros
+	// in Usage are unknown, not zero.
+	UsageReported bool      `json:"usageReported"`
+	Model         *ModelRef `json:"model"`
 	// Selection is who ran the turn (runtime, provider, model, thinking level), recorded when the reply began; null
 	// before that and for older records.
 	Selection *RunSelection `json:"selection"`
@@ -62,6 +65,8 @@ type RunSelection struct {
 
 // ContextHandoff mirrors the ContextHandoff schema.
 type ContextHandoff struct {
+	// Reason is runtime_changed, session_lost or task_start.
+	Reason           string `json:"reason"`
 	FromRuntime      string `json:"fromRuntime"`
 	ToRuntime        string `json:"toRuntime"`
 	IncludedMessages int    `json:"includedMessages"`
@@ -294,7 +299,7 @@ func FromRun(r store.Run) Run {
 		WakeSleepID:           r.WakeSleepID, ID: r.ID, Status: r.Status, Phase: strPtr(r.Phase), EndReason: strPtr(r.EndReason), ErrorCode: strPtr(r.ErrorCode),
 		ErrorMessage: strPtr(r.ErrorMessage), ConfigVersion: r.ConfigVersion, WhenBusy: strPtr(r.WhenBusy),
 		QueuedAt: r.QueuedAt, StartedAt: r.StartedAt, RunningAt: r.RunningAt, AbortRequestedAt: r.AbortRequestedAt, EndedAt: r.EndedAt,
-		Tools: make([]ToolEvent, 0, len(r.Tools)), Usage: FromUsageTotals(r.Usage),
+		Tools: make([]ToolEvent, 0, len(r.Tools)), Usage: FromUsageTotals(r.Usage), UsageReported: r.Usage.Calls > 0,
 	}
 	if r.Model != nil {
 		out.Model = &ModelRef{Provider: r.Model.Provider, ModelID: r.Model.Model}
@@ -314,7 +319,7 @@ func FromRun(r store.Run) Run {
 		out.Selection = &RunSelection{Runtime: sel.Runtime, Provider: sel.Provider, ModelID: sel.ModelID, ThinkingLevel: sel.ThinkingLevel}
 	}
 	if h := r.HandoffInfo(); h != nil {
-		out.ContextHandoff = &ContextHandoff{FromRuntime: h.FromRuntime, ToRuntime: h.ToRuntime, IncludedMessages: h.IncludedMessages,
+		out.ContextHandoff = &ContextHandoff{Reason: h.ReasonOrDefault(), FromRuntime: h.FromRuntime, ToRuntime: h.ToRuntime, IncludedMessages: h.IncludedMessages,
 			OmittedMessages: h.OmittedMessages, Images: h.Images, Bytes: h.Bytes, BudgetBytes: h.BudgetBytes}
 	}
 	if r.Status != "starting" {

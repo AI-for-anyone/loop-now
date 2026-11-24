@@ -72,7 +72,7 @@ func usageTotals() map[string]any {
 func run() map[string]any {
 	return map[string]any{"id": runUUID, "status": "failed", "phase": nil, "endReason": nil,
 		"errorCode": "pi_error", "errorMessage": "model returned an error", "configVersion": 1, "whenBusy": nil, "queuedAt": now, "startedAt": now,
-		"runningAt": now, "abortRequestedAt": nil, "endedAt": now, "tools": []any{}, "usage": usageTotals(), "model": modelRef, "selection": nil}
+		"runningAt": now, "abortRequestedAt": nil, "endedAt": now, "tools": []any{}, "usage": usageTotals(), "usageReported": true, "model": modelRef, "selection": nil}
 }
 
 func runTimeline() map[string]any {
@@ -94,7 +94,7 @@ func usagePage() map[string]any {
 
 func anomalyPage(next any) map[string]any {
 	item := map[string]any{"runId": runUUID, "kind": "run_failed", "at": now, "agentId": agentUUID, "agentName": "dev", "scope": "project", "projectId": projectUUID,
-		"errorCode": "pi_error", "errorMessage": "model returned an error", "endReason": nil, "compaction": nil}
+		"errorCode": "pi_error", "errorMessage": "model returned an error", "endReason": nil, "compaction": nil, "runtime": "pi"}
 	return map[string]any{"items": []any{item}, "total": 2, "nextCursor": next}
 }
 

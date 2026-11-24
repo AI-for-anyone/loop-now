@@ -10,20 +10,20 @@ import (
 	"loop-now/internal/server/modelcatalog"
 )
 
-// Defaults for reading Codex's model list again when the lists are read (see codexModelReader).
+// Defaults for reading a local CLI's model list again when the lists are read (see localModelReader).
 const (
-	codexModelsMaxAge   = time.Minute
-	codexModelsStaleAge = 10 * time.Second
+	localModelsMaxAge   = time.Minute
+	localModelsStaleAge = 10 * time.Second
 )
 
-// codexListsProvider reports whether provider is one whose models the local Codex lists.
-func codexListsProvider(provider string) bool {
-	rt, ok := agentruntime.ByID(agentruntime.Codex)
+// runtimeListsProvider reports whether provider is one whose models the runtime's local CLI lists.
+func runtimeListsProvider(runtime, provider string) bool {
+	rt, ok := agentruntime.ByID(runtime)
 	return ok && slices.Contains(rt.Providers, provider)
 }
 
-// codexModelRefresher reads Codex's model list once at startup, then every interval until ctx ends.
-func (a *App) codexModelRefresher(ctx context.Context, r *codexModelReader, every time.Duration) {
+// localModelRefresher reads a local CLI's model list once at startup, then every interval until ctx ends.
+func (a *App) localModelRefresher(ctx context.Context, r *localModelReader, every time.Duration) {
 	r.refresh(ctx)
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -56,11 +56,32 @@ func (a *App) readCodexModels(ctx context.Context, models *modelcatalog.Registry
 	return list.Cached
 }
 
-// codexModelReader decides when Codex's model list is read again. Besides the reads at startup and on the timer, a read
+// acpProviders build the catalog of each ACP runtime from the models its CLI lists.
+var acpProviders = map[string]func([]modelcatalog.LocalModel) modelcatalog.Provider{
+	agentruntime.Grok:        modelcatalog.GrokProvider,
+	agentruntime.Antigravity: modelcatalog.AntigravityProvider,
+}
+
+// readACPModels reads the models the local CLI of an ACP runtime lists once and puts them in the catalog; on failure
+// (not installed, not logged in) the catalog keeps the list it had. These CLIs do not say whether the list is out of
+// date.
+func (a *App) readACPModels(ctx context.Context, models *modelcatalog.Registry, runtime string) bool {
+	c, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	list, err := a.Executor.ACPModels(c, runtime)
+	if err != nil {
+		a.Log.Debug("could not read the models of a local CLI", "runtime", runtime, "err", err)
+		return false
+	}
+	models.SetLocalProviders(runtime, []modelcatalog.Provider{acpProviders[runtime](list)})
+	return false
+}
+
+// localModelReader decides when a local CLI's model list (Codex's, Grok's, Antigravity's) is read again. Besides the reads at startup and on the timer, a read
 // of the model lists (the console opening a model picker) starts one in the background when the list is older than
 // maxAge, or than staleAge when the last read said it may be out of date; that read of the lists gets the list as it
 // is, the next one the new list. Only one read of Codex's list runs at a time.
-type codexModelReader struct {
+type localModelReader struct {
 	maxAge, staleAge time.Duration
 	now              func() time.Time
 	// read reads the list into the catalog and reports whether it may be out of date.
@@ -76,7 +97,7 @@ type codexModelReader struct {
 
 // refresh reads the list now and waits for it (startup, the timer, GET /runtimes?refresh=true); a read already running
 // finishes first.
-func (r *codexModelReader) refresh(ctx context.Context) {
+func (r *localModelReader) refresh(ctx context.Context) {
 	r.mu.Lock()
 	r.running++
 	r.mu.Unlock()
@@ -91,7 +112,7 @@ func (r *codexModelReader) refresh(ctx context.Context) {
 
 // touch is called when the model lists are read: it starts a background read (under ctx) when one is due and none is
 // running, and returns at once.
-func (r *codexModelReader) touch(ctx context.Context) {
+func (r *localModelReader) touch(ctx context.Context) {
 	r.mu.Lock()
 	limit := r.maxAge
 	if r.stale {
@@ -114,4 +135,4 @@ func (r *codexModelReader) touch(ctx context.Context) {
 }
 
 // wait waits for the background reads (tests).
-func (r *codexModelReader) wait() { r.wg.Wait() }
+func (r *localModelReader) wait() { r.wg.Wait() }

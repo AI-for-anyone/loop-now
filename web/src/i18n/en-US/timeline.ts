@@ -6,8 +6,10 @@ const count = (n: number, one: string, other: string) => `${n} ${plural('en-US',
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `Run log · ${duration} · ${tokens} tokens`,
+  // A turn whose runtime reported no usage (Run.usageReported false): its zeros mean "not known".
+  toggleNoUsage: (duration: string) => `Run log · ${duration} · no usage data`,
   toggleRunning: (elapsed: string) => `Run log · ${elapsed} so far`,
-  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, running: (elapsed: string) => `${elapsed} so far` },
+  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, noUsage: 'no usage data', running: (elapsed: string) => `${elapsed} so far` },
   title: 'Run log',
   total: (duration: string) => `Total ${duration}`,
   loading: 'Loading the run log…',
@@ -32,7 +34,12 @@ export const timeline = {
     process_started: (runtime: string) => `${runtime} start`,
     process_stopped: (runtime: string) => `${runtime} process stopped`,
     process_exited: (runtime: string) => `${runtime} process exited unexpectedly`,
-    context_handoff: 'Conversation handed over',
+    // A handover, by why it happened (ContextHandoff.reason).
+    context_handoff: {
+      runtime_changed: 'Conversation handed over',
+      session_lost: 'Session not found; restarted with the conversation',
+      task_start: 'Started with a selection of the regular conversation',
+    },
     running: 'Started replying',
     tool: (name: string) => `Tool ${name}`,
     model_call: {
@@ -126,6 +133,7 @@ export const timeline = {
     title: 'Token usage',
     field: 'usage',
     calls: (n: number) => count(n, 'model call', 'model calls'),
+    unreported: "The runtime didn't report token usage for this turn.",
   },
   result: {
     completed: 'Completed',

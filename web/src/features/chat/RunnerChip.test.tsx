@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, type HttpHandler } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, errorBody, makeAgent } from '@/test/api'
+import { apiUrl, context, errorBody, makeAgent } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { server } from '@/test/server'
 import { claudeCodeProvider, providers } from '@/test/config'
@@ -15,17 +15,19 @@ const model = (id: string, name: string, thinking = levels): Schemas['Model'] =>
 const models: Record<string, Schemas['Model'][]> = {
   'claude-code': [model('haiku', 'Claude Haiku (latest)', ['low', 'medium', 'high', 'xhigh', 'max']), model('opus', 'Claude Opus (latest)', ['low', 'medium', 'high', 'xhigh', 'max'])],
   anthropic: [model('claude-sonnet-5-5', 'Claude Sonnet 5.5'), model('claude-haiku-5-5', 'Claude Haiku 5.5')],
-  openai: [model('gpt-x', 'GPT X')],
   'openai-codex': [model('gpt-a', 'GPT A')],
+  // A model with one level only (off): nothing to choose, so the chip names no level.
+  openai: [model('gpt-x', 'GPT X'), { ...model('gpt-plain', 'GPT Plain', ['off']), reasoning: false, defaultThinkingLevel: 'off' }],
 }
 
 // The chat page of an Agent, with the catalog and a record of every change saved from the chip.
-async function setup(agent: Schemas['Agent'], patch?: (body: Schemas['AgentUpdate']) => Response) {
+async function setup(agent: Schemas['Agent'], patch?: (body: Schemas['AgentUpdate']) => Response, extra: HttpHandler[] = []) {
   const bodies: Schemas['AgentUpdate'][] = []
   let current = agent
   const view = await renderChat({
     agent,
     handlers: [
+      ...extra,
       http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, codexProvider, claudeCodeProvider] })),
       http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) => HttpResponse.json({ providerId: String(params.providerId), models: models[String(params.providerId)] ?? [] })),
       http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
@@ -54,6 +56,27 @@ describe('who runs it, on the message box', () => {
     await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi', thinkingLevel: 'high' }))
     await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: anthropic · claude-sonnet-5-5 · High. Open to change'))
     expect(chip()).toHaveAttribute('title', 'Run by Pi (built in) · provider anthropic · model Claude Sonnet 5.5 (claude-sonnet-5-5) · thinking High')
+  })
+
+  it('the message box takes no images for a model that takes none, and takes them for one that does', async () => {
+    const seeing = { ...model('claude-sonnet-5-5', 'Claude Sonnet 5.5'), input: ['text', 'image'] }
+    const withImages = { ...context, limits: { ...context.limits, maxMessageImages: 4, maxMessageImageBytes: 5 * 1024 * 1024 } }
+    const extra = [
+      http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json({ providerId: 'anthropic', models: [seeing, model('claude-haiku-5-5', 'Claude Haiku 5.5')] })),
+      http.get(apiUrl('/context'), () => HttpResponse.json(withImages)),
+    ]
+    const { unmount } = await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' }, runtime: 'pi', thinkingLevel: null }), undefined, extra)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add image' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Add image' })).toHaveAttribute('title', "This model doesn't take images")
+    unmount()
+    await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi', thinkingLevel: null }), undefined, extra)
+    await waitFor(() => expect(chip()).toHaveAccessibleName(/claude-sonnet-5-5/))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add image' })).toBeEnabled())
+  })
+
+  it('a model with one level only (off) has no level to name', async () => {
+    await setup(makeAgent({ model: { provider: 'openai', modelId: 'gpt-plain' }, runtime: 'pi', thinkingLevel: null }))
+    await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: openai · gpt-plain. Open to change'))
   })
 
   it('choosing a model in the popover saves at once, with the level the new model has, and says it applies from the next message', async () => {

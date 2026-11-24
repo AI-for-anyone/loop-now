@@ -253,7 +253,7 @@ describe('Agent list', () => {
     expect(await screen.findByRole('list', { name: 'Agents' })).toBeInTheDocument()
   })
 
-  it('shows Replying and Session lost; after a refresh the Replying label goes away (idle shows no label)', async () => {
+  it('shows Replying; after a refresh the label goes away (idle shows no label), and a lost session is no state of its own any more', async () => {
     const a = makeAgent({ name: 'A', busy: true })
     const b = makeAgent({ name: 'B' })
     let busy = true
@@ -268,7 +268,8 @@ describe('Agent list', () => {
     const itemA = await within(list).findByRole('link', { name: /^A/ })
     const itemB = within(list).getByRole('link', { name: /^B/ })
     expect(within(itemA).getByText('Replying')).toBeInTheDocument()
-    expect(within(itemB).getByText('Session lost')).toBeInTheDocument()
+    // The server carries a lost session into a new one, so an older list row that still says missing shows nothing.
+    expect(itemB).toHaveTextContent(/^B$/)
     busy = false
     focusManager.setFocused(false)
     focusManager.setFocused(true)
@@ -414,8 +415,9 @@ describe('global settings page', () => {
     // (in the test title) means the parts of the page body outside the folder.
     expect(within(page).getByRole('region', { name: 'Global folder' })).toBeInTheDocument()
     const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    // The runtime status “Check again” button only reads again; it does not modify the server.
-    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again'])
+    // The runtime status “Check again” button only reads again; it does not modify the server. “Add command” only opens the dialog
+    // for a local ACP command (the runtimes section's own editing, not the server information).
+    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again', 'Add command'])
     expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
   })
   it('the server section shows the version, taken from the Loop-Now-Version header of the server response', async () => {

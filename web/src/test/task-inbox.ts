@@ -12,5 +12,5 @@ export function taskInboxRecord(overrides: Partial<Schemas['TaskNodeInboxRecord'
   return { taskId, nodeRunId: nodeId, agentId: node.agentId, runtimeId: node.runtimeId, message: receipt.message, runLinks: [], notExecuted: null, ...overrides }
 }
 export function taskRunTimeline(overrides: Partial<Schemas['TaskNodeRunTimeline']> = {}): Schemas['TaskNodeRunTimeline'] {
-  return { taskId, nodeRunId: nodeId, agentId: node.agentId, runtimeId: node.runtimeId, run: { id: runId, origin: 'inbox_reminder', executionMode: 'task_conversation', status: 'completed', queuedAt: '2026-10-18T00:00:00Z', startedAt: '2026-10-18T00:00:01Z', endedAt: '2026-10-18T00:00:03Z', errorCode: null, errorMessage: null }, entries: [], usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, total: 3, calls: 1 }, nextCursor: null, ...overrides }
+  return { taskId, nodeRunId: nodeId, agentId: node.agentId, runtimeId: node.runtimeId, run: { id: runId, origin: 'inbox_reminder', executionMode: 'task_conversation', status: 'completed', queuedAt: '2026-10-18T00:00:00Z', startedAt: '2026-10-18T00:00:01Z', endedAt: '2026-10-18T00:00:03Z', errorCode: null, errorMessage: null, usageReported: true }, entries: [], usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, total: 3, calls: 1 }, nextCursor: null, ...overrides }
 }

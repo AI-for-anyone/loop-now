@@ -6,6 +6,11 @@ import { t } from '@/i18n'
 export type AgentRuntime = Schemas['AgentRuntime']
 export type RuntimeDefinition = Schemas['RuntimeDefinition']
 
+// The runtimes that come with the server. Any other id is a runtime a person added (a local ACP command, contract AgentRuntime),
+// known only by what GET /runtime-definitions says about it. scripts/check-runtime-ids.mjs reads the ids from this list.
+export const BUILT_IN_RUNTIMES = ['pi', 'claude-code', 'codex', 'grok', 'antigravity'] as const
+export type BuiltInRuntime = (typeof BUILT_IN_RUNTIMES)[number]
+
 // The console's one place that knows runtimes by id. Everything else asks this lookup for a runtime's name or capabilities (GET
 // /runtime-definitions) instead of comparing runtime ids, so adding a runtime adds no branches to the console;
 // scripts/check-runtime-ids.mjs enforces it.
@@ -97,12 +102,15 @@ export function railOrder(definitions: readonly RuntimeDefinition[], readiness: 
 }
 
 // The glyph inside a runtime's mark (components/runner-picker/RuntimeMark.tsx), as strokes on its 32×32 grid: a terminal prompt for Claude
-// Code, a pair of braces for Codex, π for Pi. The mark's shape and the glyph's color follow the runtime's capabilities; a runtime without a glyph here is marked with
-// its initial.
-const glyphs: Partial<Record<AgentRuntime, readonly string[]>> = {
+// Code, a pair of braces for Codex, a lowercase g for Grok, rising chevrons for Antigravity, π for Pi. The mark's shape and the glyph's
+// color follow the runtime's capabilities; every built-in runtime has a glyph, and any other (one a person added) is marked with its
+// initial.
+const glyphs: Record<BuiltInRuntime, readonly string[]> = {
   'claude-code': ['M9.5 14.5l4.2 3.6-4.2 3.6', 'M16.4 22.4h6.4'],
+  grok: ['M19.4 16.5a3.4 3.4 0 1 1-6.8 0a3.4 3.4 0 1 1 6.8 0', 'M19.4 13.6v7c0 2-1.3 3-3.3 3-1.3 0-2.3-.4-3-1.2'],
+  antigravity: ['M11 21.6l5-4.4 5 4.4', 'M11 16.8l5-4.4 5 4.4'],
   codex: ['M12.8 12.6c-1.5 0-2.2.7-2.2 2v1.5c0 .9-.5 1.5-1.5 1.6 1 .1 1.5.7 1.5 1.6v1.5c0 1.3.7 2 2.2 2', 'M17.4 12.6c1.5 0 2.2.7 2.2 2v1.5c0 .9.5 1.5 1.5 1.6-1 .1-1.5.7-1.5 1.6v1.5c0 1.3-.7 2-2.2 2'],
   pi: ['M9.6 12.2c1.3-.9 2.6-1.2 4.2-1.2h8.8', 'M13.6 11.4c-.2 4-.9 7.4-2.4 10.4', 'M19.4 11.4c-.4 3.4-.3 6.3.4 8.2.5 1.3 1.6 1.9 2.8 1.3'],
 }
 
-export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => glyphs[id] ?? null
+export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => (Object.hasOwn(glyphs, id) ? glyphs[id as BuiltInRuntime] : null)

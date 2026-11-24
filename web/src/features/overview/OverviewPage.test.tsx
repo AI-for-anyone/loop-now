@@ -98,19 +98,18 @@ describe('Run status', () => {
     expect(row).toHaveTextContent('config v3')
   })
 
-  it('queue counts and lost sessions count in the summary', async () => {
+  it('queue counts add up in the summary; a lost session is no state of its own any more (the server carries it into a new one)', async () => {
     const { snapshot } = await renderOverview()
     const busy = makeAgentOverview({ name: 'A' })
     busy.status = makeStatus(busy.agentId, { busy: true, currentRun: makeRun({ status: 'running', endedAt: null }), queued: { interrupt: 1, normal: 2 } })
-    const missing = makeAgentOverview({ name: 'B' })
-    missing.status = makeStatus(missing.agentId, { session: { state: 'missing', epoch: 1 } })
-    await snapshot([busy, missing])
+    const idle = makeAgentOverview({ name: 'B' })
+    await snapshot([busy, idle])
     const tiles = screen.getByRole('list', { name: 'Run status summary' })
-    expect(within(tiles).getByText('Session lost').closest('li')).toHaveTextContent(/Session lost\s*1\s*B/)
+    expect(within(tiles).getAllByRole('listitem').map((tile) => tile.firstElementChild?.textContent)).toEqual(['Replying', 'Idle', 'Queued'])
+    expect(within(tiles).getByText('Idle').closest('li')).toHaveTextContent(/Idle\s*1\s*B/)
     expect(within(tiles).getByText('Queued').closest('li')).toHaveTextContent('31 interrupt · 2 normal')
     const rowA = within(screen.getByRole('table')).getByText('A').closest('tr')!
     expect(rowA).toHaveTextContent('3 messages queued: 1 interrupt, 2 normal')
-    expect(within(screen.getByRole('table')).getByText('B').closest('tr')).toHaveTextContent('Session lost')
   })
 
   it('after the Pi process exits on idle it shows not running, with the time and reason of the exit', async () => {
@@ -273,6 +272,19 @@ describe('Issues and failures', () => {
     expect(within(list).queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
+  it("a runtime failure names the turn's runtime; with none known it says “the runtime”", async () => {
+    const { snapshot } = await renderOverview({
+      anomalies: anomalyPage([
+        makeAnomaly({ agentName: 'A', runtime: 'claude-code', errorCode: 'runtime_unavailable', errorMessage: 'claude: command not found' }),
+        makeAnomaly({ agentName: 'B', runtime: null, errorCode: 'runtime_start_failed', errorMessage: 'exit status 1' }),
+      ]),
+    })
+    await snapshot([makeAgentOverview()])
+    const [a, b] = await within(section('Issues and failures')).findAllByRole('link')
+    await waitFor(() => expect(a).toHaveTextContent("Claude Code can't be used on this computer: it wasn't found, its version couldn't be read, or it's too old: claude: command not found"))
+    expect(b).toHaveTextContent("The runtime couldn't start: exit status 1")
+  })
+
   it('a failed CLI install shows as failed, with the CLI name in the reason', async () => {
     const { snapshot } = await renderOverview({
       anomalies: anomalyPage([makeAnomaly({ errorCode: 'cli_install_failed', errorMessage: 'gh 2.100.0: the downloaded file does not match the SHA-256 in the template' })]),
@@ -283,14 +295,14 @@ describe('Issues and failures', () => {
     expect(item).toHaveTextContent('CLI install failed: gh 2.100.0')
   })
 
-  it('a missing session file goes to the chat page without an anchor; other items jump to that reply', async () => {
+  it('every item jumps to its reply, a missing session as well (nothing is left to confirm there)', async () => {
     const missing = makeAnomaly({ errorCode: 'session_missing', errorMessage: null })
     const other = makeAnomaly()
     const { snapshot } = await renderOverview({ anomalies: anomalyPage([missing, other]) })
     await snapshot([makeAgentOverview()])
     const [a, b] = await within(section('Issues and failures')).findAllByRole('link')
-    expect(a).toHaveAttribute('href', `/agents/${missing.agentId}/chat`)
-    expect(a).toHaveTextContent('Fix it')
+    expect(a).toHaveAttribute('href', `/agents/${missing.agentId}/chat#run-${missing.runId}`)
+    expect(a).toHaveTextContent('View reply')
     expect(b).toHaveAttribute('href', `/agents/${other.agentId}/chat#run-${other.runId}`)
     expect(b).toHaveTextContent('View reply')
   })
@@ -366,12 +378,12 @@ describe('Overview on a sheet', () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
     const tiles = within(screen.getByRole('list', { name: 'Run status summary' })).getAllByRole('listitem')
-    expect(tiles).toHaveLength(4)
+    expect(tiles).toHaveLength(3)
     for (const tile of tiles) {
       expect(tile).toHaveClass('border-2', 'border-ink', 'rounded-card', 'shadow-[4px_4px_0_var(--ink)]')
       expect(tile).not.toHaveClass('riso-tilt')
     }
-    expect(tiles.map((tile) => tile.className.match(/bg-tint-[a-z0-9-]+/)?.[0])).toEqual(['bg-tint-pink-2', 'bg-tint-green', 'bg-tint-red', 'bg-tint-blue'])
+    expect(tiles.map((tile) => tile.className.match(/bg-tint-[a-z0-9-]+/)?.[0])).toEqual(['bg-tint-pink-2', 'bg-tint-green', 'bg-tint-blue'])
     expect(within(tiles[1]).getByText('1')).toHaveClass('font-display-latin', 'text-[46px]')
   })
 

@@ -1,3 +1,4 @@
+import { choosableLevels } from '@/lib/thinking'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { useQueryClient } from '@tanstack/react-query'
@@ -42,7 +43,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
   const models = useModels(ref.provider)
   const model = models.data?.models.find((candidate) => candidate.id === ref.modelId)
   const shownLevel = level ?? model?.defaultThinkingLevel ?? null
-  const levelText = shownLevel && (!model || (model.thinkingLevels?.length ?? 0) > 0) ? (t.config.basic.thinking.levels[shownLevel] ?? shownLevel) : null
+  const levelText = shownLevel && (!model || choosableLevels(model).length > 0) ? (t.config.basic.thinking.levels[shownLevel] ?? shownLevel) : null
   const bundled = runtime?.capabilities.bundled ?? false
   const lead = bundled || !runtime ? ref.provider : runtime.name
   const parts = [lead, ref.modelId, levelText].filter((part): part is string => Boolean(part))

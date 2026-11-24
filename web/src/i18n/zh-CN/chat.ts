@@ -85,6 +85,13 @@ export const chat = {
     // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
     renewed: (runtime: string) => `${runtime} · 新会话`,
     renewedLabel: (runtime: string, parts: string) => `对话交给了 ${runtime} 的新会话：${parts}`,
+    // The runtime's session could not be found, so a new one started with the saved conversation instead of stopping (reason
+    // session_lost).
+    lost: '原来的会话找不到了，已带着之前的对话重新开始',
+    lostLabel: (runtime: string, parts: string) => `${runtime} 原来的会话找不到了，已带着之前的对话开了新会话：${parts}`,
+    // A task instance on a runtime that can't fork the Agent's session starts with a selection of the regular conversation (task_start).
+    task: '任务开始时带上了普通对话的摘选',
+    taskLabel: (runtime: string, parts: string) => `任务在 ${runtime} 上开始，带上了普通对话的摘选：${parts}`,
     whole: (count: number) => `之前的 ${count} 条全部带过去`,
     included: (count: number) => `带过去 ${count} 条`,
     omitted: (count: number) => `省略 ${count} 条`,
@@ -159,14 +166,6 @@ export const chat = {
     connecting: '正在连接…',
     open: '实时连接正常',
     reconnecting: '连接中断，正在重连…',
-  },
-  sessionMissing: {
-    title: '会话找不到了',
-    body: '这个 Agent 的会话找不到了（会话文件，或 CLI 保存的对话被移走或删除），之后的消息都会失败。确认重开会话后，Agent 从新会话开始，不再记得之前的对话内容；页面上的历史记录仍然保留。',
-    action: '确认重开会话',
-    busy: '还有执行尚未结束，请等它结束后再重开会话。',
-    confirmTitle: '确认重开会话？',
-    confirmBody: '重开后 Agent 不再记得之前的对话内容，这个操作不能撤销。',
   },
   copyCode: '复制代码',
   mermaid: { diagram: 'Mermaid 图表', streaming: '图表尚在生成，等待代码块完成', rendering: '正在绘制图表…', failed: '图表未能绘制，已保留源码' },

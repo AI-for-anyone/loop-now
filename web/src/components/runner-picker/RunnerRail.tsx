@@ -3,7 +3,7 @@ import { t } from '@/i18n'
 import type { AgentRuntime } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { RuntimeMark } from './RuntimeMark'
-import { stateText, type RailEntry } from './rail-entry'
+import { problemStamp, stateText, type RailEntry } from './rail-entry'
 
 interface RunnerRailProps {
   entries: RailEntry[]
@@ -24,7 +24,7 @@ export function RunnerState({ entry, compact = false }: { entry: RailEntry; comp
   const { readiness, definition } = entry
   if (readiness.state === 'problem') {
     const stamp = readiness.problem === 'logged_out' ? 'text-pink-text [--tilt-shadow:inset_0_0_0_2px_var(--pink-text)]' : 'text-red-text [--tilt-shadow:inset_0_0_0_2px_var(--red-text)]'
-    return <span className={cn('riso-tilt inline-flex min-h-5 w-fit items-center rounded-[4px] px-1.5 text-[11.5px] font-black tracking-[0.06em] whitespace-nowrap [--tilt-bg:transparent] [--tilt:-3deg]', stamp)}>{copy.problem[readiness.problem]}</span>
+    return <span className={cn('riso-tilt inline-flex min-h-5 w-fit items-center rounded-[4px] px-1.5 text-[11.5px] font-black tracking-[0.06em] whitespace-nowrap [--tilt-bg:transparent] [--tilt:-3deg]', stamp)}>{problemStamp(definition, readiness.problem)}</span>
   }
   if (readiness.state !== 'ready') {
     return <span className="text-[12px] font-bold text-ink-500">{readiness.state === 'checking' ? copy.checking : copy.unknown}</span>

@@ -109,13 +109,13 @@ describe('Overview state', () => {
     expect(state.agents.map((agent) => agent.name)).toEqual(['A2'])
   })
 
-  it('summary: a lost session does not count as idle, queue counts add up', () => {
-    const missing = makeAgentOverview()
-    missing.status = makeStatus(missing.agentId, { session: { state: 'missing', epoch: 1 }, queued: { interrupt: 0, normal: 1 } })
+  it('summary: replying and idle split the Agents, queue counts add up', () => {
+    const waiting = makeAgentOverview()
+    waiting.status = makeStatus(waiting.agentId, { queued: { interrupt: 0, normal: 1 } })
     const busy = makeAgentOverview()
     busy.status = makeStatus(busy.agentId, { busy: true, queued: { interrupt: 2, normal: 0 } })
-    const summary = summarize([missing, busy, a])
-    expect([summary.busy.length, summary.idle.length, summary.sessionMissing.length]).toEqual([1, 1, 1])
+    const summary = summarize([waiting, busy, a])
+    expect([summary.busy.length, summary.idle.length]).toEqual([1, 2])
     expect(summary.queued).toEqual({ interrupt: 2, normal: 1 })
   })
 })

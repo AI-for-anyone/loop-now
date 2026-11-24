@@ -69,7 +69,7 @@ function Timeline({ timeline }: { timeline: Schemas['RunTimeline'] }) {
         {duration !== null && <span className="ml-auto font-black">{t.timeline.total(t.timeline.duration(duration))}</span>}
       </div>
       <TimelineSteps steps={steps} />
-      <UsageBlock usage={usage} />
+      <UsageBlock usage={usage} reported={run.usageReported} />
       <Result run={run} />
     </>
   )
@@ -93,9 +93,10 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
   const duration = runDurationMs(run)
   const done = ended && duration !== null
   const elapsed = t.overview.elapsed(now - Date.parse(run.queuedAt))
-  const label = done ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total)) : t.timeline.toggleRunning(elapsed)
-  // The parts of the receipt after the name: once ended, the duration and token count; while in progress, only the elapsed time.
-  const parts = done ? [t.timeline.duration(duration), t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total))] : [t.timeline.toggleParts.running(elapsed)]
+  const label = !done ? t.timeline.toggleRunning(elapsed) : run.usageReported ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total)) : t.timeline.toggleNoUsage(t.timeline.duration(duration))
+  // The parts of the receipt after the name: once ended, the duration and token count (or that the runtime reported none); while in
+  // progress, only the elapsed time.
+  const parts = done ? [t.timeline.duration(duration), run.usageReported ? t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total)) : t.timeline.toggleParts.noUsage] : [t.timeline.toggleParts.running(elapsed)]
 
   return (
     <div className="flex flex-col gap-2">

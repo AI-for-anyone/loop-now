@@ -5,9 +5,11 @@ type S = components['schemas']
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `运行记录 · ${duration} · ${tokens} token`,
+  // A turn whose runtime reported no usage (Run.usageReported false): its zeros mean "not known".
+  toggleNoUsage: (duration: string) => `运行记录 · ${duration} · 没有用量数据`,
   toggleRunning: (elapsed: string) => `运行记录 · 已用 ${elapsed}`,
   // The toggle bar is drawn as a segmented ticket: these are the segments after the name.
-  toggleParts: { tokens: (tokens: string) => `${tokens} token`, running: (elapsed: string) => `已用 ${elapsed}` },
+  toggleParts: { tokens: (tokens: string) => `${tokens} token`, noUsage: '没有用量数据', running: (elapsed: string) => `已用 ${elapsed}` },
   title: '运行记录',
   total: (duration: string) => `合计 ${duration}`,
   loading: '正在加载运行记录…',
@@ -33,7 +35,12 @@ export const timeline = {
     process_started: (runtime: string) => `${runtime} 启动`,
     process_stopped: (runtime: string) => `${runtime} 进程停止`,
     process_exited: (runtime: string) => `${runtime} 进程意外退出`,
-    context_handoff: '对话已交接',
+    // A handover, by why it happened (ContextHandoff.reason).
+    context_handoff: {
+      runtime_changed: '对话已交接',
+      session_lost: '会话找不到了，已带着对话重开',
+      task_start: '开始时带上了普通对话的摘选',
+    },
     running: '开始回复',
     tool: (name: string) => `工具 ${name}`,
     model_call: {
@@ -122,6 +129,7 @@ export const timeline = {
     title: 'token 用量',
     field: 'usage',
     calls: (count: number) => `模型调用 ${count} 次`,
+    unreported: '这一轮运行时没有报告 token 用量。',
   },
   result: {
     completed: '完成',

@@ -8,17 +8,20 @@ import { imageMimeTypes, imageProblem, type ImageDraft, type ImageLimits, type I
 // When a function is passed as children, the add button and the thumbnail strip are handed to it to place inside the composer
 // (addClassName adjusts the button size; the strip is null when there are no images); otherwise both go below.
 // uploads is the upload state of each image while sending, shown on the matching thumbnail.
-export function ImagePicker({ images, onChange, limits, disabled, uploads, addClassName, children }: { images: ImageDraft[]; onChange: (images: ImageDraft[]) => void; limits: ImageLimits; disabled?: boolean; uploads?: ImageUploads; addClassName?: string; children?: ReactNode | ((addButton: ReactNode, strip: ReactNode) => ReactNode) }) {
+// refused: why images can't be added at all (the model takes none); the plus is disabled and says it, and a pasted or dropped image gets
+// it as the error.
+export function ImagePicker({ images, onChange, limits, disabled, refused, uploads, addClassName, children }: { images: ImageDraft[]; onChange: (images: ImageDraft[]) => void; limits: ImageLimits; disabled?: boolean; refused?: string | null; uploads?: ImageUploads; addClassName?: string; children?: ReactNode | ((addButton: ReactNode, strip: ReactNode) => ReactNode) }) {
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState(''), [dragging, setDragging] = useState(false)
   const add = (files: File[]) => {
     if (disabled || !files.length) return
+    if (refused) return setError(refused)
     const problem = imageProblem(images, files, limits); setError(problem ?? '')
     if (!problem) onChange([...images, ...files.map(file => ({ id: crypto.randomUUID(), file }))])
   }
   const paste = (event: ClipboardEvent) => { const files = Array.from(event.clipboardData.files); if (files.length && !disabled) { event.preventDefault(); add(files) } }
-  const drag = (event: DragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); if (!disabled) setDragging(true) } }
-  const addButton = <Button type="button" variant="secondary" size="icon-sm" className={cn('bg-transparent text-ink-700 hover:bg-tint-blue', addClassName)} aria-label={t.images.add} title={t.images.add} disabled={disabled} onClick={() => input.current?.click()}><PlusIcon aria-hidden="true" className="size-5" /></Button>
+  const drag = (event: DragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); if (!disabled && !refused) setDragging(true) } }
+  const addButton = <Button type="button" variant="secondary" size="icon-sm" className={cn('bg-transparent text-ink-700 hover:bg-tint-blue', addClassName)} aria-label={t.images.add} title={refused ?? t.images.add} disabled={disabled || Boolean(refused)} onClick={() => input.current?.click()}><PlusIcon aria-hidden="true" className="size-5" /></Button>
   // The thumbnail strip scrolls horizontally inside the composer, so it doesn't widen the page even on narrow screens; the ×
   // sits on the thumbnail's corner and is always visible.
   const strip = images.length > 0 ? <div className="relative min-w-0">

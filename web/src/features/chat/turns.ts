@@ -100,7 +100,7 @@ export function handoffBefore(previous: Turn | undefined, turn: Turn): Schemas['
   const handoff = turn.run.contextHandoff
   if (!handoff) return null
   const earlier = previous?.run.contextHandoff
-  return earlier && earlier.fromRuntime === handoff.fromRuntime && earlier.toRuntime === handoff.toRuntime ? null : handoff
+  return earlier && earlier.reason === handoff.reason && earlier.fromRuntime === handoff.fromRuntime && earlier.toRuntime === handoff.toRuntime ? null : handoff
 }
 
 // A change of model on the same runtime between two neighbouring turns (Run.selection): from and to. Nothing when either turn has no

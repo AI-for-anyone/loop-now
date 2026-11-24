@@ -36,14 +36,20 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange, ori
   return (
     <div className={cn('flex min-w-0 flex-col gap-2', vertical ? 'flex-1 border-l-2 border-dashed border-ink/35 px-2.5 pt-3 pb-3' : 'px-3 pt-2.5 pb-3')}>
       <span id={labelId} className="px-1 text-[12.5px] leading-tight font-black">{copy.title}</span>
-      {disabled && hint && <p className="px-1 text-[12px] leading-snug font-bold text-ink-500">{hint}</p>}
+      {disabled ? (
+        // Nothing to choose: a quiet note on an empty ruler (its spine dashed), instead of marks that can't be pressed.
+        <div className={cn('relative flex-1', vertical ? 'min-h-24 pr-4' : '')}>
+          {vertical && <span aria-hidden="true" className="absolute top-1 right-0 bottom-3 w-0 border-r-2 border-dashed border-ink/25" />}
+          {hint && <p className="px-1 text-[12px] leading-snug font-bold text-ink-500">{hint}</p>}
+        </div>
+      ) : (
       <RadioGroupPrimitive.Root
         aria-labelledby={labelId}
         orientation={orientation}
         disabled={disabled}
         value={value === null ? DEFAULT : unavailable ? '' : value}
         onValueChange={(next) => onChange(next === DEFAULT ? null : (levels.find((level) => level === next) ?? null))}
-        className={cn('relative flex', vertical ? 'flex-col' : 'no-scrollbar -mx-3 overflow-x-auto px-3 pt-2 pb-1', disabled && 'opacity-40')}
+        className={cn('relative flex', vertical ? 'flex-col' : 'no-scrollbar -mx-3 overflow-x-auto px-3 pt-2 pb-1')}
       >
         {/* The ruler's spine: on the right edge of the column, or along the bottom of the row. */}
         <span aria-hidden="true" className={cn('absolute bg-ink/70', vertical ? 'top-[38px] right-0 bottom-3 w-0.5' : 'right-3 bottom-1 left-3 h-0.5')} />
@@ -77,6 +83,7 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange, ori
           </RadioGroupPrimitive.Item>
         ))}
       </RadioGroupPrimitive.Root>
+      )}
       {unavailable && <p className="px-1 text-[12px] leading-snug text-ink-500">{copy.unavailable(label(value))}</p>}
     </div>
   )

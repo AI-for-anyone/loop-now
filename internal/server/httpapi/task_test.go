@@ -338,6 +338,9 @@ func TestTaskFailedMessageProjection(t *testing.T) {
 				t.Fatal("missing corresponding reply")
 			}
 			for _, m := range page.Messages {
+				if m.Runtime != "pi" {
+					t.Fatalf("a task message names the runtime its instance runs on: %+v", m)
+				}
 				if m.Role == "assistant" {
 					if m.RunID != v.ID || m.NodeRunID != node.ID || m.ErrorCode == nil || *m.ErrorCode != code || m.ErrorMessage == nil || strings.Contains(*m.ErrorMessage, "do-not-project") || strings.Contains(*m.ErrorMessage, "/private/") {
 						t.Fatalf("unsafe or unattributed failure %+v", m)
