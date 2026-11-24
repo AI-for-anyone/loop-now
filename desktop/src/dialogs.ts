@@ -1,5 +1,5 @@
 import { dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { pickPathChannel, pickPathHandler } from './pick-path'
+import { appExecutable, pickPathChannel, pickPathHandler } from './pick-path'
 import type { PlatformId } from './platform'
 
 type Options = {
@@ -15,6 +15,7 @@ export function handlePathPicker(o: Options): void {
   const show = pickPathHandler<IpcMainInvokeEvent>({
     trusted: o.trusted,
     platform: o.platform,
+    resolveFile: (path) => appExecutable(path, o.platform),
     show: (options) => {
       const win = o.window()
       return win ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options)

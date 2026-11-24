@@ -2,6 +2,7 @@
 // profiles, the settings file, the tray menu, and the Windows branches (paths, git detection, PATH install, process checks, unread count).
 // The platform is injected as a parameter, so the same suite runs on any OS.
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -20,7 +21,7 @@ import { badgeStyle, cliBinary, cliInstallMode, serverBinary, trayIcon, windowCh
 import { choosePort, portFree, portOf } from './port'
 import { isOurServer, parseWindowsProcess, spawnPlan, taskkillArgs, windowsProcessQuery } from './process'
 import { findInPath, gitUsable } from './git'
-import { maxPathLength, pickPathHandler } from './pick-path'
+import { appExecutable, maxPathLength, pickPathHandler } from './pick-path'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
@@ -493,10 +494,68 @@ describe('Choosing a folder or file for the page', () => {
     const pick = pickPathHandler({ trusted: () => true, show: dialog.show, platform: 'darwin' })
     assert.equal(await pick({}, { kind: 'directory' }), '/Users/me/code/app')
     assert.equal(await pick({}, { kind: 'file' }), '/Users/me/code/app')
+    // On macOS the file dialog shows hidden files, so programs in ~/.local/bin or /opt/homebrew can be chosen without ⌘⇧.
     assert.deepEqual(
       dialog.shown.map((options) => options.properties),
-      [['openDirectory', 'createDirectory'], ['openFile']],
+      [['openDirectory', 'createDirectory'], ['openFile', 'showHiddenFiles']],
     )
+    const windows = fakeDialog(picked)
+    await pickPathHandler({ trusted: () => true, show: windows.show, platform: 'win32' })({}, { kind: 'file' })
+    assert.deepEqual(windows.shown[0]?.properties, ['openFile'])
+  })
+
+  test('A chosen file goes through resolveFile (the .app check); a chosen folder does not', async () => {
+    const resolved: string[] = []
+    const resolveFile = async (path: string) => (resolved.push(path), `${path}/Contents/MacOS/App`)
+    const pick = pickPathHandler({ trusted: () => true, show: fakeDialog({ canceled: false, filePaths: ['/Applications/App.app'] }).show, platform: 'darwin', resolveFile })
+    assert.equal(await pick({}, { kind: 'file' }), '/Applications/App.app/Contents/MacOS/App')
+    assert.equal(await pick({}, { kind: 'directory' }), '/Applications/App.app')
+    assert.deepEqual(resolved, ['/Applications/App.app'])
+  })
+
+  describe('A chosen .app bundle on macOS stands for the program inside it', () => {
+    // A bundle as macOS lays it out: Contents/Info.plist names the executable in Contents/MacOS.
+    const bundle = (name: string, plist?: string, executable?: string) => {
+      const app = join(dir, 'apps', `${name}.app`)
+      mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true })
+      if (plist !== undefined) writeFileSync(join(app, 'Contents', 'Info.plist'), plist)
+      if (executable) writeFileSync(join(app, 'Contents', 'MacOS', executable), '#!/bin/sh\n')
+      return app
+    }
+    const infoPlist = (executable: string) =>
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>CFBundleName</key>\n\t<string>Hermes</string>\n\t<key>CFBundleExecutable</key>\n\t<string>${executable}</string>\n</dict>\n</plist>\n`
+
+    test('A normal .app becomes Contents/MacOS/<CFBundleExecutable>', async () => {
+      const app = bundle('Hermes', infoPlist('hermes &amp; co'), 'hermes & co')
+      assert.equal(await appExecutable(app, 'darwin'), join(app, 'Contents', 'MacOS', 'hermes & co'))
+      assert.equal(await appExecutable(`${app}/`, 'darwin'), join(app, 'Contents', 'MacOS', 'hermes & co'))
+    })
+
+    test('A binary Info.plist is read too', { skip: process.platform !== 'darwin' && 'plutil is only on macOS' }, async () => {
+      const app = bundle('Binary', infoPlist('binary-app'), 'binary-app')
+      execFileSync('plutil', ['-convert', 'binary1', join(app, 'Contents', 'Info.plist')])
+      assert.equal(await appExecutable(app, 'darwin'), join(app, 'Contents', 'MacOS', 'binary-app'))
+    })
+
+    test('Without a usable Info.plist, the .app path is kept as is, without an error', async () => {
+      const cases = [
+        bundle('NoPlist'),
+        bundle('NoKey', '<plist version="1.0"><dict><key>CFBundleName</key><string>x</string></dict></plist>'),
+        bundle('Missing', infoPlist('not-there')),
+        bundle('Outside', infoPlist('../../../../bin/sh')),
+        bundle('Garbage', 'not a plist at all'),
+      ]
+      for (const app of cases) assert.equal(await appExecutable(app, 'darwin'), app, app)
+    })
+
+    test('An ordinary file, or any path on another system, is kept as is', async () => {
+      const file = join(dir, 'apps', 'hermes')
+      writeFileSync(file, '#!/bin/sh\n')
+      assert.equal(await appExecutable(file, 'darwin'), file)
+      const app = bundle('Elsewhere', infoPlist('elsewhere'), 'elsewhere')
+      assert.equal(await appExecutable(app, 'win32'), app)
+      assert.equal(await appExecutable(app, 'linux'), app)
+    })
   })
 
   test('Cancelling returns null', async () => {
