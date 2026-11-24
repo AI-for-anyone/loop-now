@@ -17,6 +17,9 @@ import (
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/modelauth"
+	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/modelcredential"
+	"loop-now/internal/server/store"
 )
 
 // ---- Context, health, catalog ----
@@ -54,8 +57,31 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 // listModelProviders lists the model catalog. With agentId, plugin providers are marked with the reason this Agent
 // cannot use them right now, so the model picker can warn in advance.
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	includeModels := false
+	switch query.Get("include") {
+	case "":
+	case "models":
+		includeModels = true
+	default:
+		s.fail(w, r, apperr.Invalid("include", "Must be models."))
+		return
+	}
+	given := 0
+	for _, name := range []string{"agentId", "projectId", "scope"} {
+		if query.Get(name) != "" {
+			given++
+		}
+	}
+	if given > 1 {
+		s.fail(w, r, apperr.Invalid("agentId", "Give at most one of agentId, projectId and scope."))
+		return
+	}
+	// access is what the named Agent, project or new platform Agent has for running providers; nil when the query
+	// names none, and usable is then null.
+	var access *store.ModelAccess
 	var agent *uuid.UUID
-	if raw := r.URL.Query().Get("agentId"); raw != "" {
+	if raw := query.Get("agentId"); raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil || id == uuid.Nil {
 			s.fail(w, r, apperr.Invalid("agentId", "Must be a valid non-zero UUID."))
@@ -66,6 +92,32 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		agent = &id
+		a, err := s.Store.AgentModelAccess(r.Context(), id)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		access = &a
+	}
+	if raw := query.Get("projectId"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil || id == uuid.Nil {
+			s.fail(w, r, apperr.Invalid("projectId", "Must be a valid non-zero UUID."))
+			return
+		}
+		a, err := s.Store.ProjectModelAccess(r.Context(), id)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		access = &a
+	}
+	if raw := query.Get("scope"); raw != "" {
+		if raw != "platform" {
+			s.fail(w, r, apperr.Invalid("scope", "Must be platform."))
+			return
+		}
+		access = &store.ModelAccess{} // a new platform Agent has no keys or logins of its own yet
 	}
 	models := s.Models.Snapshot()
 	names := map[string]json.RawMessage{}
@@ -111,9 +163,46 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		if access != nil {
+			usable := providerUsable(p, *access, v.UnavailableReason != nil)
+			v.Usable = &usable
+		}
+		if includeModels {
+			v.Models = modelsOf(p)
+		}
 		out.Providers = append(out.Providers, v)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// providerUsable reports whether runs can use the provider without entering an account, key or login first
+// (ModelProvider.usable): never while unavailable says it cannot be used; always for a runtime that uses its own local
+// login, and for a provider that needs nothing; otherwise when the platform keeps an account or key for it, including
+// a platform Agent's older single key that runs would read for this provider.
+func providerUsable(p modelcatalog.Provider, access store.ModelAccess, unavailable bool) bool {
+	switch {
+	case unavailable:
+		return false
+	case agentruntime.ForProvider(p.ID).Capabilities.Accounts == agentruntime.AccountsLocal, len(p.AuthMethods) == 0, access.Providers[p.ID]:
+		return true
+	case len(access.LegacyEnv) == 0:
+		return false
+	}
+	env := map[string]string{}
+	for _, name := range access.LegacyEnv {
+		env[name] = "set" // only the names decide whether the key applies to this provider
+	}
+	cred, err := modelcredential.LegacySingleKey(p.ID, env)
+	return err == nil && cred.Kind() != ""
+}
+
+// modelsOf lists a provider's models as the API shows them.
+func modelsOf(p modelcatalog.Provider) []apitypes.Model {
+	out := []apitypes.Model{}
+	for _, m := range p.Models {
+		out = append(out, apitypes.Model{ID: m.ID, Name: m.Name, Reasoning: m.Reasoning, ContextWindow: m.ContextWindow, MaxTokens: m.MaxTokens, Input: m.Input, ThinkingLevels: m.ThinkingLevels, DefaultThinkingLevel: m.DefaultThinkingLevel})
+	}
+	return out
 }
 
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
@@ -122,11 +211,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		writeError(w, apperr.NotFound("Model provider"))
 		return
 	}
-	out := apitypes.ModelList{ProviderID: p.ID, Models: []apitypes.Model{}}
-	for _, m := range p.Models {
-		out.Models = append(out.Models, apitypes.Model{ID: m.ID, Name: m.Name, Reasoning: m.Reasoning, ContextWindow: m.ContextWindow, MaxTokens: m.MaxTokens, Input: m.Input, ThinkingLevels: m.ThinkingLevels, DefaultThinkingLevel: m.DefaultThinkingLevel})
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, apitypes.ModelList{ProviderID: p.ID, Models: modelsOf(*p)})
 }
 
 func (s *Server) listCliTemplates(w http.ResponseWriter, r *http.Request) {

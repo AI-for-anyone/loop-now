@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	goruntime "runtime"
 	"strconv"
 
 	"loop-now/internal/server/agentruntime"
@@ -28,7 +29,8 @@ func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) 
 		if providers == nil {
 			providers = []string{}
 		}
-		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities})
+		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities,
+			Setup: rt.SetupOn(goruntime.GOOS)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runtimes": list})
 }

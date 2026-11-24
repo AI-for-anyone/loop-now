@@ -82,6 +82,27 @@ type Runtime struct {
 	// no other runtime lists.
 	Providers    []string
 	Capabilities Capabilities
+	// Setup gives the commands a person runs to install the runtime and log in on an operating system (runtime.GOOS
+	// values); nil for a runtime that needs no setup.
+	Setup func(goos string) *Setup
+}
+
+// SetupOn returns how to set the runtime up on the operating system goos; nil when it needs no setup.
+func (r Runtime) SetupOn(goos string) *Setup {
+	if r.Setup == nil {
+		return nil
+	}
+	return r.Setup(goos)
+}
+
+// claudeCodeSetup is Claude Code's native installer and login, from its setup documentation.
+func claudeCodeSetup(goos string) *Setup {
+	install := "curl -fsSL https://claude.ai/install.sh | bash"
+	if goos == "windows" {
+		install = "irm https://claude.ai/install.ps1 | iex" // PowerShell
+	}
+	login, docs := "claude auth login", "https://code.claude.com/docs/en/setup"
+	return &Setup{Install: &install, Login: &login, DocsURL: &docs}
 }
 
 // IsDefault reports whether this is the runtime that runs every provider no other runtime lists.
@@ -100,6 +121,7 @@ var registry = []Runtime{
 		Name:         "Claude Code",
 		Providers:    []string{ClaudeCodeProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
+		Setup:        claudeCodeSetup,
 	},
 }
 
