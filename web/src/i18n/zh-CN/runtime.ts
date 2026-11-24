@@ -26,7 +26,10 @@ export const runtime = {
       bundled: (name: string) => `${name} 随平台安装。`,
       local: (name: string) => `${name} 用本机的安装和你在本机的登录，平台不读取、不保存它的登录信息。`,
       installed: (name: string) => `${name} 用本机的安装。`,
-      byRuntime: { 'claude-code': 'Claude Code 用本机安装的 claude 和你在本机的登录，平台不读取、不保存它的登录信息。' } as Partial<Record<S['AgentRuntime'], string>>,
+      byRuntime: {
+        'claude-code': 'Claude Code 用本机安装的 claude 和你在本机的登录，平台不读取、不保存它的登录信息。',
+        codex: 'Codex 用本机安装的 codex 和你在本机的登录（ChatGPT 账号或 API key），平台不读取、不保存它的登录信息。',
+      } as Partial<Record<S['AgentRuntime'], string>>,
       separator: '',
     },
     refresh: '重新检查',
@@ -53,7 +56,17 @@ export const runtime = {
         version_failed: '运行 claude --version 失败：确认在终端里能正常运行 claude。',
         logged_out: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。',
       },
+      codex: {
+        not_found: '本机没找到 codex：装好 Codex CLI，并确认在终端里能运行 codex。',
+        version_failed: '运行 codex --version 失败：确认在终端里能正常运行 codex。',
+        logged_out: '本机的 Codex 没有登录：在本机终端运行 codex login，用 ChatGPT 账号或 API key 登录。',
+      },
     } as Partial<Record<S['AgentRuntime'], Partial<Record<'not_found' | 'version_failed' | 'unavailable' | 'logged_out', string>>>>,
+    // A CLI older than the runtime supports: the version it needs and the one on this computer, when both are known.
+    versionUnsupported: (name: string, needed: string | null, actual: string | null) =>
+      needed && actual ? `本机的 ${name} 是 ${actual} 版，需要 ${needed} 或更新的版本：更新后再检查一次。` : `本机的 ${name} 版本太旧，Loop Now 用不了：更新后再检查一次。`,
+    // How a CLI is logged in (RuntimeLogin.authMethod), in words; other methods show as the CLI reports them.
+    authMethods: { chatgpt: 'ChatGPT 账号', api_key: 'API key' } as Record<string, string>,
     unknownLogin: '判断不了登录状态；Agent 运行失败时会如实报错。',
   },
   // The runner picker (new Agent, the config page, and the popover from the message box): runtimes on the left, the chosen runtime's
@@ -65,7 +78,7 @@ export const runtime = {
     checking: '正在检查…',
     unknown: '状态未知',
     // Short stamps on a runtime that cannot run here; the full reason is in the setup panel.
-    problem: { not_found: '没装', version_failed: '运行不了', unavailable: '用不了', logged_out: '没登录' },
+    problem: { not_found: '没装', version_failed: '运行不了', version_unsupported: '版本太旧', unavailable: '用不了', logged_out: '没登录' },
     bundled: '内置',
     bundledNote: '用 API key 或其他订阅',
     current: '当前',
@@ -98,6 +111,7 @@ export const runtime = {
       title: (name: string) => `先把 ${name} 准备好`,
       install: '在本机终端运行，装好它',
       login: '在本机终端运行，按提示登录',
+      update: '在本机终端运行，更新到新版本',
       reinstall: '重新装一次通常就好了：',
       copy: '复制',
       copied: '已复制',

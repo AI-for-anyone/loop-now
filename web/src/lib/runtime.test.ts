@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody } from '@/test/api'
 import { renderHookWithQuery } from '@/test/render'
-import { runtimeDefinitions } from '@/test/runtimes'
+import { codexDefinition, runtimeDefinitions } from '@/test/runtimes'
 import { server } from '@/test/server'
-import { canRun, railOrder, runtimeGlyph, runtimeLookup, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
+import { canRun, railOrder, runtimeGlyph, runtimeLookup, runtimeProblemText, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
 
 const definitions = runtimeDefinitions().runtimes
 // A runtime the contract does not have yet, to show nothing here depends on the two known ones.
@@ -56,7 +56,8 @@ describe('runtime marks', () => {
   it('a runtime with a glyph of its own has its strokes; any other has none and is marked with its initial', () => {
     expect(runtimeGlyph('pi')?.length).toBeGreaterThan(0)
     expect(runtimeGlyph('claude-code')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('codex' as Schemas['AgentRuntime'])).toBeNull()
+    expect(runtimeGlyph('codex')?.length).toBeGreaterThan(0)
+    expect(runtimeGlyph('grok' as Schemas['AgentRuntime'])).toBeNull()
   })
 })
 
@@ -75,6 +76,14 @@ describe('runtime readiness', () => {
     expect(read(status({ available: false, unavailableReason: 'not_found', login: null }))).toEqual({ state: 'problem', problem: 'not_found' })
     expect(read(status({ available: false, unavailableReason: 'version_failed', login: null }))).toEqual({ state: 'problem', problem: 'version_failed' })
     expect(read(status({ login: { state: 'logged_out', authMethod: null, subscriptionType: null } }))).toEqual({ state: 'problem', problem: 'logged_out' })
+  })
+
+  it('a CLI older than the lowest version the runtime supports is a problem of its own, said with both versions', () => {
+    const tooOld = status({ id: 'codex', available: false, unavailableReason: 'version_unsupported', version: '0.150.0' })
+    expect(runtimeReadiness(codexDefinition, { status: tooOld, checking: false, failed: false })).toEqual({ state: 'problem', problem: 'version_unsupported' })
+    expect(runtimeProblemText(codexDefinition, 'version_unsupported', '0.150.0')).toBe('Codex on this computer is version 0.150.0; it needs 0.167.0 or later. Update it, then check again.')
+    // Without the versions it still says what is wrong.
+    expect(runtimeProblemText({ ...codexDefinition, minVersion: null }, 'version_unsupported', null)).toBe('Codex on this computer is too old for Loop Now. Update it, then check again.')
   })
 
   it('while the status is being read it is checking; when it cannot be read it is unknown', () => {
