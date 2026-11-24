@@ -9210,9 +9210,9 @@ components:
         interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
         tool state and images are not carried. The block says how many messages were left out, and the Agent can read
         them with `loopctl conversation`.
-        The block goes with every message until one of them reaches the new runtime and its session is saved, so a turn
-        that fails before that (for example because the runtime is not logged in) does not lose it; each turn that
-        carried it has this record.
+        The block goes with every message until one that carries it reaches the new runtime and either completes or has
+        its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
+        lose it; each turn that carried it has this record.
       type: object
       required: [fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
       additionalProperties: false

@@ -605,7 +605,7 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 		if err = s.insertEvent(ctx, tx, LifecycleEvent{AgentID: run.AgentID, RunID: &run.ID, Type: EventRunEnded, At: *run.EndedAt, Data: data}); err != nil {
 			return err
 		}
-		if err = endDeliveredHandoffTx(ctx, tx, run); err != nil {
+		if err = finishHandoffTx(ctx, tx, run); err != nil {
 			return err
 		}
 		_, err = s.FinishSleepTx(ctx, tx, nil, run.ID, end.Status)

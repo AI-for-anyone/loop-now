@@ -21,9 +21,11 @@ type PendingHandoff struct {
 	// SessionFile is From's session, continued as is when the change is undone before the new runtime ran anything;
 	// empty when From had no saved session.
 	SessionFile string `json:"sessionFile,omitempty"`
-	// Dispatched means a message was dispatched to the new runtime with this handoff pending, so undoing the change can
-	// no longer continue From's session.
-	Dispatched bool `json:"dispatched"`
+	// Launching is a message dispatched after the change that has not reached its runtime or ended yet.
+	Launching *uuid.UUID `json:"launching,omitempty"`
+	// Ran means a message reached a runtime after the change (or, without passing through dispatch, reached a runtime
+	// other than From): the conversation has moved on, so undoing the change can no longer continue From's session.
+	Ran bool `json:"ran"`
 }
 
 // RunSelection is who ran a turn: the runtime, model and thinking level the message was handed over with (runs.selection).
@@ -71,6 +73,10 @@ func (r Run) HandoffInfo() *HandoffRecord {
 	}
 	return &out
 }
+
+// quiet reports that nothing has run since the change and no message is on its way to a runtime: the conversation is
+// still exactly where From left it.
+func (h *PendingHandoff) quiet() bool { return !h.Ran && h.Launching == nil }
 
 func parseHandoff(raw []byte) (*PendingHandoff, error) {
 	if len(raw) == 0 {
@@ -123,10 +129,10 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 	nextState := "none"
 	var next *PendingHandoff
 	switch {
-	case pending != nil && !pending.Dispatched && pending.From == toRT && pending.SessionFile != "":
+	case pending != nil && pending.quiet() && pending.From == toRT && pending.SessionFile != "":
 		// Undone before the runtime being left ran anything: continue the earlier session.
 		nextFile, nextState, outcome = &pending.SessionFile, "active", "restored"
-	case pending != nil && !pending.Dispatched:
+	case pending != nil && pending.quiet():
 		// The runtime being left never ran anything: the conversation is still where the pending handoff says.
 		next, outcome = pending, "pending"
 	default:
@@ -154,10 +160,10 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 }
 
 // RecordRuntimeSessionFile records a session file confirmed written to disk by the given runtime. When that runtime is
-// the Agent's current one, it becomes the session (state active); it also ends a pending handoff from that same
-// runtime, whose session then holds the whole conversation. A runtime the Agent has since changed away from (a reply
-// that was in progress during the change) does not touch the session: its file goes into the pending handoff, so
-// undoing the change continues it.
+// the Agent's current one, it becomes the session (state active). If a handoff from that same runtime is pending and
+// nothing has run since the change, the save comes from a reply that was in progress during the change: that session
+// holds the whole conversation, and the handoff ends. A runtime the Agent has since changed away from (such a reply)
+// does not touch the session: its file goes into the pending handoff, so undoing the change continues it.
 func (s *Store) RecordRuntimeSessionFile(ctx context.Context, agentID uuid.UUID, runtime, path string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var provider string
@@ -174,7 +180,7 @@ func (s *Store) RecordRuntimeSessionFile(ctx context.Context, agentID uuid.UUID,
 			return err
 		}
 		if agentruntime.ForProvider(provider).ID == runtime {
-			end := pending != nil && pending.From == runtime
+			end := pending != nil && pending.From == runtime && pending.quiet()
 			_, err = tx.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', handoff = CASE WHEN $3 THEN NULL ELSE handoff END, updated_at = $4
 				WHERE agent_id = $1`, agentID, path, end, tx.Now())
 			return err
@@ -192,9 +198,9 @@ func (s *Store) RecordRuntimeSessionFile(ctx context.Context, agentID uuid.UUID,
 	})
 }
 
-// DispatchHandoff is called when a message is dispatched to the Agent: it returns the pending handoff (nil when there
-// is none) and marks it dispatched, since the new runtime now runs a message.
-func (s *Store) DispatchHandoff(ctx context.Context, agentID uuid.UUID) (*PendingHandoff, error) {
+// DispatchHandoff is called when a message (the run run) is dispatched to the Agent: it returns the pending handoff
+// (nil when there is none) and records the message as on its way to the runtime, until it reaches it or ends.
+func (s *Store) DispatchHandoff(ctx context.Context, agentID, run uuid.UUID) (*PendingHandoff, error) {
 	// Most messages have no pending handoff: find that out without taking a write transaction.
 	var pending bool
 	if err := s.Pool.QueryRow(ctx, `SELECT handoff IS NOT NULL FROM agent_sessions WHERE agent_id = $1`, agentID).Scan(&pending); err != nil || !pending {
@@ -210,7 +216,7 @@ func (s *Store) DispatchHandoff(ctx context.Context, agentID uuid.UUID) (*Pendin
 		if err != nil || pending == nil {
 			return err
 		}
-		pending.Dispatched = true
+		pending.Launching = &run
 		arg, err := jsonArg(pending)
 		if err != nil {
 			return err
@@ -225,7 +231,8 @@ func (s *Store) DispatchHandoff(ctx context.Context, agentID uuid.UUID) (*Pendin
 }
 
 // SetRunRunningWith is SetRunRunning that also records who ran the turn and the handoff it carried (with its event). A
-// turn that reaches a runtime other than the one a pending handoff comes from marks that handoff dispatched.
+// pending handoff notes that a message ran: one dispatched after the change, or any that reached a runtime other than
+// the one the handoff comes from.
 func (s *Store) SetRunRunningWith(ctx context.Context, runID uuid.UUID, configVersion int64, start RunStart) error {
 	sel, err := jsonArg(start.Selection)
 	if err != nil {
@@ -261,20 +268,59 @@ func (s *Store) SetRunRunningWith(ctx context.Context, runID uuid.UUID, configVe
 		if start.Selection == nil {
 			return nil
 		}
-		_, err = tx.Exec(ctx, `UPDATE agent_sessions SET handoff = json_set(handoff, '$.dispatched', json('true'))
-			WHERE agent_id = $1 AND handoff IS NOT NULL AND handoff->>'from' <> $2`, agentID, start.Selection.Runtime)
-		return err
+		return updateHandoffTx(ctx, tx, agentID, func(h *PendingHandoff) bool {
+			launched := h.Launching != nil && *h.Launching == runID
+			if !launched && start.Selection.Runtime == h.From {
+				return false // a reply dispatched before the change, on the runtime the conversation was on
+			}
+			h.Launching, h.Ran = nil, true
+			return true
+		})
 	})
 }
 
-// endDeliveredHandoffTx ends the pending handoff a finished turn carried, once the new runtime's session is saved: the
-// handoff is then part of that session.
-func endDeliveredHandoffTx(ctx context.Context, tx *db.Tx, run Run) error {
+// updateHandoffTx applies change to the Agent's pending handoff and saves it when change reports a change; nothing
+// happens when no handoff is pending.
+func updateHandoffTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, change func(*PendingHandoff) bool) error {
+	var raw []byte
+	if err := tx.QueryRow(ctx, `SELECT handoff FROM agent_sessions WHERE agent_id = $1`, agentID).Scan(&raw); err != nil {
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+	pending, err := parseHandoff(raw)
+	if err != nil || pending == nil || !change(pending) {
+		return err
+	}
+	arg, err := jsonArg(pending)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE agent_sessions SET handoff = $2 WHERE agent_id = $1`, agentID, arg)
+	return err
+}
+
+// finishHandoffTx updates the pending handoff when a turn ends. A message that ended before reaching its runtime is no
+// longer on its way. The handoff the turn carried ends once the runtime has it: when the runtime's session is saved,
+// or when the turn completed (the runtime has it in its context even if its session record could not be found, as with
+// Claude Code on some systems); a turn that failed with no session saved leaves it for the next message.
+func finishHandoffTx(ctx context.Context, tx *db.Tx, run Run) error {
+	if err := updateHandoffTx(ctx, tx, run.AgentID, func(h *PendingHandoff) bool {
+		if h.Launching == nil || *h.Launching != run.ID {
+			return false
+		}
+		h.Launching = nil
+		return true
+	}); err != nil {
+		return err
+	}
 	h := run.HandoffInfo()
 	if h == nil {
 		return nil
 	}
-	_, err := tx.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND state = 'active' AND handoff->>'id' = $2`, run.AgentID, h.ID.String())
+	_, err := tx.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND handoff->>'id' = $2 AND (state = 'active' OR $3)`,
+		run.AgentID, h.ID.String(), run.Status == "completed")
 	return err
 }
 

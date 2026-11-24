@@ -19,8 +19,10 @@ type pauseExecutionRead struct {
 	entered, release chan struct{}
 }
 
+// hook pauses at the first read after the configuration and session were captured (in one transaction): the Agent's
+// Skills.
 func (p *pauseExecutionRead) hook(ctx context.Context, q string) {
-	if strings.Contains(q, "FROM agent_sessions") {
+	if strings.Contains(q, "FROM agent_skills") {
 		p.once.Do(func() {
 			close(p.entered)
 			select {

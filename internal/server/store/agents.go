@@ -337,10 +337,15 @@ func bumpConfig(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 
 // GetAgentSession returns the Agent's session record.
 func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
+	return agentSession(ctx, s.Pool, agentID)
+}
+
+// agentSession reads the Agent's session record with q (the pool or a transaction).
+func agentSession(ctx context.Context, q queueQuerier, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
 	var file *string
 	var handoff []byte
-	err := s.Pool.QueryRow(ctx, `SELECT session_file, state, epoch, updated_at, handoff FROM agent_sessions WHERE agent_id = $1`, agentID).
+	err := q.QueryRow(ctx, `SELECT session_file, state, epoch, updated_at, handoff FROM agent_sessions WHERE agent_id = $1`, agentID).
 		Scan(&file, &sess.State, &sess.Epoch, &sess.UpdatedAt, &handoff)
 	if file != nil {
 		sess.SessionFile = *file

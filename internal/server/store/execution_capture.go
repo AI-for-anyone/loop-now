@@ -23,6 +23,9 @@ type ExecutionIdentity struct {
 	CLIs                []string
 	CredentialsRevision int64
 	CredentialIdentity  string
+	// Session is the Agent's session record, read in the same transaction as the Agent: a change of runtime cannot fall
+	// between the runtime the Agent runs on and the session it continues.
+	Session AgentSession
 }
 
 func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID) (ExecutionIdentity, error) {
@@ -49,6 +52,9 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		layer.AgentPrompt = out.Agent.Prompt
 		layer.AgentVersion = out.Agent.PromptVersion
 		out.Prompts = layer
+		if out.Session, err = agentSession(ctx, tx, agentID); err != nil {
+			return err
+		}
 		cliRows, e := tx.Query(ctx, `SELECT cli_name FROM agent_clis WHERE agent_id=$1 ORDER BY cli_name`, agentID)
 		if e != nil {
 			return e

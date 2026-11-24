@@ -601,7 +601,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	// After a change of runtime, the new runtime gets the saved conversation with this message, in a block between the
 	// run ID line and the message. A Pi command or a manual compaction goes to the runtime as it is, without it; the
 	// handoff then waits for the next message.
-	if pending, err := s.st.DispatchHandoff(ctx, agentID); err != nil {
+	if pending, err := s.st.DispatchHandoff(ctx, agentID, run.ID); err != nil {
 		s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
 	} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
 		if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {

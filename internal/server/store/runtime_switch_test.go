@@ -60,7 +60,7 @@ func TestRuntimeChangeLeavesAPendingHandoff(t *testing.T) {
 	if sess.State != "none" || sess.SessionFile != "" || sess.Epoch != 1 {
 		t.Fatalf("the new runtime starts its own session, in the same conversation: %+v", sess)
 	}
-	if h := sess.Handoff; h == nil || h.ID == uuid.Nil || h.From != "pi" || h.SessionFile != "/tmp/pi-session.jsonl" || h.Dispatched {
+	if h := sess.Handoff; h == nil || h.ID == uuid.Nil || h.From != "pi" || h.SessionFile != "/tmp/pi-session.jsonl" || h.Ran || h.Launching != nil {
 		t.Fatalf("wrong pending handoff: %+v", sess.Handoff)
 	}
 	if active, err := e.s.ActiveRun(e.ctx, e.agent); err != nil || active == nil || active.ID != busy.ID {
@@ -97,8 +97,9 @@ func TestRuntimeChangeUndone(t *testing.T) {
 	}
 
 	e.switchTo("claude-code", "sonnet")
-	pending, err := e.s.DispatchHandoff(e.ctx, e.agent)
-	if err != nil || pending == nil || pending.From != "pi" || !pending.Dispatched {
+	starting := e.send(true, "")
+	pending, err := e.s.DispatchHandoff(e.ctx, e.agent, starting.ID)
+	if err != nil || pending == nil || pending.From != "pi" || pending.Launching == nil || *pending.Launching != starting.ID {
 		t.Fatalf("dispatching a message to the new runtime takes the pending handoff: %+v %v", pending, err)
 	}
 	e.switchTo("anthropic", "claude-x")
@@ -170,7 +171,7 @@ func TestHandoffEndsWhenDelivered(t *testing.T) {
 	sel := &store.RunSelection{Runtime: "claude-code", Provider: "claude-code", ModelID: "sonnet", ThinkingLevel: &level}
 
 	failed := e.send(true, "")
-	pending, err := e.s.DispatchHandoff(e.ctx, e.agent)
+	pending, err := e.s.DispatchHandoff(e.ctx, e.agent, failed.ID)
 	if err != nil || pending == nil {
 		t.Fatalf("pending handoff: %+v %v", pending, err)
 	}
@@ -182,6 +183,9 @@ func TestHandoffEndsWhenDelivered(t *testing.T) {
 	}
 
 	carried := e.send(true, "")
+	if _, err := e.s.DispatchHandoff(e.ctx, e.agent, carried.ID); err != nil {
+		t.Fatal(err)
+	}
 	record := &store.HandoffRecord{ID: pending.ID, FromRuntime: "pi", ToRuntime: "claude-code", IncludedMessages: 2, Bytes: 300, BudgetBytes: 16000}
 	if err := e.s.SetRunRunningWith(e.ctx, carried.ID, 3, store.RunStart{Selection: sel, Handoff: record}); err != nil {
 		t.Fatal(err)
@@ -228,5 +232,132 @@ func TestHandoffEndsWhenDelivered(t *testing.T) {
 	}
 	if sess := e.session(); sess.Handoff != nil || sess.State != "none" {
 		t.Fatalf("/new starts clean, with no handoff: %+v", sess)
+	}
+}
+
+// A first message that fails before it reaches the new runtime (not installed, not logged in) has run nothing there:
+// changing back still continues the earlier session.
+func TestFailedFirstStartKeepsTheChangeUndoable(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	e.switchTo("claude-code", "sonnet")
+	failed := e.send(true, "")
+	if _, err := e.s.DispatchHandoff(e.ctx, e.agent, failed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, failed.ID, store.RunEnd{Status: "failed", ErrorCode: "runtime_not_found", ErrorMessage: "install it"}); err != nil {
+		t.Fatal(err)
+	}
+	if sess := e.session(); sess.Handoff == nil || sess.Handoff.Launching != nil || sess.Handoff.Ran {
+		t.Fatalf("a message that never reached the runtime ran nothing: %+v", sess.Handoff)
+	}
+	e.switchTo("anthropic", "claude-x")
+	if sess := e.session(); sess.State != "active" || sess.SessionFile != "/tmp/pi-session.jsonl" || sess.Handoff != nil {
+		t.Fatalf("changing back continues the earlier session: %+v", sess)
+	}
+}
+
+// A handoff into a new session of the runtime it came from (no earlier session to continue) ends only with a message
+// that carried it: a Pi command that starts the new session first does not end it.
+func TestHandoffIntoTheSameRuntimeEndsOnlyWhenCarried(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "failed", "")
+	e.switchTo("claude-code", "sonnet")
+	e.switchTo("anthropic", "claude-x")
+	sess := e.session()
+	if sess.Handoff == nil || sess.Handoff.From != "pi" {
+		t.Fatalf("pending handoff into Pi: %+v", sess.Handoff)
+	}
+	level := "medium"
+	sel := &store.RunSelection{Runtime: "pi", Provider: "anthropic", ModelID: "claude-x", ThinkingLevel: &level}
+	command := e.send(true, "")
+	if _, err := e.s.DispatchHandoff(e.ctx, e.agent, command.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.SetRunRunningWith(e.ctx, command.ID, 1, store.RunStart{Selection: sel}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.RecordRuntimeSessionFile(e.ctx, e.agent, "pi", "/tmp/pi-new.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, command.ID, store.RunEnd{Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if after := e.session(); after.State != "active" || after.Handoff == nil || after.Handoff.ID != sess.Handoff.ID {
+		t.Fatalf("a session started without the handoff does not end it: %+v %+v", after, after.Handoff)
+	}
+	carried := e.send(true, "")
+	pending, err := e.s.DispatchHandoff(e.ctx, e.agent, carried.ID)
+	if err != nil || pending == nil {
+		t.Fatal(pending, err)
+	}
+	if err := e.s.SetRunRunningWith(e.ctx, carried.ID, 1, store.RunStart{Selection: sel, Handoff: &store.HandoffRecord{ID: pending.ID, FromRuntime: "pi", ToRuntime: "pi"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, carried.ID, store.RunEnd{Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if sess := e.session(); sess.Handoff != nil {
+		t.Fatalf("the message that carried it ends it: %+v", sess.Handoff)
+	}
+}
+
+// A turn that carried the handoff and completed ends it even when the runtime's session could not be saved (Claude
+// Code's session record not found): the runtime has it in its context, and it must not be sent again with every
+// message. A turn that failed after reaching the runtime without a saved session keeps it pending.
+func TestHandoffEndsWhenTheCarryingTurnCompletes(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	e.switchTo("claude-code", "sonnet")
+	sel := &store.RunSelection{Runtime: "claude-code", Provider: "claude-code", ModelID: "sonnet"}
+	carry := func(status string) {
+		t.Helper()
+		r := e.send(true, "")
+		pending, err := e.s.DispatchHandoff(e.ctx, e.agent, r.ID)
+		if err != nil || pending == nil {
+			t.Fatal(pending, err)
+		}
+		if err := e.s.SetRunRunningWith(e.ctx, r.ID, 1, store.RunStart{Selection: sel, Handoff: &store.HandoffRecord{ID: pending.ID, FromRuntime: "pi", ToRuntime: "claude-code"}}); err != nil {
+			t.Fatal(err)
+		}
+		end := store.RunEnd{Status: status}
+		if status == "failed" {
+			end.ErrorCode, end.ErrorMessage = "runtime_login_required", "log in"
+		}
+		if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, end); err != nil {
+			t.Fatal(err)
+		}
+	}
+	carry("failed")
+	if sess := e.session(); sess.State != "none" || sess.Handoff == nil || !sess.Handoff.Ran {
+		t.Fatalf("a failed turn without a saved session keeps the handoff pending: %+v %+v", sess, sess.Handoff)
+	}
+	carry("completed")
+	if sess := e.session(); sess.State != "none" || sess.Handoff != nil {
+		t.Fatalf("a completed turn ends the handoff: %+v %+v", sess, sess.Handoff)
+	}
+}
+
+// The execution capture reads the session together with the Agent, so a run sees the runtime and the session (with
+// its pending handoff) as of one moment.
+func TestExecutionCaptureReadsTheSession(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	e.switchTo("claude-code", "sonnet")
+	captured, err := e.s.CaptureExecutionIdentity(e.ctx, e.agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured.Agent.ModelProvider != "claude-code" || captured.Session.State != "none" || captured.Session.Handoff == nil || captured.Session.Handoff.From != "pi" {
+		t.Fatalf("capture: %s %+v %+v", captured.Agent.ModelProvider, captured.Session, captured.Session.Handoff)
 	}
 }

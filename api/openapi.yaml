@@ -10861,8 +10861,9 @@ components:
         accepted at any time, also while the Agent is replying, and applies from the next message dispatched. The new
         runtime starts its own session and is given a selection of the saved conversation with its first message
         (Run.contextHandoff); the session number does not change, sleeps are kept, and the old runtime's session is
-        neither migrated nor deleted. When the runtime is changed back before the new one has run any message, the
-        earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
+        neither migrated nor deleted. When the runtime is changed back before any message has reached the new one (a
+        message that failed to start there, for example because it is not installed or not logged in, does not count),
+        the earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
         keeps that runtime's session. Records from before this behaviour show a session reset with reason
         runtime_changed at each change of runtime.
       type: object
@@ -11527,9 +11528,9 @@ components:
         interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
         tool state and images are not carried. The block says how many messages were left out, and the Agent can read
         them with `loopctl conversation`.
-        The block goes with every message until one of them reaches the new runtime and its session is saved, so a turn
-        that fails before that (for example because the runtime is not logged in) does not lose it; each turn that
-        carried it has this record.
+        The block goes with every message until one that carries it reaches the new runtime and either completes or has
+        its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
+        lose it; each turn that carried it has this record.
       type: object
       required: [fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
       additionalProperties: false

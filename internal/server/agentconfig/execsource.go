@@ -169,9 +169,7 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if snap.Session, err = s.Store.GetAgentSession(ctx, agentID); err != nil {
-		return Snapshot{}, err
-	}
+	snap.Session = captured.Session
 	skills, err := s.Store.ListAgentSkills(ctx, agentID)
 	if err != nil {
 		return Snapshot{}, err
