@@ -1,7 +1,7 @@
 // Package runtimes reports whether the Agent runtimes are available on this machine (GET /runtimes): the bundled Pi is
-// always available; for Claude Code it checks whether claude is on the login shell's PATH, whether its version can be
-// read, and the login state as answered by claude itself (the platform does not read its credentials, it only takes
-// whether it is logged in, the login method and the subscription type).
+// always available; for a CLI runtime (Claude Code, Codex) it checks whether the CLI is on the login shell's PATH,
+// whether its version can be read and is supported, and the login state as answered by the CLI itself (the platform
+// does not read its credentials, it only takes whether it is logged in, the login method and the subscription type).
 package runtimes
 
 import (
@@ -20,6 +20,8 @@ const cacheFor = 30 * time.Second
 const (
 	ReasonNotFound      = "not_found"
 	ReasonVersionFailed = "version_failed"
+	// ReasonVersionUnsupported: the CLI is older than the runtime's MinVersion.
+	ReasonVersionUnsupported = "version_unsupported"
 )
 
 // Login states.
@@ -60,7 +62,11 @@ type Checker struct {
 	HelperEnv func(ctx context.Context, home string) []string
 	// ClaudeBin is the claude executable (for tests); when empty it is looked up in UserPath.
 	ClaudeBin string
-	Now       func() time.Time
+	// CodexEnv is the environment for running codex's own short commands (with CODEX_HOME); nil, or a nil result,
+	// reports Codex as not found. CodexBin is the codex executable (for tests); when empty it is looked up in UserPath.
+	CodexEnv func(ctx context.Context) []string
+	CodexBin string
+	Now      func() time.Time
 
 	probe  claudecli.Probe
 	mu     sync.Mutex
@@ -109,6 +115,7 @@ var bundledVersions = map[string]func(*Checker) string{
 // probes check each runtime that is not bundled: whether it is installed, its version and its login.
 var probes = map[string]func(*Checker, context.Context, time.Time) Status{
 	agentruntime.ClaudeCode: (*Checker).claude,
+	agentruntime.Codex:      (*Checker).codex,
 }
 
 func (c *Checker) bundled(id, version string, at time.Time) Status {

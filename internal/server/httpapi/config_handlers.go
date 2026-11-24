@@ -57,6 +57,9 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 // listModelProviders lists the model catalog. With agentId, plugin providers are marked with the reason this Agent
 // cannot use them right now, so the model picker can warn in advance.
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
+	if s.ModelListRead != nil {
+		s.ModelListRead("")
+	}
 	query := r.URL.Query()
 	includeModels := false
 	switch query.Get("include") {
@@ -206,6 +209,9 @@ func modelsOf(p modelcatalog.Provider) []apitypes.Model {
 }
 
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
+	if s.ModelListRead != nil {
+		s.ModelListRead(r.PathValue("providerId"))
+	}
 	p, ok := s.Models.Provider(r.PathValue("providerId"))
 	if !ok {
 		writeError(w, apperr.NotFound("Model provider"))

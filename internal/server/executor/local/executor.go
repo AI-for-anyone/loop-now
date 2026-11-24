@@ -101,6 +101,8 @@ type Options struct {
 	RealHome func() (string, error)
 	// ClaudeBin is the claude executable; empty means look it up on the PATH of the user's login shell (UserPath).
 	ClaudeBin string
+	// CodexBin is the codex executable; empty means look it up on the PATH of the user's login shell (UserPath).
+	CodexBin string
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
@@ -605,8 +607,10 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	sink.Phase(executor.PhaseLaunching, e.driverFor(snap).runtime())
 	sessionFile := ""
 	if snap.Session.State == "active" && snap.Session.SessionFile != "" {
-		// Given a session file path that does not exist, Pi silently creates a new session, so we must check first.
-		if _, err := os.Stat(snap.Session.SessionFile); err != nil {
+		// The session reference is the runtime's own (a file path, a thread id): its driver says whether it is still
+		// there. Given a session file path that does not exist, Pi silently creates a new session, so we must check
+		// first.
+		if !e.driverFor(snap).sessionSaved(snap.Session.SessionFile) {
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &runID); mErr != nil {
 				return nil, mErr
 			}
@@ -641,7 +645,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		env = append(env, "LOOP_NOW_GCLOUD_RUNTIME_ENTRY="+e.o.GoogleRuntimeEntry)
 	}
 	drv := e.driverFor(snap)
-	spec := startSpec{snap: snap, d: d, prep: prep, env: env, sessionFile: sessionFile}
+	spec := startSpec{snap: snap, d: d, prep: prep, env: env, sessionFile: sessionFile, runID: runID}
 	begin := time.Now()
 	st, err := drv.start(ctx, spec)
 	if err != nil {
@@ -769,7 +773,8 @@ func (e *Executor) turnFinished(p *proc) error {
 	return sessionErr
 }
 
-// recordSession records the path only once the session file has been written to disk.
+// recordSession records the session reference only once the runtime has saved the session (for a file, once it is on
+// disk).
 func (e *Executor) recordSession(p *proc) error {
 	if p.sessionStale.Load() {
 		return nil
@@ -782,7 +787,7 @@ func (e *Executor) recordSession(p *proc) error {
 	if p.sessionFile == "" {
 		return errors.New("session_file_unconfirmed")
 	}
-	if _, err := os.Stat(p.sessionFile); err != nil {
+	if !p.drv.sessionSaved(p.sessionFile) {
 		return errors.New("session_file_unconfirmed")
 	}
 	if p.sessionFile == p.recorded {

@@ -90,6 +90,14 @@ it('/compact compacted: shows the tokens before and after (reads compactRun.comp
   expect(screen.getByRole('note')).toHaveTextContent('Context compacted: 52000 → about 4100 tokens')
 })
 
+it('/compact compacted on a runtime that does not report the tokens (Codex): says it compacted, without numbers', () => {
+  render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: null, estimatedTokensAfter: null })} />)
+  const line = screen.getByRole('note')
+  expect(line).toHaveTextContent(/Context compacted$/)
+  expect(line).not.toHaveTextContent('null')
+  expect(line).not.toHaveTextContent('Command completed')
+})
+
 it.each([
   ['too_small', 'The session is too short to need compacting'],
   ['already_compacted', 'Nothing new since the last compaction, so there is nothing to compact'],

@@ -30,6 +30,8 @@ type world struct {
 	cfg     config.Config
 	piAIDir string
 	logTo   io.Writer // logs are discarded when nil
+	// options changes the app's test options before each start.
+	options func(o *app.Options)
 }
 
 func newWorld(t *testing.T) *world {
@@ -74,8 +76,11 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 	if logTo == nil {
 		logTo = io.Discard
 	}
-	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel),
-		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}})
+	opts := app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}}
+	if w.options != nil {
+		w.options(&opts)
+	}
+	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel), opts)
 	if err != nil {
 		w.t.Fatalf("failed to start the server: %v", err)
 	}

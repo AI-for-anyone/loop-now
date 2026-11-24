@@ -39,7 +39,7 @@ function sleptBefore(previous: Turn | undefined, turn: Turn) {
 // Agent replies have no card: a top line with the avatar, name, time (the phase while in progress) and the outcome stamp, the body
 // directly below, and the run record last.
 // A reply that didn't complete normally keeps the text it produced, shown in the secondary text color.
-function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'>; located: boolean }) {
+function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean }) {
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
@@ -50,7 +50,7 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
   const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
-      <FailureNote run={run} />
+      <FailureNote run={run} runtime={agent.runtime} />
       {reply && reply.text !== '' ? (
         <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
           <Markdown text={reply.text} cursor={streaming} />
@@ -120,7 +120,7 @@ function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
 
 interface MessageListProps {
   // The current Agent, for the avatar and name above replies.
-  agent: Pick<Schemas['Agent'], 'id' | 'name'>
+  agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>
   // Conversation turns that have started (see buildTurns). Queued messages show in the queue list above the input box, not here.
   turns: Turn[]
   // When there are queued messages, “还没有对话” (No conversation yet) isn't shown even if the conversation flow is empty.

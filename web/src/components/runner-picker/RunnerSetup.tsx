@@ -15,12 +15,13 @@ function setupStep(runtime: RuntimeDefinition, problem: RuntimeProblem) {
   if (!setup) return null
   if (problem === 'logged_out') return setup.login ? { label: copy.login, command: setup.login } : null
   if (!setup.install) return null
-  return { label: problem === 'not_found' ? copy.install : copy.reinstall, command: setup.install }
+  return { label: problem === 'not_found' ? copy.install : problem === 'version_unsupported' ? copy.update : copy.reinstall, command: setup.install }
 }
 
 // A runtime that cannot run on this computer: instead of its models, what is wrong, the command to run in a terminal (with a copy
-// button) and the vendor's setup page, and a way to check again once it is done. The picker runs nothing itself.
-export function RunnerSetup({ runtime, problem }: { runtime: RuntimeDefinition; problem: RuntimeProblem }) {
+// button) and the vendor's setup page, and a way to check again once it is done. The picker runs nothing itself. version: the one found
+// on this computer, for a CLI that is too old.
+export function RunnerSetup({ runtime, problem, version = null }: { runtime: RuntimeDefinition; problem: RuntimeProblem; version?: string | null }) {
   const copy = t.runtime.picker.setup
   const refresh = useRefreshRuntimes()
   const [copied, setCopied] = useState(false)
@@ -29,7 +30,7 @@ export function RunnerSetup({ runtime, problem }: { runtime: RuntimeDefinition; 
   return (
     <div className="riso-scrollbar grid min-h-0 content-start gap-3 overflow-y-auto px-4 pt-4 pb-4">
       <h3 className="font-display text-[22px] leading-tight text-ink">{copy.title(runtime.name)}</h3>
-      <p className="text-[13.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem)}</p>
+      <p className="text-[13.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem, version)}</p>
       {step && (
         <div className="grid gap-1.5">
           <p className="text-[12px] font-black tracking-[0.04em] text-ink-500">{step.label}</p>

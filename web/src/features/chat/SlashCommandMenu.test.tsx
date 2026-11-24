@@ -192,7 +192,7 @@ describe('the "/" command menu of the input box', () => {
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy']))
     const blocked = screen.getByRole('group', { name: 'Not available now' })
     expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [session-id]'])
-    expect(within(blocked).getAllByText('This Agent runs on Claude Code and has no Pi session')).toHaveLength(3)
+    expect(within(blocked).getAllByText("This Agent runs on Claude Code, which doesn't support this command")).toHaveLength(3)
     expect(within(blocked).queryByRole('option')).toBeNull()
     // When no command matches, it only says so; it does not say “The command list appears after the Agent has run once”,
     // because this Agent has no Pi and would not get a list by running either.
@@ -234,7 +234,7 @@ describe('the "/" command menu of the input box', () => {
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [session-id]']))
     const blocked = screen.getByRole('group', { name: 'Not available now' })
     expect(blocked).toHaveTextContent('/compact [instructions]Platform commandNo session yet. Send a message first')
-    expect(blocked).toHaveTextContent('/export [html|jsonl]Platform commandThe session file is missing. Run /new or /resume first')
+    expect(blocked).toHaveTextContent("/export [html|jsonl]Platform commandThe session can't be found. Run /new or /resume first")
     for (const item of blocked.querySelectorAll('li')) expect(item).toHaveClass('text-ink-500')
     // Clicking an unavailable command does not fill it into the input.
     await user.click(within(blocked).getByText('/compact [instructions]'))

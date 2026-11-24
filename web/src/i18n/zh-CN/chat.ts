@@ -2,6 +2,11 @@ import type { components } from '@/api/schema.gen'
 import { formatDayClock, formatBytes, formatMonthDayClock } from './format'
 
 type S = components['schemas']
+// The failures of a runtime's CLI (runtime_*), worded with the runtime's name.
+type RuntimeErrorCode = Extract<S['RunErrorCode'], `runtime_${string}`>
+// A runtime's (Latin) name set off by spaces inside a Chinese sentence; "运行时" without spaces when the runtime isn't known. At the start
+// of a sentence there is no space before the name.
+const spaced = (name: string | null, inside = true) => (name ? `${inside ? ' ' : ''}${name} ` : '运行时')
 
 export const chat = {
   loadingOlder: '正在加载更早的消息…',
@@ -50,21 +55,23 @@ export const chat = {
     credential_unavailable: '凭证不可用',
     cli_install_failed: 'CLI 安装失败',
     workspace_sync_failed: '工作区同步失败',
-    session_missing: '会话文件丢失',
+    session_missing: '会话找不到了',
     pi_start_failed: 'Agent 启动失败',
     pi_exited: 'Agent 进程异常退出',
     pi_error: 'Agent 报告错误',
     plugin_blocked: '插件阻止了本轮执行',
     image_unsupported: '当前模型不支持图片输入',
     internal_error: '服务端内部错误',
-    // Failures of the Claude Code runtime: the first two tell the person how to fix it on
-    // their machine, the rest say plainly what happened; the server's errorMessage follows.
-    runtime_unavailable: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude',
-    runtime_login_required: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录',
-    runtime_start_failed: 'Claude Code 没能启动',
-    runtime_exited: 'Claude Code 进程在这一轮中意外退出',
-    runtime_error: 'Claude Code 报告这一轮出错',
-  } satisfies Record<S['RunErrorCode'], string>,
+  } satisfies Record<Exclude<S['RunErrorCode'], RuntimeErrorCode>, string>,
+  // A runtime's failures name the runtime that failed (its name, or "运行时" when it isn't known); a login that has expired reads the same
+  // as one that never happened.
+  runtimeError: {
+    runtime_unavailable: (name: string | null) => `本机的${spaced(name)}用不了：没找到它、读不出版本，或版本太旧`,
+    runtime_login_required: (name: string | null) => `本机的${spaced(name)}没有登录，或登录已失效：在本机终端重新登录后再试`,
+    runtime_start_failed: (name: string | null) => `${spaced(name, false)}没能启动`,
+    runtime_exited: (name: string | null) => `${spaced(name, false)}进程在这一轮中意外退出`,
+    runtime_error: (name: string | null) => `${spaced(name, false)}报告这一轮出错`,
+  } satisfies Record<RuntimeErrorCode, (name: string | null) => string>,
   tool: {
     started: '进行中',
     succeeded: '成功',
@@ -96,7 +103,8 @@ export const chat = {
     unavailable: {
       title: '现在不能用',
       onlyBlocked: '匹配的命令现在都不能用，回车会照原文发出',
-      reasons: { runtime_unsupported: '这个 Agent 用 Claude Code 运行，没有 Pi 会话', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
+      runtimeUnsupported: (runtime: string) => `这个 Agent 用 ${runtime} 运行，不支持这条命令`,
+      reasons: { runtime_unsupported: '这个 Agent 的运行时不支持这条命令', session_none: '还没有会话，先发一条消息', session_missing: '会话找不到了，先 /new 或 /resume' },
     },
     source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
     plugin: (name: string) => `插件 · ${name}`,
@@ -105,6 +113,8 @@ export const chat = {
     noReply: '命令已执行',
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
+    // Compacted, on a runtime that doesn't report the tokens before and after (Codex).
+    compacted: '上下文已压缩',
     // Cases where Pi didn't compact but finished normally.
     compactSkipped: {
       too_small: '会话内容太少，不用压缩',
@@ -151,8 +161,8 @@ export const chat = {
     reconnecting: '连接中断，正在重连…',
   },
   sessionMissing: {
-    title: '会话文件丢失',
-    body: '这个 Agent 的会话文件丢失了，之后的消息都会失败。确认重开会话后，Agent 从新会话开始，不再记得之前的对话内容；页面上的历史记录仍然保留。',
+    title: '会话找不到了',
+    body: '这个 Agent 的会话找不到了（会话文件，或 CLI 保存的对话被移走或删除），之后的消息都会失败。确认重开会话后，Agent 从新会话开始，不再记得之前的对话内容；页面上的历史记录仍然保留。',
     action: '确认重开会话',
     busy: '还有执行尚未结束，请等它结束后再重开会话。',
     confirmTitle: '确认重开会话？',

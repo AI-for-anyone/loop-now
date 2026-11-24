@@ -58,7 +58,13 @@ type Options struct {
 type Server struct {
 	// Runtimes reports whether Agent runtimes are available on this machine; when nil the list is empty.
 	Runtimes *runtimes.Checker
-	Plugins  *plugins.Service
+	// RefreshLocalModels reads the model lists of the local CLIs again (the models the local Codex lists); GET
+	// /runtimes?refresh=true calls it first. nil does nothing.
+	RefreshLocalModels func(ctx context.Context)
+	// ModelListRead is told when the model providers (provider "") or one provider's models are read, so a local CLI's
+	// list that has grown old is read again in the background; it must return at once. nil does nothing.
+	ModelListRead func(provider string)
+	Plugins       *plugins.Service
 	// Hooks is the entry point for synchronous Hooks (plugins.Service); when nil, plugins are not called.
 	Hooks              pluginhost.Hooker
 	CLIImport          CLIImportController

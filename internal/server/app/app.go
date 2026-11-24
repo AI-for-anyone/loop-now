@@ -134,12 +134,24 @@ type Options struct {
 	ExternalListener net.Listener
 	// HomeDirs overrides the home directories used when validating the work root directory (for tests).
 	HomeDirs []string
+	// CodexBin is the codex executable (for tests); empty means look it up on the user's PATH.
+	CodexBin string
+	// RealHome replaces the real home directory of the user running the server, where local CLI logins are read (for
+	// tests); nil means os.UserHomeDir.
+	RealHome func() (string, error)
+	// CodexModelsMaxAge and CodexModelsStaleAge replace how old Codex's model list may be before a read of the model
+	// lists reads it again (1 minute), and how old when the last read may be out of date (10 seconds); for tests.
+	CodexModelsMaxAge, CodexModelsStaleAge time.Duration
 }
 
 // Build runs the checks and assembly in startup order: checks -> instance ID -> model catalog -> migrations -> default
 // organization and project -> clean up leftover processes -> restart handling -> reconciliation goroutines. The HTTP
 // service starts once Serve is called.
 func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options) (a *App, err error) {
+	realHome := o.RealHome
+	if realHome == nil {
+		realHome = os.UserHomeDir
+	}
 	if cfg.MaxMessageImages <= 0 {
 		cfg.MaxMessageImages = 4
 	}
@@ -431,10 +443,12 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
+		CodexBin: o.CodexBin, RealHome: o.RealHome,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
 	taskSource.ForkBaseline = a.Executor.ForkBaseline
 	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
+	taskSource.KeepsSessions = a.Executor.KeepsSessions
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
@@ -510,7 +524,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
-		Runtimes:   &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: os.UserHomeDir, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv},
+		Runtimes: &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: realHome, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv,
+			CodexEnv: a.Executor.CodexHelperEnv, CodexBin: o.CodexBin},
 		PiCommands: a.Executor.Commands,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
@@ -519,6 +534,23 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
+	if cfg.CodexModelsRefresh > 0 {
+		reader := &codexModelReader{maxAge: o.CodexModelsMaxAge, staleAge: o.CodexModelsStaleAge, now: time.Now,
+			read: func(ctx context.Context) bool { return a.readCodexModels(ctx, models) }}
+		if reader.maxAge <= 0 {
+			reader.maxAge = codexModelsMaxAge
+		}
+		if reader.staleAge <= 0 {
+			reader.staleAge = codexModelsStaleAge
+		}
+		go a.codexModelRefresher(baseCtx, reader, cfg.CodexModelsRefresh)
+		a.API.RefreshLocalModels = reader.refresh
+		a.API.ModelListRead = func(provider string) {
+			if provider == "" || codexListsProvider(provider) {
+				reader.touch(baseCtx)
+			}
+		}
+	}
 	// Folders: mark interrupted pulls as failed and empty the trash; before any Pi starts, replay once the manual edits
 	// from retired folder sources that never reached disk.
 	if err = a.Folders.Start(ctx); err != nil {

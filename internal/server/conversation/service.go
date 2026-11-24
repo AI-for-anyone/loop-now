@@ -674,8 +674,11 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 		if c.Skipped != "" {
 			end.Compaction = &store.Compaction{Outcome: store.CompactionSkipped, SkipReason: c.Skipped}
 		} else {
-			before, after := c.TokensBefore, c.EstimatedTokensAfter
-			end.Compaction = &store.Compaction{Outcome: store.CompactionCompacted, TokensBefore: &before, EstimatedTokensAfter: &after}
+			end.Compaction = &store.Compaction{Outcome: store.CompactionCompacted}
+			if !c.NoCounts {
+				before, after := c.TokensBefore, c.EstimatedTokensAfter
+				end.Compaction.TokensBefore, end.Compaction.EstimatedTokensAfter = &before, &after
+			}
 		}
 	}
 	switch res.Outcome {

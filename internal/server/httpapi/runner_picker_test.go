@@ -118,6 +118,10 @@ func TestRuntimeDefinitionsSetup(t *testing.T) {
 			if rt.Setup != nil {
 				t.Fatalf("the bundled Pi needs no setup: %+v", rt.Setup)
 			}
+		case "codex":
+			if s := rt.Setup; s == nil || *s.Install != "npm install -g @openai/codex" || *s.Login != "codex login" || s.DocsURL == nil {
+				t.Fatalf("codex setup: %+v", s)
+			}
 		default:
 			s := rt.Setup
 			if s == nil || s.Install == nil || s.Login == nil || s.DocsURL == nil || !strings.Contains(*s.Login, "claude") {

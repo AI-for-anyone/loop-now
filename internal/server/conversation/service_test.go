@@ -127,6 +127,9 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	sink.Tool("call-1", "bash", executor.ToolSucceeded)
 	sink.TextDelta(" reply")
+	if compact && strings.Contains(req.Message, "nocounts") {
+		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{NoCounts: true}}, nil
+	}
 	if compact {
 		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{TokensBefore: 100, EstimatedTokensAfter: 40}}, nil
 	}

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
+import { runErrorText } from '@/features/chat/run-status-text'
 import { NumberedSection } from '@/components/NumberedSection'
 
 type Anomaly = Schemas['Anomaly']
@@ -32,8 +33,8 @@ const compactCommand = (compaction: Schemas['RunCompaction']) => (compaction.ins
 
 function reasonOf(item: Anomaly): string {
   if (item.kind === 'run_failed') {
-    const reason = item.errorCode ? (t.chat.runError[item.errorCode] ?? t.common.unknown(item.errorCode)) : t.errors.unknown
-    return t.overview.anomalies.reason(reason, item.errorMessage)
+    // An anomaly does not say which runtime the turn was on, so a runtime failure reads "the runtime".
+    return t.overview.anomalies.reason(runErrorText(item.errorCode), item.errorMessage)
   }
   return item.kind === 'server_restart' ? t.overview.anomalies.restartReason : t.overview.anomalies.interruptedReason
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { runPhaseText, runStatusText } from '@/features/chat/run-status-text'
+import { runErrorText, runPhaseText, runStatusText, useRunRuntimeName } from '@/features/chat/run-status-text'
 import { t } from '@/i18n'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 import { useNow } from '@/lib/use-now'
@@ -84,6 +84,7 @@ function StatePill({ state }: { state: AgentRowState }) {
 // Current reply: the phase, the time spent on this turn so far (counted from dispatch) and the config version; when no reply is
 // in progress, show the previous reply's result and end time.
 function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
+  const runtimeName = useRunRuntimeName()
   const current = agent.status.currentRun
   let main: string
   let meta: string | null = null
@@ -93,7 +94,7 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
   } else if (agent.lastRun) {
     const run = agent.lastRun
     if (run.status === 'failed') {
-      main = t.overview.run.last.failed(run.errorCode ? (t.chat.runError[run.errorCode] ?? t.common.unknown(run.errorCode)) : t.errors.unknown)
+      main = t.overview.run.last.failed(runErrorText(run.errorCode, runtimeName(run)))
     } else if (run.status === 'interrupted') {
       main = run.endReason === 'sleep_superseded' || run.endReason === 'sleep_invalidated' ? t.chat.status[run.endReason] : run.endReason === 'server_restart' ? t.overview.run.last.server_restart : t.overview.run.last.user_interrupt
     } else if (run.status === 'completed') {

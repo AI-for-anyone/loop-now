@@ -18,6 +18,7 @@ type runtimeDefinition struct {
 	IsDefault    bool                      `json:"isDefault"`
 	Capabilities agentruntime.Capabilities `json:"capabilities"`
 	Setup        *agentruntime.Setup       `json:"setup"`
+	MinVersion   *string                   `json:"minVersion"`
 }
 
 // listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and
@@ -29,8 +30,12 @@ func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) 
 		if providers == nil {
 			providers = []string{}
 		}
-		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities,
-			Setup: rt.SetupOn(goruntime.GOOS)})
+		def := runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities,
+			Setup: rt.SetupOn(goruntime.GOOS)}
+		if rt.MinVersion != "" {
+			def.MinVersion = &rt.MinVersion
+		}
+		list = append(list, def)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runtimes": list})
 }
@@ -45,6 +50,9 @@ func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		refresh = b
+	}
+	if refresh && s.RefreshLocalModels != nil {
+		s.RefreshLocalModels(r.Context())
 	}
 	list := []runtimes.Status{}
 	if s.Runtimes != nil {
