@@ -522,6 +522,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
 	if cfg.CodexModelsRefresh > 0 {
 		go a.codexModelRefresher(baseCtx, models, cfg.CodexModelsRefresh)
+		a.API.RefreshLocalModels = func(ctx context.Context) { a.refreshCodexModels(ctx, models) }
 	}
 	// Folders: mark interrupted pulls as failed and empty the trash; before any Pi starts, replay once the manual edits
 	// from retired folder sources that never reached disk.

@@ -51,6 +51,9 @@ func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 		}
 		refresh = b
 	}
+	if refresh && s.RefreshLocalModels != nil {
+		s.RefreshLocalModels(r.Context())
+	}
 	list := []runtimes.Status{}
 	if s.Runtimes != nil {
 		list = s.Runtimes.List(r.Context(), refresh)

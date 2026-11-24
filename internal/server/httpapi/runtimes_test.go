@@ -51,3 +51,19 @@ func TestListRuntimeDefinitions(t *testing.T) {
 		t.Fatalf("claude-code capabilities: %v", caps)
 	}
 }
+
+// Checking the runtimes again (refresh=true) also reads the local CLIs' model lists again, so a CLI installed or
+// logged in after startup shows its models without waiting; a plain read does not.
+func TestRuntimesRefreshReadsModelsAgain(t *testing.T) {
+	e := newEnv(t)
+	calls := 0
+	e.api.RefreshLocalModels = func(context.Context) { calls++ }
+	e.expect(200, "GET", "/runtimes", nil)
+	if calls != 0 {
+		t.Fatalf("a plain read must not read the models: %d", calls)
+	}
+	e.expect(200, "GET", "/runtimes?refresh=true", nil)
+	if calls != 1 {
+		t.Fatalf("refresh=true reads the models again: %d", calls)
+	}
+}
