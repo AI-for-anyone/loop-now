@@ -92,8 +92,12 @@ func (s *Service) Anomalies(ctx context.Context, f store.ScopeFilter, from *time
 				kind = apitypes.AnomalyServerRestart
 			}
 		}
+		var runtime *string
+		if sel := r.Run.SelectionInfo(); sel != nil && sel.Runtime != "" {
+			runtime = &sel.Runtime
+		}
 		out.Items = append(out.Items, apitypes.Anomaly{RunID: r.Run.ID, Kind: kind, At: *r.Run.EndedAt, AgentID: r.Run.AgentID, AgentName: r.AgentName,
-			Scope: apitypes.ScopeOf(r.ProjectID), ProjectID: r.ProjectID,
+			Scope: apitypes.ScopeOf(r.ProjectID), ProjectID: r.ProjectID, Runtime: runtime,
 			ErrorCode: strPtr(r.Run.ErrorCode), ErrorMessage: strPtr(r.Run.ErrorMessage), EndReason: strPtr(r.Run.EndReason), Compaction: apitypes.CompactionOf(r.Run)})
 	}
 	if next != nil {

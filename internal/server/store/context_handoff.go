@@ -248,6 +248,18 @@ func (s *Store) DispatchHandoff(ctx context.Context, agentID, run uuid.UUID) (*P
 	return out, err
 }
 
+// SetRunSelection records who a run is dispatched to (the runtime, provider, model and thinking level of the
+// configuration it is dispatched with), so a run that fails before it starts still names them. It does not replace
+// what was recorded when the reply began.
+func (s *Store) SetRunSelection(ctx context.Context, runID uuid.UUID, sel RunSelection) error {
+	arg, err := jsonArg(&sel)
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `UPDATE runs SET selection = $2 WHERE id = $1 AND running_at IS NULL`, runID, arg)
+	return err
+}
+
 // SetRunRunningWith is SetRunRunning that also records who ran the turn and the handoff it carried (with its event). A
 // pending handoff notes that a message ran: one dispatched after the change, or any that reached a runtime other than
 // the one the handoff comes from.
@@ -264,7 +276,7 @@ func (s *Store) SetRunRunningWith(ctx context.Context, runID uuid.UUID, configVe
 		var agentID uuid.UUID
 		var runningAt time.Time
 		err := tx.QueryRow(ctx, `UPDATE runs SET status = CASE WHEN status = 'aborting' THEN status ELSE 'running' END,
-				phase = NULL, config_version = $2, running_at = coalesce(running_at, $3), selection = $4, context_handoff = $5
+				phase = NULL, config_version = $2, running_at = coalesce(running_at, $3), selection = coalesce($4, selection), context_handoff = $5
 			WHERE id = $1 AND status IN ('starting', 'aborting') AND running_at IS NULL RETURNING agent_id, running_at`, runID, configVersion, tx.Now(), sel, carried).Scan(&agentID, &runningAt)
 		if errors.Is(err, db.ErrNoRows) {
 			return nil

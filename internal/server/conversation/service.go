@@ -537,6 +537,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.Origin == "sleep_wake" {
 		s.emitMessage(ctx, agentID, msg, run)
 	}
+	s.recordDispatch(ctx, agentID, run.ID)
 	if run.Origin == "inbox_reminder" {
 		text, void, err := s.prepareReminder(ctx, agentID, run)
 		if err != nil {
@@ -618,6 +619,21 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}, command
 	}
 	return res, command
+}
+
+// recordDispatch records who the run is dispatched to (from the Agent's configuration now), so a run that fails before
+// it starts still names its runtime; the executor's report when the reply begins replaces it.
+func (s *Service) recordDispatch(ctx context.Context, agentID, runID uuid.UUID) {
+	a, err := s.st.GetAgent(ctx, agentID)
+	if err != nil {
+		return
+	}
+	sel := store.RunSelection{Runtime: agentruntime.ForProvider(a.ModelProvider).ID, Provider: a.ModelProvider, ModelID: a.ModelID, ThinkingLevel: a.ThinkingLevel}
+	if err := s.st.SetRunSelection(ctx, runID, sel); err != nil {
+		s.log.Warn("failed to record who the run is dispatched to", "agentId", agentID, "runId", runID, "err", err)
+		return
+	}
+	s.emitRun(ctx, agentID, runID)
 }
 
 // handoffBlock writes the saved conversation for a pending handoff, with the record of what it carries. It is empty
