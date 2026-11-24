@@ -58,8 +58,13 @@ func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 		}
 		refresh = b
 	}
-	if refresh && s.RefreshLocalModels != nil {
+	switch {
+	case refresh && s.RefreshLocalModels != nil:
 		s.RefreshLocalModels(r.Context())
+	case !refresh && s.ModelListRead != nil:
+		// The local CLIs' model lists, and with them Grok's and Antigravity's login conclusions, are read again in the
+		// background when they have grown old; this read does not wait.
+		s.ModelListRead("")
 	}
 	list := []runtimes.Status{}
 	if s.Runtimes != nil {

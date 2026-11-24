@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/acpcli"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
@@ -322,5 +323,46 @@ func TestLocalACPCommand(t *testing.T) {
 	set("--verbose", "acp")
 	if res, _ := h.exec(id, "fake:history"); res.Text != "history=2" || len(h.starts()) != 2 || !slices.Equal(h.starts()[1].Args, []string{"--verbose", "acp"}) {
 		t.Fatalf("a changed command restarts and the session continues: %+v %+v", res, h.starts())
+	}
+}
+
+// The background read of the model lists keeps each runtime's login conclusion (Grok's from grok models, Antigravity's
+// from agy models), and a turn corrects it; the status reads it instead of going online.
+func TestACPLoginConclusions(t *testing.T) {
+	g := newACPHarness(t, "grok", nil)
+	if got := g.e.ACPLoginState("grok"); got != "" {
+		t.Fatalf("no conclusion before a read: %q", got)
+	}
+	if _, err := g.e.ACPModels(context.Background(), "grok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.e.ACPLoginState("grok"); got != acpcli.LoggedIn {
+		t.Fatalf("grok after the read: %q", got)
+	}
+	if err := os.MkdirAll(filepath.Join(g.realHome, ".fakeacp"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(g.realHome, ".fakeacp", ".logged-out"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := g.exec(g.acpAgent(nil), "hello"); res.ErrorCode != executor.ErrRuntimeLoginRequired || g.e.ACPLoginState("grok") != acpcli.LoggedOut {
+		t.Fatalf("a turn that needs a login corrects it: %+v %q", res, g.e.ACPLoginState("grok"))
+	}
+
+	a := newACPHarness(t, "agy", nil)
+	if err := os.MkdirAll(filepath.Join(a.realHome, ".fakeacp"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a.realHome, ".fakeacp", ".logged-out"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.e.ACPModels(context.Background(), "antigravity"); err == nil || a.e.ACPLoginState("antigravity") != acpcli.LoggedOut {
+		t.Fatalf("agy logged out: %v %q", err, a.e.ACPLoginState("antigravity"))
+	}
+	if err := os.Remove(filepath.Join(a.realHome, ".fakeacp", ".logged-out")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.e.ACPModels(context.Background(), "antigravity"); err != nil || a.e.ACPLoginState("antigravity") != acpcli.LoggedIn {
+		t.Fatalf("agy logged in again: %v %q", err, a.e.ACPLoginState("antigravity"))
 	}
 }

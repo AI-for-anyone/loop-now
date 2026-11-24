@@ -62,9 +62,14 @@ func TestRuntimesRefreshReadsModelsAgain(t *testing.T) {
 	e := newEnv(t)
 	calls := 0
 	e.api.RefreshLocalModels = func(context.Context) { calls++ }
+	var nudged []string
+	e.api.ModelListRead = func(provider string) { nudged = append(nudged, provider) }
 	e.expect(200, "GET", "/runtimes", nil)
 	if calls != 0 {
-		t.Fatalf("a plain read must not read the models: %d", calls)
+		t.Fatalf("a plain read must not wait for the models: %d", calls)
+	}
+	if len(nudged) != 1 || nudged[0] != "" {
+		t.Fatalf("a plain read lets old model lists and login conclusions be read again in the background: %v", nudged)
 	}
 	e.expect(200, "GET", "/runtimes?refresh=true", nil)
 	if calls != 1 {
