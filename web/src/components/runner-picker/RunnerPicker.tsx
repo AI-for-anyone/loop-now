@@ -184,7 +184,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
       className={cn(
         'grid min-w-0 overflow-hidden bg-paper-raised text-ink',
         variant === 'inline' && 'rounded-card border-2 border-ink shadow-[4px_4px_0_var(--ink)] aria-invalid:border-red aria-invalid:shadow-[4px_4px_0_var(--red)]',
-        wide ? 'grid-cols-[minmax(176px,212px)_minmax(0,1fr)_minmax(104px,auto)]' : 'grid-cols-[minmax(0,1fr)]',
+        wide ? 'grid-cols-[minmax(176px,212px)_minmax(0,1fr)_minmax(112px,168px)]' : 'grid-cols-[minmax(0,1fr)]',
         variant === 'popover' && (wide ? 'h-full grid-rows-[minmax(0,1fr)_auto]' : 'h-full grid-rows-[auto_minmax(0,1fr)_auto_auto]'),
       )}
     >
