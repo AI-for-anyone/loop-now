@@ -62,6 +62,11 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 因为你按了停止而退出的进程，不再记成“意外退出”。
 - 模型不接收图片时，消息框不让添加图片。
 - 接口：`AgentRuntime` 改为普通字符串（`grok`、`antigravity`，自己添加的命令是 `acp-<id>`）；新增 `/acp-commands`；`Run.usageReported`；交接上的 `reason`（`runtime_changed`、`session_lost`、`task_start`）；异常和任务消息上的 `runtime`；错误码 `runtime_in_use`。
+### 多开几个控制台标签页不再把浏览器卡死
+
+- 浏览器对同一个地址最多开六条连接，而每个控制台标签页会常驻两条用来实时更新。开到三个标签页，别的就都加载不了，连刷新也不行。现在同一个浏览器里的所有标签页通过一个共享的后台 worker 共用实时连接，同样的页面多开几个不再多占连接。
+- 看不同 Agent 的标签页，目前仍是每个 Agent 一条连接；之后会改成所有内容只用一条。
+- 标签页上显示的内容没有变化。浏览器不支持共享 worker 时，标签页照旧各自持有连接。
 
 ### Agent 可以用 Codex 来跑
 

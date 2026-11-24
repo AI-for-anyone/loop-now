@@ -62,6 +62,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - A process that exits because you stopped a turn is no longer recorded as an unexpected exit.
 - The message box does not accept images for a model that takes none.
 - API: `AgentRuntime` is now a plain string (`grok`, `antigravity`, and `acp-<id>` for a command you added); `/acp-commands`; `Run.usageReported`; a `reason` on handoffs (`runtime_changed`, `session_lost`, `task_start`); `runtime` on problems and task messages; error code `runtime_in_use`.
+### Several console tabs no longer freeze the browser
+
+- A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.
+- Tabs that show different Agents still use one connection per Agent; a single connection for everything follows.
+- Nothing changes in what a tab shows. Where the browser has no shared workers, a tab keeps its own connections as before.
 
 ### Agents can run on Codex
 
