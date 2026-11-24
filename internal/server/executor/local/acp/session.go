@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -173,29 +175,48 @@ func (c *Client) SetModel(ctx context.Context, sessionID, modelID string) error 
 	return c.Call(ctx, "session/set_model", map[string]any{"sessionId": sessionID, "modelId": modelID}, nil)
 }
 
-// turn is a prompt in progress.
+// turn is a prompt in progress, and with Background the time after it while the agent goes on with work it reports
+// on by itself.
 type turn struct {
 	sessionID string
 	sink      runturn.Sink
 	done      chan struct{}
+	bg        *Background
+	// changed is nudged when a message comes while the turn waits after its prompt.
+	changed chan struct{}
 
 	mu        sync.Mutex
 	text      strings.Builder
-	tools     map[string]string
+	tools     map[string]openTool
+	seq       int
 	cancelled bool
 	finished  bool
 	result    runturn.Result
+	// settled: the prompt has returned while a holding tool was open, and the turn waits (see Background). replying:
+	// a reply of the agent's own has begun and its usage_update has not come; expecting: a holding tool has ended since
+	// the agent last began a reply, so a reply is to come. last is when the agent last sent anything.
+	settled, replying, expecting bool
+	last                         time.Time
+}
+
+// openTool is a tool call that has started and not ended; holds: it keeps the turn open after the prompt (see
+// Background.Holds).
+type openTool struct {
+	id, name string
+	seq      int
+	holds    bool
 }
 
 // Prompt sends one message (session/prompt) and waits for its stop reason, streaming text and tool calls to sink.
-// It returns ErrExited when the process has already exited; when the process exits during the prompt the result is
-// failed with runtime_exited. When ctx ends it stops waiting.
+// With Background the turn can go on after the prompt returns (see Background). Tools still open when the turn ends
+// are closed without a result. It returns ErrExited when the process has already exited; when the process exits
+// during the turn the result is failed with runtime_exited. When ctx ends it stops waiting.
 func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runturn.Sink, images ...messageimage.Content) (runturn.Result, error) {
 	blocks := []any{map[string]any{"type": "text", "text": text}}
 	for _, img := range images {
 		blocks = append(blocks, map[string]any{"type": "image", "data": img.Data, "mimeType": img.MimeType})
 	}
-	t := &turn{sessionID: sessionID, sink: sink, done: make(chan struct{}), tools: map[string]string{}}
+	t := &turn{sessionID: sessionID, sink: sink, done: make(chan struct{}), bg: c.o.Background, changed: make(chan struct{}, 1), tools: map[string]openTool{}}
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -218,6 +239,13 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 	if err != nil {
 		return runturn.Result{}, err
 	}
+	wait := time.NewTimer(time.Hour)
+	wait.Stop()
+	defer wait.Stop()
+	rearm := func() {
+		at, _, _ := t.deadline()
+		wait.Reset(time.Until(at))
+	}
 	for {
 		select {
 		case r := <-ch:
@@ -236,8 +264,22 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 					StopReason string `json:"stopReason"`
 				}
 				_ = json.Unmarshal(r.result, &out)
-				t.stopped(out.StopReason)
+				if t.stopped(out.StopReason) {
+					rearm()
+				}
 			}
+		case <-t.changed:
+			rearm()
+		case <-wait.C:
+			at, limit, quiet := t.deadline()
+			if time.Now().Before(at) {
+				wait.Reset(time.Until(at))
+				continue
+			}
+			if s, ok := t.sink.(interface{ BackgroundWaitTimedOut(time.Duration) }); ok && quiet {
+				s.BackgroundWaitTimedOut(limit)
+			}
+			t.finish(runturn.OutcomeCompleted, "", "")
 		case <-t.done:
 			t.mu.Lock()
 			defer t.mu.Unlock()
@@ -248,7 +290,8 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 	}
 }
 
-// Cancel asks the agent to stop the prompt in progress (session/cancel); the prompt then ends as cancelled.
+// Cancel asks the agent to stop the prompt in progress (session/cancel); the prompt then ends as cancelled. A turn that
+// waits after its prompt (see Background) ends as cancelled at once: the agent ends its background commands.
 func (c *Client) Cancel() error {
 	c.mu.Lock()
 	t, closed := c.turn, c.closed
@@ -261,11 +304,16 @@ func (c *Client) Cancel() error {
 	}
 	t.mu.Lock()
 	t.cancelled = true
+	settled := t.settled
 	t.mu.Unlock()
-	return c.notify("session/cancel", map[string]any{"sessionId": t.sessionID})
+	err := c.notify("session/cancel", map[string]any{"sessionId": t.sessionID})
+	if settled {
+		t.finish(runturn.OutcomeAborted, "", "")
+	}
+	return err
 }
 
-// InPrompt reports whether a prompt is in progress.
+// InPrompt reports whether a turn is in progress, also while it waits after its prompt.
 func (c *Client) InPrompt() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -281,13 +329,11 @@ func (c *Client) update(params json.RawMessage) {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
-			ToolCallID string `json:"toolCallId"`
-			Title      string `json:"title"`
-			ToolKind   string `json:"kind"`
-			Status     string `json:"status"`
-			RawInput   struct {
-				Command any `json:"command"`
-			} `json:"rawInput"`
+			ToolCallID string          `json:"toolCallId"`
+			Title      string          `json:"title"`
+			ToolKind   string          `json:"kind"`
+			Status     string          `json:"status"`
+			RawInput   json.RawMessage `json:"rawInput"`
 		} `json:"update"`
 	}
 	if json.Unmarshal(params, &p) != nil {
@@ -309,6 +355,21 @@ func (c *Client) update(params json.RawMessage) {
 		return
 	}
 	u := p.Update
+	t.mu.Lock()
+	if t.finished {
+		t.mu.Unlock()
+		return
+	}
+	if t.settled {
+		t.last = time.Now()
+		switch u.Kind {
+		case "agent_message_chunk", "agent_thought_chunk", "tool_call":
+			t.replying, t.expecting = true, false
+		case "usage_update":
+			t.replying = false
+		}
+	}
+	t.mu.Unlock()
 	switch u.Kind {
 	case "agent_message_chunk":
 		if u.Content.Type == "text" && u.Content.Text != "" {
@@ -322,13 +383,21 @@ func (c *Client) update(params json.RawMessage) {
 		if name == "" || name == "other" {
 			name = u.Title
 		}
+		holds := t.bg != nil && t.bg.Holds != nil && t.bg.Holds(u.ToolKind, u.RawInput)
 		t.mu.Lock()
 		_, seen := t.tools[u.ToolCallID]
-		t.tools[u.ToolCallID] = name
+		if !seen {
+			t.seq++
+			t.tools[u.ToolCallID] = openTool{id: u.ToolCallID, name: name, seq: t.seq, holds: holds}
+		}
 		t.mu.Unlock()
 		if !seen {
 			t.sink.ToolStarted(u.ToolCallID, name)
-			if command := commandText(u.RawInput.Command); command != "" {
+			var in struct {
+				Command any `json:"command"`
+			}
+			_ = json.Unmarshal(u.RawInput, &in)
+			if command := commandText(in.Command); command != "" {
 				if s, ok := t.sink.(interface {
 					ToolCommand(id, name, command string)
 				}); ok {
@@ -342,6 +411,15 @@ func (c *Client) update(params json.RawMessage) {
 	case "tool_call_update":
 		if u.Status == "completed" || u.Status == "failed" {
 			t.toolEnded(u.ToolCallID, u.Status == "failed")
+		}
+	}
+	t.mu.Lock()
+	settled := t.settled
+	t.mu.Unlock()
+	if settled {
+		select {
+		case t.changed <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -362,25 +440,38 @@ func commandText(v any) string {
 	return ""
 }
 
+// toolEnded reports the end of an open tool; a holding tool that ends after the prompt means the agent will reply to
+// it.
 func (t *turn) toolEnded(id string, failed bool) {
 	t.mu.Lock()
-	name, ok := t.tools[id]
+	tool, ok := t.tools[id]
 	if ok {
 		delete(t.tools, id)
+		if t.settled && tool.holds {
+			t.expecting = true
+		}
 	}
 	t.mu.Unlock()
 	if ok {
-		t.sink.ToolEnded(id, name, failed)
+		t.sink.ToolEnded(id, tool.name, failed)
 	}
 }
 
 // stopped ends the prompt with the agent's stop reason: cancelled (or anything after a cancel) is a stop; refusal is
-// a failure; the rest (end_turn, max_tokens, max_turn_requests) complete with the text so far.
-func (t *turn) stopped(reason string) {
+// a failure; the rest (end_turn, max_tokens, max_turn_requests) complete with the text so far, unless a holding tool
+// is still open: then the turn waits (see Background) and stopped reports true. Whether it was cancelled and whether it
+// waits are decided together, so a cancel either comes first or finds the turn waiting (and ends it).
+func (t *turn) stopped(reason string) bool {
 	t.mu.Lock()
 	cancelled := t.cancelled
+	waits := !cancelled && reason != "cancelled" && reason != "refusal" && t.holding()
+	if waits {
+		t.settled, t.replying, t.expecting, t.last = true, false, false, time.Now()
+	}
 	t.mu.Unlock()
 	switch {
+	case waits:
+		return true
 	case reason == "cancelled", cancelled:
 		t.finish(runturn.OutcomeAborted, "", "")
 	case reason == "refusal":
@@ -388,6 +479,33 @@ func (t *turn) stopped(reason string) {
 	default:
 		t.finish(runturn.OutcomeCompleted, "", "")
 	}
+	return false
+}
+
+// holding reports whether an open tool keeps the turn open after its prompt; t.mu is held.
+func (t *turn) holding() bool {
+	if t.bg == nil {
+		return false
+	}
+	for _, tool := range t.tools {
+		if tool.holds {
+			return true
+		}
+	}
+	return false
+}
+
+// deadline is when a waiting turn ends if nothing more comes, and whether that is a quiet limit (and which).
+func (t *turn) deadline() (at time.Time, limit time.Duration, quiet bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.holding() {
+		return t.last.Add(t.bg.QuietLimit), t.bg.QuietLimit, true
+	}
+	if t.replying || t.expecting {
+		return t.last.Add(t.bg.ReplyQuietLimit), t.bg.ReplyQuietLimit, true
+	}
+	return t.last.Add(t.bg.Settle), 0, false
 }
 
 // exited ends the prompt when the process exits: a stop when a cancel was asked for (the agent was killed after it),
@@ -403,13 +521,24 @@ func (t *turn) exited() {
 	t.finish(runturn.OutcomeFailed, executor.ErrRuntimeExited, "The agent process exited.")
 }
 
+// finish ends the turn once: the tools still open are closed without a result, in the order they started.
 func (t *turn) finish(outcome runturn.Outcome, code, msg string) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.finished {
+		t.mu.Unlock()
 		return
 	}
 	t.finished = true
+	open := slices.SortedFunc(maps.Values(t.tools), func(a, b openTool) int { return a.seq - b.seq })
+	t.tools = map[string]openTool{}
+	t.mu.Unlock()
+	if s, ok := t.sink.(interface{ ToolNoResult(id, name string) }); ok {
+		for _, tool := range open {
+			s.ToolNoResult(tool.id, tool.name)
+		}
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.result = runturn.Result{Outcome: outcome, Text: t.text.String(), ErrorCode: code, ErrorMessage: msg}
 	close(t.done)
 }

@@ -386,6 +386,8 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 			ErrorCode: optStr(d, "errorCode")}, true
 	case store.EventSessionMissing:
 		return apitypes.TimelineSessionMissingEntry{TimelineBase: b(apitypes.TimelineSessionMissing), SessionFile: optStr(d, "sessionFile")}, true
+	case store.EventBackgroundWaitTimeout:
+		return apitypes.TimelineBackgroundWaitTimeoutEntry{TimelineBase: b(apitypes.TimelineBackgroundWait), LimitMs: num(d, "limitMs")}, true
 	case store.EventContextHandoff:
 		reason := str(d, "reason")
 		if reason == "" {

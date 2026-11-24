@@ -60,6 +60,8 @@ const (
 	ToolStarted   = "started"
 	ToolSucceeded = "succeeded"
 	ToolFailed    = "failed"
+	// ToolNoResult is a tool still open when its turn ended: the runtime never said how it ended.
+	ToolNoResult = "no_result"
 )
 
 // OriginConsoleCompact is a manual compaction from the console; it uses a real run but produces no conversation

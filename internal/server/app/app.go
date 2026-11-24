@@ -443,7 +443,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
 		WorkRoot: res.WorkRoot, PiBin: res.PiBin, NodeBin: res.NodeBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
-		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
+		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, ACPBackgroundWait: cfg.ACPBackgroundWait, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 		CodexBin: o.CodexBin, GrokBin: o.GrokBin, AntigravityBin: o.AntigravityBin, RealHome: o.RealHome,

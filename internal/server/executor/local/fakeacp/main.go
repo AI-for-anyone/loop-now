@@ -15,6 +15,15 @@
 //	fake:images       reply images=<number of images>
 //	fake:tool <cmd>   run one execute tool call, then reply ran
 //	fake:toolfail     run one tool call that fails, then reply ran
+//	fake:toolopen     start one execute tool call and never report its end, then reply ran
+//	fake:background <durations>
+//	                  as agy's run_command moved to the background: start one command (kind execute) per word, reply
+//	                  backgrounded and end the prompt with usage_update. Each command ends after its duration, with
+//	                  no prompt open (tool_call_update completed); the agent then replies by itself, "reported <n>"
+//	                  for the n commands that ended before that reply began, and ends the reply with usage_update.
+//	                  The word lost never reports its end; daemon starts a daemon command that never ends.
+//	                  FAKEACP_WAKE_DELAY (a duration) is how long such a reply takes to begin and to finish.
+//	                  session/cancel ends the session's commands still running, without a word.
 //	fake:permission   ask for permission, then reply permission=<chosen option>
 //	fake:sleep <dur>  wait for the duration (the word after it), or until cancelled, then reply slept
 //	fake:slow         stream a dot every 50ms until cancelled
@@ -143,6 +152,11 @@ type server struct {
 	nextReq  int
 	waiting  map[string]chan json.RawMessage
 	cancels  map[string]chan struct{}
+	// running are the background commands still going (tool call id to session id); ended counts, per session, the
+	// commands that ended since the agent's last reply began; waking is set while the agent replies on its own.
+	running map[string]string
+	ended   map[string]int
+	waking  map[string]bool
 }
 
 func (s *server) write(v any) {
@@ -184,6 +198,48 @@ func (s *server) ask(method string, params any) json.RawMessage {
 	}
 }
 
+func usage() map[string]any {
+	return map[string]any{"sessionUpdate": "usage_update", "used": 100, "size": 1000}
+}
+
+// commandEnded reports the end of a background command (unless session/cancel ended it) and wakes the agent, which
+// then replies by itself.
+func (s *server) commandEnded(sid, tid string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.running[tid]; !ok {
+		return
+	}
+	delete(s.running, tid)
+	s.update(sid, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": "completed", "kind": "execute"})
+	s.ended[sid]++
+	if !s.waking[sid] {
+		s.waking[sid] = true
+		go s.wake(sid)
+	}
+}
+
+// wake is the agent replying by itself to the commands that ended, one reply after another while more end.
+func (s *server) wake(sid string) {
+	delay, _ := time.ParseDuration(os.Getenv("FAKEACP_WAKE_DELAY"))
+	for {
+		time.Sleep(delay)
+		s.mu.Lock()
+		n := s.ended[sid]
+		s.ended[sid] = 0
+		if n == 0 {
+			s.waking[sid] = false
+			s.mu.Unlock()
+			return
+		}
+		s.mu.Unlock()
+		s.update(sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "\n\nreported "}})
+		time.Sleep(delay)
+		s.update(sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": fmt.Sprint(n)}})
+		s.update(sid, usage())
+	}
+}
+
 func models() map[string]any {
 	return map[string]any{"currentModelId": "fake-1", "availableModels": []any{
 		map[string]any{"modelId": "fake-1", "name": "Fake One", "_meta": map[string]any{"reasoningEfforts": []any{
@@ -193,7 +249,8 @@ func models() map[string]any {
 }
 
 func serve(args []string) {
-	s := &server{args: args, sessions: map[string]*session{}, waiting: map[string]chan json.RawMessage{}, cancels: map[string]chan struct{}{}}
+	s := &server{args: args, sessions: map[string]*session{}, waiting: map[string]chan json.RawMessage{}, cancels: map[string]chan struct{}{},
+		running: map[string]string{}, ended: map[string]int{}, waking: map[string]bool{}}
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 64<<10), 64<<20)
 	for sc.Scan() {
@@ -227,6 +284,11 @@ func serve(args []string) {
 				if c := s.cancels[sid]; c != nil {
 					close(c)
 					delete(s.cancels, sid)
+				}
+				for tid, owner := range s.running {
+					if owner == sid {
+						delete(s.running, tid)
+					}
 				}
 				s.mu.Unlock()
 			}
@@ -370,6 +432,29 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		}
 		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": status})
 		reply("ran")
+	case "fake:toolopen":
+		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": newID(), "title": "Run " + arg, "kind": "execute", "status": "in_progress", "rawInput": map[string]any{"command": arg}})
+		reply("ran")
+	case "fake:background":
+		for _, w := range strings.Fields(arg) {
+			tid := newID()
+			input := map[string]any{"CommandLine": "sleep " + w, "WaitMsBeforeAsync": 500}
+			if w == "daemon" {
+				input["IsDaemon"] = true
+			}
+			s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": input["CommandLine"], "kind": "execute", "status": "in_progress", "rawInput": input})
+			if d, err := time.ParseDuration(w); err == nil {
+				s.mu.Lock()
+				s.running[tid] = ss.ID
+				s.mu.Unlock()
+				go func() {
+					time.Sleep(d)
+					s.commandEnded(ss.ID, tid)
+				}()
+			}
+		}
+		reply("backgrounded")
+		s.update(ss.ID, usage())
 	case "fake:permission":
 		r := s.ask("session/request_permission", map[string]any{"sessionId": ss.ID, "toolCall": map[string]any{"toolCallId": newID()},
 			"options": []any{map[string]any{"optionId": "no", "name": "Reject", "kind": "reject_once"}, map[string]any{"optionId": "yes", "name": "Allow", "kind": "allow_once"}}})

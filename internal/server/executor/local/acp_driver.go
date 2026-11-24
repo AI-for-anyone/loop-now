@@ -53,6 +53,9 @@ type acpFlavor struct {
 	// command is set for a local ACP command a person added: its executable is command.Command (a name on the login
 	// shell's PATH or an absolute path), its environment adds command.Env, and it has no version to check.
 	command *agentruntime.LocalCommand
+	// background: the agent goes on with commands after its prompt has returned and reports on them by itself, so a
+	// turn waits for them (see acp.Background); holds says which open tools do that.
+	background func(kind string, rawInput json.RawMessage) bool
 }
 
 // localCommandFlavor runs a local ACP command: its own arguments, the program's default model, Skills listed in the
@@ -80,7 +83,41 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "agy", login: "agy acp --login", modelInSession: true, emptyLoadIsMissing: true,
 	args: func(agentconfig.Snapshot, agentDirs) []string {
 		return []string{"acp", "--dangerously-skip-permissions"}
-	}}
+	},
+	background: antigravityBackgroundCommand}
+
+// antigravityBackgroundCommand reports whether an open tool is a command agy goes on running after the prompt: its
+// run_command (kind execute) moves to the background when it outlasts WaitMsBeforeAsync, its end comes with no prompt
+// open, and agy then replies by itself. A daemon (IsDaemon) may never end and does not hold the turn.
+func antigravityBackgroundCommand(kind string, rawInput json.RawMessage) bool {
+	var in struct {
+		IsDaemon bool `json:"IsDaemon"`
+	}
+	_ = json.Unmarshal(rawInput, &in)
+	return kind == "execute" && !in.IsDaemon
+}
+
+// Waiting for an agent's background commands (acp.Background): besides the background wait (Options.ACPBackgroundWait),
+// a turn that only waits for the agent's own reply ends after acpReplyQuiet without a word, and one that waits for
+// nothing after acpSettle (agy begins its reply about two seconds after a command ends).
+const (
+	defaultACPBackgroundWait = 30 * time.Minute
+	acpReplyQuiet            = 2 * time.Minute
+	acpSettle                = 3 * time.Second
+)
+
+// clientOptions are the ACP client's options for this flavor.
+func (f acpFlavor) clientOptions(o Options) acp.Options {
+	opts := acp.Options{Kill: procgroup.Kill}
+	if f.background != nil {
+		wait := o.ACPBackgroundWait
+		if wait <= 0 {
+			wait = defaultACPBackgroundWait
+		}
+		opts.Background = &acp.Background{Holds: f.background, QuietLimit: wait, ReplyQuietLimit: acpReplyQuiet, Settle: acpSettle}
+	}
+	return opts
+}
 
 func acpFlavorOf(runtime string) (acpFlavor, bool) {
 	for _, f := range []acpFlavor{grokFlavor, antigravityFlavor} {
@@ -313,7 +350,7 @@ func (ad acpDriver) start(ctx context.Context, spec startSpec) (started, error) 
 	if err := ctx.Err(); err != nil {
 		return started{}, err
 	}
-	client, err := acp.Start(cmd, acp.Options{Kill: procgroup.Kill})
+	client, err := acp.Start(cmd, ad.f.clientOptions(e.o))
 	if err != nil {
 		return started{}, fail(executor.ErrRuntimeStartFailed, "Could not start %s %s: %v", ad.name(), version, err)
 	}

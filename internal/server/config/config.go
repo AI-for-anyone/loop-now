@@ -102,6 +102,9 @@ const (
 	// EnvCodexModelsRefresh is how often the models the local Codex lists are read again (a short-lived codex
 	// app-server); 0 turns it off.
 	EnvCodexModelsRefresh = "LOOP_NOW_CODEX_MODELS_REFRESH"
+	// EnvACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
+	// reply has ended) may hear nothing from the agent before it ends and closes the commands without a result.
+	EnvACPBackgroundWait  = "LOOP_NOW_ACP_BACKGROUND_WAIT"
 	EnvLoopctlDistDir     = "LOOP_NOW_LOOPCTL_DIST_DIR"
 	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
 	EnvExternalTLSCert    = "LOOP_NOW_EXTERNAL_TLS_CERT"
@@ -211,6 +214,8 @@ type Config struct {
 	// CodexModelsRefresh is how often the models the local Codex lists are read (once at startup, then at this
 	// interval); 0 never reads them.
 	CodexModelsRefresh time.Duration
+	// ACPBackgroundWait: see EnvACPBackgroundWait.
+	ACPBackgroundWait time.Duration
 	// LoopctlDistDir is the root directory of the loopctl build output; <version>/manifest.json in it must match the
 	// server's version.
 	// When unset, loopctl-dist next to loop-server (the release bundle) is used; if neither exists, startup is refused.
@@ -352,6 +357,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		InboxPageMax:          p.integer(EnvInboxPageMax, 100),
 		ContextHandoffTokens:  p.integer(EnvContextHandoffTokens, 16000),
 		CodexModelsRefresh:    p.duration(EnvCodexModelsRefresh, "10m"),
+		ACPBackgroundWait:     p.duration(EnvACPBackgroundWait, "30m"),
 		LoopctlDistDir:        p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
 		ExternalListenAddr:    p.str(EnvExternalListenAddr, ""),
 		ExternalTLSCert:       p.str(EnvExternalTLSCert, ""),
@@ -473,6 +479,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Duration("piStartTimeout", c.PiStartTimeout),
 		slog.Duration("piStopGrace", c.PiStopGrace),
 		slog.Duration("abortTimeout", c.AbortTimeout),
+		slog.Duration("acpBackgroundWait", c.ACPBackgroundWait),
 		slog.Duration("gitCloneTimeout", c.GitCloneTimeout),
 		slog.Duration("cliInstallTimeout", c.CLIInstallTimeout),
 		slog.Duration("cliProbeTimeout", c.CLIProbeTimeout),

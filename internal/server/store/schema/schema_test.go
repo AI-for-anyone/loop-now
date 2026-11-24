@@ -127,7 +127,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 13
+const latestVersion = 14
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.
@@ -666,5 +666,62 @@ func TestContextHandoffMigration(t *testing.T) {
 		if _, err := d.Exec(ctx, q, agent.ID); err == nil {
 			t.Fatalf("a value that is not a JSON object must be rejected: %s", q)
 		}
+	}
+}
+
+// v14 rebuilds run_tool_events in events.db so a tool can be closed as no_result: every row written before stays as it
+// was, in order, and states outside the four are still refused.
+func TestToolNoResultMigration(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 13); err != nil {
+		t.Fatal(err)
+	}
+	insert := func(run uuid.UUID, seq int, state string) error {
+		_, err := d.Exec(ctx, `INSERT INTO ev.run_tool_events (run_id, seq, tool_call_id, tool_name, state, at) VALUES ($1, $2, $3, 'execute', $4, $5)`,
+			run, seq, fmt.Sprintf("call-%d", seq), state, int64(1700000000000+seq))
+		return err
+	}
+	runs := []uuid.UUID{uuid.New(), uuid.New()}
+	for i, state := range []string{"started", "succeeded", "started", "failed", "started"} {
+		if err := insert(runs[i%2], i+1, state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := insert(runs[0], 99, "no_result"); err == nil {
+		t.Fatal("version 13 refuses no_result")
+	}
+	dump := func() string {
+		rows, err := d.Query(ctx, `SELECT run_id || ':' || seq || ':' || tool_call_id || ':' || tool_name || ':' || state || ':' || at FROM ev.run_tool_events ORDER BY run_id, seq`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		var row string
+		if _, err := db.ForEachRow(rows, []any{&row}, func() error { out = append(out, row); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(out, "\n")
+	}
+	before := dump()
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	if after := dump(); after != before || strings.Count(after, "\n") != 4 {
+		t.Fatalf("rows changed:\n%s\nwant:\n%s", after, before)
+	}
+	if err := insert(runs[0], 6, "no_result"); err != nil {
+		t.Fatalf("no_result is accepted: %v", err)
+	}
+	if err := insert(runs[0], 7, "lost"); err == nil {
+		t.Fatal("an unknown state is refused")
+	}
+	if ti, ok := tables(t, d)["run_tool_events"]; !ok || ti.schema != db.EventsSchema || !ti.strict {
+		t.Fatalf("run_tool_events stays a STRICT table in events.db: %+v", ti)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/store"
 	"loop-now/internal/testutil/fakeacpbin"
 )
 
@@ -364,5 +365,31 @@ func TestACPLoginConclusions(t *testing.T) {
 	}
 	if _, err := a.e.ACPModels(context.Background(), "antigravity"); err != nil || a.e.ACPLoginState("antigravity") != acpcli.LoggedIn {
 		t.Fatalf("agy logged in again: %v %q", err, a.e.ACPLoginState("antigravity"))
+	}
+}
+
+// Antigravity's commands moved to the background keep the run going after the prompt returns: their ends and the reply
+// agy then gives by itself belong to the run. A command whose end never comes is closed without a result once the run
+// has heard nothing for the background wait, and the run record says why. Another runtime's tool left open when the
+// turn ends is closed without a result too.
+func TestACPBackgroundCommands(t *testing.T) {
+	h := newACPHarness(t, "agy", func(o *Options) { o.ACPBackgroundWait = 800 * time.Millisecond })
+	id := h.acpAgent(nil)
+	res, sink := h.exec(id, "fake:background 300ms")
+	if res.Outcome != executor.OutcomeCompleted || !strings.HasSuffix(res.Text, "backgrounded\n\nreported 1") || strings.Join(sink.tools, ",") != "execute:started,execute:succeeded" {
+		t.Fatalf("background command: %+v %v", res, sink.tools)
+	}
+	res, sink = h.exec(id, "fake:background lost")
+	if res.Outcome != executor.OutcomeCompleted || strings.Join(sink.tools, ",") != "execute:started,execute:no_result" {
+		t.Fatalf("lost end: %+v %v", res, sink.tools)
+	}
+	evs := h.obs.eventsOf(id, store.EventBackgroundWaitTimeout)
+	if len(evs) != 1 || evs[0].run == nil || evs[0].ev.Data["limitMs"] != int64(800) {
+		t.Fatalf("the run record says why: %+v", evs)
+	}
+	g := newACPHarness(t, "grok", nil)
+	gid := g.acpAgent(nil)
+	if res, sink := g.exec(gid, "fake:toolopen sleep 9"); res.Outcome != executor.OutcomeCompleted || strings.Join(sink.tools, ",") != "execute:started,execute:no_result" {
+		t.Fatalf("Grok's open tool: %+v %v", res, sink.tools)
 	}
 }
