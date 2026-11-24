@@ -23,6 +23,8 @@ type PendingHandoff struct {
 	SessionFile string `json:"sessionFile,omitempty"`
 	// Launching is a message dispatched after the change that has not reached its runtime or ended yet.
 	Launching *uuid.UUID `json:"launching,omitempty"`
+	// Reason is why the conversation is to be carried: empty (a change of runtime) or HandoffSessionLost.
+	Reason string `json:"reason,omitempty"`
 	// Ran means a message reached a runtime after the change (or, without passing through dispatch, reached a runtime
 	// other than From): the conversation has moved on, so undoing the change can no longer continue From's session.
 	Ran bool `json:"ran"`
@@ -352,6 +354,44 @@ func finishHandoffTx(ctx context.Context, tx *db.Tx, run Run) error {
 	_, err := tx.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND handoff->>'id' = $2 AND (state = 'active' OR $3)`,
 		run.AgentID, h.ID.String(), run.Status == "completed")
 	return err
+}
+
+// LoseSession turns a session its runtime could not continue (marked missing) into a new start that carries the saved
+// conversation: the pointer is cleared and a handoff with reason session_lost from the current runtime is pending, so
+// the next message (the one that found it missing, sent again) gives the new session the conversation. A handoff that
+// is already pending stays as it is. It reports whether there was a missing session to turn.
+func (s *Store) LoseSession(ctx context.Context, agentID uuid.UUID) (bool, error) {
+	lost := false
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		var provider string
+		var raw []byte
+		err := tx.QueryRow(ctx, `SELECT a.model_provider, s.handoff FROM agents a JOIN agent_sessions s ON s.agent_id = a.id
+			WHERE a.id = $1 AND s.state = 'missing'`, agentID).Scan(&provider, &raw)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		pending, err := parseHandoff(raw)
+		if err != nil {
+			return err
+		}
+		if pending == nil {
+			pending = &PendingHandoff{ID: uuid.Must(uuid.NewV7()), From: agentruntime.ForProvider(provider).ID, Reason: HandoffSessionLost}
+		}
+		arg, err := jsonArg(pending)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', handoff = $2, updated_at = $3 WHERE agent_id = $1`,
+			agentID, arg, tx.Now()); err != nil {
+			return err
+		}
+		lost = true
+		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionLost, Data: map[string]any{"runtime": pending.From}})
+	})
+	return lost, err
 }
 
 // EndHandoff ends the given pending handoff without carrying anything (there was nothing saved to carry).

@@ -90,6 +90,13 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		if err != nil {
 			return executor.Result{}, err
 		}
+		// A session whose file starts with /gone is lost, as the local executor finds it: marked missing, the run fails.
+		if sess, err := f.sessions.GetAgentSession(ctx, req.AgentID); err == nil && sess.State == "active" && strings.HasPrefix(sess.SessionFile, "/gone") {
+			if err := f.sessions.MarkSessionMissing(ctx, req.AgentID, &req.RunID); err != nil {
+				return executor.Result{}, err
+			}
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrSessionMissing, ErrorMessage: "The recorded session no longer exists.", ConfigVersion: 1}, nil
+		}
 		sel = executor.Selection{Runtime: agentruntime.ForProvider(a.ModelProvider).ID, Provider: a.ModelProvider, ModelID: a.ModelID}
 		defer func() {
 			_ = f.sessions.RecordRuntimeSessionFile(context.Background(), req.AgentID, sel.Runtime, "/fake/"+sel.Runtime+".jsonl")

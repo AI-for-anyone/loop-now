@@ -121,3 +121,36 @@ func TestRuntimeChangeWhileReplying(t *testing.T) {
 		t.Fatalf("the next turn ran on Claude Code with the handoff: %+v %+v", run.Selection, run.ContextHandoff)
 	}
 }
+
+// A session the runtime can no longer continue does not stop the conversation: the message starts a new session of
+// the same runtime with the saved conversation, and the turn records that handoff (reason session_lost) so the console
+// can show it.
+func TestLostSessionContinuesWithTheConversation(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.turnTo("remember the word apple")
+	if err := e.st.RecordRuntimeSessionFile(context.Background(), e.agent, "pi", "/gone/session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	e.mustSend("what was the word?", "")
+	var got string
+	for got == "" || !strings.Contains(got, "<conversation-handoff>") {
+		select {
+		case got = <-e.ex.started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the message was not sent again with the conversation; last prompt %q", got)
+		}
+	}
+	e.waitIdle()
+	if !strings.Contains(got, "remember the word apple") || !strings.Contains(got, "could not be continued") || !strings.HasSuffix(got, "what was the word?") {
+		t.Fatalf("the new session gets the conversation:\n%s", got)
+	}
+	run := lastRun(t, e.history())
+	if run.Status != "completed" || run.ContextHandoff == nil || run.ContextHandoff.Reason != "session_lost" || run.ContextHandoff.FromRuntime != "pi" || run.ContextHandoff.ToRuntime != "pi" {
+		t.Fatalf("the turn completes and records the handoff: %s %+v", run.Status, run.ContextHandoff)
+	}
+	sess, err := e.st.GetAgentSession(context.Background(), e.agent)
+	if err != nil || sess.State != "active" || sess.Handoff != nil || sess.Epoch != 1 {
+		t.Fatalf("the conversation goes on in the new session: %+v %v", sess, err)
+	}
+}

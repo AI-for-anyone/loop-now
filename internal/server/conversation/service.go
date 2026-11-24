@@ -599,19 +599,35 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if command != "" {
 		message = piMessage
 	}
-	// After a change of runtime, the new runtime gets the saved conversation with this message, in a block between the
-	// run ID line and the message. A Pi command or a manual compaction goes to the runtime as it is, without it; the
-	// handoff then waits for the next message.
-	if pending, err := s.st.DispatchHandoff(ctx, agentID, run.ID); err != nil {
-		s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
-	} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
-		if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {
-			message = executor.RunIDLine(run.ID) + block + "\n\n" + prompt
-			sink.handoff = record
+	// After a change of runtime, or when the runtime's own session was lost, the runtime gets the saved conversation
+	// with this message, in a block between the run ID line and the message. A Pi command or a manual compaction goes
+	// to the runtime as it is, without it; the handoff then waits for the next message.
+	send := func() (executor.Result, error) {
+		message := message
+		if pending, err := s.st.DispatchHandoff(ctx, agentID, run.ID); err != nil {
+			s.log.Warn("failed to read the pending handoff; the message goes without it", "agentId", agentID, "runId", run.ID, "err", err)
+		} else if pending != nil && run.Origin != executor.OriginConsoleCompact && command == "" {
+			if block, record := s.handoffBlock(ctx, agentID, run.ID, pending); block != "" {
+				message = executor.RunIDLine(run.ID) + block + "\n\n" + prompt
+				sink.handoff = record
+			}
+		}
+		return s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
+			Origin: run.Origin, MessageID: trigger}, sink)
+	}
+	res, err := send()
+	// A session the runtime can no longer continue does not stop the conversation: the message starts a new session
+	// with the saved conversation (a handoff with reason session_lost, shown like any other), once.
+	if err == nil && res.ErrorCode == executor.ErrSessionMissing {
+		if lost, lerr := s.st.LoseSession(ctx, agentID); lerr != nil {
+			s.log.Warn("failed to continue a lost session with the saved conversation", "agentId", agentID, "runId", run.ID, "err", lerr)
+		} else if lost {
+			s.emitSession(ctx, agentID)
+			if run.Origin != executor.OriginConsoleCompact {
+				res, err = send()
+			}
 		}
 	}
-	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
-		Origin: run.Origin, MessageID: trigger}, sink)
 	if err != nil {
 		if ctx.Err() != nil {
 			return res, command
@@ -669,8 +685,16 @@ func (s *Service) handoffBlock(ctx context.Context, agentID, runID uuid.UUID, pe
 		from = rt.Name
 	}
 	budget := contexthandoff.ClampBudget(s.o.HandoffBudget)
-	block := contexthandoff.Build(messages, from, to.Name, budget)
-	return block.Text, &store.HandoffRecord{ID: pending.ID, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
+	reason := pending.Reason
+	if reason == "" {
+		reason = store.HandoffRuntimeChanged
+	}
+	kind := contexthandoff.RuntimeChanged
+	if reason == store.HandoffSessionLost {
+		kind = contexthandoff.SessionLost
+	}
+	block := contexthandoff.BuildFor(kind, messages, from, to.Name, budget)
+	return block.Text, &store.HandoffRecord{ID: pending.ID, Reason: reason, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
 		OmittedMessages: block.Omitted, Images: block.Images, Bytes: block.Bytes, BudgetBytes: budget}
 }
 

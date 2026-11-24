@@ -34,6 +34,8 @@ const (
 	// EventRuntimeChanged is a change of the Agent's runtime (no run); data handoff says whether the conversation waits
 	// to be carried over (pending), the earlier session continues (restored), or there was nothing to carry (none).
 	EventRuntimeChanged = "runtime.changed"
+	// EventSessionLost is a session its runtime could not continue, turned into a new start with the saved conversation.
+	EventSessionLost = "session.lost"
 	// EventContextHandoff is a turn that carried a selection of the saved conversation to a new runtime.
 	EventContextHandoff = "context.handoff"
 	EventExtensionUI    = "extension.ui"

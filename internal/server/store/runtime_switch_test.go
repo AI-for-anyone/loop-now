@@ -361,3 +361,49 @@ func TestExecutionCaptureReadsTheSession(t *testing.T) {
 		t.Fatalf("capture: %s %+v %+v", captured.Agent.ModelProvider, captured.Session, captured.Session.Handoff)
 	}
 }
+
+// A session its runtime could not continue (marked missing) becomes a new start that carries the conversation: the
+// pointer is cleared and a session_lost handoff from the current runtime is pending; a handoff already pending stays.
+func TestLoseSession(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if lost, err := e.s.LoseSession(e.ctx, e.agent); err != nil || lost {
+		t.Fatalf("nothing is lost without a missing session: %v %v", lost, err)
+	}
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, nil); err != nil {
+		t.Fatal(err)
+	}
+	if lost, err := e.s.LoseSession(e.ctx, e.agent); err != nil || !lost {
+		t.Fatalf("lose: %v %v", lost, err)
+	}
+	sess := e.session()
+	if sess.State != "none" || sess.SessionFile != "" || sess.Epoch != 1 || sess.Handoff == nil || sess.Handoff.From != "pi" || sess.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("a lost session leaves a session_lost handoff: %+v %+v", sess, sess.Handoff)
+	}
+	if evs := e.agentEvents(store.EventSessionLost); len(evs) != 1 || evs[0].Data["runtime"] != "pi" {
+		t.Fatalf("the loss is recorded: %+v", evs)
+	}
+
+	f := newRecEnv(t)
+	f.turn("hello", "completed", "hi")
+	if err := f.s.RecordSessionFile(f.ctx, f.agent, "/tmp/pi.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	f.switchTo("claude-code", "sonnet")
+	pending := f.session().Handoff
+	if err := f.s.RecordRuntimeSessionFile(f.ctx, f.agent, "claude-code", "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.MarkSessionMissing(f.ctx, f.agent, nil); err != nil {
+		t.Fatal(err)
+	}
+	if lost, err := f.s.LoseSession(f.ctx, f.agent); err != nil || !lost {
+		t.Fatal(lost, err)
+	}
+	if got := f.session().Handoff; got == nil || got.ID != pending.ID || got.Reason != "" {
+		t.Fatalf("a pending change of runtime stays: %+v", got)
+	}
+}
