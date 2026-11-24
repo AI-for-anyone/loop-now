@@ -315,6 +315,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/inbox/threads/{threadId}/read", "readInboxThread", ConsoleAndExternal, s.readThread},
 		{"GET", "/inbox/pending", "getInboxPending", ConsoleOnly, s.getInboxPending},
 		{"GET", "/inbox/events", "streamInboxEvents", ConsoleOnly, s.streamInbox},
+		{"GET", "/events", "streamMultiplexedEvents", ConsoleOnly, s.streamMultiplexed},
 		{"GET", "/agents/{agentId}/inbox", "listAgentInbox", ConsoleOnly, s.listAgentInbox},
 		{"GET", "/agents/{agentId}/console-messages", "listAgentConsoleMessages", ConsoleOnly, s.listAgentConsoleMessages},
 		{"GET", "/agents/{agentId}/inbox/{messageId}", "getAgentInboxMessage", ConsoleOnly, s.getAgentInboxMessage},

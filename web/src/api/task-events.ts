@@ -16,5 +16,5 @@ export const TASK_EVENT_NAMES = ['snapshot', 'task.updated', 'node.updated', 'me
 export interface ProjectTaskEventDataMap { snapshot: Schemas['TaskProjectSnapshotEvent']; 'task.updated': Schemas['TaskUpdatedEvent'] }
 export type ProjectTaskEvent = { [K in keyof ProjectTaskEventDataMap]: { type: K; id: string; data: ProjectTaskEventDataMap[K] } }[keyof ProjectTaskEventDataMap]
 export const PROJECT_TASK_EVENT_NAMES = ['snapshot', 'task.updated'] as const
-export const connectTaskEvents = (id: string, options: StreamOptions<TaskEvent>) => connectEventStream(`${config.apiBase}/tasks/${encodeURIComponent(id)}/events`, TASK_EVENT_NAMES, options)
-export const connectProjectTaskEvents = (id: string, options: StreamOptions<ProjectTaskEvent>) => connectEventStream(`${config.apiBase}/projects/${encodeURIComponent(id)}/tasks/events`, PROJECT_TASK_EVENT_NAMES, options)
+export const connectTaskEvents = (id: string, options: StreamOptions<TaskEvent>) => connectEventStream({ url: `${config.apiBase}/tasks/${encodeURIComponent(id)}/events`, stream: `task:${id}` }, TASK_EVENT_NAMES, options)
+export const connectProjectTaskEvents = (id: string, options: StreamOptions<ProjectTaskEvent>) => connectEventStream({ url: `${config.apiBase}/projects/${encodeURIComponent(id)}/tasks/events`, stream: `project-tasks:${id}` }, PROJECT_TASK_EVENT_NAMES, options)

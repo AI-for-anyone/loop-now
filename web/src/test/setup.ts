@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
 import { reachability, serverVersionStore } from '@/api/client'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
+import { useOwnEventStreams } from '@/api/events'
 import { FakeEventSource } from './fake-event-source'
 import { FakeIntersectionObserver } from './intersection-observer'
 import { server } from './server'
@@ -26,6 +27,8 @@ import { server } from './server'
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+// The views' tests drive each stream at its own endpoint (FakeEventSource); one GET /events for all is tested in api/shared-events.
+beforeAll(() => useOwnEventStreams())
 beforeEach(() => {
   FakeEventSource.reset()
   FakeIntersectionObserver.reset()

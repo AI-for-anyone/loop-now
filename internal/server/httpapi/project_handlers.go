@@ -279,7 +279,7 @@ func overviewKeep(f store.ScopeFilter) func(coord.Event) bool {
 }
 
 // readOverview reads overview events (at most 100 per call). It does not filter: the overview stream handler passes
-// these events through pumpEventsFiltered with overviewKeep, so events outside the scope are dropped there and still
+// these events through coordFollow with overviewKeep, so events outside the scope are dropped there and still
 // advance the cursor.
 func (s *Server) readOverview(ctx context.Context, after string, block time.Duration) ([]coord.Event, error) {
 	return s.Coord.ReadOverview(ctx, after, 100, block)

@@ -2,18 +2,15 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"github.com/google/uuid"
 	"net/http"
 	"slices"
 	"strconv"
-	"time"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
-	"loop-now/internal/server/coord"
 	"loop-now/internal/server/identity"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/store"
@@ -296,39 +293,12 @@ func (s *Server) readThread(w http.ResponseWriter, r *http.Request) {
 
 // streamInbox pushes the Inbox event stream; the snapshot and resume rules are the same as for the Agent event stream.
 func (s *Server) streamInbox(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	cursor, resume := r.Header.Get("Last-Event-ID"), false
-	if cursor != "" {
-		first, err := s.Coord.InboxFirstID(ctx)
-		if err == nil && first != "" && coord.CompareIDs(cursor, first) >= 0 {
-			last, err := s.Coord.InboxLastID(ctx)
-			resume = err == nil && coord.CompareIDs(cursor, last) <= 0
-		}
+	ls, err := s.openInboxStream(r.Context(), r.Header.Get("Last-Event-ID"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
 	}
-	var snap apitypes.SseInboxSnapshot
-	if !resume {
-		var err error
-		snap, cursor, err = s.Inbox.Snapshot(ctx)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	}
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
-	h.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if !resume {
-		data, _ := json.Marshal(snap)
-		if !writeEvent(w, cursor, apitypes.EventInboxSnapshot, data) {
-			return
-		}
-	}
-	_ = http.NewResponseController(w).Flush()
-	s.pumpEvents(w, r, cursor, func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error) {
-		return s.Coord.ReadInbox(ctx, after, 100, block)
-	}, "stream", "inbox")
+	s.serveStream(w, r, ls, "stream", "inbox")
 }
 
 // ---- Console view of the Inboxes of Agents and external identities (read-only) ----

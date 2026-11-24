@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeEventSource } from '@/test/fake-event-source'
-import { AGENT_EVENT_NAMES, agentEventsUrl, connectAgentEvents, type AgentEvent, type ConnectionState, type StreamOptions } from '../events'
-import { SharedStreams, sharedStreams, type PageEvents, type WorkerLike, type WorkerPort } from './client'
+import { AGENT_EVENT_NAMES, connectAgentEvents, connectInboxEvents, INBOX_EVENT_NAMES, useOwnEventStreams, type AgentEvent, type ConnectionState, type InboxEvent, type StreamOptions } from '../events'
+import { SharedStreams, type PageEvents, type SharedStreamsSetup, type WorkerLike, type WorkerPort } from './client'
 import { EventHub, type HubPort } from './hub'
 import type { TabMessage, WorkerMessage } from './protocol'
-import { EventSourceTransport } from './transport'
+import { MultiplexedTransport, SET_CHANGE_MS } from './transport'
 
-const URL_A = 'http://127.0.0.1:8780/api/v1/agents/a1/events'
+const ENDPOINT = 'http://127.0.0.1:8780/api/v1/events'
 
 // A worker whose port records what the tab sends; the test plays the worker's side.
 function fakeWorker() {
@@ -24,24 +24,26 @@ function page() {
   return { page: { window: target('window:'), document: { ...target('document:'), visibilityState: 'visible' } }, fire }
 }
 
-function recorder() {
-  const events: AgentEvent[] = []
+function recorder<E extends { type: string } = AgentEvent>() {
+  const events: E[] = []
   const states: ConnectionState[] = []
   let retry = true
-  const options: StreamOptions<AgentEvent> = { onEvent: (event) => events.push(event), onState: (state) => states.push(state), onClosed: async () => retry }
+  const options: StreamOptions<E> = { onEvent: (event) => events.push(event), onState: (state) => states.push(state), onClosed: async () => retry }
   return { options, events, states, decline: () => (retry = false) }
 }
+
+const streams = (setup: Partial<SharedStreamsSetup> & Pick<SharedStreamsSetup, 'connect'>) => new SharedStreams({ inPage: () => fakeWorker().worker, base: 'http://127.0.0.1:8780/', ...setup })
 
 beforeEach(() => FakeEventSource.reset())
 afterEach(() => vi.useRealTimers())
 
 describe("a tab's side of the shared streams", () => {
-  it('subscribes through the worker with the absolute URL, and hands states and parsed events to the caller', () => {
+  it('subscribes through the worker by stream name at the absolute GET /events URL, and hands states and parsed events to the caller', () => {
     const w = fakeWorker()
-    const streams = new SharedStreams(() => w.worker, vi.fn(), undefined, 'http://127.0.0.1:8780/console/')
+    const s = streams({ connect: () => w.worker })
     const r = recorder()
-    streams.subscribe('/api/v1/agents/a1/events', AGENT_EVENT_NAMES, r.options)
-    expect(w.sent).toEqual([{ kind: 'subscribe', sub: 1, url: URL_A, names: [...AGENT_EVENT_NAMES], retryMinMs: 1000, retryMaxMs: 30000 }])
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, r.options)
+    expect(w.sent).toEqual([{ kind: 'subscribe', sub: 1, endpoint: ENDPOINT, stream: 'agent:a1', names: [...AGENT_EVENT_NAMES], retryMinMs: 1000, retryMaxMs: 30000 }])
     w.say({ kind: 'state', sub: 1, state: 'open' })
     w.say({ kind: 'event', sub: 1, type: 'run.text', id: '5-0', data: '{"runId":"r"}' })
     w.say({ kind: 'event', sub: 1, type: 'run.text', id: '6-0', data: 'not json' })
@@ -52,26 +54,26 @@ describe("a tab's side of the shared streams", () => {
 
   it('answers pings, subscribes again to what is still open on reset, and tells the worker when a stream is closed', () => {
     const w = fakeWorker()
-    const streams = new SharedStreams(() => w.worker, vi.fn())
-    const close1 = streams.subscribe(URL_A, AGENT_EVENT_NAMES, recorder().options)
-    const close2 = streams.subscribe(URL_A, AGENT_EVENT_NAMES, recorder().options)
+    const s = streams({ connect: () => w.worker })
+    const close1 = s.subscribe('agent:a1', AGENT_EVENT_NAMES, recorder().options)
+    const close2 = s.subscribe('inbox', INBOX_EVENT_NAMES, recorder<InboxEvent>().options)
     close1()
     close1()
     w.sent.splice(0)
     w.say({ kind: 'ping' })
     w.say({ kind: 'reset' })
-    expect(w.sent.map((m) => (m.kind === 'subscribe' ? `subscribe ${m.sub}` : m.kind))).toEqual(['pong', 'subscribe 2'])
+    expect(w.sent.map((m) => (m.kind === 'subscribe' ? `subscribe ${m.sub} ${m.stream}` : m.kind))).toEqual(['pong', 'subscribe 2 inbox'])
     close2()
     expect(w.sent.at(-1)).toEqual({ kind: 'unsubscribe', sub: 2 })
   })
 
   it('a stream closed for good asks the caller whether to retry; one that declines is closed', async () => {
     const w = fakeWorker()
-    const streams = new SharedStreams(() => w.worker, vi.fn())
+    const s = streams({ connect: () => w.worker })
     const keep = recorder(), leave = recorder()
     leave.decline()
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, keep.options)
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, leave.options)
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, keep.options)
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, leave.options)
     w.sent.splice(0)
     w.say({ kind: 'closed', sub: 1 })
     w.say({ kind: 'closed', sub: 2 })
@@ -81,87 +83,37 @@ describe("a tab's side of the shared streams", () => {
     expect(keep.states.at(-1)).toBe('connecting')
   })
 
-  it('when the worker fails to start, every stream becomes one the tab holds itself', () => {
-    const w = fakeWorker()
-    const local = vi.fn(() => () => {})
-    const streams = new SharedStreams(() => w.worker, local)
-    const r = recorder()
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, r.options)
+  it('when the shared worker fails to start, the hub runs inside the page and every stream subscribes there', () => {
+    const w = fakeWorker(), inPage = fakeWorker()
+    const s = streams({ connect: () => w.worker, inPage: () => inPage.worker })
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, recorder().options)
     w.fail()
-    expect(local).toHaveBeenCalledWith(URL_A, [...AGENT_EVENT_NAMES], r.options)
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, r.options)
-    expect(local).toHaveBeenCalledTimes(2)
-    const throwing = new SharedStreams(() => {
-      throw new Error('blocked')
-    }, local)
-    throwing.subscribe(URL_A, AGENT_EVENT_NAMES, r.options)
-    expect(local).toHaveBeenCalledTimes(3)
+    expect(inPage.sent).toMatchObject([{ kind: 'subscribe', sub: 1, stream: 'agent:a1' }])
+    s.subscribe('inbox', INBOX_EVENT_NAMES, recorder<InboxEvent>().options)
+    expect(inPage.sent.at(-1)).toMatchObject({ kind: 'subscribe', sub: 2, stream: 'inbox' })
+    expect(w.sent).toHaveLength(1)
+    const throwing = fakeWorker()
+    streams({ connect: () => { throw new Error('blocked') }, inPage: () => throwing.worker }).subscribe('inbox', INBOX_EVENT_NAMES, recorder<InboxEvent>().options)
+    expect(throwing.sent).toMatchObject([{ kind: 'subscribe', stream: 'inbox' }])
   })
 
   it('says bye on pagehide; restored from the back-forward cache it connects again and subscribes again; on resume it checks in', () => {
     const workers = [fakeWorker(), fakeWorker()]
     let n = 0
     const p = page()
-    const streams = new SharedStreams(() => workers[n++].worker, vi.fn(), p.page)
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, recorder().options)
+    const s = streams({ connect: () => workers[n++].worker, page: p.page })
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, recorder().options)
     p.fire('window:pagehide')
     expect(workers[0].sent.at(-1)).toEqual({ kind: 'bye' })
-    const restored = Object.assign(new Event('pageshow'), { persisted: true })
-    p.fire('window:pageshow', restored)
-    expect(workers[1].sent).toMatchObject([{ kind: 'subscribe', sub: 1, url: URL_A }])
+    p.fire('window:pageshow', Object.assign(new Event('pageshow'), { persisted: true }))
+    expect(workers[1].sent).toMatchObject([{ kind: 'subscribe', sub: 1, stream: 'agent:a1' }])
     p.fire('document:resume')
     expect(workers[1].sent.at(-1)).toEqual({ kind: 'pong' })
     // Messages on the old port are ignored.
     const r = recorder()
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, r.options)
+    s.subscribe('agent:a2', AGENT_EVENT_NAMES, r.options)
     workers[0].say({ kind: 'state', sub: 2, state: 'open' })
     expect(r.states).toEqual(['connecting'])
-  })
-
-  it('without shared workers (as in these tests), connectAgentEvents opens its own EventSource as before', () => {
-    expect(typeof SharedWorker).toBe('undefined')
-    expect(sharedStreams()).toBeNull()
-    const close = connectAgentEvents({ agentId: 'a1', ...recorder().options })
-    expect(FakeEventSource.latest().url).toBe(agentEventsUrl('a1'))
-    close()
-  })
-})
-
-// Two tabs and the worker, wired together: messages cross the ports on a later task, as between a page and a shared worker.
-describe('two tabs through one worker', () => {
-  function wire(hub: EventHub) {
-    const tabPort: WorkerPort = { postMessage: (message) => queueMicrotask(() => hubPort.onmessage?.({ data: structuredClone(message) } as MessageEvent<TabMessage>)), onmessage: null }
-    const hubPort: HubPort = { postMessage: (message) => queueMicrotask(() => tabPort.onmessage?.({ data: structuredClone(message) } as MessageEvent<WorkerMessage>)), onmessage: null }
-    hub.attach(hubPort)
-    return new SharedStreams(() => ({ port: tabPort, addEventListener: () => {} }), vi.fn())
-  }
-  const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
-
-  it('share one connection: each gets the snapshot and every event, and the connection closes when both have left', async () => {
-    const hub = new EventHub(new EventSourceTransport((url) => new FakeEventSource(url) as unknown as EventSource))
-    const one = wire(hub), two = wire(hub)
-    const a = recorder(), b = recorder()
-    const closeA = one.subscribe(URL_A, AGENT_EVENT_NAMES, a.options)
-    await flush()
-    const source = FakeEventSource.latest()
-    source.open()
-    source.emit('snapshot', { status: {} }, '10-0')
-    source.emit('run.text', { runId: 'r', delta: 'hi' }, '11-0')
-    await flush()
-    const closeB = two.subscribe(URL_A, AGENT_EVENT_NAMES, b.options)
-    await flush()
-    source.emit('run.text', { runId: 'r', delta: '!' }, '12-0')
-    await flush()
-    expect(FakeEventSource.instances).toHaveLength(1)
-    expect(a.events.map((e) => `${e.type} ${e.id}`)).toEqual(['snapshot 10-0', 'run.text 11-0', 'run.text 12-0'])
-    expect(b.events.map((e) => `${e.type} ${e.id}`)).toEqual(['snapshot 10-0', 'run.text 11-0', 'run.text 12-0'])
-    expect(b.states).toEqual(['connecting', 'open'])
-    closeA()
-    await flush()
-    expect(source.readyState).not.toBe(FakeEventSource.CLOSED)
-    closeB()
-    await flush()
-    expect(source.readyState).toBe(FakeEventSource.CLOSED)
   })
 })
 
@@ -170,28 +122,85 @@ describe('a worker that went silent', () => {
     vi.useFakeTimers()
     const workers = [fakeWorker(), fakeWorker()]
     let n = 0
-    const streams = new SharedStreams(() => workers[n++].worker, vi.fn(), undefined, undefined, { checkMs: 1000, silentMs: 3000 })
-    streams.subscribe(URL_A, AGENT_EVENT_NAMES, recorder().options)
-    // Pings keep it alive.
+    const s = streams({ connect: () => workers[n++].worker, timing: { checkMs: 1000, silentMs: 3000 } })
+    s.subscribe('agent:a1', AGENT_EVENT_NAMES, recorder().options)
     for (let i = 0; i < 5; i++) {
       vi.advanceTimersByTime(1000)
       workers[0].say({ kind: 'ping' })
     }
     expect(n).toBe(1)
-    // Silent: first a check (a pong of its own, which a living worker answers with its next message)...
     const pongs = () => workers[0].sent.filter((m) => m.kind === 'pong').length
     const before = pongs()
     vi.advanceTimersByTime(3000)
     expect(pongs()).toBe(before + 1)
     expect(n).toBe(1)
-    // ...answered: kept.
     workers[0].say({ kind: 'ping' })
     vi.advanceTimersByTime(2000)
     expect(n).toBe(1)
-    // Silent again, and the check goes unanswered: a new worker, the same subscriptions.
     vi.advanceTimersByTime(2000)
     expect(n).toBe(2)
     expect(workers[0].sent.at(-1)).toEqual({ kind: 'bye' })
-    expect(workers[1].sent).toMatchObject([{ kind: 'subscribe', sub: 1, url: URL_A }])
+    expect(workers[1].sent).toMatchObject([{ kind: 'subscribe', sub: 1, stream: 'agent:a1' }])
+  })
+})
+
+// Tabs and the hub wired together: messages cross on a later task, as between a page and a shared worker.
+describe('tabs through one hub', () => {
+  function wire(hub: EventHub) {
+    const tabPort: WorkerPort = { postMessage: (message) => queueMicrotask(() => hubPort.onmessage?.({ data: structuredClone(message) } as MessageEvent<TabMessage>)), onmessage: null }
+    const hubPort: HubPort = { postMessage: (message) => queueMicrotask(() => tabPort.onmessage?.({ data: structuredClone(message) } as MessageEvent<WorkerMessage>)), onmessage: null }
+    hub.attach(hubPort)
+    return streams({ connect: () => ({ port: tabPort, addEventListener: () => {} }) })
+  }
+  const emit = (source: FakeEventSource, stream: string, event: string, data: unknown, id: string) => source.emit('event', { stream, id, event, data }, `${stream}=${id}`)
+
+  it('share one GET /events connection for all their streams; a late tab gets the snapshot and every event; the connection closes when all have left', async () => {
+    const hub = new EventHub(new MultiplexedTransport((url) => new FakeEventSource(url) as unknown as EventSource))
+    const one = wire(hub), two = wire(hub)
+    const a = recorder(), inbox = recorder<InboxEvent>(), b = recorder()
+    const closeA = one.subscribe('agent:a1', AGENT_EVENT_NAMES, a.options)
+    const closeInbox = one.subscribe('inbox', INBOX_EVENT_NAMES, inbox.options)
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1), { timeout: SET_CHANGE_MS * 5 })
+    const source = FakeEventSource.latest()
+    expect(new URL(source.url).searchParams.getAll('stream')).toEqual(['agent:a1', 'inbox'])
+    source.open()
+    emit(source, 'agent:a1', 'snapshot', { status: {} }, '10-0')
+    emit(source, 'inbox', 'snapshot', { unreadTotal: 2 }, '3-0')
+    emit(source, 'agent:a1', 'run.text', { runId: 'r', delta: 'hi' }, '11-0')
+    const closeB = two.subscribe('agent:a1', AGENT_EVENT_NAMES, b.options)
+    await vi.waitFor(() => expect(b.events).toHaveLength(2))
+    emit(source, 'agent:a1', 'run.text', { runId: 'r', delta: '!' }, '12-0')
+    await vi.waitFor(() => expect(b.events).toHaveLength(3))
+    expect(FakeEventSource.instances).toHaveLength(1)
+    expect(a.events.map((e) => `${e.type} ${e.id}`)).toEqual(['snapshot 10-0', 'run.text 11-0', 'run.text 12-0'])
+    expect(b.events.map((e) => `${e.type} ${e.id}`)).toEqual(['snapshot 10-0', 'run.text 11-0', 'run.text 12-0'])
+    expect(inbox.events).toEqual([{ type: 'snapshot', id: '3-0', data: { unreadTotal: 2 } }])
+    expect(b.states).toEqual(['connecting', 'open'])
+    closeA()
+    closeInbox()
+    await new Promise((resolve) => setTimeout(resolve, SET_CHANGE_MS * 2))
+    expect(source.readyState).toBe(FakeEventSource.CLOSED)
+    const reconnected = FakeEventSource.latest()
+    expect(new URL(reconnected.url).searchParams.getAll('stream')).toEqual(['agent:a1'])
+    expect(new URL(reconnected.url).searchParams.get('cursor')).toBe('agent:a1=12-0')
+    closeB()
+    await vi.waitFor(() => expect(reconnected.readyState).toBe(FakeEventSource.CLOSED))
+  })
+
+  it("without a shared worker a tab still opens one GET /events for its streams (the hub runs in the page)", async () => {
+    useOwnEventStreams(false)
+    try {
+      expect(typeof SharedWorker).toBe('undefined')
+      const closeAgent = connectAgentEvents({ agentId: 'a1', ...recorder().options })
+      const closeInbox = connectInboxEvents(recorder<InboxEvent>().options)
+      await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1), { timeout: SET_CHANGE_MS * 5 })
+      const url = new URL(FakeEventSource.latest().url)
+      expect(url.pathname.endsWith('/events')).toBe(true)
+      expect(url.searchParams.getAll('stream')).toEqual(['agent:a1', 'inbox'])
+      closeAgent()
+      closeInbox()
+    } finally {
+      useOwnEventStreams(true)
+    }
   })
 })
