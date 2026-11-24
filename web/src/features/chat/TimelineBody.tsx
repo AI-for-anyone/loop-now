@@ -69,7 +69,21 @@ const USAGE_PARTS = [
   { key: 'cacheWrite', bar: 'rounded-r-[4px] bg-tint-pink-2 shadow-[inset_0_0_0_2px_var(--pink-text)]' },
 ] as const
 
-export function UsageBlock({ usage }: { usage: Schemas['UsageTotals'] }) {
+// reported: whether the runtime reported usage for this turn (Run.usageReported); when it didn't, its zeros mean "not known" and only that
+// is said.
+export function UsageBlock({ usage, reported = true }: { usage: Schemas['UsageTotals']; reported?: boolean }) {
+  if (!reported) {
+    return (
+      <div className="flex flex-col gap-1 border-t-2 border-dashed border-ink/15 px-4 py-3">
+        <span className="flex items-baseline gap-2.5">
+          <span className="text-[13.5px] font-black">{t.timeline.usage.title}</span>
+          <span className="font-mono text-[11px] text-ink-500">{t.timeline.usage.field}</span>
+          <span aria-hidden="true" className="ml-auto font-display-latin text-[22px] font-extrabold text-ink-500">—</span>
+        </span>
+        <span className="text-[12.5px] text-ink-700">{t.timeline.usage.unreported}</span>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-2 border-t-2 border-dashed border-ink/15 px-4 py-3">
       <span className="flex items-baseline gap-2.5">

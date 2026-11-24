@@ -5,9 +5,11 @@ type S = components['schemas']
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `运行记录 · ${duration} · ${tokens} token`,
+  // A turn whose runtime reported no usage (Run.usageReported false): its zeros mean "not known".
+  toggleNoUsage: (duration: string) => `运行记录 · ${duration} · 没有用量数据`,
   toggleRunning: (elapsed: string) => `运行记录 · 已用 ${elapsed}`,
   // The toggle bar is drawn as a segmented ticket: these are the segments after the name.
-  toggleParts: { tokens: (tokens: string) => `${tokens} token`, running: (elapsed: string) => `已用 ${elapsed}` },
+  toggleParts: { tokens: (tokens: string) => `${tokens} token`, noUsage: '没有用量数据', running: (elapsed: string) => `已用 ${elapsed}` },
   title: '运行记录',
   total: (duration: string) => `合计 ${duration}`,
   loading: '正在加载运行记录…',
@@ -122,6 +124,7 @@ export const timeline = {
     title: 'token 用量',
     field: 'usage',
     calls: (count: number) => `模型调用 ${count} 次`,
+    unreported: '这一轮运行时没有报告 token 用量。',
   },
   result: {
     completed: '完成',

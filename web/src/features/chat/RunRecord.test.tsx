@@ -239,6 +239,19 @@ describe('run log toggle bar', () => {
     expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
   })
 
+  it('a turn whose runtime reported no usage (Grok, Antigravity, or a turn that never reached a model) says so instead of “0 tokens”', async () => {
+    const agent = makeAgent()
+    const run = makeRun({ status: 'completed', queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(9.4), usage: usage(0, 0, 0, 0, 0), usageReported: false })
+    const { handler } = timelineHandler(agent.id, () => ({ run, entries: [{ type: 'ended', at: at(9.4), status: 'completed', endReason: null, errorCode: null }], usage: run.usage }))
+    const { user } = await renderChat({ agent, messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })], handlers: [handler] })
+    const toggle = await waitFor(recordToggle)
+    expect(toggle).toHaveAccessibleName('Run log · 9.4 s · no usage data')
+    expect(parts(toggle)).toEqual(['Run log', '9.4 s', 'no usage data'])
+    await user.click(toggle)
+    const usageBlock = await screen.findByText("The runtime didn't report token usage for this turn.")
+    expect(usageBlock.closest('div')).not.toHaveTextContent(/\b0 tokens/)
+  })
+
   it('in progress has only two parts: name | elapsed time', async () => {
     const agent = makeAgent()
     const run = makeRun({ status: 'running', queuedAt: new Date(Date.now() - 5000).toISOString(), endedAt: null })

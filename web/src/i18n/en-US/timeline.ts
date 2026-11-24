@@ -6,8 +6,10 @@ const count = (n: number, one: string, other: string) => `${n} ${plural('en-US',
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `Run log · ${duration} · ${tokens} tokens`,
+  // A turn whose runtime reported no usage (Run.usageReported false): its zeros mean "not known".
+  toggleNoUsage: (duration: string) => `Run log · ${duration} · no usage data`,
   toggleRunning: (elapsed: string) => `Run log · ${elapsed} so far`,
-  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, running: (elapsed: string) => `${elapsed} so far` },
+  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, noUsage: 'no usage data', running: (elapsed: string) => `${elapsed} so far` },
   title: 'Run log',
   total: (duration: string) => `Total ${duration}`,
   loading: 'Loading the run log…',
@@ -126,6 +128,7 @@ export const timeline = {
     title: 'Token usage',
     field: 'usage',
     calls: (n: number) => count(n, 'model call', 'model calls'),
+    unreported: "The runtime didn't report token usage for this turn.",
   },
   result: {
     completed: 'Completed',
