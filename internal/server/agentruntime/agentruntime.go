@@ -85,6 +85,9 @@ type Runtime struct {
 	// Setup gives the commands a person runs to install the runtime and log in on an operating system (runtime.GOOS
 	// values); nil for a runtime that needs no setup.
 	Setup func(goos string) *Setup
+	// MinVersion is the oldest version of the runtime's CLI the platform supports (the version it was tested with);
+	// empty when there is no minimum. The status probe reports an older CLI as unsupported.
+	MinVersion string
 }
 
 // SetupOn returns how to set the runtime up on the operating system goos; nil when it needs no setup.
