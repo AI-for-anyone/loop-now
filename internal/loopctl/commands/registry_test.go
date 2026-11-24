@@ -344,7 +344,7 @@ func TestAgentIdentityRestrictions(t *testing.T) {
 			t.Errorf("%s: sent a request although the Agent identity was refused", c.Name())
 		}
 	}
-	want := map[string]bool{"agent status": true, "inbox list": true, "inbox read": true, "inbox send": true, "inbox reply": true, "project list": true, "whoami": true, "version": true, "schema": true}
+	want := map[string]bool{"agent status": true, "conversation": true, "inbox list": true, "inbox read": true, "inbox send": true, "inbox reply": true, "project list": true, "whoami": true, "version": true, "schema": true}
 	for _, c := range all() {
 		if c.Path[0] == "task" || c.Path[0] == "sleep" {
 			want[c.Name()] = true

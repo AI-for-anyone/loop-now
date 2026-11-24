@@ -11572,6 +11572,54 @@ components:
       enum: [console, inbox_reminder, sleep_wake]
 
     Message: {"type":"object","required":["id","role","origin","text","createdAt","sessionEpoch","run"],"additionalProperties":false,"properties":{"id":{"type":"string","format":"uuid"},"role":{"$ref":"#/components/schemas/MessageRole"},"origin":{"description":"Taken from the run the message belongs to; a user message and its reply have the same value. For a platform reminder turn, the user message text is the reminder text generated when the run starts","$ref":"#/components/schemas/MessageOrigin"},"text":{"type":"string"},"createdAt":{"type":"string","format":"date-time"},"sessionEpoch":{"type":"integer","minimum":1},"run":{"description":"The run this message belongs to; a user message and its reply carry the same run","$ref":"#/components/schemas/Run"},"images":{"type":"array","items":{"$ref":"#/components/schemas/MessageImage"}}}}
+    ConversationPage:
+      type: object
+      required: [messages, hasMore, hasMoreAfter, total]
+      additionalProperties: false
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ConversationEntry" }
+        hasMore:
+          type: boolean
+          description: Older messages exist; read them with before set to the first message's id
+        hasMoreAfter:
+          type: boolean
+          description: Newer messages exist; read them with after set to the last message's id
+        total:
+          type: integer
+          minimum: 0
+          description: Messages in the whole conversation
+
+    ConversationEntry:
+      type: object
+      required: [id, role, origin, text, createdAt, runId, runStatus, images, tools]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/MessageRole" }
+        origin: { $ref: "#/components/schemas/MessageOrigin" }
+        text:
+          type: string
+          description: The full text; for a reply that failed or was interrupted, the part that was written
+        createdAt: { type: string, format: date-time }
+        runId: { type: string, format: uuid, description: The turn the message belongs to; a request and its reply share it }
+        runStatus: { $ref: "#/components/schemas/RunStatus" }
+        images: { type: integer, minimum: 0, description: Images attached to the message (not returned) }
+        tools:
+          description: On a reply, the tools the turn used, in order of first use; empty on requests
+          type: array
+          items: { $ref: "#/components/schemas/ConversationToolUse" }
+
+    ConversationToolUse:
+      type: object
+      required: [name, calls, failed]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        calls: { type: integer, minimum: 1 }
+        failed: { type: integer, minimum: 0 }
+
     MessagePage:
       type: object
       required: [messages, hasMore, hasMoreAfter, turnsBefore, turnsTotal]

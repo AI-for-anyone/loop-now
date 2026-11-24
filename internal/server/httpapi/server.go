@@ -346,6 +346,7 @@ func (s *Server) AgentRoutes() []Route {
 		{"POST", "/tasks/{taskId}/artifacts", "publishTaskArtifact", ConsoleOnly, s.publishTaskArtifact},
 
 		{"GET", "/whoami", "getWhoami", ConsoleOnly, s.whoami},
+		{"GET", "/conversation", "readConversation", ConsoleOnly, s.readConversation},
 		{"GET", "/inbox/messages", "listInboxMessages", ConsoleOnly, s.listInbox},
 		{"POST", "/inbox/messages", "sendInboxMessage", ConsoleOnly, s.sendInbox},
 		{"POST", "/inbox/messages/{messageId}/read", "readInboxMessage", ConsoleOnly, s.readInbox},

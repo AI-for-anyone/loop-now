@@ -220,3 +220,14 @@ func pluginPreviewSample() map[string]any {
 		"components": map[string]any{"agentExtensions": 1, "skills": []any{}, "mcpServers": []any{}, "bin": []any{}, "platform": true, "actions": []any{map[string]any{"id": "resend", "label": "Resend", "where": []any{"identity"}, "fields": map[string]any{}}}, "channels": []any{}, "http": false, "schedules": []any{}}}
 	return map[string]any{"previewId": actionUUID, "expiresAt": now, "source": pluginSource(), "trusted": true, "manifest": manifest, "installedVersion": nil}
 }
+
+func conversationPage() map[string]any {
+	entry := func(id, role, text string, tools []any) map[string]any {
+		return map[string]any{"id": id, "role": role, "origin": "console", "text": text, "createdAt": now, "runId": "0192f1a2-0000-7000-8000-0000000000f1",
+			"runStatus": "completed", "images": 0, "tools": tools}
+	}
+	return map[string]any{"messages": []any{
+		entry("0192f1a2-0000-7000-8000-0000000000f2", "user", "hi", []any{}),
+		entry("0192f1a2-0000-7000-8000-0000000000f3", "assistant", "hello", []any{map[string]any{"name": "bash", "calls": 2, "failed": 1}}),
+	}, "hasMore": true, "hasMoreAfter": false, "total": 5}
+}

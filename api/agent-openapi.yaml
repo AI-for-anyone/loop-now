@@ -24,6 +24,7 @@ servers:
 tags:
   - name: inbox
   - name: sleep
+  - name: conversation
 
 paths:
   /agents/status:
@@ -101,6 +102,43 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /conversation:
+    get:
+      tags: [conversation]
+      operationId: readConversation
+      x-agent-only: true
+      summary: Read-only, paged view of the current Agent's own console conversation
+      description: |
+        The conversation is everything saved for this Agent since the user last started over (/new or resuming another
+        session), whichever runtime ran it: the user's messages (including platform reminders and sleep wakes, as their
+        text) and the replies, each in full, oldest first within a page. A message that is queued and has not been
+        handed to the Agent yet is not included. Images are counted, not returned; tool use is summarized per turn.
+        Without before or after it returns the newest page. Only a regular Agent's token can read it; a task instance's
+        token gets 404 (a task node's messages are read with the task commands). Reading changes nothing.
+      parameters:
+        - name: before
+          in: query
+          required: false
+          description: Return the messages just before this message (older)
+          schema: { type: string, format: uuid }
+        - name: after
+          in: query
+          required: false
+          description: Return the messages just after this message (newer); at most one of before and after
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageLimit"
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: One page of the conversation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /whoami:
@@ -2172,6 +2210,63 @@ components:
             fields:
               type: array
               items: { $ref: "#/components/schemas/FieldError" }
+
+    ConversationPage:
+      type: object
+      required: [messages, hasMore, hasMoreAfter, total]
+      additionalProperties: false
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ConversationEntry" }
+        hasMore:
+          type: boolean
+          description: Older messages exist; read them with before set to the first message's id
+        hasMoreAfter:
+          type: boolean
+          description: Newer messages exist; read them with after set to the last message's id
+        total:
+          type: integer
+          minimum: 0
+          description: Messages in the whole conversation
+
+    ConversationEntry:
+      type: object
+      required: [id, role, origin, text, createdAt, runId, runStatus, images, tools]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/MessageRole" }
+        origin: { $ref: "#/components/schemas/MessageOrigin" }
+        text:
+          type: string
+          description: The full text; for a reply that failed or was interrupted, the part that was written
+        createdAt: { type: string, format: date-time }
+        runId: { type: string, format: uuid, description: The turn the message belongs to; a request and its reply share it }
+        runStatus: { $ref: "#/components/schemas/RunStatus" }
+        images: { type: integer, minimum: 0, description: Images attached to the message (not returned) }
+        tools:
+          description: On a reply, the tools the turn used, in order of first use; empty on requests
+          type: array
+          items: { $ref: "#/components/schemas/ConversationToolUse" }
+
+    ConversationToolUse:
+      type: object
+      required: [name, calls, failed]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        calls: { type: integer, minimum: 1 }
+        failed: { type: integer, minimum: 0 }
+
+    MessageRole:
+      type: string
+      enum: [user, assistant]
+
+    MessageOrigin:
+      description: Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
+      type: string
+      enum: [console, inbox_reminder, sleep_wake]
 
     Whoami:
       type: object
