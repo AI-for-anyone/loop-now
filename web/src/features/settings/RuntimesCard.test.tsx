@@ -6,7 +6,7 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { apiUrl, errorBody } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
-import { codexStatus, runtimeDefinitions, runtimeList, runtimeStatus, withCodex } from '@/test/runtimes'
+import { acpStatus, codexStatus, runtimeDefinitions, runtimeList, runtimeStatus, withAllRuntimes, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { RuntimesCard } from './RuntimesCard'
 
@@ -91,6 +91,14 @@ describe('Agent runtimes in global settings', () => {
     expect(await screen.findByText(/Codex uses the codex installed on this computer and your login there \(a ChatGPT account or an API key\)/)).toBeInTheDocument()
     const codex = await screen.findByRole('region', { name: 'Codex' })
     expect(within(codex).getByRole('note')).toHaveTextContent("Codex isn't logged in on this computer: run codex login in a terminal there, with a ChatGPT account or an API key.")
+  })
+
+  it('Grok and Antigravity each have a sentence of their own, naming their command', async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes())))
+    setup({ runtimes: [...runtimeList().runtimes, codexStatus(), acpStatus('grok', { available: false, unavailableReason: 'not_found', version: null, binaryPath: null, login: null }), acpStatus('antigravity')] })
+    expect(await screen.findByText(/Grok uses the grok installed on this computer/)).toHaveTextContent(/Antigravity uses the agy installed on this computer and your login there/)
+    const grok = await screen.findByRole('region', { name: 'Grok' })
+    expect(within(grok).getByRole('note')).toHaveTextContent("grok wasn't found on this computer: install the Grok CLI and make sure grok runs in a terminal.")
   })
 
   it('Codex logged in with a ChatGPT account says so in words', async () => {

@@ -12,12 +12,15 @@ const tsconfig = JSON.stringify({
   include: ['src'],
   exclude: ['src/**/*.test.ts', 'src/test'],
 })
-const schema = (runtimes: string) => `export interface components { schemas: { AgentRuntime: ${runtimes}; CommandSource: "platform" | "pi" } }\n`
+// The contract's AgentRuntime is a plain string: people add runtimes of their own (acp-<command id>).
+const schema = 'export interface components { schemas: { AgentRuntime: string; CommandSource: "platform" | "pi" } }\n'
+// The lookup's list of the built-in runtimes, which the check reads the ids from.
+const lookup = (ids: string[], more = '') => `export const BUILT_IN_RUNTIMES = [${ids.map((id) => `'${id}'`).join(', ')}] as const\n${more}`
 
-function project(files: Record<string, string>, runtimes = '"pi" | "claude-code"'): string {
+function project(files: Record<string, string>, ids = ['pi', 'claude-code']): string {
   const dir = mkdtempSync(join(tmpdir(), 'runtime-ids-'))
   dirs.push(dir)
-  const all = { 'tsconfig.app.json': tsconfig, 'src/api/schema.gen.ts': schema(runtimes), ...files }
+  const all = { 'tsconfig.app.json': tsconfig, 'src/api/schema.gen.ts': schema, 'src/lib/runtime.ts': lookup(ids), ...files }
   for (const [path, content] of Object.entries(all)) {
     mkdirSync(join(dir, path, '..'), { recursive: true })
     writeFileSync(join(dir, path), content)
@@ -31,6 +34,7 @@ afterEach(() => {
 
 const header = "import type { components } from './api/schema.gen'\ntype S = components['schemas']\ntype Runtime = S['AgentRuntime']\n"
 const found = (root: string) => findRuntimeComparisons(root).found.map((item: { file: string; line: number; id: string }) => `${item.file}:${item.line} ${item.id}`)
+const pick = (root: string) => findRuntimeComparisons(root).found.map((item: { file: string; line: number; id: string; text: string }) => `${item.file}:${item.line} ${item.id} ${item.text}`)
 
 describe('check-runtime-ids', () => {
   it('reports a runtime id compared with a runtime value or a string, from either side, in a switch, or through a constant', () => {
@@ -58,15 +62,41 @@ describe('check-runtime-ids', () => {
         "  return [source === 'pi', a === b, name === 'pinned', names[a]]",
         '}',
       ].join('\n'),
-      'src/lib/runtime.ts': `${header.replaceAll('./api', '../api')}export const isPi = (runtime: Runtime) => runtime === 'pi'\n`,
+      'src/lib/runtime.ts': lookup(['pi', 'claude-code'], `${header.replaceAll('./api', '../api')}export const isPi = (runtime: Runtime) => runtime === 'pi'\nexport const isAdded = (runtime: Runtime) => runtime.startsWith('acp-')\n`),
       'src/page.test.ts': `${header}export const t = (runtime: Runtime) => runtime === 'pi'\n`,
       'src/test/fixtures.ts': `${header.replaceAll('./api', '../api')}export const f = (runtime: Runtime) => runtime === 'claude-code'\n`,
     })
     expect(findRuntimeComparisons(root)).toEqual({ ids: ['pi', 'claude-code'], found: [] })
   })
 
-  it('takes the runtime ids from the generated API types, so a new runtime is covered as soon as the contract has it', () => {
-    const root = project({ 'src/page.ts': `${header}export const codex = (runtime: Runtime) => runtime === 'codex'\n` }, '"pi" | "claude-code" | "codex"')
+  it("takes the built-in runtime ids from the lookup's list (AgentRuntime is a plain string), so a runtime listed there is covered", () => {
+    const root = project({ 'src/page.ts': `${header}export const codex = (runtime: Runtime) => runtime === 'codex'\n` }, ['pi', 'claude-code', 'codex'])
     expect(found(root)).toEqual(['src/page.ts:4 codex'])
+  })
+
+  it('stops when the lookup has no list of built-in runtimes, instead of checking nothing', () => {
+    const root = project({ 'src/lib/runtime.ts': 'export const nothing = 1\n' })
+    expect(() => findRuntimeComparisons(root)).toThrow(/BUILT_IN_RUNTIMES/)
+  })
+
+  it("reports the prefix of the runtimes people add (acp-) outside the lookup: a prefix test, a pattern, an id put together", () => {
+    const root = project({
+      'src/page.ts': header + [
+        'export function page(runtime: Runtime, id: string) {',
+        "  const a = runtime.startsWith('acp-')",
+        '  const b = /^acp-/.test(runtime)',
+        '  const c = `acp-${id}` === runtime',
+        "  const d = runtime === 'acp-1234'",
+        "  const e = '/acp-commands' + id",
+        '  return [a, b, c, d, e]',
+        '}',
+      ].join('\n'),
+    })
+    expect(pick(root)).toEqual([
+      "src/page.ts:5 acp- 'acp-'",
+      'src/page.ts:6 acp- /^acp-/',
+      'src/page.ts:7 acp- `acp-${',
+      "src/page.ts:8 acp- 'acp-1234'",
+    ])
   })
 })

@@ -10,6 +10,7 @@ import type { Schemas } from '@/api/client'
 import { useAgent, useAgentStatus, useProjects } from '@/api/queries'
 import { config } from '@/config'
 import { runPhaseText } from '@/features/chat/run-status-text'
+import { useRuntimeLookup, type RuntimeLookup } from '@/lib/runtime'
 import { t } from '@/i18n'
 import { useScope } from '@/features/projects/scope-context'
 import { isNotFound } from '@/lib/errors'
@@ -20,26 +21,27 @@ import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
-// The status tag next to the title (an outlined, slightly tilted pill), shown by priority: session lost, busy (plus the current
-// phase), idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
+// The model tag in the header: "provider · model", except for a command a person added, whose provider id (acp-<command id>) and one
+// model ("default") say nothing: it shows the command's name.
+function modelTag(model: Schemas['ModelRef'], runtimes: RuntimeLookup): string {
+  const runtime = runtimes.forProvider(model.provider)
+  return runtime?.acpCommandId ? runtime.name : `${model.provider} · ${model.modelId}`
+}
+
+// The status tag next to the title (an outlined, slightly tilted pill): busy (plus the current phase), or idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
 // is used, and until that result arrives, the busy/idle and session state from the Agent details.
 function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStickerState | null }) {
   const status = useAgentStatus(agent.id, config.agentListPollMs)
   const polled: AgentStickerState = status.data
     ? {
-        sessionMissing: status.data.session.state === 'missing',
         busy: status.data.busy,
         phase: status.data.currentRun ? runPhaseText(status.data.currentRun) : null,
         sleep: status.data.sleep,
       }
-    : { sessionMissing: agent.session.state === 'missing', busy: agent.busy, phase: null }
+    : { busy: agent.busy, phase: null }
   const state = live ?? polled
-  const [tone, label] = state.sessionMissing
-    ? (['danger', t.agents.sessionMissing] as const)
-    : state.busy
-      ? (['busy', t.agents.busy] as const)
-      : (['success', t.agents.idle] as const)
-  const phase = !state.sessionMissing && state.busy ? state.phase : null
+  const [tone, label] = state.busy ? (['busy', t.agents.busy] as const) : (['success', t.agents.idle] as const)
+  const phase = state.busy ? state.phase : null
   return (
     <>
       <span
@@ -70,6 +72,7 @@ export function AgentDetail() {
   const scope = useScope()
   const projects = useProjects()
   const agent = useAgent(agentId)
+  const runtimes = useRuntimeLookup()
   // The live status handed over by the Chat tab, recorded together with the Agent it belongs to, so that switching Agents never
   // uses the previous Agent's status.
   const [live, setLive] = useState<{ agentId: string; state: AgentStickerState } | null>(null)
@@ -131,7 +134,7 @@ export function AgentDetail() {
           {/* Model and address: the model is a monospace tag on a light blue background, the address is in a dashed box.
               On narrow screens they get a row of their own. */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] nav:contents">
-            <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
+            <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{modelTag(agent.data.model, runtimes)}</span>
             <AgentAddress address={agent.data.address} />
           </div>
         </div>

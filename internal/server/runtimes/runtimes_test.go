@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/codexcli"
 	"loop-now/internal/server/runtimes"
@@ -28,7 +29,7 @@ func TestChecker(t *testing.T) {
 	c := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: fakeclaudebin.Path(t), RealHome: func() (string, error) { return home, nil },
 		ExecBasePath: "/usr/bin:/bin", HelperEnv: helperEnv, Now: func() time.Time { return now }}
 	list := c.List(context.Background(), false)
-	if len(list) != 3 || list[0].ID != "pi" || !list[0].Available || *list[0].Version != "1.4.0" || list[0].Login != nil {
+	if len(list) != len(agentruntime.All()) || list[0].ID != "pi" || !list[0].Available || *list[0].Version != "1.4.0" || list[0].Login != nil {
 		t.Fatalf("pi: %+v", list)
 	}
 	cc := list[1]

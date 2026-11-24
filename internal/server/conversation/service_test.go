@@ -85,6 +85,13 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		if err != nil {
 			return executor.Result{}, err
 		}
+		// A session whose file starts with /gone is lost, as the local executor finds it: marked missing, the run fails.
+		if sess, err := f.sessions.GetAgentSession(ctx, req.AgentID); err == nil && sess.State == "active" && strings.HasPrefix(sess.SessionFile, "/gone") {
+			if err := f.sessions.MarkSessionMissing(ctx, req.AgentID, &req.RunID); err != nil {
+				return executor.Result{}, err
+			}
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrSessionMissing, ErrorMessage: "The recorded session no longer exists.", ConfigVersion: 1}, nil
+		}
 		sel = executor.Selection{Runtime: agentruntime.ForProvider(a.ModelProvider).ID, Provider: a.ModelProvider, ModelID: a.ModelID}
 		defer func() {
 			_ = f.sessions.RecordRuntimeSessionFile(context.Background(), req.AgentID, sel.Runtime, "/fake/"+sel.Runtime+".jsonl")
@@ -534,7 +541,9 @@ func TestRestartRecovery(t *testing.T) {
 	}
 }
 
-func TestSessionMissingAndReset(t *testing.T) {
+// A lost session does not hold the conversation back: the next message is accepted under the same session number.
+// A reset still starts a new session number.
+func TestLostSessionAndReset(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	if err := e.st.RecordSessionFile(ctx, e.agent, "/tmp/x.jsonl"); err != nil {
@@ -543,12 +552,11 @@ func TestSessionMissingAndReset(t *testing.T) {
 	if err := e.st.MarkSessionMissing(ctx, e.agent, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.send("Hello", ""); !apperr.Is(err, apperr.CodeSessionMissing) {
-		t.Fatalf("should be rejected while the session is lost: %v", err)
+	if m := e.mustSend("Hello", ""); m.SessionEpoch != 1 {
+		t.Fatalf("accepted under the same session number: %d", m.SessionEpoch)
 	}
-	if n := len(e.history()); n != 0 {
-		t.Fatal("a rejected message should not be saved")
-	}
+	e.waitStarted("Hello")
+	e.waitIdle()
 	sess, err := e.svc.ResetSession(ctx, e.agent)
 	if err != nil || sess.State != "none" || sess.Epoch != 2 {
 		t.Fatalf("after a reset it should be a new session with the epoch increased by one: %+v %v", sess, err)

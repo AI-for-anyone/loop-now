@@ -1,7 +1,10 @@
 export const images = {
   name: (index: number, width: number, height: number) => `图片 ${index} · ${width}×${height}`,
   receiptMismatch: '图片上传回执与原图片不一致，草稿已保留。',
-  add: '添加图片', selectFile: '选择图片文件', help: '可粘贴截图、拖入或选择 PNG、JPEG、WebP 图片。',
+  add: '添加图片',
+  // The Agent's model takes no images (its input has no image).
+  modelRefuses: '这个模型不收图片',
+  selectFile: '选择图片文件', help: '可粘贴截图、拖入或选择 PNG、JPEG、WebP 图片。',
   preview: '待发送图片', history: '消息图片', only: '只支持 PNG、JPEG、WebP 图片，不支持其他文件格式。',
   empty: '图片为空，无法发送。', tooMany: (count: number) => `一条消息最多 ${count} 张图片。`,
   tooLarge: (bytes: number) => `单张图片不能超过 ${Math.floor(bytes / 1024 / 1024)} MB。`,

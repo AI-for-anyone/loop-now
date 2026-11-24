@@ -23,6 +23,7 @@ import (
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/content"
+	"loop-now/internal/server/contexthandoff"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/folders"
@@ -73,6 +74,9 @@ type Source struct {
 	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (a retired instance's
 	// Claude Code session is archived from there); when nil, this is not supported.
 	ClaudeProjects func(context.Context) string
+	// HandoffBudget is the size limit of the conversation a task instance of a runtime that cannot fork the regular
+	// session starts with (contexthandoff.ClampBudget; 0 means the default).
+	HandoffBudget int
 }
 
 func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconfig.Snapshot, error) {
@@ -286,7 +290,20 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 		if session.State == "missing" {
 			return errors.New("the regular session file is missing; cannot create the task fork")
 		}
-		if session.State == "active" && session.SessionFile != "" {
+		rt := agentruntime.ForProvider(snapshot.Configuration().Provider)
+		if !rt.Capabilities.TaskFork {
+			// The runtime cannot copy the regular session: the instance starts a new session whose first message
+			// carries the regular conversation as it is now.
+			data, err := s.taskStartHandoff(ctx, inst.AgentID, rt)
+			if err != nil || data == nil {
+				return err
+			}
+			path, err := s.writeBaseline(inst, data)
+			if err != nil {
+				return err
+			}
+			base = &path
+		} else if session.State == "active" && session.SessionFile != "" {
 			if s.ForkBaseline == nil {
 				return errors.New("task forks of a session are not configured")
 			}
@@ -351,6 +368,19 @@ func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 		s.Log.Info("copied the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
 	}
 	return nil
+}
+
+// taskStartHandoff is the baseline of a task instance whose runtime cannot fork the regular session: the regular
+// conversation as a handoff block (executor.TaskStartHandoff); nil when there is no conversation yet.
+func (s *Source) taskStartHandoff(ctx context.Context, agentID uuid.UUID, rt agentruntime.Runtime) ([]byte, error) {
+	entries, err := s.Store.HandoffConversation(ctx, agentID, uuid.Nil)
+	if err != nil || len(entries) == 0 {
+		return nil, err
+	}
+	budget := contexthandoff.ClampBudget(s.HandoffBudget)
+	block := contexthandoff.BuildFor(contexthandoff.TaskStart, store.HandoffMessages(entries), rt.Name, rt.Name, budget)
+	return json.Marshal(executor.TaskStartHandoff{Text: block.Text, FromRuntime: rt.ID, ToRuntime: rt.ID, IncludedMessages: block.Included,
+		OmittedMessages: block.Omitted, Images: block.Images, Bytes: block.Bytes, BudgetBytes: budget})
 }
 
 // writeBaseline writes the baseline to the platform's task-baselines/<task>/<Agent>.jsonl (writing a temporary file

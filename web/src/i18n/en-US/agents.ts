@@ -7,7 +7,6 @@ export const agents = {
   notFound: "This Agent doesn't exist or was deleted.",
   busy: 'Busy',
   idle: 'Idle',
-  sessionMissing: 'Session lost',
   tabs: { chat: 'Chat', config: 'Config', folder: 'Folder', inbox: 'Inbox' },
   address: {
     label: 'Address',

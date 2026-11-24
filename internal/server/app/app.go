@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"loop-now/internal/buildinfo"
 	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -134,13 +136,14 @@ type Options struct {
 	ExternalListener net.Listener
 	// HomeDirs overrides the home directories used when validating the work root directory (for tests).
 	HomeDirs []string
-	// CodexBin is the codex executable (for tests); empty means look it up on the user's PATH.
-	CodexBin string
+	// CodexBin is the codex executable (for tests); empty means look it up on the user's PATH. GrokBin and
+	// AntigravityBin are the same for grok and agy.
+	CodexBin, GrokBin, AntigravityBin string
 	// RealHome replaces the real home directory of the user running the server, where local CLI logins are read (for
 	// tests); nil means os.UserHomeDir.
 	RealHome func() (string, error)
-	// CodexModelsMaxAge and CodexModelsStaleAge replace how old Codex's model list may be before a read of the model
-	// lists reads it again (1 minute), and how old when the last read may be out of date (10 seconds); for tests.
+	// CodexModelsMaxAge and CodexModelsStaleAge replace how old a local CLI's model list may be before a read of the
+	// model lists reads it again (1 minute), and how old when the last read may be out of date (10 seconds); for tests.
 	CodexModelsMaxAge, CodexModelsStaleAge time.Duration
 }
 
@@ -443,12 +446,13 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
-		CodexBin: o.CodexBin, RealHome: o.RealHome,
+		CodexBin: o.CodexBin, GrokBin: o.GrokBin, AntigravityBin: o.AntigravityBin, RealHome: o.RealHome,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
 	taskSource.ForkBaseline = a.Executor.ForkBaseline
 	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
 	taskSource.KeepsSessions = a.Executor.KeepsSessions
+	taskSource.HandoffBudget = cfg.ContextHandoffTokens
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
@@ -525,9 +529,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
 		Runtimes: &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: realHome, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv,
-			CodexEnv: a.Executor.CodexHelperEnv, CodexBin: o.CodexBin},
+			CodexEnv: a.Executor.CodexHelperEnv, CodexBin: o.CodexBin, ACPEnv: a.Executor.ACPHelperEnv, GrokBin: o.GrokBin, AntigravityBin: o.AntigravityBin},
 		PiCommands: a.Executor.Commands,
 	}
+	// The local ACP commands people added are runtimes too, before anything runs.
+	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
 		return a, err
 	}
@@ -535,19 +541,42 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.baseCancel = baseCancel
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
 	if cfg.CodexModelsRefresh > 0 {
-		reader := &codexModelReader{maxAge: o.CodexModelsMaxAge, staleAge: o.CodexModelsStaleAge, now: time.Now,
-			read: func(ctx context.Context) bool { return a.readCodexModels(ctx, models) }}
-		if reader.maxAge <= 0 {
-			reader.maxAge = codexModelsMaxAge
+		// The model lists of the local CLIs (Codex, Grok, Antigravity) are read at startup, on the timer, when GET
+		// /runtimes?refresh=true asks, and in the background when the lists are read and one has grown old.
+		reads := map[string]func(context.Context) bool{
+			agentruntime.Codex: func(ctx context.Context) bool { return a.readCodexModels(ctx, models) },
 		}
-		if reader.staleAge <= 0 {
-			reader.staleAge = codexModelsStaleAge
+		for runtime := range acpProviders {
+			reads[runtime] = func(ctx context.Context) bool { return a.readACPModels(ctx, models, runtime) }
 		}
-		go a.codexModelRefresher(baseCtx, reader, cfg.CodexModelsRefresh)
-		a.API.RefreshLocalModels = reader.refresh
+		readers := map[string]*localModelReader{}
+		for runtime, read := range reads {
+			r := &localModelReader{maxAge: o.CodexModelsMaxAge, staleAge: o.CodexModelsStaleAge, now: time.Now, read: read}
+			if r.maxAge <= 0 {
+				r.maxAge = localModelsMaxAge
+			}
+			if r.staleAge <= 0 {
+				r.staleAge = localModelsStaleAge
+			}
+			readers[runtime] = r
+			go a.localModelRefresher(baseCtx, r, cfg.CodexModelsRefresh)
+		}
+		a.API.RefreshLocalModels = func(ctx context.Context) {
+			var wg sync.WaitGroup
+			for _, r := range readers {
+				wg.Go(func() { r.refresh(ctx) })
+			}
+			wg.Wait()
+		}
+		// The runtime status reads Grok's and Antigravity's login from these reads instead of going online itself.
+		if a.API.Runtimes != nil {
+			a.API.Runtimes.ACPLogin = a.Executor.ACPLoginState
+		}
 		a.API.ModelListRead = func(provider string) {
-			if provider == "" || codexListsProvider(provider) {
-				reader.touch(baseCtx)
+			for runtime, r := range readers {
+				if provider == "" || runtimeListsProvider(runtime, provider) {
+					r.touch(baseCtx)
+				}
 			}
 		}
 	}

@@ -66,8 +66,26 @@ const (
 	gapReserve = len("[999999 messages left out here]\n\n")
 )
 
-// Build selects the messages that fit the budget and writes the block; from and to are the runtimes' display names.
+// Kind is why the conversation is carried; it decides how the block introduces itself.
+type Kind int
+
+const (
+	// RuntimeChanged: the runtime that runs the Agent changed.
+	RuntimeChanged Kind = iota
+	// SessionLost: the runtime's own session could not be continued; a new session of the same runtime starts.
+	SessionLost
+	// TaskStart: a task instance starts on a runtime that cannot fork the regular session.
+	TaskStart
+)
+
+// Build selects the messages that fit the budget and writes the block for a change of runtime; from and to are the
+// runtimes' display names.
 func Build(messages []Message, from, to string, budget int) Block {
+	return BuildFor(RuntimeChanged, messages, from, to, budget)
+}
+
+// BuildFor is Build for a given reason.
+func BuildFor(kind Kind, messages []Message, from, to string, budget int) Block {
 	if len(messages) == 0 {
 		return Block{}
 	}
@@ -77,7 +95,7 @@ func Build(messages []Message, from, to string, budget int) Block {
 	}
 	total := len(messages)
 	// The fixed part is sized with the widest counts, so the final text cannot exceed the budget.
-	remaining := budget - len(openTag) - len(closeTag) - len(intro(from, to, total, total, total, images)) - gapReserve
+	remaining := budget - len(openTag) - len(closeTag) - len(intro(kind, from, to, total, total, total, images)) - gapReserve
 	cost := make([]int, total)
 	for i, m := range messages {
 		cost[i] = len(render(m)) + gapReserve
@@ -104,7 +122,7 @@ func Build(messages []Message, from, to string, budget int) Block {
 	}
 	var b strings.Builder
 	b.WriteString(openTag)
-	b.WriteString(intro(from, to, included, total, total-included, images))
+	b.WriteString(intro(kind, from, to, included, total, total-included, images))
 	gap := 0
 	for i, m := range messages {
 		if !selected[i] {
@@ -124,11 +142,16 @@ func Build(messages []Message, from, to string, budget int) Block {
 	return Block{Text: b.String(), Included: included, Omitted: total - included, Images: images, Bytes: b.Len()}
 }
 
-func intro(from, to string, included, total, omitted, images int) string {
+func intro(kind Kind, from, to string, included, total, omitted, images int) string {
 	var b strings.Builder
-	if from == to {
+	switch {
+	case kind == SessionLost:
+		fmt.Fprintf(&b, "Your earlier %s session could not be continued (the runtime no longer has it). You start a new session. ", to)
+	case kind == TaskStart:
+		fmt.Fprintf(&b, "You run a task instance of this Agent in a new %s session, which cannot copy the Agent's own session. ", to)
+	case from == to:
 		fmt.Fprintf(&b, "You start a new %s session after the runtime that runs you was changed back. ", to)
-	} else {
+	default:
 		fmt.Fprintf(&b, "The runtime that runs you changed from %s to %s. You start a new session. ", from, to)
 	}
 	b.WriteString("Below is the conversation saved before this message, taken from the platform's record, not from your own memory. " +

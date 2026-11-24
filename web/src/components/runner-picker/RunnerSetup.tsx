@@ -1,11 +1,14 @@
 import { useState } from 'react'
+import { Link, useInRouterContext } from 'react-router'
 import { ArrowUpRightIcon, CopyIcon, RefreshCwIcon } from 'lucide-react'
+import { useAcpCommands } from '@/api/acp-commands'
 import { useRefreshRuntimes } from '@/api/queries'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { t } from '@/i18n'
 import { copyText } from '@/lib/clipboard'
 import { runtimeProblemText, type RuntimeDefinition, type RuntimeProblem } from '@/lib/runtime'
+import { runtimeSettingsPath } from '@/lib/scope'
 
 // The step to show for a problem, from the commands the server gives for its operating system (RuntimeDefinition.setup): log in when
 // logged out, otherwise install (again).
@@ -30,7 +33,11 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
   return (
     <div className="riso-scrollbar grid min-h-0 content-start gap-3 overflow-y-auto px-4 pt-4 pb-4">
       <h3 className="font-display text-[22px] leading-tight text-ink">{copy.title(runtime.name)}</h3>
-      <p className="text-[13.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem, version)}</p>
+      {runtime.acpCommandId ? (
+        <AddedCommandProblem commandId={runtime.acpCommandId} runtime={runtime} problem={problem} version={version} />
+      ) : (
+        <p className="text-[13.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem, version)}</p>
+      )}
       {step && (
         <div className="grid gap-1.5">
           <p className="text-[12px] font-black tracking-[0.04em] text-ink-500">{step.label}</p>
@@ -64,5 +71,28 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
       </div>
       <ErrorAlert error={refresh.error} />
     </div>
+  )
+}
+
+// A local ACP command a person added: its program not found is said with the command as entered (the server gives no setup commands for
+// it), with a link to where it is edited.
+function AddedCommandProblem({ commandId, runtime, problem, version }: { commandId: string; runtime: RuntimeDefinition; problem: RuntimeProblem; version: string | null }) {
+  const command = useAcpCommands().data?.commands.find((candidate) => candidate.id === commandId)
+  const routed = useInRouterContext()
+  const linkClass = 'inline-flex w-fit items-center gap-1 text-[13px] font-black text-riso-blue underline decoration-2 underline-offset-4 hover:text-ink'
+  const label = t.runtime.picker.setup.editCommand
+  return (
+    <>
+      <p className="text-[13.5px] leading-relaxed text-ink-700">{problem === 'not_found' ? t.runtime.commands.notFoundNote(command?.command ?? runtime.name) : runtimeProblemText(runtime, problem, version)}</p>
+      {routed ? (
+        <Link to={runtimeSettingsPath} className={linkClass}>
+          {label}
+        </Link>
+      ) : (
+        <a href={runtimeSettingsPath} className={linkClass}>
+          {label}
+        </a>
+      )}
+    </>
   )
 }

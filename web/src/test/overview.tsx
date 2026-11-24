@@ -51,6 +51,7 @@ export function makeUsageRow(overrides: Partial<Schemas['UsageRow']> = {}): Sche
 export function makeAnomaly(overrides: Partial<Schemas['Anomaly']> = {}): Schemas['Anomaly'] {
   return {
     runId: id(),
+    runtime: null,
     scope: 'project',
     projectId: null,
     kind: 'run_failed',

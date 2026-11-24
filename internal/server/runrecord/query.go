@@ -92,8 +92,12 @@ func (s *Service) Anomalies(ctx context.Context, f store.ScopeFilter, from *time
 				kind = apitypes.AnomalyServerRestart
 			}
 		}
+		var runtime *string
+		if sel := r.Run.SelectionInfo(); sel != nil && sel.Runtime != "" {
+			runtime = &sel.Runtime
+		}
 		out.Items = append(out.Items, apitypes.Anomaly{RunID: r.Run.ID, Kind: kind, At: *r.Run.EndedAt, AgentID: r.Run.AgentID, AgentName: r.AgentName,
-			Scope: apitypes.ScopeOf(r.ProjectID), ProjectID: r.ProjectID,
+			Scope: apitypes.ScopeOf(r.ProjectID), ProjectID: r.ProjectID, Runtime: runtime,
 			ErrorCode: strPtr(r.Run.ErrorCode), ErrorMessage: strPtr(r.Run.ErrorMessage), EndReason: strPtr(r.Run.EndReason), Compaction: apitypes.CompactionOf(r.Run)})
 	}
 	if next != nil {
@@ -383,8 +387,12 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	case store.EventSessionMissing:
 		return apitypes.TimelineSessionMissingEntry{TimelineBase: b(apitypes.TimelineSessionMissing), SessionFile: optStr(d, "sessionFile")}, true
 	case store.EventContextHandoff:
+		reason := str(d, "reason")
+		if reason == "" {
+			reason = store.HandoffRuntimeChanged // records from before the reason was kept
+		}
 		return apitypes.TimelineContextHandoffEntry{TimelineBase: b(apitypes.TimelineContextHandoff), ContextHandoff: apitypes.ContextHandoff{
-			FromRuntime: str(d, "fromRuntime"), ToRuntime: str(d, "toRuntime"), IncludedMessages: int(num(d, "includedMessages")),
+			Reason: reason, FromRuntime: str(d, "fromRuntime"), ToRuntime: str(d, "toRuntime"), IncludedMessages: int(num(d, "includedMessages")),
 			OmittedMessages: int(num(d, "omittedMessages")), Images: int(num(d, "images")), Bytes: int(num(d, "bytes")), BudgetBytes: int(num(d, "budgetBytes"))}}, true
 	case store.EventExtensionUI:
 		return apitypes.TimelineExtensionUIEntry{TimelineBase: b(apitypes.TimelineExtensionUI), Method: str(d, "method"), Message: optStr(d, "message"),

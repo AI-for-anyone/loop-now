@@ -38,6 +38,9 @@ type agentDirs struct {
 	claudeMCP    string
 	// codexSkills is the Skill directory the platform gives Codex (an extra Skill root).
 	codexSkills string
+	// acpPlugin is the plugin directory the platform gives Grok (--plugin-dir); acpSkills is the Skill directory the
+	// platform prompt lists for Antigravity; acpInstructions records which platform prompt the ACP session already has.
+	acpPlugin, acpSkills, acpInstructions string
 }
 
 func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
@@ -56,6 +59,10 @@ func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
 		claudePlugin: filepath.Join(root, "claude-plugin"),
 		claudeMCP:    filepath.Join(root, "claude-mcp.json"),
 		codexSkills:  filepath.Join(root, "codex-skills"),
+
+		acpPlugin:       filepath.Join(root, "acp-plugin"),
+		acpSkills:       filepath.Join(root, "acp-skills"),
+		acpInstructions: filepath.Join(root, "acp-instructions.json"),
 	}
 }
 

@@ -73,6 +73,13 @@ export const chat = {
     // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
     renewed: (runtime: string) => `${runtime} · new session`,
     renewedLabel: (runtime: string, parts: string) => `Handed over to a new ${runtime} session: ${parts}`,
+    // The runtime's session could not be found, so a new one started with the saved conversation instead of stopping (reason
+    // session_lost).
+    lost: "The previous session couldn't be found; a new one started with the earlier conversation",
+    lostLabel: (runtime: string, parts: string) => `${runtime}'s previous session couldn't be found, so a new one started with the earlier conversation: ${parts}`,
+    // A task instance on a runtime that can't fork the Agent's session starts with a selection of the regular conversation (task_start).
+    task: 'The task started with a selection of the regular conversation',
+    taskLabel: (runtime: string, parts: string) => `The task started on ${runtime} with a selection of the regular conversation: ${parts}`,
     whole: (count: number) => `all ${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
     included: (count: number) => `${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
     omitted: (count: number) => `${count} left out`,
@@ -142,14 +149,6 @@ export const chat = {
     connecting: 'Connecting…',
     open: 'Live',
     reconnecting: 'Connection lost, reconnecting…',
-  },
-  sessionMissing: {
-    title: 'Session not found',
-    body: "This Agent's session can't be found (its file, or the conversation its CLI saved, was moved or deleted), so further messages will fail. Once you confirm, the Agent starts a new session and no longer remembers the earlier conversation. The history on this page is kept.",
-    action: 'Start a new session',
-    busy: 'A run is still in progress. Wait for it to finish before starting a new session.',
-    confirmTitle: 'Start a new session?',
-    confirmBody: "The Agent won't remember the earlier conversation. This can't be undone.",
   },
   copyCode: 'Copy code',
   mermaid: { diagram: 'Mermaid diagram', streaming: 'Diagram still streaming; waiting for the code block to finish', rendering: 'Drawing diagram…', failed: "Couldn't draw the diagram; showing the source" },

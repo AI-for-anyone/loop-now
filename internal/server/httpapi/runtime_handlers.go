@@ -5,6 +5,8 @@ import (
 	goruntime "runtime"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/runtimes"
@@ -19,6 +21,7 @@ type runtimeDefinition struct {
 	Capabilities agentruntime.Capabilities `json:"capabilities"`
 	Setup        *agentruntime.Setup       `json:"setup"`
 	MinVersion   *string                   `json:"minVersion"`
+	AcpCommandID *uuid.UUID                `json:"acpCommandId"`
 }
 
 // listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and
@@ -34,6 +37,10 @@ func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) 
 			Setup: rt.SetupOn(goruntime.GOOS)}
 		if rt.MinVersion != "" {
 			def.MinVersion = &rt.MinVersion
+		}
+		if rt.Command != nil {
+			id := rt.CommandID
+			def.AcpCommandID = &id
 		}
 		list = append(list, def)
 	}
@@ -51,8 +58,13 @@ func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 		}
 		refresh = b
 	}
-	if refresh && s.RefreshLocalModels != nil {
+	switch {
+	case refresh && s.RefreshLocalModels != nil:
 		s.RefreshLocalModels(r.Context())
+	case !refresh && s.ModelListRead != nil:
+		// The local CLIs' model lists, and with them Grok's and Antigravity's login conclusions, are read again in the
+		// background when they have grown old; this read does not wait.
+		s.ModelListRead("")
 	}
 	list := []runtimes.Status{}
 	if s.Runtimes != nil {

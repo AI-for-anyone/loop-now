@@ -7,10 +7,23 @@ import "loop-now/internal/server/agentruntime"
 const SourceLocalCLI = "local_cli"
 
 // localSources are the model providers a runtime brings itself, by runtime id, as they are before the CLI was asked:
-// Claude Code's are fixed; Codex's are empty until Registry.SetLocalProviders gives the models the local Codex lists.
+// Claude Code's are fixed; Codex's, Grok's and Antigravity's are empty until Registry.SetLocalProviders gives the models
+// the local CLI lists.
 var localSources = map[string]func() []Provider{
-	agentruntime.ClaudeCode: func() []Provider { return []Provider{ClaudeCodeProvider()} },
-	agentruntime.Codex:      func() []Provider { return []Provider{CodexProvider(nil)} },
+	agentruntime.ClaudeCode:  func() []Provider { return []Provider{ClaudeCodeProvider()} },
+	agentruntime.Codex:       func() []Provider { return []Provider{CodexProvider(nil)} },
+	agentruntime.Grok:        func() []Provider { return []Provider{GrokProvider(nil)} },
+	agentruntime.Antigravity: func() []Provider { return []Provider{AntigravityProvider(nil)} },
+}
+
+// LocalCommandDefaultModel is the one model of a local ACP command's provider: whatever model the program uses by
+// default (its own model list is known only once a session is open).
+const LocalCommandDefaultModel = "default"
+
+// LocalCommandProvider is the catalog of a local ACP command's runtime: one provider of the runtime's id and name, with
+// the program's default model.
+func LocalCommandProvider(rt agentruntime.Runtime) Provider {
+	return LocalCLIProvider(rt.ID, rt.Name, []LocalModel{{ID: LocalCommandDefaultModel, Name: "Default model"}})
 }
 
 // withLocal returns base plus the providers the runtimes bring themselves (in registry order): the ones a runtime's
@@ -22,10 +35,13 @@ func withLocal(base *Catalog, listed map[string][]Provider) *Catalog {
 	}
 	var local []Provider
 	for _, rt := range agentruntime.All() {
-		if providers, ok := listed[rt.ID]; ok {
+		switch providers, ok := listed[rt.ID]; {
+		case ok:
 			local = append(local, providers...)
-		} else if source := localSources[rt.ID]; source != nil {
-			local = append(local, source()...)
+		case rt.Command != nil:
+			local = append(local, LocalCommandProvider(rt))
+		case localSources[rt.ID] != nil:
+			local = append(local, localSources[rt.ID]()...)
 		}
 	}
 	reserved := map[string]bool{}

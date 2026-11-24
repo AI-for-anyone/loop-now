@@ -141,7 +141,8 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 	if err := e.st.MarkSessionMissing(ctx, agent.ID, nil); err != nil {
 		t.Fatal(err)
 	}
-	e.expectError(409, "session_missing", "GET", path+"/session/export?format=html", nil)
+	// A lost session starts over: there is nothing to export until the next message.
+	e.expectError(409, "session_none", "GET", path+"/session/export?format=html", nil)
 }
 
 // While a platform command (/new, /reload, /resume, export) holds the busy lock there is no run to report: the

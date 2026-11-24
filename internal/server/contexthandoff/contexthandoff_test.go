@@ -155,3 +155,14 @@ func TestBuildIntoANewSessionOfTheSameRuntime(t *testing.T) {
 		t.Fatalf("wrong introduction:\n%s", block.Text)
 	}
 }
+
+// The block says why the conversation is carried: a lost session, or a task instance that cannot copy the session.
+func TestBuildForReason(t *testing.T) {
+	all := conversation(1, 10)
+	if b := contexthandoff.BuildFor(contexthandoff.SessionLost, all, "Grok", "Grok", contexthandoff.DefaultBudget); !strings.Contains(b.Text, "earlier Grok session could not be continued") {
+		t.Fatalf("lost session:\n%s", b.Text)
+	}
+	if b := contexthandoff.BuildFor(contexthandoff.TaskStart, all, "Grok", "Grok", contexthandoff.DefaultBudget); !strings.Contains(b.Text, "task instance") {
+		t.Fatalf("task start:\n%s", b.Text)
+	}
+}

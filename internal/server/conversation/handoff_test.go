@@ -124,6 +124,95 @@ func TestRuntimeChangeWhileReplying(t *testing.T) {
 	}
 }
 
+// A session the runtime can no longer continue does not stop the conversation: the message starts a new session of
+// the same runtime with the saved conversation, and the turn records that handoff (reason session_lost) so the console
+// can show it.
+func TestLostSessionContinuesWithTheConversation(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.turnTo("remember the word apple")
+	if err := e.st.RecordRuntimeSessionFile(context.Background(), e.agent, "pi", "/gone/session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := e.st.GetAgentSession(context.Background(), e.agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mustSend("what was the word?", "")
+	var got string
+	for got == "" || !strings.Contains(got, "<conversation-handoff>") {
+		select {
+		case got = <-e.ex.started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the message was not sent again with the conversation; last prompt %q", got)
+		}
+	}
+	e.waitIdle()
+	if !strings.Contains(got, "remember the word apple") || !strings.Contains(got, "could not be continued") || !strings.HasSuffix(got, "what was the word?") {
+		t.Fatalf("the new session gets the conversation:\n%s", got)
+	}
+	run := lastRun(t, e.history())
+	if run.Status != "completed" || run.ContextHandoff == nil || run.ContextHandoff.Reason != "session_lost" || run.ContextHandoff.FromRuntime != "pi" || run.ContextHandoff.ToRuntime != "pi" {
+		t.Fatalf("the turn completes and records the handoff: %s %+v", run.Status, run.ContextHandoff)
+	}
+	sess, err := e.st.GetAgentSession(context.Background(), e.agent)
+	if err != nil || sess.State != "active" || sess.Handoff != nil || sess.Epoch != before.Epoch {
+		t.Fatalf("the conversation goes on in the new session, under the same session number: %+v %v", sess, err)
+	}
+	if evs, err := e.st.AgentEvents(context.Background(), e.agent); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, ev := range evs {
+			if ev.Type == store.EventSessionMissing || ev.Type == store.EventSessionReset {
+				t.Fatalf("the session is neither left missing nor reset: %+v", ev)
+			}
+		}
+	}
+}
+
+// A session lost in a turn that could not carry the conversation (a compaction), followed by a change of runtime,
+// reaches the new runtime as a change of runtime.
+func TestLostSessionThenRuntimeChange(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.turnTo("remember the word apple")
+	if err := e.st.MarkSessionMissing(context.Background(), e.agent, nil); err != nil {
+		t.Fatal(err)
+	}
+	e.switchModel("claude-code", "sonnet")
+	got := e.turnTo("what was the word?")
+	if !strings.Contains(got, "remember the word apple") || !strings.Contains(got, "changed from Pi to Claude Code") || strings.Contains(got, "could not be continued") {
+		t.Fatalf("the block reads as a change of runtime:\n%s", got)
+	}
+	if run := lastRun(t, e.history()); run.ContextHandoff == nil || run.ContextHandoff.Reason != "runtime_changed" || run.ContextHandoff.FromRuntime != "pi" || run.ContextHandoff.ToRuntime != "claude-code" {
+		t.Fatalf("recorded as a change of runtime: %+v", run.ContextHandoff)
+	}
+}
+
+// A session an earlier version left "missing" no longer blocks the conversation after a restart: the next message is
+// accepted and carries the saved conversation.
+func TestMissingSessionFromAnEarlierVersion(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.turnTo("remember the word apple")
+	ctx := context.Background()
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE agent_sessions SET state = 'missing' WHERE agent_id = $1`, e.agent); err != nil {
+		t.Fatal(err)
+	}
+	_ = e.svc.Stop(ctx)
+	e.svc = e.newService()
+	if err := e.svc.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := e.turnTo("what was the word?")
+	if !strings.Contains(got, "remember the word apple") || !strings.Contains(got, "could not be continued") {
+		t.Fatalf("the message carries the conversation:\n%s", got)
+	}
+	if run := lastRun(t, e.history()); run.Status != "completed" || run.ContextHandoff == nil || run.ContextHandoff.Reason != "session_lost" {
+		t.Fatalf("recorded as a lost session: %s %+v", run.Status, run.ContextHandoff)
+	}
+}
+
 // Known window: a change of runtime that lands after a message was dispatched (no handoff was pending yet) but before
 // the executor read the Agent's configuration sends that message to the new runtime without the conversation. The
 // turn counts as having run there, so changing back no longer continues the earlier session, and the next message

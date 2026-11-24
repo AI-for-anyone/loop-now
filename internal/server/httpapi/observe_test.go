@@ -237,6 +237,14 @@ func TestUsageAndAnomalies(t *testing.T) {
 	if it.Kind != "run_failed" || it.AgentID != agentA.ID || it.AgentName != "A" || it.ErrorCode == nil || *it.ErrorCode != "workspace_sync_failed" {
 		t.Errorf("wrong anomaly item: %+v", it)
 	}
+	// The run failed before it started, yet it names the runtime it was dispatched to.
+	if it.Runtime == nil || *it.Runtime != "pi" {
+		t.Errorf("the anomaly names the runtime the run was meant for: %v", it.Runtime)
+	}
+	msgs := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=200", nil))
+	if last := msgs.Messages[len(msgs.Messages)-1].Run; last.Selection == nil || last.Selection.Runtime != "pi" || last.Selection.Provider != "anthropic" || last.Selection.ModelID != "claude-x" || last.UsageReported {
+		t.Errorf("a run that failed before starting keeps the selection it was dispatched with, and no usage was reported: %+v %v", last.Selection, last.UsageReported)
+	}
 	seen := map[uuid.UUID]bool{}
 	for _, x := range list.Items {
 		seen[x.RunID] = true

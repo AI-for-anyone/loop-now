@@ -52,6 +52,16 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Agents can run on Grok, Antigravity, and any ACP command you add
+
+- Two more runtimes that use CLIs installed on your computer and your own logins there: Grok (`grok agent stdio`) and Antigravity (`agy acp`). Both speak the Agent Client Protocol (ACP). The platform neither reads nor stores their logins. They appear in "Who runs it" with the models each CLI lists.
+- You can add any other program that speaks ACP in Settings → Agent runtimes → "ACP commands you added": a name, the command, its arguments and environment variables. It runs on this computer as the server's user, so add only programs you trust. Saved variable values are never shown again. A command cannot be deleted while Agents use it; the page lists them.
+- Limits of these runtimes: they report no token usage (a turn says "no usage data"); their conversations stay in the CLI's own history and are not removed when an Agent is deleted, because the protocol has no way to do it; `/compact`, `/export` and `/resume` are not available; tasks start from a selection of the regular conversation instead of a copy of the session. Antigravity's model names include the thinking level, so there is none to choose. A command you add has one model, "Default model", and takes no images.
+- When a session can no longer be found (its file was deleted, or the CLI lost it), the next message now starts a new session with the saved conversation, and the conversation shows a line saying so. Before, the Agent stopped until you confirmed starting over. This applies to Pi, Claude Code and Codex as well; the red "session lost" notice and its confirmation are gone.
+- A turn records which runtime it was meant for from the moment it is sent, so a turn that fails before starting names the right one; the overview's problem list and task turns name it too.
+- A process that exits because you stopped a turn is no longer recorded as an unexpected exit.
+- The message box does not accept images for a model that takes none.
+- API: `AgentRuntime` is now a plain string (`grok`, `antigravity`, and `acp-<id>` for a command you added); `/acp-commands`; `Run.usageReported`; a `reason` on handoffs (`runtime_changed`, `session_lost`, `task_start`); `runtime` on problems and task messages; error code `runtime_in_use`.
 ### Several console tabs no longer freeze the browser
 
 - A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.

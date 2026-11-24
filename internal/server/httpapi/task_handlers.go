@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/taskmodel"
+	"loop-now/internal/server/taskruntime"
 )
 
 func (s *Server) taskReady(w http.ResponseWriter, r *http.Request) bool {
@@ -150,7 +152,26 @@ func (s *Server) listTaskNodeMessages(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, e)
 		return
 	}
+	if runtime := s.taskInstanceRuntime(r.Context(), n.RuntimeID); runtime != "" {
+		for i := range page.Messages {
+			page.Messages[i].Runtime = runtime
+		}
+	}
 	writeJSON(w, 200, page)
+}
+
+// taskInstanceRuntime is the runtime a task instance runs on (from the configuration frozen when the task started);
+// empty when it cannot be told.
+func (s *Server) taskInstanceRuntime(ctx context.Context, instanceID uuid.UUID) string {
+	inst, err := s.Store.TaskInstance(ctx, instanceID)
+	if err != nil {
+		return ""
+	}
+	snap, err := taskruntime.Decode(inst.Snapshot)
+	if err != nil {
+		return ""
+	}
+	return agentruntime.ForProvider(snap.Configuration().Provider).ID
 }
 func taskLimit(r *http.Request) (int, error) {
 	v := r.URL.Query().Get("limit")

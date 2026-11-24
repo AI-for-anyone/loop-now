@@ -22,12 +22,11 @@ function names(agents: AgentOverview[]): string {
   return agents.length === 0 ? '' : t.overview.run.names(agents.slice(0, NAMES_SHOWN).map((agent) => agent.name), agents.length)
 }
 
-// Background colors of the four summary cards (redesign: cards with a tinted background, a 2px navy outline and a 4px solid navy
+// Background colors of the three summary cards (redesign: cards with a tinted background, a 2px navy outline and a 4px solid navy
 // offset shadow, no longer tilted).
 const TILES = [
   { key: 'busy', bg: 'bg-tint-pink-2' },
   { key: 'idle', bg: 'bg-tint-green' },
-  { key: 'sessionMissing', bg: 'bg-tint-red' },
   { key: 'queued', bg: 'bg-tint-blue' },
 ] as const
 
@@ -37,7 +36,6 @@ function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
   const values = {
     busy: { label: t.overview.run.busy, value: summary.busy.length, note: names(summary.busy) },
     idle: { label: t.overview.run.idle, value: summary.idle.length, note: names(summary.idle) },
-    sessionMissing: { label: t.overview.run.sessionMissing, value: summary.sessionMissing.length, note: names(summary.sessionMissing) },
     queued: { label: t.overview.run.queued, value: queuedTotal, note: t.overview.run.queuedNote(summary.queued.interrupt, summary.queued.normal) },
   }
   return (
@@ -61,11 +59,10 @@ function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
 }
 
 // Status pill (redesign general rule 6): a slightly tilted background with a navy outline; fluorescent pink for replying, light
-// green with a green dot for idle; session lost is a stamp with a red outline.
+// green with a green dot for idle.
 const STATE_PILL: Record<AgentRowState, { label: string; back: string; text: string; dot?: string }> = {
   busy: { label: t.overview.run.busy, back: 'bg-riso-pink shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-ink', dot: 'bg-ink' },
   idle: { label: t.overview.run.idle, back: 'bg-tint-green shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-green-text', dot: 'bg-green' },
-  sessionMissing: { label: t.overview.run.sessionMissing, back: 'rounded-[4px] shadow-[inset_0_0_0_2px_var(--red-text)]', text: 'text-red-text tracking-[0.06em]' },
 }
 
 function StatePill({ state }: { state: AgentRowState }) {

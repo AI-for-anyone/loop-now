@@ -1,10 +1,13 @@
 package store_test
 
 import (
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
@@ -359,5 +362,121 @@ func TestExecutionCaptureReadsTheSession(t *testing.T) {
 	}
 	if captured.Agent.ModelProvider != "claude-code" || captured.Session.State != "none" || captured.Session.Handoff == nil || captured.Session.Handoff.From != "pi" {
 		t.Fatalf("capture: %s %+v %+v", captured.Agent.ModelProvider, captured.Session, captured.Session.Handoff)
+	}
+}
+
+// A session its runtime can no longer continue never waits in a "missing" state: it becomes a new start that carries
+// the conversation. The pointer is cleared, the session number stays, and a session_lost handoff from the current
+// runtime is pending; a handoff already pending stays as it is.
+func TestMarkSessionMissingStartsOver(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	epoch := e.session().Epoch
+	run := uuid.Must(uuid.NewV7())
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &run); err != nil {
+		t.Fatal(err)
+	}
+	sess := e.session()
+	if sess.State != "none" || sess.SessionFile != "" || sess.Epoch != epoch || sess.Handoff == nil || sess.Handoff.From != "pi" || sess.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("a lost session leaves a session_lost handoff and keeps its number: %+v %+v", sess, sess.Handoff)
+	}
+	if evs := e.agentEvents(store.EventSessionLost); len(evs) != 1 || evs[0].Data["runtime"] != "pi" || evs[0].Data["sessionFile"] != "/tmp/gone.jsonl" || evs[0].RunID == nil || *evs[0].RunID != run {
+		t.Fatalf("the loss is recorded with the run that found it: %+v", evs)
+	}
+	if evs := e.agentEvents(store.EventSessionMissing); len(evs) != 0 {
+		t.Fatalf("no session.missing: %+v", evs)
+	}
+	// Nothing to lose without an active session.
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, nil); err != nil || len(e.agentEvents(store.EventSessionLost)) != 1 {
+		t.Fatalf("again: %v", err)
+	}
+	// A session the runtime records before the handoff was carried is a new one: the handoff stays.
+	if err := e.s.RecordRuntimeSessionFile(e.ctx, e.agent, "pi", "/tmp/new.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.session(); got.Handoff == nil || got.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("a new session does not end a session_lost handoff: %+v", got.Handoff)
+	}
+
+	f := newRecEnv(t)
+	f.turn("hello", "completed", "hi")
+	if err := f.s.RecordSessionFile(f.ctx, f.agent, "/tmp/pi.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	f.switchTo("claude-code", "sonnet")
+	pending := f.session().Handoff
+	if err := f.s.RecordRuntimeSessionFile(f.ctx, f.agent, "claude-code", "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.MarkSessionMissing(f.ctx, f.agent, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.session(); got.State != "none" || got.Handoff == nil || got.Handoff.ID != pending.ID || got.Handoff.Reason != "" {
+		t.Fatalf("a pending change of runtime stays: %+v %+v", got, got.Handoff)
+	}
+}
+
+// Sessions left "missing" by an earlier version are turned into the same new start when the server starts.
+func TestHealMissingSessions(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	epoch := e.session().Epoch
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE agent_sessions SET state = 'missing' WHERE agent_id = $1`, e.agent); err != nil {
+		t.Fatal(err)
+	}
+	healed, err := e.s.HealMissingSessions(e.ctx)
+	if err != nil || len(healed) != 1 || healed[0] != e.agent {
+		t.Fatalf("heal: %v %v", healed, err)
+	}
+	if sess := e.session(); sess.State != "none" || sess.SessionFile != "" || sess.Epoch != epoch || sess.Handoff == nil || sess.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("healed: %+v %+v", sess, sess.Handoff)
+	}
+	if healed, err := e.s.HealMissingSessions(e.ctx); err != nil || len(healed) != 0 {
+		t.Fatalf("nothing left: %v %v", healed, err)
+	}
+}
+
+// Local ACP commands are kept with their arguments and environment; one that an Agent's provider names cannot be
+// removed.
+func TestACPCommands(t *testing.T) {
+	e := newRecEnv(t)
+	c, err := e.s.CreateACPCommand(e.ctx, "My Agent", "my-agent", []string{"--profile", "acp"}, map[string]string{"B": "2", "A": "1"})
+	if err != nil || c.Name != "My Agent" || c.Command != "my-agent" || !slices.Equal(c.Args, []string{"--profile", "acp"}) || !slices.Equal(c.EnvNames(), []string{"A", "B"}) ||
+		c.Runtime() != "acp-"+c.ID.String() {
+		t.Fatalf("create: %+v %v", c, err)
+	}
+	name, three, changed := "Renamed", "3", "changed"
+	u, err := e.s.UpdateACPCommand(e.ctx, c.ID, store.ACPCommandPatch{Name: &name, Env: map[string]*string{"C": &three, "A": nil, "B": &changed}})
+	if err != nil || u.Name != "Renamed" || u.Command != "my-agent" || !slices.Equal(u.EnvNames(), []string{"B", "C"}) || u.Env["C"] != "3" || u.Env["B"] != "changed" {
+		t.Fatalf("update merges the environment: %+v %v", u, err)
+	}
+	list, err := e.s.ACPCommands(e.ctx)
+	if err != nil || len(list) != 1 || list[0].ID != c.ID {
+		t.Fatalf("list: %+v %v", list, err)
+	}
+	provider, model := c.Runtime(), "default"
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: &provider, ModelID: &model}); err != nil {
+		t.Fatal(err)
+	}
+	err = e.s.DeleteACPCommand(e.ctx, c.ID)
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeRuntimeInUse {
+		t.Fatalf("in use: %v", err)
+	}
+	if d, ok := ae.Details.(store.RuntimeInUseDetails); !ok || len(d.Agents) != 1 || d.Agents[0].ID != e.agent || d.Agents[0].Name == "" || d.Agents[0].ProjectID == nil {
+		t.Fatalf("the Agents that use it: %+v", ae.Details)
+	}
+	e.switchTo("anthropic", "claude-x")
+	if err := e.s.DeleteACPCommand(e.ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.DeleteACPCommand(e.ctx, c.ID); !apperr.Is(err, apperr.CodeNotFound) {
+		t.Fatalf("gone: %v", err)
 	}
 }

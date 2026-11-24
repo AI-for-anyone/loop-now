@@ -223,9 +223,12 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'context_handoff':
         steps.push(
           step(entry, index, {
-            label: t.timeline.step.context_handoff,
+            label: t.timeline.step.context_handoff[entry.reason],
+            // A lost session or a task's start begins a new session of the same runtime; a change of runtime goes from one to the other.
             detail: t.timeline.detail.handoff(
-              t.chat.handoff.route(runtimeName(entry.fromRuntime), runtimeName(entry.toRuntime)),
+              entry.reason === 'runtime_changed'
+                ? t.chat.handoff.route(runtimeName(entry.fromRuntime), runtimeName(entry.toRuntime))
+                : t.chat.handoff.renewed(runtimeName(entry.toRuntime)),
               entry.includedMessages,
               entry.omittedMessages,
               entry.images,

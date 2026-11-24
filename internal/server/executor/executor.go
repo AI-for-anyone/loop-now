@@ -66,6 +66,20 @@ const (
 // message.
 const OriginConsoleCompact = "console_compact"
 
+// TaskStartHandoff is what a task instance of a runtime that cannot copy the regular session starts from (its baseline
+// file, snapshot ForkSessionFile): the regular conversation as it was when the task started, as a handoff block that
+// goes with the instance's first message, and how much of it the block carries.
+type TaskStartHandoff struct {
+	Text             string `json:"text"`
+	FromRuntime      string `json:"fromRuntime"`
+	ToRuntime        string `json:"toRuntime"`
+	IncludedMessages int    `json:"includedMessages"`
+	OmittedMessages  int    `json:"omittedMessages"`
+	Images           int    `json:"images"`
+	Bytes            int    `json:"bytes"`
+	BudgetBytes      int    `json:"budgetBytes"`
+}
+
 // CompactionResult is the result of one manual compaction. A non-empty Skipped means Pi did not compact (the session is
 // too short, was already compacted, or an extension cancelled it); this is still a normal completion and all token
 // counts are 0. Otherwise the fields hold the token counts before and after compaction.

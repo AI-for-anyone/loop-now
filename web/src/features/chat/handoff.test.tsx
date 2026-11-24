@@ -9,7 +9,7 @@ import { buildSteps } from './timeline-steps'
 type Selection = Schemas['RunSelection']
 const pi = (modelId: string, provider = 'anthropic'): Selection => ({ runtime: 'pi', provider, modelId, thinkingLevel: null })
 const claude = (modelId: string): Selection => ({ runtime: 'claude-code', provider: 'claude-code', modelId, thinkingLevel: 'high' })
-const handoff = (overrides: Partial<Schemas['ContextHandoff']> = {}): Schemas['ContextHandoff'] => ({ fromRuntime: 'pi', toRuntime: 'claude-code', includedMessages: 12, omittedMessages: 30, images: 2, bytes: 9812, budgetBytes: 16000, ...overrides })
+const handoff = (overrides: Partial<Schemas['ContextHandoff']> = {}): Schemas['ContextHandoff'] => ({ reason: 'runtime_changed', fromRuntime: 'pi', toRuntime: 'claude-code', includedMessages: 12, omittedMessages: 30, images: 2, bytes: 9812, budgetBytes: 16000, ...overrides })
 
 // One turn: the user's message and the reply, on a run with this selection (and handoff).
 let clock = 0
@@ -50,6 +50,14 @@ describe('changes of who runs it, in the conversation', () => {
     expect(row).toHaveTextContent('Pi · new session')
   })
 
+  it('a session that was lost says the earlier conversation went into a new session of the same runtime', async () => {
+    await renderChat({ messages: [...turn('Hello', claude('haiku')), ...turn('Still there?', claude('haiku'), handoff({ reason: 'session_lost', fromRuntime: 'claude-code', toRuntime: 'claude-code', includedMessages: 2, omittedMessages: 0, images: 0 }))] })
+    const row = screen.getByRole('separator', { name: /session/ })
+    expect(row).toHaveAccessibleName("Claude Code's previous session couldn't be found, so a new one started with the earlier conversation: all 2 earlier messages went along")
+    expect(row).toHaveTextContent('Claude Code · new session')
+    expect(row).toHaveTextContent("The previous session couldn't be found; a new one started with the earlier conversation")
+  })
+
   it('a conversation that went whole says so', async () => {
     await renderChat({ messages: [...turn('Hello', pi('claude-sonnet-4-5')), ...turn('On Claude', claude('haiku'), handoff({ includedMessages: 2, omittedMessages: 0, images: 0 }))] })
     expect(screen.getByRole('separator', { name: /^Handed over/ })).toHaveAccessibleName('Handed over from Pi to Claude Code: all 2 earlier messages went along')
@@ -73,8 +81,13 @@ describe('changes of who runs it, in the conversation', () => {
     expect(follows(dividers[0], screen.getByText('On GPT'))).toBe(true)
   })
 
-  it('the run record lists the handover as a step', () => {
+  it('the run record lists the handover as a step, named by why it happened', () => {
     const steps = buildSteps(null, [{ type: 'context_handoff', at: '2026-11-23T08:00:00Z', ...handoff() }], runtimeName)
     expect(steps.map((step) => [step.label, step.detail])).toEqual([['Conversation handed over', 'Pi → Claude Code · 12 messages went along, 30 left out, 2 images not carried · 9.8K of a 16K budget']])
+    const same = { fromRuntime: 'claude-code', toRuntime: 'claude-code', omittedMessages: 0, images: 0 } as const
+    const lost = buildSteps(null, [{ type: 'context_handoff', at: '2026-11-23T08:00:00Z', ...handoff({ reason: 'session_lost', ...same }) }], runtimeName)
+    expect(lost.map((step) => [step.label, step.detail])).toEqual([['Session not found; restarted with the conversation', 'Claude Code · new session · 12 messages went along · 9.8K of a 16K budget']])
+    const task = buildSteps(null, [{ type: 'context_handoff', at: '2026-11-23T08:00:00Z', ...handoff({ reason: 'task_start', ...same }) }], runtimeName)
+    expect(task[0].label).toBe('Started with a selection of the regular conversation')
   })
 })

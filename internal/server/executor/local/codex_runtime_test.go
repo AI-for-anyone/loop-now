@@ -266,10 +266,11 @@ func TestCodexTaskForkAndArchive(t *testing.T) {
 	}
 }
 
-// Codex keeps its sessions itself (a retired task instance's archive records the thread); Pi and Claude Code do not.
+// Codex, Grok and Antigravity keep their sessions themselves (a retired task instance's archive records the reference);
+// Pi and Claude Code do not.
 func TestKeepsSessions(t *testing.T) {
 	e := New(Options{}, nil, nil, nil, nil)
-	for runtime, want := range map[string]bool{"codex": true, "pi": false, "claude-code": false, "unknown": false} {
+	for runtime, want := range map[string]bool{"codex": true, "grok": true, "antigravity": true, "pi": false, "claude-code": false, "unknown": false} {
 		if got := e.KeepsSessions(runtime); got != want {
 			t.Errorf("%s: %v", runtime, got)
 		}

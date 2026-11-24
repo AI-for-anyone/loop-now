@@ -5,7 +5,6 @@ export const agents = {
   notFound: '该 Agent 不存在或已删除。',
   busy: '正忙',
   idle: '空闲',
-  sessionMissing: '会话丢失',
   tabs: { chat: '对话', config: '配置', folder: '文件夹', inbox: '收件箱' },
   address: {
     label: '地址',

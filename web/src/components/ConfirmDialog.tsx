@@ -30,6 +30,9 @@ interface ConfirmDialogProps {
   children?: ReactNode
   // When the returned Promise fails, the dialog stays open and shows the error; on success, onOpenChange(false) is called.
   onConfirm: () => Promise<unknown> | void
+  // How to show a failure the caller can say more about (such as which Agents still use what is being deleted); undefined falls back to
+  // the error alert.
+  failureView?: (error: unknown) => ReactNode | undefined
 }
 
 export function ConfirmDialog({
@@ -45,6 +48,7 @@ export function ConfirmDialog({
   scrollBody = false,
   onConfirm,
   children,
+  failureView,
 }: ConfirmDialogProps) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -55,6 +59,7 @@ export function ConfirmDialog({
     if (open) setError(null)
   }
 
+  const failure = error ? (failureView?.(error) ?? <ErrorAlert error={error} />) : null
   const confirm = async () => {
     if (confirmDisabled || pending) return
     setPending(true)
@@ -94,7 +99,7 @@ export function ConfirmDialog({
           </div>
           {body && <AlertDialogDescription className="text-[14.5px] leading-[1.75]">{body}</AlertDialogDescription>}
         </AlertDialogHeader>
-        {scrollBody ? <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1" data-confirm-scroll>{children}<ErrorAlert error={error} /></div> : <>{children}<ErrorAlert error={error} /></>}
+        {scrollBody ? <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1" data-confirm-scroll>{children}{failure}</div> : <>{children}{failure}</>}
         <AlertDialogFooter className={`mt-2 ${scrollBody ? 'shrink-0' : ''}`}>
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
           <Button variant={destructive ? 'destructive' : 'default'} disabled={pending || confirmDisabled} onClick={() => void confirm()}>
