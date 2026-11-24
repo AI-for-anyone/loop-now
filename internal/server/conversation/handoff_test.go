@@ -3,10 +3,12 @@ package conversation_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 )
 
@@ -119,5 +121,31 @@ func TestRuntimeChangeWhileReplying(t *testing.T) {
 	}
 	if run := lastRun(t, h); run.ContextHandoff == nil || run.Selection == nil || run.Selection.Runtime != "claude-code" {
 		t.Fatalf("the next turn ran on Claude Code with the handoff: %+v %+v", run.Selection, run.ContextHandoff)
+	}
+}
+
+// Known window: a change of runtime that lands after a message was dispatched (no handoff was pending yet) but before
+// the executor read the Agent's configuration sends that message to the new runtime without the conversation. The
+// turn counts as having run there, so changing back no longer continues the earlier session, and the next message
+// carries the conversation, including that turn.
+func TestRuntimeChangeBetweenDispatchAndStart(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.turnTo("remember the word apple")
+	var once sync.Once
+	e.ex.beforeSnapshot = func(executor.Request) { once.Do(func() { e.switchModel("claude-code", "sonnet") }) }
+	if got := e.turnTo("racing message"); strings.Contains(got, "<conversation-handoff>") || got != "racing message" {
+		t.Fatalf("the message dispatched before the change goes without the conversation: %q", got)
+	}
+	h := e.history()
+	if run := lastRun(t, h); run.Selection == nil || run.Selection.Runtime != "claude-code" || run.ContextHandoff != nil {
+		t.Fatalf("it ran on Claude Code and carried nothing: %+v %+v", run.Selection, run.ContextHandoff)
+	}
+	if sess, err := e.st.GetAgentSession(context.Background(), e.agent); err != nil || sess.Handoff == nil || !sess.Handoff.Ran || sess.Handoff.From != "pi" {
+		t.Fatalf("the handoff stays pending and counts the turn as run: %+v %v", sess.Handoff, err)
+	}
+	got := e.turnTo("what was the word?")
+	if !strings.Contains(got, "remember the word apple") || !strings.Contains(got, "Reply: racing message") || !strings.HasSuffix(got, "what was the word?") {
+		t.Fatalf("the next message carries the conversation, including the racing turn:\n%s", got)
 	}
 }
