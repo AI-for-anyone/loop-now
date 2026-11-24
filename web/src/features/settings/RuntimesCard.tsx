@@ -5,7 +5,9 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import type { Schemas } from '@/api/client'
 import { useRefreshRuntimes, useRuntimeDefinitions, useRuntimes } from '@/api/queries'
 import { t } from '@/i18n'
+import { useAcpCommands } from '@/api/acp-commands'
 import { runtimeProblem, runtimeProblemText, useRuntimeLookup, type RuntimeDefinition } from '@/lib/runtime'
+import { AcpCommandsSection } from './AcpCommands'
 
 const text = t.runtime.status
 const loginTone = { logged_in: 'success', logged_out: 'warning', unknown: 'neutral' } as const
@@ -15,10 +17,14 @@ const loginTone = { logged_in: 'success', logged_out: 'warning', unknown: 'neutr
 // The server caches for 30 seconds; “重新检查” (Check again) bypasses the cache. For the login, only the method and the
 // subscription type are given; the server doesn't return the email or the organization.
 // After the redesign this is the content of one numbered section on the global settings sheet: a row with the description and
-// “重新检查” (Check again), with one card per runtime below.
+// “重新检查” (Check again), with one card per runtime below. The runtimes of the local ACP commands people added are not among those
+// cards: they are listed with their commands at the end (AcpCommands.tsx).
 export function RuntimesCard() {
   const runtimes = useRuntimes()
-  const definitions = useRuntimeDefinitions().data?.runtimes
+  const lookup = useRuntimeLookup()
+  const added = new Set(useAcpCommands().data?.commands.map((command) => command.runtime))
+  const isAdded = (id: string) => added.has(id) || Boolean(lookup.get(id)?.acpCommandId)
+  const definitions = useRuntimeDefinitions().data?.runtimes.filter((definition) => !isAdded(definition.id))
   const refresh = useRefreshRuntimes()
   return (
     <div className="grid gap-3.5">
@@ -36,7 +42,8 @@ export function RuntimesCard() {
       </div>
       <ErrorAlert error={refresh.error ?? runtimes.error} />
       {runtimes.isPending && <p className="text-[13.5px] text-ink-500">{t.common.loading}</p>}
-      {runtimes.data?.runtimes.map((runtime) => <RuntimeRow key={runtime.id} runtime={runtime} />)}
+      {runtimes.data?.runtimes.filter((runtime) => !isAdded(runtime.id)).map((runtime) => <RuntimeRow key={runtime.id} runtime={runtime} />)}
+      <AcpCommandsSection />
     </div>
   )
 }

@@ -414,8 +414,9 @@ describe('global settings page', () => {
     // (in the test title) means the parts of the page body outside the folder.
     expect(within(page).getByRole('region', { name: 'Global folder' })).toBeInTheDocument()
     const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    // The runtime status “Check again” button only reads again; it does not modify the server.
-    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again'])
+    // The runtime status “Check again” button only reads again; it does not modify the server. “Add command” only opens the dialog
+    // for a local ACP command (the runtimes section's own editing, not the server information).
+    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again', 'Add command'])
     expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
   })
   it('the server section shows the version, taken from the Loop-Now-Version header of the server response', async () => {
