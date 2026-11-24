@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
-import type { Turn } from './turns'
+import { handoffBefore, modelChangeBefore, type Turn } from './turns'
+import { HandoffRow, ModelChangeLine } from './HandoffRow'
 import { Cursor, Markdown } from './Markdown'
 import { RunRecord } from './RunRecord'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
@@ -103,6 +104,13 @@ function interruptedBy(previous: Turn, turn: Turn) {
 
 // Dividers between turns (CutLine, components/CutLine.tsx): “会话已切换，页面历史保留” (Session switched; page history is kept)
 // with scissors where the session changes, and “已打断，先处理这条” (Interrupted; handling this first) with a lightning bolt.
+// Where who runs it changed: the handover to another runtime, or a quieter line for a change of model on the same runtime.
+function TurnChange({ previous, turn }: { previous: Turn | undefined; turn: Turn }) {
+  const handoff = handoffBefore(previous, turn)
+  if (handoff) return <HandoffRow handoff={handoff} />
+  const change = modelChangeBefore(previous, turn)
+  return change ? <ModelChangeLine from={change.from} to={change.to} /> : null
+}
 
 // Set the scroll position and record the actual result (the browser clamps the position to the scrollable range).
 function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
@@ -340,6 +348,7 @@ export function MessageList({
               <Fragment key={turn.key}>
                 {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
                 {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
+                <TurnChange previous={turns[index - 1]} turn={turn} />
                 {/* One conversation turn: in the blank space on the left is the turn's hollow number (matching the number on the
                     ruler; left empty when the number is unknown), and on the right the user message and the reply.
                     The located turn is highlighted with a light yellow fill. */}
