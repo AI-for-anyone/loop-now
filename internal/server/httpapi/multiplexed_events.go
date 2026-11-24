@@ -141,7 +141,6 @@ type muxItem struct {
 func (s *Server) streamMultiplexed(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var streams []muxStream
-	var order []string
 	seen := map[string]bool{}
 	for _, name := range q["stream"] {
 		if seen[name] {
@@ -153,7 +152,7 @@ func (s *Server) streamMultiplexed(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[name] = true
-		streams, order = append(streams, m), append(order, name)
+		streams = append(streams, m)
 	}
 	switch {
 	case len(streams) == 0:
@@ -167,8 +166,16 @@ func (s *Server) streamMultiplexed(w http.ResponseWriter, r *http.Request) {
 	if raw == "" {
 		raw = q.Get("cursor")
 	}
-	cursors := parseCombinedCursor(raw)
+	s.serveMultiplexed(w, r, streams, parseCombinedCursor(raw))
+}
 
+// serveMultiplexed carries the streams over the connection, each from its position in cursors (by name; none means
+// its snapshot first).
+func (s *Server) serveMultiplexed(w http.ResponseWriter, r *http.Request, streams []muxStream, cursors map[string]string) {
+	order := make([]string, len(streams))
+	for i, m := range streams {
+		order[i] = m.name
+	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	h := w.Header()
@@ -227,7 +234,15 @@ func (s *Server) streamMultiplexed(w http.ResponseWriter, r *http.Request) {
 	}
 	tick := time.NewTicker(min(keepalive, time.Second))
 	defer tick.Stop()
+	// Every stream asked for with a position keeps it from the first event on, before its reader has even opened it: a
+	// reconnect in the meantime then resumes it from there instead of giving it a fresh snapshot. A stream that starts
+	// with a snapshot replaces it; one that cannot be opened loses it.
 	positions := map[string]string{}
+	for _, name := range order {
+		if c, ok := cursors[name]; ok {
+			positions[name] = c
+		}
+	}
 	lastWrite := time.Now()
 	for {
 		select {
