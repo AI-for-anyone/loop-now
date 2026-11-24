@@ -34,7 +34,12 @@ export const timeline = {
     process_started: (runtime: string) => `${runtime} start`,
     process_stopped: (runtime: string) => `${runtime} process stopped`,
     process_exited: (runtime: string) => `${runtime} process exited unexpectedly`,
-    context_handoff: 'Conversation handed over',
+    // A handover, by why it happened (ContextHandoff.reason).
+    context_handoff: {
+      runtime_changed: 'Conversation handed over',
+      session_lost: 'Session not found; restarted with the conversation',
+      task_start: 'Started with a selection of the regular conversation',
+    },
     running: 'Started replying',
     tool: (name: string) => `Tool ${name}`,
     model_call: {

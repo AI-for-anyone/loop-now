@@ -85,6 +85,13 @@ export const chat = {
     // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
     renewed: (runtime: string) => `${runtime} · 新会话`,
     renewedLabel: (runtime: string, parts: string) => `对话交给了 ${runtime} 的新会话：${parts}`,
+    // The runtime's session could not be found, so a new one started with the saved conversation instead of stopping (reason
+    // session_lost).
+    lost: '原来的会话找不到了，已带着之前的对话重新开始',
+    lostLabel: (runtime: string, parts: string) => `${runtime} 原来的会话找不到了，已带着之前的对话开了新会话：${parts}`,
+    // A task instance on a runtime that can't fork the Agent's session starts with a selection of the regular conversation (task_start).
+    task: '任务开始时带上了普通对话的摘选',
+    taskLabel: (runtime: string, parts: string) => `任务在 ${runtime} 上开始，带上了普通对话的摘选：${parts}`,
     whole: (count: number) => `之前的 ${count} 条全部带过去`,
     included: (count: number) => `带过去 ${count} 条`,
     omitted: (count: number) => `省略 ${count} 条`,

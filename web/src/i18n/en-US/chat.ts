@@ -73,6 +73,13 @@ export const chat = {
     // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
     renewed: (runtime: string) => `${runtime} · new session`,
     renewedLabel: (runtime: string, parts: string) => `Handed over to a new ${runtime} session: ${parts}`,
+    // The runtime's session could not be found, so a new one started with the saved conversation instead of stopping (reason
+    // session_lost).
+    lost: "The previous session couldn't be found; a new one started with the earlier conversation",
+    lostLabel: (runtime: string, parts: string) => `${runtime}'s previous session couldn't be found, so a new one started with the earlier conversation: ${parts}`,
+    // A task instance on a runtime that can't fork the Agent's session starts with a selection of the regular conversation (task_start).
+    task: 'The task started with a selection of the regular conversation',
+    taskLabel: (runtime: string, parts: string) => `The task started on ${runtime} with a selection of the regular conversation: ${parts}`,
     whole: (count: number) => `all ${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
     included: (count: number) => `${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
     omitted: (count: number) => `${count} left out`,
