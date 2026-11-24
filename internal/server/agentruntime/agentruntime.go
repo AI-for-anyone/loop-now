@@ -1,5 +1,5 @@
 // Package agentruntime is the registry of Agent runtimes: which programs can run an Agent (the bundled Pi, and the Claude
-// Code and Codex installed on the user's computer), which model providers each one runs, and what each one can do. The runtime
+// Code, Codex, Grok and Antigravity installed on the user's computer), which model providers each one runs, and what each one can do. The runtime
 // is not stored separately; the model provider decides it.
 //
 // Code outside this package and the executor's driver files asks the registry about a capability and never compares a
@@ -10,9 +10,11 @@ import "slices"
 
 // Runtime ids, matching AgentRuntime in the OpenAPI spec.
 const (
-	Pi         = "pi"
-	ClaudeCode = "claude-code"
-	Codex      = "codex"
+	Pi          = "pi"
+	ClaudeCode  = "claude-code"
+	Codex       = "codex"
+	Grok        = "grok"
+	Antigravity = "antigravity"
 )
 
 // ClaudeCodeProvider is the model provider id of the Claude Code runtime: models come from the claude installed on the
@@ -23,6 +25,13 @@ const ClaudeCodeProvider = "claude-code"
 // computer, using its own login (the openai-codex provider is a different thing, run by Pi with an account the
 // platform keeps).
 const CodexProvider = "codex-cli"
+
+// GrokProvider and AntigravityProvider are the model provider ids of the Grok and Antigravity runtimes: models come from
+// the grok and agy installed on the user's computer, using their own logins.
+const (
+	GrokProvider        = "grok-cli"
+	AntigravityProvider = "antigravity-cli"
+)
 
 // Accounts says whose login runs the model.
 type Accounts string
@@ -110,6 +119,17 @@ func codexSetup(string) *Setup {
 	return &Setup{Install: &install, Login: &login, DocsURL: &docs}
 }
 
+// grokSetup and antigravitySetup give the commands that log in; the platform does not name an installer for them.
+func grokSetup(string) *Setup {
+	login := "grok login"
+	return &Setup{Login: &login}
+}
+
+func antigravitySetup(string) *Setup {
+	login := "agy acp --login"
+	return &Setup{Login: &login}
+}
+
 // claudeCodeSetup is Claude Code's native installer and login, from its setup documentation.
 func claudeCodeSetup(goos string) *Setup {
 	install := "curl -fsSL https://claude.ai/install.sh | bash"
@@ -148,6 +168,26 @@ var registry = []Runtime{
 			ReadsEntryFile: true},
 		Setup:      codexSetup,
 		MinVersion: "0.167.0",
+	},
+	{
+		// Grok runs as `grok agent ... stdio`, an Agent Client Protocol agent, with this computer's login (kept under the
+		// real HOME). The model and reasoning effort are given when it starts.
+		ID:           Grok,
+		Name:         "Grok",
+		Providers:    []string{GrokProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Setup:        grokSetup,
+		MinVersion:   "1.0.88",
+	},
+	{
+		// Antigravity runs as `agy acp`, an Agent Client Protocol agent, with this computer's login (kept under the real
+		// HOME). Its model ids carry the thinking level.
+		ID:           Antigravity,
+		Name:         "Antigravity",
+		Providers:    []string{AntigravityProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Setup:        antigravitySetup,
+		MinVersion:   "1.5.14",
 	},
 }
 

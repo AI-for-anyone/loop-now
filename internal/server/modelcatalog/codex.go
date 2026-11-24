@@ -6,26 +6,47 @@ import (
 	"loop-now/internal/server/agentruntime"
 )
 
-// CodexModel is one model the Codex installed on the user's computer lists for its login (model/list).
-type CodexModel struct {
+// LocalModel is one model a CLI installed on the user's computer lists for its login (Codex's model/list, Grok's
+// initialize, agy models).
+type LocalModel struct {
 	ID, Name string
-	// Efforts are the reasoning efforts the model supports, as Codex names them; DefaultEffort is its default.
+	// Efforts are the reasoning efforts the model supports, as the CLI names them; DefaultEffort is its default. None
+	// means the thinking level cannot be chosen (Antigravity's ids carry it).
 	Efforts       []string
 	DefaultEffort string
 	Images        bool
 	Hidden        bool
 }
 
+// CodexModel is one model the Codex installed on the user's computer lists for its login (model/list).
+type CodexModel = LocalModel
+
 // thinkingLevels are the thinking levels the platform knows, in order; Codex efforts outside them (such as ultra) are
 // left out.
 var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 // CodexProvider is the catalog of the Codex runtime: the models the codex on this computer lists for its login, without
-// hidden ones (none until Codex was asked, or when it is not installed). A model's thinking levels are its reasoning
-// efforts that the platform knows; its default is Codex's default when known, otherwise medium, otherwise the lowest.
-// Context window and maximum output are not listed by Codex and stay 0.
+// hidden ones (none until Codex was asked, or when it is not installed).
 func CodexProvider(models []CodexModel) Provider {
-	p := Provider{ID: agentruntime.CodexProvider, Name: "Codex", Source: SourceLocalCLI, AuthMethods: []string{}, APIKeyEnvVars: []string{}, Models: []Model{}}
+	return LocalCLIProvider(agentruntime.CodexProvider, "Codex", models)
+}
+
+// GrokProvider and AntigravityProvider are the catalogs of the Grok and Antigravity runtimes: the models the grok and
+// agy on this computer list for their logins.
+func GrokProvider(models []LocalModel) Provider {
+	return LocalCLIProvider(agentruntime.GrokProvider, "Grok", models)
+}
+
+func AntigravityProvider(models []LocalModel) Provider {
+	return LocalCLIProvider(agentruntime.AntigravityProvider, "Antigravity", models)
+}
+
+// LocalCLIProvider is the catalog of a runtime whose CLI lists its own models, without hidden ones. A model's thinking
+// levels are its reasoning efforts that the platform knows (only off when it lists none); its default is the CLI's
+// default when known, otherwise medium, otherwise the lowest. Context window and maximum output are not listed by these
+// CLIs and stay 0.
+func LocalCLIProvider(id, name string, models []LocalModel) Provider {
+	p := Provider{ID: id, Name: name, Source: SourceLocalCLI, AuthMethods: []string{}, APIKeyEnvVars: []string{}, Models: []Model{}}
 	for _, m := range models {
 		if m.Hidden || m.ID == "" {
 			continue

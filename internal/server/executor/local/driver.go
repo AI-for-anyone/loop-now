@@ -163,9 +163,11 @@ type started struct {
 
 // drivers builds each runtime's driver, by runtime id. A test checks that every runtime in the registry has one.
 var drivers = map[string]func(*Executor) driver{
-	agentruntime.Pi:         func(e *Executor) driver { return piDriver{e: e} },
-	agentruntime.ClaudeCode: func(e *Executor) driver { return claudeDriver{e: e} },
-	agentruntime.Codex:      func(e *Executor) driver { return codexDriver{e: e} },
+	agentruntime.Pi:          func(e *Executor) driver { return piDriver{e: e} },
+	agentruntime.ClaudeCode:  func(e *Executor) driver { return claudeDriver{e: e} },
+	agentruntime.Codex:       func(e *Executor) driver { return codexDriver{e: e} },
+	agentruntime.Grok:        func(e *Executor) driver { return acpDriver{e: e, f: grokFlavor} },
+	agentruntime.Antigravity: func(e *Executor) driver { return acpDriver{e: e, f: antigravityFlavor} },
 }
 
 // driverFor returns the driver of the runtime that runs this config (decided by its model provider).

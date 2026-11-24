@@ -66,7 +66,11 @@ type Checker struct {
 	// reports Codex as not found. CodexBin is the codex executable (for tests); when empty it is looked up in UserPath.
 	CodexEnv func(ctx context.Context) []string
 	CodexBin string
-	Now      func() time.Time
+	// ACPEnv is the environment for running grok's and agy's own short commands; nil, or a nil result, reports them as
+	// not found. GrokBin and AntigravityBin are their executables (for tests); when empty they are looked up in UserPath.
+	ACPEnv                  func(ctx context.Context) []string
+	GrokBin, AntigravityBin string
+	Now                     func() time.Time
 
 	probe  claudecli.Probe
 	mu     sync.Mutex
@@ -116,6 +120,10 @@ var bundledVersions = map[string]func(*Checker) string{
 var probes = map[string]func(*Checker, context.Context, time.Time) Status{
 	agentruntime.ClaudeCode: (*Checker).claude,
 	agentruntime.Codex:      (*Checker).codex,
+	agentruntime.Grok:       func(c *Checker, ctx context.Context, at time.Time) Status { return c.acp(ctx, at, agentruntime.Grok) },
+	agentruntime.Antigravity: func(c *Checker, ctx context.Context, at time.Time) Status {
+		return c.acp(ctx, at, agentruntime.Antigravity)
+	},
 }
 
 func (c *Checker) bundled(id, version string, at time.Time) Status {

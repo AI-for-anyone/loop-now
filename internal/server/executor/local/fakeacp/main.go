@@ -1,5 +1,5 @@
-// Command fakeacp is a fake Agent Client Protocol agent for tests, playing Grok or Antigravity (FAKEACP_FLAVOR=grok,
-// the default, or agy): --version and models answer as those CLIs do, and any arguments containing stdio or acp serve
+// Command fakeacp is a fake Agent Client Protocol agent for tests, playing Grok or Antigravity (FAKEACP_FLAVOR=grok or
+// agy; without it, agy when the executable's name starts with agy, otherwise grok): --version and models answer as those CLIs do, and any arguments containing stdio or acp serve
 // the protocol (version 1) over stdio, without network access and without reading credentials. Sessions are saved
 // under $FAKEACP_HOME/sessions once they have had a prompt. Loading an unknown session fails like Grok ("Path not
 // found.") or, for agy, succeeds empty, as the real ones do. FAKEACP_LOAD_SILENT=1 replays a session's history but
@@ -15,6 +15,7 @@
 //	fake:tool <cmd>   run one execute tool call, then reply ran
 //	fake:toolfail     run one tool call that fails, then reply ran
 //	fake:permission   ask for permission, then reply permission=<chosen option>
+//	fake:sleep <dur>  wait for the duration (the word after it), or until cancelled, then reply slept
 //	fake:slow         stream a dot every 50ms until cancelled
 //	fake:noack        the same, but ignore session/cancel
 //	fake:refusal      stop with refusal
@@ -38,6 +39,9 @@ import (
 func flavor() string {
 	if f := os.Getenv("FAKEACP_FLAVOR"); f != "" {
 		return f
+	}
+	if strings.HasPrefix(filepath.Base(os.Args[0]), "agy") {
+		return "agy"
 	}
 	return "grok"
 }
@@ -237,7 +241,7 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 	switch method {
 	case "initialize":
 		res := map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{"loadSession": true, "promptCapabilities": map[string]any{"image": true}}}
-		if flavor() == "grok" {
+		if flavor() != "agy" {
 			res["_meta"] = map[string]any{"agentVersion": "1.0.88", "modelState": models()}
 		}
 		s.result(id, res)
@@ -251,7 +255,7 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 		sid := str("sessionId")
 		b, err := os.ReadFile(sessionPath(sid))
 		ss := &session{ID: sid, Cwd: str("cwd"), MCP: mcpNames()}
-		if err != nil && flavor() == "grok" {
+		if err != nil && flavor() != "agy" {
 			s.fail(id, -32603, "Path not found.", map[string]any{"code": "FS_NOT_FOUND"})
 			return
 		}
@@ -366,6 +370,18 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		}
 		json.Unmarshal(r, &out)
 		reply("permission=" + out.Outcome.OptionID)
+	case "fake:sleep":
+		var d time.Duration
+		if f := strings.Fields(arg); len(f) > 0 {
+			d, _ = time.ParseDuration(f[0])
+		}
+		select {
+		case <-cancel:
+			stop("cancelled")
+			return
+		case <-time.After(d):
+		}
+		reply("slept")
 	case "fake:slow", "fake:noack":
 		tick := time.NewTicker(50 * time.Millisecond)
 		defer tick.Stop()

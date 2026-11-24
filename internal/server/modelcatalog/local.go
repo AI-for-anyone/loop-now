@@ -7,10 +7,13 @@ import "loop-now/internal/server/agentruntime"
 const SourceLocalCLI = "local_cli"
 
 // localSources are the model providers a runtime brings itself, by runtime id, as they are before the CLI was asked:
-// Claude Code's are fixed; Codex's are empty until Registry.SetLocalProviders gives the models the local Codex lists.
+// Claude Code's are fixed; Codex's, Grok's and Antigravity's are empty until Registry.SetLocalProviders gives the models
+// the local CLI lists.
 var localSources = map[string]func() []Provider{
-	agentruntime.ClaudeCode: func() []Provider { return []Provider{ClaudeCodeProvider()} },
-	agentruntime.Codex:      func() []Provider { return []Provider{CodexProvider(nil)} },
+	agentruntime.ClaudeCode:  func() []Provider { return []Provider{ClaudeCodeProvider()} },
+	agentruntime.Codex:       func() []Provider { return []Provider{CodexProvider(nil)} },
+	agentruntime.Grok:        func() []Provider { return []Provider{GrokProvider(nil)} },
+	agentruntime.Antigravity: func() []Provider { return []Provider{AntigravityProvider(nil)} },
 }
 
 // withLocal returns base plus the providers the runtimes bring themselves (in registry order): the ones a runtime's
