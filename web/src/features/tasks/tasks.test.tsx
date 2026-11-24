@@ -382,6 +382,10 @@ it('reconnecting reconciles all loaded pages from the first cursor, and a partia
 })
 
 it('two run segments each load more than 50 messages without sharing cursors or gaps, and clicking a node goes back to the conversation by default', async () => {
+  // With 100+ messages on the page, role queries over the whole document are slow (each computes every element's role and name), so
+  // controls are found by their text or inside the small part of the page that holds them.
+  const button = (text: string, index = 0) => screen.getAllByText(text)[index].closest('button')!
+  const tab = (name: string) => screen.getByText(name, { selector: '[role="tab"], [role="tab"] *' }).closest('[role="tab"]')!
   setup(); const cursors: { node: string; cursor: string | null }[] = []
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params, request }) => {
     const node = String(params.node), cursor = new URL(request.url).searchParams.get('cursor'); cursors.push({ node, cursor })
@@ -389,18 +393,20 @@ it('two run segments each load more than 50 messages without sharing cursors or 
   }))
   renderRoutes(routes, detailPath()); await screen.findByText('current segment #49'); await screen.findByText('history segment #49')
   const gaps = screen.getAllByText('Some messages from this run haven\'t loaded yet.'); expect(gaps).toHaveLength(2)
-  await userEvent.click(screen.getAllByRole('button', { name: 'Load more' })[0])
+  await userEvent.click(button('Load more', 0))
   await screen.findByText('history segment #51')
   expect(cursors).toContainEqual({ node: oldNodeId, cursor: `cursor-for-${oldNodeId}` })
   expect(cursors).not.toContainEqual({ node: nodeId, cursor: `cursor-for-${oldNodeId}` })
-  await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+  await userEvent.click(button('Load more'))
   await screen.findByText('current segment #51')
   expect(cursors).toContainEqual({ node: nodeId, cursor: `cursor-for-${nodeId}` })
-  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
-  await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
-  expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
+  await userEvent.click(tab('Node materials'))
+  await userEvent.click(within(document.querySelector('[data-ruler-step]')!.closest('nav')!).getByRole('button', { name: /Quality check/ }))
+  expect(tab('Conversation')).toHaveAttribute('aria-selected', 'true')
   expect(screen.getByText('history segment #51')).toBeVisible()
-})
+  // The whole app renders the 100+ messages of the two segments again after each load and click. That is most of this test's time
+  // (about 0.5 s here); a loaded CI machine took over the default 5 s, so this one test gets more.
+}, 15_000)
 
 it('a source link across steps locates the original record while keeping all segments of that step, and the latest failed group is expanded by default', async () => {
   const env = setup(), thirdId = '00000000-0000-7000-8000-000000000903'
