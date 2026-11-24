@@ -273,6 +273,19 @@ describe('Issues and failures', () => {
     expect(within(list).queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
+  it("a runtime failure names the turn's runtime; with none known it says “the runtime”", async () => {
+    const { snapshot } = await renderOverview({
+      anomalies: anomalyPage([
+        makeAnomaly({ agentName: 'A', runtime: 'claude-code', errorCode: 'runtime_unavailable', errorMessage: 'claude: command not found' }),
+        makeAnomaly({ agentName: 'B', runtime: null, errorCode: 'runtime_start_failed', errorMessage: 'exit status 1' }),
+      ]),
+    })
+    await snapshot([makeAgentOverview()])
+    const [a, b] = await within(section('Issues and failures')).findAllByRole('link')
+    await waitFor(() => expect(a).toHaveTextContent("Claude Code can't be used on this computer: it wasn't found, its version couldn't be read, or it's too old: claude: command not found"))
+    expect(b).toHaveTextContent("The runtime couldn't start: exit status 1")
+  })
+
   it('a failed CLI install shows as failed, with the CLI name in the reason', async () => {
     const { snapshot } = await renderOverview({
       anomalies: anomalyPage([makeAnomaly({ errorCode: 'cli_install_failed', errorMessage: 'gh 2.100.0: the downloaded file does not match the SHA-256 in the template' })]),

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
 import { runErrorText } from '@/features/chat/run-status-text'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { NumberedSection } from '@/components/NumberedSection'
 
 type Anomaly = Schemas['Anomaly']
@@ -31,11 +32,9 @@ function fieldOf(item: Anomaly): string {
 // For a failed manual compaction (compaction is not null), append the command of that compaction.
 const compactCommand = (compaction: Schemas['RunCompaction']) => (compaction.instructions ? `/compact ${compaction.instructions}` : '/compact')
 
-function reasonOf(item: Anomaly): string {
-  if (item.kind === 'run_failed') {
-    // An anomaly does not say which runtime the turn was on, so a runtime failure reads "the runtime".
-    return t.overview.anomalies.reason(runErrorText(item.errorCode), item.errorMessage)
-  }
+// runtimeName: the name of the runtime the turn was on (Anomaly.runtime), or null when the anomaly doesn't say.
+function reasonOf(item: Anomaly, runtimeName: string | null): string {
+  if (item.kind === 'run_failed') return t.overview.anomalies.reason(runErrorText(item.errorCode, runtimeName), item.errorMessage)
   return item.kind === 'server_restart' ? t.overview.anomalies.restartReason : t.overview.anomalies.interruptedReason
 }
 
@@ -47,6 +46,7 @@ function targetOf(item: Anomaly): { to: string; action: string } {
 }
 
 function AnomalyItem({ item }: { item: Anomaly }) {
+  const runtimes = useRuntimeLookup()
   const { to, action } = targetOf(item)
   return (
     <li>
@@ -70,7 +70,7 @@ function AnomalyItem({ item }: { item: Anomaly }) {
           </span>
           <span className="text-[13.5px] [overflow-wrap:anywhere] text-ink-700">
             {item.compaction && <code className="mr-2 font-mono text-[12.5px] font-bold text-ink">{compactCommand(item.compaction)}</code>}
-            {reasonOf(item)}
+            {reasonOf(item, item.runtime ? runtimes.name(item.runtime) : null)}
           </span>
         </span>
         <span className="col-start-2 inline-flex items-center gap-1.5 text-[13.5px] font-black whitespace-nowrap sm:col-start-auto">
