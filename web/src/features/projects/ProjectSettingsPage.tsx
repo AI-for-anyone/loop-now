@@ -175,9 +175,7 @@ function NameCard({ project }: { project: Schemas['Project'] }) {
 }
 
 const statusBadge = (agent: Schemas['AgentListItem']) =>
-  agent.sessionState === 'missing' ? (
-    <Badge tone="danger">{t.agents.sessionMissing}</Badge>
-  ) : agent.busy ? (
+  agent.busy ? (
     <Badge tone="busy">{t.agents.busy}</Badge>
   ) : (
     <Badge tone="success">{t.agents.idle}</Badge>

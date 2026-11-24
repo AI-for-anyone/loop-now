@@ -253,7 +253,7 @@ describe('Agent list', () => {
     expect(await screen.findByRole('list', { name: 'Agents' })).toBeInTheDocument()
   })
 
-  it('shows Replying and Session lost; after a refresh the Replying label goes away (idle shows no label)', async () => {
+  it('shows Replying; after a refresh the label goes away (idle shows no label), and a lost session is no state of its own any more', async () => {
     const a = makeAgent({ name: 'A', busy: true })
     const b = makeAgent({ name: 'B' })
     let busy = true
@@ -268,7 +268,8 @@ describe('Agent list', () => {
     const itemA = await within(list).findByRole('link', { name: /^A/ })
     const itemB = within(list).getByRole('link', { name: /^B/ })
     expect(within(itemA).getByText('Replying')).toBeInTheDocument()
-    expect(within(itemB).getByText('Session lost')).toBeInTheDocument()
+    // The server carries a lost session into a new one, so an older list row that still says missing shows nothing.
+    expect(itemB).toHaveTextContent(/^B$/)
     busy = false
     focusManager.setFocused(false)
     focusManager.setFocused(true)

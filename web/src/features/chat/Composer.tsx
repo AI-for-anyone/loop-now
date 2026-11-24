@@ -55,11 +55,6 @@ interface ComposerProps {
   agentName: string
   busy: boolean
   disabled: boolean
-  // When the session file is missing and /resume is available right now (per the server's command list), an image-free /resume is still
-  // allowed; all other input stays behind the disabled gate.
-  // When /resume isn't available (a Claude Code Agent), nothing is let through: don't leave a dead end where the only thing you can type
-  // is a command that is bound to be rejected.
-  allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
   // The Agent's model takes no images (its input has no image): none can be added.
   imagesRefused?: boolean
@@ -94,7 +89,7 @@ const platformNames = (list: CommandList | undefined) => (list ? new Set(list.co
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -116,33 +111,25 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
-  // The list must also be read when the session is missing and /resume is allowed: the input box opens up only if /resume is available
-  // right now.
-  const gate = disabled && allowResumeWhenDisabled
-  const token = reply || (disabled && !gate) ? null : slashToken(text, caret)
+  const token = reply || disabled ? null : slashToken(text, caret)
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
-  const commands = useAgentCommands(agentId, menuRequested || gate)
+  const commands = useAgentCommands(agentId, menuRequested)
   // The runtime the command list states, as the runtime definitions describe it.
   const runtimes = useRuntimeLookup()
   const listRuntime = runtimes.get(commands.data?.runtime)
   const listError = commands.error ?? (commands.data && !listRuntime ? runtimes.error : null)
   const listed = commands.data?.commands ?? []
-  // Don't lock the input box when the list can't be read: let /resume through anyway and let the server decide (after the session is
-  // lost, /resume is the only way out that keeps the context).
-  const resumeOpen = gate && (commands.isError || listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available))
-  const resumeAllowed = resumeOpen && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
-  const inputDisabled = disabled && !resumeOpen
-  const submitDisabled = disabled && !resumeAllowed
-  // "/" text with images is an ordinary message, so platform commands aren't suggested; when the session is missing, only /resume is
-  // suggested.
-  const pool = (images.length > 0 ? listed.filter((command) => command.source !== 'platform') : listed).filter((command) => !disabled || (command.source === 'platform' && command.name === 'resume'))
+  const inputDisabled = disabled
+  const submitDisabled = disabled
+  // "/" text with images is an ordinary message, so platform commands aren't suggested.
+  const pool = images.length > 0 ? listed.filter((command) => command.source !== 'platform') : listed
   const matched = matchCommands(pool, token ?? '/')
   // Commands that can't be used right now can't be chosen; they are grayed out at the bottom of the menu with the reason.
   const selectable = matched.filter((command) => command.available)
   const blocked = matched.filter((command) => !command.available)
   // When the session is missing, open the menu only if there is a /resume to suggest, or the list can't be read (the reason must be shown).
-  const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || ((!disabled || commands.isError) && images.length === 0))
+  const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || images.length === 0)
   const menuStatus = matched.length > 0
     ? null
     : listError

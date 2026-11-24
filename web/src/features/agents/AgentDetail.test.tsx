@@ -134,13 +134,6 @@ describe('Status label in the header', () => {
     await heading('Agent A')
   }
 
-  it('shows session lost when the session is lost, even if the Agent is busy', async () => {
-    await renderConfigWith({ busy: true, currentRun: makeRun({ status: 'running' }), session: { state: 'missing', epoch: 1 } })
-    await waitFor(() => expect(sticker()?.textContent).toBe('Session lost'))
-    expect(sticker()).toHaveAttribute('data-tone', 'danger')
-    expect(sticker()).toHaveAttribute('role', 'status')
-  })
-
   it('when busy, adds the current phase', async () => {
     await renderConfigWith({ busy: true, currentRun: makeRun({ status: 'starting', phase: 'preparing' }) })
     await waitFor(() => expect(sticker()?.textContent).toBe('BusyPreparing the environment'))

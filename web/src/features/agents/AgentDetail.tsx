@@ -20,26 +20,20 @@ import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
-// The status tag next to the title (an outlined, slightly tilted pill), shown by priority: session lost, busy (plus the current
-// phase), idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
+// The status tag next to the title (an outlined, slightly tilted pill): busy (plus the current phase), or idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
 // is used, and until that result arrives, the busy/idle and session state from the Agent details.
 function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStickerState | null }) {
   const status = useAgentStatus(agent.id, config.agentListPollMs)
   const polled: AgentStickerState = status.data
     ? {
-        sessionMissing: status.data.session.state === 'missing',
         busy: status.data.busy,
         phase: status.data.currentRun ? runPhaseText(status.data.currentRun) : null,
         sleep: status.data.sleep,
       }
-    : { sessionMissing: agent.session.state === 'missing', busy: agent.busy, phase: null }
+    : { busy: agent.busy, phase: null }
   const state = live ?? polled
-  const [tone, label] = state.sessionMissing
-    ? (['danger', t.agents.sessionMissing] as const)
-    : state.busy
-      ? (['busy', t.agents.busy] as const)
-      : (['success', t.agents.idle] as const)
-  const phase = !state.sessionMissing && state.busy ? state.phase : null
+  const [tone, label] = state.busy ? (['busy', t.agents.busy] as const) : (['success', t.agents.idle] as const)
+  const phase = state.busy ? state.phase : null
   return (
     <>
       <span

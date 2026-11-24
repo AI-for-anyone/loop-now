@@ -28,7 +28,7 @@ export const errors = {
     agent_busy: 'Agent 正忙',
     agent_not_idle: 'Agent 不空闲：还有进行中的回复或排队消息',
     session_none: '还没有活动会话，请先发送一条消息',
-    session_missing: '会话找不到了，需要先确认重开会话',
+    session_missing: '会话找不到了：下一条消息会带着之前的对话开新会话',
     console_command_failed: '命令执行失败',
     template_deleted: '来源模板已删除，不能重新复制',
     name_conflict: '名称已被占用',

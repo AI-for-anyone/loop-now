@@ -52,7 +52,7 @@ describe('Chinese console', () => {
     await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     for (const name of ['运行状态', '用量', '异常与失败']) expect(screen.getByRole('region', { name })).toBeInTheDocument()
     const tiles = screen.getByRole('list', { name: '运行状态汇总' })
-    for (const label of ['回复中', '空闲', '会话丢失', '排队中']) expect(within(tiles).getByText(label)).toBeInTheDocument()
+    for (const label of ['回复中', '空闲', '排队中']) expect(within(tiles).getByText(label)).toBeInTheDocument()
   })
 
   it('chat composer', async () => {

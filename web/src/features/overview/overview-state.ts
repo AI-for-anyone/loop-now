@@ -63,21 +63,17 @@ export function overviewReducer(state: OverviewState, action: OverviewAction): O
   }
 }
 
-// The four summary counts: replying (busy), idle (not busy and the session is fine), session lost, and queued (the sum of
-// interrupt and normal queue counts across all Agents).
+// The three summary counts: replying (busy), idle, and queued (the sum of interrupt and normal queue counts across all Agents).
 export interface OverviewSummary {
   busy: AgentOverview[]
   idle: AgentOverview[]
-  sessionMissing: AgentOverview[]
   queued: { interrupt: number; normal: number }
 }
 
 export function summarize(agents: AgentOverview[]): OverviewSummary {
-  const missing = (agent: AgentOverview) => agent.status.session.state === 'missing'
   return {
     busy: agents.filter((agent) => agent.status.busy),
-    idle: agents.filter((agent) => !agent.status.busy && !missing(agent)),
-    sessionMissing: agents.filter(missing),
+    idle: agents.filter((agent) => !agent.status.busy),
     queued: agents.reduce(
       (sum, agent) => ({ interrupt: sum.interrupt + agent.status.queued.interrupt, normal: sum.normal + agent.status.queued.normal }),
       { interrupt: 0, normal: 0 },
@@ -85,10 +81,9 @@ export function summarize(agents: AgentOverview[]): OverviewSummary {
   }
 }
 
-// Each row's state, with the same priority as the Agent header sticker: session lost, replying, idle.
-export type AgentRowState = 'sessionMissing' | 'busy' | 'idle'
+// Each row's state, as the Agent header sticker says it: replying or idle.
+export type AgentRowState = 'busy' | 'idle'
 
 export function rowState(agent: AgentOverview): AgentRowState {
-  if (agent.status.session.state === 'missing') return 'sessionMissing'
   return agent.status.busy ? 'busy' : 'idle'
 }

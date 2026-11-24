@@ -19,7 +19,6 @@ import { QueueList, QueueMessages } from './QueueList'
 import { RunnerChip } from './RunnerChip'
 import { runPhaseText } from './run-status-text'
 import { runStartedAt } from './time'
-import { SessionMissingBanner } from './SessionMissingBanner'
 import { buildTurns } from './turns'
 import { useAgentLive } from './useAgentLive'
 import { messageImageLimits } from '@/api/message-images'
@@ -105,28 +104,25 @@ export function ChatPage() {
       .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} copyFailed={item.copyFailed} onResume={(sessionId) => composer.current?.resume(sessionId)} /> })),
   ]
 
-  // Before a snapshot arrives, busy/idle and session state come from the status API and the Agent details.
+  // Before a snapshot arrives, busy/idle comes from the status API and the Agent details.
   const synced = live.snapshots > 0
   const busy = synced ? isBusy(live) : (status.data?.busy ?? agent.busy)
   // Per-item queue list: before a snapshot arrives it comes from the queue API; after that, snapshots and queue.updated are authoritative.
   const initialQueue = useAgentQueue(agent.id, !synced)
   const queueItems = synced ? live.queueItems : initialQueue.data?.agentId === agent.id ? initialQueue.data.items : []
   const currentRunId = synced ? live.current?.run.id : status.data?.currentRun?.id
-  const session = live.session ?? status.data?.session ?? agent.session
   // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none. Unknown
   // while its provider's models are being read, and then images are offered as before.
   const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
   const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
-  const sessionMissing = session.state === 'missing'
-  const hasRunInProgress = synced ? live.current !== null : status.data?.currentRun != null
   const phase = live.current ? runPhaseText(live.current.run) : null
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.
   useEffect(() => {
-    if (synced) reportLiveStatus({ sessionMissing, busy, phase, sleep })
-  }, [synced, sessionMissing, busy, phase, sleep, reportLiveStatus])
+    if (synced) reportLiveStatus({ busy, phase, sleep })
+  }, [synced, busy, phase, sleep, reportLiveStatus])
   useEffect(() => () => reportLiveStatus(null), [reportLiveStatus])
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
@@ -139,7 +135,6 @@ export function ChatPage() {
       <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
         {/* Notice bars sit above the message area, with the same left and right padding as the message area. */}
         <div className="flex shrink-0 flex-col px-[clamp(12px,2vw,28px)]">
-          {sessionMissing && <SessionMissingBanner agentId={agent.id} hasRunInProgress={hasRunInProgress} />}
           {notFound && (
             <Alert variant="warning" className="mt-4">
               <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
@@ -188,8 +183,7 @@ export function ChatPage() {
           agentId={agent.id}
           agentName={agent.name}
           busy={busy}
-          disabled={sessionMissing}
-          allowResumeWhenDisabled={sessionMissing}
+          disabled={false}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
           imagesRefused={imagesRefused}

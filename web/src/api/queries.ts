@@ -596,10 +596,6 @@ export function useSendMessage(agentId: string) {
   })
 }
 
-export function useResetSession(agentId: string) {
-  return useAgentMutation(agentId, () => call(api.POST('/agents/{agentId}/session/reset', agentPath(agentId))), [keys.agentStatus(agentId)])
-}
-
 export function useCreateSkillFromArchive() {
   const invalidate = useInvalidate()
   return useMutation<Schemas['SkillTemplate'], ApiError, Blob>({

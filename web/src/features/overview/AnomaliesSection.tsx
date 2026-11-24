@@ -38,10 +38,8 @@ function reasonOf(item: Anomaly, runtimeName: string | null): string {
   return item.kind === 'server_restart' ? t.overview.anomalies.restartReason : t.overview.anomalies.interruptedReason
 }
 
-// A missing session file goes to the Chat tab, where a banner handles starting a new session; other items jump to that reply
-// (or that manual compaction) and expand its run log.
+// Each item jumps to that reply (or that manual compaction) and expands its run log.
 function targetOf(item: Anomaly): { to: string; action: string } {
-  if (item.errorCode === 'session_missing') return { to: `/agents/${item.agentId}/chat`, action: t.overview.anomalies.handle }
   return { to: `/agents/${item.agentId}/chat#run-${item.runId}`, action: item.compaction ? t.overview.anomalies.viewCompaction : t.overview.anomalies.view }
 }
 

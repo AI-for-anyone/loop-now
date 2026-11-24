@@ -27,7 +27,7 @@ export const errors = {
     agent_busy: 'The Agent is busy',
     agent_not_idle: "The Agent isn't idle: a reply is in progress or messages are queued",
     session_none: 'There is no active session yet. Send a message first.',
-    session_missing: "The session can't be found. Confirm starting a new session first.",
+    session_missing: "The session can't be found: the next message starts a new one with the earlier conversation",
     console_command_failed: 'The command failed',
     template_deleted: "The source template was deleted and can't be copied again",
     name_conflict: 'That name is already taken',
