@@ -189,7 +189,7 @@ func TestSessionEvents(t *testing.T) {
 	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil { // already missing: not recorded again
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil { // already lost: not recorded again
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "failed", ErrorCode: "session_missing"}); err != nil {
@@ -205,7 +205,7 @@ func TestSessionEvents(t *testing.T) {
 			sess = append(sess, ev)
 		}
 	}
-	if len(sess) != 2 || sess[0].Type != store.EventSessionMissing || sess[0].RunID == nil || *sess[0].RunID != r.ID ||
+	if len(sess) != 2 || sess[0].Type != store.EventSessionLost || sess[0].RunID == nil || *sess[0].RunID != r.ID ||
 		sess[0].Data["sessionFile"] != "/tmp/s.jsonl" || sess[1].Type != store.EventSessionReset ||
 		sess[1].Data["fromEpoch"] != float64(1) || sess[1].Data["toEpoch"] != float64(2) {
 		t.Fatalf("wrong session events: %+v", sess)

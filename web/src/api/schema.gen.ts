@@ -4429,7 +4429,7 @@ export interface components {
             /**
              * @description Whether the runtime reported token usage for this run. false when it reported none (Agent Client Protocol
              *     runtimes such as Grok and Antigravity report only how full the context is) or the run never reached a model
-             *     (for example it failed before starting); usage is then all zeros and means unknown, not zero."
+             *     (for example it failed before starting); usage is then all zeros and means unknown, not zero.
              */
             usageReported: boolean;
             /** @description Provider and model this run actually used (as reported by the last model call); null when there was no model call */
@@ -7708,6 +7708,8 @@ export interface components {
             endedAt: string | null;
             errorCode: string | null;
             errorMessage: string | null;
+            /** @description Whether the runtime reported token usage for this turn. false when it reported none (Agent Client Protocol runtimes such as Grok and Antigravity) or the turn never reached a model; the timeline's usage is then all zeros and means unknown, not zero. */
+            usageReported: boolean;
         };
         TaskNodeRunTimeline: {
             /** Format: uuid */

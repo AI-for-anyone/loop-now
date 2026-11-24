@@ -2,17 +2,29 @@ package app
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"time"
 
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/modelcatalog"
 )
 
-// codexModelRefresher keeps the models the local Codex lists for its login in the catalog: once at startup, then every
-// interval until ctx ends. When Codex is not installed or cannot list them, the codex-cli provider keeps the list it
-// had (none at first).
-func (a *App) codexModelRefresher(ctx context.Context, models *modelcatalog.Registry, every time.Duration) {
-	a.refreshCodexModels(ctx, models)
+// Defaults for reading Codex's model list again when the lists are read (see codexModelReader).
+const (
+	codexModelsMaxAge   = time.Minute
+	codexModelsStaleAge = 10 * time.Second
+)
+
+// codexListsProvider reports whether provider is one whose models the local Codex lists.
+func codexListsProvider(provider string) bool {
+	rt, ok := agentruntime.ByID(agentruntime.Codex)
+	return ok && slices.Contains(rt.Providers, provider)
+}
+
+// codexModelRefresher reads Codex's model list once at startup, then every interval until ctx ends.
+func (a *App) codexModelRefresher(ctx context.Context, r *codexModelReader, every time.Duration) {
+	r.refresh(ctx)
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -20,21 +32,86 @@ func (a *App) codexModelRefresher(ctx context.Context, models *modelcatalog.Regi
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			a.refreshCodexModels(ctx, models)
+			r.refresh(ctx)
 		}
 	}
 }
 
-// refreshCodexModels reads the models the local Codex lists once and puts them in the catalog; on failure the catalog
-// keeps the list it had. GET /runtimes?refresh=true calls it too, so a Codex installed or logged in after startup shows
-// its models at once.
-func (a *App) refreshCodexModels(ctx context.Context, models *modelcatalog.Registry) {
+// readCodexModels reads the models the local Codex lists once and puts them in the catalog; on failure (Codex not
+// installed, cannot list) the catalog keeps the list it had. It reports whether the list may be out of date: Codex
+// could not refresh it online (a rejected login, no network) and answered from its own cache.
+func (a *App) readCodexModels(ctx context.Context, models *modelcatalog.Registry) bool {
 	c, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	list, err := a.Executor.CodexModels(c)
 	if err != nil {
 		a.Log.Debug("could not read the models of the local Codex", "err", err)
+		return false
+	}
+	models.SetLocalProviders(agentruntime.Codex, []modelcatalog.Provider{modelcatalog.CodexProvider(list.Models)})
+	if list.Cached {
+		a.Log.Info("Codex could not refresh its model list online and answered from its cache; it is read again at the next chance",
+			"loginRejected", list.LoginRejected)
+	}
+	return list.Cached
+}
+
+// codexModelReader decides when Codex's model list is read again. Besides the reads at startup and on the timer, a read
+// of the model lists (the console opening a model picker) starts one in the background when the list is older than
+// maxAge, or than staleAge when the last read said it may be out of date; that read of the lists gets the list as it
+// is, the next one the new list. Only one read of Codex's list runs at a time.
+type codexModelReader struct {
+	maxAge, staleAge time.Duration
+	now              func() time.Time
+	// read reads the list into the catalog and reports whether it may be out of date.
+	read func(ctx context.Context) (stale bool)
+
+	readMu  sync.Mutex // one read at a time
+	mu      sync.Mutex
+	readAt  time.Time
+	stale   bool
+	running int
+	wg      sync.WaitGroup
+}
+
+// refresh reads the list now and waits for it (startup, the timer, GET /runtimes?refresh=true); a read already running
+// finishes first.
+func (r *codexModelReader) refresh(ctx context.Context) {
+	r.mu.Lock()
+	r.running++
+	r.mu.Unlock()
+	r.readMu.Lock()
+	stale := r.read(ctx)
+	r.readMu.Unlock()
+	r.mu.Lock()
+	r.running--
+	r.readAt, r.stale = r.now(), stale
+	r.mu.Unlock()
+}
+
+// touch is called when the model lists are read: it starts a background read (under ctx) when one is due and none is
+// running, and returns at once.
+func (r *codexModelReader) touch(ctx context.Context) {
+	r.mu.Lock()
+	limit := r.maxAge
+	if r.stale {
+		limit = r.staleAge
+	}
+	if r.running > 0 || r.now().Sub(r.readAt) < limit || ctx.Err() != nil {
+		r.mu.Unlock()
 		return
 	}
-	models.SetLocalProviders(agentruntime.Codex, []modelcatalog.Provider{modelcatalog.CodexProvider(list)})
+	r.running++ // counted now, so a touch right after does not start another
+	r.wg.Add(1)
+	r.mu.Unlock()
+	go func() {
+		defer r.wg.Done()
+		r.refresh(ctx)
+		r.mu.Lock()
+		r.running--
+		r.mu.Unlock()
+	}()
 }
+
+// wait waits for the background reads (tests).
+func (r *codexModelReader) wait() { r.wg.Wait() }

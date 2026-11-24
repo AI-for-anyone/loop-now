@@ -1024,6 +1024,11 @@ type directives struct {
 
 func parseDirectives(msg string) directives {
 	var d directives
+	// The directives are read from the message itself, not from the saved conversation a handoff block carries
+	// before it (earlier messages may hold directives meant for their own turn).
+	if before, after, ok := strings.Cut(msg, "</conversation-handoff>"); ok && strings.Contains(before, "<conversation-handoff>") {
+		msg = after
+	}
 	for _, tok := range strings.Fields(msg) {
 		key, val, hasVal := strings.Cut(tok, "=")
 		known := true

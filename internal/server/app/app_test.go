@@ -30,6 +30,8 @@ type world struct {
 	cfg     config.Config
 	piAIDir string
 	logTo   io.Writer // logs are discarded when nil
+	// options changes the app's test options before each start.
+	options func(o *app.Options)
 }
 
 func newWorld(t *testing.T) *world {
@@ -74,8 +76,11 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 	if logTo == nil {
 		logTo = io.Discard
 	}
-	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel),
-		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}})
+	opts := app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}}
+	if w.options != nil {
+		w.options(&opts)
+	}
+	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel), opts)
 	if err != nil {
 		w.t.Fatalf("failed to start the server: %v", err)
 	}
@@ -344,7 +349,8 @@ func TestSessionFiles(t *testing.T) {
 		t.Fatalf("should reply normally from a new session: %+v %+v", r[len(r)-1], st.Session)
 	}
 
-	// A session file already written to disk is deleted: it is judged lost, and recovers after confirming a reopen.
+	// A session file already written to disk is deleted: the message starts a new session with the saved conversation,
+	// under the same session number, and the turn records that handoff (reason session_lost).
 	time.Sleep(800 * time.Millisecond)
 	matches, _ := filepath.Glob(filepath.Join(w.cfg.WorkRoot, "agents", "*", "sessions", "*.jsonl"))
 	for _, m := range matches {
@@ -352,11 +358,15 @@ func TestSessionFiles(t *testing.T) {
 	}
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "third message"})
 	st = s.waitIdle(a)
-	if r := s.replies(a); *r[len(r)-1].Run.ErrorCode != "session_missing" || st.Session.State != "missing" {
-		t.Fatalf("the session should be judged missing after its file is deleted: %+v", st.Session)
+	last := s.replies(a)[len(s.replies(a))-1]
+	if last.Run.Status != "completed" || last.Run.ContextHandoff == nil || last.Run.ContextHandoff.Reason != "session_lost" ||
+		st.Session.State != "active" || st.Session.Epoch != 1 || last.SessionEpoch != 1 {
+		t.Fatalf("a deleted session file continues in a new session with the conversation: %s %v %v %+v %+v", last.Run.Status, ptrStr(last.Run.ErrorCode), ptrStr(last.Run.ErrorMessage), last.Run.ContextHandoff, st.Session)
 	}
-	if code, _ := s.call("POST", a+"/messages", map[string]any{"text": "fourth message"}); code != http.StatusConflict {
-		t.Fatalf("new messages should be refused while the session is missing: %d", code)
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "fourth message"})
+	s.waitIdle(a)
+	if r := s.replies(a); r[len(r)-1].Run.Status != "completed" || r[len(r)-1].Run.ContextHandoff != nil {
+		t.Fatalf("the conversation goes on in the new session: %+v", r[len(r)-1].Run)
 	}
 	sess := decode[apitypes.SessionInfo](t, s.must(200, "POST", a+"/session/reset", nil))
 	if sess.Epoch != 2 {
@@ -430,4 +440,11 @@ func (s *server) createPlatformAgent(name string) (string, apitypes.Agent) {
 	ag := decode[apitypes.Agent](s.t, s.must(201, "POST", "/platform/agents", map[string]any{"name": name,
 		"model": map[string]string{"provider": provider, "modelId": models.Models[0].ID}, "prompt": "You are a test assistant"}))
 	return "/agents/" + ag.ID.String(), ag
+}
+
+func ptrStr(p *string) string {
+	if p == nil {
+		return "<nil>"
+	}
+	return *p
 }

@@ -94,7 +94,8 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	if err := e.st.MarkSessionMissing(ctx, agent.ID, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(platformAvailability(get()), " "); got != "session new compact:session_missing reload copy export:session_missing resume" {
+	// A lost session starts over: until the next message there is no session to compact or export.
+	if got := strings.Join(platformAvailability(get()), " "); got != "session new compact:session_none reload copy export:session_none resume" {
 		t.Fatalf("session lost: %s", got)
 	}
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())

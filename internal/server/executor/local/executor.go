@@ -614,7 +614,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &runID); mErr != nil {
 				return nil, mErr
 			}
-			return nil, fail(executor.ErrSessionMissing, "The recorded session file %s no longer exists. Confirm reopening the session in the console first.", snap.Session.SessionFile)
+			return nil, fail(executor.ErrSessionMissing, "The recorded session file %s no longer exists; the next message starts a new session with the saved conversation.", snap.Session.SessionFile)
 		}
 		sessionFile = snap.Session.SessionFile
 	}

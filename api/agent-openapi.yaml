@@ -8467,7 +8467,8 @@ components:
           "startedAt",
           "endedAt",
           "errorCode",
-          "errorMessage"
+          "errorMessage",
+          "usageReported"
         ],
         "properties": {
           "id": {
@@ -8544,6 +8545,10 @@ components:
                 "type": "null"
               }
             ]
+          },
+          "usageReported": {
+            "type": "boolean",
+            "description": "Whether the runtime reported token usage for this turn. false when it reported none (Agent Client Protocol runtimes such as Grok and Antigravity) or the turn never reached a model; the timeline's usage is then all zeros and means unknown, not zero."
           }
         }
       }
@@ -9180,7 +9185,7 @@ components:
           description: |
             Whether the runtime reported token usage for this run. false when it reported none (Agent Client Protocol
             runtimes such as Grok and Antigravity report only how full the context is) or the run never reached a model
-            (for example it failed before starting); usage is then all zeros and means unknown, not zero."
+            (for example it failed before starting); usage is then all zeros and means unknown, not zero.
         model:
           description: Provider and model this run actually used (as reported by the last model call); null when there was no model call
           oneOf:

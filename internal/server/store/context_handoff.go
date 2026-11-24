@@ -23,6 +23,8 @@ type PendingHandoff struct {
 	SessionFile string `json:"sessionFile,omitempty"`
 	// Launching is a message dispatched after the change that has not reached its runtime or ended yet.
 	Launching *uuid.UUID `json:"launching,omitempty"`
+	// Reason is why the conversation is to be carried: empty (a change of runtime) or HandoffSessionLost.
+	Reason string `json:"reason,omitempty"`
 	// Ran means a message reached a runtime after the change (or, without passing through dispatch, reached a runtime
 	// other than From): the conversation has moved on, so undoing the change can no longer continue From's session.
 	Ran bool `json:"ran"`
@@ -198,7 +200,8 @@ func (s *Store) RecordRuntimeSessionFile(ctx context.Context, agentID uuid.UUID,
 			return err
 		}
 		if agentruntime.ForProvider(provider).ID == runtime {
-			end := pending != nil && pending.From == runtime && pending.quiet()
+			// A session lost before (session_lost) left nothing to continue: a session recorded now is a new one.
+			end := pending != nil && pending.From == runtime && pending.quiet() && pending.Reason != HandoffSessionLost
 			_, err = tx.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', handoff = CASE WHEN $3 THEN NULL ELSE handoff END, updated_at = $4
 				WHERE agent_id = $1`, agentID, path, end, tx.Now())
 			return err
@@ -248,6 +251,18 @@ func (s *Store) DispatchHandoff(ctx context.Context, agentID, run uuid.UUID) (*P
 	return out, err
 }
 
+// SetRunSelection records who a run is dispatched to (the runtime, provider, model and thinking level of the
+// configuration it is dispatched with), so a run that fails before it starts still names them. It does not replace
+// what was recorded when the reply began.
+func (s *Store) SetRunSelection(ctx context.Context, runID uuid.UUID, sel RunSelection) error {
+	arg, err := jsonArg(&sel)
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `UPDATE runs SET selection = $2 WHERE id = $1 AND running_at IS NULL`, runID, arg)
+	return err
+}
+
 // SetRunRunningWith is SetRunRunning that also records who ran the turn and the handoff it carried (with its event). A
 // pending handoff notes that a message ran: one dispatched after the change, or any that reached a runtime other than
 // the one the handoff comes from.
@@ -264,7 +279,7 @@ func (s *Store) SetRunRunningWith(ctx context.Context, runID uuid.UUID, configVe
 		var agentID uuid.UUID
 		var runningAt time.Time
 		err := tx.QueryRow(ctx, `UPDATE runs SET status = CASE WHEN status = 'aborting' THEN status ELSE 'running' END,
-				phase = NULL, config_version = $2, running_at = coalesce(running_at, $3), selection = $4, context_handoff = $5
+				phase = NULL, config_version = $2, running_at = coalesce(running_at, $3), selection = coalesce($4, selection), context_handoff = $5
 			WHERE id = $1 AND status IN ('starting', 'aborting') AND running_at IS NULL RETURNING agent_id, running_at`, runID, configVersion, tx.Now(), sel, carried).Scan(&agentID, &runningAt)
 		if errors.Is(err, db.ErrNoRows) {
 			return nil
@@ -340,6 +355,83 @@ func finishHandoffTx(ctx context.Context, tx *db.Tx, run Run) error {
 	_, err := tx.Exec(ctx, `UPDATE agent_sessions SET handoff = NULL WHERE agent_id = $1 AND handoff->>'id' = $2 AND (state = 'active' OR $3)`,
 		run.AgentID, h.ID.String(), run.Status == "completed")
 	return err
+}
+
+// loseSessionTx turns the Agent's session, when it is in the given state, into a new start that carries the saved
+// conversation: the pointer is cleared, the session number stays, and a handoff with reason session_lost from the
+// current runtime is pending, so the next message gives the new session the conversation. A handoff that is already
+// pending stays as it is. It reports whether there was such a session.
+func (s *Store) loseSessionTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, runID *uuid.UUID, state string) (bool, error) {
+	var provider string
+	var file *string
+	var epoch int
+	var raw []byte
+	err := tx.QueryRow(ctx, `SELECT a.model_provider, s.session_file, s.epoch, s.handoff FROM agents a JOIN agent_sessions s ON s.agent_id = a.id
+		WHERE a.id = $1 AND s.state = $2`, agentID, state).Scan(&provider, &file, &epoch, &raw)
+	if errors.Is(err, db.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	pending, err := parseHandoff(raw)
+	if err != nil {
+		return false, err
+	}
+	runtime := agentruntime.ForProvider(provider).ID
+	if pending == nil {
+		pending = &PendingHandoff{ID: uuid.Must(uuid.NewV7()), From: runtime, Reason: HandoffSessionLost}
+	}
+	arg, err := jsonArg(pending)
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', handoff = $2, updated_at = $3 WHERE agent_id = $1`,
+		agentID, arg, tx.Now()); err != nil {
+		return false, err
+	}
+	data := map[string]any{"runtime": runtime, "epoch": epoch}
+	if file != nil {
+		data["sessionFile"] = *file
+	}
+	return true, s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: runID, Type: EventSessionLost, Data: data})
+}
+
+// HealMissingSessions turns the sessions an earlier version left "missing" (waiting for the person to confirm a new
+// session) into the same new start a lost session now gets, and returns their Agents. It runs when the server starts.
+func (s *Store) HealMissingSessions(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT agent_id FROM agent_sessions WHERE state = 'missing' ORDER BY agent_id`)
+	if err != nil {
+		return nil, err
+	}
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var healed []uuid.UUID
+	for _, id := range ids {
+		var lost bool
+		if err := s.inTx(ctx, func(tx *db.Tx) error {
+			var err error
+			lost, err = s.loseSessionTx(ctx, tx, id, nil, "missing")
+			return err
+		}); err != nil {
+			return healed, err
+		}
+		if lost {
+			healed = append(healed, id)
+		}
+	}
+	return healed, nil
 }
 
 // EndHandoff ends the given pending handoff without carrying anything (there was nothing saved to carry).

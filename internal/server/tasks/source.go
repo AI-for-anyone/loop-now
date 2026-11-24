@@ -67,6 +67,9 @@ type Source struct {
 	// and returns what the instance's baseline file holds (at most maxBytes); when nil, task forks of a session are not
 	// supported.
 	ForkBaseline func(ctx context.Context, runtime string, agentID uuid.UUID, sessionFile string, maxBytes int64) ([]byte, error)
+	// KeepsSessions reports whether a runtime keeps its sessions itself, named by a reference rather than a file (a
+	// Codex thread): a retired instance's archive then records the reference. When nil, no runtime does.
+	KeepsSessions func(runtime string) bool
 	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (a retired instance's
 	// Claude Code session is archived from there); when nil, this is not supported.
 	ClaudeProjects func(context.Context) string
