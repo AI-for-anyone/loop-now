@@ -52,6 +52,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Several console tabs no longer freeze the browser
+
+- A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.
+- Tabs that show different Agents still use one connection per Agent; a single connection for everything follows.
+- Nothing changes in what a tab shows. Where the browser has no shared workers, a tab keeps its own connections as before.
+
 ### Agents can run on Codex
 
 - A new runtime: the Codex CLI installed on your computer, with your own `codex login`. The platform neither reads nor stores the login. It appears in "Who runs it" as Codex, with the models your account can use (read from Codex itself, again every 10 minutes and when you choose "Check again").
