@@ -39,14 +39,32 @@ type RunSelection struct {
 // HandoffRecord is the selection of the saved conversation a turn carried to a new runtime (runs.context_handoff).
 type HandoffRecord struct {
 	// ID is the pending handoff the turn carried.
-	ID               uuid.UUID `json:"id"`
-	FromRuntime      string    `json:"fromRuntime"`
-	ToRuntime        string    `json:"toRuntime"`
-	IncludedMessages int       `json:"includedMessages"`
-	OmittedMessages  int       `json:"omittedMessages"`
-	Images           int       `json:"images"`
-	Bytes            int       `json:"bytes"`
-	BudgetBytes      int       `json:"budgetBytes"`
+	ID uuid.UUID `json:"id"`
+	// Reason is HandoffRuntimeChanged, HandoffSessionLost or HandoffTaskStart; empty in records from before it was
+	// kept, which were all changes of runtime.
+	Reason           string `json:"reason,omitempty"`
+	FromRuntime      string `json:"fromRuntime"`
+	ToRuntime        string `json:"toRuntime"`
+	IncludedMessages int    `json:"includedMessages"`
+	OmittedMessages  int    `json:"omittedMessages"`
+	Images           int    `json:"images"`
+	Bytes            int    `json:"bytes"`
+	BudgetBytes      int    `json:"budgetBytes"`
+}
+
+// Why a turn carried the saved conversation (HandoffRecord.Reason).
+const (
+	HandoffRuntimeChanged = "runtime_changed"
+	HandoffSessionLost    = "session_lost"
+	HandoffTaskStart      = "task_start"
+)
+
+// ReasonOrDefault is the record's reason; records from before it was kept were all changes of runtime.
+func (h HandoffRecord) ReasonOrDefault() string {
+	if h.Reason == "" {
+		return HandoffRuntimeChanged
+	}
+	return h.Reason
 }
 
 // RunStart is what is recorded when the reply of a turn begins.

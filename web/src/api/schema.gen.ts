@@ -3701,17 +3701,20 @@ export interface components {
             models?: components["schemas"]["Model"][];
         };
         /**
-         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code and codex
-         *     the unmodified Codex installed on the user's computer (looked up on the login shell's PATH; Codex runs as
-         *     `codex app-server`), each using its own local login; the platform neither reads nor stores their credentials.
-         *     The runtime follows from the model provider and is not set separately: claude-code when model.provider is
-         *     claude-code, codex when it is codex-cli, and pi otherwise (the openai-codex provider runs on Pi). Under Claude
+         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
+         *     unmodified Codex, grok the unmodified Grok CLI and antigravity the unmodified Antigravity CLI (agy) installed on
+         *     the user's computer (looked up on the login shell's PATH; Codex runs as `codex app-server`, Grok and
+         *     Antigravity speak the Agent Client Protocol), each using its own local login; the platform neither reads nor
+         *     stores their credentials. The runtime follows from the model provider and is not set separately: claude-code
+         *     when model.provider is claude-code, codex when it is codex-cli, grok when it is grok-cli, antigravity when it
+         *     is antigravity-cli, and pi otherwise (the openai-codex provider runs on Pi). Under Claude
          *     Code and Codex there are no Pi extensions (/pi: commands, extension conversations, plugin providers); plugin
          *     Skills and MCP servers work as usual. A Codex Agent's conversation is kept in the user's own Codex home (it
-         *     shows in the user's Codex history); deleting the Agent archives it there.
+         *     shows in the user's Codex history); deleting the Agent archives it there. Grok and Antigravity keep their
+         *     sessions in their own data as well.
          * @enum {string}
          */
-        AgentRuntime: "pi" | "claude-code" | "codex";
+        AgentRuntime: "pi" | "claude-code" | "codex" | "grok" | "antigravity";
         RuntimeList: {
             runtimes: components["schemas"]["RuntimeStatus"][];
         };
@@ -4423,13 +4426,21 @@ export interface components {
             tools: components["schemas"]["ToolEvent"][];
             /** @description Sum of all usage of this run (including compaction, cache warming and tool usage) */
             usage: components["schemas"]["UsageTotals"];
+            /**
+             * @description Whether the runtime reported token usage for this run. false when it reported none (Agent Client Protocol
+             *     runtimes such as Grok and Antigravity report only how full the context is) or the run never reached a model
+             *     (for example it failed before starting); usage is then all zeros and means unknown, not zero."
+             */
+            usageReported: boolean;
             /** @description Provider and model this run actually used (as reported by the last model call); null when there was no model call */
             model: components["schemas"]["ModelRef"] | null;
             /**
-             * @description Who ran this turn: the runtime, model provider, model and thinking level the message was handed over with,
-             *     recorded when the reply began (runningAt). Neighbouring turns with a different provider or model on the same
-             *     runtime show a change of model; a change of runtime shows as contextHandoff instead. Null until the reply
-             *     begins, for turns that never began, and for turns recorded before it was kept.
+             * @description Who ran this turn: the runtime, model provider, model and thinking level. Recorded when the run is dispatched
+             *     (the configuration it is dispatched with), so a run that fails before it starts still names the runtime it
+             *     was meant for, and replaced when the reply begins (runningAt) by what the runtime actually took. Neighbouring
+             *     turns with a different provider or model on the same runtime show a change of model; a change of runtime
+             *     shows as contextHandoff instead. Null while queued and for turns recorded before it was kept (older records
+             *     that began have it from when the reply began).
              */
             selection: components["schemas"]["RunSelection"] | null;
             /**
@@ -4463,6 +4474,14 @@ export interface components {
          *     lose it; each turn that carried it has this record.
          */
         ContextHandoff: {
+            /**
+             * @description Why the conversation was carried: runtime_changed, the Agent's runtime changed; session_lost, the runtime's
+             *     own session could not be continued (its record is gone or the runtime cannot load it), so a new session
+             *     started with the saved conversation instead of stopping for the user; task_start, a task instance on a
+             *     runtime that cannot fork sessions started with the regular conversation.
+             * @enum {string}
+             */
+            reason: "runtime_changed" | "session_lost" | "task_start";
             /** @description The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message */
             fromRuntime: components["schemas"]["AgentRuntime"];
             toRuntime: components["schemas"]["AgentRuntime"];
@@ -4844,6 +4863,8 @@ export interface components {
         Anomaly: {
             /** Format: uuid */
             runId: string;
+            /** @description The runtime the run was dispatched to (Run.selection.runtime); null for records from before it was kept */
+            runtime: components["schemas"]["AgentRuntime"] | null;
             scope: components["schemas"]["AgentScope"];
             /** Format: uuid */
             projectId: string | null;
@@ -5479,6 +5500,8 @@ export interface components {
              * @enum {string}
              */
             type: "context_handoff";
+            /** @enum {string} */
+            reason: "runtime_changed" | "session_lost" | "task_start";
             /** Format: date-time */
             at: string;
             fromRuntime: components["schemas"]["AgentRuntime"];
@@ -6269,6 +6292,8 @@ export interface components {
             errorCode?: string | null;
             /** @description Redacted run error description for this reply, generated from the error code; never echoes raw stderr, credentials or private paths. Omitted when there is no error. */
             errorMessage?: string | null;
+            /** @description The runtime the task instance runs this turn on (from the configuration the task captured), so an error such as runtime_login_required names the right CLI; omitted when it cannot be told. */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         TaskMessagePage: {
             messages: components["schemas"]["TaskMessage"][];

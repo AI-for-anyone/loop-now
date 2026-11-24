@@ -9,7 +9,7 @@ import { buildSteps } from './timeline-steps'
 type Selection = Schemas['RunSelection']
 const pi = (modelId: string, provider = 'anthropic'): Selection => ({ runtime: 'pi', provider, modelId, thinkingLevel: null })
 const claude = (modelId: string): Selection => ({ runtime: 'claude-code', provider: 'claude-code', modelId, thinkingLevel: 'high' })
-const handoff = (overrides: Partial<Schemas['ContextHandoff']> = {}): Schemas['ContextHandoff'] => ({ fromRuntime: 'pi', toRuntime: 'claude-code', includedMessages: 12, omittedMessages: 30, images: 2, bytes: 9812, budgetBytes: 16000, ...overrides })
+const handoff = (overrides: Partial<Schemas['ContextHandoff']> = {}): Schemas['ContextHandoff'] => ({ reason: 'runtime_changed', fromRuntime: 'pi', toRuntime: 'claude-code', includedMessages: 12, omittedMessages: 30, images: 2, bytes: 9812, budgetBytes: 16000, ...overrides })
 
 // One turn: the user's message and the reply, on a run with this selection (and handoff).
 let clock = 0
