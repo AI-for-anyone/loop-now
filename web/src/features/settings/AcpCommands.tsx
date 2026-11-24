@@ -235,7 +235,8 @@ function EnvRowField({ row, problem, disabled, onChange, onRemove }: { row: EnvR
   )
   return (
     <div className="grid gap-1">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] items-center gap-2">
+      {/* Name, value, remove in one row; on a narrow screen the value goes under the name, at full width. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]">
         {row.saved ? (
           <span className="flex h-10 min-w-0 items-center gap-1.5 rounded-input bg-tint-yellow px-3 font-mono text-[13.5px] font-bold text-ink">
             <KeyRoundIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
@@ -254,6 +255,7 @@ function EnvRowField({ row, problem, disabled, onChange, onRemove }: { row: EnvR
             onChange={(event) => onChange({ name: event.target.value })}
           />
         )}
+        <div className="order-last col-span-full min-w-0 sm:order-none sm:col-span-1">
         {row.saved && !row.refill ? (
           <span className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-input px-3 text-[13px] text-ink-500 shadow-[inset_0_0_0_2px_rgb(24_38_94/.2)]">
             <span className="truncate font-bold">{copy.savedValue}</span>
@@ -271,6 +273,7 @@ function EnvRowField({ row, problem, disabled, onChange, onRemove }: { row: EnvR
         ) : (
           valueInput
         )}
+        </div>
         <Button type="button" variant="secondary" size="icon-sm" className="rounded-full" disabled={disabled} aria-label={copy.removeEnv(row.name.trim())} title={copy.removeEnv(row.name.trim())} onClick={onRemove}>
           <XIcon aria-hidden="true" className="size-4" strokeWidth={3} />
         </Button>
