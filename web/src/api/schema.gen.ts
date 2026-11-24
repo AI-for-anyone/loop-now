@@ -2657,6 +2657,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Several event streams over one connection (SSE)
+         * @description `text/event-stream` carrying any set of the five event streams, so one connection serves every view of a
+         *     browser (a browser keeps at most six connections to one address). Each stream behaves exactly as its own
+         *     endpoint: the same access rules, the same snapshot and resume rules, the same events and data, in the same
+         *     order within the stream. Streams are named in `stream`:
+         *
+         *     - `agent:<agentId>`: GET /agents/{agentId}/events
+         *     - `overview`, `overview:platform`, `overview:project:<projectId>`: GET /overview/events without a scope, with
+         *       platform=true, or with projectId
+         *     - `inbox`: GET /inbox/events
+         *     - `task:<taskId>`: GET /tasks/{taskId}/events
+         *     - `project-tasks:<projectId>`: GET /projects/{projectId}/tasks/events
+         *
+         *     Every event of a stream comes as an `event` whose data is a MultiplexedEvent: the stream's name, the event's own
+         *     id in that stream, its event name and its data (the schema the stream's own endpoint lists for that name in
+         *     `x-sse-events`). Events of different streams interleave; within a stream their order is kept.
+         *
+         *     The SSE `id` of each event is a combined cursor: `<stream>=<id>` pairs separated by `;`, one for each stream
+         *     that has started (sent its snapshot, or resumed), with the stream's latest id. On a reconnect the browser sends
+         *     it back as `Last-Event-ID`, and every stream resumes after its own id (or starts with its snapshot when that id
+         *     is beyond the stream's retention range, as on its own endpoint). A stream of the request with no pair in the
+         *     cursor starts with its snapshot; pairs of streams not requested are ignored, and so is a pair that cannot be
+         *     read. To change the set of streams, close the connection and open a new one with the new `stream` list and
+         *     the `id` of the last event received as `cursor`: streams in both sets go on where they were, nothing is lost or
+         *     repeated; new ones start with their snapshot. Removing a stream's pair from the cursor makes it start with a
+         *     fresh snapshot.
+         *
+         *     A stream that cannot be opened (its Agent, task or project does not exist, its scope is invalid, the task
+         *     service is not running) or cannot be read any more ends with a `stream.error` naming it; the other streams go
+         *     on. Keep-alives are comment lines.
+         */
+        get: operations["streamMultiplexedEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/external-identities": {
         parameters: {
             query?: never;
@@ -5954,6 +6002,25 @@ export interface components {
             unread: components["schemas"]["InboxPendingItem"][];
             byAgent: components["schemas"]["InboxPendingAgentCount"][];
             byTask: components["schemas"]["InboxPendingTaskCount"][];
+        };
+        /** @description One event of a stream carried by GET /events */
+        MultiplexedEvent: {
+            /** @description The stream's name, as requested */
+            stream: string;
+            /** @description The event's id in its own stream (what its own endpoint sends as the SSE id) */
+            id: string;
+            /** @description The event's name in its own stream */
+            event: string;
+            /** @description The event's data, as the stream's own endpoint lists it for that name in x-sse-events */
+            data: unknown;
+        };
+        /** @description A stream carried by GET /events that could not be opened or read; it is no longer followed on this connection */
+        MultiplexedStreamError: {
+            stream: string;
+            error: {
+                code: components["schemas"]["ErrorCode"];
+                message: string;
+            };
         };
         SseInboxSnapshot: {
             /** @description Unread total for the console operator, counted at the same moment as the snapshot position */
@@ -14465,6 +14532,38 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    streamMultiplexedEvents: {
+        parameters: {
+            query: {
+                /** @description The streams to carry, by name (see above); repeated names count once */
+                stream: string[];
+                /** @description A combined cursor (the id of an event this endpoint sent earlier), for a new connection; Last-Event-ID takes precedence */
+                cursor?: string;
+            };
+            header?: {
+                "Last-Event-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event stream */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listExternalIdentities: {
