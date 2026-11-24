@@ -61,6 +61,8 @@ interface ComposerProps {
   // is a command that is bound to be rejected.
   allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
+  // The Agent's model takes no images (its input has no image): none can be added.
+  imagesRefused?: boolean
   maxMessageBytes: number | undefined
   // After a successful send, hand the result to the chat page so the message shows even while a history request is in flight.
   onSent: (result: Schemas['SendMessageResult']) => void
@@ -92,7 +94,7 @@ const platformNames = (list: CommandList | undefined) => (list ? new Set(list.co
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -395,7 +397,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
           leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
       <div className="flex min-w-0 flex-col">
         {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
-        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
+        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
       </div>
       {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
           right the live connection status. On wide screens it lines up with the left edge of the input box. */}

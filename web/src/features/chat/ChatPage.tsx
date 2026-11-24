@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { stopAgentRun, useAgentQueue } from '@/api/agent-queue'
-import { useAgentStatus, useContextInfo, useMessages, useRunTimeline } from '@/api/queries'
+import { useAgentStatus, useContextInfo, useMessages, useModels, useRunTimeline } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -113,6 +113,10 @@ export function ChatPage() {
   const queueItems = synced ? live.queueItems : initialQueue.data?.agentId === agent.id ? initialQueue.data.items : []
   const currentRunId = synced ? live.current?.run.id : status.data?.currentRun?.id
   const session = live.session ?? status.data?.session ?? agent.session
+  // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none. Unknown
+  // while its provider's models are being read, and then images are offered as before.
+  const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
+  const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
   const sessionMissing = session.state === 'missing'
   const hasRunInProgress = synced ? live.current !== null : status.data?.currentRun != null
   const phase = live.current ? runPhaseText(live.current.run) : null
@@ -188,6 +192,7 @@ export function ChatPage() {
           allowResumeWhenDisabled={sessionMissing}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
+          imagesRefused={imagesRefused}
           onSent={recordSent}
           onCommand={(result, command, outcome) => setCommands((current) => [...current, { agentId: agent.id, id: current.length + 1, at: new Date().toISOString(), command, result, copyFailed: outcome?.copyFailed ?? false }])}
           reply={replyTarget && { message: replyTarget, name: agent.name, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) }}
