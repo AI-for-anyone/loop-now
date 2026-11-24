@@ -2187,7 +2187,7 @@ components:
             code: { $ref: "#/components/schemas/ErrorCode" }
             message: { type: string }
             details:
-              description: Depends on the code; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist
+              description: Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist
               oneOf:
                 - $ref: "#/components/schemas/VerificationVersionConflictDetails"
                 - $ref: "#/components/schemas/VerificationConflictDetails"
@@ -2206,6 +2206,7 @@ components:
                 - $ref: "#/components/schemas/RunNotQueuedDetails"
                 - $ref: "#/components/schemas/RunNotActiveDetails"
                 - $ref: "#/components/schemas/ProjectNotIdleDetails"
+                - $ref: "#/components/schemas/RuntimeInUseDetails"
                 - $ref: "#/components/schemas/NotFoundDetails"
             fields:
               type: array
@@ -2479,6 +2480,7 @@ components:
 - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412)
 - payload_too_large: exceeds the size limit (413)
 - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409)
+- runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails)
 - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409)
 - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409)
 - session_none: there is no Pi session yet to compact or export (409)
@@ -2554,7 +2556,8 @@ components:
           "plugin_not_enabled",
           "plugin_blocked",
           "plugin_failed",
-          "plugin_timeout"
+          "plugin_timeout",
+          "runtime_in_use"
         ],
         "type": "string"
       }
@@ -2618,6 +2621,27 @@ components:
           description: "unknown_endpoint: no endpoint matches the request's method and path."
           type: string
           enum: [unknown_endpoint]
+
+    RuntimeInUseDetails:
+      description: When removing a local ACP command is rejected, lists the Agents (not deleted) whose model provider it runs
+      type: object
+      required: [agents]
+      additionalProperties: false
+      properties:
+        agents:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id, name, projectId]
+            additionalProperties: false
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              projectId:
+                description: The Agent's project; null for a platform Agent
+                type: [string, "null"]
+                format: uuid
 
     ProjectNotIdleDetails:
       description: When deleting a project is rejected, lists the Agents that are not idle
