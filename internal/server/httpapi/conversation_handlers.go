@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
-	"loop-now/internal/server/coord"
 	"loop-now/internal/server/store"
 )
 
@@ -187,101 +185,17 @@ func (s *Server) resetSession(w http.ResponseWriter, r *http.Request) {
 // is pushed first; the snapshot's event ID is the latest position of the event stream at that moment; with a
 // Last-Event-ID still inside the retained range, no snapshot is pushed and the stream resumes right after it.
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	id, err := pathUUID(r, "agentId")
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if _, err := s.Store.GetAgent(ctx, id); err != nil {
+	ls, err := s.openAgentStream(r.Context(), id, r.Header.Get("Last-Event-ID"))
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	agent := id.String()
-	cursor, resume := r.Header.Get("Last-Event-ID"), false
-	if cursor != "" {
-		first, err := s.Coord.FirstEventID(ctx, agent)
-		if err == nil && first != "" && coord.CompareIDs(cursor, first) >= 0 {
-			_, last, err := s.Coord.Snapshot(ctx, agent, "")
-			resume = err == nil && coord.CompareIDs(cursor, last) <= 0
-		}
-	}
-	var snap apitypes.SseSnapshot
-	if !resume {
-		snap, cursor, err = s.Conv.Snapshot(ctx, id)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	}
-
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
-	h.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	rc := http.NewResponseController(w)
-	if !resume {
-		data, _ := json.Marshal(snap)
-		if !writeEvent(w, cursor, apitypes.EventSnapshot, data) {
-			return
-		}
-	}
-	_ = rc.Flush()
-	s.pumpEvents(w, r, cursor, func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error) {
-		return s.Coord.ReadEvents(ctx, agent, after, 100, block)
-	}, "agentId", agent)
-}
-
-// pumpEvents keeps reading the event stream after cursor and pushing it, with periodic keepalives, until the connection
-// or the server closes.
-func (s *Server) pumpEvents(w http.ResponseWriter, r *http.Request, cursor string,
-	read func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error), logAttrs ...any) {
-	s.pumpEventsFiltered(w, r, cursor, read, nil, logAttrs...)
-}
-
-// pumpEventsFiltered is like pumpEvents; when keep is not nil only the events it keeps are written, and filtered-out
-// events still advance the cursor so they are not read again and again.
-func (s *Server) pumpEventsFiltered(w http.ResponseWriter, r *http.Request, cursor string,
-	read func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error), keep func(coord.Event) bool, logAttrs ...any) {
-	ctx := r.Context()
-	rc := http.NewResponseController(w)
-	// Block at most 1 second per read and decide on keepalives by elapsed time, so the loop exits promptly when the
-	// connection or the server closes.
-	block := min(s.O.SSEKeepalive, time.Second)
-	lastWrite := time.Now()
-	for ctx.Err() == nil {
-		events, err := read(ctx, cursor, block)
-		if err != nil {
-			if ctx.Err() == nil {
-				s.Log.Warn("failed to read the event stream", append(logAttrs, "err", err)...)
-			}
-			return
-		}
-		wrote := false
-		for _, ev := range events {
-			cursor = ev.ID
-			if keep != nil && !keep(ev) {
-				continue
-			}
-			if !writeEvent(w, ev.ID, ev.Type, ev.Data) {
-				return
-			}
-			wrote = true
-		}
-		if !wrote {
-			if time.Since(lastWrite) < s.O.SSEKeepalive {
-				continue
-			}
-			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
-				return
-			}
-		}
-		if err := rc.Flush(); err != nil {
-			return
-		}
-		lastWrite = time.Now()
-	}
+	s.serveStream(w, r, ls, "agentId", id.String())
 }
 
 func writeEvent(w http.ResponseWriter, id, typ string, data []byte) bool {

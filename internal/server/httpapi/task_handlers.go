@@ -8,14 +8,12 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
-	"loop-now/internal/server/coord"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 )
@@ -422,137 +420,27 @@ func (s *Server) streamTasks(w http.ResponseWriter, r *http.Request, project boo
 	if !s.taskReady(w, r) {
 		return
 	}
-	ctx := r.Context()
 	var taskID, projectID *uuid.UUID
-	var snapshot any
-	var position int64
-	var e error
 	if project {
 		id, err := pathUUID(r, "projectId")
 		if err != nil {
 			s.fail(w, r, err)
 			return
 		}
-		if _, e = s.Store.GetProject(ctx, id); e != nil {
-			s.fail(w, r, e)
-			return
-		}
 		projectID = &id
-		snapshot = map[string]any{"projectId": id}
-		position, e = s.Store.TaskEventPosition(ctx, nil, projectID)
 	} else {
 		id, ok := s.taskID(w, r)
 		if !ok {
 			return
 		}
-		if _, e = s.Tasks.Get(ctx, principal(r), id); e != nil {
-			s.fail(w, r, e)
-			return
-		}
 		taskID = &id
-		var detail taskmodel.Detail
-		detail, position, e = s.Store.TaskSnapshot(ctx, id)
-		if e == nil {
-			detail, e = s.Tasks.QuestionViews(ctx, principal(r), detail)
-		}
-		snapshot = struct {
-			Task taskmodel.Detail `json:"task"`
-		}{Task: detail}
 	}
-	if e != nil {
-		s.fail(w, r, e)
+	ls, err := s.openTaskStream(r.Context(), principal(r), taskID, projectID, r.Header.Get("Last-Event-ID"))
+	if err != nil {
+		s.fail(w, r, err)
 		return
 	}
-	streamKey := ""
-	if projectID != nil {
-		streamKey = coord.ProjectTaskStream(projectID.String())
-	} else {
-		streamKey = coord.TaskStream(taskID.String())
-	}
-	streamCursor := "0-0"
-	if s.Coord != nil {
-		if _, last, err := s.Coord.Snapshot(ctx, streamKey, ""); err == nil && last != "" {
-			streamCursor = last
-		}
-	}
-	cursor := position
-	resume := false
-	if raw := r.Header.Get("Last-Event-ID"); raw != "" {
-		parsed, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil && parsed >= 0 && parsed <= position {
-			cursor = parsed
-			resume = true
-		}
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(200)
-	rc := http.NewResponseController(w)
-	if !resume {
-		data, _ := json.Marshal(snapshot)
-		if !writeEvent(w, strconv.FormatInt(cursor, 10), "snapshot", data) {
-			return
-		}
-	}
-	if rc.Flush() != nil {
-		return
-	}
-	interval := s.O.TaskEventPoll
-	if interval <= 0 {
-		interval = 100 * time.Millisecond
-	}
-	poll := time.NewTicker(interval)
-	defer poll.Stop()
-	keepalive := s.O.SSEKeepalive
-	if keepalive <= 0 {
-		keepalive = 15 * time.Second
-	}
-	keep := time.NewTicker(keepalive)
-	defer keep.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-keep.C:
-			if _, e = io.WriteString(w, ": keepalive\n\n"); e != nil {
-				return
-			}
-			if rc.Flush() != nil {
-				return
-			}
-		case <-poll.C:
-			// The relay cursor is only used to consume wake-up notifications. The durable cursor must be advanced only
-			// by ordered catch-up from the database; a new relay event must not skip past the reconnection backlog or
-			// past history beyond a single batch of 100 events.
-			if s.Coord != nil {
-				if relayed, err := s.Coord.ReadEvents(ctx, streamKey, streamCursor, 100, 0); err == nil && len(relayed) > 0 {
-					streamCursor = relayed[len(relayed)-1].ID
-				}
-			}
-
-			events, err := s.Store.TaskEvents(ctx, taskID, projectID, cursor, 100)
-			if err != nil {
-				return
-			}
-			for _, event := range events {
-				cursor = event.ID
-				if project && event.Type != "task.updated" {
-					continue
-				}
-				data, e := s.taskEventView(ctx, principal(r), event.Type, event.Data)
-				if e != nil {
-					return
-				}
-				if !writeEvent(w, strconv.FormatInt(cursor, 10), event.Type, data) {
-					return
-				}
-			}
-			if len(events) > 0 && rc.Flush() != nil {
-				return
-			}
-		}
-	}
+	s.serveStream(w, r, ls, "stream", "tasks")
 }
 
 func (s *Server) listTaskAgents(w http.ResponseWriter, r *http.Request) {
