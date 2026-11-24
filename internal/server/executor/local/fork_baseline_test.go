@@ -113,7 +113,7 @@ func TestCopyClaudeBaseline(t *testing.T) {
 // ForkBaseline goes to the driver of the runtime it is given; a runtime with no driver is not supported.
 func TestForkBaselineByRuntime(t *testing.T) {
 	e := &Executor{o: Options{WorkRoot: t.TempDir()}}
-	if _, err := e.ForkBaseline(context.Background(), "codex", uuid.New(), "/x.jsonl", 10); !errors.Is(err, executor.ErrUnsupportedRuntime) {
+	if _, err := e.ForkBaseline(context.Background(), "grok", uuid.New(), "/x.jsonl", 10); !errors.Is(err, executor.ErrUnsupportedRuntime) {
 		t.Fatalf("unknown runtime: %v", err)
 	}
 	if _, err := e.ForkBaseline(context.Background(), "pi", uuid.New(), "/x.jsonl", 10); err == nil || errors.Is(err, executor.ErrUnsupportedRuntime) {

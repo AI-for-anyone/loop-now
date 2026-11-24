@@ -99,10 +99,13 @@ const (
 	// EnvContextHandoffTokens is the budget, in tokens counted as one per UTF-8 byte, of the conversation carried to a
 	// new runtime after a change of runtime (clamped to 1024..64000).
 	EnvContextHandoffTokens = "LOOP_NOW_CONTEXT_HANDOFF_TOKENS"
-	EnvLoopctlDistDir       = "LOOP_NOW_LOOPCTL_DIST_DIR"
-	EnvExternalListenAddr   = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
-	EnvExternalTLSCert      = "LOOP_NOW_EXTERNAL_TLS_CERT"
-	EnvExternalTLSKey       = "LOOP_NOW_EXTERNAL_TLS_KEY"
+	// EnvCodexModelsRefresh is how often the models the local Codex lists are read again (a short-lived codex
+	// app-server); 0 turns it off.
+	EnvCodexModelsRefresh = "LOOP_NOW_CODEX_MODELS_REFRESH"
+	EnvLoopctlDistDir     = "LOOP_NOW_LOOPCTL_DIST_DIR"
+	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
+	EnvExternalTLSCert    = "LOOP_NOW_EXTERNAL_TLS_CERT"
+	EnvExternalTLSKey     = "LOOP_NOW_EXTERNAL_TLS_KEY"
 	// EnvExternalTLSSelfSigned is a directory: the external port uses a self-signed certificate maintained by the
 	// server itself instead (cert.pem and key.pem in the directory, generated when missing or expired). It is mutually
 	// exclusive with the certificate/private key pair. The desktop shell uses it to open the external port, and loopctl
@@ -205,6 +208,9 @@ type Config struct {
 	InboxPageMax      int // maximum number of items per page in the Inbox list
 	// ContextHandoffTokens is the budget of the conversation carried to a new runtime (see EnvContextHandoffTokens).
 	ContextHandoffTokens int
+	// CodexModelsRefresh is how often the models the local Codex lists are read (once at startup, then at this
+	// interval); 0 never reads them.
+	CodexModelsRefresh time.Duration
 	// LoopctlDistDir is the root directory of the loopctl build output; <version>/manifest.json in it must match the
 	// server's version.
 	// When unset, loopctl-dist next to loop-server (the release bundle) is used; if neither exists, startup is refused.
@@ -345,6 +351,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		InboxPreviewChars:     p.integer(EnvInboxPreviewChars, 200),
 		InboxPageMax:          p.integer(EnvInboxPageMax, 100),
 		ContextHandoffTokens:  p.integer(EnvContextHandoffTokens, 16000),
+		CodexModelsRefresh:    p.duration(EnvCodexModelsRefresh, "10m"),
 		LoopctlDistDir:        p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
 		ExternalListenAddr:    p.str(EnvExternalListenAddr, ""),
 		ExternalTLSCert:       p.str(EnvExternalTLSCert, ""),

@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"loop-now/internal/server/claudecli"
+	"loop-now/internal/server/codexcli"
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/testutil/fakeclaudebin"
+	"loop-now/internal/testutil/fakecodexbin"
 )
 
 // TestChecker: pi is always available; claude-code reports claude's path, version and login state (only whether it is
@@ -26,7 +28,7 @@ func TestChecker(t *testing.T) {
 	c := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: fakeclaudebin.Path(t), RealHome: func() (string, error) { return home, nil },
 		ExecBasePath: "/usr/bin:/bin", HelperEnv: helperEnv, Now: func() time.Time { return now }}
 	list := c.List(context.Background(), false)
-	if len(list) != 2 || list[0].ID != "pi" || !list[0].Available || *list[0].Version != "1.4.0" || list[0].Login != nil {
+	if len(list) != 3 || list[0].ID != "pi" || !list[0].Available || *list[0].Version != "1.4.0" || list[0].Login != nil {
 		t.Fatalf("pi: %+v", list)
 	}
 	cc := list[1]
@@ -57,5 +59,36 @@ func TestChecker(t *testing.T) {
 		RealHome: func() (string, error) { return home, nil }}
 	if cc := missing.List(context.Background(), true)[1]; cc.Available || cc.UnavailableReason == nil || *cc.UnavailableReason != "not_found" || cc.Login != nil || cc.BinaryPath != nil {
 		t.Fatalf("claude not found: %+v", cc)
+	}
+}
+
+// Codex: its path, version and login method from codex login status; one older than the version tested is
+// version_unsupported with its version shown and no login; one that is not found is not_found.
+func TestCodexStatus(t *testing.T) {
+	codexHome := t.TempDir()
+	env := func(context.Context) []string {
+		return codexcli.Env(codexcli.EnvOptions{Home: t.TempDir(), CodexHome: codexHome, Path: []string{"/usr/bin", "/bin"}})
+	}
+	c := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, CodexBin: fakecodexbin.Path(t), CodexEnv: env,
+		RealHome: func() (string, error) { return t.TempDir(), nil }}
+	cx := c.List(context.Background(), true)[2]
+	if cx.ID != "codex" || !cx.Available || *cx.Version != "0.167.0" || *cx.BinaryPath != c.CodexBin || cx.UnavailableReason != nil ||
+		cx.Login == nil || cx.Login.State != "logged_in" || *cx.Login.AuthMethod != "chatgpt" || cx.Login.SubscriptionType != nil {
+		t.Fatalf("codex: %+v %+v", cx, cx.Login)
+	}
+	_ = os.WriteFile(filepath.Join(codexHome, ".fakecodex-logged-out"), nil, 0o600)
+	if got := c.List(context.Background(), true)[2].Login; got.State != "logged_out" || got.AuthMethod != nil {
+		t.Fatalf("logged out: %+v", got)
+	}
+	old := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, CodexBin: c.CodexBin, RealHome: c.RealHome, CodexEnv: func(ctx context.Context) []string {
+		return append(env(ctx), "FAKECODEX_VERSION=0.150.0")
+	}}
+	if cx := old.List(context.Background(), true)[2]; cx.Available || cx.UnavailableReason == nil || *cx.UnavailableReason != "version_unsupported" || *cx.Version != "0.150.0" || cx.Login != nil {
+		t.Fatalf("too old: %+v", cx)
+	}
+	missing := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, UserPath: func(context.Context) []string { return []string{t.TempDir()} },
+		RealHome: c.RealHome, CodexEnv: env}
+	if cx := missing.List(context.Background(), true)[2]; cx.Available || *cx.UnavailableReason != "not_found" || cx.BinaryPath != nil || cx.Login != nil {
+		t.Fatalf("not found: %+v", cx)
 	}
 }

@@ -8243,12 +8243,12 @@ export interface components {
             skipReason: "too_small" | "already_compacted" | "cancelled_by_extension" | null;
             /**
              * Format: int64
-             * @description Context tokens before compaction; set only when compacted
+             * @description Context tokens before compaction; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)
              */
             tokensBefore: number | null;
             /**
              * Format: int64
-             * @description Context tokens after compaction as estimated by Pi; set only when compacted
+             * @description Context tokens after compaction as estimated by the runtime; set only when compacted by a runtime that reports it (Pi; Codex reports no counts)
              */
             estimatedTokensAfter: number | null;
         };

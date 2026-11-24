@@ -64,7 +64,10 @@ var claudeEfforts = map[string]bool{"low": true, "medium": true, "high": true, "
 // claudeDriver is the Claude Code runtime installed on the user's machine: an unmodified claude found on the login
 // shell's PATH, run with the real HOME (using the user's own local login; the platform neither reads nor stores its
 // credentials), as a long-running process in stream-json mode.
-type claudeDriver struct{ e *Executor }
+type claudeDriver struct {
+	fileSessions
+	e *Executor
+}
 
 // claudeProcess is a Claude Code process: the stream-json client plus what the driver keeps about this process.
 type claudeProcess struct {

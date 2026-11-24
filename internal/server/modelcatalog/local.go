@@ -6,21 +6,25 @@ import "loop-now/internal/server/agentruntime"
 // use the CLI's own login, and need no account.
 const SourceLocalCLI = "local_cli"
 
-// localSources are the model providers a runtime brings itself, by runtime id. A source is called every time the
-// catalog is rebuilt, so it may return a list it asked the CLI for and cached. Today the only one is static.
+// localSources are the model providers a runtime brings itself, by runtime id, as they are before the CLI was asked:
+// Claude Code's are fixed; Codex's are empty until Registry.SetLocalProviders gives the models the local Codex lists.
 var localSources = map[string]func() []Provider{
 	agentruntime.ClaudeCode: func() []Provider { return []Provider{ClaudeCodeProvider()} },
+	agentruntime.Codex:      func() []Provider { return []Provider{CodexProvider(nil)} },
 }
 
-// withLocal returns base plus the providers the runtimes bring themselves (in registry order). The ids of those
-// providers are reserved: providers in base with the same id (custom ones from models.json) are not published.
-func withLocal(base *Catalog) *Catalog {
+// withLocal returns base plus the providers the runtimes bring themselves (in registry order): the ones a runtime's
+// CLI listed (listed, by runtime id) or else its local source. The ids of those providers are reserved: providers in
+// base with the same id (custom ones from models.json) are not published.
+func withLocal(base *Catalog, listed map[string][]Provider) *Catalog {
 	if base == nil {
 		return nil
 	}
 	var local []Provider
 	for _, rt := range agentruntime.All() {
-		if source := localSources[rt.ID]; source != nil {
+		if providers, ok := listed[rt.ID]; ok {
+			local = append(local, providers...)
+		} else if source := localSources[rt.ID]; source != nil {
 			local = append(local, source()...)
 		}
 	}

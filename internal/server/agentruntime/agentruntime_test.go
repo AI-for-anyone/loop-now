@@ -53,7 +53,7 @@ func TestLookup(t *testing.T) {
 			t.Fatalf("provider %q: %s", p, got)
 		}
 	}
-	if r, ok := ByID(ClaudeCode); !ok || r.Name != "Claude Code" || !Known(Pi) || Known("codex") || Known("") {
+	if r, ok := ByID(ClaudeCode); !ok || r.Name != "Claude Code" || !Known(Pi) || !Known(Codex) || Known("grok") || Known("") {
 		t.Fatal("ByID/Known")
 	}
 	r, _ := ByID(ClaudeCode)
@@ -78,6 +78,20 @@ func TestSetupCommands(t *testing.T) {
 	} {
 		s := cc.SetupOn(goos)
 		if s == nil || s.Install == nil || *s.Install != install || s.Login == nil || *s.Login != "claude auth login" || s.DocsURL == nil {
+			t.Fatalf("%s: %+v", goos, s)
+		}
+	}
+}
+
+// Codex is installed with npm on every system, logs in with codex login, and needs at least the version tested.
+func TestCodexSetup(t *testing.T) {
+	cx, ok := ByID(Codex)
+	if !ok || cx.MinVersion != "0.167.0" || ForProvider(CodexProvider).ID != Codex {
+		t.Fatalf("registry entry: %+v", cx)
+	}
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		s := cx.SetupOn(goos)
+		if s == nil || *s.Install != "npm install -g @openai/codex" || *s.Login != "codex login" || s.DocsURL == nil {
 			t.Fatalf("%s: %+v", goos, s)
 		}
 	}
