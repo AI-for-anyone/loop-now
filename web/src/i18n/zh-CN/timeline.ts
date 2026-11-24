@@ -1,5 +1,5 @@
 import type { components } from '@/api/schema.gen'
-import { formatMonthDayClock, formatPreciseClock, formatStepDuration } from './format'
+import { formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
 
 type S = components['schemas']
 
@@ -59,6 +59,9 @@ export const timeline = {
     message_cancelled: '一条 Inbox 消息被取消',
     session_missing: '会话找不到了',
     model_rate_limit: '订阅额度',
+    // The reply had ended but commands it runs in the background were still going; the turn waited, and the runtime sent nothing for
+    // limitMs, so the turn ended there (tools still open were closed as no_result).
+    background_wait_timeout: (limitMs: number) => `等后台命令时运行时 ${formatSlept(limitMs)}没有任何消息，这一轮在这里结束`,
     ended: {
       completed: '完成',
       failed: '失败',
@@ -108,6 +111,8 @@ export const timeline = {
       aborted: '压缩被中止。',
     },
     toolRunning: '进行中',
+    // A tool closed as no_result, or one still on started in a turn that has ended (records saved before no_result existed).
+    toolNoResult: '没有结果',
     commandUnavailable: '未记录命令',
     // The session's reference: a file for Pi and Claude Code, a thread for Codex.
     sessionFile: (file: string) => `会话：${file}`,

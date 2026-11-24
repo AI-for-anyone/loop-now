@@ -31,4 +31,6 @@ export const common = {
   required: '请填写此项',
   upload: '上传',
   uploading: '上传中…',
+  // Next to a path input in the desktop window: opens the system's own dialog for a folder or file.
+  choosePath: '选择…',
 } as const

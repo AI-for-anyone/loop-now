@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { apiUrl, errorBody } from '@/test/api'
+import { inDesktopShell } from '@/test/desktop'
 import { makeComponents, makeManifest, makePlugin, makePreview, makeResolvedSource } from '@/test/plugins'
 import { keys } from '@/api/queries'
 import { renderWithQuery } from '@/test/render'
@@ -158,6 +159,30 @@ describe('Installing a plugin: read manifest → confirm → install', () => {
     await user.click(screen.getByRole('button', { name: 'Read manifest' }))
     expect(await screen.findByText(/Couldn't fetch the plugin source, or installing its dependencies failed/)).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
+  it('in the desktop window, a local folder can be chosen with the system folder dialog; a git repository has no such button', async () => {
+    const pickPath = inDesktopShell({ answer: '/Users/me/plugins/mine' })
+    const user = userEvent.setup()
+    const { previews } = handlers()
+    renderInstall()
+    await user.click(screen.getByRole('radio', { name: 'git repository' }))
+    expect(screen.queryByRole('button', { name: 'Choose…' })).toBeNull()
+    await user.click(screen.getByRole('radio', { name: 'Local folder' }))
+    await user.click(screen.getByRole('button', { name: 'Choose…' }))
+    expect(pickPath).toHaveBeenCalledWith({ kind: 'directory' })
+    await waitFor(() => expect(screen.getByLabelText('Absolute path to a folder on the server machine')).toHaveValue('/Users/me/plugins/mine'))
+    await user.click(screen.getByRole('button', { name: 'Read manifest' }))
+    await waitFor(() => expect(previews).toEqual([{ source: { kind: 'local', location: '/Users/me/plugins/mine' } }]))
+  })
+
+  it('in a browser, a local folder is typed: there is no “Choose…”', async () => {
+    const user = userEvent.setup()
+    handlers()
+    renderInstall()
+    await user.click(screen.getByRole('radio', { name: 'Local folder' }))
+    expect(screen.getByLabelText('Absolute path to a folder on the server machine')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Choose…' })).toBeNull()
   })
 
   it('when the server still asks for confirmation (409 plugin_confirmation_required), adds the warning, and clicking again installs with confirm', async () => {

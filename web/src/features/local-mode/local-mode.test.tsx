@@ -8,6 +8,7 @@ import { FileManager } from '@/features/folders/FileManager'
 import type { FolderSource, GitPull } from '@/features/folders/folder-source'
 import { apiUrl, defaultProject, errorBody, makeAgent, makeProject } from '@/test/api'
 import { renderConfig } from '@/test/config'
+import { inDesktopShell } from '@/test/desktop'
 import { createMockFolder } from '@/test/folders'
 import { dir, localModeBackend } from '@/test/local-mode'
 import { projectBackend } from '@/test/projects'
@@ -202,6 +203,39 @@ describe('Project settings: local directories', () => {
     expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 3, directories: [{ path: '/Users/me/other', note: null }, { path: '/srv/data', note: null }] })
   })
 
+  it('in the desktop window, “Choose…” opens the system folder dialog: the chosen path fills the input and can still be edited; cancelling keeps what is there', async () => {
+    const pickPath = inDesktopShell({ answer: '/Users/me/picked' })
+    const { local, user } = setup()
+    await user.click(await within(await region('Local directories')).findByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    const input = within(dialog).getByLabelText('Absolute path')
+    const choose = within(dialog).getByRole('button', { name: 'Choose…' })
+    await user.click(choose)
+    expect(pickPath).toHaveBeenLastCalledWith({ kind: 'directory' })
+    await waitFor(() => expect(input).toHaveValue('/Users/me/picked'))
+    await user.type(input, '/sub')
+    pickPath.mockResolvedValueOnce(null)
+    await user.click(choose)
+    expect(pickPath).toHaveBeenLastCalledWith({ kind: 'directory', defaultPath: '/Users/me/picked/sub' })
+    await waitFor(() => expect(choose).toBeEnabled())
+    expect(input).toHaveValue('/Users/me/picked/sub')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: 'Main repo' }, { path: '/Users/me/missing-dir', note: null }, { path: '/Users/me/picked/sub', note: null }] })
+  })
+
+  it.each([
+    ['in a browser', false],
+    ['in an older desktop shell without the picker', true],
+  ])('%s there is no “Choose…”: the path is typed', async (_where, desktop) => {
+    if (desktop) inDesktopShell({ withPicker: false })
+    const { user } = setup()
+    await user.click(await within(await region('Local directories')).findByRole('button', { name: 'Add directory' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    expect(within(dialog).getByLabelText('Absolute path')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Choose…' })).toBeNull()
+  })
+
   it('with “Bind local directories” off, says that Agents aren\'t given the list for now and links to global settings', async () => {
     const { user, router } = setup({ settings: { directories: false } })
     const card = await region('Local directories')
@@ -238,6 +272,31 @@ describe('Agent config: local directories', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.state.requests).toEqual([{ method: 'PUT', path: `/api/v1/agents/${agent.id}/local-directories`, body: { expectedRevision: 4, directories: [{ path: '/Users/me/own', note: null }, { path: '/Users/me/notes', note: null }] } }])
     expect(within(inherited).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('in the desktop window, adding and editing both offer “Choose…”; editing starts the dialog at the current path', async () => {
+    const pickPath = inDesktopShell({ answer: '/Users/me/elsewhere' })
+    const agent = makeAgent()
+    const local = localModeBackend({
+      projects: { [defaultProject.id]: { revision: 1, directories: [] } },
+      agents: { [agent.id]: { revision: 4, directories: [dir('/Users/me/own')], projectId: defaultProject.id } },
+    })
+    const { user } = await renderConfig({ agent, handlers: local.handlers })
+    const section = await region('Local directories')
+    await user.click(await within(section).findByRole('button', { name: 'Add directory' }))
+    const add = await screen.findByRole('dialog', { name: 'Add local directory' })
+    expect(within(add).getByRole('button', { name: 'Choose…' })).toBeInTheDocument()
+    await user.click(within(add).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    await user.click(within(section).getByRole('button', { name: 'Edit /Users/me/own' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit local directory' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose…' }))
+    expect(pickPath).toHaveBeenCalledWith({ kind: 'directory', defaultPath: '/Users/me/own' })
+    await waitFor(() => expect(within(dialog).getByLabelText('Absolute path')).toHaveValue('/Users/me/elsewhere'))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.state.requests).toEqual([{ method: 'PUT', path: `/api/v1/agents/${agent.id}/local-directories`, body: { expectedRevision: 4, directories: [{ path: '/Users/me/elsewhere', note: null }] } }])
   })
 
   it('a platform Agent has no inherited entries', async () => {

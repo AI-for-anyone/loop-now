@@ -4506,8 +4506,13 @@ export interface components {
          * @enum {string|null}
          */
         RunEndReason: "user_interrupt" | "user_stopped" | "server_restart" | "sleep_superseded" | "sleep_invalidated" | "user_cancelled" | "merged_into_interrupt" | "no_pending_messages" | null;
-        /** @enum {string} */
-        ToolState: "started" | "succeeded" | "failed";
+        /**
+         * @description started: the tool is running; succeeded and failed: the runtime reported how it ended. no_result: the turn ended
+         *     while the tool was still open and the runtime never said how it ended (for example a command still running in
+         *     the background when the turn's wait for it ran out); it is neither a success nor a failure.
+         * @enum {string}
+         */
+        ToolState: "started" | "succeeded" | "failed" | "no_result";
         ToolEvent: {
             toolCallId: string;
             toolName: string;
@@ -5293,7 +5298,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineBackgroundWaitTimeout"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description A request from an agent-side extension through ctx.ui (extension_ui_request in Pi RPC). notify is a notification
          *     (level info, warning or error); setStatus sets or clears a status (cleared when message is empty). select,
@@ -5659,6 +5664,23 @@ export interface components {
             at: string;
             /** @description The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex) */
             sessionFile: string | null;
+        };
+        /**
+         * @description The runtime's reply had ended while commands it runs in the background were still going (Antigravity moves a
+         *     command that takes longer than its wait to the background and reports on it by itself later), so the turn
+         *     waited for them and for the runtime's own follow-up reply. Nothing came from the runtime for limitMs, so the
+         *     turn ended there; the tools still open were closed as no_result.
+         */
+        TimelineBackgroundWaitTimeout: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "background_wait_timeout";
+            /** Format: date-time */
+            at: string;
+            /** @description How long the turn waited without any message from the runtime */
+            limitMs: number;
         };
         /** @description The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff) */
         TimelineContextHandoff: {

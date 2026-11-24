@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PathPicker } from '@/features/desktop/PathPicker'
 import { t } from '@/i18n'
 import { serverDetail } from '@/lib/errors'
 import { localizedText } from '@/lib/localized-text'
@@ -157,6 +158,17 @@ export function InstallSourceDialog({
     if (await installer.begin('source', { source })) onOpenChange(false)
   }
   const error = installer.errorFor('source')
+  const locationInput = (
+    <Input
+      id={`${id}-location`}
+      value={location}
+      aria-invalid={invalid ? true : undefined}
+      placeholder={kind === 'git' ? text.gitUrlPlaceholder : text.localPathPlaceholder}
+      onChange={(event) => setLocation(event.target.value)}
+      autoComplete="off"
+      spellCheck={false}
+    />
+  )
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => installer.pending === null && onOpenChange(next)}>
@@ -221,15 +233,13 @@ export function InstallSourceDialog({
             ) : (
               <div className="grid gap-1.5">
                 <Label htmlFor={`${id}-location`}>{kind === 'git' ? text.gitUrl : text.localPath}</Label>
-                <Input
-                  id={`${id}-location`}
-                  value={location}
-                  aria-invalid={invalid ? true : undefined}
-                  placeholder={kind === 'git' ? text.gitUrlPlaceholder : text.localPathPlaceholder}
-                  onChange={(event) => setLocation(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                {kind === 'local' ? (
+                  <PathPicker kind="directory" value={location} onPick={setLocation} disabled={installer.pending !== null}>
+                    {locationInput}
+                  </PathPicker>
+                ) : (
+                  locationInput
+                )}
                 <p className="text-[12.5px] text-ink-500">{kind === 'git' ? text.gitHint : text.localHint}</p>
               </div>
             )}

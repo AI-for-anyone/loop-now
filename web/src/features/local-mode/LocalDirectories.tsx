@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Section } from '@/features/agent-config/Section'
+import { PathPicker } from '@/features/desktop/PathPicker'
 import { useScope } from '@/features/projects/scope-context'
 import { fieldMessages, unmatchedFieldError } from '@/lib/errors'
 import { projectSettingsPath } from '@/lib/scope'
@@ -310,17 +311,19 @@ function DirectoryDialog({ target, listing, save, reload, onClose }: { target: T
         <form className="grid gap-4" onSubmit={(event) => void submit(event)} noValidate>
           <div className="grid gap-1.5">
             <Label htmlFor={ids.path}>{copy.dialog.path}</Label>
-            <Input
-              id={ids.path}
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              aria-describedby={ids.pathHint}
-              aria-invalid={pathError ? true : undefined}
-              autoFocus
-              spellCheck={false}
-              autoComplete="off"
-              className="font-mono text-[13px]"
-            />
+            <PathPicker kind="directory" value={path} onPick={setPath} disabled={busy}>
+              <Input
+                id={ids.path}
+                value={path}
+                onChange={(event) => setPath(event.target.value)}
+                aria-describedby={ids.pathHint}
+                aria-invalid={pathError ? true : undefined}
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+                className="font-mono text-[13px]"
+              />
+            </PathPicker>
             <FieldError message={pathError} />
             <p id={ids.pathHint} className="text-[12.5px] leading-snug text-ink-500">
               {copy.dialog.pathHint}
