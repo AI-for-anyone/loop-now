@@ -320,29 +320,52 @@ func (c *Client) InPrompt() bool {
 	return c.turn != nil
 }
 
-func (c *Client) update(params json.RawMessage) {
+// sessionUpdate is what the client uses of one session/update notification.
+type sessionUpdate struct {
+	SessionID, Kind, ToolCallID, Title, ToolKind, Status string
+	// Text is the text of a message or thought chunk (its content is one ContentBlock; a tool call's is a list of
+	// ToolCallContent, which the client does not use).
+	Text     string
+	RawInput json.RawMessage
+}
+
+// parseUpdate reads a session/update notification field by field: a field of an unexpected type or shape (a tool
+// call's content list, a title that is not a string) is left empty and the others are still used, so the status of a
+// tool's end is never lost to its output. It fails only when there is no update object at all.
+func parseUpdate(params json.RawMessage) (sessionUpdate, bool) {
 	var p struct {
-		SessionID string `json:"sessionId"`
-		Update    struct {
-			Kind    string `json:"sessionUpdate"`
-			Content struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-			ToolCallID string          `json:"toolCallId"`
-			Title      string          `json:"title"`
-			ToolKind   string          `json:"kind"`
-			Status     string          `json:"status"`
-			RawInput   json.RawMessage `json:"rawInput"`
-		} `json:"update"`
+		SessionID json.RawMessage            `json:"sessionId"`
+		Update    map[string]json.RawMessage `json:"update"`
 	}
-	if json.Unmarshal(params, &p) != nil {
+	if json.Unmarshal(params, &p) != nil || p.Update == nil {
+		return sessionUpdate{}, false
+	}
+	str := func(raw json.RawMessage) string {
+		var s string
+		_ = json.Unmarshal(raw, &s)
+		return s
+	}
+	u := sessionUpdate{SessionID: str(p.SessionID), Kind: str(p.Update["sessionUpdate"]), ToolCallID: str(p.Update["toolCallId"]),
+		Title: str(p.Update["title"]), ToolKind: str(p.Update["kind"]), Status: str(p.Update["status"]), RawInput: p.Update["rawInput"]}
+	switch u.Kind {
+	case "agent_message_chunk", "agent_thought_chunk", "user_message_chunk":
+		var block map[string]json.RawMessage
+		if json.Unmarshal(p.Update["content"], &block) == nil && str(block["type"]) == "text" {
+			u.Text = str(block["text"])
+		}
+	}
+	return u, true
+}
+
+func (c *Client) update(params json.RawMessage) {
+	u, ok := parseUpdate(params)
+	if !ok {
 		return
 	}
 	c.mu.Lock()
 	l, t := c.loading, c.turn
-	if l != nil && l.sessionID == p.SessionID {
-		switch p.Update.Kind {
+	if l != nil && l.sessionID == u.SessionID {
+		switch u.Kind {
 		case "user_message_chunk", "agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update", "plan":
 			l.count++
 			l.last = time.Now()
@@ -351,10 +374,9 @@ func (c *Client) update(params json.RawMessage) {
 		return
 	}
 	c.mu.Unlock()
-	if t == nil || t.sessionID != p.SessionID || t.sink == nil {
+	if t == nil || t.sessionID != u.SessionID || t.sink == nil {
 		return
 	}
-	u := p.Update
 	t.mu.Lock()
 	if t.finished {
 		t.mu.Unlock()
@@ -372,11 +394,11 @@ func (c *Client) update(params json.RawMessage) {
 	t.mu.Unlock()
 	switch u.Kind {
 	case "agent_message_chunk":
-		if u.Content.Type == "text" && u.Content.Text != "" {
+		if u.Text != "" {
 			t.mu.Lock()
-			t.text.WriteString(u.Content.Text)
+			t.text.WriteString(u.Text)
 			t.mu.Unlock()
-			t.sink.TextDelta(u.Content.Text)
+			t.sink.TextDelta(u.Text)
 		}
 	case "tool_call":
 		name := u.ToolKind

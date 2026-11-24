@@ -21,7 +21,8 @@
 //	                  backgrounded and end the prompt with usage_update. Each command ends after its duration, with
 //	                  no prompt open (tool_call_update completed); the agent then replies by itself, "reported <n>"
 //	                  for the n commands that ended before that reply began, and ends the reply with usage_update.
-//	                  The word lost never reports its end; daemon starts a daemon command that never ends.
+//	                  The word lost never reports its end; daemon starts a daemon command that never ends; now
+//	                  ends before the prompt does (its end comes within the prompt, as agy's for a quick command).
 //	                  FAKEACP_WAKE_DELAY (a duration) is how long such a reply takes to begin and to finish.
 //	                  session/cancel ends the session's commands still running, without a word.
 //	fake:permission   ask for permission, then reply permission=<chosen option>
@@ -198,6 +199,14 @@ func (s *server) ask(method string, params any) json.RawMessage {
 	}
 }
 
+// toolEnd is the end of a tool call as agy sends it: the output as rawOutput and as content, a list of ToolCallContent
+// (a message chunk's content is a single block).
+func toolEnd(tid, status, output string) map[string]any {
+	return map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": status, "kind": "execute",
+		"rawOutput": map[string]any{"output": output, "exit_code": 0},
+		"content":   []any{map[string]any{"type": "content", "content": map[string]any{"type": "text", "text": output}}}}
+}
+
 func usage() map[string]any {
 	return map[string]any{"sessionUpdate": "usage_update", "used": 100, "size": 1000}
 }
@@ -211,7 +220,7 @@ func (s *server) commandEnded(sid, tid string) {
 		return
 	}
 	delete(s.running, tid)
-	s.update(sid, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": "completed", "kind": "execute"})
+	s.update(sid, toolEnd(tid, "completed", "finished"))
 	s.ended[sid]++
 	if !s.waking[sid] {
 		s.waking[sid] = true
@@ -430,7 +439,7 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		if cmd == "fake:toolfail" {
 			status = "failed"
 		}
-		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": status})
+		s.update(ss.ID, toolEnd(tid, status, "ran "+arg))
 		reply("ran")
 	case "fake:toolopen":
 		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": newID(), "title": "Run " + arg, "kind": "execute", "status": "in_progress", "rawInput": map[string]any{"command": arg}})
@@ -443,6 +452,10 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 				input["IsDaemon"] = true
 			}
 			s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": input["CommandLine"], "kind": "execute", "status": "in_progress", "rawInput": input})
+			if w == "now" {
+				s.update(ss.ID, toolEnd(tid, "completed", "done now"))
+				continue
+			}
 			if d, err := time.ParseDuration(w); err == nil {
 				s.mu.Lock()
 				s.running[tid] = ss.ID

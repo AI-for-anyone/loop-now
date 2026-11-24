@@ -341,27 +341,35 @@ func agyBackgroundHarness(t *testing.T) *harness {
 	return h
 }
 
-// Commands the agent moved to the background keep the turn open after the prompt has returned: their ends, which all
-// come after the prompt, and the replies the agent then gives by itself belong to the turn, which ends once no command
-// runs and no reply is open or expected. A command that ends during such a reply is answered by another one.
+// Commands the agent moved to the background keep the turn open after the prompt has returned. A command that ends
+// before the prompt does reports its end within the prompt; one still running when the prompt returns reports it later,
+// and the agent then replies by itself. Those ends and replies belong to the turn, which ends once no command runs and
+// no reply is open or expected. A command that ends during such a reply is answered by another one. The ends carry
+// the command's output as a content list, as agy's do.
 func TestBackgroundCommandsHoldTheTurn(t *testing.T) {
 	h := agyBackgroundHarness(t)
 	c, _ := h.start(acp.Options{Background: background(time.Minute)})
 	sess := newSession(t, c, h)
 	s := &sink{}
-	// 300ms ends and is reported from 700ms to 1100ms; 900ms ends during that reply and is reported from 1500ms;
-	// 2500ms is reported from 2900ms.
-	r := prompt(t, c, sess, "fake:background 300ms 900ms 2500ms", s)
+	// now ends within the prompt; 300ms ends and is reported from 700ms to 1100ms; 900ms ends during that reply and is
+	// reported from 1500ms; 2500ms is reported from 2900ms.
+	r := prompt(t, c, sess, "fake:background now 300ms 900ms 2500ms", s)
 	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded\n\nreported 1\n\nreported 1\n\nreported 1" || r.Text != s.String() {
 		t.Fatalf("result: %+v %q", r, s.String())
 	}
-	if s.toolList() != "start:execute,start:execute,start:execute,end:execute:ok,end:execute:ok,end:execute:ok" || len(s.timedOut) != 0 {
+	if s.toolList() != "start:execute,end:execute:ok,start:execute,start:execute,start:execute,end:execute:ok,end:execute:ok,end:execute:ok" || len(s.timedOut) != 0 {
 		t.Fatalf("tools: %s %v", s.toolList(), s.timedOut)
 	}
 	// Commands that end before the agent begins its reply are reported together.
 	s = &sink{}
 	if r := prompt(t, c, sess, "fake:background 300ms 400ms", s); r.Text != "backgrounded\n\nreported 2" || s.toolList() != "start:execute,start:execute,end:execute:ok,end:execute:ok" {
 		t.Fatalf("together: %+v %s", r, s.toolList())
+	}
+	// A command that ends within the prompt holds nothing: the turn ends with the prompt.
+	s = &sink{}
+	start := time.Now()
+	if r := prompt(t, c, sess, "fake:background now", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:ok" || time.Since(start) > time.Second {
+		t.Fatalf("within the prompt: %+v %s after %v", r, s.toolList(), time.Since(start))
 	}
 }
 
