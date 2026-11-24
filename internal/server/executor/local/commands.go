@@ -163,6 +163,13 @@ func (e *Executor) ForkBaseline(ctx context.Context, runtime string, agentID uui
 	return forker.forkBaseline(ctx, agentID, sessionFile, maxBytes)
 }
 
+// KeepsSessions reports whether runtime keeps its sessions itself (see sessionKeeper): a task instance's archive then
+// records the session reference instead of reading a session file.
+func (e *Executor) KeepsSessions(runtime string) bool {
+	k, ok := e.driverByID(runtime).(sessionKeeper)
+	return ok && k.keepsSessions()
+}
+
 // commandsFile is the runtime's own command list read the last time the Agent started a runtime with native commands
 // (for Pi, RPC get_commands), kept in the Agent directory for the "/" menu on the conversation page; the platform never
 // starts a runtime just to list commands. The name is kept for existing data.

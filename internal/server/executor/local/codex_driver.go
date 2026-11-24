@@ -404,6 +404,9 @@ func (cd codexDriver) forkBaseline(ctx context.Context, _ uuid.UUID, threadID st
 	return json.Marshal(codexBaseline{ThreadID: threadID, LastTurnID: last})
 }
 
+// keepsSessions: Codex keeps its threads in its own store; a retired task instance's thread is archived there by purge.
+func (codexDriver) keepsSessions() bool { return true }
+
 // codexThreadsFile lists the threads Codex keeps for this Agent (or task instance), so deleting it can archive them.
 func codexThreadsFile(d agentDirs) string { return filepath.Join(d.root, "codex-threads.json") }
 

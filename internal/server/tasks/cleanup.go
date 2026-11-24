@@ -10,8 +10,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/store"
+	"loop-now/internal/server/taskruntime"
 )
 
 // cleanup first persists each instance's full session and then reclaims the directories. When archiving fails, all
@@ -138,10 +140,21 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 
 // archiveSession reads a task instance's session for archiving: Pi's is in the instance's own sessions directory;
 // Claude Code's is the one <session ID>.jsonl that claude left for this instance's workspace (only files in the
-// subdirectory of claude's session record directory that corresponds to the instance workspace are accepted).
+// subdirectory of claude's session record directory that corresponds to the instance workspace are accepted). A runtime
+// that keeps its sessions itself (Codex) is not read: the archive records its runtime and session reference, and the
+// runtime keeps the session (the executor archives it there when the instance is released).
 func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([]byte, error) {
 	if inst.SessionState == "missing" {
 		return nil, errors.New("the task session is missing; the directory is kept for repair")
+	}
+	if runtime := s.keptSessionRuntime(inst); runtime != "" {
+		return json.Marshal(struct {
+			RuntimeID  uuid.UUID `json:"runtimeId"`
+			State      string    `json:"state"`
+			Runtime    string    `json:"runtime"`
+			SessionRef string    `json:"sessionRef"`
+			Session    []byte    `json:"session"`
+		}{inst.ID, inst.SessionState, runtime, *inst.SessionFile, nil})
 	}
 	var data []byte
 	if inst.SessionFile != nil {
@@ -185,6 +198,23 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 		State     string    `json:"state"`
 		Session   []byte    `json:"session"`
 	}{inst.ID, inst.SessionState, data})
+}
+
+// keptSessionRuntime returns the instance's runtime when that runtime keeps its sessions itself and the instance has a
+// session; otherwise empty.
+func (s *Source) keptSessionRuntime(inst store.TaskInstance) string {
+	if inst.SessionFile == nil || s.KeepsSessions == nil {
+		return ""
+	}
+	snap, err := taskruntime.Decode(inst.Snapshot)
+	if err != nil {
+		return ""
+	}
+	runtime := agentruntime.ForProvider(snap.Configuration().Provider).ID
+	if !s.KeepsSessions(runtime) {
+		return ""
+	}
+	return runtime
 }
 
 // claudeInstanceSession decides whether file is a session record claude left for this task instance's workspace: if so

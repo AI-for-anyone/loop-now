@@ -14,6 +14,7 @@
 //	fake:toolfail       run one command item that fails, then reply ran
 //	fake:approval       ask the client to approve a command, then reply approval=<decision>
 //	fake:ask            ask the client a question, then reply answers=<JSON>
+//	fake:sleep <dur>    wait for the duration (the word after it), or until interrupted, then reply slept
 //	fake:slow           stream a dot every 50ms until interrupted
 //	fake:noack          the same, but ignore turn/interrupt
 //	fake:error <kind>   end the turn failed, with codexErrorInfo <kind>
@@ -434,6 +435,18 @@ func (s *server) turn(t *thread, turnID string, p map[string]any, stop chan stru
 	case "fake:ask":
 		r := s.ask("item/tool/requestUserInput", map[string]any{"threadId": tid, "turnId": turnID, "itemId": newID(), "questions": []any{}})
 		reply("answers=" + string(r))
+	case "fake:sleep":
+		var d time.Duration
+		if f := strings.Fields(arg); len(f) > 0 {
+			d, _ = time.ParseDuration(f[0])
+		}
+		select {
+		case <-stop:
+			done("interrupted", nil)
+			return
+		case <-time.After(d):
+		}
+		reply("slept")
 	case "fake:slow", "fake:noack":
 		item := newID()
 		deadline := time.After(30 * time.Second)
