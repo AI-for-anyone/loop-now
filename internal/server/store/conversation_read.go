@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/contexthandoff"
 	"loop-now/internal/server/db"
 )
 
@@ -192,6 +193,19 @@ func fillToolUse(ctx context.Context, tx *db.Tx, entries []ConversationEntry) er
 		}
 	}
 	return nil
+}
+
+// HandoffMessages turns conversation entries into the messages a handoff block selects from.
+func HandoffMessages(entries []ConversationEntry) []contexthandoff.Message {
+	messages := make([]contexthandoff.Message, 0, len(entries))
+	for _, e := range entries {
+		m := contexthandoff.Message{ID: e.ID, Role: e.Role, Origin: e.Origin, Status: e.RunStatus, Text: e.Text, Images: e.Images, CreatedAt: e.CreatedAt}
+		for _, t := range e.Tools {
+			m.Tools = append(m.Tools, contexthandoff.Tool{Name: t.Name, Calls: t.Calls, Failed: t.Failed})
+		}
+		messages = append(messages, m)
+	}
+	return messages
 }
 
 // HandoffConversation returns the Agent's whole current conversation before the given run (that run's own message is

@@ -504,17 +504,27 @@ func (o claudeObserver) RateLimit(info map[string]any, inTurn bool) {
 // loopctl, the Agent's Skill copies and the Skills of granted plugins, rebuilt as a whole on every start. Claude Code
 // shows these Skills with the plugin name as their namespace (such as loop-now:loopctl).
 func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) error {
-	if err := os.RemoveAll(d.claudePlugin); err != nil {
+	return e.writeSkillPlugin(ctx, snap, d.claudePlugin)
+}
+
+// writeSkillPlugin rebuilds plugin as a Claude-style plugin directory (.claude-plugin/plugin.json and skills/) holding
+// the Skills (loopctl, the Agent's Skill copies, the granted plugins' Skills); Claude Code and Grok take it as is.
+func (e *Executor) writeSkillPlugin(ctx context.Context, snap agentconfig.Snapshot, plugin string) error {
+	if err := os.RemoveAll(plugin); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(d.claudePlugin, ".claude-plugin"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(plugin, ".claude-plugin"), 0o700); err != nil {
 		return err
 	}
 	manifest, _ := json.Marshal(map[string]string{"name": claudePluginName, "description": "Loop Now platform Skills"})
-	if err := os.WriteFile(filepath.Join(d.claudePlugin, ".claude-plugin", "plugin.json"), manifest, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(plugin, ".claude-plugin", "plugin.json"), manifest, 0o600); err != nil {
 		return err
 	}
-	dir := filepath.Join(d.claudePlugin, "skills")
+	return e.syncSkillDir(ctx, snap, filepath.Join(plugin, "skills"))
+}
+
+// syncSkillDir writes the Skills into dir: the platform's and the Agent's (syncSkills) and the granted plugins'.
+func (e *Executor) syncSkillDir(ctx context.Context, snap agentconfig.Snapshot, dir string) error {
 	if _, err := e.syncSkills(ctx, snap, dir); err != nil {
 		return err
 	}

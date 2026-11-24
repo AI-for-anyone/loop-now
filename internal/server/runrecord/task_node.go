@@ -43,7 +43,7 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 	if e != nil {
 		return out, e
 	}
-	out = apitypes.TaskNodeRunTimeline{TaskID: task, NodeRunID: node, AgentID: agent, RuntimeID: t.RuntimeID, Run: apitypes.TaskNodeRunSummary{ID: t.ID, Origin: t.Origin, ExecutionMode: t.ExecutionMode, Status: t.Status, QueuedAt: t.QueuedAt, StartedAt: t.StartedAt, EndedAt: t.EndedAt, ErrorCode: t.ErrorCode, ErrorMessage: taskmodel.PublicError(t.ErrorCode, t.ErrorMessage)}, Entries: []any{}, Usage: apitypes.FromUsageTotals(totals)}
+	out = apitypes.TaskNodeRunTimeline{TaskID: task, NodeRunID: node, AgentID: agent, RuntimeID: t.RuntimeID, Run: apitypes.TaskNodeRunSummary{ID: t.ID, Origin: t.Origin, ExecutionMode: t.ExecutionMode, Status: t.Status, QueuedAt: t.QueuedAt, StartedAt: t.StartedAt, EndedAt: t.EndedAt, ErrorCode: t.ErrorCode, ErrorMessage: taskmodel.PublicError(t.ErrorCode, t.ErrorMessage), UsageReported: totals.Calls > 0}, Entries: []any{}, Usage: apitypes.FromUsageTotals(totals)}
 	for i := range events {
 		if events[i].Type == store.EventRunQueued {
 			if events[i].Data == nil {

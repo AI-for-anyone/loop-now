@@ -53,6 +53,7 @@ export const errors = {
     plugin_blocked: 'A plugin blocked this action',
     plugin_failed: 'The plugin hit an error',
     plugin_timeout: "The plugin didn't respond in time",
+    runtime_in_use: 'Agents still run on this runtime; move them to another runtime first',
     internal_error: 'Internal server error',
   },
   unknown: 'Unknown error',

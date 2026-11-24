@@ -18,8 +18,8 @@ export function runtimeList(claudeCode: Partial<Schemas['RuntimeStatus']> = {}):
 export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
   return {
     runtimes: [
-      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true }, minVersion: null, setup: null },
-      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' } },
+      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true }, minVersion: null, setup: null, acpCommandId: null },
+      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' }, acpCommandId: null },
     ],
   }
 }
@@ -36,6 +36,7 @@ export const codexDefinition: Schemas['RuntimeDefinition'] = {
   isDefault: false,
   capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false },
   minVersion: '0.167.0',
+  acpCommandId: null,
   setup: { install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: 'https://developers.openai.com/codex/cli' },
 }
 
@@ -57,6 +58,7 @@ const acp = (id: 'grok' | 'antigravity', name: string, binary: string): Schemas[
   capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false },
   minVersion: null,
   setup: { install: null, login: binary, docsUrl: null },
+  acpCommandId: null,
 })
 export const grokDefinition = acp('grok', 'Grok', 'grok')
 export const antigravityDefinition = acp('antigravity', 'Antigravity', 'agy')

@@ -1745,7 +1745,8 @@ paths:
       description: |
         The fixed definition of each runtime: its name, the model providers it runs, which runtime is the default, and
         what it can do. Reading it starts no process and checks nothing on this computer, so it answers at once; whether
-        a runtime is installed and logged in is GET /runtimes. The list changes only when the server is upgraded.
+        a runtime is installed and logged in is GET /runtimes. The list changes when the server is upgraded and when a
+        local ACP command is added or removed (POST and DELETE /acp-commands).
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -1755,6 +1756,100 @@ paths:
               schema: { $ref: "#/components/schemas/RuntimeDefinitionList" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  /acp-commands:
+    get:
+      tags: [models]
+      operationId: listAcpCommands
+      x-access: console
+      summary: The local ACP commands people added
+      description: |
+        A local ACP command is any program on this computer that speaks the Agent Client Protocol over stdio, added by
+        a person: the platform runs it as a runtime of its own (AcpCommand.runtime), with one model provider of the same
+        id. Its environment values are never returned, only their names.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The commands, oldest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AcpCommandList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [models]
+      operationId: createAcpCommand
+      x-access: console
+      summary: Add a local ACP command
+      description: |
+        The executable is a name looked up on the PATH of the server user's login shell, or an absolute path; it is run
+        directly with the arguments as given (no shell). The program uses its own login on this computer; the
+        environment given here is added to the one Agents run with (for example a key the program needs). Its runtime
+        and model provider appear at once in GET /runtime-definitions and GET /model-providers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcpCommandCreate" }
+      responses:
+        "201":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The command added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AcpCommand" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /acp-commands/{commandId}:
+    parameters:
+      - name: commandId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [models]
+      operationId: updateAcpCommand
+      x-access: console
+      summary: Change a local ACP command
+      description: |
+        Fields left out stay as they are. env is merged into the saved environment: a name with a string sets it, a
+        name with null removes it, and names not mentioned keep their saved values. Agents running it pick the change
+        up from their next message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcpCommandUpdate" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The command after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AcpCommand" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [models]
+      operationId: deleteAcpCommand
+      x-access: console
+      summary: Remove a local ACP command
+      description: |
+        Returns 409 `runtime_in_use` (details is RuntimeInUseDetails, naming the Agents) while an Agent (not deleted) has
+        its model provider; move those Agents to another model first. The sessions the program kept are left as they
+        are.
+      responses:
+        "204":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -9877,7 +9972,8 @@ components:
       description: |
         Conflicts with the current state. `error.code` values:
         `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
-        project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`.
+        project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
+        `runtime_in_use` (details is RuntimeInUseDetails).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10100,7 +10196,7 @@ components:
             code: { $ref: "#/components/schemas/ErrorCode" }
             message: { type: string }
             details:
-              description: Depends on the code; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist
+              description: Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist
               oneOf:
                 - $ref: "#/components/schemas/VerificationVersionConflictDetails"
                 - $ref: "#/components/schemas/VerificationConflictDetails"
@@ -10119,6 +10215,7 @@ components:
                 - $ref: "#/components/schemas/RunNotQueuedDetails"
                 - $ref: "#/components/schemas/RunNotActiveDetails"
                 - $ref: "#/components/schemas/ProjectNotIdleDetails"
+                - $ref: "#/components/schemas/RuntimeInUseDetails"
                 - $ref: "#/components/schemas/NotFoundDetails"
             fields:
               type: array
@@ -10131,6 +10228,7 @@ components:
 - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412)
 - payload_too_large: exceeds the size limit (413)
 - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409)
+- runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails)
 - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409)
 - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409)
 - session_none: there is no Pi session yet to compact or export (409)
@@ -10206,7 +10304,8 @@ components:
           "plugin_not_enabled",
           "plugin_blocked",
           "plugin_failed",
-          "plugin_timeout"
+          "plugin_timeout",
+          "runtime_in_use"
         ],
         "type": "string"
       }
@@ -10434,8 +10533,11 @@ components:
 
     AgentRuntime:
       type: string
-      enum: [pi, claude-code, codex, grok, antigravity]
+      minLength: 1
       description: |
+        A plain string, not a closed list: besides the built-in runtimes below, each local ACP command a person added
+        (AcpCommand) is a runtime of its own, whose id is acp- followed by the command's id (AcpCommand.runtime). Show an
+        id the console does not know by the name GET /runtime-definitions gives it.
         The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
         unmodified Codex, grok the unmodified Grok CLI and antigravity the unmodified Antigravity CLI (agy) installed on
         the user's computer (looked up on the login shell's PATH; Codex runs as `codex app-server`, Grok and
@@ -10457,6 +10559,72 @@ components:
           type: array
           items: { $ref: "#/components/schemas/RuntimeStatus" }
 
+    AcpCommand:
+      description: A local ACP command a person added; it runs as the runtime named in runtime, with one model provider of the same id
+      type: object
+      required: [id, runtime, name, command, args, envNames, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        name: { type: string, description: "The name shown for the runtime and its model provider" }
+        command: { type: string, description: "The executable: a name on the login shell's PATH, or an absolute path" }
+        args:
+          type: array
+          items: { type: string }
+          description: The arguments, each passed as is (no shell)
+        envNames:
+          type: array
+          items: { type: string }
+          description: The names of the environment variables given to it, sorted; their values are never returned
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AcpCommandList:
+      type: object
+      required: [commands]
+      additionalProperties: false
+      properties:
+        commands:
+          type: array
+          items: { $ref: "#/components/schemas/AcpCommand" }
+
+    AcpCommandCreate:
+      type: object
+      required: [name, command]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        command: { type: string, minLength: 1, maxLength: 4096 }
+        args:
+          type: array
+          maxItems: 64
+          items: { type: string, maxLength: 4096 }
+        env:
+          type: object
+          maxProperties: 64
+          description: Environment variables added for the program (names are letters, digits and _, not starting with a digit)
+          additionalProperties: { type: string, maxLength: 8192 }
+
+    AcpCommandUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        command: { type: string, minLength: 1, maxLength: 4096 }
+        args:
+          type: array
+          maxItems: 64
+          items: { type: string, maxLength: 4096 }
+        env:
+          type: object
+          maxProperties: 64
+          description: Merged into the saved environment; a string sets the variable, null removes it, names left out stay as they are
+          additionalProperties:
+            type: [string, "null"]
+            maxLength: 8192
+
     RuntimeDefinitionList:
       type: object
       required: [runtimes]
@@ -10469,10 +10637,14 @@ components:
     RuntimeDefinition:
       description: The fixed definition of a runtime; nothing in it depends on this computer, except that setup is given for the operating system the server runs on.
       type: object
-      required: [id, name, providers, isDefault, capabilities, setup, minVersion]
+      required: [id, name, providers, isDefault, capabilities, setup, minVersion, acpCommandId]
       additionalProperties: false
       properties:
         id: { $ref: "#/components/schemas/AgentRuntime" }
+        acpCommandId:
+          description: The local ACP command this runtime runs (AcpCommand.id); null for the built-in runtimes
+          type: [string, "null"]
+          format: uuid
         name:
           type: string
           description: The product name, shown as is in every language
@@ -10835,6 +11007,27 @@ components:
             properties:
               id: { type: string, format: uuid }
               name: { type: string }
+
+    RuntimeInUseDetails:
+      description: When removing a local ACP command is rejected, lists the Agents (not deleted) whose model provider it runs
+      type: object
+      required: [agents]
+      additionalProperties: false
+      properties:
+        agents:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id, name, projectId]
+            additionalProperties: false
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              projectId:
+                description: The Agent's project; null for a platform Agent
+                type: [string, "null"]
+                format: uuid
 
     AgentCreate:
       description: The Agent name is unique within its scope (this project or the platform), and a duplicate returns 409 name_conflict; deleted Agents do not hold their names; the scope comes from the request path and cannot change after creation

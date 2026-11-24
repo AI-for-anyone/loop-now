@@ -54,6 +54,7 @@ export const errors = {
     plugin_blocked: '插件阻止了这个操作',
     plugin_failed: '插件处理时出错',
     plugin_timeout: '插件没有及时回应',
+    runtime_in_use: '还有 Agent 在用这个运行时，先把它们换到别的运行时',
     internal_error: '服务端内部错误',
   } satisfies Record<S['ErrorCode'], string>,
   unknown: '未知错误',

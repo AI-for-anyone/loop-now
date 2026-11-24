@@ -53,7 +53,7 @@ func TestLookup(t *testing.T) {
 			t.Fatalf("provider %q: %s", p, got)
 		}
 	}
-	if r, ok := ByID(ClaudeCode); !ok || r.Name != "Claude Code" || !Known(Pi) || !Known(Codex) || Known("grok") || Known("") {
+	if r, ok := ByID(ClaudeCode); !ok || r.Name != "Claude Code" || !Known(Pi) || !Known(Codex) || !Known(Grok) || !Known(Antigravity) || Known("unknown-runtime") || Known("") {
 		t.Fatal("ByID/Known")
 	}
 	r, _ := ByID(ClaudeCode)

@@ -122,6 +122,12 @@ func TestRuntimeDefinitionsSetup(t *testing.T) {
 			if s := rt.Setup; s == nil || *s.Install != "npm install -g @openai/codex" || *s.Login != "codex login" || s.DocsURL == nil {
 				t.Fatalf("codex setup: %+v", s)
 			}
+		case "grok", "antigravity":
+			// Only how to log in: the platform names no installer for them.
+			want := map[string]string{"grok": "grok login", "antigravity": "agy acp --login"}[rt.ID]
+			if s := rt.Setup; s == nil || s.Install != nil || s.DocsURL != nil || s.Login == nil || *s.Login != want {
+				t.Fatalf("%s setup: %+v", rt.ID, s)
+			}
 		default:
 			s := rt.Setup
 			if s == nil || s.Install == nil || s.Login == nil || s.DocsURL == nil || !strings.Contains(*s.Login, "claude") {

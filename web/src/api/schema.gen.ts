@@ -490,7 +490,8 @@ export interface paths {
          * What each Agent runtime is, without checking this computer
          * @description The fixed definition of each runtime: its name, the model providers it runs, which runtime is the default, and
          *     what it can do. Reading it starts no process and checks nothing on this computer, so it answers at once; whether
-         *     a runtime is installed and logged in is GET /runtimes. The list changes only when the server is upgraded.
+         *     a runtime is installed and logged in is GET /runtimes. The list changes when the server is upgraded and when a
+         *     local ACP command is added or removed (POST and DELETE /acp-commands).
          */
         get: operations["listRuntimeDefinitions"];
         put?: never;
@@ -499,6 +500,65 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/acp-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The local ACP commands people added
+         * @description A local ACP command is any program on this computer that speaks the Agent Client Protocol over stdio, added by
+         *     a person: the platform runs it as a runtime of its own (AcpCommand.runtime), with one model provider of the same
+         *     id. Its environment values are never returned, only their names.
+         */
+        get: operations["listAcpCommands"];
+        put?: never;
+        /**
+         * Add a local ACP command
+         * @description The executable is a name looked up on the PATH of the server user's login shell, or an absolute path; it is run
+         *     directly with the arguments as given (no shell). The program uses its own login on this computer; the
+         *     environment given here is added to the one Agents run with (for example a key the program needs). Its runtime
+         *     and model provider appear at once in GET /runtime-definitions and GET /model-providers.
+         */
+        post: operations["createAcpCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/acp-commands/{commandId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commandId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a local ACP command
+         * @description Returns 409 `runtime_in_use` (details is RuntimeInUseDetails, naming the Agents) while an Agent (not deleted) has
+         *     its model provider; move those Agents to another model first. The sessions the program kept are left as they
+         *     are.
+         */
+        delete: operations["deleteAcpCommand"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a local ACP command
+         * @description Fields left out stay as they are. env is merged into the saved environment: a name with a string sets it, a
+         *     name with null removes it, and names not mentioned keep their saved values. Agents running it pick the change
+         *     up from their next message.
+         */
+        patch: operations["updateAcpCommand"];
         trace?: never;
     };
     "/model-providers/{providerId}/models": {
@@ -3501,16 +3561,16 @@ export interface components {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
-                /** @description Depends on the code; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist */
-                details?: components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["NotFoundDetails"];
+                /** @description Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist */
+                details?: components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["RuntimeInUseDetails"] | components["schemas"]["NotFoundDetails"];
                 fields?: components["schemas"]["FieldError"][];
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -3701,7 +3761,10 @@ export interface components {
             models?: components["schemas"]["Model"][];
         };
         /**
-         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
+         * @description A plain string, not a closed list: besides the built-in runtimes below, each local ACP command a person added
+         *     (AcpCommand) is a runtime of its own, whose id is acp- followed by the command's id (AcpCommand.runtime). Show an
+         *     id the console does not know by the name GET /runtime-definitions gives it.
+         *     The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
          *     unmodified Codex, grok the unmodified Grok CLI and antigravity the unmodified Antigravity CLI (agy) installed on
          *     the user's computer (looked up on the login shell's PATH; Codex runs as `codex app-server`, Grok and
          *     Antigravity speak the Agent Client Protocol), each using its own local login; the platform neither reads nor
@@ -3712,11 +3775,49 @@ export interface components {
          *     Skills and MCP servers work as usual. A Codex Agent's conversation is kept in the user's own Codex home (it
          *     shows in the user's Codex history); deleting the Agent archives it there. Grok and Antigravity keep their
          *     sessions in their own data as well.
-         * @enum {string}
          */
-        AgentRuntime: "pi" | "claude-code" | "codex" | "grok" | "antigravity";
+        AgentRuntime: string;
         RuntimeList: {
             runtimes: components["schemas"]["RuntimeStatus"][];
+        };
+        /** @description A local ACP command a person added; it runs as the runtime named in runtime, with one model provider of the same id */
+        AcpCommand: {
+            /** Format: uuid */
+            id: string;
+            runtime: components["schemas"]["AgentRuntime"];
+            /** @description The name shown for the runtime and its model provider */
+            name: string;
+            /** @description The executable: a name on the login shell's PATH, or an absolute path */
+            command: string;
+            /** @description The arguments, each passed as is (no shell) */
+            args: string[];
+            /** @description The names of the environment variables given to it, sorted; their values are never returned */
+            envNames: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AcpCommandList: {
+            commands: components["schemas"]["AcpCommand"][];
+        };
+        AcpCommandCreate: {
+            name: string;
+            command: string;
+            args?: string[];
+            /** @description Environment variables added for the program (names are letters, digits and _, not starting with a digit) */
+            env?: {
+                [key: string]: string;
+            };
+        };
+        AcpCommandUpdate: {
+            name?: string;
+            command?: string;
+            args?: string[];
+            /** @description Merged into the saved environment; a string sets the variable, null removes it, names left out stay as they are */
+            env?: {
+                [key: string]: string | null;
+            };
         };
         RuntimeDefinitionList: {
             runtimes: components["schemas"]["RuntimeDefinition"][];
@@ -3724,6 +3825,11 @@ export interface components {
         /** @description The fixed definition of a runtime; nothing in it depends on this computer, except that setup is given for the operating system the server runs on. */
         RuntimeDefinition: {
             id: components["schemas"]["AgentRuntime"];
+            /**
+             * Format: uuid
+             * @description The local ACP command this runtime runs (AcpCommand.id); null for the built-in runtimes
+             */
+            acpCommandId: string | null;
             /** @description The product name, shown as is in every language */
             name: string;
             /**
@@ -3962,6 +4068,19 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
+            }[];
+        };
+        /** @description When removing a local ACP command is rejected, lists the Agents (not deleted) whose model provider it runs */
+        RuntimeInUseDetails: {
+            agents: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /**
+                 * Format: uuid
+                 * @description The Agent's project; null for a platform Agent
+                 */
+                projectId: string | null;
             }[];
         };
         /** @description The Agent name is unique within its scope (this project or the platform), and a duplicate returns 409 name_conflict; deleted Agents do not hold their names; the scope comes from the request path and cannot change after creation */
@@ -8456,7 +8575,8 @@ export interface components {
         /**
          * @description Conflicts with the current state. `error.code` values:
          *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
-         *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`.
+         *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
+         *     `runtime_in_use` (details is RuntimeInUseDetails).
          */
         Conflict: {
             headers: {
@@ -10464,6 +10584,117 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listAcpCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The commands, oldest first */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcpCommandList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAcpCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcpCommandCreate"];
+            };
+        };
+        responses: {
+            /** @description The command added */
+            201: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcpCommand"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    deleteAcpCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commandId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateAcpCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commandId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcpCommandUpdate"];
+            };
+        };
+        responses: {
+            /** @description The command after the change */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcpCommand"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listModels: {

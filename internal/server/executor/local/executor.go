@@ -103,6 +103,9 @@ type Options struct {
 	ClaudeBin string
 	// CodexBin is the codex executable; empty means look it up on the PATH of the user's login shell (UserPath).
 	CodexBin string
+	// GrokBin and AntigravityBin are the grok and agy executables; empty means look them up on the PATH of the user's
+	// login shell (UserPath).
+	GrokBin, AntigravityBin string
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
@@ -824,7 +827,7 @@ func (e *Executor) watch(p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	if !p.stopping.Load() {
+	if !p.stopping.Load() && !exiting(p) {
 		// Read curRun first: discard sets exitRun before clearing curRun, so at least one of them matches.
 		run := p.curRun.Load()
 		if run == nil {

@@ -673,14 +673,7 @@ func (s *Service) handoffBlock(ctx context.Context, agentID, runID uuid.UUID, pe
 		}
 		return "", nil
 	}
-	messages := make([]contexthandoff.Message, 0, len(entries))
-	for _, e := range entries {
-		m := contexthandoff.Message{ID: e.ID, Role: e.Role, Origin: e.Origin, Status: e.RunStatus, Text: e.Text, Images: e.Images, CreatedAt: e.CreatedAt}
-		for _, t := range e.Tools {
-			m.Tools = append(m.Tools, contexthandoff.Tool{Name: t.Name, Calls: t.Calls, Failed: t.Failed})
-		}
-		messages = append(messages, m)
-	}
+	messages := store.HandoffMessages(entries)
 	to := agentruntime.ForProvider(a.ModelProvider)
 	from := pending.From
 	if rt, ok := agentruntime.ByID(pending.From); ok {

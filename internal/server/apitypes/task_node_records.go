@@ -15,6 +15,9 @@ type TaskNodeRunSummary struct {
 	EndedAt       *time.Time `json:"endedAt"`
 	ErrorCode     *string    `json:"errorCode"`
 	ErrorMessage  *string    `json:"errorMessage"`
+	// UsageReported is whether the runtime reported token usage for this turn; otherwise the timeline's usage is all
+	// zeros and means unknown.
+	UsageReported bool `json:"usageReported"`
 }
 type TaskNodeRunTimeline struct {
 	TaskID     uuid.UUID          `json:"taskId"`
