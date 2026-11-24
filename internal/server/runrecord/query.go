@@ -383,8 +383,12 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	case store.EventSessionMissing:
 		return apitypes.TimelineSessionMissingEntry{TimelineBase: b(apitypes.TimelineSessionMissing), SessionFile: optStr(d, "sessionFile")}, true
 	case store.EventContextHandoff:
+		reason := str(d, "reason")
+		if reason == "" {
+			reason = store.HandoffRuntimeChanged // records from before the reason was kept
+		}
 		return apitypes.TimelineContextHandoffEntry{TimelineBase: b(apitypes.TimelineContextHandoff), ContextHandoff: apitypes.ContextHandoff{
-			FromRuntime: str(d, "fromRuntime"), ToRuntime: str(d, "toRuntime"), IncludedMessages: int(num(d, "includedMessages")),
+			Reason: reason, FromRuntime: str(d, "fromRuntime"), ToRuntime: str(d, "toRuntime"), IncludedMessages: int(num(d, "includedMessages")),
 			OmittedMessages: int(num(d, "omittedMessages")), Images: int(num(d, "images")), Bytes: int(num(d, "bytes")), BudgetBytes: int(num(d, "budgetBytes"))}}, true
 	case store.EventExtensionUI:
 		return apitypes.TimelineExtensionUIEntry{TimelineBase: b(apitypes.TimelineExtensionUI), Method: str(d, "method"), Message: optStr(d, "message"),

@@ -113,17 +113,19 @@ type Message struct {
 	WakeSleepID *uuid.UUID `json:"wakeSleepId,omitempty"`
 	// VoidReason marks a queued turn voided without running; the console hides
 	// merged_into_interrupt (its messages moved to an interrupt turn).
-	VoidReason   *string   `json:"voidReason,omitempty"`
-	ErrorCode    *string   `json:"errorCode,omitempty"`
-	ErrorMessage *string   `json:"errorMessage,omitempty"`
-	ID           uuid.UUID `json:"id"`
-	RunID        uuid.UUID `json:"runId"`
-	NodeRunID    uuid.UUID `json:"nodeRunId"`
-	Role         string    `json:"role"`
-	Text         string    `json:"text"`
-	Origin       string    `json:"origin"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
+	VoidReason   *string `json:"voidReason,omitempty"`
+	ErrorCode    *string `json:"errorCode,omitempty"`
+	ErrorMessage *string `json:"errorMessage,omitempty"`
+	// Runtime is the runtime the task instance runs the turn on; omitted when it cannot be told.
+	Runtime   string    `json:"runtime,omitempty"`
+	ID        uuid.UUID `json:"id"`
+	RunID     uuid.UUID `json:"runId"`
+	NodeRunID uuid.UUID `json:"nodeRunId"`
+	Role      string    `json:"role"`
+	Text      string    `json:"text"`
+	Origin    string    `json:"origin"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 type MessagePage struct {
 	Messages   []Message `json:"messages"`
