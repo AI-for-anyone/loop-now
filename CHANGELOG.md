@@ -4,7 +4,9 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-## Unreleased
+## v0.3.0
+
+Antigravity works as it should: commands that printed output no longer stay "in progress" (the same fix covers Grok and local ACP commands), a reply waits for the commands Antigravity runs in the background and shows what it says about them afterwards, and its models have thinking levels. In the desktop app, path fields have a "Choose…" button that opens the system's dialog.
 
 ### Antigravity: finished commands show as finished, and its background commands are waited for
 

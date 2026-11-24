@@ -4,7 +4,9 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
-## 未发布
+## v0.3.0
+
+Antigravity 用起来正常了：打印了输出的命令不再一直显示“进行中”（Grok 和自己添加的 ACP 命令也一起修好了），回复会等 Antigravity 放到后台的命令跑完，并显示它之后说的话；它的模型也有了思考等级。桌面版的路径输入框旁有了“选择…”按钮，会打开系统自己的选择窗口。
 
 ### Antigravity：跑完的命令显示为完成，后台命令会等它跑完
 
