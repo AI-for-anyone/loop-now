@@ -52,6 +52,17 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 账号种类写 `"label": null` 现在会被拒绝，与 `displayName` 为 null 时一致。
 - 降级：存过带两种语言标签的清单或模板之后，旧版本读不了它。
 
+### Agent 可以用 Grok、Antigravity，以及你自己添加的 ACP 命令来跑
+
+- 又多了两个运行时，用的是你电脑上安装的 CLI 和你在本机的登录：Grok（`grok agent stdio`）和 Antigravity（`agy acp`）。两者都使用 Agent Client Protocol（ACP）。平台不读取也不保存它们的登录。它们出现在“谁来跑”里，模型是各自 CLI 列出的那些。
+- 其他支持 ACP 的程序，可以在 设置 → Agent 运行时 →“自己添加的 ACP 命令”里添加：名字、命令、参数和环境变量。它会以服务端用户的身份在这台电脑上运行，所以只添加你信任的程序。保存后的变量值不会再显示。还有 Agent 在用的命令不能删除，页面会列出是哪些。
+- 这类运行时的限制：不报告 token 用量（那一轮会写“没有用量数据”）；对话留在 CLI 自己的历史里，删除 Agent 时不会清掉，因为协议没有提供办法；没有 `/compact`、`/export` 和 `/resume`；任务从普通对话的摘选开始，而不是会话的副本。Antigravity 的模型名自带思考等级，所以没有可选的思考等级。自己添加的命令只有一个模型“Default model”，不接收图片。
+- 会话找不到时（文件被删，或 CLI 把它弄丢了），下一条消息现在会带着保存下来的对话开一个新会话，对话里有一行说明。以前 Agent 会停住，等你确认重开。这对 Pi、Claude Code 和 Codex 同样生效；红色的“会话丢失”提示和确认框已经去掉。
+- 一轮回复从发出那一刻起就记下要用哪个运行时，所以还没开始就失败的那一轮也能写对名字；概览的异常列表和任务轮次也会写出运行时。
+- 因为你按了停止而退出的进程，不再记成“意外退出”。
+- 模型不接收图片时，消息框不让添加图片。
+- 接口：`AgentRuntime` 改为普通字符串（`grok`、`antigravity`，自己添加的命令是 `acp-<id>`）；新增 `/acp-commands`；`Run.usageReported`；交接上的 `reason`（`runtime_changed`、`session_lost`、`task_start`）；异常和任务消息上的 `runtime`；错误码 `runtime_in_use`。
+
 ### Agent 可以用 Codex 来跑
 
 - 新增一个运行时：你电脑上安装的 Codex CLI，用你自己 `codex login` 的登录。平台不读取也不保存这份登录。它在“谁来跑”里显示为 Codex，模型是你的账号能用的那些（直接从 Codex 读，每 10 分钟读一次，点“再检查一次”时也会读）。
