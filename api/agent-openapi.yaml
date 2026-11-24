@@ -4227,8 +4227,11 @@ components:
 
     AgentRuntime:
       type: string
-      enum: [pi, claude-code, codex, grok, antigravity]
+      minLength: 1
       description: |
+        A plain string, not a closed list: besides the built-in runtimes below, each local ACP command a person added
+        (AcpCommand) is a runtime of its own, whose id is acp- followed by the command's id (AcpCommand.runtime). Show an
+        id the console does not know by the name GET /runtime-definitions gives it.
         The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
         unmodified Codex, grok the unmodified Grok CLI and antigravity the unmodified Antigravity CLI (agy) installed on
         the user's computer (looked up on the login shell's PATH; Codex runs as `codex app-server`, Grok and
