@@ -139,6 +139,9 @@ type Options struct {
 	// RealHome replaces the real home directory of the user running the server, where local CLI logins are read (for
 	// tests); nil means os.UserHomeDir.
 	RealHome func() (string, error)
+	// CodexModelsMaxAge and CodexModelsStaleAge replace how old Codex's model list may be before a read of the model
+	// lists reads it again (1 minute), and how old when the last read may be out of date (10 seconds); for tests.
+	CodexModelsMaxAge, CodexModelsStaleAge time.Duration
 }
 
 // Build runs the checks and assembly in startup order: checks -> instance ID -> model catalog -> migrations -> default
@@ -532,8 +535,21 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.baseCancel = baseCancel
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
 	if cfg.CodexModelsRefresh > 0 {
-		go a.codexModelRefresher(baseCtx, models, cfg.CodexModelsRefresh)
-		a.API.RefreshLocalModels = func(ctx context.Context) { a.refreshCodexModels(ctx, models) }
+		reader := &codexModelReader{maxAge: o.CodexModelsMaxAge, staleAge: o.CodexModelsStaleAge, now: time.Now,
+			read: func(ctx context.Context) bool { return a.readCodexModels(ctx, models) }}
+		if reader.maxAge <= 0 {
+			reader.maxAge = codexModelsMaxAge
+		}
+		if reader.staleAge <= 0 {
+			reader.staleAge = codexModelsStaleAge
+		}
+		go a.codexModelRefresher(baseCtx, reader, cfg.CodexModelsRefresh)
+		a.API.RefreshLocalModels = reader.refresh
+		a.API.ModelListRead = func(provider string) {
+			if provider == "" || codexListsProvider(provider) {
+				reader.touch(baseCtx)
+			}
+		}
 	}
 	// Folders: mark interrupted pulls as failed and empty the trash; before any Pi starts, replay once the manual edits
 	// from retired folder sources that never reached disk.

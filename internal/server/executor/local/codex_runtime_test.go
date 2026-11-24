@@ -275,3 +275,24 @@ func TestKeepsSessions(t *testing.T) {
 		}
 	}
 }
+
+// When Codex cannot refresh its model list online it still answers, from its own cache; the executor tells that from
+// Codex's log, and tells a rejected login (401) apart.
+func TestCodexModelsNoticesARejectedRefresh(t *testing.T) {
+	h := newCodexHarness(t, nil)
+	codexHome := filepath.Join(h.realHome, ".codex")
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	list, err := h.e.CodexModels(context.Background())
+	if err != nil || len(list.Models) == 0 || list.Cached || list.LoginRejected {
+		t.Fatalf("a fresh list: %+v %v", list, err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, ".fakecodex-revoked"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list, err = h.e.CodexModels(context.Background())
+	if err != nil || len(list.Models) == 0 || !list.Cached || !list.LoginRejected {
+		t.Fatalf("a list from the cache after the login was rejected: %+v %v", list, err)
+	}
+}
