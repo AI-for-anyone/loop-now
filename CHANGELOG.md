@@ -52,6 +52,10 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Fixes
+
+- A platform Agent that had a model key and was switched to Claude Code failed every run with "credentials unavailable", and the key could not be removed from its page. An Agent on Claude Code now ignores the model key; the key stays stored and is used again if the Agent is switched back to its provider.
+
 ### Groundwork for more Agent runtimes
 
 - Nothing changes in use: Agents on Pi and on Claude Code start, reply, stop, join tasks and are deleted as before, and every text in the console is the same.

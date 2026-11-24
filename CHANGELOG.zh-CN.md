@@ -52,6 +52,10 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 账号种类写 `"label": null` 现在会被拒绝，与 `displayName` 为 null 时一致。
 - 降级：存过带两种语言标签的清单或模板之后，旧版本读不了它。
 
+### 修复
+
+- 平台 Agent 填过模型 key 后改用 Claude Code，每次运行都报“凭证不可用”，而且页面上删不掉那个 key。现在用 Claude Code 的 Agent 不再看模型 key；key 仍然保存着，切回原来的提供方时照常使用。
+
 ### 为接入更多 Agent 运行时做准备
 
 - 用起来没有变化：用 Pi 和用 Claude Code 的 Agent，启动、回复、停止、进任务、删除都和以前一样，控制台里的文字也一字未改。
