@@ -29,6 +29,8 @@ export const runtime = {
       byRuntime: {
         'claude-code': 'Claude Code 用本机安装的 claude 和你在本机的登录，平台不读取、不保存它的登录信息。',
         codex: 'Codex 用本机安装的 codex 和你在本机的登录（ChatGPT 账号或 API key），平台不读取、不保存它的登录信息。',
+        grok: 'Grok 用本机安装的 grok 和你在本机的登录，平台不读取、不保存它的登录信息。',
+        antigravity: 'Antigravity 用本机安装的 agy 和你在本机的登录，平台不读取、不保存它的登录信息。',
       } as Partial<Record<S['AgentRuntime'], string>>,
       separator: '',
     },
@@ -60,6 +62,14 @@ export const runtime = {
         not_found: '本机没找到 codex：装好 Codex CLI，并确认在终端里能运行 codex。',
         version_failed: '运行 codex --version 失败：确认在终端里能正常运行 codex。',
         logged_out: '本机的 Codex 没有登录：在本机终端运行 codex login，用 ChatGPT 账号或 API key 登录。',
+      },
+      grok: {
+        not_found: '本机没找到 grok：装好 Grok CLI，并确认在终端里能运行 grok。',
+        version_failed: '运行 grok --version 失败：确认在终端里能正常运行 grok。',
+      },
+      antigravity: {
+        not_found: '本机没找到 agy：装好 Antigravity 的命令行，并确认在终端里能运行 agy。',
+        version_failed: '运行 agy --version 失败：确认在终端里能正常运行 agy。',
       },
     } as Partial<Record<S['AgentRuntime'], Partial<Record<'not_found' | 'version_failed' | 'unavailable' | 'logged_out', string>>>>,
     // A CLI older than the runtime supports: the version it needs and the one on this computer, when both are known.
@@ -93,6 +103,8 @@ export const runtime = {
     inUse: '现在用的是',
     notInCatalog: (ref: string) => `现在用的 ${ref} 不在模型目录里`,
     noThinking: '这个模型不分思考等级',
+    // A model that thinks at a level of its own (Antigravity's models carry it in their id).
+    fixedThinking: '这个模型的思考等级是固定的，已含在模型里',
     noModel: '先选模型',
     // The chip on the message box that says who runs the Agent now and opens the picker; a choice is saved at once.
     chip: {

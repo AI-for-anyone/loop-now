@@ -19,6 +19,8 @@ export const runtime = {
       byRuntime: {
         'claude-code': "Claude Code uses the claude installed on this computer and your login there; the platform doesn't read or store its login.",
         codex: "Codex uses the codex installed on this computer and your login there (a ChatGPT account or an API key); the platform doesn't read or store its login.",
+        grok: "Grok uses the grok installed on this computer and your login there; the platform doesn't read or store its login.",
+        antigravity: "Antigravity uses the agy installed on this computer and your login there; the platform doesn't read or store its login.",
       },
       separator: ' ',
     },
@@ -49,6 +51,14 @@ export const runtime = {
         version_failed: 'Running codex --version failed: make sure codex runs normally in a terminal.',
         logged_out: "Codex isn't logged in on this computer: run codex login in a terminal there, with a ChatGPT account or an API key.",
       },
+      grok: {
+        not_found: "grok wasn't found on this computer: install the Grok CLI and make sure grok runs in a terminal.",
+        version_failed: 'Running grok --version failed: make sure grok runs normally in a terminal.',
+      },
+      antigravity: {
+        not_found: "agy wasn't found on this computer: install Antigravity's command line and make sure agy runs in a terminal.",
+        version_failed: 'Running agy --version failed: make sure agy runs normally in a terminal.',
+      },
     },
     versionUnsupported: (name: string, needed: string | null, actual: string | null) =>
       needed && actual ? `${name} on this computer is version ${actual}; it needs ${needed} or later. Update it, then check again.` : `${name} on this computer is too old for Loop Now. Update it, then check again.`,
@@ -76,6 +86,7 @@ export const runtime = {
     inUse: 'In use:',
     notInCatalog: (ref: string) => `${ref}, used now, isn't in the model catalog`,
     noThinking: 'This model has no thinking levels',
+    fixedThinking: "This model's thinking level is fixed: it comes with the model",
     noModel: 'Pick a model first',
     chip: {
       label: (summary: string) => `Runs on: ${summary}. Open to change`,

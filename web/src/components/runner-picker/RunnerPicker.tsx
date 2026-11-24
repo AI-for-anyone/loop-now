@@ -255,7 +255,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           value={thinkingLevel}
           levels={levels}
           defaultLevel={chosenModel?.defaultThinkingLevel}
-          hint={!value ? t.runtime.picker.noModel : chosenModel && levels.length === 0 ? t.runtime.picker.noThinking : null}
+          hint={!value ? t.runtime.picker.noModel : chosenModel && levels.length === 0 ? (chosenModel.reasoning ? t.runtime.picker.fixedThinking : t.runtime.picker.noThinking) : null}
           onChange={onThinkingChange}
         />
       </div>

@@ -46,3 +46,24 @@ export const withCodex = (): Schemas['RuntimeDefinitionList'] => ({ runtimes: [.
 export function codexStatus(overrides: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeStatus'] {
   return { id: 'codex', available: true, version: '0.170.0', binaryPath: '/usr/local/bin/codex', unavailableReason: null, login: { state: 'logged_in', authMethod: 'chatgpt', subscriptionType: null }, checkedAt, ...overrides }
 }
+
+// Grok and Antigravity as the server defines them (ACP-DESIGN.md): CLIs on this computer with their own login and the real home, no
+// commands of their own, no Pi extensions.
+const acp = (id: 'grok' | 'antigravity', name: string, binary: string): Schemas['RuntimeDefinition'] => ({
+  id,
+  name,
+  providers: [`${id}-cli`],
+  isDefault: false,
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false },
+  minVersion: null,
+  setup: { install: null, login: binary, docsUrl: null },
+})
+export const grokDefinition = acp('grok', 'Grok', 'grok')
+export const antigravityDefinition = acp('antigravity', 'Antigravity', 'agy')
+
+// GET /runtime-definitions with every runtime the console knows.
+export const withAllRuntimes = (): Schemas['RuntimeDefinitionList'] => ({ runtimes: [...withCodex().runtimes, grokDefinition, antigravityDefinition] })
+
+export function acpStatus(id: 'grok' | 'antigravity', overrides: Partial<Schemas['RuntimeStatus']> = {}): Schemas['RuntimeStatus'] {
+  return { id, available: true, version: id === 'grok' ? '1.0.88' : '1.5.14', binaryPath: id === 'grok' ? '/usr/local/bin/grok' : '/usr/local/bin/agy', unavailableReason: null, login: { state: 'logged_in', authMethod: null, subscriptionType: null }, checkedAt, ...overrides }
+}

@@ -57,7 +57,9 @@ describe('runtime marks', () => {
     expect(runtimeGlyph('pi')?.length).toBeGreaterThan(0)
     expect(runtimeGlyph('claude-code')?.length).toBeGreaterThan(0)
     expect(runtimeGlyph('codex')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('grok' as Schemas['AgentRuntime'])).toBeNull()
+    expect(runtimeGlyph('grok')?.length).toBeGreaterThan(0)
+    expect(runtimeGlyph('antigravity')?.length).toBeGreaterThan(0)
+    expect(runtimeGlyph('acme' as Schemas['AgentRuntime'])).toBeNull()
   })
 })
 

@@ -269,6 +269,17 @@ describe('runner picker', () => {
     expect(screen.queryByText('Pick a model first')).toBeNull()
   })
 
+  it('a model whose level comes with it (Antigravity) leaves the ruler empty with a note, and a context size of 0 (Codex) is not shown', async () => {
+    useCatalog()
+    catalog['claude-code'] = [...catalog['claude-code'], { ...model('fixed-high', 'Fixed High', []), reasoning: true, contextWindow: 0, maxTokens: 0 }]
+    renderWithQuery(<Picker initial={{ provider: 'claude-code', modelId: 'fixed-high' }} />)
+    const row = await screen.findByRole('treeitem', { name: 'Fixed High (fixed-high)' })
+    expect(row).not.toHaveTextContent(/\b0\b/)
+    expect(await screen.findByText("This model's thinking level is fixed: it comes with the model")).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: 'Thinking level' })).toBeNull()
+    catalog['claude-code'] = catalog['claude-code'].filter((entry) => entry.id !== 'fixed-high')
+  })
+
   it('the thinking level is a ruler of the chosen model’s levels', async () => {
     useCatalog()
     const user = userEvent.setup()
