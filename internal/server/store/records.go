@@ -29,8 +29,10 @@ const (
 	EventModelRetryStarted = "model.retry_started"
 	EventModelRetryEnded   = "model.retry_ended"
 	EventContextCompaction = "context.compaction"
-	EventSessionMissing    = "session.missing"
-	EventSessionReset      = "session.reset"
+	// EventSessionMissing is a session marked missing, waiting for the person to confirm a new one; earlier versions
+	// recorded it (a lost session is now EventSessionLost).
+	EventSessionMissing = "session.missing"
+	EventSessionReset   = "session.reset"
 	// EventRuntimeChanged is a change of the Agent's runtime (no run); data handoff says whether the conversation waits
 	// to be carried over (pending), the earlier session continues (restored), or there was nothing to carry (none).
 	EventRuntimeChanged = "runtime.changed"

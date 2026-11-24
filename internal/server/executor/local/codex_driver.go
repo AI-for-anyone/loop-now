@@ -251,7 +251,7 @@ func (cd codexDriver) ready(ctx context.Context, p *proc, spec startSpec) error 
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &spec.runID); mErr != nil {
 				return mErr
 			}
-			return fail(executor.ErrSessionMissing, "The recorded Codex thread %s no longer exists. Confirm reopening the session in the console first.", spec.sessionFile)
+			return fail(executor.ErrSessionMissing, "The recorded Codex thread %s no longer exists; the next message starts a new session with the saved conversation.", spec.sessionFile)
 		}
 		if err != nil {
 			return cd.startFailure(p, err)

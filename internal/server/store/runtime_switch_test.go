@@ -362,29 +362,40 @@ func TestExecutionCaptureReadsTheSession(t *testing.T) {
 	}
 }
 
-// A session its runtime could not continue (marked missing) becomes a new start that carries the conversation: the
-// pointer is cleared and a session_lost handoff from the current runtime is pending; a handoff already pending stays.
-func TestLoseSession(t *testing.T) {
+// A session its runtime can no longer continue never waits in a "missing" state: it becomes a new start that carries
+// the conversation. The pointer is cleared, the session number stays, and a session_lost handoff from the current
+// runtime is pending; a handoff already pending stays as it is.
+func TestMarkSessionMissingStartsOver(t *testing.T) {
 	e := newRecEnv(t)
 	e.turn("hello", "completed", "hi")
-	if lost, err := e.s.LoseSession(e.ctx, e.agent); err != nil || lost {
-		t.Fatalf("nothing is lost without a missing session: %v %v", lost, err)
-	}
 	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/gone.jsonl"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.MarkSessionMissing(e.ctx, e.agent, nil); err != nil {
+	epoch := e.session().Epoch
+	run := uuid.Must(uuid.NewV7())
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &run); err != nil {
 		t.Fatal(err)
 	}
-	if lost, err := e.s.LoseSession(e.ctx, e.agent); err != nil || !lost {
-		t.Fatalf("lose: %v %v", lost, err)
-	}
 	sess := e.session()
-	if sess.State != "none" || sess.SessionFile != "" || sess.Epoch != 1 || sess.Handoff == nil || sess.Handoff.From != "pi" || sess.Handoff.Reason != store.HandoffSessionLost {
-		t.Fatalf("a lost session leaves a session_lost handoff: %+v %+v", sess, sess.Handoff)
+	if sess.State != "none" || sess.SessionFile != "" || sess.Epoch != epoch || sess.Handoff == nil || sess.Handoff.From != "pi" || sess.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("a lost session leaves a session_lost handoff and keeps its number: %+v %+v", sess, sess.Handoff)
 	}
-	if evs := e.agentEvents(store.EventSessionLost); len(evs) != 1 || evs[0].Data["runtime"] != "pi" {
-		t.Fatalf("the loss is recorded: %+v", evs)
+	if evs := e.agentEvents(store.EventSessionLost); len(evs) != 1 || evs[0].Data["runtime"] != "pi" || evs[0].Data["sessionFile"] != "/tmp/gone.jsonl" || evs[0].RunID == nil || *evs[0].RunID != run {
+		t.Fatalf("the loss is recorded with the run that found it: %+v", evs)
+	}
+	if evs := e.agentEvents(store.EventSessionMissing); len(evs) != 0 {
+		t.Fatalf("no session.missing: %+v", evs)
+	}
+	// Nothing to lose without an active session.
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, nil); err != nil || len(e.agentEvents(store.EventSessionLost)) != 1 {
+		t.Fatalf("again: %v", err)
+	}
+	// A session the runtime records before the handoff was carried is a new one: the handoff stays.
+	if err := e.s.RecordRuntimeSessionFile(e.ctx, e.agent, "pi", "/tmp/new.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.session(); got.Handoff == nil || got.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("a new session does not end a session_lost handoff: %+v", got.Handoff)
 	}
 
 	f := newRecEnv(t)
@@ -400,10 +411,30 @@ func TestLoseSession(t *testing.T) {
 	if err := f.s.MarkSessionMissing(f.ctx, f.agent, nil); err != nil {
 		t.Fatal(err)
 	}
-	if lost, err := f.s.LoseSession(f.ctx, f.agent); err != nil || !lost {
-		t.Fatal(lost, err)
+	if got := f.session(); got.State != "none" || got.Handoff == nil || got.Handoff.ID != pending.ID || got.Handoff.Reason != "" {
+		t.Fatalf("a pending change of runtime stays: %+v %+v", got, got.Handoff)
 	}
-	if got := f.session().Handoff; got == nil || got.ID != pending.ID || got.Reason != "" {
-		t.Fatalf("a pending change of runtime stays: %+v", got)
+}
+
+// Sessions left "missing" by an earlier version are turned into the same new start when the server starts.
+func TestHealMissingSessions(t *testing.T) {
+	e := newRecEnv(t)
+	e.turn("hello", "completed", "hi")
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/gone.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	epoch := e.session().Epoch
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE agent_sessions SET state = 'missing' WHERE agent_id = $1`, e.agent); err != nil {
+		t.Fatal(err)
+	}
+	healed, err := e.s.HealMissingSessions(e.ctx)
+	if err != nil || len(healed) != 1 || healed[0] != e.agent {
+		t.Fatalf("heal: %v %v", healed, err)
+	}
+	if sess := e.session(); sess.State != "none" || sess.SessionFile != "" || sess.Epoch != epoch || sess.Handoff == nil || sess.Handoff.Reason != store.HandoffSessionLost {
+		t.Fatalf("healed: %+v %+v", sess, sess.Handoff)
+	}
+	if healed, err := e.s.HealMissingSessions(e.ctx); err != nil || len(healed) != 0 {
+		t.Fatalf("nothing left: %v %v", healed, err)
 	}
 }

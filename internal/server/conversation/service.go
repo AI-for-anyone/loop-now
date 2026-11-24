@@ -94,6 +94,11 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.recoverAfterRestart(ctx); err != nil {
 		return err
 	}
+	if healed, err := s.st.HealMissingSessions(ctx); err != nil {
+		return err
+	} else if len(healed) > 0 {
+		s.log.Info("sessions an earlier version left missing continue with the saved conversation", "agents", len(healed))
+	}
 	s.reconcile(ctx)
 	s.wg.Go(s.reconcileLoop)
 	return nil
@@ -616,16 +621,13 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 			Origin: run.Origin, MessageID: trigger}, sink)
 	}
 	res, err := send()
-	// A session the runtime can no longer continue does not stop the conversation: the message starts a new session
-	// with the saved conversation (a handoff with reason session_lost, shown like any other), once.
-	if err == nil && res.ErrorCode == executor.ErrSessionMissing {
-		if lost, lerr := s.st.LoseSession(ctx, agentID); lerr != nil {
-			s.log.Warn("failed to continue a lost session with the saved conversation", "agentId", agentID, "runId", run.ID, "err", lerr)
-		} else if lost {
-			s.emitSession(ctx, agentID)
-			if run.Origin != executor.OriginConsoleCompact {
-				res, err = send()
-			}
+	// A session the runtime can no longer continue does not stop the conversation: the store has turned it into a new
+	// start (a handoff with reason session_lost, shown like any other), and the message is sent again, once, now
+	// carrying the saved conversation. A compaction is not: there is nothing left to compact.
+	if err == nil && res.ErrorCode == executor.ErrSessionMissing && ctx.Err() == nil {
+		s.emitSession(ctx, agentID)
+		if run.Origin != executor.OriginConsoleCompact {
+			res, err = send()
 		}
 	}
 	if err != nil {
@@ -685,13 +687,10 @@ func (s *Service) handoffBlock(ctx context.Context, agentID, runID uuid.UUID, pe
 		from = rt.Name
 	}
 	budget := contexthandoff.ClampBudget(s.o.HandoffBudget)
-	reason := pending.Reason
-	if reason == "" {
-		reason = store.HandoffRuntimeChanged
-	}
-	kind := contexthandoff.RuntimeChanged
-	if reason == store.HandoffSessionLost {
-		kind = contexthandoff.SessionLost
+	// A session lost on one runtime, then a change to another, reaches the new one as a change of runtime.
+	reason, kind := store.HandoffRuntimeChanged, contexthandoff.RuntimeChanged
+	if pending.Reason == store.HandoffSessionLost && pending.From == to.ID {
+		reason, kind = store.HandoffSessionLost, contexthandoff.SessionLost
 	}
 	block := contexthandoff.BuildFor(kind, messages, from, to.Name, budget)
 	return block.Text, &store.HandoffRecord{ID: pending.ID, Reason: reason, FromRuntime: pending.From, ToRuntime: to.ID, IncludedMessages: block.Included,
