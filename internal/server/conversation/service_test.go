@@ -38,6 +38,9 @@ type fakeExec struct {
 	// sessions, when set, makes the fake behave like a runtime that saves its session: the turn is reported with the
 	// Agent's runtime and model, and its session file is recorded with that runtime when the turn ends.
 	sessions *store.Store
+	// beforeSnapshot, when set, is called after the conversation service has dispatched a message and before the fake
+	// reads the Agent's configuration, the way the local executor reads its execution snapshot.
+	beforeSnapshot func(req executor.Request)
 }
 
 func newFakeExec() *fakeExec {
@@ -71,19 +74,11 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	if _, after, ok := strings.Cut(body, "</conversation-handoff>"); ok {
 		body = after
 	}
-	ctl := make(chan string, 4)
-	f.mu.Lock()
-	if f.running[req.AgentID] != nil {
-		f.mu.Unlock()
-		return executor.Result{}, fmt.Errorf("two runs at once for the same Agent")
+	// Like the local executor, the runtime is decided from the configuration read when the run starts, before the
+	// run counts as started: a change made after that applies from the next message.
+	if f.beforeSnapshot != nil {
+		f.beforeSnapshot(req)
 	}
-	f.running[req.AgentID] = ctl
-	f.runIDs[req.AgentID] = req.RunID
-	f.order = append(f.order, req.Message)
-	f.mu.Unlock()
-	defer func() { f.mu.Lock(); delete(f.running, req.AgentID); delete(f.runIDs, req.AgentID); f.mu.Unlock() }()
-	f.started <- req.Message
-
 	sel := executor.Selection{Runtime: "pi"}
 	if f.sessions != nil {
 		a, err := f.sessions.GetAgent(ctx, req.AgentID)
@@ -102,6 +97,19 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 			_ = f.sessions.RecordRuntimeSessionFile(context.Background(), req.AgentID, sel.Runtime, "/fake/"+sel.Runtime+".jsonl")
 		}()
 	}
+	ctl := make(chan string, 4)
+	f.mu.Lock()
+	if f.running[req.AgentID] != nil {
+		f.mu.Unlock()
+		return executor.Result{}, fmt.Errorf("two runs at once for the same Agent")
+	}
+	f.running[req.AgentID] = ctl
+	f.runIDs[req.AgentID] = req.RunID
+	f.order = append(f.order, req.Message)
+	f.mu.Unlock()
+	defer func() { f.mu.Lock(); delete(f.running, req.AgentID); delete(f.runIDs, req.AgentID); f.mu.Unlock() }()
+	f.started <- req.Message
+
 	sink.Phase(executor.PhasePreparing, sel.Runtime)
 	sink.Running(1, sel)
 	sink.Tool("call-1", "bash", executor.ToolStarted)
