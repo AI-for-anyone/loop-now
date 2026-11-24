@@ -15,6 +15,8 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
       ? [copy.whole(handoff.includedMessages)]
       : [copy.included(handoff.includedMessages), copy.omitted(handoff.omittedMessages)]
   if (handoff.images > 0) parts.push(copy.images(handoff.images))
+  // The change was undone after the other runtime had run a message: a new session of the same runtime gets the conversation.
+  const renewed = handoff.fromRuntime === handoff.toRuntime
   const side = (id: AgentRuntime, name: string) => {
     const runtime = lookup.get(id)
     return (
@@ -25,14 +27,20 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
     )
   }
   return (
-    <div role="separator" aria-label={copy.label(from, to, parts.join(copy.separator))} className="flex items-center gap-3">
+    <div role="separator" aria-label={renewed ? copy.renewedLabel(to, parts.join(copy.separator)) : copy.label(from, to, parts.join(copy.separator))} className="flex items-center gap-3">
       <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-riso-blue/70" />
       <div aria-hidden="true" className="grid justify-items-center gap-1">
         <span className="inline-flex items-center gap-2.5 rounded-full border-2 border-ink bg-paper-raised py-1 pr-3.5 pl-1.5 text-ink shadow-[3px_3px_0_var(--riso-blue)]">
-          {side(handoff.fromRuntime, from)}
-          <ArrowRightIcon className="size-4 text-riso-pink" strokeWidth={3} />
-          {side(handoff.toRuntime, to)}
-          <span className="sr-only">{copy.route(from, to)}</span>
+          {renewed ? (
+            side(handoff.toRuntime, copy.renewed(to))
+          ) : (
+            <>
+              {side(handoff.fromRuntime, from)}
+              <ArrowRightIcon className="size-4 text-riso-pink" strokeWidth={3} />
+              {side(handoff.toRuntime, to)}
+              <span className="sr-only">{copy.route(from, to)}</span>
+            </>
+          )}
         </span>
         <span className="text-center text-[12px] font-bold text-ink-700">{parts.join(' · ')}</span>
       </div>

@@ -43,6 +43,13 @@ describe('changes of who runs it, in the conversation', () => {
     expect(screen.queryByRole('separator', { name: /^Model changed/ })).toBeNull()
   })
 
+  it('a handover into a new session of the same runtime (the change was undone after the other one had run) says so', async () => {
+    await renderChat({ messages: [...turn('On Claude', claude('haiku')), ...turn('Back on Pi', pi('claude-sonnet-4-5'), handoff({ fromRuntime: 'pi', toRuntime: 'pi', omittedMessages: 0, includedMessages: 4, images: 0 }))] })
+    const row = screen.getByRole('separator', { name: /^Handed over/ })
+    expect(row).toHaveAccessibleName('Handed over to a new Pi session: all 4 earlier messages went along')
+    expect(row).toHaveTextContent('Pi · new session')
+  })
+
   it('a conversation that went whole says so', async () => {
     await renderChat({ messages: [...turn('Hello', pi('claude-sonnet-4-5')), ...turn('On Claude', claude('haiku'), handoff({ includedMessages: 2, omittedMessages: 0, images: 0 }))] })
     expect(screen.getByRole('separator', { name: /^Handed over/ })).toHaveAccessibleName('Handed over from Pi to Claude Code: all 2 earlier messages went along')
