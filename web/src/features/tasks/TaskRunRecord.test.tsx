@@ -50,3 +50,13 @@ it.each([
   await user.click(await screen.findByRole('button', { name: /^Run log/ }))
   expect(await screen.findByText(text)).toBeInTheDocument()
 })
+it('a task turn whose runtime reported no usage says so instead of "0 tokens", closed and open', async () => {
+  const zeros = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, calls: 0 }
+  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ run: { ...dto.run, usageReported: false }, usage: zeros }))))
+  const user = userEvent.setup()
+  renderRecord()
+  const toggle = await screen.findByRole('button', { name: 'Run log · 3.0 s · no usage data' })
+  await user.click(toggle)
+  expect(await screen.findByText("The runtime didn't report token usage for this turn.")).toBeInTheDocument()
+  expect(screen.queryByText(/\b0 tokens?\b/)).toBeNull()
+})
