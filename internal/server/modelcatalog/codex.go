@@ -11,11 +11,14 @@ import (
 type LocalModel struct {
 	ID, Name string
 	// Efforts are the reasoning efforts the model supports, as the CLI names them; DefaultEffort is its default. None
-	// means the thinking level cannot be chosen (Antigravity's ids carry it).
+	// means the thinking level cannot be chosen.
 	Efforts       []string
 	DefaultEffort string
 	Images        bool
 	Hidden        bool
+	// LevelIDs: the CLI lists this model once per thinking level, as <ID>-<level> (Antigravity), and runs it by that id
+	// (see MergeLevelModels and LevelModelID); its Efforts are those levels.
+	LevelIDs bool
 }
 
 // CodexModel is one model the Codex installed on the user's computer lists for its login (model/list).

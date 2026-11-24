@@ -78,8 +78,8 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 		return append(args, "--plugin-dir", d.acpPlugin, "stdio")
 	}}
 
-// antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model (whose id carries the thinking level) is chosen
-// in the session.
+// antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model is chosen in the session, by the id that carries
+// the thinking level (see acpSessionModel).
 var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "agy", login: "agy acp --login", modelInSession: true, emptyLoadIsMissing: true,
 	args: func(agentconfig.Snapshot, agentDirs) []string {
 		return []string{"acp", "--dangerously-skip-permissions"}
@@ -126,6 +126,16 @@ func acpFlavorOf(runtime string) (acpFlavor, bool) {
 		}
 	}
 	return acpFlavor{}, false
+}
+
+// acpSessionModel is the model id chosen in the session (Antigravity): agy lists a model once per thinking level, so
+// the model runs by the id for the Agent's level (gemini-4-neon at xhigh is gemini-4-neon-xhigh). An id recorded before
+// the levels were merged names its level already and comes with off or no level; it runs as it is.
+func acpSessionModel(snap agentconfig.Snapshot) string {
+	if snap.ThinkingLevel == nil {
+		return snap.ModelID
+	}
+	return modelcatalog.LevelModelID(snap.ModelID, *snap.ThinkingLevel)
 }
 
 // acpEffort is the reasoning effort for the Agent's thinking level (the runtimes name them the same way); off or none
@@ -421,7 +431,7 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 		}
 	}
 	if ad.f.modelInSession && snap.ModelID != modelcatalog.LocalCommandDefaultModel {
-		if err := ap.SetModel(ctx, ap.sessionID, snap.ModelID); err != nil {
+		if err := ap.SetModel(ctx, ap.sessionID, acpSessionModel(snap)); err != nil {
 			return ad.startFailure(p, err)
 		}
 	}
@@ -598,9 +608,9 @@ func (e *Executor) noteACPLogin(runtime, state string) {
 }
 
 // ACPModels returns the models the runtime's CLI on this computer lists for its login, for the model catalog: Grok's
-// from a short-lived agent's initialize (with each model's reasoning efforts), Antigravity's from agy models (each
-// thinking level a model id of its own). It also keeps the runtime's login conclusion (ACPLoginState): Antigravity's
-// from the same agy models, Grok's from grok models run alongside.
+// from a short-lived agent's initialize (with each model's reasoning efforts), Antigravity's from agy models (which
+// lists a model once per thinking level; see modelcatalog.MergeLevelModels). It also keeps the runtime's login
+// conclusion (ACPLoginState): Antigravity's from the same agy models, Grok's from grok models run alongside.
 func (e *Executor) ACPModels(ctx context.Context, runtime string) ([]modelcatalog.LocalModel, error) {
 	f, ok := acpFlavorOf(runtime)
 	if !ok {
@@ -624,7 +634,7 @@ func (e *Executor) ACPModels(ctx context.Context, runtime string) ([]modelcatalo
 		for _, m := range list {
 			out = append(out, modelcatalog.LocalModel{ID: m.ID, Name: m.Name, Images: true})
 		}
-		return out, nil
+		return modelcatalog.MergeLevelModels(out), nil
 	}
 	login := make(chan string, 1)
 	go func() { login <- acpcli.GrokLogin(ctx, bin, env) }()
