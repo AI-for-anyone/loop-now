@@ -65,8 +65,9 @@ User-facing changes in each version. The release pipeline takes the matching ver
 ### Several console tabs no longer freeze the browser
 
 - A browser allows six connections to one address, and every console tab kept two open for live updates. With three tabs open nothing else could load, not even a reload. All tabs of one browser now share their live connections through one shared worker, so opening more tabs of the same pages costs no more connections.
-- Tabs that show different Agents still use one connection per Agent; a single connection for everything follows.
-- Nothing changes in what a tab shows. Where the browser has no shared workers, a tab keeps its own connections as before.
+- All live updates of all tabs now travel over one connection, whatever the tabs show: the inbox, the overview, any number of Agents and tasks.
+- Nothing changes in what a tab shows. Where the browser has no shared workers, each tab uses one connection of its own.
+- API: `GET /events` carries any set of the existing event streams on one connection; the five separate stream endpoints stay.
 
 ### Agents can run on Codex
 
