@@ -103,6 +103,9 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
 
   // The step of the most recent “Pi 启动” (Pi start) phase; the note about a newly started or reused process is merged into it.
   let launching: TimelineStep | null = null
+  // Once the turn has ended, a tool still on started never reported its end (a record saved before the server closed such tools as
+  // no_result): how it went is unknown, the same as no_result.
+  const turnEnded = entries.some((entry) => entry.type === 'ended')
   entries.forEach((entry, index) => {
     switch (entry.type) {
       case 'sleep':
@@ -240,18 +243,23 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
         break
       case 'tool': {
         const command = entry.toolName === 'bash' && entry.command?.trim() ? entry.command : null
+        const noResult = entry.state === 'no_result' || (entry.state === 'started' && turnEnded)
+        const state = noResult ? t.timeline.detail.toolNoResult : entry.state === 'started' ? t.timeline.detail.toolRunning : null
         steps.push(
           step(entry, index, {
             label: t.timeline.step.tool(entry.toolName),
             field: t.timeline.field.tool(entry.state),
             command,
-            detail: [entry.toolName === 'bash' && !command ? t.timeline.detail.commandUnavailable : null, entry.state === 'started' ? t.timeline.detail.toolRunning : null].filter(Boolean).join(' · ') || null,
+            detail: [entry.toolName === 'bash' && !command ? t.timeline.detail.commandUnavailable : null, state].filter(Boolean).join(' · ') || null,
             duration: entry.durationMs !== null ? t.timeline.duration(entry.durationMs) : null,
-            tone: entry.state === 'succeeded' ? 'ok' : entry.state === 'failed' ? 'fail' : 'warn',
+            tone: entry.state === 'succeeded' ? 'ok' : entry.state === 'failed' ? 'fail' : noResult ? 'neutral' : 'warn',
           }),
         )
         break
       }
+      case 'background_wait_timeout':
+        steps.push(step(entry, index, { label: t.timeline.step.background_wait_timeout(entry.limitMs) }))
+        break
       case 'model_call':
         steps.push(
           step(entry, index, {

@@ -106,6 +106,9 @@ type Options struct {
 	// GrokBin and AntigravityBin are the grok and agy executables; empty means look them up on the PATH of the user's
 	// login shell (UserPath).
 	GrokBin, AntigravityBin string
+	// ACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
+	// prompt has returned) may hear nothing from the agent before it ends; 0 means 30 minutes.
+	ACPBackgroundWait time.Duration
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
@@ -355,7 +358,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		if command = toolcommand.Display(name, command); command != "" {
 			e.event(snap.AgentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
 		}
-	}}, req.Images...)
+	}, event: func(typ string, data map[string]any) { e.event(snap.AgentID, &runID, typ, data) }}, req.Images...)
 	exitCode, exitMsg := p.drv.exited()
 	if errors.Is(err, runturn.ErrExited) {
 		tr, err = runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: exitCode, ErrorMessage: exitMsg}, nil
@@ -416,6 +419,8 @@ func failed(code, msg string, version int64) executor.Result {
 type sinkAdapter struct {
 	s       executor.Sink
 	command func(string, string, string)
+	// event records a run event of this turn.
+	event func(typ string, data map[string]any)
 }
 
 func (a sinkAdapter) ToolCommand(id, name, command string) {
@@ -434,6 +439,16 @@ func (a sinkAdapter) ToolEnded(id, name string, isError bool) {
 		state = executor.ToolFailed
 	}
 	a.s.Tool(id, name, state)
+}
+
+// ToolNoResult closes a tool that was still open when the turn ended.
+func (a sinkAdapter) ToolNoResult(id, name string) { a.s.Tool(id, name, executor.ToolNoResult) }
+
+// BackgroundWaitTimedOut records that the turn stopped waiting for the runtime's background commands.
+func (a sinkAdapter) BackgroundWaitTimedOut(limit time.Duration) {
+	if a.event != nil {
+		a.event(store.EventBackgroundWaitTimeout, map[string]any{"limitMs": limit.Milliseconds()})
+	}
 }
 
 // acquire returns a process usable for the Agent: it reuses a live process with the same config version, or else starts

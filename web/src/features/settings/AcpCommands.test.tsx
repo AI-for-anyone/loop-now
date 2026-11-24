@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, defaultProject, errorBody, projectsUrl } from '@/test/api'
+import { inDesktopShell } from '@/test/desktop'
 import { renderRoutes } from '@/test/render'
 import { acpCommand, acpCommandDefinition, acpCommandStatus, acpRuntimeId, runtimeDefinitions, runtimeList } from '@/test/runtimes'
 import { server } from '@/test/server'
@@ -92,6 +93,30 @@ describe('ACP commands people added, in global settings', () => {
     expect(sent).toEqual([{ method: 'POST', path: '/acp-commands', body: { name: 'Hermes', command: '/opt/hermes/bin/hermes', args: ['acp', '--model "fast one"'], env: { HERMES_KEY: 'secret' } } }])
     await waitFor(() => expect(definitionReads()).toBeGreaterThan(reads))
     expect(await card()).toHaveTextContent('HERMES_KEYsaved')
+  })
+
+  it('in the desktop window, the command can be chosen as a file with the system dialog, and the chosen path is what gets added', async () => {
+    const pickPath = inDesktopShell({ answer: '/opt/hermes/bin/hermes' })
+    const { user, sent } = setup({ commands: [], status: null })
+    await user.click(await screen.findByRole('button', { name: 'Add command' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add an ACP command' })
+    await user.type(within(dialog).getByLabelText('Name'), 'Hermes')
+    await user.type(within(dialog).getByLabelText('Command'), 'hermes')
+    await user.click(within(dialog).getByRole('button', { name: 'Choose…' }))
+    // The shell starts the dialog at the value only when it is an absolute path; a bare command name opens it at its usual place.
+    expect(pickPath).toHaveBeenCalledWith({ kind: 'file', defaultPath: 'hermes' })
+    await waitFor(() => expect(within(dialog).getByLabelText('Command')).toHaveValue('/opt/hermes/bin/hermes'))
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(sent).toEqual([{ method: 'POST', path: '/acp-commands', body: { name: 'Hermes', command: '/opt/hermes/bin/hermes', args: [], env: {} } }])
+  })
+
+  it('in a browser, the command is typed: there is no “Choose…”', async () => {
+    const { user } = setup({ commands: [], status: null })
+    await user.click(await screen.findByRole('button', { name: 'Add command' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add an ACP command' })
+    expect(within(dialog).getByLabelText('Command')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Choose…' })).toBeNull()
   })
 
   it('editing sends only what changed: a refilled variable, a removed one (null) and a new one; saved values are never shown', async () => {

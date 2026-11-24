@@ -10,10 +10,15 @@ import { t } from '@/i18n'
 
 // The interface the desktop shell (desktop/src/preload.ts) provides in its windows; absent when the console is opened in a browser.
 export type DesktopNotification = { id: string; title: string; body: string; path: string }
+export type PathKind = 'directory' | 'file'
+export type PickPathRequest = { kind: PathKind; defaultPath?: string }
 export type DesktopBridge = {
   notify: (notification: DesktopNotification) => void
   setBadge: (count: number) => void
   onNavigate: (listener: (path: string) => void) => () => void
+  // Shows the system's own dialog for a folder or file and resolves to its full path, or null when cancelled. The shell starts the dialog
+  // at defaultPath only when it is an absolute path. Absent in shells older than this call.
+  pickPath?: (request: PickPathRequest) => Promise<string | null>
 }
 
 declare global {
@@ -88,6 +93,13 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
 // with the system traffic-light buttons in the top-left corner, and the top of the page must leave a strip for dragging the
 // window (window-drag in index.css). Not affected when the console is opened in a browser.
 export const inDesktopWindow = () => window.loopNowDesktop !== undefined
+
+// The shell's system dialog for a folder or file; undefined in a browser (a browser never gives a page a full path, so paths are typed
+// there) and in shells older than the call. The server always runs on the same computer as the desktop shell, so the path is valid for it.
+export function pathPicker(): ((request: PickPathRequest) => Promise<string | null>) | undefined {
+  const bridge = window.loopNowDesktop
+  return typeof bridge?.pickPath === 'function' ? (request) => bridge.pickPath!(request) : undefined
+}
 
 // A system notification was clicked: after showing the window, the desktop shell hands the path to the page, which navigates
 // within the console.

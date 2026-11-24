@@ -40,7 +40,10 @@ const (
 	EventSessionLost = "session.lost"
 	// EventContextHandoff is a turn that carried a selection of the saved conversation to a new runtime.
 	EventContextHandoff = "context.handoff"
-	EventExtensionUI    = "extension.ui"
+	// EventBackgroundWaitTimeout is a turn that stopped waiting for its runtime's background commands after nothing came
+	// from the runtime for data limitMs; its open tools were closed without a result.
+	EventBackgroundWaitTimeout = "runtime.background_wait_timeout"
+	EventExtensionUI           = "extension.ui"
 	// EventModelRateLimit is the subscription quota status reported by Claude Code (the rate_limit_event is kept as is
 	// in info).
 	EventModelRateLimit = "model.rate_limit"

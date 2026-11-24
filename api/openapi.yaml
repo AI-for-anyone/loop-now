@@ -11659,8 +11659,12 @@ components:
       enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, null]
 
     ToolState:
+      description: |
+        started: the tool is running; succeeded and failed: the runtime reported how it ended. no_result: the turn ended
+        while the tool was still open and the runtime never said how it ended (for example a command still running in
+        the background when the turn's wait for it ran out); it is neither a success nor a failure.
       type: string
-      enum: [started, succeeded, failed]
+      enum: [started, succeeded, failed, no_result]
 
     ToolEvent:
       type: object
@@ -12760,6 +12764,7 @@ components:
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineContextHandoff"
+        - $ref: "#/components/schemas/TimelineBackgroundWaitTimeout"
         - $ref: "#/components/schemas/TimelineExtensionUI"
         - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
@@ -12786,6 +12791,7 @@ components:
           ended: "#/components/schemas/TimelineEnded"
           session_missing: "#/components/schemas/TimelineSessionMissing"
           context_handoff: "#/components/schemas/TimelineContextHandoff"
+          background_wait_timeout: "#/components/schemas/TimelineBackgroundWaitTimeout"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
           model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
@@ -13134,6 +13140,23 @@ components:
         sessionFile:
           type: [string, "null"]
           description: The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex)
+
+    TimelineBackgroundWaitTimeout:
+      description: |
+        The runtime's reply had ended while commands it runs in the background were still going (Antigravity moves a
+        command that takes longer than its wait to the background and reports on it by itself later), so the turn
+        waited for them and for the runtime's own follow-up reply. Nothing came from the runtime for limitMs, so the
+        turn ended there; the tools still open were closed as no_result.
+      type: object
+      required: [type, at, limitMs]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [background_wait_timeout] }
+        at: { type: string, format: date-time }
+        limitMs:
+          description: How long the turn waited without any message from the runtime
+          type: integer
+          minimum: 0
 
     TimelineContextHandoff:
       description: The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff)

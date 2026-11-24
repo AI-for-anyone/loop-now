@@ -463,3 +463,20 @@ func TestBundledDefaults(t *testing.T) {
 		t.Fatalf("environment variables should take precedence: %v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }
+
+// How long a turn may wait for an agent's background commands without a word from the agent: 30 minutes unless set,
+// and never 0.
+func TestACPBackgroundWait(t *testing.T) {
+	env := requiredEnv()
+	if c, err := Load(envOf(env)); err != nil || c.ACPBackgroundWait != 30*time.Minute {
+		t.Fatalf("default: %v %v", c.ACPBackgroundWait, err)
+	}
+	env[EnvACPBackgroundWait] = "45m"
+	if c, err := Load(envOf(env)); err != nil || c.ACPBackgroundWait != 45*time.Minute {
+		t.Fatalf("set: %v %v", c.ACPBackgroundWait, err)
+	}
+	env[EnvACPBackgroundWait] = "0s"
+	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvACPBackgroundWait) {
+		t.Fatalf("0 is refused: %v", err)
+	}
+}

@@ -1,6 +1,6 @@
 import type { Messages } from '..'
 import { plural } from '../format'
-import { formatMonthDayClock, formatPreciseClock, formatStepDuration } from './format'
+import { formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
 
 const count = (n: number, one: string, other: string) => `${n} ${plural('en-US', n, { one, other })}`
 
@@ -58,6 +58,7 @@ export const timeline = {
     message_cancelled: 'An Inbox message was cancelled',
     session_missing: 'Session not found',
     model_rate_limit: 'Subscription limit',
+    background_wait_timeout: (limitMs: number) => `While waiting on background commands, the runtime sent nothing for ${formatSlept(limitMs)}; the turn ended here`,
     ended: {
       completed: 'Completed',
       failed: 'Failed',
@@ -112,6 +113,7 @@ export const timeline = {
       aborted: 'Compaction aborted.',
     },
     toolRunning: 'Running',
+    toolNoResult: 'No result',
     commandUnavailable: 'Command not recorded',
     // The session's reference: a file for Pi and Claude Code, a thread for Codex.
     sessionFile: (file: string) => `Session: ${file}`,

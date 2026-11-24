@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { PathPicker } from '@/features/desktop/PathPicker'
 import { t } from '@/i18n'
 import { fieldMessages, unmatchedFieldError } from '@/lib/errors'
 import { useRuntimeLookup } from '@/lib/runtime'
@@ -168,7 +169,9 @@ function AcpCommandDialog({ command, onClose }: { command?: Command; onClose: ()
             <Input id={`${ids}-name`} value={draft.name} autoComplete="off" readOnly={saving} aria-invalid={nameError ? true : undefined} aria-describedby={`${ids}-name-hint`} onChange={(event) => set({ name: event.target.value })} />
           </Field>
           <Field id={`${ids}-command`} label={copy.command} hint={copy.commandHint} error={commandError}>
-            <Input id={`${ids}-command`} value={draft.command} autoComplete="off" spellCheck={false} readOnly={saving} className="font-mono text-[14px]" placeholder="hermes" aria-invalid={commandError ? true : undefined} aria-describedby={`${ids}-command-hint`} onChange={(event) => set({ command: event.target.value })} />
+            <PathPicker kind="file" value={draft.command} onPick={(path) => set({ command: path })} disabled={saving}>
+              <Input id={`${ids}-command`} value={draft.command} autoComplete="off" spellCheck={false} readOnly={saving} className="font-mono text-[14px]" placeholder="hermes" aria-invalid={commandError ? true : undefined} aria-describedby={`${ids}-command-hint`} onChange={(event) => set({ command: event.target.value })} />
+            </PathPicker>
           </Field>
           <Field id={`${ids}-args`} label={copy.args} hint={copy.argsHint} error={argsError}>
             <Textarea id={`${ids}-args`} value={draft.args} rows={3} spellCheck={false} readOnly={saving} className="min-h-[84px] font-mono text-[13.5px] leading-[1.6] whitespace-pre" placeholder={'acp\n--stdio'} aria-invalid={argsError ? true : undefined} aria-describedby={`${ids}-args-hint`} onChange={(event) => set({ args: event.target.value })} />

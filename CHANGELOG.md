@@ -4,6 +4,27 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
+## Unreleased
+
+### Antigravity: finished commands show as finished, and its background commands are waited for
+
+- A tool that ended with output, such as any command that printed something, stayed "in progress" forever: its end message carries its output as a list, and the whole message was dropped. This affected Antigravity, Grok and local ACP commands. The end is now recorded.
+- Antigravity moves a command that runs longer than its wait to the background and ends its reply; when the command finishes, it reports the result by itself. The reply now stays open until those commands have finished and Antigravity's own follow-up has come, and the follow-up appears in the same reply. If nothing comes from Antigravity for 30 minutes (`LOOP_NOW_ACP_BACKGROUND_WAIT`), the reply ends there and the run record says why. Stop ends it at once and stops the background commands; messages sent meanwhile are queued as usual.
+- A tool that never reported how it ended shows "No result" once the reply is over, instead of "in progress". Older records show the same.
+- API: `ToolState` gains `no_result`; new run record entry `background_wait_timeout`.
+- Upgrade: the events database's tool table is rebuilt once (about 5 seconds for 2.5 million rows; the file keeps the freed space for later writes).
+- Downgrade: older versions show `no_result` tools without a state in the chat and as still running in task records, and do not show the new run record entry.
+
+### Antigravity models have thinking levels
+
+- Antigravity lists every thinking level as a model of its own (Gemini 4 Neon (Low), Gemini 4 Neon (Medium) and so on). These are now one model with its levels to choose, as for the other runtimes; the default is medium where it is listed. Models without levels, such as Orchestrator, are unchanged.
+- Agents saved with a per-level model keep it: when Antigravity's models are first read, they move to the model and that level. Task instances keep the model they started with.
+
+### Choose a folder or a program in the desktop app
+
+- In the desktop app, path fields have a "Choose…" button that opens the system's dialog: an Agent's or a project's local folders, a plugin installed from a local folder, and the command of a local ACP command. Choosing an `.app` fills in the program inside it, and hidden folders such as `~/.local/bin` are shown. The path can still be typed.
+- In a browser the fields are unchanged: a web page cannot learn a folder's full path.
+
 ## v0.2.7
 
 Besides Pi and Claude Code, Agents can now run on Codex, Grok, Antigravity or any ACP command you add, all with your own login on this computer; you pick who runs an Agent from the message box before any message, and the conversation carries over. All console tabs share one live connection, so several open tabs no longer freeze the browser. The console redesign reaches task details, plugin details and dialogs; platform Agents can use model providers from plugins; logs and error messages are in English.

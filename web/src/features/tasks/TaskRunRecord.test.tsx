@@ -60,3 +60,22 @@ it('a task turn whose runtime reported no usage says so instead of "0 tokens", c
   expect(await screen.findByText("The runtime didn't report token usage for this turn.")).toBeInTheDocument()
   expect(screen.queryByText(/\b0 tokens?\b/)).toBeNull()
 })
+
+it.each([
+  ['completed', 'No result'],
+  ['failed', 'No result'],
+  ['interrupted', 'No result'],
+  ['running', 'Running'],
+] as const)('task run %s: a tool without its end event shows “%s”', async (status, label) => {
+  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ run: { ...dto.run, status, endedAt: status === 'running' ? null : dto.run.endedAt }, entries: [tool('started')] }))))
+  renderRecord()
+  const list = await screen.findByRole('list', { name: 'Tool calls' })
+  expect(within(list).getByRole('listitem')).toHaveTextContent(`fixture_tool${label}`)
+})
+
+it('a task tool the server closed as no_result shows “No result”', async () => {
+  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ entries: [tool('started'), tool('no_result')] }))))
+  renderRecord()
+  const list = await screen.findByRole('list', { name: 'Tool calls' })
+  expect(within(list).getByRole('listitem')).toHaveTextContent('fixture_toolNo result')
+})

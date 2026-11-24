@@ -76,3 +76,24 @@ it('an Inbox message cancelled, promoted to interrupt one by one (with the messa
   expect(steps.map(step => step.field)).toEqual([`whenBusy=queue → interrupt · messageId=${messageId}`, `messageId=${messageId}`, 'abortRequestedAt · stop=true', 'abortRequestedAt · status=aborting'])
   expect(steps[2].tone).not.toBe('hot')
 })
+
+const execute = (state: Schemas['ToolState']): Schemas['TimelineTool'] => ({ type: 'tool', at: '2026-11-24T08:00:05Z', toolCallId: 'exec-1', toolName: 'execute', state, endedAt: state === 'started' ? null : '2026-11-24T08:01:35Z', durationMs: null })
+const ended: Schemas['TimelineEnded'] = { type: 'ended', at: '2026-11-24T08:01:35Z', status: 'completed', endReason: null, errorCode: null }
+
+it('a tool closed as no_result, or an old one still on started in a turn that has ended, reads “No result” in a neutral step', () => {
+  for (const entries of [[execute('no_result')], [execute('started'), ended]]) {
+    const step = buildSteps(null, entries, runtimeName)[0]
+    expect(step.detail).toBe('No result')
+    expect(step.tone).toBe('neutral')
+  }
+  // While the turn goes on, a started tool is running.
+  const running = buildSteps(null, [execute('started')], runtimeName)[0]
+  expect(running.detail).toBe('Running')
+  expect(running.tone).toBe('warn')
+})
+
+it('the turn that ended because the runtime went quiet while background commands ran says so, with the wait in minutes', () => {
+  const entry: Schemas['TimelineBackgroundWaitTimeout'] = { type: 'background_wait_timeout', at: '2026-11-24T08:11:35Z', limitMs: 10 * 60_000 }
+  renderWithQuery(<TimelineSteps steps={buildSteps(null, [execute('no_result'), entry, ended], runtimeName)} />)
+  expect(screen.getByText('While waiting on background commands, the runtime sent nothing for 10 min; the turn ended here')).toBeVisible()
+})

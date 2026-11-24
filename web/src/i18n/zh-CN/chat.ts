@@ -76,6 +76,8 @@ export const chat = {
     started: '进行中',
     succeeded: '成功',
     failed: '失败',
+    // The turn ended while the tool was still open and the runtime never said how it ended: neither a success nor a failure.
+    no_result: '没有结果',
   } satisfies Record<S['ToolState'], string>,
   sessionDivider: '会话已切换，页面历史保留',
   // Where the conversation was handed to another runtime (Run.contextHandoff), and where the model changed on the same runtime.

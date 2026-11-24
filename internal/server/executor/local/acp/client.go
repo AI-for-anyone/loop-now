@@ -37,6 +37,26 @@ type Options struct {
 	// LoadQuiet is how long a session/load that keeps replaying but never answers may stay quiet before it counts as
 	// loaded (some agents never answer it); 0 means 2 seconds.
 	LoadQuiet time.Duration
+	// Background, when set, keeps a turn open after its prompt has returned while the agent goes on with work it
+	// reports on by itself (see Background); nil ends the turn with the prompt.
+	Background *Background
+}
+
+// Background is how a turn waits for work the agent goes on with after its prompt has returned. Antigravity moves a
+// command that takes longer than its wait to the background and answers the prompt; the command's end comes later,
+// with no prompt open, and the agent then replies by itself, each reply ending with usage_update. Such a turn ends once
+// no holding tool is open and no reply is open or expected, after Settle without any message from the agent.
+type Background struct {
+	// Holds reports whether a tool still open when the prompt returns goes on and is reported on later; kind is its
+	// ACP kind and rawInput its raw input.
+	Holds func(kind string, rawInput json.RawMessage) bool
+	// QuietLimit ends a turn that a holding tool keeps open once nothing has come from the agent for this long (the
+	// end of a command may be lost); its open tools are closed without a result.
+	QuietLimit time.Duration
+	// ReplyQuietLimit ends a turn that only waits for the agent's own reply once nothing has come for this long.
+	ReplyQuietLimit time.Duration
+	// Settle is how long a turn that waits for nothing stays open for a reply the agent may still begin.
+	Settle time.Duration
 }
 
 // RPCError is an error response from the agent.

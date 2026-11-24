@@ -95,7 +95,7 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 func taskNodeEventEntry(ev store.LifecycleEvent) (any, bool) {
 	if ev.Type == "tool.changed" {
 		id, name, state := str(ev.Data, "toolCallId"), str(ev.Data, "toolName"), str(ev.Data, "state")
-		if id == "" || name == "" || (state != "started" && state != "succeeded" && state != "failed") {
+		if id == "" || name == "" || (state != "started" && state != "succeeded" && state != "failed" && state != "no_result") {
 			return nil, false
 		}
 		item := apitypes.TimelineToolEntry{TimelineBase: base(apitypes.TimelineTool, ev.At), ToolCallID: id, ToolName: name, State: state}

@@ -45,6 +45,7 @@ describe('the Chinese copy table', () => {
     expect(t.stats.wan(1_234_567)).toBe('123 万')
     expect(t.stats.clock(100)).toBe('1 分 40 秒')
     expect(formatCount(1234567)).toBe('1,234,567')
+    expect(t.timeline.step.background_wait_timeout(10 * 60_000)).toBe('等后台命令时运行时 10 分钟没有任何消息，这一轮在这里结束')
   })
 
   it('dates and times use the Chinese formats with a 24-hour clock', () => {

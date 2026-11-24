@@ -24,7 +24,10 @@ type sink struct {
 	text     strings.Builder
 	tools    []string
 	commands []string
+	timedOut []time.Duration
 }
+
+func (s *sink) toolList() string { s.mu.Lock(); defer s.mu.Unlock(); return strings.Join(s.tools, ",") }
 
 func (s *sink) TextDelta(d string) { s.mu.Lock(); s.text.WriteString(d); s.mu.Unlock() }
 func (s *sink) ToolStarted(id, name string) {
@@ -39,6 +42,16 @@ func (s *sink) ToolEnded(id, name string, isError bool) {
 		state = "error"
 	}
 	s.tools = append(s.tools, "end:"+name+":"+state)
+	s.mu.Unlock()
+}
+func (s *sink) ToolNoResult(id, name string) {
+	s.mu.Lock()
+	s.tools = append(s.tools, "end:"+name+":none")
+	s.mu.Unlock()
+}
+func (s *sink) BackgroundWaitTimedOut(limit time.Duration) {
+	s.mu.Lock()
+	s.timedOut = append(s.timedOut, limit)
 	s.mu.Unlock()
 }
 func (s *sink) ToolCommand(id, name, command string) {
@@ -284,5 +297,148 @@ func TestPromptFailures(t *testing.T) {
 	<-c.Done()
 	if _, err := c.Prompt(ctx(t), sess.ID, "again", &sink{}); !errors.Is(err, acp.ErrExited) {
 		t.Fatalf("after the exit: %v", err)
+	}
+}
+
+func newSession(t *testing.T, c *acp.Client, h *harness) string {
+	t.Helper()
+	sess, err := c.NewSession(ctx(t), h.cwd, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sess.ID
+}
+
+// A tool the agent still has open when its turn ends is closed without a result (neither a success nor a failure),
+// whatever the agent.
+func TestTurnEndClosesOpenTools(t *testing.T) {
+	for _, flavor := range []string{"grok", "agy"} {
+		h := newHarness(t, flavor)
+		c, _ := h.start(acp.Options{})
+		s := &sink{}
+		if r := prompt(t, c, newSession(t, c, h), "fake:toolopen sleep 9", s); r.Outcome != runturn.OutcomeCompleted || r.Text != "ran" || s.toolList() != "start:execute,end:execute:none" {
+			t.Fatalf("%s: %+v %s", flavor, r, s.toolList())
+		}
+	}
+}
+
+// background is how Antigravity's turns wait for its background commands, with short limits for tests: the agent
+// takes 400ms to begin a reply of its own, longer than the settle time.
+func background(quiet time.Duration) *acp.Background {
+	return &acp.Background{
+		Holds: func(kind string, raw json.RawMessage) bool {
+			var in struct{ IsDaemon bool }
+			_ = json.Unmarshal(raw, &in)
+			return kind == "execute" && !in.IsDaemon
+		},
+		QuietLimit: quiet, ReplyQuietLimit: 5 * time.Second, Settle: 200 * time.Millisecond,
+	}
+}
+
+func agyBackgroundHarness(t *testing.T) *harness {
+	h := newHarness(t, "agy")
+	h.env = []string{"FAKEACP_WAKE_DELAY=400ms"}
+	return h
+}
+
+// Commands the agent moved to the background keep the turn open after the prompt has returned. A command that ends
+// before the prompt does reports its end within the prompt; one still running when the prompt returns reports it later,
+// and the agent then replies by itself. Those ends and replies belong to the turn, which ends once no command runs and
+// no reply is open or expected. A command that ends during such a reply is answered by another one. The ends carry
+// the command's output as a content list, as agy's do.
+func TestBackgroundCommandsHoldTheTurn(t *testing.T) {
+	h := agyBackgroundHarness(t)
+	c, _ := h.start(acp.Options{Background: background(time.Minute)})
+	sess := newSession(t, c, h)
+	s := &sink{}
+	// now ends within the prompt; 300ms ends and is reported from 700ms to 1100ms; 900ms ends during that reply and is
+	// reported from 1500ms; 2500ms is reported from 2900ms.
+	r := prompt(t, c, sess, "fake:background now 300ms 900ms 2500ms", s)
+	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded\n\nreported 1\n\nreported 1\n\nreported 1" || r.Text != s.String() {
+		t.Fatalf("result: %+v %q", r, s.String())
+	}
+	if s.toolList() != "start:execute,end:execute:ok,start:execute,start:execute,start:execute,end:execute:ok,end:execute:ok,end:execute:ok" || len(s.timedOut) != 0 {
+		t.Fatalf("tools: %s %v", s.toolList(), s.timedOut)
+	}
+	// Commands that end before the agent begins its reply are reported together.
+	s = &sink{}
+	if r := prompt(t, c, sess, "fake:background 300ms 400ms", s); r.Text != "backgrounded\n\nreported 2" || s.toolList() != "start:execute,start:execute,end:execute:ok,end:execute:ok" {
+		t.Fatalf("together: %+v %s", r, s.toolList())
+	}
+	// A command that ends within the prompt holds nothing: the turn ends with the prompt.
+	s = &sink{}
+	start := time.Now()
+	if r := prompt(t, c, sess, "fake:background now", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:ok" || time.Since(start) > time.Second {
+		t.Fatalf("within the prompt: %+v %s after %v", r, s.toolList(), time.Since(start))
+	}
+}
+
+// When the end of a background command never comes, the turn ends after the quiet limit: the command is closed
+// without a result and the sink is told why.
+func TestBackgroundEndLost(t *testing.T) {
+	h := agyBackgroundHarness(t)
+	c, _ := h.start(acp.Options{Background: background(600 * time.Millisecond)})
+	s := &sink{}
+	start := time.Now()
+	r := prompt(t, c, newSession(t, c, h), "fake:background lost", s)
+	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" {
+		t.Fatalf("result: %+v %s", r, s.toolList())
+	}
+	if len(s.timedOut) != 1 || s.timedOut[0] != 600*time.Millisecond || time.Since(start) < 600*time.Millisecond {
+		t.Fatalf("quiet limit: %v after %v", s.timedOut, time.Since(start))
+	}
+}
+
+// A daemon command does not hold the turn (it may never end); it is closed without a result when the turn ends. An
+// agent run without Background holds nothing.
+func TestBackgroundDaemonAndOtherAgentsDoNotHold(t *testing.T) {
+	h := agyBackgroundHarness(t)
+	c, _ := h.start(acp.Options{Background: background(time.Minute)})
+	s := &sink{}
+	if r := prompt(t, c, newSession(t, c, h), "fake:background daemon", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" || len(s.timedOut) != 0 {
+		t.Fatalf("daemon: %+v %s %v", r, s.toolList(), s.timedOut)
+	}
+	g := newHarness(t, "grok")
+	gc, _ := g.start(acp.Options{})
+	s = &sink{}
+	start := time.Now()
+	if r := prompt(t, gc, newSession(t, gc, g), "fake:background 2s", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" || time.Since(start) > time.Second {
+		t.Fatalf("without Background: %+v %s after %v", r, s.toolList(), time.Since(start))
+	}
+}
+
+// A stop while the turn waits for a background command sends session/cancel (which ends the agent's commands) and
+// ends the turn as stopped at once.
+func TestBackgroundStop(t *testing.T) {
+	h := agyBackgroundHarness(t)
+	c, _ := h.start(acp.Options{Background: background(time.Minute)})
+	sess := newSession(t, c, h)
+	s := &sink{}
+	done := make(chan runturn.Result, 1)
+	go func() {
+		r, _ := c.Prompt(ctx(t), sess, "fake:background 10s", s)
+		done <- r
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for s.String() != "backgrounded" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond) // the prompt has returned and the turn waits
+	if !c.InPrompt() {
+		t.Fatal("the turn waits for the command")
+	}
+	if err := c.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-done:
+		if r.Outcome != runturn.OutcomeAborted || s.toolList() != "start:execute,end:execute:none" {
+			t.Fatalf("stopped: %+v %s", r, s.toolList())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the turn did not end after the stop")
+	}
+	if c.InPrompt() {
+		t.Fatal("still in a prompt")
 	}
 }

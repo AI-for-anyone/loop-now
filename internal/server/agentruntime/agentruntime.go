@@ -240,7 +240,8 @@ var registry = []Runtime{
 	},
 	{
 		// Antigravity runs as `agy acp`, an Agent Client Protocol agent, with this computer's login (kept under the real
-		// HOME). Its model ids carry the thinking level.
+		// HOME). It lists a model once per thinking level (gemini-4-neon-high); the catalog has one model with those
+		// levels (see modelcatalog.MergeLevelModels).
 		ID:           Antigravity,
 		Name:         "Antigravity",
 		Providers:    []string{AntigravityProvider},

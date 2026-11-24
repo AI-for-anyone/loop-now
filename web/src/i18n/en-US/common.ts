@@ -31,4 +31,6 @@ export const common = {
   required: 'Required',
   upload: 'Upload',
   uploading: 'Uploading…',
+  // Next to a path input in the desktop window: opens the system's own dialog for a folder or file.
+  choosePath: 'Choose…',
 } satisfies Messages['common']
