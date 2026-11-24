@@ -195,6 +195,11 @@ func (s *Store) RecordRuntimeSessionFile(ctx context.Context, agentID uuid.UUID,
 // DispatchHandoff is called when a message is dispatched to the Agent: it returns the pending handoff (nil when there
 // is none) and marks it dispatched, since the new runtime now runs a message.
 func (s *Store) DispatchHandoff(ctx context.Context, agentID uuid.UUID) (*PendingHandoff, error) {
+	// Most messages have no pending handoff: find that out without taking a write transaction.
+	var pending bool
+	if err := s.Pool.QueryRow(ctx, `SELECT handoff IS NOT NULL FROM agent_sessions WHERE agent_id = $1`, agentID).Scan(&pending); err != nil || !pending {
+		return nil, notFoundIfNoRows(err, "Agent session")
+	}
 	var out *PendingHandoff
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var raw []byte

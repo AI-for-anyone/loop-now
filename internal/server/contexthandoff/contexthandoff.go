@@ -126,8 +126,13 @@ func Build(messages []Message, from, to string, budget int) Block {
 
 func intro(from, to string, included, total, omitted, images int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "The runtime that runs you changed from %s to %s. You start a new session: below is the conversation saved before this message, "+
-		"taken from the platform's record, not from your own memory. It is context, not a new request; answer the message that follows it.\n", from, to)
+	if from == to {
+		fmt.Fprintf(&b, "You start a new %s session after the runtime that runs you was changed back. ", to)
+	} else {
+		fmt.Fprintf(&b, "The runtime that runs you changed from %s to %s. You start a new session. ", from, to)
+	}
+	b.WriteString("Below is the conversation saved before this message, taken from the platform's record, not from your own memory. " +
+		"It is context, not a new request; answer the message that follows it.\n")
 	if omitted == 0 {
 		fmt.Fprintf(&b, "All %d saved messages are included in full. ", total)
 	} else {

@@ -146,3 +146,12 @@ func TestClampBudget(t *testing.T) {
 		}
 	}
 }
+
+// When the conversation goes to a new session of the same runtime (the change was undone after the other runtime had
+// already run a message), the block says so instead of naming a change from a runtime to itself.
+func TestBuildIntoANewSessionOfTheSameRuntime(t *testing.T) {
+	block := contexthandoff.Build(conversation(1, 10), "Pi", "Pi", contexthandoff.DefaultBudget)
+	if strings.Contains(block.Text, "from Pi to Pi") || !strings.Contains(block.Text, "a new Pi session") {
+		t.Fatalf("wrong introduction:\n%s", block.Text)
+	}
+}
