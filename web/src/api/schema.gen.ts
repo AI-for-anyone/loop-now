@@ -3974,8 +3974,9 @@ export interface components {
          *     accepted at any time, also while the Agent is replying, and applies from the next message dispatched. The new
          *     runtime starts its own session and is given a selection of the saved conversation with its first message
          *     (Run.contextHandoff); the session number does not change, sleeps are kept, and the old runtime's session is
-         *     neither migrated nor deleted. When the runtime is changed back before the new one has run any message, the
-         *     earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
+         *     neither migrated nor deleted. When the runtime is changed back before any message has reached the new one (a
+         *     message that failed to start there, for example because it is not installed or not logged in, does not count),
+         *     the earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
          *     keeps that runtime's session. Records from before this behaviour show a session reset with reason
          *     runtime_changed at each change of runtime.
          */
@@ -4445,9 +4446,9 @@ export interface components {
          *     interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
          *     tool state and images are not carried. The block says how many messages were left out, and the Agent can read
          *     them with `loopctl conversation`.
-         *     The block goes with every message until one of them reaches the new runtime and its session is saved, so a turn
-         *     that fails before that (for example because the runtime is not logged in) does not lose it; each turn that
-         *     carried it has this record.
+         *     The block goes with every message until one that carries it reaches the new runtime and either completes or has
+         *     its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
+         *     lose it; each turn that carried it has this record.
          */
         ContextHandoff: {
             /** @description The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message */
@@ -4496,6 +4497,40 @@ export interface components {
             /** @description The run this message belongs to; a user message and its reply carry the same run */
             run: components["schemas"]["Run"];
             images?: components["schemas"]["MessageImage"][];
+        };
+        ConversationPage: {
+            messages: components["schemas"]["ConversationEntry"][];
+            /** @description Older messages exist; read them with before set to the first message's id */
+            hasMore: boolean;
+            /** @description Newer messages exist; read them with after set to the last message's id */
+            hasMoreAfter: boolean;
+            /** @description Messages in the whole conversation */
+            total: number;
+        };
+        ConversationEntry: {
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["MessageRole"];
+            origin: components["schemas"]["MessageOrigin"];
+            /** @description The full text; for a reply that failed or was interrupted, the part that was written */
+            text: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: uuid
+             * @description The turn the message belongs to; a request and its reply share it
+             */
+            runId: string;
+            runStatus: components["schemas"]["RunStatus"];
+            /** @description Images attached to the message (not returned) */
+            images: number;
+            /** @description On a reply, the tools the turn used, in order of first use; empty on requests */
+            tools: components["schemas"]["ConversationToolUse"][];
+        };
+        ConversationToolUse: {
+            name: string;
+            calls: number;
+            failed: number;
         };
         /**
          * @description A page of conversation history plus turn counts. Turns are counted the same way as in the console's conversation
