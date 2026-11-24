@@ -41,6 +41,7 @@ export function makeRun(overrides: Partial<Schemas['Run']> = {}): Schemas['Run']
     tools: [],
     usage: { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     model: null,
+    selection: null,
     ...overrides,
   }
 }

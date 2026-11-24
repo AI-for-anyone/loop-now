@@ -72,7 +72,7 @@ func usageTotals() map[string]any {
 func run() map[string]any {
 	return map[string]any{"id": runUUID, "status": "failed", "phase": nil, "endReason": nil,
 		"errorCode": "pi_error", "errorMessage": "model returned an error", "configVersion": 1, "whenBusy": nil, "queuedAt": now, "startedAt": now,
-		"runningAt": now, "abortRequestedAt": nil, "endedAt": now, "tools": []any{}, "usage": usageTotals(), "model": modelRef}
+		"runningAt": now, "abortRequestedAt": nil, "endedAt": now, "tools": []any{}, "usage": usageTotals(), "model": modelRef, "selection": nil}
 }
 
 func runTimeline() map[string]any {
@@ -115,7 +115,7 @@ func agentStatus() map[string]any {
 
 func modelProviderList() map[string]any {
 	return map[string]any{"piVersion": "1.1.0", "catalogGeneratedAt": nil,
-		"providers": []any{map[string]any{"id": "anthropic", "name": nil, "source": "builtin", "runtime": "pi", "pluginId": nil, "pluginDisplayName": nil, "unavailableReason": nil, "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1}}}
+		"providers": []any{map[string]any{"id": "anthropic", "name": nil, "source": "builtin", "runtime": "pi", "pluginId": nil, "pluginDisplayName": nil, "unavailableReason": nil, "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1, "usable": nil}}}
 }
 
 func modelList() map[string]any {

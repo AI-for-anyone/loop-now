@@ -125,6 +125,11 @@ type ModelProvider struct {
 	APIKeyEnvVars     []string        `json:"apiKeyEnvVars"`
 	AuthMethods       []string        `json:"authMethods"`
 	ModelCount        int             `json:"modelCount"`
+	// Usable says whether the Agent, project or new platform Agent named in the query can run the provider without
+	// entering an account first; null when the query names none.
+	Usable *bool `json:"usable"`
+	// Models is set only with include=models.
+	Models []Model `json:"models,omitempty"`
 }
 
 // ModelList mirrors the ModelList schema.

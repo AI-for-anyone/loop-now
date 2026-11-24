@@ -18,8 +18,8 @@ export function runtimeList(claudeCode: Partial<Schemas['RuntimeStatus']> = {}):
 export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
   return {
     runtimes: [
-      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true } },
-      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false } },
+      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true }, setup: null },
+      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false }, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' } },
     ],
   }
 }

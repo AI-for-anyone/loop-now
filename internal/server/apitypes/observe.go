@@ -142,6 +142,7 @@ const (
 	TimelineMessageCancelled  = "message_cancelled"
 	TimelineExtensionUI       = "extension_ui"
 	TimelineModelRateLimit    = "model_rate_limit"
+	TimelineContextHandoff    = "context_handoff"
 )
 
 // TimelineBase holds the fields every entry has.
@@ -338,6 +339,12 @@ type TimelineEndedEntry struct {
 type TimelineSessionMissingEntry struct {
 	TimelineBase
 	SessionFile *string `json:"sessionFile"`
+}
+
+// TimelineContextHandoffEntry mirrors the TimelineContextHandoff schema.
+type TimelineContextHandoffEntry struct {
+	TimelineBase
+	ContextHandoff
 }
 
 // TimelineSleepEntry exposes the persistent sleep transition, never its internal scheduling fields.
