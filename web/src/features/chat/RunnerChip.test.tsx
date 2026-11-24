@@ -118,14 +118,14 @@ describe('who runs it, on the message box', () => {
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' }, thinkingLevel: null, serviceTier: null }]))
   })
 
-  it('when the server refuses a change while replying, says so in the popover and keeps it open', async () => {
+  it('when a change cannot be saved, the popover stays open and says why', async () => {
     const { user } = await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi' }), () =>
-      HttpResponse.json(errorBody('agent_not_idle', 'The Agent is replying'), { status: 409 }),
+      HttpResponse.json(errorBody('validation_failed', 'model.modelId: no such model', { fields: [{ field: 'model.modelId', message: 'no such model' }] }), { status: 422 }),
     )
     await user.click(chip())
     const popover = await screen.findByRole('dialog', { name: 'Runs on' })
     await chooseModel(user, popover, 'haiku', { runtime: 'Claude Code' })
-    expect(await within(popover).findByRole('alert')).toHaveTextContent('The Agent is replying. Switch after this reply finishes.')
+    expect(await within(popover).findByRole('alert')).toHaveTextContent('no such model')
     expect(screen.getByRole('dialog', { name: 'Runs on' })).toBeInTheDocument()
   })
 })

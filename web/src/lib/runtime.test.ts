@@ -6,7 +6,7 @@ import { apiUrl, errorBody } from '@/test/api'
 import { renderHookWithQuery } from '@/test/render'
 import { runtimeDefinitions } from '@/test/runtimes'
 import { server } from '@/test/server'
-import { canRun, railOrder, runtimeLookup, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
+import { canRun, railOrder, runtimeGlyph, runtimeLookup, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
 
 const definitions = runtimeDefinitions().runtimes
 // A runtime the contract does not have yet, to show nothing here depends on the two known ones.
@@ -49,6 +49,14 @@ describe('runtime lookup', () => {
     await waitFor(() => expect(failed.current.error).not.toBeNull())
     expect(failed.current.get('pi')).toBeUndefined()
     expect(failed.current.name('pi')).toBe('pi')
+  })
+})
+
+describe('runtime marks', () => {
+  it('a runtime with a glyph of its own has its strokes; any other has none and is marked with its initial', () => {
+    expect(runtimeGlyph('pi')?.length).toBeGreaterThan(0)
+    expect(runtimeGlyph('claude-code')?.length).toBeGreaterThan(0)
+    expect(runtimeGlyph('codex' as Schemas['AgentRuntime'])).toBeNull()
   })
 })
 
