@@ -94,3 +94,13 @@ export function railOrder(definitions: readonly RuntimeDefinition[], readiness: 
   }
   return definitions.map((definition, index) => ({ definition, index, rank: rank(definition) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(({ definition }) => definition)
 }
+
+// The glyph inside a runtime's mark (components/runner-picker/RuntimeMark.tsx), as strokes on its 32×32 grid: a terminal prompt for Claude
+// Code, π for Pi. The mark's shape and the glyph's color follow the runtime's capabilities; a runtime without a glyph here is marked with
+// its initial.
+const glyphs: Partial<Record<AgentRuntime, readonly string[]>> = {
+  'claude-code': ['M9.5 14.5l4.2 3.6-4.2 3.6', 'M16.4 22.4h6.4'],
+  pi: ['M9.6 12.2c1.3-.9 2.6-1.2 4.2-1.2h8.8', 'M13.6 11.4c-.2 4-.9 7.4-2.4 10.4', 'M19.4 11.4c-.4 3.4-.3 6.3.4 8.2.5 1.3 1.6 1.9 2.8 1.3'],
+}
+
+export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => glyphs[id] ?? null

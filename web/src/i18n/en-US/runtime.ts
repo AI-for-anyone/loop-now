@@ -10,9 +10,6 @@ export const runtime = {
     plugins: "Plugins that only contain Pi extensions don't apply to it; plugin skills and MCP tools work.",
     piCommands: 'There are no /pi: commands.',
   },
-  switch: {
-    notIdle: 'The Agent is replying. Switch after this reply finishes.',
-  },
   status: {
     title: 'Agent runtimes',
     intro: {

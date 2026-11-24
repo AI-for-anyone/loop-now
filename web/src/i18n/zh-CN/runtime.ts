@@ -17,10 +17,6 @@ export const runtime = {
     plugins: '只含 Pi 扩展的插件对它不起作用；插件的技能和 MCP 工具可以用。',
     piCommands: '没有 /pi: 命令。',
   },
-  // A change of runtime while the Agent is replying.
-  switch: {
-    notIdle: 'Agent 正在回复，等这次回复结束后再切换。',
-  },
   // Runtime status in global settings (GET /runtimes); the problems also explain a runtime in the runner picker's setup panel.
   status: {
     title: 'Agent 运行时',

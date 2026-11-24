@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { useQueryClient } from '@tanstack/react-query'
-import { ApiError, type Schemas } from '@/api/client'
+import type { Schemas } from '@/api/client'
 import { keys, useModels, useUpdateAgent } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { RuntimeMark } from '@/components/runner-picker/RuntimeMark'
@@ -72,7 +72,6 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
     const tier = next.provider !== 'openai-codex' && agent.serviceTier && agent.serviceTier !== 'default' ? { serviceTier: null } : {}
     save({ model: next, thinkingLevel, ...tier }, true)
   }
-  const notIdle = failure instanceof ApiError && failure.code === 'agent_not_idle'
 
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
@@ -126,13 +125,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
             </div>
             {failure !== null && (
               <div className="shrink-0 border-t-2 border-dashed border-ink/30 px-4 py-2.5">
-                {notIdle ? (
-                  <p role="alert" className="text-[13px] font-black text-red-text">
-                    {t.runtime.switch.notIdle}
-                  </p>
-                ) : (
-                  <ErrorAlert error={failure} />
-                )}
+                <ErrorAlert error={failure} />
               </div>
             )}
           </PopoverPrimitive.Content>

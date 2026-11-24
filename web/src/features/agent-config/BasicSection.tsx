@@ -1,6 +1,5 @@
 import { useId, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CircleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +8,7 @@ import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { IdField } from '@/components/IdField'
 import { RunnerPicker } from '@/components/runner-picker/RunnerPicker'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
-import { ApiError, type Schemas } from '@/api/client'
+import type { Schemas } from '@/api/client'
 import { invalidateModelCatalog, useModelProviders, useUpdateAgent } from '@/api/queries'
 import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
@@ -100,8 +99,6 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   const shownInline = (field: string) => field === 'name' || field === 'thinkingLevel' || field === 'serviceTier' || isModelField(field)
   const nameError = nameRule ?? agentNameError(update.error, agent.scope)
-  // Per the contract, updating an Agent returns 409 agent_not_idle (because the Agent is replying) only when it switches the runtime.
-  const notIdle = update.error instanceof ApiError && update.error.code === 'agent_not_idle'
 
   return (
     <Section id="basic" title={t.config.basic.title}>
@@ -140,14 +137,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
         <RuntimeDifferences runtime={runtimes.get(nextRuntime)} className="col-span-full" />
       </div>
       <p className="text-xs text-ink-500">{t.config.basic.thinking.nextRun}</p>
-      {notIdle ? (
-        <Alert variant="error">
-          <CircleAlertIcon />
-          <AlertDescription className="text-[13.5px] leading-[1.7]">{t.runtime.switch.notIdle}</AlertDescription>
-        </Alert>
-      ) : (
-        !isAgentNameConflict(update.error) && <ErrorAlert error={unmatchedFieldError(update.error, shownInline)} />
-      )}
+      {!isAgentNameConflict(update.error) && <ErrorAlert error={unmatchedFieldError(update.error, shownInline)} />}
       {serverUpdated && dirty && (
         <Alert variant="warning" role="status">
           <AlertDescription className="text-[13.5px] font-bold text-ink">{t.config.basic.serverUpdated}</AlertDescription>

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, errorBody, makeAgent } from '@/test/api'
+import { apiUrl, errorBody, makeAgent, makeRun } from '@/test/api'
 import { renderConfig, withClaudeCode } from '@/test/config'
 import { chooseModel, chooseRunner, runnerTab } from '@/test/model-picker'
 import { runtimeList } from '@/test/runtimes'
@@ -77,21 +77,29 @@ describe('Choosing Claude Code', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('switching while the Agent is replying (409 agent_not_idle): says to switch after this reply finishes', async () => {
+  it('a change of runtime while the Agent is replying is saved like any other change and applies from the next message', async () => {
     const agent = makeAgent()
+    const bodies: unknown[] = []
+    let current = agent
     const { user } = await renderConfig({
       agent,
+      status: { busy: true, currentRun: makeRun({ status: 'running', configVersion: 1 }) },
       handlers: [
         catalog,
-        http.patch(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(errorBody('agent_not_idle', 'The Agent is replying; wait for the reply to finish before switching runtimes'), { status: 409 })),
+        http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
+        http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
+          bodies.push(await request.json())
+          current = claudeAgent({ id: agent.id, configVersion: 2 })
+          return HttpResponse.json(current)
+        }),
       ],
     })
     const basic = region('Basics')
     await chooseModel(user, basic, 'sonnet', { runtime: 'Claude Code' })
     await user.click(saveButton())
-    expect(await within(basic).findByRole('alert')).toHaveTextContent(/^The Agent is replying\. Switch after this reply finishes\.$/)
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(within(basic).getByText('Unsaved')).toBeInTheDocument()
+    await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
+    expect(await within(basic).findByText('Saved. The current reply is not affected; changes take effect from the next message.')).toBeInTheDocument()
+    expect(within(basic).queryByRole('alert')).toBeNull()
   })
 })
 
