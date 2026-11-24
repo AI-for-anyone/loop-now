@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -80,6 +81,18 @@ type driver interface {
 	// with the stderr tail added.
 	exited() (code, msg string)
 	crashMessage(p *proc, stderrTail string) string
+	// sessionSaved reports whether the session a reference names (the runtime's own: a file path, a thread id) is saved
+	// where the runtime keeps it. A driver that can only tell by continuing the session returns true here and reports a
+	// missing session when it continues it (see startSpec.runID).
+	sessionSaved(ref string) bool
+}
+
+// fileSessions is sessionSaved for runtimes whose session reference is the path of a file the runtime writes.
+type fileSessions struct{}
+
+func (fileSessions) sessionSaved(ref string) bool {
+	_, err := os.Stat(ref)
+	return err == nil
 }
 
 // taskForker is a driver whose task instances can start from a copy of the regular session (capability taskFork).
@@ -128,9 +141,11 @@ type startSpec struct {
 	// env is the platform's common environment: directories, run PATH, credentials, Lark, Agent token and the Google
 	// refresh channel.
 	env []string
-	// sessionFile is the session file to continue; empty means a new session (on a task instance's first start it forks
-	// from snap.ForkSessionFile).
+	// sessionFile is the session reference to continue (the runtime's own: a file path, a thread id); empty means a new
+	// session (on a task instance's first start it forks from snap.ForkSessionFile).
 	sessionFile string
+	// runID is the run this start is for, for a driver that finds a missing session only when it continues it.
+	runID uuid.UUID
 }
 
 // started is the process a driver started, plus the resources that come with it.

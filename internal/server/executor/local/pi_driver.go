@@ -30,7 +30,10 @@ import (
 
 // piDriver is the bundled Pi runtime: a long-running process in RPC mode, with model credentials provided through the
 // Agent's Pi directory (auth.json, models.json) and the auth refresh channel.
-type piDriver struct{ e *Executor }
+type piDriver struct {
+	fileSessions
+	e *Executor
+}
 
 func (piDriver) name() string { return runtimeName(agentruntime.Pi) }
 
