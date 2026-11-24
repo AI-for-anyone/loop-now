@@ -68,7 +68,7 @@ export function RunnerRail({ entries, browsed, current, wide, tabId, panelId, on
   }
   return (
     <div className={cn('flex min-w-0 flex-1 flex-col gap-2 bg-paper-tab', wide ? 'border-r-2 border-dashed border-ink/35 px-2.5 pt-3 pb-3' : 'border-b-2 border-dashed border-ink/35 px-2.5 pt-2.5 pb-3')}>
-      <p aria-hidden="true" className="px-1.5 font-display-latin text-[11px] font-extrabold tracking-[0.14em] text-ink-500 uppercase">{t.runtime.picker.rail}</p>
+      {wide && <p aria-hidden="true" className="px-1.5 font-display-latin text-[11px] font-extrabold tracking-[0.14em] text-ink-500 uppercase">{t.runtime.picker.rail}</p>}
       <div role="tablist" aria-label={t.runtime.picker.rail} aria-orientation={wide ? 'vertical' : 'horizontal'} className={cn('flex gap-1.5', wide ? 'flex-col' : 'no-scrollbar -mx-2.5 overflow-x-auto px-2.5 pb-1')}>
         {entries.map((entry, index) => {
           const { definition } = entry

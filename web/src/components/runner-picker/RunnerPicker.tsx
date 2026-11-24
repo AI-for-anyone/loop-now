@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Schemas } from '@/api/client'
 import { useAllModels, useModelProviders, useModelsOf, useRuntimes } from '@/api/queries'
-import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import { t } from '@/i18n'
 import { describeError } from '@/lib/errors'
-import { railOrder, runtimeReadiness, statusOf, useRuntimeLookup, type AgentRuntime, type RuntimeDefinition } from '@/lib/runtime'
+import { canRun, railOrder, runtimeReadiness, statusOf, useRuntimeLookup, type AgentRuntime, type RuntimeDefinition } from '@/lib/runtime'
 import type { ScopeKey } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { ModelList } from './ModelList'
@@ -41,7 +40,7 @@ interface RunnerPickerProps {
   invalid?: boolean
 }
 
-// Below this width the runtimes become a row of cards above the models and the thinking level a segmented row below them.
+// Below this width the runtimes become a row of cards above the models and the thinking level a row below them.
 const WIDE = 600
 const MODEL_LIMIT = 200
 
@@ -90,9 +89,9 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
     version: statusFor(definition)?.version ?? null,
   }))
 
-  // The runtime being looked at: the one picked in the rail, otherwise the one in use, otherwise the first in the rail.
+  // The runtime being looked at: the one picked in the rail, otherwise the one in use, otherwise the first in the rail that can run.
   const [picked, setPicked] = useState<AgentRuntime | null>(null)
-  const browsed = entries.find((entry) => entry.definition.id === (picked ?? valueRuntime)) ?? entries[0]
+  const browsed = entries.find((entry) => entry.definition.id === (picked ?? valueRuntime)) ?? entries.find((entry) => canRun(entry.readiness)) ?? entries[0]
   const browsedId = browsed?.definition.id
 
   const reasonOf = (provider: Provider) => unavailableOf(provider, agentId)
@@ -242,12 +241,15 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           </>
         )}
       </div>
-      <div ref={thinkingRef} className={cn('min-w-0', wide ? 'row-span-2 flex flex-col' : 'border-t-2 border-dashed border-ink/35 px-3 pt-2.5 pb-3')}>
-        {wide ? (
-          <ThinkingRuler value={thinkingLevel} levels={levels} defaultLevel={chosenModel?.defaultThinkingLevel} hasModel={Boolean(chosenModel)} onChange={onThinkingChange} />
-        ) : (
-          <ThinkingLevelPicker value={thinkingLevel} levels={levels} defaultLevel={chosenModel?.defaultThinkingLevel} disabled={levels.length === 0} onChange={onThinkingChange} />
-        )}
+      <div ref={thinkingRef} className={cn('flex min-w-0 flex-col', wide ? 'row-span-2' : 'border-t-2 border-dashed border-ink/35')}>
+        <ThinkingRuler
+          orientation={wide ? 'vertical' : 'horizontal'}
+          value={thinkingLevel}
+          levels={levels}
+          defaultLevel={chosenModel?.defaultThinkingLevel}
+          hasModel={Boolean(chosenModel)}
+          onChange={onThinkingChange}
+        />
       </div>
       {(note || showCurrent || showInUse) && (
         <div className={cn('grid gap-1 border-t-2 border-dashed border-ink/25 px-3.5 py-2 text-[12.5px] font-bold', wide && 'col-start-2')}>

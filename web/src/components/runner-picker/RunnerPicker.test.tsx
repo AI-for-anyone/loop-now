@@ -93,9 +93,16 @@ describe('runner picker', () => {
     const panel = screen.getByRole('tabpanel')
     expect(within(panel).getByRole('heading', { name: 'Set up Claude Code first' })).toBeInTheDocument()
     expect(within(panel).getByText('curl -fsSL https://claude.ai/install.sh | bash')).toBeInTheDocument()
-    expect(within(panel).getByRole('link', { name: 'Other ways to install' })).toHaveAttribute('href', 'https://docs.anthropic.com/en/docs/claude-code/setup')
+    expect(within(panel).getByRole('link', { name: 'Setup guide from the vendor' })).toHaveAttribute('href', 'https://docs.anthropic.com/en/docs/claude-code/setup')
     expect(within(panel).queryByRole('tree')).toBeNull()
     expect(shown()).toBe('anthropic/claude-sonnet-4-5 default')
+  })
+
+  it('with nothing chosen yet, the first runtime that can run is looked at, not one that needs setting up', async () => {
+    useCatalog(runtimeList({ available: false, unavailableReason: 'not_found', login: null, version: null, binaryPath: null }))
+    renderWithQuery(<Picker />)
+    expect(await runnerTab(document.body, 'Claude Code')).toHaveAccessibleName('Claude Code, Not installed')
+    await vi.waitFor(async () => expect(await runnerTab(document.body, 'Pi')).toHaveAttribute('aria-selected', 'true'))
   })
 
   it('a CLI that is logged out shows the login command; checking again reads the status without the cache', async () => {

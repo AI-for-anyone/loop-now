@@ -35,7 +35,7 @@ export function RunnerSetup({ runtime, problem }: { runtime: RuntimeDefinition; 
           <p className="text-[12px] font-black tracking-[0.04em] text-ink-500">{step.label}</p>
           <div className="flex min-w-0 items-center gap-2 rounded-input border-2 border-dashed border-ink/55 bg-white py-1.5 pr-1.5 pl-3">
             <span aria-hidden="true" className="font-mono text-[13px] font-bold text-riso-pink">$</span>
-            <code className="riso-scrollbar min-w-0 flex-1 overflow-x-auto py-1 font-mono text-[13px] leading-snug whitespace-nowrap text-ink">{step.command}</code>
+            <code className="min-w-0 flex-1 py-1 font-mono text-[13px] leading-snug whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">{step.command}</code>
             <Button
               type="button"
               size="xs"

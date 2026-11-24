@@ -92,7 +92,7 @@ export function RunnerChip({ agent }: { agent: Schemas['Agent'] }) {
             align="start"
             sideOffset={10}
             collisionPadding={12}
-            className="z-50 flex h-[min(480px,calc(100dvh-140px))] w-[min(820px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)] outline-none"
+            className="z-50 flex h-[min(480px,calc(100dvh-140px))] max-sm:h-[min(580px,calc(100dvh-120px))] w-[min(820px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)] outline-none"
           >
             {/* A strip in the message bar's yellow: what this is and when a choice applies. */}
             <div className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b-2 border-ink bg-tint-yellow px-4 py-2">

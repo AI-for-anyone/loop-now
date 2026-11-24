@@ -88,7 +88,7 @@ export const runtime = {
       reinstall: 'Installing it again usually fixes this:',
       copy: 'Copy',
       copied: 'Copied',
-      docs: 'Other ways to install',
+      docs: 'Setup guide from the vendor',
       recheck: 'Check again',
       rechecking: 'Checking…',
       locked: (name: string) => `${name} can't be chosen until it's set up.`,

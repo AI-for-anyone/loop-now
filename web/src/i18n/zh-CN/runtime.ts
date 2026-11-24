@@ -106,7 +106,7 @@ export const runtime = {
       reinstall: '重新装一次通常就好了：',
       copy: '复制',
       copied: '已复制',
-      docs: '其他安装方式',
+      docs: '官方的安装和登录说明',
       recheck: '再检查一次',
       rechecking: '正在检查…',
       locked: (name: string) => `准备好之前不能选 ${name}。`,
