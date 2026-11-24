@@ -186,3 +186,23 @@ func TestCompactSurvivesCancelledRequest(t *testing.T) {
 		t.Fatalf("compaction result: %+v", c)
 	}
 }
+
+// A runtime that compacts without reporting token counts (Codex) records the compaction with no counts, not zeros.
+func TestCompactionWithoutCounts(t *testing.T) {
+	e := newEnv(t)
+	e.ex.sessions = e.st
+	e.mustSend("hello", "")
+	e.waitStarted("hello")
+	e.waitIdle()
+	if _, err := e.svc.Compact(context.Background(), e.agent, "nocounts"); err != nil {
+		t.Fatal(err)
+	}
+	e.waitIdle()
+	last, err := e.svc.LastCompaction(context.Background(), e.agent)
+	if err != nil || last == nil {
+		t.Fatal(last, err)
+	}
+	if c := store.ParseCompaction(last.Compaction); c.Outcome != store.CompactionCompacted || c.TokensBefore != nil || c.EstimatedTokensAfter != nil {
+		t.Fatalf("compaction without counts: %+v", c)
+	}
+}

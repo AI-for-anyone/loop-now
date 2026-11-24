@@ -21,7 +21,8 @@ func TestListRuntimes(t *testing.T) {
 	got := decode[struct {
 		Runtimes []runtimes.Status `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtimes?refresh=true", nil))
-	if len(got.Runtimes) != 2 || got.Runtimes[1].ID != "claude-code" || !got.Runtimes[1].Available || got.Runtimes[1].Login.State != "logged_in" {
+	if len(got.Runtimes) != 3 || got.Runtimes[1].ID != "claude-code" || !got.Runtimes[1].Available || got.Runtimes[1].Login.State != "logged_in" ||
+		got.Runtimes[2].ID != "codex" || got.Runtimes[2].Available || *got.Runtimes[2].UnavailableReason != "not_found" {
 		t.Fatalf("runtimes: %+v", got)
 	}
 	e.expect(422, "GET", "/runtimes?refresh=maybe", nil, "X-Contract-Invalid-Request", "1")
@@ -40,7 +41,8 @@ func TestListRuntimeDefinitions(t *testing.T) {
 			Capabilities map[string]any `json:"capabilities"`
 		} `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtime-definitions", nil))
-	if len(got.Runtimes) != 2 || got.Runtimes[0].ID != "pi" || !got.Runtimes[0].IsDefault || len(got.Runtimes[0].Providers) != 0 ||
+	if len(got.Runtimes) != 3 || got.Runtimes[0].ID != "pi" || !got.Runtimes[0].IsDefault || len(got.Runtimes[0].Providers) != 0 ||
+		got.Runtimes[2].ID != "codex" || got.Runtimes[2].Name != "Codex" || len(got.Runtimes[2].Providers) != 1 || got.Runtimes[2].Providers[0] != "codex-cli" ||
 		got.Runtimes[1].ID != "claude-code" || got.Runtimes[1].Name != "Claude Code" || got.Runtimes[1].IsDefault ||
 		len(got.Runtimes[1].Providers) != 1 || got.Runtimes[1].Providers[0] != "claude-code" {
 		t.Fatalf("runtime definitions: %+v", got)

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelcatalog/catalogtest"
 )
@@ -107,9 +108,13 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 	if a, _ := reg.Provider("anthropic"); a.Source != "builtin" {
 		t.Fatalf("a built-in provider should not be replaced by a plugin: %+v", a)
 	}
-	// Published catalog = Pi catalog + the local CLI claude-code + this one plugin provider (anthropic, which has the
-	// same id as a built-in provider, is not merged).
-	if len(reg.Snapshot().Providers) != len(base.Providers)+2 {
-		t.Fatal("should add only the local CLI and one plugin provider")
+	// Published catalog = Pi catalog + the providers of the local CLIs (claude-code, codex-cli) + this one plugin
+	// provider (anthropic, which has the same id as a built-in provider, is not merged).
+	local := 0
+	for _, rt := range agentruntime.All() {
+		local += len(rt.Providers)
+	}
+	if len(reg.Snapshot().Providers) != len(base.Providers)+local+1 {
+		t.Fatal("should add only the local CLIs and one plugin provider")
 	}
 }
