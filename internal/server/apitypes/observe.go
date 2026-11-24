@@ -88,16 +88,18 @@ const (
 
 // Anomaly mirrors the Anomaly schema.
 type Anomaly struct {
-	RunID        uuid.UUID  `json:"runId"`
-	Kind         string     `json:"kind"`
-	At           time.Time  `json:"at"`
-	AgentID      uuid.UUID  `json:"agentId"`
-	AgentName    string     `json:"agentName"`
-	Scope        string     `json:"scope"`
-	ProjectID    *uuid.UUID `json:"projectId"`
-	ErrorCode    *string    `json:"errorCode"`
-	ErrorMessage *string    `json:"errorMessage"`
-	EndReason    *string    `json:"endReason"`
+	RunID     uuid.UUID  `json:"runId"`
+	Kind      string     `json:"kind"`
+	At        time.Time  `json:"at"`
+	AgentID   uuid.UUID  `json:"agentId"`
+	AgentName string     `json:"agentName"`
+	Scope     string     `json:"scope"`
+	ProjectID *uuid.UUID `json:"projectId"`
+	// Runtime is the runtime the run was dispatched to; null for records from before it was kept.
+	Runtime      *string `json:"runtime"`
+	ErrorCode    *string `json:"errorCode"`
+	ErrorMessage *string `json:"errorMessage"`
+	EndReason    *string `json:"endReason"`
 	// Compaction is set only on manual compaction (/compact) runs; null otherwise.
 	Compaction *RunCompaction `json:"compaction"`
 }

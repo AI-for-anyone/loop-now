@@ -3784,6 +3784,9 @@ components:
             - string
             - 'null'
           description: Redacted run error description for this reply, generated from the error code; never echoes raw stderr, credentials or private paths. Omitted when there is no error.
+        runtime:
+          description: The runtime the task instance runs this turn on (from the configuration the task captured), so an error such as runtime_login_required names the right CLI; omitted when it cannot be told.
+          $ref: "#/components/schemas/AgentRuntime"
       description: message.created is a full-content upsert by id. Enqueueing, incremental text updates, status changes and the final state are all sent with the same id; the runId/nodeRunId it belongs to never changes. Clients update by id and do not append duplicate bubbles.
     TaskMessagePage:
       type: object
@@ -4224,16 +4227,19 @@ components:
 
     AgentRuntime:
       type: string
-      enum: [pi, claude-code, codex]
+      enum: [pi, claude-code, codex, grok, antigravity]
       description: |
-        The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code and codex
-        the unmodified Codex installed on the user's computer (looked up on the login shell's PATH; Codex runs as
-        `codex app-server`), each using its own local login; the platform neither reads nor stores their credentials.
-        The runtime follows from the model provider and is not set separately: claude-code when model.provider is
-        claude-code, codex when it is codex-cli, and pi otherwise (the openai-codex provider runs on Pi). Under Claude
+        The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code, codex the
+        unmodified Codex, grok the unmodified Grok CLI and antigravity the unmodified Antigravity CLI (agy) installed on
+        the user's computer (looked up on the login shell's PATH; Codex runs as `codex app-server`, Grok and
+        Antigravity speak the Agent Client Protocol), each using its own local login; the platform neither reads nor
+        stores their credentials. The runtime follows from the model provider and is not set separately: claude-code
+        when model.provider is claude-code, codex when it is codex-cli, grok when it is grok-cli, antigravity when it
+        is antigravity-cli, and pi otherwise (the openai-codex provider runs on Pi). Under Claude
         Code and Codex there are no Pi extensions (/pi: commands, extension conversations, plugin providers); plugin
         Skills and MCP servers work as usual. A Codex Agent's conversation is kept in the user's own Codex home (it
-        shows in the user's Codex history); deleting the Agent archives it there.
+        shows in the user's Codex history); deleting the Agent archives it there. Grok and Antigravity keep their
+        sessions in their own data as well.
 
     ModelProvider:
       type: object
@@ -8685,10 +8691,11 @@ components:
     TimelineContextHandoff:
       description: The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff)
       type: object
-      required: [type, at, fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      required: [type, at, reason, fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
       additionalProperties: false
       properties:
         type: { type: string, enum: [context_handoff] }
+        reason: { type: string, enum: [runtime_changed, session_lost, task_start] }
         at: { type: string, format: date-time }
         fromRuntime: { $ref: "#/components/schemas/AgentRuntime" }
         toRuntime: { $ref: "#/components/schemas/AgentRuntime" }
@@ -9081,7 +9088,7 @@ components:
 
     Run:
       type: object
-      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model, selection]
+      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, usageReported, model, selection]
       additionalProperties: false
       properties:
         triggerInboxMessageId:
@@ -9168,6 +9175,12 @@ components:
         usage:
           description: Sum of all usage of this run (including compaction, cache warming and tool usage)
           $ref: "#/components/schemas/UsageTotals"
+        usageReported:
+          type: boolean
+          description: |
+            Whether the runtime reported token usage for this run. false when it reported none (Agent Client Protocol
+            runtimes such as Grok and Antigravity report only how full the context is) or the run never reached a model
+            (for example it failed before starting); usage is then all zeros and means unknown, not zero."
         model:
           description: Provider and model this run actually used (as reported by the last model call); null when there was no model call
           oneOf:
@@ -9175,10 +9188,12 @@ components:
             - type: "null"
         selection:
           description: |
-            Who ran this turn: the runtime, model provider, model and thinking level the message was handed over with,
-            recorded when the reply began (runningAt). Neighbouring turns with a different provider or model on the same
-            runtime show a change of model; a change of runtime shows as contextHandoff instead. Null until the reply
-            begins, for turns that never began, and for turns recorded before it was kept.
+            Who ran this turn: the runtime, model provider, model and thinking level. Recorded when the run is dispatched
+            (the configuration it is dispatched with), so a run that fails before it starts still names the runtime it
+            was meant for, and replaced when the reply begins (runningAt) by what the runtime actually took. Neighbouring
+            turns with a different provider or model on the same runtime show a change of model; a change of runtime
+            shows as contextHandoff instead. Null while queued and for turns recorded before it was kept (older records
+            that began have it from when the reply began).
           oneOf:
             - $ref: "#/components/schemas/RunSelection"
             - type: "null"
@@ -9219,9 +9234,17 @@ components:
         its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
         lose it; each turn that carried it has this record.
       type: object
-      required: [fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      required: [reason, fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
       additionalProperties: false
       properties:
+        reason:
+          type: string
+          enum: [runtime_changed, session_lost, task_start]
+          description: |
+            Why the conversation was carried: runtime_changed, the Agent's runtime changed; session_lost, the runtime's
+            own session could not be continued (its record is gone or the runtime cannot load it), so a new session
+            started with the saved conversation instead of stopping for the user; task_start, a task instance on a
+            runtime that cannot fork sessions started with the regular conversation.
         fromRuntime:
           $ref: "#/components/schemas/AgentRuntime"
           description: The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message
