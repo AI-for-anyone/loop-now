@@ -1,14 +1,11 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
-	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
-	"loop-now/internal/server/coord"
 )
 
 func (s *Server) getRunTimeline(w http.ResponseWriter, r *http.Request) {
@@ -123,40 +120,15 @@ func queryTime(r *http.Request, name string) (*time.Time, error) {
 
 // streamOverview pushes the overview event stream, with the same snapshot and resume rules as the Agent event stream.
 func (s *Server) streamOverview(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	f, err := s.scopeFilter(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	cursor, resume := r.Header.Get("Last-Event-ID"), false
-	if cursor != "" {
-		first, err := s.Coord.OverviewFirstID(ctx)
-		if err == nil && first != "" && coord.CompareIDs(cursor, first) >= 0 {
-			last, err := s.Coord.OverviewLastID(ctx)
-			resume = err == nil && coord.CompareIDs(cursor, last) <= 0
-		}
+	ls, err := s.openOverviewStream(r.Context(), f, r.Header.Get("Last-Event-ID"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
 	}
-	var snap apitypes.SseOverviewSnapshot
-	if !resume {
-		var err error
-		snap, cursor, err = s.Conv.OverviewSnapshot(ctx, f)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-	}
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
-	h.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if !resume {
-		data, _ := json.Marshal(snap)
-		if !writeEvent(w, cursor, apitypes.EventOverviewSnapshot, data) {
-			return
-		}
-	}
-	_ = http.NewResponseController(w).Flush()
-	s.pumpEventsFiltered(w, r, cursor, s.readOverview, overviewKeep(f), "stream", "overview")
+	s.serveStream(w, r, ls, "stream", "overview")
 }
