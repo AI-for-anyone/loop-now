@@ -60,6 +60,8 @@ describe('runtime marks', () => {
     expect(runtimeGlyph('grok')?.length).toBeGreaterThan(0)
     expect(runtimeGlyph('antigravity')?.length).toBeGreaterThan(0)
     expect(runtimeGlyph('acme' as Schemas['AgentRuntime'])).toBeNull()
+    // An id that is a property of every object is still no runtime's.
+    expect(runtimeGlyph('constructor' as Schemas['AgentRuntime'])).toBeNull()
   })
 })
 
