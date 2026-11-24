@@ -493,21 +493,40 @@ func (e *Executor) withCodexApp(ctx context.Context, fn func(*codexapp.Client) e
 	return fn(c)
 }
 
+// CodexModelList is what the codex on this computer lists for its login.
+type CodexModelList struct {
+	Models []modelcatalog.CodexModel
+	// Cached means Codex could not refresh its list online and answered from its own cache, which may be out of date;
+	// LoginRejected means that refresh was rejected because the login is no longer valid (HTTP 401, as for a revoked
+	// login). The protocol does not say either: both are read from Codex's log, whose line codex 0.167.0 writes as
+	// "failed to refresh available models: unexpected status 401 Unauthorized ...".
+	Cached, LoginRejected bool
+}
+
 // CodexModels returns the models the codex on this computer lists for its login, for the model catalog.
-func (e *Executor) CodexModels(ctx context.Context) ([]modelcatalog.CodexModel, error) {
+func (e *Executor) CodexModels(ctx context.Context) (CodexModelList, error) {
 	var models []codexapp.Model
+	var client *codexapp.Client
 	err := e.withCodexApp(ctx, func(c *codexapp.Client) error {
+		client = c
 		var err error
 		models, err = c.ListModels(ctx)
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return CodexModelList{}, err
 	}
-	out := make([]modelcatalog.CodexModel, 0, len(models))
+	out := CodexModelList{Models: make([]modelcatalog.CodexModel, 0, len(models))}
 	for _, m := range models {
-		out = append(out, modelcatalog.CodexModel{ID: m.ID, Name: m.DisplayName, Efforts: m.Efforts, DefaultEffort: m.DefaultEffort,
+		out.Models = append(out.Models, modelcatalog.CodexModel{ID: m.ID, Name: m.DisplayName, Efforts: m.Efforts, DefaultEffort: m.DefaultEffort,
 			Images: slices.Contains(m.InputModalities, "image"), Hidden: m.Hidden})
+	}
+	// The app-server has exited by now, so its whole log has been read.
+	for line := range strings.Lines(client.Stderr()) {
+		if strings.Contains(line, "failed to refresh available models") {
+			out.Cached = true
+			out.LoginRejected = out.LoginRejected || strings.Contains(line, "401")
+		}
 	}
 	return out, nil
 }

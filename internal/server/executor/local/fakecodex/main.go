@@ -27,7 +27,9 @@
 //
 // Environment: FAKECODEX_VERSION changes the version; FAKECODEX_ARGS_FILE gets one line per start (JSON: arguments
 // and environment); login status reports logged out when $CODEX_HOME/.fakecodex-logged-out exists;
-// FAKECODEX_MODELS (JSON array) replaces the model list.
+// FAKECODEX_MODELS (JSON array) replaces the model list, and so does $CODEX_HOME/.fakecodex-models.json; when
+// $CODEX_HOME/.fakecodex-revoked exists, model/list logs to stderr, as Codex 0.167.0 does, that refreshing the list
+// online was rejected (401 token_revoked) and answers from its cache.
 package main
 
 import (
@@ -238,6 +240,13 @@ func (s *server) request(id json.RawMessage, method string, raw json.RawMessage)
 		if custom := os.Getenv("FAKECODEX_MODELS"); custom != "" {
 			models = nil
 			json.Unmarshal([]byte(custom), &models)
+		}
+		if custom, err := os.ReadFile(filepath.Join(codexHome(), ".fakecodex-models.json")); err == nil {
+			models = nil
+			json.Unmarshal(custom, &models)
+		}
+		if _, err := os.Stat(filepath.Join(codexHome(), ".fakecodex-revoked")); err == nil {
+			fmt.Fprintln(os.Stderr, "\x1b[2m2026-11-24T05:27:39.181431Z\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2mcodex_models_manager::manager\x1b[0m\x1b[2m:\x1b[0m failed to refresh available models: unexpected status 401 Unauthorized: Encountered invalidated oauth token for user, failing request, url: https://chatgpt.com/backend-api/codex/models?client_version=0.167.0, auth error: 401, auth error code: token_revoked")
 		}
 		s.result(id, map[string]any{"data": models, "nextCursor": nil})
 	case "thread/start", "thread/resume", "thread/fork":
