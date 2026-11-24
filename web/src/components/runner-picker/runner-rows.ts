@@ -29,9 +29,12 @@ export interface RowsInput {
   query: string
   // At most this many model rows; the rest are counted in hidden.
   limit: number
+  // Whether a provider goes under the "can use now" heading; by default what the catalog says (usable). A provider that cannot be chosen
+  // at all belongs with the rest, whatever the catalog says.
+  usableNow?: (provider: Provider) => boolean
 }
 
-export function buildRows({ providers, models, expanded, grouped, query, limit }: RowsInput): { rows: Row[]; hidden: number } {
+export function buildRows({ providers, models, expanded, grouped, query, limit, usableNow = (provider) => provider.usable === true }: RowsInput): { rows: Row[]; hidden: number } {
   const terms = words(query)
   const rows: Row[] = []
   const sectioned = grouped && providers.some((provider) => provider.usable !== null)
@@ -43,7 +46,7 @@ export function buildRows({ providers, models, expanded, grouped, query, limit }
     if (grouped) {
       const show = terms.length === 0 || found.length > 0 || (list === undefined && matches(terms, haystack(provider)))
       if (!show) continue
-      const usable = provider.usable === true
+      const usable = usableNow(provider)
       if (sectioned && section !== usable) {
         section = usable
         rows.push({ kind: 'section', key: `s:${usable}`, usable })

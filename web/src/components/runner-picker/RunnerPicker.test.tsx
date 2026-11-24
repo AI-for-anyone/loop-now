@@ -204,6 +204,56 @@ describe('runner picker', () => {
     expect(modelSearch(document.body)).toHaveFocus()
   })
 
+  it('right at the end of the search goes to the chosen thinking level, not to Default', async () => {
+    useCatalog()
+    const user = userEvent.setup()
+    renderWithQuery(<Picker initial={{ provider: 'claude-code', modelId: 'haiku' }} level="high" />)
+    await screen.findByText('Claude Haiku (latest)')
+    await vi.waitFor(() => expect(screen.getByRole('radio', { name: 'High' })).toBeEnabled())
+    await user.click(modelSearch(document.body))
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('radio', { name: 'High' })).toHaveFocus()
+  })
+
+  it('Enter with nothing listed does nothing (it does not submit the form around the picker)', async () => {
+    useCatalog()
+    const submitted = vi.fn((event: React.FormEvent) => event.preventDefault())
+    const user = userEvent.setup()
+    renderWithQuery(<form onSubmit={submitted}><Picker initial={{ provider: 'claude-code', modelId: 'haiku' }} /><button type="submit">Create</button></form>)
+    await screen.findByText('Claude Haiku (latest)')
+    await user.type(modelSearch(document.body), 'no-such-model{Enter}')
+    expect(submitted).not.toHaveBeenCalled()
+    expect(shown()).toBe('claude-code/haiku default')
+  })
+
+  it('choosing a model leaves the providers where they were, so the row under the pointer stays the same', async () => {
+    useCatalog()
+    const user = userEvent.setup()
+    renderWithQuery(<Picker initial={{ provider: 'anthropic', modelId: 'claude-sonnet-4-5' }} />)
+    await screen.findByText('Claude Sonnet 4.5')
+    const order = () => screen.getAllByRole('treeitem').filter((row) => row.hasAttribute('aria-expanded')).map((row) => row.getAttribute('aria-label')?.split(',')[0])
+    const before = order()
+    await chooseModel(user, document.body, 'openai/gpt-5', { provider: 'openrouter' })
+    expect(shown()).toBe('openrouter/openai/gpt-5 default')
+    expect(order()).toEqual(before)
+  })
+
+  it('a model in use whose provider left the catalog is named once, and nothing claims the catalog failed', async () => {
+    useCatalog()
+    server.use(http.get(apiUrl('/model-providers/gone/models'), () => HttpResponse.json({ error: { code: 'not_found', message: 'no such provider' } }, { status: 404 })))
+    renderWithQuery(<Picker initial={{ provider: 'gone', modelId: 'old-model' }} />)
+    expect(await screen.findByText("gone / old-model, used now, isn't in the model catalog")).toBeInTheDocument()
+    // It runs on the default runtime, which is looked at first; its providers list fine, and so does Claude Code's.
+    expect(await runnerTab(document.body, 'Pi')).toHaveAttribute('aria-selected', 'true')
+    await screen.findByRole('treeitem', { name: 'anthropic' })
+    expect(screen.queryByText(/Couldn't load the model catalog/)).toBeNull()
+    await chooseRunner(userEvent.setup(), document.body, 'Claude Code')
+    await screen.findByText('Claude Haiku (latest)')
+    expect(screen.queryByText(/Couldn't load the model catalog/)).toBeNull()
+    expect(screen.queryByText(/^In use:/)).toBeNull()
+    expect(screen.queryByText('Pick a model first')).toBeNull()
+  })
+
   it('the thinking level is a ruler of the chosen model’s levels', async () => {
     useCatalog()
     const user = userEvent.setup()

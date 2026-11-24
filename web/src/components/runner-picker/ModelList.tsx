@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type RefObject } from 'react'
 import { ChevronRightIcon, SearchIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
@@ -31,7 +31,7 @@ interface ModelListProps {
   onRail: () => void
   onThinking: () => void
   autoFocus?: boolean
-  searchRef?: React.Ref<HTMLInputElement>
+  searchRef: RefObject<HTMLInputElement | null>
 }
 
 // Context windows as a short figure: 200K, 1M.
@@ -76,6 +76,24 @@ export function ModelList(props: ModelListProps) {
     if (top + row.offsetHeight > list.clientHeight) list.scrollTop = Math.max(0, top - list.clientHeight / 3)
   })
 
+  // Escape with text in the search box clears the search. Dialogs and popovers close on Escape from a listener on the document in the
+  // capture phase, before the search box hears it, so this listens on the window, earlier still, and keeps the key from reaching them.
+  const clear = useRef(onQuery)
+  useEffect(() => {
+    clear.current = onQuery
+  })
+  useEffect(() => {
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      const input = searchRef.current
+      if (event.key !== 'Escape' || !input || document.activeElement !== input || input.value === '') return
+      event.preventDefault()
+      event.stopPropagation()
+      clear.current('')
+    }
+    window.addEventListener('keydown', onEscape, true)
+    return () => window.removeEventListener('keydown', onEscape, true)
+  }, [searchRef])
+
   const go = (target: number) => {
     const row = stops[Math.max(0, Math.min(stops.length - 1, target))]
     if (!row) return
@@ -93,8 +111,9 @@ export function ModelList(props: ModelListProps) {
       event.preventDefault()
       go(index - 1)
     } else if (event.key === 'Enter') {
-      if (!current) return
+      // Enter never submits the form around the picker, even with nothing listed.
       event.preventDefault()
+      if (!current) return
       if (current.kind === 'provider') onToggle(current.provider.id)
       else if (!blocked(current.provider)) onChoose(current.provider, current.model)
     } else if (event.key === 'ArrowRight' && atEnd) {
@@ -108,10 +127,6 @@ export function ModelList(props: ModelListProps) {
         keyboardMove.current = true
         onActive(`p:${current.provider.id}`)
       } else onRail()
-    } else if (event.key === 'Escape' && query) {
-      event.preventDefault()
-      event.stopPropagation()
-      onQuery('')
     }
   }
 

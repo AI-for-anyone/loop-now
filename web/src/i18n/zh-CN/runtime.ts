@@ -83,7 +83,6 @@ export const runtime = {
     matchCount: (found: number, count: number) => `${found} / ${count} 个模型`,
     inUse: '现在用的是',
     notInCatalog: (ref: string) => `现在用的 ${ref} 不在模型目录里`,
-    thinking: '思考',
     noThinking: '这个模型不分思考等级',
     noModel: '先选模型',
     // The chip on the message box that says who runs the Agent now and opens the picker; a choice is saved at once.

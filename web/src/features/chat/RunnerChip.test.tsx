@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { renderChat } from '@/test/chat'
+import { server } from '@/test/server'
 import { claudeCodeProvider, providers } from '@/test/config'
 import { codexProvider } from '@/test/model-auth'
 import { chooseModel, findRunnerPicker } from '@/test/model-picker'
@@ -67,6 +68,36 @@ describe('who runs it, on the message box', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Runs on' })).toBeNull())
     expect(await screen.findByText('Changed; applies from the next message')).toBeInTheDocument()
     await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: Claude Code · haiku · High. Open to change'))
+  })
+
+  it('a level chosen while a model change is still saving shows both, and both are sent', async () => {
+    let release = () => {}
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const agent = makeAgent({ model: { provider: 'claude-code', modelId: 'haiku' }, runtime: 'claude-code', thinkingLevel: null })
+    let current = agent
+    const { user, bodies } = await setup(agent)
+    // The server applies each change as it arrives; the answer to the first is held back until after the second's, so the answers come
+    // back out of order.
+    server.use(
+      http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
+      http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {
+        const body = (await request.json()) as Schemas['AgentUpdate']
+        bodies.push(body)
+        current = { ...current, ...body, configVersion: current.configVersion + 1 }
+        const answer = current
+        if (bodies.length === 1) await held
+        return HttpResponse.json(answer)
+      }),
+    )
+    await user.click(chip())
+    const popover = await screen.findByRole('dialog', { name: 'Runs on' })
+    await waitFor(() => expect(within(popover).getByRole('radio', { name: 'Max' })).toBeEnabled())
+    await user.click(within(popover).getByRole('treeitem', { name: 'Claude Opus (latest) (opus)' }))
+    await chooseThinking(user, popover, 'Max')
+    expect(chip()).toHaveAccessibleName('Runs on: Claude Code · opus · Max. Open to change')
+    release()
+    await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'opus' }, thinkingLevel: null }, { thinkingLevel: 'max' }]))
+    await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: Claude Code · opus · Max. Open to change'))
   })
 
   it('a thinking level is saved on its own and the popover stays open', async () => {

@@ -60,6 +60,12 @@ describe('runner picker rows', () => {
     expect(order.map((p) => p.id)).toEqual(['anthropic', 'openai-codex', 'openai', 'amazon-bedrock', 'grok-cli'])
   })
 
+  it('a provider that cannot be chosen goes under the second heading even when the catalog calls it usable', () => {
+    const ready = provider('anthropic', { usable: true }), needs = provider('openrouter', { usable: false }), blockedPlugin = provider('grok-cli', { usable: true, source: 'plugin' })
+    const rows = buildRows({ providers: [ready, needs, blockedPlugin], models, expanded: new Set(), grouped: true, query: '', limit: 100, usableNow: (p) => p.usable === true && p.source !== 'plugin' }).rows
+    expect(rows.map((row) => row.key)).toEqual(['s:true', 'p:anthropic', 's:false', 'p:openrouter', 'p:grok-cli'])
+  })
+
   it('heads the two groups when the catalog says which providers can be used now', () => {
     const ready = provider('anthropic', { usable: true }), needs = provider('openrouter', { usable: false })
     const rows = buildRows({ providers: [ready, needs], models, expanded: new Set(), grouped: true, query: '', limit: 100 }).rows

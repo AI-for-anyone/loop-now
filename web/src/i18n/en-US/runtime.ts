@@ -67,7 +67,6 @@ export const runtime = {
     matchCount: (found: number, count: number) => `${found} of ${count} ${count === 1 ? 'model' : 'models'}`,
     inUse: 'In use:',
     notInCatalog: (ref: string) => `${ref}, used now, isn't in the model catalog`,
-    thinking: 'Thinking',
     noThinking: 'This model has no thinking levels',
     noModel: 'Pick a model first',
     chip: {

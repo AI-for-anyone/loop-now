@@ -14,7 +14,8 @@ interface ThinkingRulerProps {
   // The chosen model's levels, lowest first; empty when it has none or no model is chosen yet.
   levels: readonly ThinkingLevel[]
   defaultLevel?: ThinkingLevel | null
-  hasModel: boolean
+  // Why there is nothing to choose: no model chosen yet, or one without levels; null when the model is not in the catalog.
+  hint: string | null
   onChange: (value: ThinkingLevel | null) => void
   // vertical: a column beside the models, the highest level at the top. horizontal: a row under them at narrow widths, lowest first, that
   // scrolls sideways rather than cutting labels short.
@@ -23,7 +24,7 @@ interface ThinkingRulerProps {
 
 // The thinking level drawn as one of the console's rulers: one tick per level on the edge, the chosen one under a slanted yellow marker with
 // the pink arrow. "Default" comes first and says which level it means. A radio group: the arrow keys move between marks.
-export function ThinkingRuler({ value, levels, defaultLevel, hasModel, onChange, orientation = 'vertical' }: ThinkingRulerProps) {
+export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange, orientation = 'vertical' }: ThinkingRulerProps) {
   const labelId = useId()
   const copy = t.config.basic.thinking
   const label = (level: string) => copy.levels[level] ?? level
@@ -35,7 +36,7 @@ export function ThinkingRuler({ value, levels, defaultLevel, hasModel, onChange,
   return (
     <div className={cn('flex min-w-0 flex-col gap-2', vertical ? 'flex-1 border-l-2 border-dashed border-ink/35 px-2.5 pt-3 pb-3' : 'px-3 pt-2.5 pb-3')}>
       <span id={labelId} className="px-1 text-[12.5px] leading-tight font-black">{copy.title}</span>
-      {disabled && <p className="px-1 text-[12px] leading-snug font-bold text-ink-500">{hasModel ? t.runtime.picker.noThinking : t.runtime.picker.noModel}</p>}
+      {disabled && hint && <p className="px-1 text-[12px] leading-snug font-bold text-ink-500">{hint}</p>}
       <RadioGroupPrimitive.Root
         aria-labelledby={labelId}
         orientation={orientation}

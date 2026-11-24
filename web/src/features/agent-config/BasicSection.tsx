@@ -105,8 +105,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   return (
     <Section id="basic" title={t.config.basic.title}>
-      {/* Internal ID and display name sit in two columns on one row and wrap when narrow; model provider and model are laid out in two
-          columns the same way (the grid inside ModelPicker).
+      {/* Internal ID and display name sit in two columns on one row and wrap when narrow; the runner picker spans the width below them.
           Fields on the same row align to the top: help text under one column grows downward without pushing the neighboring column down. */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-start gap-4">
         <IdField label={t.config.basic.id} id={agent.id} />

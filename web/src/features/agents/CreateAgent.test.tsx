@@ -143,6 +143,19 @@ describe('Creating an Agent', () => {
     await waitFor(() => expect(created).toEqual({ name: 'Local assistant', model: { provider: 'claude-code', modelId: 'sonnet' }, thinkingLevel: 'max' }))
   })
 
+  it('Escape in the model search clears the search and keeps the dialog and what was typed; the next Escape closes it', async () => {
+    const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
+    const dialog = await fill(user, 'Keep me', false)
+    const search = within(dialog).getByRole('combobox')
+    await user.type(search, 'sonnet')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(search).toHaveValue('')
+    expect(within(dialog).getByLabelText('Display name')).toHaveValue('Keep me')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('does not submit without a model', async () => {
     let calls = 0
     const { user } = setup(() => {

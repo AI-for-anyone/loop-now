@@ -96,9 +96,11 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
 
   const reasonOf = (provider: Provider) => unavailableOf(provider, agentId)
   const blocked = (provider: Provider) => blocks(reasonOf(provider))
+  // The provider in use when the picker opened leads its group; it stays there while models are chosen, so rows don't move under the pointer.
+  const [leading] = useState(value?.provider)
   const own = orderProviders(
     providers.filter((provider) => provider.runtime === browsedId),
-    value?.provider,
+    leading,
     blocked,
   )
   const grouped = own.length > 1
@@ -117,10 +119,13 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   // for its thinking levels.
   const all = useAllModels(grouped)
   const fromAll = (id: string) => all.data?.get(id)
+  // The chosen model's provider is read only when the catalog has it (one that left the catalog, such as an uninstalled plugin's, has no
+  // models to read).
+  const chosenListed = value !== null && (catalog.data === undefined || valueProvider !== undefined)
   const wanted = [
     ...new Set([
       ...(grouped ? own.filter((provider) => expanded.has(provider.id) && !all.isLoading && !fromAll(provider.id)).map((provider) => provider.id) : own.map((provider) => provider.id)),
-      ...(value ? [value.provider] : []),
+      ...(value && chosenListed ? [value.provider] : []),
     ]),
   ]
   const reads = useModelsOf(wanted)
@@ -129,7 +134,10 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   const reading = new Set([...(grouped && all.isLoading ? own.map((provider) => provider.id) : []), ...wanted.filter((_, index) => reads[index]?.isLoading)])
   // Why a provider's models could not be read (its own read failed and the read of all models has no list for it).
   const failures = new Map(wanted.flatMap((id, index) => (reads[index]?.isError && !models.get(id) ? [[id, reads[index].error] as const] : [])))
-  const { rows, hidden } = buildRows({ providers: own, models, expanded, grouped, query, limit: MODEL_LIMIT })
+  // Only the failures of the providers listed here show in the list.
+  const listedFailures = new Map([...failures].filter(([id]) => own.some((provider) => provider.id === id)))
+  const usableNow = (provider: Provider) => provider.usable === true && !blocked(provider)
+  const { rows, hidden } = buildRows({ providers: own, models, expanded, grouped, query, limit: MODEL_LIMIT, usableNow })
   const pickable = rows.filter((row) => row.kind !== 'section')
 
   const chosen = value ? modelKey(value.provider, value.modelId) : null
@@ -222,13 +230,13 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
               chosen={chosen}
               loading={catalog.isLoading || reading.size > 0}
               reading={reading}
-              failures={failures}
+              failures={listedFailures}
               reasonOf={reasonOf}
               blocked={blocked}
               onToggle={toggle}
               onChoose={choose}
               onRail={() => railRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus()}
-              onThinking={() => thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"], [role="radio"]:not([disabled])')?.focus()}
+              onThinking={() => (thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ?? thinkingRef.current?.querySelector<HTMLElement>('[role="radio"]:not([disabled])'))?.focus()}
               autoFocus={variant === 'popover'}
               searchRef={searchRef}
             />
@@ -247,7 +255,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           value={thinkingLevel}
           levels={levels}
           defaultLevel={chosenModel?.defaultThinkingLevel}
-          hasModel={Boolean(chosenModel)}
+          hint={!value ? t.runtime.picker.noModel : chosenModel && levels.length === 0 ? t.runtime.picker.noThinking : null}
           onChange={onThinkingChange}
         />
       </div>
