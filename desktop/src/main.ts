@@ -6,6 +6,7 @@ import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Badge } from './badge'
+import { handlePathPicker } from './dialogs'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
@@ -293,6 +294,7 @@ function run(): void {
     if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
     setAppMenu(() => void quit(true))
     handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path), badge: (count) => badge.set(count) })
+    handlePathPicker({ trusted: (event) => window.trusts(event), window: () => window.browserWindow, platform })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )

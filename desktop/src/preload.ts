@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('loopNowDesktop', {
   platform: process.platform,
   notify: (notification: unknown) => ipcRenderer.send('loop-now:notify', notification),
   setBadge: (count: unknown) => ipcRenderer.send('loop-now:badge', count),
+  // Shows the system's own dialog for a folder or file and resolves to the full path, or null when cancelled (see pick-path.ts; the
+  // sandboxed preload can't import the channel name from there).
+  pickPath: (request: unknown) => ipcRenderer.invoke('loop-now:pick-path', request),
   onNavigate: (listener: (path: string) => void) => {
     const handler = (_event: IpcRendererEvent, path: string) => listener(path)
     ipcRenderer.on('loop-now:navigate', handler)

@@ -20,6 +20,7 @@ import { badgeStyle, cliBinary, cliInstallMode, serverBinary, trayIcon, windowCh
 import { choosePort, portFree, portOf } from './port'
 import { isOurServer, parseWindowsProcess, spawnPlan, taskkillArgs, windowsProcessQuery } from './process'
 import { findInPath, gitUsable } from './git'
+import { maxPathLength, pickPathHandler } from './pick-path'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
@@ -475,6 +476,67 @@ describe('Notifications and unread count sent by the page', () => {
     assert.equal(parseBadge(3), 3)
     assert.equal(parseBadge(0), 0)
     for (const v of [-1, 1.5, '3', null]) assert.equal(parseBadge(v), undefined)
+  })
+})
+
+describe('Choosing a folder or file for the page', () => {
+  type Shown = { properties: string[]; defaultPath?: string }
+  // The system dialog, faked: records what it was asked to show and answers with the given result.
+  const fakeDialog = (result: { canceled: boolean; filePaths: string[] }) => {
+    const shown: Shown[] = []
+    return { shown, show: async (options: Shown) => (shown.push(options), result) }
+  }
+  const picked = { canceled: false, filePaths: ['/Users/me/code/app'] }
+
+  test('A folder opens the folder dialog (with “New Folder”), a file the file dialog; the chosen path is returned', async () => {
+    const dialog = fakeDialog(picked)
+    const pick = pickPathHandler({ trusted: () => true, show: dialog.show, platform: 'darwin' })
+    assert.equal(await pick({}, { kind: 'directory' }), '/Users/me/code/app')
+    assert.equal(await pick({}, { kind: 'file' }), '/Users/me/code/app')
+    assert.deepEqual(
+      dialog.shown.map((options) => options.properties),
+      [['openDirectory', 'createDirectory'], ['openFile']],
+    )
+  })
+
+  test('Cancelling returns null', async () => {
+    for (const result of [{ canceled: true, filePaths: [] }, { canceled: false, filePaths: [] }]) {
+      const pick = pickPathHandler({ trusted: () => true, show: fakeDialog(result).show, platform: 'darwin' })
+      assert.equal(await pick({}, { kind: 'directory' }), null)
+    }
+  })
+
+  test('A call that does not come from the console page is refused without opening a dialog', async () => {
+    const dialog = fakeDialog(picked)
+    const sender = { from: 'status page' }
+    const pick = pickPathHandler({ trusted: (event) => event !== sender, show: dialog.show, platform: 'darwin' })
+    await assert.rejects(pick(sender, { kind: 'directory' }))
+    assert.equal(dialog.shown.length, 0)
+  })
+
+  test('A malformed request is refused without opening a dialog', async () => {
+    const dialog = fakeDialog(picked)
+    const pick = pickPathHandler({ trusted: () => true, show: dialog.show, platform: 'darwin' })
+    for (const value of [undefined, null, 'directory', {}, { kind: 'folder' }, { kind: 'openDirectory' }, { kind: 'file', defaultPath: 3 }, { kind: 'file', defaultPath: `/${'x'.repeat(maxPathLength)}` }, { kind: 'file', defaultPath: '/tmp/a\0b' }])
+      await assert.rejects(pick({}, value), Error, JSON.stringify(value))
+    assert.equal(dialog.shown.length, 0)
+  })
+
+  test('The dialog starts at the current value only when it is an absolute path on this system', async () => {
+    const mac = fakeDialog(picked)
+    const pickMac = pickPathHandler({ trusted: () => true, show: mac.show, platform: 'darwin' })
+    for (const defaultPath of ['/Users/me/code', 'hermes', '~/code', '', '   ']) await pickMac({}, { kind: 'directory', defaultPath })
+    assert.deepEqual(
+      mac.shown.map((options) => options.defaultPath),
+      ['/Users/me/code', undefined, undefined, undefined, undefined],
+    )
+    const windows = fakeDialog(picked)
+    const pickWindows = pickPathHandler({ trusted: () => true, show: windows.show, platform: 'win32' })
+    for (const defaultPath of ['C:\\Users\\me\\code', 'code\\app']) await pickWindows({}, { kind: 'directory', defaultPath })
+    assert.deepEqual(
+      windows.shown.map((options) => options.defaultPath),
+      ['C:\\Users\\me\\code', undefined],
+    )
   })
 })
 

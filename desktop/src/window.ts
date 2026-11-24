@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, shell, type IpcMainEvent } from 'electron'
+import { app, BrowserWindow, screen, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { classifyNavigation, handOffOnce } from './links'
 import { current, windowChrome, type PlatformId } from './platform'
@@ -78,7 +78,7 @@ export class MainWindow {
 
   // Whether a call the page sends through preload comes from the console the server serves in the window (main frame, same origin), not
   // from the status page or anywhere else.
-  trusts(event: IpcMainEvent): boolean {
+  trusts(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
     const frame = event.senderFrame
     if (!this.win || this.win.isDestroyed() || event.sender !== this.win.webContents || !frame || frame.parent || !this.consoleURL) return false
     try {
