@@ -26,6 +26,20 @@ describe('ToolList', () => {
     expect(items).toEqual(['bashSucceeded', 'readFailed'])
   })
 
+  it('in a turn a person interrupted, tools left open read “Interrupted”, whether still on started or closed by the server as no_result', () => {
+    render(
+      <ToolList
+        unfinished="interrupted"
+        tools={[
+          { toolCallId: 'call_1', toolName: 'bash', state: 'started', at: '2026-10-12T00:00:00Z' },
+          { toolCallId: 'call_2', toolName: 'read', state: 'no_result', at: '2026-10-12T00:00:01Z' },
+          { toolCallId: 'call_3', toolName: 'grep', state: 'succeeded', at: '2026-10-12T00:00:02Z' },
+        ]}
+      />,
+    )
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['bashInterrupted', 'readInterrupted', 'grepSucceeded'])
+  })
+
   it('spins the icon of a running tool; with reduced motion stops spinning and shows a static “…” instead', () => {
     const { container, rerender } = render(
       <ToolList tools={[{ toolCallId: 'call_1', toolName: 'bash', state: 'started', at: '2026-10-12T00:00:00Z' }]} />,

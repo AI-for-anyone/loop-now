@@ -2,6 +2,7 @@ import type { ComponentProps, ReactElement, ReactNode } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Schemas } from '@/api/client'
 import type { MessagePages } from '@/api/queries'
 import { makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { createTestQueryClient } from '@/test/render'
@@ -324,6 +325,49 @@ describe('how replies show', () => {
     expect(dividers[0].compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(bubble).toHaveClass('border-riso-pink', 'bg-tint-pink-2')
     expect(screen.getByText('Run the tests')).toHaveClass('bg-tint-pink')
+  })
+
+  // A runtime may never report a tool's end (Antigravity moves a long command to the background and its end arrives after the turn). The
+  // server now closes such a tool as no_result when the turn ends; records saved before that still have it on started.
+  const unfinishedTools: Schemas['ToolEvent'][] = [
+    { toolCallId: 'read-1', toolName: 'read', state: 'started', at: '2026-10-12T08:00:01Z' },
+    { toolCallId: 'read-1', toolName: 'read', state: 'succeeded', at: '2026-10-12T08:00:02Z' },
+    { toolCallId: 'exec-1', toolName: 'execute', state: 'started', at: '2026-10-12T08:00:03Z' },
+    { toolCallId: 'exec-2', toolName: 'execute', state: 'failed', at: '2026-10-12T08:00:04Z' },
+    { toolCallId: 'exec-3', toolName: 'execute', state: 'started', at: '2026-10-12T08:00:05Z' },
+    { toolCallId: 'exec-3', toolName: 'execute', state: 'no_result', at: '2026-10-12T08:01:35Z' },
+  ]
+  const toolRows = () => within(screen.getByRole('list', { name: 'Tool calls' })).getAllByRole('listitem')
+
+  it.each([
+    ['completed', { status: 'completed' }],
+    ['failed', { status: 'failed', errorCode: 'runtime_error', errorMessage: 'boom' }],
+    ['stopped', { status: 'interrupted', endReason: 'user_stopped' }],
+    ['cut off by a server restart', { status: 'interrupted', endReason: 'server_restart' }],
+  ] as const)('once the turn has ended (%s), a tool closed as no_result, or an old record still on started, shows a neutral “No result”', (_how, fields) => {
+    const run = makeRun({ ...fields, startedAt: '2026-10-12T08:00:00Z', endedAt: '2026-10-12T08:01:35Z', tools: unfinishedTools })
+    const { container } = render(<List {...props} pages={{ pages: [makeMessagePage([makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'Done', run })])], pageParams: [null] }} onLoadOlder={() => {}} />)
+    const [read, old, failed, closed] = toolRows()
+    expect(read).toHaveTextContent('readSucceeded')
+    expect(old).toHaveTextContent('executeNo result')
+    expect(failed).toHaveTextContent('executeFailed')
+    expect(closed).toHaveTextContent('executeNo result')
+    expect(container.querySelector('[data-slot="tool-spinner"]')).toBeNull()
+    // Told apart from success and failure, and from tools a person's interrupt cut off.
+    for (const row of [old, closed]) {
+      const mark = row.querySelector('[data-slot="badge"]')
+      expect(mark).toHaveAttribute('data-no-result')
+      expect(mark?.className).not.toMatch(/tint-green|tint-red|border-dashed/)
+    }
+  })
+
+  it('while the turn is still going, a tool without its end event shows running with a spinner', () => {
+    // The server closes tools as no_result only when the turn ends, so a running turn has none.
+    const run = makeRun({ status: 'running', startedAt: '2026-10-12T08:00:00Z', runningAt: '2026-10-12T08:00:00Z', endedAt: null, tools: unfinishedTools.filter((tool) => tool.toolCallId !== 'exec-3') })
+    const { container } = render(<List {...props} pages={{ pages: [makeMessagePage([makeMessage({ text: 'Run the tests', run })])], pageParams: [null] }} onLoadOlder={() => {}} />)
+    expect(toolRows()[1]).toHaveTextContent('executeRunning')
+    expect(screen.queryByText('No result')).toBeNull()
+    expect(container.querySelectorAll('[data-slot="tool-spinner"]')).toHaveLength(1)
   })
 
   it('the session divider is a pink dashed cut line with scissors, the same style as the “interrupt” divider', () => {

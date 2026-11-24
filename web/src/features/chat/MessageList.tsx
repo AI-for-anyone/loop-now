@@ -15,6 +15,7 @@ import { HandoffRow, ModelChangeLine } from './HandoffRow'
 import { Cursor, Markdown } from './Markdown'
 import { RunRecord } from './RunRecord'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
+import { unfinishedTool } from './tool-state'
 import { runStartedAt } from './time'
 import { InboxReminder } from './InboxReminder'
 import { MessageRuler } from './MessageRuler'
@@ -68,7 +69,7 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
           </p>
         )
       )}
-      <ToolList tools={run.tools} interrupted={run.status === 'interrupted' && run.endReason === 'user_interrupt'} />
+      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} />
       <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />
     </AgentChatReply>
   )

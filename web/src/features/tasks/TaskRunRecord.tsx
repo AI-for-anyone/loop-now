@@ -3,6 +3,7 @@ import { useId, useState } from 'react'
 import type { Schemas } from '@/api/client'
 import { useTaskRunTimeline } from '@/api/task-inbox'
 import { ToolList } from '@/features/chat/RunStatus'
+import { unfinishedTool } from '@/features/chat/tool-state'
 import { TimelineSteps, UsageBlock } from '@/features/chat/TimelineBody'
 import { buildSteps, runDurationMs } from '@/features/chat/timeline-steps'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -25,7 +26,7 @@ export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: 
   const tools: Schemas['ToolEvent'][] = entries.filter(entry => entry.type === 'tool').map(entry => ({ toolCallId: entry.toolCallId, toolName: entry.toolName, state: entry.state, at: entry.at }))
   const duration = latest ? runDurationMs(latest.run) : null
   return <div className="mt-2 grid min-w-0 gap-2" data-task-run-id={runId}>
-    <ToolList tools={tools} />
+    <ToolList tools={tools} unfinished={latest ? unfinishedTool(latest.run) : 'running'} />
     {timeline.hasNextPage && <p className="text-xs">{copy.timelinePartial}</p>}
     <button type="button" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen(value => !value)} className="inline-flex min-h-9 items-center gap-2 justify-self-start rounded-full bg-tint-blue px-3.5 text-[13px] font-black text-ink outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus">{duration !== null && latest ? (latest.run.usageReported ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(latest.usage.total)) : t.timeline.toggleNoUsage(t.timeline.duration(duration))) : t.timeline.title}</button>
     {timeline.isPending && <p role="status" className="text-xs">{copy.recordsLoading}</p>}

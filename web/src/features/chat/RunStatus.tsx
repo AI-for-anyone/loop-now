@@ -5,6 +5,7 @@ import { t } from '@/i18n'
 import { isInProgress } from './live-state'
 import type { AgentRuntime } from '@/lib/runtime'
 import { runStatusText, useRunRuntimeName } from './run-status-text'
+import type { UnfinishedTool } from './tool-state'
 
 type Run = Schemas['Run']
 
@@ -61,34 +62,48 @@ function ToolSpinner() {
   )
 }
 
+// The state a tool shows: started and no_result follow the turn (see unfinishedTool); succeeded and failed are what the runtime reported.
+function shownState(state: Schemas['ToolState'], unfinished: UnfinishedTool): Schemas['ToolState'] | 'interrupted' {
+  if (state !== 'started' && state !== 'no_result') return state
+  if (unfinished === 'interrupted') return 'interrupted'
+  return state === 'no_result' || unfinished === 'no_result' ? 'no_result' : 'started'
+}
+
 // Tool calls show only their name and state, not arguments or output. Run.tools is a log of state changes,
 // so the same toolCallId may have several entries; they are merged in order of appearance and only the latest state is shown.
-// When this turn was interrupted, tools that hadn't finished turn gray with a dashed border, marked as interrupted.
-export function ToolList({ tools: events, interrupted = false }: { tools: Schemas['ToolEvent'][]; interrupted?: boolean }) {
+// Interrupted tools turn gray with a dashed border; those with no result get a plain gray chip, told apart from running (blue, spinning),
+// succeeded (green) and failed (red).
+export function ToolList({ tools: events, unfinished = 'running' }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool }) {
   const latest = new Map<string, Schemas['ToolEvent']>()
   for (const event of events) latest.set(event.toolCallId, event)
   const tools = [...latest.values()]
   if (tools.length === 0) return null
   return (
     <ul className="flex flex-wrap gap-2" aria-label={t.chat.toolsLabel}>
-      {tools.map((tool) =>
-        interrupted && tool.state === 'started' ? (
+      {tools.map((tool) => {
+        const state = shownState(tool.state, unfinished)
+        return (
           <li key={tool.toolCallId}>
-            <Badge data-interrupted className="border-[1.5px] border-dashed border-ink/30 bg-paper-raised text-ink-500">
-              <span className="font-mono">{tool.toolName}</span>
-              <span>{t.chat.toolInterrupted}</span>
-            </Badge>
+            {state === 'interrupted' ? (
+              <Badge data-interrupted className="border-[1.5px] border-dashed border-ink/30 bg-paper-raised text-ink-500">
+                <span className="font-mono">{tool.toolName}</span>
+                <span>{t.chat.toolInterrupted}</span>
+              </Badge>
+            ) : state === 'no_result' ? (
+              <Badge data-no-result className="bg-ink/[0.07] text-ink-700">
+                <span className="font-mono text-ink">{tool.toolName}</span>
+                <span>{t.chat.tool.no_result}</span>
+              </Badge>
+            ) : (
+              <Badge tone={state === 'failed' ? 'danger' : state === 'succeeded' ? 'success' : 'info'}>
+                {state === 'started' && <ToolSpinner />}
+                <span className="font-mono text-ink">{tool.toolName}</span>
+                <span>{t.chat.tool[state]}</span>
+              </Badge>
+            )}
           </li>
-        ) : (
-          <li key={tool.toolCallId}>
-            <Badge tone={tool.state === 'failed' ? 'danger' : tool.state === 'succeeded' ? 'success' : 'info'}>
-              {tool.state === 'started' && <ToolSpinner />}
-              <span className="font-mono text-ink">{tool.toolName}</span>
-              <span>{t.chat.tool[tool.state]}</span>
-            </Badge>
-          </li>
-        ),
-      )}
+        )
+      })}
     </ul>
   )
 }

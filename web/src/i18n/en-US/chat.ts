@@ -64,6 +64,7 @@ export const chat = {
     started: 'Running',
     succeeded: 'Succeeded',
     failed: 'Failed',
+    no_result: 'No result',
   },
   sessionDivider: 'Session switched; page history is kept',
   // Where the conversation was handed to another runtime (Run.contextHandoff), and where the model changed on the same runtime.
