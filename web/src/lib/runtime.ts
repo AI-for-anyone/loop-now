@@ -46,7 +46,8 @@ export type RuntimeProblem = 'not_found' | 'version_failed' | 'unavailable' | 'l
 // does not count; if a run fails, the server reports the error as it is.
 export function runtimeProblem(status: Schemas['RuntimeStatus'] | undefined): RuntimeProblem | null {
   if (!status) return null
-  if (!status.available) return status.unavailableReason ?? 'unavailable'
+  // version_unsupported (a CLI older than the runtime's minVersion) reads as unavailable until the console says it in its own words.
+  if (!status.available) return status.unavailableReason === 'version_unsupported' ? 'unavailable' : (status.unavailableReason ?? 'unavailable')
   return status.login?.state === 'logged_out' ? 'logged_out' : null
 }
 
