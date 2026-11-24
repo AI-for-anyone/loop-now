@@ -8,6 +8,7 @@ import (
 
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/store"
 )
 
 // Defaults for reading a local CLI's model list again when the lists are read (see localModelReader).
@@ -73,8 +74,34 @@ func (a *App) readACPModels(ctx context.Context, models *modelcatalog.Registry, 
 		a.Log.Debug("could not read the models of a local CLI", "runtime", runtime, "err", err)
 		return false
 	}
-	models.SetLocalProviders(runtime, []modelcatalog.Provider{acpProviders[runtime](list)})
+	provider := acpProviders[runtime](list)
+	models.SetLocalProviders(runtime, []modelcatalog.Provider{provider})
+	a.adoptLevelModels(ctx, provider.ID, list)
 	return false
+}
+
+// adoptLevelModels moves the Agents saved before a CLI's per-level model ids were merged into one model (Antigravity's
+// gemini-4-neon-xhigh, with no level) to the model and that level, so they show and run as the catalog now has them.
+func (a *App) adoptLevelModels(ctx context.Context, provider string, list []modelcatalog.LocalModel) {
+	ids := map[string]store.LevelModel{}
+	for _, m := range list {
+		if !m.LevelIDs {
+			continue
+		}
+		for _, level := range m.Efforts {
+			ids[modelcatalog.LevelModelID(m.ID, level)] = store.LevelModel{ModelID: m.ID, Level: level}
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	moved, err := a.Store.AdoptLevelModels(ctx, provider, ids)
+	switch {
+	case err != nil:
+		a.Log.Warn("could not move Agents to models with thinking levels; they are moved at the next read", "provider", provider, "err", err)
+	case moved > 0:
+		a.Log.Info("moved Agents saved with a model id that carries its thinking level to the model and that level", "provider", provider, "agents", moved)
+	}
 }
 
 // localModelReader decides when a local CLI's model list (Codex's, Grok's, Antigravity's) is read again. Besides the reads at startup and on the timer, a read

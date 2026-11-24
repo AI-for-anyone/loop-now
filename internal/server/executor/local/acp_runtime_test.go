@@ -53,7 +53,7 @@ func (h *acpHarness) acpAgent(fn func(s *agentconfig.Snapshot)) uuid.UUID {
 		level := "high"
 		s.ThinkingLevel = &level
 		if h.flavor == "agy" {
-			s.Provider, s.ModelID = "antigravity-cli", "fake-high"
+			s.Provider, s.ModelID = "antigravity-cli", "fake"
 		} else {
 			s.Provider, s.ModelID = "grok-cli", "fake-1"
 		}
@@ -154,9 +154,9 @@ func TestGrokTurnSessionAndResume(t *testing.T) {
 	}
 }
 
-// Antigravity runs as `agy acp --dangerously-skip-permissions`; the model is chosen in the session, its thinking level
-// is part of the model id. Antigravity takes no Skill directory: the platform prompt lists the Skills and where their
-// SKILL.md is. No Gemini key reaches it.
+// Antigravity runs as `agy acp --dangerously-skip-permissions`; the model is chosen in the session by the id agy lists
+// for the model at the Agent's thinking level (fake at high is fake-high). Antigravity takes no Skill directory: the
+// platform prompt lists the Skills and where their SKILL.md is. No Gemini key reaches it.
 func TestAntigravityTurnAndModel(t *testing.T) {
 	h := newACPHarness(t, "agy", nil)
 	h.env["GEMINI_API_KEY"] = "gemini-passed-through"
@@ -180,10 +180,11 @@ func TestAntigravityTurnAndModel(t *testing.T) {
 	if starts := h.starts(); len(starts) != 1 || starts[0].Env["HOME"] != h.realHome || starts[0].Env["GEMINI_API_KEY"] != "" {
 		t.Fatalf("environment: %+v", starts)
 	}
-	h.src.update(id, func(s *agentconfig.Snapshot) { s.ConfigVersion++; s.ModelID = "fake-low" })
+	low := "low"
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.ThinkingLevel = &low })
 	res, _ = h.exec(id, "fake:config")
 	if err := json.Unmarshal([]byte(res.Text), &cfg); err != nil || cfg.Model != "fake-low" {
-		t.Fatalf("another model after a restart: %+v %v", cfg, err)
+		t.Fatalf("another thinking level after a restart: %+v %v", cfg, err)
 	}
 	if res, _ := h.exec(id, "fake:history"); res.Text != "history=3" {
 		t.Fatalf("the session continues: %q", res.Text)
@@ -256,7 +257,7 @@ func TestACPStop(t *testing.T) {
 }
 
 // The models each runtime lists for the catalog: Grok's from its initialize, with reasoning efforts; Antigravity's from
-// agy models, one id per thinking level.
+// agy models, one id per thinking level, merged into one model with those levels.
 func TestACPModels(t *testing.T) {
 	g := newACPHarness(t, "grok", nil)
 	models, err := g.e.ACPModels(context.Background(), "grok")
@@ -266,7 +267,7 @@ func TestACPModels(t *testing.T) {
 	}
 	a := newACPHarness(t, "agy", nil)
 	models, err = a.e.ACPModels(context.Background(), "antigravity")
-	if err != nil || len(models) != 2 || models[0].ID != "fake-high" || models[0].Name != "Fake (High)" || len(models[0].Efforts) != 0 || models[1].ID != "fake-low" {
+	if err != nil || len(models) != 1 || models[0].ID != "fake" || models[0].Name != "Fake" || !slices.Equal(models[0].Efforts, []string{"low", "high"}) || !models[0].LevelIDs || !models[0].Images {
 		t.Fatalf("Antigravity: %+v %v", models, err)
 	}
 }
@@ -391,5 +392,22 @@ func TestACPBackgroundCommands(t *testing.T) {
 	gid := g.acpAgent(nil)
 	if res, sink := g.exec(gid, "fake:toolopen sleep 9"); res.Outcome != executor.OutcomeCompleted || strings.Join(sink.tools, ",") != "execute:started,execute:no_result" {
 		t.Fatalf("Grok's open tool: %+v %v", res, sink.tools)
+	}
+}
+
+// An Agent recorded before Antigravity's levels were merged names the model at one level by its full id, with no level
+// or off (as do task instances started then): it runs by that id as it is.
+func TestAntigravityRecordedLevelID(t *testing.T) {
+	h := newACPHarness(t, "agy", nil)
+	off := "off"
+	for _, level := range []*string{&off, nil} {
+		id := h.acpAgent(func(s *agentconfig.Snapshot) { s.ModelID, s.ThinkingLevel = "fake-high", level })
+		res, _ := h.exec(id, "fake:config")
+		var cfg struct {
+			Model string `json:"model"`
+		}
+		if err := json.Unmarshal([]byte(res.Text), &cfg); err != nil || cfg.Model != "fake-high" {
+			t.Fatalf("level %v: %+v %v", level, res, err)
+		}
 	}
 }
