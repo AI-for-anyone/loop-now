@@ -175,7 +175,9 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   // A line at the foot of the model list on whose login the runtime runs: its own login on this computer (with the path that was found),
   // or the accounts and keys the platform keeps.
   const browsedStatus = browsed ? statusFor(browsed.definition) : undefined
-  const colophon = browsed && (browsed.definition.capabilities.accounts === 'local' ? t.runtime.providerNote(browsed.definition.name) : t.runtime.picker.managed)
+  const colophon =
+    browsed &&
+    (browsed.definition.acpCommandId ? t.runtime.picker.addedNote(browsed.definition.name) : browsed.definition.capabilities.accounts === 'local' ? t.runtime.providerNote(browsed.definition.name) : t.runtime.picker.managed)
 
   return (
     <div

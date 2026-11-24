@@ -133,10 +133,14 @@ export const runtime = {
       recheck: '再检查一次',
       rechecking: '正在检查…',
       locked: (name: string) => `准备好之前不能选 ${name}。`,
+      // A local ACP command a person added: where to change it.
+      editCommand: '在全局设置里修改这条命令',
     },
     // Headings of the two provider groups when the catalog says which ones the Agent can use now.
     usable: { true: '现在就能用', false: '要先加账号或 key' },
     managed: '用平台保存的模型账号或 API key 运行。',
+    // The foot line for a local ACP command a person added.
+    addedNote: (name: string) => `${name} 是你在全局设置里添加的 ACP 命令，用它自己在本机的设置和登录。`,
   },
   // Local ACP commands a person added (global settings, under the runtimes): any program on this computer that speaks the Agent Client
   // Protocol becomes a runtime of its own.

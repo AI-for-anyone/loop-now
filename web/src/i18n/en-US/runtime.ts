@@ -112,9 +112,11 @@ export const runtime = {
       recheck: 'Check again',
       rechecking: 'Checking…',
       locked: (name: string) => `${name} can't be chosen until it's set up.`,
+      editCommand: 'Edit this command in Global settings',
     },
     usable: { true: 'Ready to use', false: 'Needs an account or key first' },
     managed: 'Runs with the model accounts or API keys the platform keeps.',
+    addedNote: (name: string) => `${name} is an ACP command you added in Global settings; it uses its own settings and login on this computer.`,
   },
   commands: {
     title: 'ACP commands you added',

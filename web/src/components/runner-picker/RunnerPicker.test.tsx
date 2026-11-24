@@ -7,7 +7,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl } from '@/test/api'
 import { chooseModel, chooseRunner, modelOptions, modelSearch, openProvider, runnerTab } from '@/test/model-picker'
 import { renderWithQuery } from '@/test/render'
-import { acpCommandDefinition, acpCommandStatus, acpDefaultModel, acpRuntimeId, codexStatus, runtimeDefinitions, runtimeList, withCodex } from '@/test/runtimes'
+import { acpCommand, acpCommandDefinition, acpCommandStatus, acpDefaultModel, acpRuntimeId, codexStatus, runtimeDefinitions, runtimeList, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
 import { RunnerPicker, type RunnerChoice } from './RunnerPicker'
@@ -294,6 +294,23 @@ describe('runner picker', () => {
     expect(await screen.findByText('The program sets its own thinking level')).toBeInTheDocument()
     expect(screen.queryByRole('radiogroup', { name: 'Thinking level' })).toBeNull()
     delete catalog[acpRuntimeId]
+  })
+
+  it('an added command whose program is missing says what to check in its own words, links to where it is edited, and its foot line says it was added', async () => {
+    const definitions = runtimeDefinitions()
+    server.use(
+      http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...definitions.runtimes, acpCommandDefinition(), acpCommandDefinition('9b8f0c1d-2e3a-4b5c-8d6e-7f8091a2b3c4', 'Athena')] })),
+      http.get(apiUrl('/acp-commands'), () => HttpResponse.json({ commands: [acpCommand()] })),
+    )
+    const found = acpCommandStatus('9b8f0c1d-2e3a-4b5c-8d6e-7f8091a2b3c4')
+    useCatalog({ runtimes: [...runtimeList().runtimes, acpCommandStatus(undefined, { available: false, binaryPath: null, unavailableReason: 'not_found', login: null }), found] }, [provider(found.id, { source: 'local_cli', runtime: found.id, authMethods: [], modelCount: 1 })])
+    const user = userEvent.setup()
+    renderWithQuery(<Picker />)
+    await chooseRunner(user, document.body, 'Hermes')
+    expect(await screen.findByText("hermes wasn't found on this computer: check the command is spelled right and runs in a terminal, or give its absolute path.")).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Edit this command in Global settings' })).toHaveAttribute('href', '/settings#settings-runtimes')
+    await chooseRunner(user, document.body, 'Athena')
+    expect(await screen.findByText('Athena is an ACP command you added in Global settings; it uses its own settings and login on this computer.')).toBeInTheDocument()
   })
 
   it('the thinking level is a ruler of the chosen model’s levels', async () => {
