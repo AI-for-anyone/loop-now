@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
-import { runtimeDefinitions } from '@/test/runtimes'
+import { runtimeGlyph } from '@/lib/runtime'
+import { runtimeDefinitions, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { RuntimeBadge, RuntimeMark } from './RuntimeBadge'
 
@@ -20,5 +21,19 @@ describe('runtime badge and sidebar mark', () => {
     expect(await screen.findByText('Codex')).toHaveAttribute('title', 'Runtime: Codex on this computer')
     expect(screen.getAllByTitle('Runtime: Codex on this computer')).toHaveLength(2)
     expect(container).toHaveTextContent(/^CodexRuntime: Codex on this computer$/)
+  })
+})
+
+describe('runtime glyphs in the badge and the sidebar mark', () => {
+  it('each runtime installed on this computer has its own glyph, so a Claude Code Agent and a Codex Agent tell apart; one without a glyph shows its initial', async () => {
+    const acme = { ...runtimeDefinitions().runtimes[1], id: 'acme', name: 'Acme CLI', providers: ['acme'] } as unknown as Schemas['RuntimeDefinition']
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...withCodex().runtimes, acme] })))
+    const strokes = (title: string) => [...screen.getByTitle(title).querySelectorAll('path')].map((path) => path.getAttribute('d'))
+    renderWithQuery(<><RuntimeMark runtime="claude-code" /><RuntimeMark runtime="codex" /><RuntimeMark runtime={'acme' as Schemas['AgentRuntime']} /><RuntimeBadge runtime="codex" /></>)
+    await screen.findAllByTitle('Runtime: Codex on this computer')
+    expect(strokes('Runtime: Claude Code on this computer')).toEqual(runtimeGlyph('claude-code'))
+    const codexMarks = screen.getAllByTitle('Runtime: Codex on this computer')
+    for (const mark of codexMarks) expect([...mark.querySelectorAll('path')].map((path) => path.getAttribute('d'))).toEqual(runtimeGlyph('codex'))
+    expect(screen.getByTitle('Runtime: Acme CLI on this computer').querySelector('text')).toHaveTextContent('A')
   })
 })
