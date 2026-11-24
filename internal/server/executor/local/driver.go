@@ -127,6 +127,13 @@ type nativeCommander interface {
 	commands(ctx context.Context, p *proc) ([]executor.PiCommand, error)
 }
 
+// sessionKeeper is a driver whose sessions the runtime keeps itself, outside the platform's directories (a Codex thread
+// in Codex's own store), named by a reference rather than a file the platform can read. A retired task instance's
+// archive then records only the reference; the driver's purge archives the session in the runtime.
+type sessionKeeper interface {
+	keepsSessions() bool
+}
+
 // purger is a driver that keeps data outside the Agent's directories and removes it when an Agent is deleted or a task
 // instance is retired. Release calls every purger, whatever runtime the Agent used last; failures are only logged.
 type purger interface {
