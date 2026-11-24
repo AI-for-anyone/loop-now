@@ -4,6 +4,9 @@ import { formatDayClock, formatBytes, formatMonthDayClock } from './format'
 type S = components['schemas']
 // The failures of a runtime's CLI (runtime_*), worded with the runtime's name.
 type RuntimeErrorCode = Extract<S['RunErrorCode'], `runtime_${string}`>
+// A runtime's (Latin) name set off by spaces inside a Chinese sentence; "运行时" without spaces when the runtime isn't known. At the start
+// of a sentence there is no space before the name.
+const spaced = (name: string | null, inside = true) => (name ? `${inside ? ' ' : ''}${name} ` : '运行时')
 
 export const chat = {
   loadingOlder: '正在加载更早的消息…',
@@ -63,11 +66,11 @@ export const chat = {
   // A runtime's failures name the runtime that failed (its name, or "运行时" when it isn't known); a login that has expired reads the same
   // as one that never happened.
   runtimeError: {
-    runtime_unavailable: (name: string | null) => `本机的 ${name ?? '运行时'} 用不了：没找到它、读不出版本，或版本太旧`,
-    runtime_login_required: (name: string | null) => `本机的 ${name ?? '运行时'} 没有登录，或登录已失效：在本机终端重新登录后再试`,
-    runtime_start_failed: (name: string | null) => `${name ?? '运行时'} 没能启动`,
-    runtime_exited: (name: string | null) => `${name ?? '运行时'} 进程在这一轮中意外退出`,
-    runtime_error: (name: string | null) => `${name ?? '运行时'} 报告这一轮出错`,
+    runtime_unavailable: (name: string | null) => `本机的${spaced(name)}用不了：没找到它、读不出版本，或版本太旧`,
+    runtime_login_required: (name: string | null) => `本机的${spaced(name)}没有登录，或登录已失效：在本机终端重新登录后再试`,
+    runtime_start_failed: (name: string | null) => `${spaced(name, false)}没能启动`,
+    runtime_exited: (name: string | null) => `${spaced(name, false)}进程在这一轮中意外退出`,
+    runtime_error: (name: string | null) => `${spaced(name, false)}报告这一轮出错`,
   } satisfies Record<RuntimeErrorCode, (name: string | null) => string>,
   tool: {
     started: '进行中',
