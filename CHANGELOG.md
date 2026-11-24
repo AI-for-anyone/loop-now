@@ -52,6 +52,17 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - An account kind with `"label": null` is now rejected, like a null `displayName`.
 - Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
 
+### Pick who runs an Agent, and change it at any message
+
+- Creating an Agent now starts with "Who runs it": the CLIs found on this computer come first, with their state (ready, not installed, not logged in), and the bundled Pi comes last with its model providers, those you can use now on top. A runtime that is not ready shows the command to install it or log in. Models are searchable, across all of Pi's providers too.
+- The same picker is on the Agent's config page and in the message box. The message box shows who runs the Agent now; choosing there saves at once and applies from the next message, also while the Agent is replying. The choice stays until you change it, and messages nobody types (from other Agents, wake-ups) use it too.
+- Changing the runtime no longer starts the conversation over. The new runtime gets the saved conversation with your next message: all of it when it is short, otherwise your first request, the most recent messages and a one-line summary of tool use per turn, up to a budget (16,000 tokens by default, `LOOP_NOW_CONTEXT_HANDOFF_TOKENS`). Reasoning, tool state and images are not carried. The conversation shows where it happened and how many messages went along; a change of model alone shows a small divider.
+- Changing the runtime and straight back, before a message reached the new one, simply continues the earlier session. `/new` still starts clean.
+- Pending sleeps are no longer cancelled by a change of runtime; the wake-up goes to the new one.
+- An Agent can read its own saved conversation with `loopctl conversation`.
+- API: `Run.selection` and `Run.contextHandoff`, a `context_handoff` timeline entry, `usable` and `?include=models` on `GET /model-providers`, `setup` on runtime definitions, `GET /conversation` in the Agent API. Changing the runtime during a reply no longer returns 409.
+- Downgrading: an older version runs on the new database but does not know a handoff that is still pending; it starts the conversation over on a change of runtime, as before.
+
 ### Fixes
 
 - A platform Agent that had a model key and was switched to Claude Code failed every run with "credentials unavailable", and the key could not be removed from its page. An Agent on Claude Code now ignores the model key; the key stays stored and is used again if the Agent is switched back to its provider.
