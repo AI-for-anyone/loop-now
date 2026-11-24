@@ -1,10 +1,10 @@
 import { compareEventIds } from '../event-ids'
-import type { ConnectionState, StreamRequest, TabMessage, WorkerMessage } from './protocol'
+import { streamKey, type ConnectionState, type StreamRequest, type TabMessage, type WorkerMessage } from './protocol'
 import type { StreamTransport } from './transport'
 
-// The shared worker's side: which tab gets which events. The transport opens the streams (transport.ts); the hub counts the tabs
-// subscribed to each stream, opens it for the first and closes it after the last, and passes every event and connection state on to
-// each subscriber, in order.
+// The shared worker's side: which tab gets which events. The transport carries the streams (transport.ts: one GET /events
+// connection); the hub counts the tabs subscribed to each stream, asks for it for the first and lets it go after the last, and
+// passes every event and connection state on to each subscriber, in order.
 //
 // A tab that subscribes to a stream already open must get what a new connection would give it: a snapshot, then what follows. The
 // hub keeps, per stream, the last snapshot and every event after it, and replays them to the newcomer before it gets live events.
@@ -13,7 +13,8 @@ import type { StreamTransport } from './transport'
 // snapshot would (the snapshot carries the stream position, and the events after it are exactly those after that position). When
 // that record grows too long (a long-lived Agent stream with many text deltas), it is dropped; a newcomer then gets a fresh
 // snapshot through a second, short connection (transport.snapshot), followed by the events the shared stream delivered after the
-// snapshot's position.
+// snapshot's position. A stream can also get a second snapshot on its own (it resumed from a position the server no longer has,
+// such as 0-0 of a stream that had no events yet): the record starts again from it, and every subscriber gets it like any event.
 //
 // A tab that goes away without a word (crash, killed process) answers no pings: after `missedPings` unanswered ones it is forgotten
 // with its subscriptions. A forgotten tab that comes back (a frozen page resuming) is told to subscribe again ('reset').
@@ -54,6 +55,7 @@ interface Subscriber {
 }
 
 interface Stream {
+  key: string
   request: StreamRequest
   subscribers: Subscriber[]
   state: ConnectionState
@@ -93,9 +95,9 @@ export class EventHub {
     }
   }
 
-  // The streams open now and how many subscribers each has (for tests and debugging).
+  // The streams open now, by name, and how many subscribers each has (for tests and debugging).
   openStreams(): Record<string, number> {
-    return Object.fromEntries([...this.streams].map(([url, stream]) => [url, stream.subscribers.length]))
+    return Object.fromEntries([...this.streams.values()].map((stream) => [stream.request.stream, stream.subscribers.length]))
   }
 
   receive(port: HubPort, message: TabMessage) {
@@ -110,7 +112,7 @@ export class EventHub {
     tab.missed = 0
     switch (message.kind) {
       case 'subscribe':
-        this.subscribe(tab, message.sub, { url: message.url, names: message.names, retryMinMs: message.retryMinMs, retryMaxMs: message.retryMaxMs })
+        this.subscribe(tab, message.sub, { endpoint: message.endpoint, stream: message.stream, names: message.names, retryMinMs: message.retryMinMs, retryMaxMs: message.retryMaxMs })
         break
       case 'unsubscribe':
         this.unsubscribe(tab, message.sub)
@@ -124,7 +126,7 @@ export class EventHub {
         }
         if (stream.awaitingRetry) {
           stream.awaitingRetry = false
-          this.transport.retry(stream.request.url)
+          this.transport.retry(stream.key)
         }
         break
       }
@@ -143,11 +145,12 @@ export class EventHub {
 
   private subscribe(tab: Tab, sub: number, request: StreamRequest) {
     if (tab.subs.has(sub)) this.unsubscribe(tab, sub)
-    let stream = this.streams.get(request.url)
+    const key = streamKey(request)
+    let stream = this.streams.get(key)
     const subscriber: Subscriber = { tab, sub, live: true }
     if (!stream) {
-      stream = { request, subscribers: [subscriber], state: 'connecting', fresh: true, record: null, awaitingRetry: false, catchUp: null }
-      this.streams.set(request.url, stream)
+      stream = { key, request, subscribers: [subscriber], state: 'connecting', fresh: true, record: null, awaitingRetry: false, catchUp: null }
+      this.streams.set(key, stream)
       tab.subs.set(sub, stream)
       this.transport.open(request, this.sink(stream))
       return
@@ -173,8 +176,8 @@ export class EventHub {
     if (stream.catchUp && stream.subscribers.every((subscriber) => subscriber.live)) this.stopCatchUp(stream)
     if (stream.subscribers.length > 0) return
     this.stopCatchUp(stream)
-    this.transport.close(stream.request.url)
-    this.streams.delete(stream.request.url)
+    this.transport.close(stream.key)
+    this.streams.delete(stream.key)
   }
 
   // A fresh snapshot for the subscribers waiting for one, without touching the shared connection: the events the shared stream
@@ -216,7 +219,7 @@ export class EventHub {
         for (const subscriber of stream.subscribers) subscriber.live = true
       },
       event: (type: string, id: string, data: string) => {
-        if (this.streams.get(stream.request.url) !== stream) return
+        if (this.streams.get(stream.key) !== stream) return
         const event = { type, id, data }
         // A snapshot on the shared connection itself (it resumed beyond what the server keeps): whoever waits for one gets it live.
         if (type === 'snapshot' && stream.catchUp) {
@@ -234,12 +237,12 @@ export class EventHub {
         for (const subscriber of stream.subscribers) if (subscriber.live) this.post(subscriber, { kind: 'event', sub: subscriber.sub, ...event })
       },
       state: (state: 'connecting' | 'open' | 'reconnecting') => {
-        if (this.streams.get(stream.request.url) !== stream) return
+        if (this.streams.get(stream.key) !== stream) return
         stream.state = state
         for (const subscriber of stream.subscribers) this.post(subscriber, { kind: 'state', sub: subscriber.sub, state })
       },
       closed: () => {
-        if (this.streams.get(stream.request.url) !== stream) return
+        if (this.streams.get(stream.key) !== stream) return
         stream.awaitingRetry = true
         stream.state = 'reconnecting'
         // The next connection starts with a snapshot: whoever joins or waits meanwhile gets it live.

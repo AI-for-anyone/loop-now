@@ -1,8 +1,8 @@
 import { EventHub } from './hub'
-import { EventSourceTransport } from './transport'
+import { MultiplexedTransport } from './transport'
 
-// The shared worker that owns the console's live event streams: one per browser and origin, so every console tab shares its
-// connections (see hub.ts). Started by client.ts; the browser ends it when the last tab using it closes.
+// The shared worker that owns the console's live event streams: one per browser and origin, so every console tab shares its one
+// GET /events connection (see hub.ts and transport.ts). Started by client.ts; the browser ends it when the last tab using it closes.
 
 interface SharedWorkerScope {
   onconnect: ((event: MessageEvent) => void) | null
@@ -11,7 +11,7 @@ interface SharedWorkerScope {
 // How often the worker pings each tab; a tab that leaves DEFAULT_LIMITS.missedPings pings unanswered is forgotten.
 export const PING_INTERVAL_MS = 15_000
 
-const hub = new EventHub(new EventSourceTransport())
+const hub = new EventHub(new MultiplexedTransport())
 setInterval(() => hub.tick(), PING_INTERVAL_MS)
 ;(globalThis as unknown as SharedWorkerScope).onconnect = (event) => {
   const port = event.ports[0]

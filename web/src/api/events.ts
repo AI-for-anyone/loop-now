@@ -102,14 +102,32 @@ export function overviewEventsUrl(scope: ScopeQuery = {}): string {
   return `${config.apiBase}/overview/events${search ? `?${search}` : ''}`
 }
 
+// A stream as its own endpoint serves it (url) and as GET /events names it (stream).
+export interface StreamTarget {
+  url: string
+  stream: string
+}
+
+export function agentEventsTarget(agentId: string): StreamTarget {
+  return { url: agentEventsUrl(agentId), stream: `agent:${agentId}` }
+}
+
+export function overviewEventsTarget(scope: ScopeQuery = {}): StreamTarget {
+  return { url: overviewEventsUrl(scope), stream: scope.projectId ? `overview:project:${scope.projectId}` : scope.platform ? 'overview:platform' : 'overview' }
+}
+
+export function inboxEventsTarget(): StreamTarget {
+  return { url: inboxEventsUrl(), stream: 'inbox' }
+}
+
 // Open an Agent's event stream. The return value closes the connection.
 export function connectAgentEvents({ agentId, ...options }: AgentEventsOptions): () => void {
-  return connectEventStream(agentEventsUrl(agentId), AGENT_EVENT_NAMES, options)
+  return connectEventStream(agentEventsTarget(agentId), AGENT_EVENT_NAMES, options)
 }
 
 // Open the overview event stream. The return value closes the connection.
 export function connectOverviewEvents({ scope, ...options }: OverviewEventsOptions & { scope?: ScopeQuery }): () => void {
-  return connectEventStream(overviewEventsUrl(scope), OVERVIEW_EVENT_NAMES, options)
+  return connectEventStream(overviewEventsTarget(scope), OVERVIEW_EVENT_NAMES, options)
 }
 
 export function inboxEventsUrl(): string {
@@ -118,20 +136,27 @@ export function inboxEventsUrl(): string {
 
 // Open the inbox event stream. The return value closes the connection.
 export function connectInboxEvents(options: InboxEventsOptions): () => void {
-  return connectEventStream(inboxEventsUrl(), INBOX_EVENT_NAMES, options)
+  return connectEventStream(inboxEventsTarget(), INBOX_EVENT_NAMES, options)
 }
 
-// Open an event stream. Where the browser has shared workers, the stream is held by one worker for every console tab, so tabs that
-// show the same stream share its connection (shared-events/); otherwise, or when a test supplies its own EventSource, the tab holds
-// it itself. Either way the caller gets the same events and states. The return value closes it.
+// Each stream on an EventSource of its own, at its own endpoint, instead of one GET /events for all: for the tests of the views,
+// which drive those endpoints' events directly (the shared path has tests of its own in shared-events/).
+let ownStreams = false
+export function useOwnEventStreams(on = true) {
+  ownStreams = on
+}
+
+// Open an event stream. Every stream of every console tab goes over one GET /events connection, held by a shared worker where the
+// browser has one (shared-events/), otherwise by the tab; either way the caller gets the same events and states as from the
+// stream's own endpoint. A caller that supplies its own EventSource gets the stream at its own endpoint. The return value closes it.
 export function connectEventStream<E extends { type: string; id: string; data: unknown }>(
-  url: string,
+  target: StreamTarget,
   names: readonly E['type'][],
   options: StreamOptions<E>,
 ): () => void {
-  const shared = options.createEventSource ? null : sharedStreams()
-  if (shared) return shared.subscribe(url, names, options)
-  return connectLocalEventStream(url, names, options)
+  const shared = options.createEventSource || ownStreams ? null : sharedStreams()
+  if (shared) return shared.subscribe(target.stream, names, options)
+  return connectLocalEventStream(target.url, names, options)
 }
 
 export { compareEventIds } from './event-ids'
