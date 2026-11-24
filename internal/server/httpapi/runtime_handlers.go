@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	goruntime "runtime"
 	"strconv"
 
 	"loop-now/internal/server/agentruntime"
@@ -16,6 +17,7 @@ type runtimeDefinition struct {
 	Providers    []string                  `json:"providers"`
 	IsDefault    bool                      `json:"isDefault"`
 	Capabilities agentruntime.Capabilities `json:"capabilities"`
+	Setup        *agentruntime.Setup       `json:"setup"`
 }
 
 // listRuntimeDefinitions returns the fixed definition of each runtime from the registry. It starts no process and
@@ -27,7 +29,8 @@ func (s *Server) listRuntimeDefinitions(w http.ResponseWriter, _ *http.Request) 
 		if providers == nil {
 			providers = []string{}
 		}
-		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities})
+		list = append(list, runtimeDefinition{ID: rt.ID, Name: rt.Name, Providers: providers, IsDefault: rt.IsDefault(), Capabilities: rt.Capabilities,
+			Setup: rt.SetupOn(goruntime.GOOS)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runtimes": list})
 }

@@ -64,6 +64,20 @@ export const chat = {
     failed: 'Failed',
   },
   sessionDivider: 'Session switched; page history is kept',
+  // Where the conversation was handed to another runtime (Run.contextHandoff), and where the model changed on the same runtime.
+  handoff: {
+    route: (from: string, to: string) => `${from} → ${to}`,
+    label: (from: string, to: string, parts: string) => `Handed over from ${from} to ${to}: ${parts}`,
+    // The change was undone after the other runtime had run a message: the same runtime starts a new session with the conversation.
+    renewed: (runtime: string) => `${runtime} · new session`,
+    renewedLabel: (runtime: string, parts: string) => `Handed over to a new ${runtime} session: ${parts}`,
+    whole: (count: number) => `all ${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
+    included: (count: number) => `${count} earlier ${count === 1 ? 'message' : 'messages'} went along`,
+    omitted: (count: number) => `${count} left out`,
+    images: (count: number) => `${count} ${count === 1 ? 'image' : 'images'} not carried`,
+    separator: ', ',
+  },
+  modelChange: (from: string, to: string) => `Model changed from ${from} to ${to}`,
   commands: {
     menuLabel: 'Commands',
     loading: 'Loading commands…',

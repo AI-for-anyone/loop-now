@@ -354,7 +354,7 @@ describe('connection and error display', () => {
   it('a validation failure shows the reason next to the field and keeps what was entered', async () => {
     server.use(
       http.get(apiUrl('/model-providers'), () =>
-        HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [{ id: 'anthropic', source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_API_KEY'], modelCount: 1, authMethods: ['api_key'] }] }),
+        HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [{ id: 'anthropic', name: null, source: 'builtin', runtime: 'pi', pluginId: null, pluginDisplayName: null, unavailableReason: null, usable: null, apiKeyEnvVars: ['ANTHROPIC_API_KEY'], modelCount: 1, authMethods: ['api_key'] }] }),
       ),
       http.get(apiUrl('/model-providers/anthropic/models'), () =>
         HttpResponse.json({ providerId: 'anthropic', models: [{ id: 'm1', name: 'M1', reasoning: false, contextWindow: 1, maxTokens: 1, input: [] }] }),
@@ -369,8 +369,7 @@ describe('connection and error display', () => {
     // When there is no Agent, the empty state in the main area also has a “New Agent”; here we use the “+” in the sidebar.
     await user.click(await within(sidebar()).findByRole('button', { name: 'New Agent' }))
     await user.type(screen.getByLabelText('Display name'), 'A very long name')
-    await user.selectOptions(await screen.findByLabelText('Model provider'), 'anthropic')
-    await chooseModel(user, document.body, 'm1')
+    await chooseModel(user, document.body, 'm1', { runtime: 'Pi', provider: 'anthropic' })
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByText('Name is too long')).toBeInTheDocument()
     expect(screen.getByLabelText('Display name')).toHaveValue('A very long name')

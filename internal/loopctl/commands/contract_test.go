@@ -77,6 +77,7 @@ func agentSamples() map[string]clitest.Sample {
 		"GET /sleep":                             {Status: 200, Body: map[string]any{"currentRunId": nil, "sleep": nil}},
 		"POST /sleep":                            {Status: 202, Body: map[string]any{"sleep": sleepRecord("requested", false), "endTurn": true}},
 		"GET /whoami":                            {Status: 200, Body: whoamiBody("agent", agentAddress, "dev")},
+		"GET /conversation":                      {Status: 200, Body: conversationPage()},
 		"GET /inbox/messages":                    {Status: 200, Body: inboxPage(nil, inboxSummary(consoleParticipant(), me, false))},
 		"POST /inbox/messages":                   {Status: 201, Body: inboxMessage(me, consoleParticipant())},
 		"POST /inbox/messages/{messageId}/read":  {Status: 200, Body: inboxMessage(consoleParticipant(), me)},

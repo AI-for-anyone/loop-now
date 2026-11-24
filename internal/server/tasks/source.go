@@ -211,10 +211,10 @@ func (s *Source) MarkSourceSynced(ctx context.Context, id uuid.UUID, files []sto
 	}
 	return s.Store.MarkTaskSourceSynced(ctx, runtime, id, files)
 }
-func (s *Source) RecordSessionFile(ctx context.Context, id uuid.UUID, file string) error {
+func (s *Source) RecordSessionFile(ctx context.Context, id uuid.UUID, runtime, file string) error {
 	_, err := s.Store.TaskInstance(ctx, id)
 	if store.IsNotFound(err) {
-		return s.Normal.RecordSessionFile(ctx, id, file)
+		return s.Normal.RecordSessionFile(ctx, id, runtime, file)
 	}
 	if err != nil {
 		return err

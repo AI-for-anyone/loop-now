@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -6,10 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
-import { ModelPicker } from '@/components/ModelPicker'
+import { RunnerPicker } from '@/components/runner-picker/RunnerPicker'
 import { RuntimeDifferences } from '@/features/agent-config/RuntimeNotes'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
-import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import type { Schemas } from '@/api/client'
 import { useCreateAgent } from '@/api/queries'
 import { t } from '@/i18n'
@@ -17,11 +16,14 @@ import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmat
 import { nameRuleError } from '@/lib/names'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { agentPath, scopeKey, type Scope } from '@/lib/scope'
+import { cn } from '@/lib/utils'
 
 // The New Agent dialog; the Agent is created in the current project or the platform. The list header and the first-use empty
-// state open the same dialog, and AgentsPage holds its open/closed state.
+// state open the same dialog, and AgentsPage holds its open/closed state. Who runs it comes first: the runner picker (runtime, model,
+// thinking level), then the name and the prompt.
 export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: () => void }) {
   const navigate = useNavigate()
+  const runnerLabel = useId()
   const create = useCreateAgent(scopeKey(scope))
   const runtimes = useRuntimeLookup()
   const [name, setName] = useState('')
@@ -44,26 +46,46 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
   }
 
   const nameError = missing.name ?? agentNameError(create.error, scope.kind)
+  const modelError = missing.model ?? fieldMessages(create.error, isModelField)
+  // How the chosen runtime differs from the bundled one, worth knowing the moment it is chosen.
+  const chosenRuntime = model ? runtimes.forProvider(model.provider) : undefined
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent kind="create">
+      <DialogContent kind="create" className="sm:max-w-[860px]">
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>
         <form className="grid gap-[18px]" onSubmit={(e) => void submit(e)} noValidate>
+          <div className="grid gap-2">
+            <span id={runnerLabel} className="text-[13.5px] leading-snug font-black">{t.runtime.picker.label}</span>
+            <RunnerPicker
+              labelledBy={runnerLabel}
+              newIn={scopeKey(scope)}
+              value={model}
+              thinkingLevel={thinkingLevel}
+              invalid={Boolean(modelError)}
+              onChoose={(choice) => {
+                if (choice.model.provider !== 'openai-codex') setServiceTier(null)
+                setModel(choice.model)
+                setThinkingLevel(choice.thinkingLevel)
+              }}
+              onThinkingChange={setThinkingLevel}
+            />
+            <FieldError message={modelError} />
+            <FieldError message={fieldMessages(create.error, (field) => field === 'thinkingLevel')} />
+          </div>
+          {(model?.provider === 'openai-codex' || chosenRuntime) && (
+            <div className={cn('grid items-start gap-4', model?.provider === 'openai-codex' && chosenRuntime && 'sm:grid-cols-2')}>
+              {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(create.error, (field) => field === 'serviceTier')} />}
+              <RuntimeDifferences runtime={chosenRuntime} brief />
+            </div>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="create-agent-name">{t.config.basic.name}</Label>
             <Input id="create-agent-name" value={name} aria-invalid={nameError ? true : undefined} onChange={(e) => setName(e.target.value)} />
             <FieldError message={nameError} />
           </div>
-          <ModelPicker value={model} onChange={next => { if (next?.provider !== model?.provider || next?.modelId !== model?.modelId) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={missing.model ?? fieldMessages(create.error, isModelField)}>
-            {(selected, provider) => <>
-              <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(create.error, field => field === 'thinkingLevel')} />
-              {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(create.error, field => field === 'serviceTier')} />}
-              <RuntimeDifferences runtime={runtimes.get(provider?.runtime)} brief />
-            </>}
-          </ModelPicker>
           <div className="grid gap-1.5">
             <Label htmlFor="create-agent-prompt">{t.config.basic.prompt}</Label>
             <Textarea id="create-agent-prompt" rows={4} placeholder={t.config.basic.promptPlaceholder} value={prompt} onChange={(e) => setPrompt(e.target.value)} />

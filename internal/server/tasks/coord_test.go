@@ -83,7 +83,7 @@ func TestSameAgentTasksHaveIndependentLocks(t *testing.T) {
 		calls[req.AgentID]++
 		mu.Unlock()
 		starts <- req
-		sink.Running(1)
+		sink.Running(1, executor.Selection{})
 		sink.Tool("tool", "bash", "started")
 		sink.TextDelta("reply")
 		inst, e := s.Store.TaskInstance(ctx, req.AgentID)

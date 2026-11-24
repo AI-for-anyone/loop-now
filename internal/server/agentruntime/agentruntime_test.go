@@ -62,3 +62,23 @@ func TestLookup(t *testing.T) {
 		t.Fatal("ByID must return a copy")
 	}
 }
+
+// A runtime that is not bundled says how to install it and log in on each operating system; the bundled Pi needs
+// nothing.
+func TestSetupCommands(t *testing.T) {
+	pi, _ := ByID(Pi)
+	if pi.SetupOn("darwin") != nil {
+		t.Fatal("the bundled Pi needs no setup")
+	}
+	cc, _ := ByID(ClaudeCode)
+	for goos, install := range map[string]string{
+		"darwin":  "curl -fsSL https://claude.ai/install.sh | bash",
+		"linux":   "curl -fsSL https://claude.ai/install.sh | bash",
+		"windows": "irm https://claude.ai/install.ps1 | iex",
+	} {
+		s := cc.SetupOn(goos)
+		if s == nil || s.Install == nil || *s.Install != install || s.Login == nil || *s.Login != "claude auth login" || s.DocsURL == nil {
+			t.Fatalf("%s: %+v", goos, s)
+		}
+	}
+}

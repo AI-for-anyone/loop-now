@@ -1441,6 +1441,53 @@
       "output": "Profile summary {name, server, caFile, tokenSet, tokenId, tokenPrefix}, without the secret part of the token"
     },
     {
+      "path": "conversation",
+      "summary": "Read your own conversation saved since the user last started over, whichever runtime handled it: requests and replies in full, each page oldest first; without a position, returns the newest page",
+      "identities": [
+        "agent"
+      ],
+      "network": true,
+      "args": [],
+      "flags": [
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "repeatable": false,
+          "description": "Return the messages just before this message ID (older)"
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "repeatable": false,
+          "description": "Return the messages just after this message ID (newer)"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "required": false,
+          "repeatable": false,
+          "min": 1,
+          "max": 100,
+          "description": "Messages per page, 1..100; default 20"
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "atMostOne",
+          "flags": [
+            "before",
+            "after"
+          ]
+        }
+      ],
+      "destructive": false,
+      "stdin": false,
+      "retry": true,
+      "output": "ConversationPage (hasMore means there are older messages before this page; hasMoreAfter means there are newer messages after it)"
+    },
+    {
       "path": "health",
       "summary": "Check whether the server's local database is healthy; when it is not, fails with server_unhealthy and details holds the health status",
       "identities": [

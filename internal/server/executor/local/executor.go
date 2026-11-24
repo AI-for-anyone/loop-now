@@ -37,7 +37,8 @@ type Source interface {
 	ReadBlob(ctx context.Context, sha string) ([]byte, error)
 	SourceFilesForSync(ctx context.Context, sourceID uuid.UUID) ([]store.SyncFile, error)
 	MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, processed []store.SyncFile) error
-	RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error
+	// RecordSessionFile records a session file confirmed written by the given runtime (the driver's runtime id).
+	RecordSessionFile(ctx context.Context, agentID uuid.UUID, runtime, path string) error
 	MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID *uuid.UUID) error
 	DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error)
 }
@@ -340,7 +341,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	r.prompting = true
 	r.mu.Unlock()
-	sink.Running(snap.ConfigVersion)
+	sink.Running(snap.ConfigVersion, executor.Selection{Runtime: p.drv.runtime(), Provider: snap.Provider, ModelID: snap.ModelID, ThinkingLevel: snap.ThinkingLevel})
 	if req.Origin == executor.OriginConsoleCompact {
 		return e.compact(ctx, p, r, req, snap), nil
 	}
@@ -789,7 +790,7 @@ func (e *Executor) recordSession(p *proc) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), e.o.StartTimeout)
 	defer cancel()
-	if err := e.src.RecordSessionFile(ctx, p.agentID, p.sessionFile); err != nil {
+	if err := e.src.RecordSessionFile(ctx, p.agentID, p.drv.runtime(), p.sessionFile); err != nil {
 		p.log.Error("failed to record the session file", "runId", p.curRun.Load(), "code", "session_record_failed")
 		return errors.New("session_record_failed")
 	}

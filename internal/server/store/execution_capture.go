@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"slices"
+
 	"github.com/google/uuid"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
@@ -23,6 +26,9 @@ type ExecutionIdentity struct {
 	CLIs                []string
 	CredentialsRevision int64
 	CredentialIdentity  string
+	// Session is the Agent's session record, read in the same transaction as the Agent: a change of runtime cannot fall
+	// between the runtime the Agent runs on and the session it continues.
+	Session AgentSession
 }
 
 func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID) (ExecutionIdentity, error) {
@@ -49,6 +55,9 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		layer.AgentPrompt = out.Agent.Prompt
 		layer.AgentVersion = out.Agent.PromptVersion
 		out.Prompts = layer
+		if out.Session, err = agentSession(ctx, tx, agentID); err != nil {
+			return err
+		}
 		cliRows, e := tx.Query(ctx, `SELECT cli_name FROM agent_clis WHERE agent_id=$1 ORDER BY cli_name`, agentID)
 		if e != nil {
 			return e
@@ -70,21 +79,27 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 			out.CredentialIdentity = projectCredentialIdentity(out.CLIs, resolved, out.CredentialRows)
 			return nil
 		}
-		var version *uuid.UUID
-		err = tx.QueryRow(ctx, `SELECT version_id FROM agent_model_auth WHERE agent_id=$1`, agentID).Scan(&version)
-		if err != nil && err != db.ErrNoRows {
-			return err
-		}
-		out.ModelAuthManaged = err == nil
-		if version != nil {
-			var provider string
-			if err := tx.QueryRow(ctx, `SELECT provider FROM model_auth_versions WHERE id=$1 AND agent_id=$2`, *version, agentID).Scan(&provider); err != nil {
+		// A runtime that runs on its own CLI's local login (capability accounts = local, such as Claude Code) uses no
+		// model credential: the Agent's model key or login and its single-key model row are neither read nor checked
+		// here. They stay stored, so a switch back to their provider uses them again.
+		local := agentruntime.ForProvider(out.Agent.ModelProvider).Capabilities.Accounts == agentruntime.AccountsLocal
+		if !local {
+			var version *uuid.UUID
+			err = tx.QueryRow(ctx, `SELECT version_id FROM agent_model_auth WHERE agent_id=$1`, agentID).Scan(&version)
+			if err != nil && err != db.ErrNoRows {
 				return err
 			}
-			if provider != out.Agent.ModelProvider {
-				return apperr.Invalid("credentials", "The model credential does not match the current provider.")
+			out.ModelAuthManaged = err == nil
+			if version != nil {
+				var provider string
+				if err := tx.QueryRow(ctx, `SELECT provider FROM model_auth_versions WHERE id=$1 AND agent_id=$2`, *version, agentID).Scan(&provider); err != nil {
+					return err
+				}
+				if provider != out.Agent.ModelProvider {
+					return apperr.Invalid("credentials", "The model credential does not match the current provider.")
+				}
+				out.ModelAuth = &modelcredential.Binding{VersionID: *version, AgentID: agentID, Provider: provider}
 			}
-			out.ModelAuth = &modelcredential.Binding{VersionID: *version, AgentID: agentID, Provider: provider}
 		}
 		rows, err := tx.Query(ctx, `SELECT id,agent_id,purpose,coalesce(cli_name,''),coalesce(template_version,''),coalesce(template_source,''),secret,field_names,env_names,file_paths,updated_at FROM agent_credentials WHERE agent_id=$1 ORDER BY id`, agentID)
 		if err != nil {
@@ -95,6 +110,9 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 			err := r.Scan(&c.ID, &c.AgentID, &c.Purpose, &c.CLIName, &c.TemplateVersion, &c.TemplateSource, &c.Secret, &c.FieldNames, &c.EnvNames, &c.FilePaths, &c.UpdatedAt)
 			return c, err
 		})
+		if err == nil && local {
+			out.CredentialRows = slices.DeleteFunc(out.CredentialRows, func(r CredentialRow) bool { return r.Purpose == PurposeModel })
+		}
 		return err
 	})
 	return out, err

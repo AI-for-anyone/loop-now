@@ -87,7 +87,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			var active bool
 			var valid bool
 			if m == nil {
-				if err = scope.Tx.QueryRow(ctx, `SELECT state='active' AND session_file IS NOT NULL AND epoch=$2 FROM agent_sessions WHERE agent_id=$1`, r.AgentID, r.Epoch).Scan(&valid); err != nil {
+				if err = scope.Tx.QueryRow(ctx, `SELECT epoch=$2 AND (state='active' AND session_file IS NOT NULL OR handoff IS NOT NULL) FROM agent_sessions WHERE agent_id=$1`, r.AgentID, r.Epoch).Scan(&valid); err != nil {
 					return err
 				}
 				if err = scope.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM runs WHERE agent_id=$1 AND status IN ('starting','running','aborting'))`, r.AgentID).Scan(&active); err != nil {

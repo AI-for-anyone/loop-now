@@ -16,7 +16,7 @@ import { pluginProvider } from '@/test/config'
 
 // Project settings › Model accounts: adding an account uses a search panel to choose
 // the provider, and each row of the account list shows the same provider name.
-const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: [], modelCount, authMethods })
+const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, usable: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: [], modelCount, authMethods })
 const catalog: Schemas['ModelProvider'][] = [
   provider('anthropic', 17), provider('deepseek', 2), provider('moonshotai', 4), provider('moonshotai-cn', 4), provider('no-login', 5, []),
   provider('openai-codex', 7, ['oauth']), provider('openrouter', 401), provider('typesafe', 0), provider('zai', 7), provider('zai-coding-cn', 4), provider('zz-new', 3),

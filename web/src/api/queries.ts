@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { config } from '@/config'
 import { lastScope, PLATFORM, renamedHere, scopeQueryKey, type ScopeKey, type ScopeQuery } from '@/lib/scope'
 import { api, ApiError, archiveBody, call, requestIdOf, toApiError, type Schemas } from './client'
@@ -12,6 +12,8 @@ export const keys = {
   // granted, after plugins are disabled globally, and after models.json is saved.
   modelProviders: ['modelProviders'] as const,
   agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
+  newAgentModelProviders: (scope: ScopeKey) => ['modelProviders', 'new', scope] as const,
+  allModels: ['modelProviders', 'models'] as const,
   runtimes: ['runtimes'] as const,
   runtimeDefinitions: ['runtimeDefinitions'] as const,
   modelSettings: ['modelSettings'] as const,
@@ -88,13 +90,33 @@ export function useHealth() {
   })
 }
 
-// With agentId, plugin providers also give the reason this Agent cannot use them right now (unavailableReason); project enablement and
-// grants can change elsewhere, so this is not cached for long and is re-read when a page opens and when the window regains focus.
-export function useModelProviders(agentId?: string) {
+// Who the catalog's usable flags are for: an Agent (its id), or a new Agent in a project or the platform (a scope key).
+export type CatalogFor = string | { newIn: ScopeKey }
+
+// With an Agent, plugin providers also give the reason this Agent cannot use them right now (unavailableReason), and every provider whether
+// it can run without entering an account or key first (usable); for a new Agent, usable is asked of its project or the platform. Accounts,
+// project enablement and grants can change elsewhere, so these are not cached for long and are re-read when a page opens and when the
+// window regains focus.
+export function useModelProviders(subject?: CatalogFor) {
+  const query =
+    subject === undefined ? undefined : typeof subject === 'string' ? { agentId: subject } : subject.newIn === PLATFORM ? { scope: 'platform' as const } : { projectId: subject.newIn }
   return useQuery({
-    queryKey: agentId ? keys.agentModelProviders(agentId) : keys.modelProviders,
-    queryFn: () => call(api.GET('/model-providers', agentId ? { params: { query: { agentId } } } : {})),
-    staleTime: agentId ? 0 : Infinity,
+    queryKey: subject === undefined ? keys.modelProviders : typeof subject === 'string' ? keys.agentModelProviders(subject) : keys.newAgentModelProviders(subject.newIn),
+    queryFn: () => call(api.GET('/model-providers', query ? { params: { query } } : {})),
+    staleTime: subject === undefined ? Infinity : 0,
+  })
+}
+
+// Every provider with its models in one read (include=models), for the runner picker's provider groups and its search across them; a
+// provider without a models list (a server that ignores include) maps to undefined. The catalog changes only with plugins and models.json
+// (invalidateModelCatalog), so it is read once.
+export function useAllModels(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.allModels,
+    queryFn: () => call(api.GET('/model-providers', { params: { query: { include: 'models' } } })),
+    select: (data) => new Map(data.providers.map((provider) => [provider.id, provider.models] as const)),
+    staleTime: Infinity,
+    enabled,
   })
 }
 
@@ -130,6 +152,17 @@ export function useModels(providerId: string | null) {
     queryFn: () => call(api.GET('/model-providers/{providerId}/models', { params: { path: { providerId: providerId! } } })),
     enabled: providerId !== null && providerId !== '',
     staleTime: Infinity,
+  })
+}
+
+// The models of several providers at once, for the runner picker's provider groups and its search across them; shares useModels' cache.
+export function useModelsOf(providerIds: readonly string[]) {
+  return useQueries({
+    queries: providerIds.map((providerId) => ({
+      queryKey: keys.models(providerId),
+      queryFn: () => call(api.GET('/model-providers/{providerId}/models', { params: { path: { providerId } } })),
+      staleTime: Infinity,
+    })),
   })
 }
 

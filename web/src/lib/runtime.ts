@@ -10,6 +10,8 @@ export type RuntimeDefinition = Schemas['RuntimeDefinition']
 // /runtime-definitions) instead of comparing runtime ids, so adding a runtime adds no branches to the console;
 // scripts/check-runtime-ids.mjs enforces it.
 export interface RuntimeLookup {
+  // Every definition, in the server's order (the default runtime first).
+  all: readonly RuntimeDefinition[]
   // The definition of a runtime; undefined while the definitions are being read, when they cannot be read, or for an id the server
   // does not define.
   get: (id: AgentRuntime | null | undefined) => RuntimeDefinition | undefined
@@ -25,6 +27,7 @@ export function runtimeLookup(definitions: readonly RuntimeDefinition[] | undefi
   const list = definitions ?? []
   const get = (id: AgentRuntime | null | undefined) => (id == null ? undefined : list.find((definition) => definition.id === id))
   return {
+    all: list,
     get,
     forProvider: (providerId) => list.find((definition) => definition.providers.includes(providerId)) ?? list.find((definition) => definition.isDefault),
     name: (id) => get(id)?.name ?? id,
@@ -53,3 +56,51 @@ export function runtimeProblemText(runtime: Pick<RuntimeDefinition, 'id' | 'name
   const copy = t.runtime.status
   return copy.problemsByRuntime[runtime.id]?.[problem] ?? copy.problems[problem](runtime.name)
 }
+
+// Whether a runtime can run an Agent on this computer right now, for the runner picker. A bundled runtime is always ready. One installed
+// on this computer is as GET /runtimes reports it: checking while that is being read, unknown when it cannot be read, and otherwise ready
+// or one of the problems above (an undeterminable login state counts as ready, as in runtimeProblem).
+export type RuntimeReadiness = { state: 'ready' } | { state: 'checking' } | { state: 'unknown' } | { state: 'problem'; problem: RuntimeProblem }
+
+export interface RuntimeStatusRead {
+  status: Schemas['RuntimeStatus'] | undefined
+  checking: boolean
+  failed: boolean
+}
+
+export function runtimeReadiness(definition: RuntimeDefinition, read: RuntimeStatusRead): RuntimeReadiness {
+  if (definition.capabilities.bundled) return { state: 'ready' }
+  if (read.status) {
+    const problem = runtimeProblem(read.status)
+    return problem ? { state: 'problem', problem } : { state: 'ready' }
+  }
+  return read.checking ? { state: 'checking' } : { state: 'unknown' }
+}
+
+// The status of one runtime in GET /runtimes.
+export const statusOf = (statuses: readonly Schemas['RuntimeStatus'][] | undefined, definition: RuntimeDefinition) => statuses?.find((status) => status.id === definition.id)
+
+// Only a known problem keeps a runtime from being chosen: while its status is being read, or when it cannot be read, the choice is left to
+// the person, and a run that fails says why.
+export const canRun = (readiness: RuntimeReadiness) => readiness.state !== 'problem'
+
+// The order of the picker's runtime rail: runtimes installed on this computer first, those that can run on top, those with a problem
+// after them; bundled runtimes last. Within each group, the server's order.
+export function railOrder(definitions: readonly RuntimeDefinition[], readiness: (definition: RuntimeDefinition) => RuntimeReadiness): RuntimeDefinition[] {
+  const rank = (definition: RuntimeDefinition) => {
+    if (definition.capabilities.bundled) return 3
+    const state = readiness(definition).state
+    return state === 'ready' ? 0 : state === 'problem' ? 2 : 1
+  }
+  return definitions.map((definition, index) => ({ definition, index, rank: rank(definition) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(({ definition }) => definition)
+}
+
+// The glyph inside a runtime's mark (components/runner-picker/RuntimeMark.tsx), as strokes on its 32×32 grid: a terminal prompt for Claude
+// Code, π for Pi. The mark's shape and the glyph's color follow the runtime's capabilities; a runtime without a glyph here is marked with
+// its initial.
+const glyphs: Partial<Record<AgentRuntime, readonly string[]>> = {
+  'claude-code': ['M9.5 14.5l4.2 3.6-4.2 3.6', 'M16.4 22.4h6.4'],
+  pi: ['M9.6 12.2c1.3-.9 2.6-1.2 4.2-1.2h8.8', 'M13.6 11.4c-.2 4-.9 7.4-2.4 10.4', 'M19.4 11.4c-.4 3.4-.3 6.3.4 8.2.5 1.3 1.6 1.9 2.8 1.3'],
+}
+
+export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => glyphs[id] ?? null

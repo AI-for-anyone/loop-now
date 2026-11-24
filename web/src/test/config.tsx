@@ -13,8 +13,8 @@ export const providers: Schemas['ModelProviderList'] = {
   piVersion: '1.1.0',
   catalogGeneratedAt: null,
   providers: [
-    { id: 'anthropic', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
-    { id: 'openai', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
+    { id: 'anthropic', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, usable: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
+    { id: 'openai', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, usable: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
   ],
 }
 
@@ -23,12 +23,12 @@ const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reaso
 // Provider registered by a plugin's Pi extension: OAuth only; unavailableReason
 // can be non-null only when the catalog is read with an agentId.
 export function pluginProvider(id: string, overrides: Partial<Schemas['ModelProvider']> = {}): Schemas['ModelProvider'] {
-  return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides } // check-english: zh (LocalizedText in both languages)
+  return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, usable: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides } // check-english: zh (LocalizedText in both languages)
 }
 
 // Local Claude Code (contract ModelProvider source=local_cli): uses its own login on
 // this machine, no account; models are aliases, thinking levels low to max, no off.
-export const claudeCodeProvider: Schemas['ModelProvider'] = { id: 'claude-code', name: 'Claude Code', source: 'local_cli', runtime: 'claude-code', pluginId: null, pluginDisplayName: null, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: [] }
+export const claudeCodeProvider: Schemas['ModelProvider'] = { id: 'claude-code', name: 'Claude Code', source: 'local_cli', runtime: 'claude-code', pluginId: null, pluginDisplayName: null, unavailableReason: null, usable: null, apiKeyEnvVars: [], modelCount: 2, authMethods: [] }
 const claudeCodeModel = (id: string, name: string): Schemas['Model'] => ({ ...model(id, name), reasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium' })
 export const withClaudeCode: Schemas['ModelProviderList'] = { ...providers, providers: [...providers.providers, claudeCodeProvider] }
 

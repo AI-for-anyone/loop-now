@@ -537,7 +537,7 @@ func (t *turnSink) warn(err error) {
 func (t *turnSink) event(kind string, data map[string]any) {
 	t.warn(t.service.Store.RecordTaskObservation(t.ctx, t.turn, kind, data))
 }
-func (t *turnSink) Running(version int64) {
+func (t *turnSink) Running(version int64, _ executor.Selection) {
 	t.warn(t.service.Store.MarkTaskRunning(t.ctx, t.turn, version))
 }
 func (t *turnSink) TextDelta(delta string) {

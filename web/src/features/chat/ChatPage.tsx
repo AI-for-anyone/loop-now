@@ -16,6 +16,7 @@ import { isBusy } from './live-state'
 import { MessageList } from './MessageList'
 import { conflictNotice, useStopReply } from './queue-actions'
 import { QueueList, QueueMessages } from './QueueList'
+import { RunnerChip } from './RunnerChip'
 import { runPhaseText } from './run-status-text'
 import { runStartedAt } from './time'
 import { SessionMissingBanner } from './SessionMissingBanner'
@@ -203,6 +204,7 @@ export function ChatPage() {
               />
             </>
           }
+          runner={<RunnerChip agent={agent} />}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
             // Busy hint: a fluorescent pink dot with a navy outline, no background fill.

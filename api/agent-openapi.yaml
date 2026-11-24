@@ -24,6 +24,7 @@ servers:
 tags:
   - name: inbox
   - name: sleep
+  - name: conversation
 
 paths:
   /agents/status:
@@ -101,6 +102,43 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /conversation:
+    get:
+      tags: [conversation]
+      operationId: readConversation
+      x-agent-only: true
+      summary: Read-only, paged view of the current Agent's own console conversation
+      description: |
+        The conversation is everything saved for this Agent since the user last started over (/new or resuming another
+        session), whichever runtime ran it: the user's messages (including platform reminders and sleep wakes, as their
+        text) and the replies, each in full, oldest first within a page. A message that is queued and has not been
+        handed to the Agent yet is not included. Images are counted, not returned; tool use is summarized per turn.
+        Without before or after it returns the newest page. Only a regular Agent's token can read it; a task instance's
+        token gets 404 (a task node's messages are read with the task commands). Reading changes nothing.
+      parameters:
+        - name: before
+          in: query
+          required: false
+          description: Return the messages just before this message (older)
+          schema: { type: string, format: uuid }
+        - name: after
+          in: query
+          required: false
+          description: Return the messages just after this message (newer); at most one of before and after
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageLimit"
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: One page of the conversation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /whoami:
@@ -2173,6 +2211,63 @@ components:
               type: array
               items: { $ref: "#/components/schemas/FieldError" }
 
+    ConversationPage:
+      type: object
+      required: [messages, hasMore, hasMoreAfter, total]
+      additionalProperties: false
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ConversationEntry" }
+        hasMore:
+          type: boolean
+          description: Older messages exist; read them with before set to the first message's id
+        hasMoreAfter:
+          type: boolean
+          description: Newer messages exist; read them with after set to the last message's id
+        total:
+          type: integer
+          minimum: 0
+          description: Messages in the whole conversation
+
+    ConversationEntry:
+      type: object
+      required: [id, role, origin, text, createdAt, runId, runStatus, images, tools]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/MessageRole" }
+        origin: { $ref: "#/components/schemas/MessageOrigin" }
+        text:
+          type: string
+          description: The full text; for a reply that failed or was interrupted, the part that was written
+        createdAt: { type: string, format: date-time }
+        runId: { type: string, format: uuid, description: The turn the message belongs to; a request and its reply share it }
+        runStatus: { $ref: "#/components/schemas/RunStatus" }
+        images: { type: integer, minimum: 0, description: Images attached to the message (not returned) }
+        tools:
+          description: On a reply, the tools the turn used, in order of first use; empty on requests
+          type: array
+          items: { $ref: "#/components/schemas/ConversationToolUse" }
+
+    ConversationToolUse:
+      type: object
+      required: [name, calls, failed]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        calls: { type: integer, minimum: 1 }
+        failed: { type: integer, minimum: 0 }
+
+    MessageRole:
+      type: string
+      enum: [user, assistant]
+
+    MessageOrigin:
+      description: Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
+      type: string
+      enum: [console, inbox_reminder, sleep_wake]
+
     Whoami:
       type: object
       required:
@@ -4151,6 +4246,7 @@ components:
         - apiKeyEnvVars
         - modelCount
         - authMethods
+        - usable
       additionalProperties: false
       properties:
         id:
@@ -4215,6 +4311,46 @@ components:
             $ref: '#/components/schemas/ModelAuthMethod'
           uniqueItems: true
           description: Explicit authentication methods the platform supports; OAuth login is console only and currently supports openai-codex and plugin providers (plugin providers support only oauth).
+        usable:
+          type: [boolean, "null"]
+          description: |
+            Whether the Agent (or a new Agent in the project, or a new platform Agent) can run this provider right now
+            without entering an account, key or login first; null when the query has none of agentId, projectId and
+            scope.
+            true: the provider needs nothing (authMethods is empty), or the platform keeps a usable one: for a project
+            Agent or a project, at least one project model account for this provider (when there are several, a run
+            may still ask which one to use); for a platform Agent, its own model key or login for this provider, or an
+            older single key with one of its environment variables. A new platform Agent has none yet, so only
+            providers that need nothing are true.
+            A provider whose runtime uses its own local login (RuntimeCapabilities.accounts is local, such as
+            claude-code) is always true: the platform keeps no account for it, and whether that runtime is installed
+            and logged in on this computer is GET /runtimes.
+            A plugin provider with a non-null unavailableReason is false.
+        models:
+          description: Present only with include=models; the same list as GET /model-providers/{providerId}/models
+          type: array
+          items: { $ref: "#/components/schemas/Model" }
+
+    Model:
+      type: object
+      required: [id, name, reasoning, contextWindow, maxTokens, input]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        name: { type: string }
+        reasoning: { type: boolean }
+        thinkingLevels:
+          description: The levels actually available for this specific model, as computed by the pinned Pi; absent means an older server that does not provide this capability.
+          type: array
+          items: { $ref: "#/components/schemas/ThinkingLevel" }
+        defaultThinkingLevel:
+          description: The result of the pinned Pi's official clampThinkingLevel(model, medium); does not read the session or the host settings.
+          $ref: "#/components/schemas/ThinkingLevel"
+        contextWindow: { type: integer }
+        maxTokens: { type: integer }
+        input:
+          type: array
+          items: { type: string }
 
     Warning:
       type: object
@@ -8512,6 +8648,7 @@ components:
         - $ref: "#/components/schemas/TimelineAbortRequested"
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
+        - $ref: "#/components/schemas/TimelineContextHandoff"
         - $ref: "#/components/schemas/TimelineExtensionUI"
         - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
@@ -8537,9 +8674,26 @@ components:
           abort_requested: "#/components/schemas/TimelineAbortRequested"
           ended: "#/components/schemas/TimelineEnded"
           session_missing: "#/components/schemas/TimelineSessionMissing"
+          context_handoff: "#/components/schemas/TimelineContextHandoff"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
           model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
+
+    TimelineContextHandoff:
+      description: The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff)
+      type: object
+      required: [type, at, fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [context_handoff] }
+        at: { type: string, format: date-time }
+        fromRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        toRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        includedMessages: { type: integer, minimum: 0 }
+        omittedMessages: { type: integer, minimum: 0 }
+        images: { type: integer, minimum: 0 }
+        bytes: { type: integer, minimum: 0 }
+        budgetBytes: { type: integer, minimum: 0 }
 
     UsageTotals:
       description: Sum of a number of usage records; total = input + output + cacheRead + cacheWrite
@@ -8922,7 +9076,7 @@ components:
 
     Run:
       type: object
-      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model]
+      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model, selection]
       additionalProperties: false
       properties:
         triggerInboxMessageId:
@@ -9014,6 +9168,69 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ModelRef"
             - type: "null"
+        selection:
+          description: |
+            Who ran this turn: the runtime, model provider, model and thinking level the message was handed over with,
+            recorded when the reply began (runningAt). Neighbouring turns with a different provider or model on the same
+            runtime show a change of model; a change of runtime shows as contextHandoff instead. Null until the reply
+            begins, for turns that never began, and for turns recorded before it was kept.
+          oneOf:
+            - $ref: "#/components/schemas/RunSelection"
+            - type: "null"
+        contextHandoff:
+          description: |
+            Present only on a turn that carried the saved conversation over to a new runtime (see ContextHandoff); omitted
+            on every other run.
+          $ref: "#/components/schemas/ContextHandoff"
+
+    RunSelection:
+      description: The runtime, model and thinking level a turn was handed over with.
+      type: object
+      required: [runtime, provider, modelId, thinkingLevel]
+      additionalProperties: false
+      properties:
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        provider: { type: string, description: ModelProvider.id }
+        modelId: { type: string }
+        thinkingLevel:
+          description: The Agent's thinking level when the turn began; null means the model's default
+          oneOf:
+            - $ref: "#/components/schemas/ThinkingLevel"
+            - type: "null"
+
+    ContextHandoff:
+      description: |
+        A selection of the saved conversation, given to a new runtime with the first message after the Agent's runtime
+        changed. The new runtime starts its own session and does not see the earlier runtime's memory; the selection is
+        a marked block in the prompt before this turn's message (after the run ID line). The stored message stays the
+        user's own text, and the message itself is never shortened.
+        The conversation is everything saved for this Agent since the user last started over (/new or resuming another
+        session). When it fits the budget it goes whole; otherwise the first request, the most recent requests and
+        answers, and as many earlier messages as fit are kept, in order and in full (partial text of failed or
+        interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
+        tool state and images are not carried. The block says how many messages were left out, and the Agent can read
+        them with `loopctl conversation`.
+        The block goes with every message until one that carries it reaches the new runtime and either completes or has
+        its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
+        lose it; each turn that carried it has this record.
+      type: object
+      required: [fromRuntime, toRuntime, includedMessages, omittedMessages, images, bytes, budgetBytes]
+      additionalProperties: false
+      properties:
+        fromRuntime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message
+        toRuntime: { $ref: "#/components/schemas/AgentRuntime" }
+        includedMessages: { type: integer, minimum: 0, description: Saved messages carried over in full }
+        omittedMessages: { type: integer, minimum: 0, description: Saved messages left out to stay within the budget }
+        images: { type: integer, minimum: 0, description: Images in the saved conversation; they are counted in the block but never carried }
+        bytes: { type: integer, minimum: 0, description: Size of the block in UTF-8 bytes }
+        budgetBytes:
+          type: integer
+          minimum: 0
+          description: |
+            The budget the block was selected for, counted as one token per UTF-8 byte (default 16000; the server's
+            LOOP_NOW_CONTEXT_HANDOFF_TOKENS changes it, clamped to 1024-64000)
 
     RunPhase:
       description: Set only when status is starting

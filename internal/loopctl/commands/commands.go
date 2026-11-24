@@ -59,6 +59,7 @@ func Registry() *cli.Registry {
 	addOps(r)
 	addTasks(r)
 	addSleep(r)
+	addConversation(r)
 	addPlugins(r)
 	return r
 }

@@ -98,7 +98,7 @@ func (s *Store) FinishSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r
 	}
 	var saved bool
 	if m == nil {
-		e = tx.QueryRow(ctx, `SELECT state='active' AND session_file IS NOT NULL AND epoch=$2 FROM agent_sessions WHERE agent_id=$1`, r.AgentID, r.Epoch).Scan(&saved)
+		e = tx.QueryRow(ctx, `SELECT epoch=$2 AND (state='active' AND session_file IS NOT NULL OR handoff IS NOT NULL) FROM agent_sessions WHERE agent_id=$1`, r.AgentID, r.Epoch).Scan(&saved)
 	} else {
 		e = tx.QueryRow(ctx, `SELECT session_state='active' AND session_file IS NOT NULL AND NOT retired FROM task_instances WHERE id=$1`, r.RuntimeID).Scan(&saved)
 	}

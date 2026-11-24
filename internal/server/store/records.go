@@ -31,7 +31,12 @@ const (
 	EventContextCompaction = "context.compaction"
 	EventSessionMissing    = "session.missing"
 	EventSessionReset      = "session.reset"
-	EventExtensionUI       = "extension.ui"
+	// EventRuntimeChanged is a change of the Agent's runtime (no run); data handoff says whether the conversation waits
+	// to be carried over (pending), the earlier session continues (restored), or there was nothing to carry (none).
+	EventRuntimeChanged = "runtime.changed"
+	// EventContextHandoff is a turn that carried a selection of the saved conversation to a new runtime.
+	EventContextHandoff = "context.handoff"
+	EventExtensionUI    = "extension.ui"
 	// EventModelRateLimit is the subscription quota status reported by Claude Code (the rate_limit_event is kept as is
 	// in info).
 	EventModelRateLimit = "model.rate_limit"

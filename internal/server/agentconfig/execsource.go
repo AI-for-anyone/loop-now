@@ -169,9 +169,7 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if snap.Session, err = s.Store.GetAgentSession(ctx, agentID); err != nil {
-		return Snapshot{}, err
-	}
+	snap.Session = captured.Session
 	skills, err := s.Store.ListAgentSkills(ctx, agentID)
 	if err != nil {
 		return Snapshot{}, err
@@ -311,9 +309,10 @@ func (s *Service) MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, proc
 	return s.Store.MarkSourceSynced(ctx, sourceID, processed)
 }
 
-// RecordSessionFile records a session file that has been written to disk.
-func (s *Service) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
-	return s.Store.RecordSessionFile(ctx, agentID, path)
+// RecordSessionFile records a session file that the given runtime has written to disk (see
+// store.RecordRuntimeSessionFile).
+func (s *Service) RecordSessionFile(ctx context.Context, agentID uuid.UUID, runtime, path string) error {
+	return s.Store.RecordRuntimeSessionFile(ctx, agentID, runtime, path)
 }
 
 // MarkSessionMissing marks the session as lost; runID is the run that found it missing.

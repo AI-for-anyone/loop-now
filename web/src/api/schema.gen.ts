@@ -380,6 +380,9 @@ export interface paths {
          *     version number or push event; the console reads it again after these operations).
          *     With agentId, providers whose source is plugin also give `unavailableReason`, the reason this Agent cannot use them
          *     right now (read it again after project enablement or grants change, too).
+         *     With agentId, projectId or scope=platform, every provider gives `usable` (see ModelProvider.usable); at most one
+         *     of the three may be given (422 otherwise). Read it again after accounts, keys or logins change.
+         *     With include=models, every provider also carries its models, so a picker can search all models at once.
          */
         get: operations["listModelProviders"];
         put?: never;
@@ -3675,6 +3678,23 @@ export interface components {
             modelCount: number;
             /** @description Explicit authentication methods the platform supports; OAuth login is console only and currently supports openai-codex and plugin providers (plugin providers support only oauth). */
             authMethods: components["schemas"]["ModelAuthMethod"][];
+            /**
+             * @description Whether the Agent (or a new Agent in the project, or a new platform Agent) can run this provider right now
+             *     without entering an account, key or login first; null when the query has none of agentId, projectId and
+             *     scope.
+             *     true: the provider needs nothing (authMethods is empty), or the platform keeps a usable one: for a project
+             *     Agent or a project, at least one project model account for this provider (when there are several, a run
+             *     may still ask which one to use); for a platform Agent, its own model key or login for this provider, or an
+             *     older single key with one of its environment variables. A new platform Agent has none yet, so only
+             *     providers that need nothing are true.
+             *     A provider whose runtime uses its own local login (RuntimeCapabilities.accounts is local, such as
+             *     claude-code) is always true: the platform keeps no account for it, and whether that runtime is installed
+             *     and logged in on this computer is GET /runtimes.
+             *     A plugin provider with a non-null unavailableReason is false.
+             */
+            usable: boolean | null;
+            /** @description Present only with include=models; the same list as GET /model-providers/{providerId}/models */
+            models?: components["schemas"]["Model"][];
         };
         /**
          * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code installed
@@ -3692,7 +3712,7 @@ export interface components {
         RuntimeDefinitionList: {
             runtimes: components["schemas"]["RuntimeDefinition"][];
         };
-        /** @description The fixed definition of a runtime; nothing in it depends on this computer. */
+        /** @description The fixed definition of a runtime; nothing in it depends on this computer, except that setup is given for the operating system the server runs on. */
         RuntimeDefinition: {
             id: components["schemas"]["AgentRuntime"];
             /** @description The product name, shown as is in every language */
@@ -3705,6 +3725,23 @@ export interface components {
             /** @description True for exactly one runtime, the one that runs every model provider no other runtime lists */
             isDefault: boolean;
             capabilities: components["schemas"]["RuntimeCapabilities"];
+            /** @description How a person sets this runtime up on this computer when GET /runtimes says it is not ready; null for a runtime that needs no setup (the bundled Pi) */
+            setup: components["schemas"]["RuntimeSetup"] | null;
+        };
+        /**
+         * @description Commands a person runs in a terminal, for the operating system the server runs on. The console shows them; nothing
+         *     runs them for the user.
+         */
+        RuntimeSetup: {
+            /** @description The command that installs the runtime's CLI (for example on Windows a PowerShell command); null when there is none to show */
+            install: string | null;
+            /** @description The command that logs the CLI in; null when it needs no login */
+            login: string | null;
+            /**
+             * Format: uri
+             * @description The vendor's setup page, for other ways to install
+             */
+            docsUrl: string | null;
         };
         /** @description What a runtime can do. Thinking levels and image input are per model, in the model catalog. */
         RuntimeCapabilities: {
@@ -3933,10 +3970,15 @@ export interface components {
             expectedPromptVersion: number;
         };
         /**
-         * @description Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime): the
-         *     new runtime starts with a new session and the session number goes up by one (the session reset event's reason is
-         *     runtime_changed), any sleep in the current session is cancelled, and the old session is neither migrated nor
-         *     deleted. Returns 409 agent_not_idle while the Agent has a reply in progress.
+         * @description Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime). It is
+         *     accepted at any time, also while the Agent is replying, and applies from the next message dispatched. The new
+         *     runtime starts its own session and is given a selection of the saved conversation with its first message
+         *     (Run.contextHandoff); the session number does not change, sleeps are kept, and the old runtime's session is
+         *     neither migrated nor deleted. When the runtime is changed back before any message has reached the new one (a
+         *     message that failed to start there, for example because it is not installed or not logged in, does not count),
+         *     the earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
+         *     keeps that runtime's session. Records from before this behaviour show a session reset with reason
+         *     runtime_changed at each change of runtime.
          */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
@@ -4371,6 +4413,60 @@ export interface components {
             usage: components["schemas"]["UsageTotals"];
             /** @description Provider and model this run actually used (as reported by the last model call); null when there was no model call */
             model: components["schemas"]["ModelRef"] | null;
+            /**
+             * @description Who ran this turn: the runtime, model provider, model and thinking level the message was handed over with,
+             *     recorded when the reply began (runningAt). Neighbouring turns with a different provider or model on the same
+             *     runtime show a change of model; a change of runtime shows as contextHandoff instead. Null until the reply
+             *     begins, for turns that never began, and for turns recorded before it was kept.
+             */
+            selection: components["schemas"]["RunSelection"] | null;
+            /**
+             * @description Present only on a turn that carried the saved conversation over to a new runtime (see ContextHandoff); omitted
+             *     on every other run.
+             */
+            contextHandoff?: components["schemas"]["ContextHandoff"];
+        };
+        /** @description The runtime, model and thinking level a turn was handed over with. */
+        RunSelection: {
+            runtime: components["schemas"]["AgentRuntime"];
+            /** @description ModelProvider.id */
+            provider: string;
+            modelId: string;
+            /** @description The Agent's thinking level when the turn began; null means the model's default */
+            thinkingLevel: components["schemas"]["ThinkingLevel"] | null;
+        };
+        /**
+         * @description A selection of the saved conversation, given to a new runtime with the first message after the Agent's runtime
+         *     changed. The new runtime starts its own session and does not see the earlier runtime's memory; the selection is
+         *     a marked block in the prompt before this turn's message (after the run ID line). The stored message stays the
+         *     user's own text, and the message itself is never shortened.
+         *     The conversation is everything saved for this Agent since the user last started over (/new or resuming another
+         *     session). When it fits the budget it goes whole; otherwise the first request, the most recent requests and
+         *     answers, and as many earlier messages as fit are kept, in order and in full (partial text of failed or
+         *     interrupted turns included), with each turn's tool use in short form (tool names, how many failed). Reasoning,
+         *     tool state and images are not carried. The block says how many messages were left out, and the Agent can read
+         *     them with `loopctl conversation`.
+         *     The block goes with every message until one that carries it reaches the new runtime and either completes or has
+         *     its session saved, so a turn that fails before that (for example because the runtime is not logged in) does not
+         *     lose it; each turn that carried it has this record.
+         */
+        ContextHandoff: {
+            /** @description The runtime that ran the conversation before the change; can equal toRuntime when the change was undone after the new runtime had already run a message */
+            fromRuntime: components["schemas"]["AgentRuntime"];
+            toRuntime: components["schemas"]["AgentRuntime"];
+            /** @description Saved messages carried over in full */
+            includedMessages: number;
+            /** @description Saved messages left out to stay within the budget */
+            omittedMessages: number;
+            /** @description Images in the saved conversation; they are counted in the block but never carried */
+            images: number;
+            /** @description Size of the block in UTF-8 bytes */
+            bytes: number;
+            /**
+             * @description The budget the block was selected for, counted as one token per UTF-8 byte (default 16000; the server's
+             *     LOOP_NOW_CONTEXT_HANDOFF_TOKENS changes it, clamped to 1024-64000)
+             */
+            budgetBytes: number;
         };
         /** @description Sum of a number of usage records; total = input + output + cacheRead + cacheWrite */
         UsageTotals: {
@@ -4401,6 +4497,40 @@ export interface components {
             /** @description The run this message belongs to; a user message and its reply carry the same run */
             run: components["schemas"]["Run"];
             images?: components["schemas"]["MessageImage"][];
+        };
+        ConversationPage: {
+            messages: components["schemas"]["ConversationEntry"][];
+            /** @description Older messages exist; read them with before set to the first message's id */
+            hasMore: boolean;
+            /** @description Newer messages exist; read them with after set to the last message's id */
+            hasMoreAfter: boolean;
+            /** @description Messages in the whole conversation */
+            total: number;
+        };
+        ConversationEntry: {
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["MessageRole"];
+            origin: components["schemas"]["MessageOrigin"];
+            /** @description The full text; for a reply that failed or was interrupted, the part that was written */
+            text: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: uuid
+             * @description The turn the message belongs to; a request and its reply share it
+             */
+            runId: string;
+            runStatus: components["schemas"]["RunStatus"];
+            /** @description Images attached to the message (not returned) */
+            images: number;
+            /** @description On a reply, the tools the turn used, in order of first use; empty on requests */
+            tools: components["schemas"]["ConversationToolUse"][];
+        };
+        ConversationToolUse: {
+            name: string;
+            calls: number;
+            failed: number;
         };
         /**
          * @description A page of conversation history plus turn counts. Turns are counted the same way as in the console's conversation
@@ -4963,7 +5093,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description A request from an agent-side extension through ctx.ui (extension_ui_request in Pi RPC). notify is a notification
          *     (level info, warning or error); setStatus sets or clears a status (cleared when message is empty). select,
@@ -5328,6 +5458,23 @@ export interface components {
             /** Format: date-time */
             at: string;
             sessionFile: string | null;
+        };
+        /** @description The saved conversation was carried over to a new runtime with this turn's message (see ContextHandoff) */
+        TimelineContextHandoff: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "context_handoff";
+            /** Format: date-time */
+            at: string;
+            fromRuntime: components["schemas"]["AgentRuntime"];
+            toRuntime: components["schemas"]["AgentRuntime"];
+            includedMessages: number;
+            omittedMessages: number;
+            images: number;
+            bytes: number;
+            budgetBytes: number;
         };
         /**
          * @description Identity kind. console is the console operator, external is an external identity, agent is an Agent
@@ -10087,8 +10234,14 @@ export interface operations {
     listModelProviders: {
         parameters: {
             query?: {
-                /** @description Marks for plugin providers whether this Agent can use them; returns 404 if the Agent does not exist */
+                /** @description Marks for plugin providers whether this Agent can use them, and for every provider whether this Agent has an account or key for it; returns 404 if the Agent does not exist */
                 agentId?: string;
+                /** @description For a new Agent in this project (no Agent yet), whether the project has an account for each provider; returns 404 if the project does not exist */
+                projectId?: string;
+                /** @description platform asks the same for a new platform Agent (no Agent yet), which has no keys or logins of its own until they are entered */
+                scope?: "platform";
+                /** @description models adds each provider's models (ModelProvider.models) */
+                include?: "models";
             };
             header?: never;
             path?: never;

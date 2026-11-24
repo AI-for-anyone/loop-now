@@ -472,6 +472,48 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	}
 }
 
+// A saved session is recorded with the runtime that wrote it, so the platform can tell a late save by the runtime the
+// Agent changed away from (a reply that was in progress during the change) from the current runtime's session.
+func TestSessionRecordedWithItsRuntime(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	id := h.agent(nil)
+	if res, _ := h.exec(id, "pi turn"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("Pi: %+v", res)
+	}
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = "claude-code", "haiku" })
+	if res, _ := h.exec(id, "claude turn"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("Claude Code: %+v", res)
+	}
+	h.src.mu.Lock()
+	defer h.src.mu.Unlock()
+	if got := h.src.recordRuntimes[id]; len(got) < 2 || got[0] != "pi" || got[len(got)-1] != "claude-code" {
+		t.Fatalf("runtimes the sessions were recorded with: %v", got)
+	}
+}
+
+// The conversation block the platform puts before the first message after a change of runtime reaches the runtime as
+// it is, on Pi and on Claude Code, and the reply reports who ran the turn.
+func TestHandoffBlockReachesTheRuntime(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	id := h.agent(nil)
+	message := executor.RunIDLine(uuid.Must(uuid.NewV7())) + "<conversation-handoff>\n[user · message 1]\nremember the word apple\n\n</conversation-handoff>\n\nwhat was the word?"
+	res, sink := h.exec(id, message)
+	if res.Outcome != executor.OutcomeCompleted || !strings.Contains(res.Text, "remember the word apple") || !strings.Contains(res.Text, "what was the word?") {
+		t.Fatalf("Pi: %+v", res)
+	}
+	if sink.selection.Runtime != "pi" {
+		t.Fatalf("Pi turn reported as %+v", sink.selection)
+	}
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = "claude-code", "haiku" })
+	res, sink = h.exec(id, message)
+	if res.Outcome != executor.OutcomeCompleted || !strings.Contains(res.Text, "<conversation-handoff>") || !strings.Contains(res.Text, "remember the word apple") {
+		t.Fatalf("Claude Code: %+v", res)
+	}
+	if sink.selection.Runtime != "claude-code" || sink.selection.Provider != "claude-code" || sink.selection.ModelID != "haiku" {
+		t.Fatalf("Claude Code turn reported as %+v", sink.selection)
+	}
+}
+
 // purgeLog returns the purge calls logged by fakeclaude.
 func (h *claudeHarness) purgeLog() []string {
 	b, _ := os.ReadFile(filepath.Join(h.realHome, ".fakeclaude-purge.log"))

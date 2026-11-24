@@ -382,6 +382,10 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 			ErrorCode: optStr(d, "errorCode")}, true
 	case store.EventSessionMissing:
 		return apitypes.TimelineSessionMissingEntry{TimelineBase: b(apitypes.TimelineSessionMissing), SessionFile: optStr(d, "sessionFile")}, true
+	case store.EventContextHandoff:
+		return apitypes.TimelineContextHandoffEntry{TimelineBase: b(apitypes.TimelineContextHandoff), ContextHandoff: apitypes.ContextHandoff{
+			FromRuntime: str(d, "fromRuntime"), ToRuntime: str(d, "toRuntime"), IncludedMessages: int(num(d, "includedMessages")),
+			OmittedMessages: int(num(d, "omittedMessages")), Images: int(num(d, "images")), Bytes: int(num(d, "bytes")), BudgetBytes: int(num(d, "budgetBytes"))}}, true
 	case store.EventExtensionUI:
 		return apitypes.TimelineExtensionUIEntry{TimelineBase: b(apitypes.TimelineExtensionUI), Method: str(d, "method"), Message: optStr(d, "message"),
 			Level: optStr(d, "level"), StatusKey: optStr(d, "statusKey"), Answered: optStr(d, "answered"), QuestionID: optUUID(d, "questionId")}, true

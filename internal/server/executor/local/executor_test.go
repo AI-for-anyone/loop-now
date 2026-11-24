@@ -45,6 +45,8 @@ type fakeSource struct {
 	// recordLog records, in order, the path of every RecordSessionFile call (to check that the old runtime's session is
 	// not recorded back).
 	recordLog map[uuid.UUID][]string
+	// recordRuntimes are the runtimes passed with each recorded session file.
+	recordRuntimes map[uuid.UUID][]string
 }
 
 func newFakeSource() *fakeSource {
@@ -116,7 +118,7 @@ func (f *fakeSource) MarkSourceSynced(_ context.Context, id uuid.UUID, processed
 	return nil
 }
 
-func (f *fakeSource) RecordSessionFile(_ context.Context, id uuid.UUID, p string) error {
+func (f *fakeSource) RecordSessionFile(_ context.Context, id uuid.UUID, runtime, p string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.recorded[id] = p
@@ -124,6 +126,10 @@ func (f *fakeSource) RecordSessionFile(_ context.Context, id uuid.UUID, p string
 		f.recordLog = map[uuid.UUID][]string{}
 	}
 	f.recordLog[id] = append(f.recordLog[id], p)
+	if f.recordRuntimes == nil {
+		f.recordRuntimes = map[uuid.UUID][]string{}
+	}
+	f.recordRuntimes[id] = append(f.recordRuntimes[id], runtime)
 	return nil
 }
 
@@ -149,9 +155,11 @@ type recSink struct {
 	// phaseRuntimes is the runtime reported with each phase.
 	phaseRuntimes []string
 	running       int
-	text          strings.Builder
-	tools         []string
-	gotText       chan struct{}
+	// selection is who the executor reported running the turn.
+	selection executor.Selection
+	text      strings.Builder
+	tools     []string
+	gotText   chan struct{}
 }
 
 func newSink() *recSink { return &recSink{gotText: make(chan struct{}, 100)} }
@@ -161,7 +169,12 @@ func (s *recSink) Phase(p, runtime string) {
 	s.phases, s.phaseRuntimes = append(s.phases, p), append(s.phaseRuntimes, runtime)
 	s.mu.Unlock()
 }
-func (s *recSink) Running(int64) { s.mu.Lock(); s.running++; s.mu.Unlock() }
+func (s *recSink) Running(_ int64, sel executor.Selection) {
+	s.mu.Lock()
+	s.running++
+	s.selection = sel
+	s.mu.Unlock()
+}
 func (s *recSink) TextDelta(d string) {
 	s.mu.Lock()
 	s.text.WriteString(d)

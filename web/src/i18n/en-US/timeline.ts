@@ -32,6 +32,7 @@ export const timeline = {
     process_started: (runtime: string) => `${runtime} start`,
     process_stopped: (runtime: string) => `${runtime} process stopped`,
     process_exited: (runtime: string) => `${runtime} process exited unexpectedly`,
+    context_handoff: 'Conversation handed over',
     running: 'Started replying',
     tool: (name: string) => `Tool ${name}`,
     model_call: {
@@ -78,6 +79,10 @@ export const timeline = {
     processReused: (runtime: string, pid: number) => `Reused the resident ${runtime} process, PID ${pid}.`,
     processStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}, ${reason}, ran for ${uptime}.`,
     processExited: (pid: number, exit: string, uptime: string) => `PID ${pid}, ${exit}, ran for ${uptime}.`,
+    // The selection of the saved conversation given to a new runtime: route, what went along, and its size against the budget (one token
+    // per byte).
+    handoff: (route: string, included: number, omitted: number, images: number, used: string, budget: string) =>
+      [route, [`${included} ${included === 1 ? 'message' : 'messages'} went along`, omitted > 0 ? `${omitted} left out` : null, images > 0 ? `${images} ${images === 1 ? 'image' : 'images'} not carried` : null].filter(Boolean).join(', '), `${used} of a ${budget} budget`].join(' · '),
     rateLimit: {
       type: { five_hour: '5-hour limit', seven_day: '7-day limit', seven_day_opus: '7-day Opus limit', seven_day_sonnet: '7-day Sonnet limit', overage: 'Overage usage' } as Record<string, string>,
       status: { allowed: 'available', allowed_warning: 'running low', rejected: 'used up' } as Record<string, string>,

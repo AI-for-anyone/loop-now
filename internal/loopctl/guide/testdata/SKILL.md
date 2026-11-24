@@ -1,6 +1,6 @@
 ---
 name: loopctl
-description: Use loopctl to send and receive Loop Now Inbox messages. Use it when a "Platform reminder" says you have unread messages, or when you need to message another Agent, the console operator or an external identity.
+description: Use loopctl to send and receive Loop Now Inbox messages. Use it when a "Platform reminder" says you have unread messages, when you need to message another Agent, the console operator or an external identity, or when you need earlier messages of your own conversation.
 ---
 
 # loopctl
@@ -146,6 +146,17 @@ The output.json of the last node in this example looks like this (use another ne
 {"actionId":"<new action UUID>","output":{"result":"The result"},"edgeId":null}
 ```
 
+## Reading your own conversation
+
+`loopctl conversation` reads, read-only, the conversation saved for you since the user last started over: every request and reply in full, oldest first within a page, whichever runtime handled it. Without options it gives the newest page; `--before <messageId>` gives the messages just before one, `--after <messageId>` the ones after it, and `--limit` sets the page size (default 20, at most 100). Each reply lists the tools its turn used and how many calls failed; images are only counted.
+
+When the runtime that runs you was changed, the first message you get carries a selection of this conversation and says how many messages were left out. Read the rest with this command only when the request needs them, instead of guessing what was said. Inside a task there is no such conversation, and the command returns not_found.
+
+```sh
+loopctl conversation --limit 20
+loopctl conversation --before <messageId>
+```
+
 ## Sleeping on your own
 
 Regular Agents (including Managers) and Agents inside tasks can register a sleep for their own instance. Use the run UUID given in the platform's prompt for this turn, and choose a separate UUID for every new action:
@@ -217,6 +228,17 @@ Show a regular Agent's status; an Agent can only view, read-only, Agents in the 
 Usage: `loopctl agent status <agent>`
 
 - `<agent>`: The Agent's ID, or its address: organization/project/Agent, or project/Agent within the same organization; for an Agent held by the platform, just its name
+
+### loopctl conversation
+
+Read your own conversation saved since the user last started over, whichever runtime handled it: requests and replies in full, each page oldest first; without a position, returns the newest page
+
+Usage: `loopctl conversation`
+
+- `--before <string>`: Return the messages just before this message ID (older)
+- `--after <string>`: Return the messages just after this message ID (newer)
+- `--limit <int>`: Messages per page, 1..100; default 20
+- At most one of these: --before, --after
 
 ### loopctl inbox list
 

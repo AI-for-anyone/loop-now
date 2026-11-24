@@ -54,7 +54,7 @@ func TestClaudeCodeRuntimeAPI(t *testing.T) {
 		t.Fatalf("Pi Agent: %+v", pi)
 	}
 	switched := decode[apitypes.Agent](t, e.expect(200, "PATCH", "/agents/"+pi.ID.String(), map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "haiku"}}))
-	if switched.Runtime != "claude-code" || switched.Session.State != "none" || switched.Session.Epoch != 2 {
+	if switched.Runtime != "claude-code" || switched.Session.State != "none" || switched.Session.Epoch != 1 {
 		t.Fatalf("after switching runtime: %+v", switched)
 	}
 	listed := decode[apitypes.AgentList](t, e.expect(200, "GET", e.agents(), nil))

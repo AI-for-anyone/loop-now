@@ -35,7 +35,7 @@ async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail
 
 it('lists only the levels the model supports and the actual default; saves the level on its own without the model or name', async () => {
   const { user, writes } = await setup()
-  expect(thinkingOptions(basic())).toEqual(['Default (Medium)', 'Off', 'Low', 'Medium', 'High'])
+  expect(thinkingOptions(basic())).toEqual(['Default (Medium)', 'High', 'Medium', 'Low', 'Off'])
   expect(thinkingChoice(basic())).toBe('Default (Medium)')
   await chooseThinking(user, basic(), 'High'); await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: 'high' }]))

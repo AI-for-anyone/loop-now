@@ -127,7 +127,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 11
+const latestVersion = 12
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.
@@ -612,5 +612,59 @@ func TestTaskNumberMigration(t *testing.T) {
 	}
 	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.title','renamed') WHERE id=$1`, a); err != nil {
 		t.Errorf("changing other parts of the document should still work: %v", err)
+	}
+}
+
+// v12 adds the pending handoff of a change of runtime (agent_sessions.handoff) and the run's selection and carried
+// handoff (runs.selection, runs.context_handoff): existing sessions and runs read them as empty, and only JSON objects
+// are accepted.
+func TestContextHandoffMigration(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 11); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(d)
+	defaults, err := st.EnsureDefaults(ctx, "o", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Version 11 data is written directly in SQL: the current store reads the new columns.
+	runID := uuid.New()
+	if _, err := d.Exec(ctx, `UPDATE agent_sessions SET session_file = '/s.jsonl', state = 'active' WHERE agent_id = $1`, agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, queued_at, started_at, ended_at)
+		VALUES ($1, $2, $3, 1, 1, 1, 'completed', 'console', now(), now(), now())`, runID, agent.ID, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := st.GetAgentSession(ctx, agent.ID)
+	if err != nil || sess.State != "active" || sess.SessionFile != "/s.jsonl" || sess.Handoff != nil {
+		t.Fatalf("an existing session has no pending handoff: %+v %v", sess, err)
+	}
+	run, err := st.GetRun(ctx, runID)
+	if err != nil || run.SelectionInfo() != nil || run.HandoffInfo() != nil {
+		t.Fatalf("an existing run has no selection or handoff: %+v %v", run, err)
+	}
+	for _, q := range []string{
+		`UPDATE agent_sessions SET handoff = '[1]' WHERE agent_id = $1`,
+		`UPDATE runs SET selection = '"pi"' WHERE agent_id = $1`,
+		`UPDATE runs SET context_handoff = '1' WHERE agent_id = $1`,
+	} {
+		if _, err := d.Exec(ctx, q, agent.ID); err == nil {
+			t.Fatalf("a value that is not a JSON object must be rejected: %s", q)
+		}
 	}
 }

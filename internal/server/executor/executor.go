@@ -174,10 +174,18 @@ type CommandNotice struct {
 type Sink interface {
 	// Phase reports a change of startup phase; runtime is the id of the runtime the run is being started on.
 	Phase(phase, runtime string)
-	// Running means the message has been handed to Pi and the reply has started.
-	Running(configVersion int64)
+	// Running means the message has been handed to the runtime and the reply has started; sel is who runs it.
+	Running(configVersion int64, sel Selection)
 	TextDelta(delta string)
 	Tool(toolCallID, toolName, state string)
+}
+
+// Selection is who runs a turn: the runtime, model provider, model and thinking level the message was handed over with.
+type Selection struct {
+	Runtime       string
+	Provider      string
+	ModelID       string
+	ThinkingLevel *string
 }
 
 // Executor runs Agent messages.

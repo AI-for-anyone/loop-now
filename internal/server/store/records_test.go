@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 	"loop-now/internal/testutil/sqlitetest"
@@ -323,83 +322,5 @@ func TestTaskProcessExitsDoNotOverrideNormalOverview(t *testing.T) {
 	}
 	if exits[agent.ID].Reason != "idle_timeout" || !exits[agent.ID].At.Equal(normalAt.Truncate(time.Microsecond)) {
 		t.Fatal("task exits polluted normal overview", exits[agent.ID])
-	}
-}
-
-// Changing the model provider switches the runtime (between Pi and Claude Code): rejected while a reply is in progress;
-// otherwise the session is reset (sequence number plus one, a reset event recorded with reason runtime_changed), while
-// changing the model within the same runtime leaves the session alone.
-func TestRuntimeSwitchResetsSession(t *testing.T) {
-	e := newRecEnv(t)
-	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
-	r := e.send(true, "")
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); !apperr.Is(err, apperr.CodeAgentNotIdle) {
-		t.Fatalf("switching the runtime should be rejected while a reply is in progress: %v", err)
-	}
-	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("openai"), ModelID: model("gpt-x")}); err != nil {
-		t.Fatal(err)
-	}
-	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "active" || sess.Epoch != 1 || sess.SessionFile != "/tmp/pi-session.jsonl" {
-		t.Fatalf("changing the model within the same runtime should leave the session alone: %+v", sess)
-	}
-	a, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")})
-	if err != nil || a.ModelProvider != "claude-code" {
-		t.Fatalf("switch to Claude Code: %+v %v", a, err)
-	}
-	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 || sess.SessionFile != "" {
-		t.Fatalf("switching the runtime should reset the session: %+v", sess)
-	}
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("opus")}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
-		t.Fatal(err)
-	}
-	evs, _ := e.s.AgentEvents(e.ctx, e.agent)
-	var resets []store.LifecycleEvent
-	for _, ev := range evs {
-		if ev.Type == store.EventSessionReset {
-			resets = append(resets, ev)
-		}
-	}
-	if len(resets) != 2 || resets[0].Data["reason"] != "runtime_changed" || resets[0].Data["fromRuntime"] != "pi" || resets[0].Data["toRuntime"] != "claude-code" ||
-		resets[0].Data["toEpoch"] != float64(2) || resets[1].Data["fromRuntime"] != "claude-code" || resets[1].Data["toEpoch"] != float64(3) {
-		t.Fatalf("reset events: %+v", resets)
-	}
-}
-
-// The runtime can also be switched while there are queued (not yet started) messages: they are later handled by the
-// new runtime, and the session is reset as usual. Without a session row the switch is saved as usual.
-func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
-	e := newRecEnv(t)
-	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
-	r := e.send(true, "")
-	queued := e.send(false, "")
-	if queued.Status != "queued" {
-		t.Fatalf("the second message should be queued: %+v", queued.Status)
-	}
-	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); err != nil {
-		t.Fatalf("switch with queued messages: %v", err)
-	}
-	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 {
-		t.Fatalf("the session should be reset: %+v", sess)
-	}
-	if _, err := e.s.Pool.Exec(e.ctx, `DELETE FROM agent_sessions WHERE agent_id = $1`, e.agent); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
-		t.Fatalf("without a session row the switch should be saved as usual: %v", err)
 	}
 }

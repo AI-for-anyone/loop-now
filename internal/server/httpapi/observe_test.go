@@ -63,6 +63,8 @@ func TestRunTimelineContract(t *testing.T) {
 	add(store.EventModelRetryEnded, map[string]any{"success": true, "attempt": 1})
 	add(store.EventContextCompaction, map[string]any{"reason": "threshold", "result": "succeeded", "tokensBefore": 150000, "estimatedTokensAfter": 32000, "durationMs": 900})
 	add(store.EventSessionMissing, map[string]any{"sessionFile": "/tmp/s.jsonl", "epoch": 1})
+	add(store.EventContextHandoff, map[string]any{"fromRuntime": "pi", "toRuntime": "claude-code", "includedMessages": 4, "omittedMessages": 2,
+		"images": 1, "bytes": 900, "budgetBytes": 16000})
 	add(store.EventPiStopped, map[string]any{"pid": 123, "reason": "abort_timeout", "uptimeMs": 5000})
 	add(store.EventPiExited, map[string]any{"pid": 124, "uptimeMs": 10, "exit": "exit status 3", "stderrTail": "boom"})
 	add(store.EventRunAbortRequested, map[string]any{"byRunId": uuid.Must(uuid.NewV7()).String()})
@@ -96,7 +98,7 @@ func TestRunTimelineContract(t *testing.T) {
 		order = append(order, head.Type)
 	}
 	for _, want := range []string{"dispatched", "phase", "running", "tool", "ended", "cli_install", "workspace_sync", "pi_started", "pi_reused",
-		"model_retry_started", "model_retry_ended", "compaction", "session_missing", "pi_stopped", "pi_exited", "abort_requested", "model_call"} {
+		"model_retry_started", "model_retry_ended", "compaction", "session_missing", "context_handoff", "pi_stopped", "pi_exited", "abort_requested", "model_call"} {
 		if seen[want] == 0 {
 			t.Errorf("timeline is missing entry %s: %v", want, order)
 		}
