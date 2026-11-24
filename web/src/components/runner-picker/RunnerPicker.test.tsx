@@ -7,7 +7,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl } from '@/test/api'
 import { chooseModel, chooseRunner, modelOptions, modelSearch, openProvider, runnerTab } from '@/test/model-picker'
 import { renderWithQuery } from '@/test/render'
-import { runtimeList } from '@/test/runtimes'
+import { codexStatus, runtimeList, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
 import { RunnerPicker, type RunnerChoice } from './RunnerPicker'
@@ -103,6 +103,21 @@ describe('runner picker', () => {
     renderWithQuery(<Picker />)
     expect(await runnerTab(document.body, 'Claude Code')).toHaveAccessibleName('Claude Code, Not installed')
     await vi.waitFor(async () => expect(await runnerTab(document.body, 'Pi')).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  it('a CLI older than its runtime supports says which version it needs, offers the update command, and cannot be chosen', async () => {
+    useCatalog({ runtimes: [...runtimeList().runtimes, codexStatus({ available: false, unavailableReason: 'version_unsupported', version: '0.150.0', login: null })] })
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex())))
+    const user = userEvent.setup()
+    renderWithQuery(<Picker />)
+    const tab = await runnerTab(document.body, 'Codex')
+    await vi.waitFor(() => expect(tab).toHaveAccessibleName('Codex, Too old'))
+    await user.click(tab)
+    const panel = screen.getByRole('tabpanel')
+    expect(within(panel).getByText('Codex on this computer is version 0.150.0; it needs 0.167.0 or later. Update it, then check again.')).toBeInTheDocument()
+    expect(within(panel).getByText('Update it: run this in a terminal on this computer')).toBeInTheDocument()
+    expect(within(panel).getByText('npm install -g @openai/codex')).toBeInTheDocument()
+    expect(within(panel).queryByRole('tree')).toBeNull()
   })
 
   it('a CLI that is logged out shows the login command; checking again reads the status without the cache', async () => {

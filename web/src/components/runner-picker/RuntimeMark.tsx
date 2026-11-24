@@ -41,3 +41,24 @@ export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition
     </svg>
   )
 }
+
+// The glyph alone, in the text color, for small places (the Agent header's runtime badge, a sidebar row): a runtime's own strokes, or its
+// initial.
+export function RuntimeGlyph({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
+  const strokes = runtimeGlyph(runtime.id)
+  return (
+    <svg viewBox="7 9.5 18 15" aria-hidden="true" className={cn('size-3.5 shrink-0', className)}>
+      {strokes ? (
+        <g fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+          {strokes.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      ) : (
+        <text x="16" y="22" textAnchor="middle" fontSize="14" fontWeight="800" fontFamily="var(--font-display-latin)" fill="currentColor">
+          {runtime.name.slice(0, 1).toUpperCase()}
+        </text>
+      )}
+    </svg>
+  )
+}

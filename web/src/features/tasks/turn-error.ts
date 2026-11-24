@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { runErrorText } from '@/features/chat/run-status-text'
 
 // The error line of a task turn (a message in the node chat, or a run in the task run record). The turn's errorMessage is the
 // server's fixed sentence for its errorCode and says nothing more than the code, so a known code shows only its copy. The server's
@@ -11,6 +12,7 @@ export function turnErrorText(code: string | null, message: string | null): stri
 
 function turnErrorLabel(code: string): string | null {
   if (code === 'user_stopped') return t.chat.status.user_stopped
-  if (code in t.chat.runError) return t.chat.runError[code as keyof typeof t.chat.runError]
+  // A task turn does not say which runtime it was on, so a runtime failure reads "the runtime".
+  if (code in t.chat.runError || code in t.chat.runtimeError) return runErrorText(code)
   return t.tasks.turnErrors[code] ?? null
 }

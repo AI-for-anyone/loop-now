@@ -216,7 +216,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
             <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
           </div>
         ) : browsed && readiness?.state === 'problem' ? (
-          <RunnerSetup runtime={browsed.definition} problem={readiness.problem} />
+          <RunnerSetup runtime={browsed.definition} problem={readiness.problem} version={browsed.version} />
         ) : (
           <>
             <ModelList
