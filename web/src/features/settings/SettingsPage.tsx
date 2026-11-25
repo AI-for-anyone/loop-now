@@ -1,6 +1,7 @@
 import { useId, useSyncExternalStore } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { DefaultPermissionMode } from '@/features/permissions/DefaultPermissionMode'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -34,13 +35,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 // The numbered sections of global settings; their order is the order of the section ruler. The local mode section keeps
 // LOCAL_MODE_ANCHOR as its id, so links from other pages (#local-mode) keep working.
-const KEYS = ['language', 'import', 'local-mode', 'runtimes', 'writing', 'models', 'folder', 'server', 'cli-templates'] as const
+const KEYS = ['language', 'import', 'permissions', 'local-mode', 'runtimes', 'writing', 'models', 'folder', 'server', 'cli-templates'] as const
 type Key = (typeof KEYS)[number]
 const partId = (key: Key) => (key === 'local-mode' ? LOCAL_MODE_ANCHOR : `settings-${key}`)
 const partTitleId = (key: Key) => `${partId(key)}-title`
 const titles: Record<Key, string> = {
   language: t.settings.language.title,
   import: t.importing.entry.settingsTitle,
+  permissions: t.permissions.defaultTitle,
   'local-mode': t.localMode.settings.title,
   runtimes: t.runtime.status.title,
   writing: t.settings.writing.title,
@@ -126,6 +128,9 @@ export function SettingsPage() {
                       <Link to="/import">{t.importing.entry.open}</Link>
                     </Button>
                   </div>
+                </Part>
+                <Part id="permissions">
+                  <DefaultPermissionMode labelledBy={partTitleId('permissions')} />
                 </Part>
                 <Part id="local-mode">
                   <LocalModeCard />

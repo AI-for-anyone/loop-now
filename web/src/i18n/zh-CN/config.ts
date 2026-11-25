@@ -41,6 +41,39 @@ export const config = {
     prompt: 'Prompt',
     promptPlaceholder: '追加到系统提示中的内容（可选）',
   },
+  // Where and how the Agent works: its own folder, the person's own CLI configuration (as the terminal), and how often it asks.
+  work: {
+    title: '工作方式',
+    importedFrom: (cli: string, time: string) => `从 ${cli} 的对话导入（${time}）。它从一份副本接着说，原来的记录不会被改动：`,
+    folder: {
+      label: '工作文件夹',
+      hint: 'Agent 在这个文件夹里干活，路径、git、CLAUDE.md / AGENTS.md 和项目里的 Skills 都按这个文件夹算。',
+      empty: '没有指定：用 Loop Now 给它的工作区',
+      placeholder: '/Users/me/projects/app',
+      clear: '改回 Loop Now 的工作区',
+      save: '保存文件夹',
+      piNote: 'Pi 不能在指定的文件夹里干活；指定后，“谁来运行”里不再提供 Pi。',
+      unsupported: (runtime: string) => `${runtime} 不能在指定的文件夹里干活。`,
+    },
+    localConfig: {
+      label: '用我本机的 CLI 配置',
+      off: '关着：Loop Now 用自己准备的配置运行，只给它需要的工具，不读你的个人配置。',
+      onIntro: '打开后，它像你在终端里一样运行：',
+      turnsOn: {
+        'claude-code': [
+          '你的 Claude 设置、CLAUDE.md 和自动记忆（和终端用同一份）',
+          '你装的插件、Skills 和 MCP 服务器',
+          'Claude 的全部内置工具，包括发消息、定时、网页抓取、工作树',
+          '本机的 HOME 和 PATH，你自己的 git、gh、ssh 登录',
+        ],
+        codex: ['你的 ~/.codex 配置', '本机的 HOME 和 PATH，你自己的 git、gh、ssh 登录'],
+      } as Record<string, string[]>,
+      generic: ['你在这台电脑上为这个 CLI 做的配置', '本机的 HOME 和 PATH，你自己的 git、gh、ssh 登录'],
+      alsoKept: '项目账号不再用于它；Loop Now 仍会加上收件箱和 loopctl，它照样能收发消息。',
+      risk: '它能做的事和你在终端里一样多，靠下面的批准模式把关。',
+      unsupported: (runtime: string) => `${runtime} 没有可用的本机配置。`,
+    },
+  },
   modelCredential: {
     title: '模型账号凭证',
     deleteTitle: '删除模型账号凭证？',

@@ -30,6 +30,13 @@ export const server = setupServer(
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/inbox-messages'), () => HttpResponse.json({ items: [], nextCursor: null })),
+  // Permission modes: new Agents on Full access, and no request waiting, for an Agent or a task node. Pages read these on load; an
+  // unanswered read fails like a lost connection (see the background tasks below).
+  http.get(apiUrl('/permission-settings'), () => HttpResponse.json({ defaultMode: 'full' })),
+  http.get(apiUrl('/agents/:agentId/permission-requests'), () => HttpResponse.json({ requests: [] })),
+  http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/permission-requests'), ({ params }) =>
+    HttpResponse.json({ taskId: String(params.taskId), nodeRunId: String(params.nodeRunId), runtimeId: '00000000-0000-7000-8000-000000000000', requests: [] }),
+  ),
   // The current node's running background tasks: none by default. Every task page reads them; an unanswered read fails like a lost
   // connection and puts up the “连不上服务端” (Can't reach the server) banner, which other assertions then trip over.
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/background-tasks'), ({ params }) =>

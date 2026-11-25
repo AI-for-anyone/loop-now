@@ -7,12 +7,10 @@ export const permissions = {
     auto: { name: '自动审查', hint: '由 CLI 自己的自动审查放行常规操作，拿不准的再问你' },
     full: { name: '完全放开', hint: '运行命令、改文件都不问你（以前一直是这样）' },
   },
-  // The order they are offered in, most careful first.
-  order: ['supervised', 'accept_edits', 'auto', 'full'] as const,
   current: (mode: string) => `批准模式：${mode}`,
   // A runtime without the chosen mode runs it as Supervised, never as Full access.
   fallback: (runtime: string, mode: string) => `${runtime} 没有「${mode}」，会按「逐项批准」运行`,
-  piOnlyFull: 'Pi 不会请求批准，只能完全放开',
+  onlyFull: (runtime: string) => `${runtime} 不会请求批准，只能完全放开`,
   nextMessage: '从下一条消息开始生效',
   saving: '正在保存…',
   saved: '已保存',

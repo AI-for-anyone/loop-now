@@ -29,7 +29,7 @@ describe('Draft navigation on the global settings page', () => {
 
 // "Printed sheet" redesign, step 4: global settings sit on a sheet, with numbered sections and the section ruler in the stub.
 describe('Global settings on the sheet', () => {
-  const titles = ['Language', 'Import conversations', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
+  const titles = ['Language', 'Import conversations', 'Permissions for new Agents', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
   const region = (name: string) => screen.getByRole('region', { name })
   const open = async () => {
     server.use(...baseHandlers([]))
