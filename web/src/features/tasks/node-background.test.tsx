@@ -135,3 +135,10 @@ describe('Background tasks of a task node', () => {
     void runId
   })
 })
+
+it('a task page whose test registers no background-task read still gets an empty list, not a failed request', async () => {
+  // Without the shared default the read fails like a lost connection, and the page shows the connection banner (an alert).
+  const response = await fetch(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/background-tasks`))
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({ taskId, nodeRunId: nodeId, tasks: [] })
+})

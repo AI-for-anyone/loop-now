@@ -30,6 +30,11 @@ export const server = setupServer(
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/inbox-messages'), () => HttpResponse.json({ items: [], nextCursor: null })),
+  // The current node's running background tasks: none by default. Every task page reads them; an unanswered read fails like a lost
+  // connection and puts up the “连不上服务端” (Can't reach the server) banner, which other assertions then trip over.
+  http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/background-tasks'), ({ params }) =>
+    HttpResponse.json({ taskId: String(params.taskId), nodeRunId: String(params.nodeRunId), runtimeId: '00000000-0000-7000-8000-000000000000', tasks: [] }),
+  ),
   // Folders: by default an empty root with no Git pull history.
   http.get(apiUrl('/agents/:agentId/folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/projects/:projectId/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
