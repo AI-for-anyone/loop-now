@@ -286,7 +286,7 @@ var registry = []Runtime{
 		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",
-		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"flash"}, Level: LowestLevel},
+		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},
 	},
 }
 
