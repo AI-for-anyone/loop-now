@@ -10,6 +10,7 @@ import { apiUrl, defaultProject, errorBody, makeAgent, makeProject } from '@/tes
 import { renderConfig } from '@/test/config'
 import { inDesktopShell } from '@/test/desktop'
 import { createMockFolder } from '@/test/folders'
+import { serverShowsDialog } from '@/test/path-picks'
 import { dir, localModeBackend } from '@/test/local-mode'
 import { projectBackend } from '@/test/projects'
 import { renderRoutes } from '@/test/render'
@@ -224,8 +225,29 @@ describe('Project settings: local directories', () => {
     expect(local.state.requests.at(-1)?.body).toEqual({ expectedRevision: 2, directories: [{ path: '/Users/me/code/app', note: 'Main repo' }, { path: '/Users/me/missing-dir', note: null }, { path: '/Users/me/picked/sub', note: null }] })
   })
 
+  it('in a browser, “Choose…” has the server show this computer\'s folder dialog; closing the form while it is open drops the request, and with it the dialog', async () => {
+    const picks = serverShowsDialog('hold')
+    const { user } = setup()
+    const card = await region('Local directories')
+    await user.click(await within(card).findByRole('button', { name: 'Add directory' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose…' }))
+    expect(within(dialog).getByRole('button', { name: 'Choosing…' })).toBeInTheDocument()
+    await waitFor(() => expect(picks.requests).toEqual([{ kind: 'directory' }]))
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(picks.aborted).toBe(1))
+
+    picks.answer = { path: '/Users/me/picked' }
+    await user.click(within(card).getByRole('button', { name: 'Add directory' }))
+    dialog = await screen.findByRole('dialog', { name: 'Add local directory' })
+    await user.click(within(dialog).getByRole('button', { name: 'Choose…' }))
+    await waitFor(() => expect(within(dialog).getByLabelText('Absolute path')).toHaveValue('/Users/me/picked'))
+    expect(picks.requests).toHaveLength(2)
+  })
+
   it.each([
-    ['in a browser', false],
+    ['in a browser whose server cannot show the dialog', false],
     ['in an older desktop shell without the picker', true],
   ])('%s there is no “Choose…”: the path is typed', async (_where, desktop) => {
     if (desktop) inDesktopShell({ withPicker: false })

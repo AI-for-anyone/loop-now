@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, defaultProject, errorBody, projectsUrl } from '@/test/api'
 import { inDesktopShell } from '@/test/desktop'
+import { serverShowsDialog } from '@/test/path-picks'
 import { renderRoutes } from '@/test/render'
 import { acpCommand, acpCommandDefinition, acpCommandStatus, acpRuntimeId, runtimeDefinitions, runtimeList } from '@/test/runtimes'
 import { server } from '@/test/server'
@@ -111,7 +112,21 @@ describe('ACP commands people added, in global settings', () => {
     expect(sent).toEqual([{ method: 'POST', path: '/acp-commands', body: { name: 'Hermes', command: '/opt/hermes/bin/hermes', args: [], env: {} } }])
   })
 
-  it('in a browser, the command is typed: there is no “Choose…”', async () => {
+  it('in a browser whose server can show this computer\'s dialog, the command can be chosen there as a file', async () => {
+    const picks = serverShowsDialog({ path: '/opt/hermes/bin/hermes' })
+    const { user, sent } = setup({ commands: [], status: null })
+    await user.click(await screen.findByRole('button', { name: 'Add command' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add an ACP command' })
+    await user.type(within(dialog).getByLabelText('Name'), 'Hermes')
+    await user.click(await within(dialog).findByRole('button', { name: 'Choose…' }))
+    await waitFor(() => expect(within(dialog).getByLabelText('Command')).toHaveValue('/opt/hermes/bin/hermes'))
+    expect(picks.requests).toEqual([{ kind: 'file' }])
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(sent).toEqual([{ method: 'POST', path: '/acp-commands', body: { name: 'Hermes', command: '/opt/hermes/bin/hermes', args: [], env: {} } }])
+  })
+
+  it('in a browser whose server cannot show the dialog, the command is typed: there is no “Choose…”', async () => {
     const { user } = setup({ commands: [], status: null })
     await user.click(await screen.findByRole('button', { name: 'Add command' }))
     const dialog = await screen.findByRole('dialog', { name: 'Add an ACP command' })

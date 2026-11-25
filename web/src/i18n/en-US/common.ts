@@ -31,6 +31,10 @@ export const common = {
   required: 'Required',
   upload: 'Upload',
   uploading: 'Uploading…',
-  // Next to a path input in the desktop window: opens the system's own dialog for a folder or file.
+  // Next to a path input: opens the system's own dialog for a folder or file (the desktop window's, or in a browser the one Loop Now's
+  // server shows on its computer).
   choosePath: 'Choose…',
+  // In a browser, while the server's dialog is open: it opens in front, but on macOS usually without the keyboard.
+  choosingPath: 'Choosing…',
+  choosingPathHint: 'The dialog is open on this computer. If keys do nothing, click it once.',
 } satisfies Messages['common']
