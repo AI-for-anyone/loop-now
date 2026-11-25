@@ -4,10 +4,11 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
-import { agentsUrl, apiUrl, context, defaultAgentsPath, errorBody, makeAgent, makeStatus, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, context, defaultAgentsPath, defaultProject, errorBody, makeAgent, makeStatus, toListItem } from '@/test/api'
 import { pluginProvider, providers, catalogHandlers, withClaudeCode } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
+import { textGenerationBackend } from '@/test/text-generation'
 import { sidebar } from '@/test/shell'
 import { codexProvider } from '@/test/model-auth'
 import { chooseModel, chooseRunner, findRunnerPicker, openProvider } from '@/test/model-picker'
@@ -45,6 +46,23 @@ async function fill(user: ReturnType<typeof userEvent.setup>, name: string, pick
 }
 
 describe('Creating an Agent', () => {
+  it('Write with AI writes the prompt for an Agent in this project with the name typed so far, and the Agent is created with it', async () => {
+    let created: Schemas['AgentCreate'] | null = null
+    const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, prompt: body.prompt }), { status: 201 }) })
+    const backend = textGenerationBackend()
+    server.use(...backend.handlers)
+    const dialog = await fill(user, 'Issue sorter')
+    await user.click(within(dialog).getByRole('button', { name: 'Write with AI' }))
+    // A panel inside the dialog, not a second dialog on top of it.
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    await user.type(within(dialog).getByLabelText('What should it do?'), 'Sort issues')
+    await user.click(within(dialog).getByRole('button', { name: 'Write' }))
+    await waitFor(() => expect(within(dialog).getByLabelText('Prompt')).toHaveValue('Written: Sort issues'))
+    expect(backend.state.drafts).toEqual([{ target: 'agent', projectId: defaultProject.id, agentName: 'Issue sorter', request: 'Sort issues', currentText: '' }])
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(created).toMatchObject({ name: 'Issue sorter', prompt: 'Written: Sort issues' }))
+  })
+
   it('picks a supported thinking level from the same model catalog and saves the explicit choice on create', async () => {
     let created: Schemas['AgentCreate'] | null = null
     const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, thinkingLevel: body.thinkingLevel }), { status: 201 }) })

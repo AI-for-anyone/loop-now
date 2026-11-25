@@ -16,4 +16,20 @@ export const prompts = {
   serverVersion: (version: number) => `服务器文本 · 版本 ${version}`, draft: '我的草稿',
   newerThanReview: '核对期间服务器又有更新。这里保留已展示的版本，再次保存仍可能提示冲突。',
   adopt: (version: number) => `已核对版本 ${version}，保留草稿继续编辑`,
+  // "Write with AI" beside each Prompt editor: a small panel above the text, which the draft replaces (undoable).
+  ai: {
+    button: 'AI 帮写', title: 'AI 帮写', ask: '想让它做什么？',
+    examples: {
+      agent: '比如：每天早上看 GitHub 上新开的 issue，分好类发到飞书群',
+      project: '比如：这个项目做手机 App；大家用中文回复；部署前先问我',
+      improve: '比如：写短一点，遇到报错先问我。留空就按原意改得更清楚',
+    },
+    replaces: '会参考框里现有的内容，写好后替换它，可以撤销。', fills: '写好后填进框里，可以撤销。',
+    by: (name: string) => `由 ${name} 写`, change: '换一个',
+    checking: '正在看由谁来写…', noWriter: '这台电脑上还没有能用来写的命令行工具。', setUp: '去设置',
+    unknownWriter: '读不到由谁来写；写的时候由服务器来挑。',
+    write: '写', writing: '正在写…', seconds: (seconds: number) => `${seconds} 秒`, stop: '停止',
+    replaced: '已替换', filled: '已填入', undo: '撤销',
+    fellBack: (chosen: string, writer: string) => `你选的 ${chosen} 这次用不了，改由 ${writer} 写的。`,
+  },
 } as const
