@@ -1,12 +1,25 @@
-import { useRef, type KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { t } from '@/i18n'
 import type { AgentRuntime } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { RuntimeMark } from './RuntimeMark'
 import { problemStamp, stateText, type RailEntry } from './rail-entry'
 
+// The rail's first entry when it has one that is not a runtime (RunnerPicker's lead).
+export interface RailLead {
+  name: string
+  mark: ReactNode
+  state: ReactNode
+  label: string
+  tabId: string
+  selected: boolean
+  inUse: boolean
+  onBrowse: () => void
+}
+
 interface RunnerRailProps {
   entries: RailEntry[]
+  lead?: RailLead
   browsed: AgentRuntime | undefined
   current: AgentRuntime | undefined
   wide: boolean
@@ -48,12 +61,13 @@ export function RunnerState({ entry, compact = false }: { entry: RailEntry; comp
 
 // The column of runtimes on the left of the picker (a row of cards at narrow widths). Each is a tab: choosing one shows its models (or how
 // to set it up) on the right; the model, not the tab, is what gets chosen. The runtime in use carries the pink arrow of the console's rulers.
-export function RunnerRail({ entries, browsed, current, wide, tabId, panelId, onBrowse, onLeave }: RunnerRailProps) {
+export function RunnerRail({ entries, lead, browsed, current, wide, tabId, panelId, onBrowse, onLeave }: RunnerRailProps) {
   const refs = useRef(new Map<string, HTMLButtonElement>())
+  // Every tab in order, keyed by its element id: the first entry, then the runtimes.
+  const tabs = [...(lead ? [{ id: lead.tabId, browse: lead.onBrowse }] : []), ...entries.map((entry) => ({ id: tabId(entry.definition.id), browse: () => onBrowse(entry.definition.id) }))]
   const move = (event: KeyboardEvent, index: number) => {
     const back = wide ? 'ArrowUp' : 'ArrowLeft', next = wide ? 'ArrowDown' : 'ArrowRight'
-    const target =
-      event.key === back ? index - 1 : event.key === next ? index + 1 : event.key === 'Home' ? 0 : event.key === 'End' ? entries.length - 1 : null
+    const target = event.key === back ? index - 1 : event.key === next ? index + 1 : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null
     if (target === null) {
       if (wide && event.key === 'ArrowRight') {
         event.preventDefault()
@@ -62,51 +76,91 @@ export function RunnerRail({ entries, browsed, current, wide, tabId, panelId, on
       return
     }
     event.preventDefault()
-    const entry = entries[(target + entries.length) % entries.length]
-    onBrowse(entry.definition.id)
-    refs.current.get(entry.definition.id)?.focus()
+    const tab = tabs[(target + tabs.length) % tabs.length]
+    tab.browse()
+    refs.current.get(tab.id)?.focus()
   }
+  const register = (id: string, node: HTMLButtonElement | null) => {
+    if (node) refs.current.set(id, node)
+    else refs.current.delete(id)
+  }
+  const offset = lead ? 1 : 0
   return (
     <div className={cn('flex min-w-0 flex-1 flex-col gap-2 bg-paper-tab', wide ? 'border-r-2 border-dashed border-ink/35 px-2.5 pt-3 pb-3' : 'border-b-2 border-dashed border-ink/35 px-2.5 pt-2.5 pb-3')}>
       {wide && <p aria-hidden="true" className="px-1.5 font-display-latin text-[11px] font-extrabold tracking-[0.14em] text-ink-500 uppercase">{t.runtime.picker.rail}</p>}
       <div role="tablist" aria-label={t.runtime.picker.rail} aria-orientation={wide ? 'vertical' : 'horizontal'} className={cn('flex gap-1.5', wide ? 'flex-col' : 'no-scrollbar -mx-2.5 overflow-x-auto px-2.5 pb-1')}>
+        {lead && (
+          <RailTab id={lead.tabId} register={register} label={lead.label} selected={lead.selected} inUse={lead.inUse} wide={wide} panelId={panelId} onClick={lead.onBrowse} onKeyDown={(event) => move(event, 0)} mark={lead.mark} name={lead.name} state={lead.state} />
+        )}
         {entries.map((entry, index) => {
           const { definition } = entry
-          const selected = definition.id === browsed
-          const inUse = definition.id === current
+          const id = tabId(definition.id)
           return (
-            <button
+            <RailTab
               key={definition.id}
-              ref={(node) => {
-                if (node) refs.current.set(definition.id, node)
-                else refs.current.delete(definition.id)
-              }}
-              type="button"
-              role="tab"
-              id={tabId(definition.id)}
-              aria-selected={selected}
-              aria-controls={panelId}
-              aria-label={[definition.name, stateText(entry), inUse ? t.runtime.picker.current : null].filter(Boolean).join(', ')}
-              tabIndex={selected ? 0 : -1}
+              id={id}
+              register={register}
+              label={[definition.name, stateText(entry), definition.id === current ? t.runtime.picker.current : null].filter(Boolean).join(', ')}
+              selected={definition.id === browsed}
+              inUse={definition.id === current}
+              wide={wide}
+              panelId={panelId}
               onClick={() => onBrowse(definition.id)}
-              onKeyDown={(event) => move(event, index)}
-              className={cn(
-                'relative grid shrink-0 cursor-pointer grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 rounded-input border-2 text-left outline-none focus-visible:shadow-focus',
-                wide ? 'px-2.5 py-2' : 'min-w-[172px] px-2.5 py-1.5',
-                selected ? 'border-ink bg-riso-yellow shadow-[3px_3px_0_var(--ink)]' : 'border-transparent hover:border-ink/25 hover:bg-paper-raised',
-              )}
-            >
-              {/* The runtime in use: the pink arrow the console's rulers use for "you are here". */}
-              {inUse && <span aria-hidden="true" className={cn('absolute size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-riso-pink', wide ? 'top-1/2 -left-[13px] -translate-y-1/2' : '-top-[3px] left-3 rotate-90')} />}
-              <RuntimeMark runtime={definition} />
-              <span className="grid min-w-0 gap-1">
-                <span className="truncate font-display-latin text-[15.5px] leading-tight font-extrabold text-ink">{definition.name}</span>
-                <RunnerState entry={entry} compact={!wide} />
-              </span>
-            </button>
+              onKeyDown={(event) => move(event, index + offset)}
+              mark={<RuntimeMark runtime={definition} />}
+              name={definition.name}
+              state={<RunnerState entry={entry} compact={!wide} />}
+            />
           )
         })}
       </div>
     </div>
+  )
+}
+
+interface RailTabProps {
+  id: string
+  // Keeps the tab's element by its id, for moving the focus with the arrow keys.
+  register: (id: string, node: HTMLButtonElement | null) => void
+  label: string
+  selected: boolean
+  inUse: boolean
+  wide: boolean
+  panelId: string
+  onClick: () => void
+  onKeyDown: (event: KeyboardEvent) => void
+  mark: ReactNode
+  name: string
+  state: ReactNode
+}
+
+// One card in the rail: the mark, the name and the state under it; yellow while looked at.
+function RailTab({ id, register, label, selected, inUse, wide, panelId, onClick, onKeyDown, mark, name, state }: RailTabProps) {
+  return (
+    <button
+      ref={(node) => register(id, node)}
+      type="button"
+      role="tab"
+      id={id}
+      aria-selected={selected}
+      aria-controls={panelId}
+      aria-label={label}
+      tabIndex={selected ? 0 : -1}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      className={cn(
+        'relative grid shrink-0 cursor-pointer grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 rounded-input border-2 text-left outline-none focus-visible:shadow-focus',
+        wide ? 'px-2.5 py-2' : 'min-w-[172px] px-2.5 py-1.5',
+        selected ? 'border-ink bg-riso-yellow shadow-[3px_3px_0_var(--ink)]' : 'border-transparent hover:border-ink/25 hover:bg-paper-raised',
+      )}
+    >
+      {/* The entry in use: the pink arrow the console's rulers use for "you are here". */}
+      {inUse && <span aria-hidden="true" className={cn('absolute size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-riso-pink', wide ? 'top-1/2 -left-[13px] -translate-y-1/2' : '-top-[3px] left-3 rotate-90')} />}
+      {mark}
+      <span className="grid min-w-0 gap-1">
+        <span className="truncate font-display-latin text-[15.5px] leading-tight font-extrabold text-ink">{name}</span>
+        {state}
+      </span>
+    </button>
   )
 }

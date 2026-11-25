@@ -5,11 +5,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ApiError } from '@/api/client'
+import { PromptWriter, type PromptWriterAsk } from '@/features/writing/PromptWriter'
 import { t } from '@/i18n'
 import { useDirtyForm } from './draft-navigation'
 import { createPromptDraft, promptDirty, reducePromptDraft, type PromptText } from './prompt-draft'
 
-export function PromptEditor({ formId, label, saveLabel, text, version, save, readLatest }: {
+export function PromptEditor({ formId, label, saveLabel, text, version, save, readLatest, ask }: {
   formId: string
   label: string
   saveLabel: string
@@ -17,6 +18,8 @@ export function PromptEditor({ formId, label, saveLabel, text, version, save, re
   version: number
   save: (value: PromptText) => Promise<PromptText>
   readLatest: () => Promise<PromptText>
+  // What "Write with AI" writes this Prompt for; its draft goes into the box as an unsaved edit.
+  ask: PromptWriterAsk
 }) {
   const [state, dispatch] = useReducer(reducePromptDraft, { text, version }, createPromptDraft)
   const [error, setError] = useState<unknown>(null), [readError, setReadError] = useState<unknown>(null)
@@ -42,8 +45,9 @@ export function PromptEditor({ formId, label, saveLabel, text, version, save, re
   }
   return <div className="grid min-w-0 gap-3.5">
     <div className="grid min-w-0 gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Textarea id={id} rows={7} className="min-h-[160px] max-h-[420px] resize-y font-mono text-[14px]" value={state.draft} disabled={state.pending} onChange={event => { dispatch({ type: 'edit', text: event.target.value }); setSaved(false) }} />
+      <PromptWriter label={<Label htmlFor={id}>{label}</Label>} text={state.draft} ask={ask} onReplace={value => { dispatch({ type: 'edit', text: value }); setSaved(false) }}>
+        {writing => <Textarea id={id} rows={7} className="min-h-[160px] max-h-[420px] resize-y font-mono text-[14px]" value={state.draft} disabled={state.pending || writing} onChange={event => { dispatch({ type: 'edit', text: event.target.value }); setSaved(false) }} />}
+      </PromptWriter>
       <p className="text-[12.5px] text-ink-500">{copy.baseline(state.base.version)}</p>
     </div>
     {state.pinned && state.latest.version !== state.base.version && !state.conflict && <Alert variant="warning" role="status"><AlertDescription>{copy.backgroundUpdated}</AlertDescription></Alert>}

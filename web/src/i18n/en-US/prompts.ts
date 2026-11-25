@@ -1,4 +1,5 @@
 import type { Messages } from '..'
+import { formatElapsed } from './format'
 
 export const prompts = {
   sectionTitle: 'Prompt',
@@ -30,4 +31,31 @@ export const prompts = {
   draft: 'My draft',
   newerThanReview: 'The server changed again while you were reviewing. The version shown here is kept; saving may still report a conflict.',
   adopt: (version: number) => `Reviewed version ${version}; keep editing my draft`,
+  ai: {
+    button: 'Write with AI',
+    title: 'Write with AI',
+    ask: 'What should it do?',
+    examples: {
+      agent: 'e.g. Every morning, sort the new GitHub issues and post them to the Lark group',
+      project: 'e.g. This project is a mobile app; reply in Chinese; ask before deploying',
+      improve: 'e.g. Make it shorter, and ask me first when something fails. Leave empty to make it clearer as it is',
+    },
+    replaces: "It reads what's in the box, then replaces it. You can undo.",
+    fills: 'It fills the box when done. You can undo.',
+    by: (name: string) => `By ${name}`,
+    change: 'Change',
+    checking: 'Checking who writes…',
+    noWriter: 'No CLI on this computer can write yet.',
+    setUp: 'Set one up',
+    unknownWriter: "Couldn't read who writes; the server picks one when you write.",
+    write: 'Write',
+    writing: 'Writing…',
+    elapsed: (ms: number) => formatElapsed(ms),
+    stop: 'Stop',
+    replaced: 'Replaced',
+    filled: 'Filled in',
+    undo: 'Undo',
+    fellBack: (chosen: string, writer: string) => `${chosen} couldn't write this time, so ${writer} wrote it.`,
+    fellBackUnknown: (writer: string) => `The one you chose couldn't write this time, so ${writer} wrote it.`,
+  },
 } satisfies Messages['prompts']

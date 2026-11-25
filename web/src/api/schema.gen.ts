@@ -561,6 +561,79 @@ export interface paths {
         patch: operations["updateAcpCommand"];
         trace?: never;
     };
+    "/text-generation-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who writes with AI ("Write with AI"), and who would write right now
+         * @description "Write with AI" drafts a Prompt (POST /prompt-drafts) with one short run of a CLI installed on this computer,
+         *     using that CLI's own login; no Agent is created. Only runtimes whose accounts are local
+         *     (RuntimeCapabilities.accounts) write; the bundled Pi does not.
+         *     selection is the runtime model a person chose; null is Automatic: the first ready runtime in the order Claude
+         *     Code, Codex, Antigravity, Grok, then the local ACP commands in the order they were added, with a small model from
+         *     its live model list: Claude Code a Haiku model, Codex a -mini model at the low thinking level, Antigravity a
+         *     Flash model at its lowest thinking level, the others their first listed model; the first listed model when the
+         *     preferred one is not listed, and the model's default thinking level when the preferred one is not offered. A
+         *     runtime is ready when GET /runtimes reports it available and not logged out (its 30-second cache is used) and
+         *     its model list has the model.
+         *     writer says who would write now: the chosen one when it is ready; otherwise Automatic's choice, with fellBack
+         *     true when a chosen one was passed over; null when no runtime is ready.
+         */
+        get: operations["getTextGenerationSettings"];
+        /**
+         * Choose who writes with AI
+         * @description selection null goes back to Automatic. A provider that no runtime with local accounts runs is refused (422,
+         *     field selection.provider). The model and thinking level are not checked against the live model list, which can
+         *     be out of date while a CLI is logged out; when writing, one that is not listed then falls back to Automatic.
+         */
+        put: operations["putTextGenerationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prompt-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a draft of an Agent's or a project's Prompt with AI
+         * @description Asks the writer (GET /text-generation-settings; a chosen one that is not ready falls back to Automatic for this
+         *     request, with writer.fellBack true) once and returns its draft. Nothing is saved: the console puts the draft in
+         *     the editor, and the person saves as usual.
+         *     The writer runs as a new session of the CLI in an empty temporary folder that is removed afterwards, with the
+         *     CLI's own login and without Loop Now Skills, loopctl, plugins, MCP servers or tools; every permission request
+         *     is refused, and the session is not kept in the CLI's history. The model is given an instruction for an Agent
+         *     Prompt or a project Prompt, the Agent's name, the project's name and its Prompt (for an Agent in a project, so
+         *     the Agent Prompt does not repeat it), currentText and request. One surrounding code fence is removed from the
+         *     reply.
+         *     The request is answered when the draft is ready (at most 3 minutes); closing the request stops the CLI at once.
+         *     The texts of the request and the draft are not logged. A few drafts are written at a time; more wait for their
+         *     turn within the same 3 minutes.
+         *     Errors: 409 text_generation_unavailable when no runtime is ready (the message says how to set one up); 502
+         *     text_generation_failed when the CLI fails, tries to use a tool, runs over 3 minutes or returns nothing (the
+         *     message carries the CLI's own reason, such as a used-up limit or a revoked login); 404 for an Agent or project
+         *     that does not exist; 422 when request and currentText are both empty, a text is too long, or the ids do not
+         *     fit the target.
+         */
+        post: operations["createPromptDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -3615,10 +3688,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -3964,6 +4037,60 @@ export interface components {
             authMethod: string | null;
             /** @description Subscription type, such as max */
             subscriptionType: string | null;
+        };
+        /** @description A runtime model chosen to write with AI */
+        TextGenerationSelection: {
+            /** @description The model provider (ModelProvider.id) of a runtime whose accounts are local, such as claude-code or codex-cli */
+            provider: string;
+            modelId: string;
+            /** @description The thinking level; null or left out uses the model's default */
+            thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
+        };
+        /** @description The runtime and model that write (or would write now) */
+        TextGenerationWriter: {
+            runtime: components["schemas"]["AgentRuntime"];
+            provider: string;
+            modelId: string;
+            /** @description The model's name in the model list (its id when the list has none) */
+            modelName: string;
+            /** @description The thinking level used; null when the model's default is used */
+            thinkingLevel: components["schemas"]["ThinkingLevel"] | null;
+            /** @description The chosen one was not ready (not installed, not logged in, too old, or its model is no longer listed), so Automatic's choice writes instead */
+            fellBack: boolean;
+        };
+        TextGenerationSettings: {
+            /** @description The chosen runtime model; null is Automatic */
+            selection: components["schemas"]["TextGenerationSelection"] | null;
+            /** @description Who would write now; null when no runtime is ready */
+            writer: components["schemas"]["TextGenerationWriter"] | null;
+        };
+        TextGenerationSettingsPut: {
+            /** @description The runtime model to write with; null is Automatic */
+            selection: components["schemas"]["TextGenerationSelection"] | null;
+        };
+        /**
+         * @description target agent: an existing Agent's Prompt (agentId), or a new Agent's (no agentId; projectId is the project it
+         *     will be in, none for a platform Agent). target project: the Prompt of the project projectId. agentName is the
+         *     name as typed so far; with agentId it replaces the saved name. agentId and agentName are refused with target
+         *     project, and projectId together with agentId (422).
+         */
+        PromptDraftRequest: {
+            /** @enum {string} */
+            target: "agent" | "project";
+            /** Format: uuid */
+            agentId?: string;
+            /** Format: uuid */
+            projectId?: string;
+            agentName?: string;
+            /** @description What the person wants, in their words; may be empty only when currentText is not */
+            request: string;
+            /** @description The text in the editor now, which the draft improves or replaces; may be empty. Limited only by the request size, as the Prompt endpoints are. */
+            currentText: string;
+        };
+        PromptDraft: {
+            /** @description The draft, to put in the editor */
+            text: string;
+            writer: components["schemas"]["TextGenerationWriter"];
         };
         ModelList: {
             providerId: string;
@@ -8665,7 +8792,7 @@ export interface components {
          * @description Conflicts with the current state. `error.code` values:
          *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
          *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
-         *     `runtime_in_use` (details is RuntimeInUseDetails).
+         *     `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`.
          */
         Conflict: {
             headers: {
@@ -10784,6 +10911,102 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getTextGenerationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The setting and who would write now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TextGenerationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putTextGenerationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TextGenerationSettingsPut"];
+            };
+        };
+        responses: {
+            /** @description The saved setting and who would write now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TextGenerationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    createPromptDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The draft and who wrote it */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptDraft"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+            /** @description The writer failed (text_generation_failed) */
+            502: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listModels: {

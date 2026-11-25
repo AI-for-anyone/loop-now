@@ -12,7 +12,7 @@ export function ProjectPromptForm({ projectId }: { projectId: string }) {
     <ErrorAlert error={query.error} />
     {query.error && <Button size="sm" variant="secondary" className="self-start" onClick={() => void query.refetch()}>{t.common.retry}</Button>}
     {query.data ? <PromptEditor key={projectId} formId="project-prompt" label={t.prompts.projectTitle} saveLabel={t.prompts.saveProject}
-      text={query.data.prompt} version={query.data.promptVersion}
+      text={query.data.prompt} version={query.data.promptVersion} ask={{ target: 'project', projectId }}
       readLatest={async () => { const result = await getProjectPrompt(projectId); return { text: result.prompt, version: result.promptVersion } }}
       save={async value => { const result = await putProjectPrompt(projectId, { prompt: value.text, expectedPromptVersion: value.version }); await client.invalidateQueries({ queryKey: projectPromptKey(projectId) }); return { text: result.prompt, version: result.promptVersion } }} />
       : query.isPending && <p role="status">{t.common.loading}</p>}

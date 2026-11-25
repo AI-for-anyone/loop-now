@@ -32,7 +32,7 @@ export function AgentPromptSection({ agent }: { agent: Schemas['Agent'] }) {
     {agent.scope === 'project' && scope.kind === 'project' && <InheritedPrompt projectId={scope.project.id} projectName={scope.project.name} />}
     <p className="text-[13px] leading-[1.7] text-ink-700">{agent.scope === 'project' ? t.prompts.agentHint : t.prompts.platformHint}</p>
     <p className="text-[13px] leading-[1.7] text-ink-700">{agent.scope === 'project' ? t.prompts.effect : t.prompts.platformEffect}</p>
-    <PromptEditor key={agent.id} formId="agent-prompt" label={t.prompts.agentTitle} saveLabel={t.prompts.saveAgent} text={agent.prompt} version={agent.promptVersion}
+    <PromptEditor key={agent.id} formId="agent-prompt" label={t.prompts.agentTitle} saveLabel={t.prompts.saveAgent} text={agent.prompt} version={agent.promptVersion} ask={{ target: 'agent', agentId: agent.id }}
       readLatest={async () => { const result = await getAgentPrompt(agent.id); return { text: result.prompt, version: result.promptVersion } }}
       save={async value => { const result = await putAgentPrompt(agent.id, { prompt: value.text, expectedPromptVersion: value.version }); await invalidateAgent(client, agent.id); return { text: result.prompt, version: result.promptVersion } }} />
   </Section>

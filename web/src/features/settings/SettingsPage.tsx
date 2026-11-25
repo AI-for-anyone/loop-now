@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { ContextFolderBody } from '@/features/folders/FolderSections'
 import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
 import { RuntimesCard } from '@/features/settings/RuntimesCard'
+import { WritingSettings } from '@/features/writing/WritingSettings'
 import { LOCAL_MODE_ANCHOR, LocalModeCard } from '@/features/local-mode/LocalModeCard'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 
@@ -31,7 +32,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 // The numbered sections of global settings; their order is the order of the section ruler. The local mode section keeps
 // LOCAL_MODE_ANCHOR as its id, so links from other pages (#local-mode) keep working.
-const KEYS = ['language', 'local-mode', 'runtimes', 'models', 'folder', 'server', 'cli-templates'] as const
+const KEYS = ['language', 'local-mode', 'runtimes', 'writing', 'models', 'folder', 'server', 'cli-templates'] as const
 type Key = (typeof KEYS)[number]
 const partId = (key: Key) => (key === 'local-mode' ? LOCAL_MODE_ANCHOR : `settings-${key}`)
 const partTitleId = (key: Key) => `${partId(key)}-title`
@@ -39,6 +40,7 @@ const titles: Record<Key, string> = {
   language: t.settings.language.title,
   'local-mode': t.localMode.settings.title,
   runtimes: t.runtime.status.title,
+  writing: t.settings.writing.title,
   models: t.settings.models.title,
   folder: t.folders.global.title,
   server: t.settings.server,
@@ -82,7 +84,7 @@ function LanguagePicker() {
 const installTone = (status: string) => (status === 'failed' ? 'danger' : status === 'installed' ? 'success' : 'neutral')
 
 // Global settings (step 4 of the "printed sheet" redesign): the header is the shared page title (next to it the server version
-// and connection state); the seven numbered sections are laid out on one sheet, with the section ruler in the stub on the
+// and connection state); the eight numbered sections are laid out on one sheet, with the section ruler in the stub on the
 // right; what can be changed on this page is written on a yellow sticky note at the top of the sheet.
 export function SettingsPage() {
   const context = useContextInfo()
@@ -118,6 +120,9 @@ export function SettingsPage() {
                 </Part>
                 <Part id="runtimes">
                   <RuntimesCard />
+                </Part>
+                <Part id="writing">
+                  <WritingSettings />
                 </Part>
                 <Part id="models">
                   <ModelSettingsCard />

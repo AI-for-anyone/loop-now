@@ -4,6 +4,7 @@ import { apiUrl, defaultProject, projectsUrl, unknownEndpointBody } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
 import { commandList } from './commands'
 import { runtimeDefinitions, runtimeList } from './runtimes'
+import { automaticSettings } from './text-generation'
 
 // Each test registers its own endpoint handlers with server.use(...). The left sidebar is always present and polls health
 // on a timer, and both scope switching and Agent pages read the project list, so by default there is a healthy health
@@ -39,6 +40,7 @@ export const server = setupServer(
   // Local mode: by default the first three switches are on and “用本机的登录状态” (Use local logins) is off, and neither projects
   // nor Agents have registered local directories yet (tests that need them override with localModeBackend).
   http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
+  http.get(apiUrl('/text-generation-settings'), () => HttpResponse.json(automaticSettings())),
   http.get(apiUrl('/projects/:projectId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [] })),
   http.get(apiUrl('/agents/:agentId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [], projectId: null, inherited: [] })),
   http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: params.agentId, items: [] })),
