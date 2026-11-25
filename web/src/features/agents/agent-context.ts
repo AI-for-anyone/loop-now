@@ -7,6 +7,9 @@ export interface AgentStickerState {
   busy: boolean
   phase: string | null
   sleep?: Schemas['SleepInfo'] | null
+  // The running background tasks, and the numbers of the loaded replies that started them (by run ID).
+  backgroundTasks?: Schemas['BackgroundTask'][]
+  replyNumbers?: Readonly<Record<string, number>>
 }
 
 // The Agent detail page passes the current Agent to the “对话” (Chat) and “配置” (Config) tabs through the route outlet.

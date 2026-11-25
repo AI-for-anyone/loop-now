@@ -1,5 +1,6 @@
 import { agentInbox, inbox } from './inbox'
 import { agents, createAgent } from './agents'
+import { background } from './background'
 import { app, connection } from './app'
 import { chat } from './chat'
 import { common } from './common'
@@ -38,6 +39,7 @@ export const zhCN = {
   createAgent,
   folders,
   chat,
+  background,
   prompts,
   config,
   skills,

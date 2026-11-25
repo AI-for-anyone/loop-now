@@ -118,11 +118,22 @@ export function ChatPage() {
   const phase = live.current ? runPhaseText(live.current.run) : null
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
+  // The numbers of the loaded replies that started a running background task, so the header's list can name them.
+  const backgroundTasks = live.backgroundTasks
+  const replyNumbers = useMemo(() => {
+    const numbers: Record<string, number> = {}
+    if (turnsBefore === undefined) return numbers
+    turns.forEach((turn, index) => {
+      if (backgroundTasks.some((task) => task.runId === turn.run.id)) numbers[turn.run.id] = turnsBefore + index + 1
+    })
+    return numbers
+  }, [backgroundTasks, turns, turnsBefore])
+
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.
   useEffect(() => {
-    if (synced) reportLiveStatus({ busy, phase, sleep })
-  }, [synced, busy, phase, sleep, reportLiveStatus])
+    if (synced) reportLiveStatus({ busy, phase, sleep, backgroundTasks, replyNumbers })
+  }, [synced, busy, phase, sleep, backgroundTasks, replyNumbers, reportLiveStatus])
   useEffect(() => () => reportLiveStatus(null), [reportLiveStatus])
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
