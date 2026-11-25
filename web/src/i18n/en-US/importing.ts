@@ -1,0 +1,82 @@
+import type { components } from '@/api/schema.gen'
+import { formatBytes, formatDayClock } from './format'
+
+type Schemas = components['schemas']
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+// Importing conversations from the CLIs on this computer (as T3's welcome page): each folder becomes a project, each conversation an
+// Agent that continues it.
+export const importing = {
+  title: 'Import conversations',
+  intro: 'Continue your Claude Code and Codex conversations from this computer in Loop Now: each folder becomes a project, each conversation an Agent in it.',
+  firstRun: 'This is the first time Loop Now is open. Bring your terminal conversations over now, or skip and open this page later from Settings.',
+  skip: 'Skip for now',
+  keepRunning: 'Importing does not change the session in your terminal; it keeps working. The Agent continues from a copy.',
+  sameFolder: "Don't let the terminal session and the Agent work in the same folder at the same time.",
+  scanning: 'Looking for conversations…',
+  scanProgress: (done: number, total: number) => `Read ${done} of ${plural(total, 'history file', 'history files')}`,
+  scanFailed: 'Looking for conversations did not work',
+  retry: 'Look again',
+  nothing: 'No conversations found.',
+  nothingRecent: 'No Claude Code or Codex conversations in the last 30 days.',
+  sinceLabel: 'Time range',
+  since: { recent: 'Last 30 days', all: 'All' },
+  found: (count: number) => `${plural(count, 'folder', 'folders')} found`,
+  pickedInFolder: (count: number) => `${count} picked`,
+  skipReasons: { too_large: 'its record is over 4 GB', too_many_records: 'over 100,000 records', empty: 'no conversation in it', unreadable: "it can't be read" } satisfies Record<NonNullable<Schemas['ImportConversation']['skipReason']>, string>,
+  tiles: {
+    label: 'What was found',
+    conversations: 'conversations',
+    byCli: (claude: number, codex: number) => `Claude Code ${claude} · Codex ${codex}`,
+    folders: 'folders',
+    suggested: (count: number) => `${count} suggested`,
+    imported: 'already imported',
+    importedNote: 'never imported twice',
+  },
+  groups: { git: 'Git repositories', other: 'Other folders' },
+  otherHint: 'Not git repositories; not checked by default',
+  suggested: (count: number) => `${plural(count, 'folder', 'folders')} suggested`,
+  noneSuggested: 'No folder is suggested (git repositories with 3 or more conversations in the last 30 days).',
+  reviewAll: (count: number) => `Review all ${plural(count, 'folder', 'folders')}`,
+  suggestedOnly: 'Suggested only',
+  selectAll: 'Select all',
+  selectNone: 'Select none',
+  folder: {
+    conversations: (count: number) => plural(count, 'conversation', 'conversations'),
+    lastActive: (time: string) => `last active ${formatDayClock(time)}`,
+    existingProject: (name: string) => `Joins project “${name}”`,
+    newProject: 'New project',
+    worktree: 'worktree',
+    truncated: 'Too many conversations: one import takes at most 100 conversations and 4 GB. Open this page again afterwards to import the rest.',
+    show: 'Show conversations',
+    hide: 'Hide conversations',
+  },
+  conversation: {
+    lastActive: (time: string) => formatDayClock(time),
+    messages: (count: number) => plural(count, 'message', 'messages'),
+    size: (bytes: number) => formatBytes(bytes),
+    imported: 'Imported',
+    openAgent: 'Open Agent',
+    skipped: (reason: string) => `Can't import: ${reason}`,
+    untitled: '(no title)',
+    inFolder: (path: string) => `in ${path}`,
+  },
+  cli: { claude: 'Claude Code', codex: 'Codex' },
+  selected: (folders: number, conversations: number) => `${plural(folders, 'folder', 'folders')} · ${plural(conversations, 'conversation', 'conversations')} selected`,
+  nothingSelected: 'Nothing selected yet',
+  start: 'Import',
+  importing: (done: number, total: number) => `Importing ${done} of ${total}`,
+  done: 'Import done',
+  doneSummary: (agents: number) => `${plural(agents, 'Agent', 'Agents')} created`,
+  failed: 'The import did not finish',
+  errors: (count: number) => `${plural(count, 'conversation was', 'conversations were')} not imported`,
+  openProject: (name: string) => `Open project “${name}”`,
+  again: 'Import more',
+  entry: {
+    settingsTitle: 'Import conversations',
+    settingsHint: 'Continue your terminal Claude Code and Codex conversations in Loop Now.',
+    open: 'Open the import page',
+    project: "Import conversations from this project's folder",
+  },
+} as const

@@ -56,7 +56,19 @@ export function ProjectLocalDirectories({ projectId }: { projectId: string }) {
       <Cautions />
       <DirectoriesOffNote />
       <Loaded query={query}>
-        {(data) => <DirectoryEditor listing={data} save={put.mutateAsync} reload={async () => (await query.refetch()).data} />}
+        {(data) => (
+          <DirectoryEditor
+            listing={data}
+            save={put.mutateAsync}
+            reload={async () => (await query.refetch()).data}
+            // A project's folder can bring its terminal conversations in: the import page, for that folder and into this project.
+            extra={(entry) => (
+              <Button size="sm" variant="ghost" asChild>
+                <Link to={`/import?${new URLSearchParams({ path: entry.path, project: projectId })}`}>{t.importing.entry.project}</Link>
+              </Button>
+            )}
+          />
+        )}
       </Loaded>
     </>
   )
@@ -183,7 +195,7 @@ function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNod
   )
 }
 
-function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Save; reload: Reload }) {
+function DirectoryEditor({ listing, save, reload, extra }: { listing: Listing; save: Save; reload: Reload; extra?: (entry: Directory) => ReactNode }) {
   const [target, setTarget] = useState<Target | null>(null)
   const [removing, setRemoving] = useState<Directory | null>(null)
   const [removeOpen, setRemoveOpen] = useState(false)
@@ -215,6 +227,7 @@ function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Sa
           entries={listing.directories}
           actions={(entry) => (
             <>
+              {extra?.(entry)}
               <Button size="sm" variant="ghost" aria-label={copy.editLabel(entry.path)} onClick={() => setTarget({ kind: 'edit', entry })}>
                 {copy.edit}
               </Button>

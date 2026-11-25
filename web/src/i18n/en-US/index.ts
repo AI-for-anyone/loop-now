@@ -3,6 +3,8 @@ import { agents, createAgent } from './agents'
 import { background } from './background'
 import { app, connection } from './app'
 import { chat } from './chat'
+import { importing } from './importing'
+import { permissions } from './permissions'
 import { common } from './common'
 import { config } from './config'
 import { consoleInbox } from './console-inbox'
@@ -39,6 +41,8 @@ export const enUS: Messages = {
   createAgent,
   folders,
   chat,
+  importing,
+  permissions,
   background,
   prompts,
   config,

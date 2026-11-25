@@ -1,4 +1,6 @@
 import { useId, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Link, Navigate } from 'react-router'
+import { firstRunImportSkipped } from '@/features/importing/first-run'
 import { PlusIcon } from 'lucide-react'
 import { reachability, type Schemas } from '@/api/client'
 import type { ConnectionState } from '@/api/events'
@@ -30,10 +32,16 @@ function EmptyOverview({ onCreate }: { onCreate: () => void }) {
         {t.overview.empty.title}
       </h2>
       <p className="text-[14.5px] text-ink-700">{t.overview.empty.body}</p>
-      <Button size="lg" className="h-12 px-[26px] text-base shadow-print-pink" disabled={!reachable} onClick={onCreate}>
-        <PlusIcon strokeWidth={3} />
-        {t.agents.create}
-      </Button>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button size="lg" className="h-12 px-[26px] text-base shadow-print-pink" disabled={!reachable} onClick={onCreate}>
+          <PlusIcon strokeWidth={3} />
+          {t.agents.create}
+        </Button>
+        {/* Or bring the conversations from the terminal over. */}
+        <Button size="lg" variant="secondary" className="h-12 px-[26px] text-base" asChild>
+          <Link to="/import">{t.importing.title}</Link>
+        </Button>
+      </div>
     </section>
   )
 }
@@ -116,7 +124,8 @@ function OverviewContent({ overview, query }: { overview: Overview; query: Scope
       <OverviewSheet>
         {noAgents ? (
           filter.kind === 'all' ? (
-            <EmptyOverview onCreate={() => setCreating(true)} />
+            // A fresh install (no Agents anywhere) opens the import page once, as T3's welcome page; skipping it is remembered.
+            firstRunImportSkipped() ? <EmptyOverview onCreate={() => setCreating(true)} /> : <Navigate to="/import?first=1" replace />
           ) : (
             <OverviewScopeEmpty project={filter.kind === 'project' ? (filter.project ?? null) : null} />
           )
