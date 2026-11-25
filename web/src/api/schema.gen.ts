@@ -575,9 +575,10 @@ export interface paths {
          *     (RuntimeCapabilities.accounts) write; the bundled Pi does not.
          *     selection is the runtime model a person chose; null is Automatic: the first ready runtime in the order Claude
          *     Code, Codex, Antigravity, Grok, then the local ACP commands in the order they were added, with a small model from
-         *     its live model list: Claude Code a Haiku model, Codex a -mini model at the low thinking level, Antigravity a
-         *     Flash model at its lowest thinking level, the others their first listed model; the first listed model when the
-         *     preferred one is not listed, and the model's default thinking level when the preferred one is not offered. A
+         *     its live model list: Claude Code a Haiku model, Codex a Luna model (else a -mini model) at the low thinking
+         *     level, Antigravity a Flash model at its lowest thinking level, the others their first listed model; the first
+         *     listed model when no preferred one is listed, and the model's default thinking level when the preferred one is
+         *     not offered. A
          *     runtime is ready when GET /runtimes reports it available and not logged out (its 30-second cache is used) and
          *     its model list has the model.
          *     writer says who would write now: the chosen one when it is ready; otherwise Automatic's choice, with fellBack
