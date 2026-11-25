@@ -10,7 +10,7 @@ import { renderWithQuery } from '@/test/render'
 import { acpCommand, acpCommandDefinition, acpCommandStatus, acpDefaultModel, acpRuntimeId, codexStatus, runtimeDefinitions, runtimeList, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
-import { RunnerPicker, type RunnerChoice } from './RunnerPicker'
+import { RunnerPicker, type RunnerChoice, type RunnerLead } from './RunnerPicker'
 
 type Provider = Schemas['ModelProvider']
 type Model = Schemas['Model']
@@ -47,7 +47,7 @@ function useCatalog(statuses: Schemas['RuntimeList'] = runtimeList(), extra: Pro
   return asked
 }
 
-function Picker({ initial = null, level = null, onChoose = () => {}, agentId, newIn }: { initial?: Schemas['ModelRef'] | null; level?: Schemas['ThinkingLevel'] | null; onChoose?: (choice: RunnerChoice) => void; agentId?: string; newIn?: string }) {
+function Picker({ initial = null, level = null, onChoose = () => {}, agentId, newIn, offers, lead }: { initial?: Schemas['ModelRef'] | null; level?: Schemas['ThinkingLevel'] | null; onChoose?: (choice: RunnerChoice) => void; agentId?: string; newIn?: string; offers?: (definition: Schemas['RuntimeDefinition']) => boolean; lead?: (choose: () => void) => RunnerLead }) {
   const [value, setValue] = useState(initial)
   const [thinking, setThinking] = useState(level)
   return (
@@ -57,6 +57,11 @@ function Picker({ initial = null, level = null, onChoose = () => {}, agentId, ne
         thinkingLevel={thinking}
         agentId={agentId}
         newIn={newIn}
+        offers={offers}
+        lead={lead?.(() => {
+          setValue(null)
+          setThinking(null)
+        })}
         onChoose={(choice) => {
           onChoose(choice)
           setValue(choice.model)
@@ -324,5 +329,61 @@ describe('runner picker', () => {
     await vi.waitFor(() => expect(thinkingOptions(document.body)).toEqual(['Default (Medium)', 'Max', 'Extra high', 'High', 'Medium', 'Low']))
     await chooseThinking(user, document.body, 'Extra high')
     expect(shown()).toBe('claude-code/haiku xhigh')
+  })
+  describe('a first entry that is not a runtime, and only some runtimes (who writes with AI)', () => {
+    const local = (definition: Schemas['RuntimeDefinition']) => definition.capabilities.accounts === 'local'
+    const automatic = (choose: () => void): RunnerLead => ({
+      name: 'Automatic',
+      mark: <span>A</span>,
+      state: <span>Claude Code now</span>,
+      stateText: 'Claude Code now',
+      panel: (
+        <button type="button" onClick={choose}>
+          Use automatic
+        </button>
+      ),
+      thinkingNote: 'Picked with the CLI',
+    })
+
+    it('offers only the runtimes asked for, with the first entry ahead of them; with nothing chosen it is in use and looked at', async () => {
+      useCatalog()
+      renderWithQuery(<Picker offers={local} lead={automatic} />)
+      const rail = await screen.findByRole('tablist', { name: 'Runtimes' })
+      await vi.waitFor(() => expect(within(rail).getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))).toEqual(['Automatic, Claude Code now, Current', 'Claude Code, Ready']))
+      expect(within(rail).getAllByRole('tab')[0]).toHaveAttribute('aria-selected', 'true')
+      const panel = screen.getByRole('tabpanel')
+      expect(panel).toHaveAccessibleName('Automatic, Claude Code now, Current')
+      expect(within(panel).getByRole('button', { name: 'Use automatic' })).toBeInTheDocument()
+      expect(within(panel).queryByRole('tree')).toBeNull()
+      expect(screen.getByText('Picked with the CLI')).toBeInTheDocument()
+    })
+
+    it('arrow keys go from the first entry to the runtimes; choosing a model leaves it, and its own button comes back to it', async () => {
+      useCatalog()
+      const user = userEvent.setup()
+      renderWithQuery(<Picker offers={local} lead={automatic} />)
+      const first = await runnerTab(document.body, 'Automatic')
+      first.focus()
+      await user.keyboard('{ArrowDown}')
+      expect(await runnerTab(document.body, 'Claude Code')).toHaveFocus()
+      await chooseModel(user, document.body, 'haiku')
+      expect(shown()).toBe('claude-code/haiku default')
+      expect(await runnerTab(document.body, 'Automatic')).toHaveAccessibleName('Automatic, Claude Code now')
+      expect(await runnerTab(document.body, 'Claude Code')).toHaveAccessibleName('Claude Code, Ready, Current')
+      await user.keyboard('{ArrowUp}')
+      expect(await runnerTab(document.body, 'Automatic')).toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Use automatic' }))
+      expect(shown()).toBe('none')
+      expect(await runnerTab(document.body, 'Automatic')).toHaveAccessibleName('Automatic, Claude Code now, Current')
+      expect(await runnerTab(document.body, 'Automatic')).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('with a model chosen, its runtime is looked at first, not the first entry', async () => {
+      useCatalog()
+      renderWithQuery(<Picker offers={local} lead={automatic} initial={{ provider: 'claude-code', modelId: 'opus' }} />)
+      // The first entry is there before the runtimes have been read.
+      await vi.waitFor(async () => expect(await runnerTab(document.body, 'Claude Code')).toHaveAttribute('aria-selected', 'true'))
+      expect(await screen.findByRole('tree')).toBeInTheDocument()
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
 import { useAllModels, useModelProviders, useModelsOf, useRuntimes } from '@/api/queries'
 import { t } from '@/i18n'
@@ -24,6 +24,19 @@ export interface RunnerChoice {
   thinkingLevel: ThinkingLevel | null
 }
 
+// A first entry in the rail that is not a runtime (who writes with AI: "Automatic"). It is in use while no model is chosen (value null),
+// is looked at first then, and shows its own panel in place of models; its panel offers the way back to it.
+export interface RunnerLead {
+  name: string
+  mark: ReactNode
+  // Under its name in the rail, and the same said in words for its tab's name.
+  state: ReactNode
+  stateText: string
+  panel: ReactNode
+  // In place of the thinking levels while it is in use.
+  thinkingNote: string
+}
+
 interface RunnerPickerProps {
   value: ModelRef | null
   thinkingLevel: ThinkingLevel | null
@@ -39,6 +52,9 @@ interface RunnerPickerProps {
   variant?: 'inline' | 'popover'
   labelledBy?: string
   invalid?: boolean
+  // Only these runtimes are offered (who writes with AI: only CLIs with their own login on this computer); all of them when not given.
+  offers?: (definition: RuntimeDefinition) => boolean
+  lead?: RunnerLead
 }
 
 // Below this width the runtimes become a row of cards above the models and the thinking level a row below them.
@@ -66,7 +82,7 @@ function useWide() {
 // runtime that cannot run here shows how to set it up instead of its models, so it cannot be chosen. Under a runtime with several model
 // providers (the bundled Pi) the providers are a level of their own: those the Agent can use now first, those it cannot choose at all last.
 // Runtimes, capabilities and status are read only through lib/runtime.ts.
-export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange, agentId, newIn, variant = 'inline', labelledBy, invalid }: RunnerPickerProps) {
+export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange, agentId, newIn, variant = 'inline', labelledBy, invalid, offers, lead }: RunnerPickerProps) {
   const lookup = useRuntimeLookup()
   const catalog = useModelProviders(agentId ?? (newIn === undefined ? undefined : { newIn }))
   const statuses = useRuntimes(lookup.all.some((definition) => !definition.capabilities.bundled))
@@ -84,7 +100,8 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   const read = { checking: statuses.isLoading, failed: statuses.isError }
   const statusFor = (definition: RuntimeDefinition) => statusOf(statuses.data?.runtimes, definition)
   const readinessOf = (definition: RuntimeDefinition) => runtimeReadiness(definition, { ...read, status: statusFor(definition) })
-  const entries: RailEntry[] = railOrder(lookup.all, readinessOf).map((definition) => ({
+  const offered = offers ? lookup.all.filter(offers) : lookup.all
+  const entries: RailEntry[] = railOrder(offered, readinessOf).map((definition) => ({
     definition,
     readiness: readinessOf(definition),
     version: statusFor(definition)?.version ?? null,
@@ -92,16 +109,20 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
 
   // The runtime being looked at: the one picked in the rail, otherwise the one in use, otherwise the first in the rail that can run.
   const [picked, setPicked] = useState<AgentRuntime | null>(null)
-  const browsed = entries.find((entry) => entry.definition.id === (picked ?? valueRuntime)) ?? entries.find((entry) => canRun(entry.readiness)) ?? entries[0]
+  // The first entry is looked at instead of a runtime: at first while it is in use, then when picked in the rail.
+  const [onLead, setOnLead] = useState(value === null)
+  const leading = lead !== undefined && onLead
+  const browsed = leading ? undefined : (entries.find((entry) => entry.definition.id === (picked ?? valueRuntime)) ?? entries.find((entry) => canRun(entry.readiness)) ?? entries[0])
   const browsedId = browsed?.definition.id
+  const leadTab = `${tabBase}-lead`
 
   const reasonOf = (provider: Provider) => unavailableOf(provider, agentId)
   const blocked = (provider: Provider) => blocks(reasonOf(provider))
   // The provider in use when the picker opened leads its group; it stays there while models are chosen, so rows don't move under the pointer.
-  const [leading] = useState(value?.provider)
+  const [first] = useState(value?.provider)
   const own = orderProviders(
     providers.filter((provider) => provider.runtime === browsedId),
-    leading,
+    first,
     blocked,
   )
   const grouped = own.length > 1
@@ -113,6 +134,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   if (value?.provider !== seen) {
     setSeen(value?.provider)
     setPicked(null)
+    setOnLead(value === null)
     if (value) setExpanded((current) => new Set(current).add(value.provider))
   }
   // Models: a runtime with several providers reads them all at once (its groups and its search need them), and reads an open provider on
@@ -164,6 +186,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   }
   const browse = (id: AgentRuntime) => {
     setPicked(id)
+    setOnLead(false)
     setQuery('')
   }
 
@@ -199,6 +222,16 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
         ) : (
           <RunnerRail
             entries={entries}
+            lead={
+              lead && {
+                ...lead,
+                tabId: leadTab,
+                label: [lead.name, lead.stateText, value === null ? t.runtime.picker.current : null].filter(Boolean).join(', '),
+                selected: leading,
+                inUse: value === null,
+                onBrowse: () => setOnLead(true),
+              }
+            }
             browsed={browsedId}
             current={valueRuntime}
             wide={wide}
@@ -212,10 +245,12 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
       <div
         id={panelId}
         role="tabpanel"
-        aria-labelledby={browsedId ? tabId(browsedId) : undefined}
+        aria-labelledby={leading ? leadTab : browsedId ? tabId(browsedId) : undefined}
         className={cn('flex min-w-0 flex-col', variant === 'inline' ? (wide ? 'h-[340px]' : 'h-[320px]') : 'min-h-0')}
       >
-        {catalog.isError ? (
+        {lead && leading ? (
+          lead.panel
+        ) : catalog.isError ? (
           <div className="grid gap-1.5 px-4 py-4 text-[13.5px] text-red-text">
             <p className="font-bold">{t.config.basic.catalogUnavailable}</p>
             <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
@@ -260,7 +295,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           value={thinkingLevel}
           levels={levels}
           defaultLevel={chosenModel?.defaultThinkingLevel}
-          hint={!value ? t.runtime.picker.noModel : levels.length === 0 ? noLevelsNote : null}
+          hint={!value ? (lead?.thinkingNote ?? t.runtime.picker.noModel) : levels.length === 0 ? noLevelsNote : null}
           onChange={onThinkingChange}
         />
       </div>
