@@ -10,6 +10,7 @@ import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import { NumberedSection } from '@/components/NumberedSection'
 import { rowState, summarize, type AgentRowState, type OverviewState } from './overview-state'
+import { BackgroundCountTag } from '@/features/chat/BackgroundTasks'
 
 type AgentOverview = Schemas['AgentOverview']
 
@@ -220,7 +221,10 @@ function AgentTable({ agents }: { agents: AgentOverview[] }) {
                 </Link>
               </TableCell>
               <TableCell className="py-[11px] align-middle">
-                <StatePill state={state} />
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  <StatePill state={state} />
+                  {!agent.status.busy && <BackgroundCountTag count={agent.status.backgroundTasks.length} />}
+                </span>
                 {!agent.status.busy && agent.status.sleep?.state === 'sleeping' && agent.status.sleep.wakeAt && <SleepUntil at={agent.status.sleep.wakeAt} reason={agent.status.sleep.reason} />}
               </TableCell>
               <TableCell className="py-[11px] align-middle">

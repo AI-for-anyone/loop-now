@@ -1,4 +1,4 @@
-import { BotIcon, ChevronDownIcon, CircleDashedIcon, LoaderCircleIcon, SquareTerminalIcon } from 'lucide-react'
+import { BotIcon, ChevronDownIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Popover as PopoverPrimitive } from 'radix-ui'
@@ -180,5 +180,31 @@ export function BackgroundPanelHead({ count, children }: { count: number; childr
       <span className="basis-full text-[12.5px] font-bold text-ink-700">{t.background.hint}</span>
       {children}
     </div>
+  )
+}
+
+// Above the message box when a settings change takes effect with the next message, which restarts the CLI and so stops its running
+// background tasks: said before the person sends it.
+export function RestartNotice({ runtimeName, count }: { runtimeName: string; count: number }) {
+  return (
+    <p role="status" data-restart-notice className="flex min-w-0 items-start gap-2 rounded-ticket border-2 border-dashed border-red-text/60 bg-tint-red px-3 py-1.5 text-[13px] leading-snug font-bold text-red-text">
+      <RotateCwIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.8} />
+      <span className="min-w-0">{t.background.restartWarning(runtimeName, count)}</span>
+    </p>
+  )
+}
+
+// The mark in lists (overview, project Agents) on an idle Agent whose background tasks still run: a small yellow tilted tag
+// “后台任务 N” (Background N) with the spinner, next to its idle state.
+export function BackgroundCountTag({ count, className }: { count: number; className?: string }) {
+  if (count <= 0) return null
+  return (
+    <span data-background-count={count} title={t.background.listTitle(count)} className={cn('relative inline-flex min-h-6 shrink-0 items-center px-[10px] text-[12px] font-black whitespace-nowrap text-ink', className)}>
+      <span aria-hidden="true" className="absolute inset-0 rotate-[2deg] rounded-full bg-riso-yellow shadow-[inset_0_0_0_2px_var(--ink)]" />
+      <span className="relative inline-flex items-center gap-1.5">
+        <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3 motion-reduce:animate-none" strokeWidth={3} />
+        {t.background.mark(count)}
+      </span>
+    </span>
   )
 }

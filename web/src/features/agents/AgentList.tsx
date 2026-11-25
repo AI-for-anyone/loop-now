@@ -28,7 +28,8 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
   return keyword === '' || searchableText(agent).some((text) => text.toLowerCase().includes(keyword))
 }
 
-// At most one status tag on the right of each row, by priority: replying, sleep, Manager. Nothing is shown when idle.
+// At most one status tag on the right of each row, by priority: replying, background tasks still running (“后台 N”, Bg N, in yellow), sleep,
+// Manager. Nothing is shown when idle. On the selected row (itself yellow) the background tag turns into yellow text on navy.
 // On the blue background, sleep and Manager use a semi-transparent navy background; when their row is selected (yellow
 // background) they become a pill with white text on solid navy, because the semi-transparent one is hard to read on yellow.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
@@ -37,11 +38,13 @@ function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; curren
   const [label, tone, title] =
     agent.busy
       ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
-      : sleeping
-        ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
-        : agent.isManager
-          ? [t.agents.manager, quiet, t.agents.managerTitle]
-          : [null, '', undefined]
+      : agent.backgroundTaskCount > 0
+        ? [t.background.listTag(agent.backgroundTaskCount), current ? 'rounded-full bg-ink px-2 text-riso-yellow' : 'bg-riso-yellow text-ink', t.background.listTitle(agent.backgroundTaskCount)]
+        : sleeping
+          ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
+          : agent.isManager
+            ? [t.agents.manager, quiet, t.agents.managerTitle]
+            : [null, '', undefined]
   if (!label) return null
   return (
     <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-black whitespace-nowrap', tone)}>

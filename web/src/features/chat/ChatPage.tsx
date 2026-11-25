@@ -26,6 +26,8 @@ import { newerSleep } from '@/features/sleep/projection'
 import { useAgentConsoleMessages } from '@/api/console-inbox'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { CommandLine } from '@/features/plugins/ChatLines'
+import { useRuntimeLookup } from '@/lib/runtime'
+import { RestartNotice } from './BackgroundTasks'
 import type { Schemas } from '@/api/client'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -116,6 +118,12 @@ export function ChatPage() {
   const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
   const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
   const phase = live.current ? runPhaseText(live.current.run) : null
+  // Background tasks the next message, or stopping this reply, would stop: the next message restarts the CLI after a settings change;
+  // on some runtimes stopping a reply ends the process.
+  const runtimes = useRuntimeLookup()
+  const running = synced ? live.backgroundTasks.length : (status.data?.backgroundTasks.length ?? 0)
+  const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(agent.runtime)} count={running} /> : null
+  const stopAlso = runtimes.get(agent.runtime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
   // The numbers of the loaded replies that started a running background task, so the header's list can name them.
@@ -215,6 +223,8 @@ export function ChatPage() {
             </>
           }
           runner={<RunnerChip agent={agent} />}
+          notice={restartNotice}
+          stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
             // Busy hint: a fluorescent pink dot with a navy outline, no background fill.
