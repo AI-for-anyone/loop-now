@@ -370,3 +370,30 @@ func backgroundStopReason(p *proc, why stopCause) string {
 	}
 	return ""
 }
+
+// bgAwaitEnd waits up to wait for the task id to end and returns it as it ended, taking it from the tasks ended since
+// the last message (the follow-up it is about tells about it); false when it is unknown or still runs.
+func (e *Executor) bgAwaitEnd(p *proc, id string, wait time.Duration) (executor.BackgroundTask, bool) {
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	for {
+		changed := p.bgChanged()
+		p.bg.mu.Lock()
+		_, running := p.bg.running[id]
+		t, ended := p.bg.done[id]
+		if ended && !running {
+			p.bg.ended = slices.DeleteFunc(p.bg.ended, func(x executor.BackgroundTask) bool { return x.ID == id })
+			p.bg.mu.Unlock()
+			return t, true
+		}
+		p.bg.mu.Unlock()
+		if !running {
+			return executor.BackgroundTask{}, false
+		}
+		select {
+		case <-changed:
+		case <-deadline.C:
+			return executor.BackgroundTask{}, false
+		}
+	}
+}

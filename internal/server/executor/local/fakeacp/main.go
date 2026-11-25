@@ -34,7 +34,9 @@
 //	                  _x.ai/task/kill {sessionId, taskId}) the task ends: _x.ai/task_completed with its snapshot, an
 //	                  updated list, and Grok replies by itself in a prompt of its own (_x.ai/queue/changed runningPromptId
 //	                  task-completed-<task id>, text "background done", turn_completed with its usage) once no prompt of
-//	                  the client runs.
+//	                  the client runs. With none running, that prompt is announced before the task's end, as the real one
+//	                  does.
+//	fake:texttool     reply some text, run one execute tool call, then reply ran (text on both sides of a tool call)
 //	fake:permission   ask for permission, then reply permission=<chosen option>
 //	fake:sleep <dur>  wait for the duration (the word after it), or until cancelled, then reply slept
 //	fake:slow         stream a dot every 50ms until cancelled
@@ -233,14 +235,29 @@ func (s *server) endGrokTask(id string, killed bool) bool {
 		snapshot["output"], snapshot["exit_code"], snapshot["signal"], snapshot["completed"], snapshot["explicitly_killed"] = "", nil, "SIGKILL", false, true
 		exit = nil
 	}
-	s.xai("_x.ai/task_completed", t.sid, map[string]any{"sessionUpdate": "task_completed", "task_snapshot": snapshot})
-	s.xai("_x.ai/session_notification", t.sid, s.grokTaskList(t.sid, t, exit))
-	go func() {
-		lock := s.turnLock(t.sid)
-		lock.Lock()
-		defer lock.Unlock()
-		prompt := "task-completed-" + t.id
+	prompt := "task-completed-" + t.id
+	announce := func() {
 		s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/queue/changed", "params": map[string]any{"sessionId": t.sid, "entries": []any{}, "runningPromptId": prompt}})
+	}
+	ended := func() {
+		s.xai("_x.ai/task_completed", t.sid, map[string]any{"sessionUpdate": "task_completed", "task_snapshot": snapshot})
+		s.xai("_x.ai/session_notification", t.sid, s.grokTaskList(t.sid, t, exit))
+	}
+	lock := s.turnLock(t.sid)
+	idle := lock.TryLock()
+	if idle {
+		// As Grok 1.0.92 does with no prompt running: its own prompt is announced before the task's end.
+		announce()
+		ended()
+	} else {
+		ended()
+	}
+	go func() {
+		if !idle {
+			lock.Lock()
+			announce()
+		}
+		defer lock.Unlock()
 		s.update(t.sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "background done"}})
 		u := map[string]any{"inputTokens": 700, "outputTokens": 9, "totalTokens": 709, "cachedReadTokens": 500, "cacheCreationTokens": 0, "reasoningTokens": 4, "modelCalls": 1}
 		u["modelUsage"] = map[string]any{"fake-1-build": maps.Clone(u)}
@@ -567,6 +584,12 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 			status = "failed"
 		}
 		s.update(ss.ID, toolEnd(tid, status, "ran "+arg))
+		reply("ran")
+	case "fake:texttool":
+		reply("Let me run it.")
+		tid := newID()
+		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": "Run true", "kind": "execute", "status": "in_progress", "rawInput": map[string]any{"command": "true"}})
+		s.update(ss.ID, toolEnd(tid, "completed", "ran true"))
 		reply("ran")
 	case "fake:toolopen":
 		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": newID(), "title": "Run " + arg, "kind": "execute", "status": "in_progress", "rawInput": map[string]any{"command": arg}})

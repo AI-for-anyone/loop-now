@@ -401,7 +401,7 @@ func claudeEnv(env []string) []string {
 func (cd claudeDriver) attach(p *proc) {
 	if cp := claudeOf(p); cp != nil {
 		cp.SetObserver(claudeObserver{e: cd.e, p: p})
-		cp.SetSelfTurns(func() runturn.SelfTurn { return cd.e.selfTurnBegan(p) })
+		cp.SetSelfTurns(func() runturn.SelfTurn { return cd.e.selfTurnBegan(p, "") })
 	}
 }
 

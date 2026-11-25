@@ -138,9 +138,10 @@ func TestAntigravityNoHoldForAgents(t *testing.T) {
 		t.Fatalf("ended: %+v", end)
 	}
 	call := host.next(t)
-	follow, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, newSink())
-	if err != nil || follow.Outcome != executor.OutcomeCompleted || strings.TrimSpace(follow.Text) != "reported 1" {
-		t.Fatalf("agy's own reply is a follow-up run: %+v %v", follow, err)
+	sink := newSink()
+	follow, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, sink)
+	if err != nil || follow.Outcome != executor.OutcomeCompleted || follow.Text != "reported 1" || sink.text.String() != "reported 1" {
+		t.Fatalf("agy's own reply is a follow-up run, without its leading blank lines: %+v %v %q", follow, err, sink.text.String())
 	}
 }
 

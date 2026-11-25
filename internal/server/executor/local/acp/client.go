@@ -104,7 +104,7 @@ type Client struct {
 	observer Observer
 	// selfTurns receives the prompts the agent runs by itself; session is the session the client runs (set by its
 	// first prompt), whose background tasks and own prompts count.
-	selfTurns func() runturn.SelfTurn
+	selfTurns func(about string) runturn.SelfTurn
 	session   string
 	// background are the tools that went on in the background when their prompt ended, by tool call id.
 	background map[string]*bgTool

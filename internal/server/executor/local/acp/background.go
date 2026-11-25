@@ -33,8 +33,9 @@ type TaskEnd struct {
 }
 
 // SetSelfTurns sets where the prompts the agent runs by itself go (Grok runs one after a background task ended, with
-// no prompt of the client open); nil drops them.
-func (c *Client) SetSelfTurns(f func() runturn.SelfTurn) {
+// no prompt of the client open); about is the background task the agent says the prompt is about (Grok's
+// task-completed-<task id>), empty when it says none. Nil drops them.
+func (c *Client) SetSelfTurns(f func(about string) runturn.SelfTurn) {
 	c.mu.Lock()
 	c.selfTurns = f
 	c.mu.Unlock()
@@ -137,7 +138,11 @@ func (c *Client) beginSelfTurn(sessionID, promptID string) {
 	if open {
 		return
 	}
-	st := hook()
+	about, _ := strings.CutPrefix(promptID, "task-completed-")
+	if about == promptID {
+		about = ""
+	}
+	st := hook(about)
 	t := &turn{sessionID: sessionID, sink: st, done: make(chan struct{}), changed: make(chan struct{}, 1), tools: map[string]openTool{},
 		self: promptID, end: st.End}
 	c.mu.Lock()
@@ -252,7 +257,7 @@ func (c *Client) ownReply(u sessionUpdate) *turn {
 	if !begins {
 		return t
 	}
-	st := hook()
+	st := hook("")
 	nt := &turn{sessionID: u.SessionID, sink: st, done: make(chan struct{}), changed: make(chan struct{}, 1), tools: map[string]openTool{},
 		self: ownReply, end: st.End}
 	c.mu.Lock()

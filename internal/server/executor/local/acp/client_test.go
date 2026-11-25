@@ -351,7 +351,7 @@ func agyWithTasks(t *testing.T) (*acp.Client, string, *bgObserver, chan *selfTur
 	obs := newBgObserver()
 	c.SetObserver(obs)
 	turns := make(chan *selfTurn, 8)
-	c.SetSelfTurns(func() runturn.SelfTurn {
+	c.SetSelfTurns(func(string) runturn.SelfTurn {
 		s := &selfTurn{sink: &sink{}, ended: make(chan runturn.Result, 1)}
 		turns <- s
 		return s
@@ -520,5 +520,15 @@ func TestPromptReportsUsage(t *testing.T) {
 		if len(obs.list()) != 2 {
 			t.Fatalf("agy's own reply: %q", obs.list())
 		}
+	}
+}
+
+// Text the agent sends on both sides of a tool call is two paragraphs: the agent gives no break between them.
+func TestTextAroundToolCall(t *testing.T) {
+	h := newHarness(t, "grok")
+	c, _ := h.start(acp.Options{})
+	s := &sink{}
+	if r := prompt(t, c, newSession(t, c, h), "fake:texttool", s); r.Text != "Let me run it.\n\nran" || s.String() != r.Text {
+		t.Fatalf("%+v %q", r, s.String())
 	}
 }

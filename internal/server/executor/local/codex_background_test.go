@@ -60,8 +60,8 @@ func TestCodexStopBackground(t *testing.T) {
 	}
 	task := lastItem(t, obs)
 	got, err := h.e.StopBackground(context.Background(), id, task, executor.StopByPerson)
-	if err != nil || got.Status != executor.BackgroundStopped || got.StopReason != executor.StopByPerson {
-		t.Fatalf("stopped: %+v %v", got, err)
+	if err != nil || got.Status != executor.BackgroundStopped || got.StopReason != executor.StopByPerson || got.ExitCode != nil {
+		t.Fatalf("stopped, with no exit code (Codex's -1 says nothing): %+v %v", got, err)
 	}
 }
 

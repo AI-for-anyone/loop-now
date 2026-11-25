@@ -565,14 +565,16 @@ func (o codexObserver) CommandBackgrounded(c codexapp.Command) {
 	o.e.bgStarted(o.p, executor.BackgroundTask{ID: c.ItemID, Kind: executor.BackgroundCommand, Label: label, ToolCallID: c.ItemID})
 }
 
-// CommandEnded records its end: completed with exit code 0, failed otherwise; stopped when a stop was asked for.
+// CommandEnded records its end: completed with exit code 0, failed otherwise; stopped, with no exit code, when a stop
+// was asked for.
 func (o codexObserver) CommandEnded(c codexapp.Command, status string, exitCode *int64, output *string) {
 	end := executor.BackgroundEnd{Status: executor.BackgroundCompleted, ExitCode: exitCode, Output: output}
 	if status == "failed" || status == "declined" || exitCode != nil && *exitCode != 0 {
 		end.Status = executor.BackgroundFailed
 	}
 	if reason := o.p.bgStopReason(c.ItemID); reason != "" {
-		end.Status, end.StopReason = executor.BackgroundStopped, reason
+		// Codex reports a terminated command with exit code -1, which says nothing about the command.
+		end.Status, end.StopReason, end.ExitCode = executor.BackgroundStopped, reason, nil
 	}
 	o.e.bgEnded(o.p, c.ItemID, end)
 }

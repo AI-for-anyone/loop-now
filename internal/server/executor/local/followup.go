@@ -33,6 +33,7 @@ type followUp struct {
 	taker  *uuid.UUID   // the run that took it
 	ended  bool
 	result runturn.Result
+	spoke  bool // its first text came (blank lines before it are left out)
 }
 
 var _ runturn.SelfTurn = (*followUp)(nil)
@@ -49,7 +50,18 @@ func (f *followUp) do(fn func(runturn.Sink)) {
 	fn(k)
 }
 
-func (f *followUp) TextDelta(s string) { f.do(func(k runturn.Sink) { k.TextDelta(s) }) }
+// TextDelta passes on the reply's text, without the blank lines it may start with (agy starts its own replies so).
+func (f *followUp) TextDelta(s string) {
+	f.mu.Lock()
+	if !f.spoke {
+		s = strings.TrimLeft(s, " \t\r\n")
+		f.spoke = s != ""
+	}
+	f.mu.Unlock()
+	if s != "" {
+		f.do(func(k runturn.Sink) { k.TextDelta(s) })
+	}
+}
 func (f *followUp) ToolStarted(id, name string) {
 	f.do(func(k runturn.Sink) { k.ToolStarted(id, name) })
 }
@@ -80,6 +92,7 @@ func (f *followUp) End(r runturn.Result) {
 		f.mu.Unlock()
 		return
 	}
+	r.Text = strings.TrimLeft(r.Text, " \t\r\n")
 	f.ended, f.result = true, r
 	f.mu.Unlock()
 	close(f.done)
@@ -137,10 +150,12 @@ func (f *followUp) take(runID uuid.UUID, sink runturn.Sink) {
 }
 
 // selfTurnBegan is called by a runtime client when its CLI begins a turn by itself: the reply becomes a follow-up of
-// the tasks that ended since the platform last sent a message, and the host makes a run of origin background for it.
+// the tasks that ended since the platform last sent a message, and of the task about (the one the CLI says the turn is
+// about, which may end just after the turn began; empty when it says none), and the host makes a run of origin
+// background for it.
 // A task instance gets no runs of that kind: its turn waits for its background work, and a reply after that wait is
 // not recorded.
-func (e *Executor) selfTurnBegan(p *proc) runturn.SelfTurn {
+func (e *Executor) selfTurnBegan(p *proc, about string) runturn.SelfTurn {
 	f := &followUp{e: e, agentID: p.agentID, runID: uuid.Must(uuid.NewV7()), triggers: e.bgTakeEnded(p), done: make(chan struct{}),
 		sel: executor.Selection{Runtime: p.drv.runtime(), Provider: p.provider, ModelID: p.model, ThinkingLevel: p.thinking}, version: p.version}
 	host := e.followUps.Load()
@@ -158,10 +173,20 @@ func (e *Executor) selfTurnBegan(p *proc) runturn.SelfTurn {
 	p.bgNotify()
 	if !p.task {
 		triggers := slices.Clone(f.triggers)
-		go (*host).FollowUp(p.agentID, f.runID, triggers)
+		go func() {
+			if about != "" && !slices.ContainsFunc(triggers, func(t executor.BackgroundTask) bool { return t.ID == about }) {
+				if t, ok := e.bgAwaitEnd(p, about, aboutWait); ok {
+					triggers = append(triggers, t)
+				}
+			}
+			(*host).FollowUp(p.agentID, f.runID, triggers)
+		}()
 	}
 	return f
 }
+
+// aboutWait is how long a follow-up waits for the end of the task it is about (Grok announces the turn first).
+const aboutWait = 10 * time.Second
 
 // followUpEnded forgets the reply as the one the process is giving.
 func (e *Executor) followUpEnded(f *followUp) {

@@ -58,7 +58,7 @@ func grokWithTasks(t *testing.T) (*acp.Client, string, *bgObserver, chan *selfTu
 	obs := newBgObserver()
 	c.SetObserver(obs)
 	turns := make(chan *selfTurn, 4)
-	c.SetSelfTurns(func() runturn.SelfTurn {
+	c.SetSelfTurns(func(string) runturn.SelfTurn {
 		s := &selfTurn{sink: &sink{}, ended: make(chan runturn.Result, 1)}
 		turns <- s
 		return s
@@ -127,7 +127,7 @@ func TestGrokLateQueueIsNotASelfTurn(t *testing.T) {
 	h.env = []string{"FAKEACP_LATE_QUEUE=1"}
 	c, _ := h.start(acp.Options{})
 	turns := make(chan *selfTurn, 4)
-	c.SetSelfTurns(func() runturn.SelfTurn {
+	c.SetSelfTurns(func(string) runturn.SelfTurn {
 		s := &selfTurn{sink: &sink{}, ended: make(chan runturn.Result, 1)}
 		turns <- s
 		return s
