@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/sys/unix"
 )
 
 // A file is copied (cloned where possible, else copied) without changing the source; an existing target is refused.
@@ -17,9 +15,7 @@ func TestCloneFile(t *testing.T) {
 	}
 	for _, unsupported := range []bool{false, true} {
 		if unsupported {
-			orig := clonefile
-			clonefile = func(string, string, int) error { return unix.ENOTSUP }
-			t.Cleanup(func() { clonefile = orig })
+			forceCopyFallback(t)
 		}
 		dst := filepath.Join(dir, "out", "copy.jsonl")
 		_ = os.Remove(dst)
