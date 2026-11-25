@@ -30,6 +30,10 @@ type Service struct {
 	Models   Models
 	WorkRoot string
 	OrgID    uuid.UUID
+	// Home is the person's home folder and Excluded more folders that are not projects (see ScanOptions); nil and
+	// empty leave nothing out but Loop Now's own conversations.
+	Home     func() (string, error)
+	Excluded []string
 	// DefaultMode is the permission mode new Agents get; nil is full.
 	DefaultMode func(context.Context) (string, error)
 	// AgentCreated is told about each Agent an import creates; may be nil.
@@ -77,6 +81,12 @@ func (s *Service) StartScan(ctx context.Context, in apitypes.ConversationScanInp
 			o.CodexSessions, o.CodexIndex = filepath.Join(home, "sessions"), filepath.Join(home, "session_index.jsonl")
 		}
 	}
+	if s.Home != nil {
+		if home, err := s.Home(); err == nil && filepath.IsAbs(home) {
+			o.Home = home
+		}
+	}
+	o.Excluded = s.Excluded
 	op := &scanOp{view: apitypes.ConversationScan{OperationID: uuid.Must(uuid.NewV7()).String(), State: "running", Folders: []apitypes.ImportFolder{}}}
 	o.Progress = func(done, total int) {
 		op.mu.Lock()

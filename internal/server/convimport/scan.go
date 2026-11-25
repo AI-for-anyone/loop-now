@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -66,6 +67,11 @@ type ScanOptions struct {
 	// MaxBytes and MaxRecords override MaxFileBytes and MaxFileRecords (tests); zero keeps them.
 	MaxBytes   int64
 	MaxRecords int
+	// Home is the person's home folder: its Downloads, Documents/Codex (Codex's scratch folders) and Library (apps'
+	// data, Claude's scratch workspaces among them) are not projects. Excluded are more folders whose conversations are left out (TemporaryFolders,
+	// Loop Now's work root).
+	Home     string
+	Excluded []string
 }
 
 // Folder is a group of conversations: a git repository (its main checkout, its worktrees and checkouts with the same
@@ -136,6 +142,9 @@ func Scan(ctx context.Context, o ScanOptions) ([]Folder, error) {
 		if o.Path != "" && !within(c.Cwd, o.Path) {
 			continue
 		}
+		if o.leftOut(c) {
+			continue
+		}
 		convs = append(convs, c)
 	}
 	return group(o, convs), nil
@@ -165,6 +174,54 @@ type candidate struct {
 	cli, path, id string
 	size          int64
 	mtime         time.Time
+}
+
+// TemporaryFolders are this computer's temporary folders (with their resolved forms on macOS and the process's
+// TMPDIR): conversations there are not projects.
+func TemporaryFolders() []string {
+	out := []string{"/tmp", "/private/tmp", "/var/folders", "/private/var/folders"}
+	if tmp := os.TempDir(); tmp != "" {
+		out = append(out, tmp)
+	}
+	return out
+}
+
+// loopNowWorkspace matches a folder under a Loop Now Agent's (or task instance's) own workspace, in any work root.
+var loopNowWorkspace = regexp.MustCompile(`(^|/)agents/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/workspace(/|$)`)
+
+// loopNowRunHeader starts the first message of every turn Loop Now runs (executor.RunIDLine), in English and as older
+// versions wrote it.
+var loopNowRunHeaders = []string{"Run ID for this turn: ", "本轮运行ID："} // check-english: zh (older Loop Now runs start with this line)
+
+// leftOut reports whether a conversation is not offered at all: Loop Now made it (one of its Agents' workspaces, or
+// a run header), or it worked in a folder that is not a project (scratch, downloads, temporary).
+func (o ScanOptions) leftOut(c Conversation) bool {
+	cwd := filepath.ToSlash(filepath.Clean(c.Cwd))
+	if loopNowWorkspace.MatchString(cwd) {
+		return true
+	}
+	for _, h := range loopNowRunHeaders {
+		if strings.HasPrefix(c.FirstPrompt, h) {
+			return true
+		}
+	}
+	excluded := slices.Clone(o.Excluded)
+	if o.Home != "" {
+		// Library holds apps' data (Claude's scratch workspaces among them), not projects.
+		excluded = append(excluded, filepath.Join(o.Home, "Downloads"), filepath.Join(o.Home, "Documents", "Codex"), filepath.Join(o.Home, "Library"))
+	}
+	for _, dir := range excluded {
+		if dir == "" {
+			continue
+		}
+		if within(c.Cwd, dir) {
+			return true
+		}
+		if real, err := filepath.EvalSymlinks(dir); err == nil && within(c.Cwd, real) {
+			return true
+		}
+	}
+	return false
 }
 
 func within(path, root string) bool {

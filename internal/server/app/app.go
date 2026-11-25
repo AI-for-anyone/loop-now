@@ -563,7 +563,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.API.PathPicker = &pathpicker.Picker{Log: log}
 	// Importing conversations reads only Claude Code's and Codex's conversation records on this computer.
 	a.API.ConvImport = &convimport.Service{Store: a.Store, ClaudeProjects: a.Executor.ClaudeProjectsDir, CodexHome: a.Executor.CodexHome,
-		Models: models, WorkRoot: res.WorkRoot, OrgID: defaults.Organization.ID, AgentCreated: a.Conv.EmitAgentStatus, DefaultMode: a.Store.PermissionDefaultMode}
+		Models: models, WorkRoot: res.WorkRoot, OrgID: defaults.Organization.ID, AgentCreated: a.Conv.EmitAgentStatus, DefaultMode: a.Store.PermissionDefaultMode,
+		Home: realHome, Excluded: append(convimport.TemporaryFolders(), res.WorkRoot)}
 	// A request is asked in the Inbox too; its changes go to the Agent's stream, or the task node's.
 	permissionSvc.Inbox = inboxSvc
 	permissionSvc.Changed = func(r store.PermissionRequest) {
