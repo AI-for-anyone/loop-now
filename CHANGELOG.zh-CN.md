@@ -4,7 +4,9 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
-## 未发布
+## v0.3.1
+
+AI 帮写：每个 Prompt 旁边都有一个按钮，用这台电脑上已经装好的 CLI（Claude Code、Codex、Antigravity 或 Grok，用它自己的登录）帮你写出来。设置里可以选由谁来写，默认用第一个能用的，挑它又小又快的模型。不会新建 Agent，你不点保存就不会存下来。
 
 ### AI 帮写
 

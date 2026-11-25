@@ -4,7 +4,9 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-## Unreleased
+## v0.3.1
+
+Write with AI: every Prompt has a button that drafts it for you with a CLI already on this computer (Claude Code, Codex, Antigravity or Grok, using its own login). Settings says which one writes; by default the first one that is ready, with a small, quick model. No Agent is created and nothing is saved until you save.
 
 ### Write with AI
 
