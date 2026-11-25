@@ -561,6 +561,188 @@ export interface paths {
         patch: operations["updateAcpCommand"];
         trace?: never;
     };
+    "/conversation-scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look for Claude Code and Codex conversations on this computer to import
+         * @description Reads, without changing anything, Claude Code's conversation records (~/.claude/projects/*\/*.jsonl) and Codex's
+         *     (~/.codex/sessions), and nothing else: never login, token or credential files. Runs asynchronously: returns 202
+         *     with the scan; read its progress and result with GET. Conversations are grouped by folder: a git repository
+         *     (its worktrees and checkouts with the same remote folded into it) or, for others, the conversation's own folder.
+         */
+        post: operations["startConversationScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversation-scans/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * A scan's progress and, once done, what it found
+         * @description Scans are kept in memory for an hour after they end; an unknown or forgotten one is 404.
+         */
+        get: operations["getConversationScan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversation-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import conversations a scan found, as Agents that continue them
+         * @description For each folder: its project (projectId, else a project that already has the folder as a local directory, else a
+         *     new project named after the folder) gets the folder as a local directory; each conversation becomes an Agent in
+         *     it on the same runtime, working in the conversation's own folder (ImportConversation.cwd), with the person's own
+         *     CLI configuration and the default permission mode, its model the conversation's last one when the runtime
+         *     still lists it (else the runtime's default), and the conversation's history as messages of origin imported. The
+         *     Agent continues a copy of the conversation taken now (Claude Code's session file is copied; Codex's thread is
+         *     forked from its last turn), so the original is never changed and keeps working in the terminal. A conversation
+         *     already imported is not imported again: its Agent is given instead. At most 100 conversations and 4 GiB per
+         *     folder (422 otherwise). Runs asynchronously: returns 202; read progress with GET.
+         */
+        post: operations["startConversationImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversation-imports/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * An import's progress and result
+         * @description Imports are kept in memory for an hour after they end; an unknown or forgotten one is 404.
+         */
+        get: operations["getConversationImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/permission-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The permission mode new Agents get */
+        get: operations["getPermissionSettings"];
+        /** Choose the permission mode new Agents get (initially full); existing Agents keep theirs */
+        put: operations["putPermissionSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/permission-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The Agent's pending permission requests, oldest first
+         * @description The same list as AgentStatus.permissionRequests and the permission_requests.updated event.
+         */
+        get: operations["listPermissionRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/permission-requests/{permissionRequestId}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                permissionRequestId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a pending permission request
+         * @description The runtime is told at once and the reply goes on; a rejection's reason is given to the runtime. The request's
+         *     Inbox question closes. 409 `permission_request_answered` (details PermissionRequestAnsweredDetails) when it
+         *     was answered (from the chat or the Inbox) or cancelled already; 404 when there is no such request.
+         */
+        post: operations["answerPermissionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/nodes/{nodeRunId}/permission-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The pending permission requests of this node's turns, oldest first
+         * @description task.node.permission_requests.updated on the task's event stream replaces the list whenever it changes. Answer with POST /permission-requests/{permissionRequestId}/answer.
+         */
+        get: operations["listTaskNodePermissionRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/text-generation-settings": {
         parameters: {
             query?: never;
@@ -1652,6 +1834,9 @@ export interface paths {
          *     `background_tasks.updated` carries the full list of the Agent's running background tasks whenever one starts,
          *     ends or is asked to stop (the snapshot's `status.backgroundTasks` holds it at snapshot time). The run that started
          *     the task also gets `run.updated` (Run.backgroundTasks), even when it has ended.
+         *
+         *     `permission_requests.updated` carries the full list of the Agent's pending permission requests whenever one is
+         *     asked, answered or cancelled (the snapshot's `status.permissionRequests` holds it at snapshot time).
          */
         get: operations["streamAgentEvents"];
         put?: never;
@@ -3151,7 +3336,7 @@ export interface paths {
         };
         /**
          * Task SSE, with snapshot and task/node/artifact updates
-         * @description Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes. task.node.background_tasks.updated fully replaces a node's running background tasks (same structure as GET …/nodes/{nodeRunId}/background-tasks) whenever one starts, ends or is asked to stop.
+         * @description Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes. task.node.background_tasks.updated fully replaces a node's running background tasks (same structure as GET …/nodes/{nodeRunId}/background-tasks) whenever one starts, ends or is asked to stop. task.node.permission_requests.updated fully replaces a node's pending permission requests (same structure as GET …/nodes/{nodeRunId}/permission-requests) whenever one is asked, answered or cancelled.
          */
         get: operations["streamTaskEvents"];
         put?: never;
@@ -3851,16 +4036,16 @@ export interface components {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
-                /** @description Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist; background_task_ended carries BackgroundTaskEndedDetails */
-                details?: components["schemas"]["BackgroundTaskEndedDetails"] | components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["RuntimeInUseDetails"] | components["schemas"]["NotFoundDetails"];
+                /** @description Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist; background_task_ended carries BackgroundTaskEndedDetails; permission_request_answered carries PermissionRequestAnsweredDetails */
+                details?: components["schemas"]["BackgroundTaskEndedDetails"] | components["schemas"]["PermissionRequestAnsweredDetails"] | components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["RuntimeInUseDetails"] | components["schemas"]["NotFoundDetails"];
                 fields?: components["schemas"]["FieldError"][];
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended" | "permission_request_answered";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -4187,6 +4372,16 @@ export interface components {
              *     them running.
              */
             stopEndsBackgroundTasks: boolean;
+            /**
+             * @description The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Pi has only full;
+             *     Grok has no accept_edits; Antigravity lists auto only when its account offers it. An Agent set to a mode its
+             *     runtime lacks runs as supervised.
+             */
+            permissionModes: components["schemas"]["PermissionMode"][];
+            /** @description It can work in an Agent's own folder on this computer (Agent.workingDirectory); Pi cannot, so an Agent with a working folder cannot use Pi. */
+            workingDirectory: boolean;
+            /** @description It can run with the person's own CLI configuration (Agent.useLocalConfig), as Claude Code and Codex can. */
+            localConfig: boolean;
         };
         RuntimeStatus: {
             id: components["schemas"]["AgentRuntime"];
@@ -4459,6 +4654,12 @@ export interface components {
             /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt?: string;
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            workingDirectory?: string | null;
+            /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
+            useLocalConfig?: boolean;
+            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            permissionMode?: components["schemas"]["PermissionMode"];
         };
         ProjectPrompt: {
             prompt: string;
@@ -4479,7 +4680,8 @@ export interface components {
          *     message that failed to start there, for example because it is not installed or not logged in, does not count),
          *     the earlier session simply continues and nothing is handed over. A change of provider or model within one runtime
          *     keeps that runtime's session. Records from before this behaviour show a session reset with reason
-         *     runtime_changed at each change of runtime.
+         *     runtime_changed at each change of runtime. An Agent with a working folder or a permission mode other than full
+         *     cannot move to Pi (422).
          */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
@@ -4494,6 +4696,12 @@ export interface components {
              * @description Required when prompt is present (including empty text and unchanged text); independent of configVersion, and a stale value returns 412.
              */
             expectedPromptVersion?: number;
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            workingDirectory?: string | null;
+            /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
+            useLocalConfig?: boolean;
+            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            permissionMode?: components["schemas"]["PermissionMode"];
         };
         Agent: {
             /** Format: uuid */
@@ -4526,6 +4734,24 @@ export interface components {
             /** Format: int64 */
             promptVersion: number;
             configVersion: number;
+            /**
+             * @description The folder on this computer the Agent works in (an absolute path to an existing folder), for example the folder
+             *     of a conversation it was imported from; null means its own workspace. Task steps still run in a copy of the
+             *     Agent's own workspace, and the Folder tab shows that workspace. Pi cannot use a working folder.
+             */
+            workingDirectory: string | null;
+            /**
+             * @description Run with the person's own CLI configuration, as in a terminal (Claude Code and Codex; RuntimeCapabilities.localConfig).
+             *     For Claude Code: the person's settings, CLAUDE.md, skills, plugins and MCP servers, all of Claude Code's tools,
+             *     its auto memory and built-in skills, the real HOME and the login shell's PATH with the person's own git, gh and
+             *     ssh logins whatever the local-mode switches say, and no project accounts; Loop Now still adds loopctl, its
+             *     system prompt and granted plugins' MCP servers. Codex loads ~/.codex as it always does. The permission mode
+             *     is the control over risky actions.
+             */
+            useLocalConfig: boolean;
+            permissionMode: components["schemas"]["PermissionMode"];
+            /** @description The conversation the Agent was imported from; null for Agents made otherwise. Read only. */
+            importedFrom: components["schemas"]["ImportedFrom"] | null;
             busy: boolean;
             /** @description How many background tasks run on the Agent's runtime process (see AgentStatus.backgroundTasks); the Agent can be idle while they run */
             backgroundTaskCount: number;
@@ -4830,6 +5056,88 @@ export interface components {
          */
         RunEndReason: "user_interrupt" | "user_stopped" | "server_restart" | "sleep_superseded" | "sleep_invalidated" | "user_cancelled" | "merged_into_interrupt" | "no_pending_messages" | "merged_into_reply" | null;
         /**
+         * @description How much an Agent's runtime may do without asking (T3's permission modes). supervised: it asks before running
+         *     commands and changing files; accept_edits: file changes in the working folder go ahead, commands ask; auto: the
+         *     runtime's own automatic review approves routine actions and asks about the others; full: it never asks. A
+         *     request to approve is a PermissionRequest; the reply waits until someone answers it in the chat or the Inbox.
+         *     Not every runtime has every mode (RuntimeCapabilities.permissionModes): a mode a runtime lacks runs as
+         *     supervised, never as full.
+         * @enum {string}
+         */
+        PermissionMode: "supervised" | "accept_edits" | "auto" | "full";
+        /**
+         * @description Something an Agent's runtime asked to do in a mode other than full, waiting for a person. It is shown in the
+         *     Agent's chat (or the task node's) and sent to the console's Inbox as a question of kind permission; the first
+         *     answer counts. Stopping the reply, the reply ending otherwise or the runtime's process exiting cancels the
+         *     requests still pending (the runtime is told no).
+         */
+        PermissionRequest: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The Agent (for a task instance, the Agent it runs)
+             */
+            agentId: string;
+            /**
+             * Format: uuid
+             * @description The run (for a task instance, the task turn) that is waiting
+             */
+            runId: string;
+            /**
+             * Format: uuid
+             * @description The task, for a task instance; null otherwise
+             */
+            taskId: string | null;
+            /**
+             * Format: uuid
+             * @description The task node, for a task instance; null otherwise
+             */
+            nodeRunId: string | null;
+            runtime: components["schemas"]["AgentRuntime"];
+            /**
+             * @description command, a shell command; file_change, changing files; tool, another tool (an MCP tool, a web fetch); network, network access outside the sandbox; other, anything else
+             * @enum {string}
+             */
+            kind: "command" | "file_change" | "tool" | "network" | "other";
+            /** @description What is asked, in a short line (as the runtime says it) */
+            title: string;
+            /** @description The command line, the files and their changes, or the tool's input, when the runtime gives them (at most 16 KiB) */
+            detail: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** @enum {string} */
+            state: "pending" | "approved" | "rejected" | "cancelled";
+            /** Format: date-time */
+            answeredAt: string | null;
+            /** @description On a rejected request, what the person typed, which the runtime was given; on a cancelled one, why (reply_stopped, reply_ended, process_exited); null otherwise */
+            reason: string | null;
+        };
+        /** @description Details for permission_request_answered, the request as it was answered */
+        PermissionRequestAnsweredDetails: {
+            request: components["schemas"]["PermissionRequest"];
+        };
+        /** @description A permission request of this run (see PermissionRequest); at is when it was asked, answeredAt when it was answered or cancelled */
+        TimelinePermissionRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "permission_request";
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            requestId: string;
+            /** @enum {string} */
+            kind: "command" | "file_change" | "tool" | "network" | "other";
+            title: string;
+            /** @enum {string} */
+            state: "pending" | "approved" | "rejected" | "cancelled";
+            /** Format: date-time */
+            answeredAt: string | null;
+            reason: string | null;
+        };
+        /**
          * @description Work that the runtime's CLI started in the background during a reply and that outlives the reply: a command
          *     (Claude Code's background Bash, a Codex command still running when its turn completed, a Grok terminal command
          *     moved to the background, an Antigravity command moved to the background), a sub-agent, or other work. The reply
@@ -4892,6 +5200,160 @@ export interface components {
              *     ones, cut at a character boundary; null while running and when the runtime gives none.
              */
             output: string | null;
+        };
+        ConversationScanInput: {
+            /**
+             * Format: date-time
+             * @description Only conversations active since then (the console offers the last 30 days first); null or omitted is all history
+             */
+            since?: string | null;
+            /** @description Only conversations whose folder is this folder or inside it (for a project's own folder); null or omitted is everywhere */
+            path?: string | null;
+        };
+        ConversationScan: {
+            /** Format: uuid */
+            operationId: string;
+            /** @enum {string} */
+            state: "running" | "done" | "failed";
+            /** @description Why the scan failed; null otherwise */
+            error: string | null;
+            /** @description Conversation files found to read (known once the files are listed) */
+            filesTotal: number;
+            /** @description Conversation files read so far */
+            filesDone: number;
+            /** @description What was found, git repositories first, newest first; empty until the scan is done */
+            folders: components["schemas"]["ImportFolder"][];
+        };
+        ImportFolder: {
+            /** @description The folder that becomes the project's local directory, a git repository's main checkout (its worktrees folded in) or, outside git, the conversations' own folder */
+            path: string;
+            git: boolean;
+            /** @description For a git repository, its remote (the fetch URL of origin, else of the first remote; null without one) and main checkout */
+            repository: {
+                remote: string | null;
+                mainCheckout: string;
+            } | null;
+            /** Format: date-time */
+            lastActiveAt: string;
+            /** @description Offered checked (T3's rule) a git repository with at least 3 conversations active in the last 30 days */
+            preChecked: boolean;
+            /**
+             * Format: uuid
+             * @description A project that already has this folder as a local directory; the import puts the Agents there unless told otherwise
+             */
+            projectId: string | null;
+            /** @description Newest first */
+            conversations: components["schemas"]["ImportConversation"][];
+            /** @description More than the 500 newest conversations were found; the older ones are left out */
+            truncated: boolean;
+        };
+        ImportConversation: {
+            /** @enum {string} */
+            cli: "claude" | "codex";
+            /** @description The CLI's session id (Claude Code) or thread id (Codex) */
+            sessionId: string;
+            /** @description The conversation's own folder, which an imported Agent works in */
+            cwd: string;
+            /** @description The title the CLI stored for it, else its first prompt (shortened) */
+            title: string;
+            /** @description The first prompt, at most 500 characters */
+            firstPrompt: string;
+            /** Format: date-time */
+            lastActiveAt: string;
+            /** @description Prompts and replies with text (tool activity not counted) */
+            messageCount: number;
+            sizeBytes: number;
+            /** @description The last model it used, as the CLI names it */
+            model: string | null;
+            /**
+             * Format: uuid
+             * @description The Agent it was already imported as; such a conversation is not imported again
+             */
+            agentId: string | null;
+            /**
+             * @description Why it cannot be imported (over 4 GiB, over 100,000 records, no prompt, cannot be read); null when it can
+             * @enum {string|null}
+             */
+            skipReason: "too_large" | "too_many_records" | "empty" | "unreadable" | null;
+        };
+        ConversationImportInput: {
+            /**
+             * Format: uuid
+             * @description The scan that found the conversations
+             */
+            scanId: string;
+            folders: {
+                /** @description ImportFolder.path */
+                path: string;
+                /**
+                 * Format: uuid
+                 * @description The project to import into; null uses ImportFolder.projectId, else a new project named after the folder
+                 */
+                projectId: string | null;
+                sessionIds: string[];
+            }[];
+        };
+        ConversationImport: {
+            /** Format: uuid */
+            operationId: string;
+            /** @enum {string} */
+            state: "running" | "done" | "failed";
+            /** @description Why the whole import failed; null otherwise (a conversation that failed is in errors) */
+            error: string | null;
+            done: number;
+            total: number;
+            /** @description The project each folder went to */
+            projects: {
+                path: string;
+                /** Format: uuid */
+                projectId: string;
+            }[];
+            /** @description The Agent of each conversation imported (or imported before) */
+            agents: {
+                sessionId: string;
+                /** Format: uuid */
+                agentId: string;
+            }[];
+            errors: {
+                sessionId: string;
+                message: string;
+            }[];
+        };
+        /** @description The conversation an Agent was imported from */
+        ImportedFrom: {
+            /** @enum {string} */
+            cli: "claude" | "codex";
+            sessionId: string;
+            /** @description The original conversation record, which is never changed */
+            path: string;
+            /** Format: date-time */
+            importedAt: string;
+        };
+        PermissionSettings: {
+            defaultMode: components["schemas"]["PermissionMode"];
+        };
+        PermissionRequestList: {
+            requests: components["schemas"]["PermissionRequest"][];
+        };
+        PermissionAnswer: {
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            /** @description With reject, what the runtime is told (why, or what to do instead) */
+            reason?: string;
+        };
+        /** @description The Agent's pending permission requests, oldest first (the full list, as AgentStatus.permissionRequests) */
+        SsePermissionRequestsUpdated: {
+            requests: components["schemas"]["PermissionRequest"][];
+        };
+        TaskNodePermissionRequests: {
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            nodeRunId: string;
+            /** Format: uuid */
+            runtimeId: string;
+            /** @description Pending permission requests of this node's turns, oldest first */
+            requests: components["schemas"]["PermissionRequest"][];
         };
         BackgroundTaskList: {
             tasks: components["schemas"]["BackgroundTask"][];
@@ -5094,10 +5556,12 @@ export interface components {
          * @description Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder
          *     after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the
          *     sleep is due; background means the runtime's CLI replied by itself after background work it started had ended
-         *     (Run.triggerBackgroundTasks names that work), and the user message is generated text saying so
+         *     (Run.triggerBackgroundTasks names that work), and the user message is generated text saying so; imported means
+         *     history copied from a conversation the Agent was imported from (Agent.importedFrom): one completed run per turn
+         *     of that conversation (its prompt and its reply), with no tools and no usage, before the Agent's own runs
          * @enum {string}
          */
-        MessageOrigin: "console" | "inbox_reminder" | "sleep_wake" | "background";
+        MessageOrigin: "console" | "inbox_reminder" | "sleep_wake" | "background" | "imported";
         Message: {
             /** Format: uuid */
             id: string;
@@ -5230,6 +5694,8 @@ export interface components {
              *     settings_changed). Always false when no background task runs.
              */
             restartOnNextMessage: boolean;
+            /** @description The Agent's pending permission requests (state pending), oldest first; see PermissionRequest */
+            permissionRequests: components["schemas"]["PermissionRequest"][];
         };
         SseSnapshot: {
             status: components["schemas"]["AgentStatus"];
@@ -5721,7 +6187,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineBackgroundWaitTimeout"] | components["schemas"]["TimelineBackgroundTaskStarted"] | components["schemas"]["TimelineBackgroundTaskEnded"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineBackgroundWaitTimeout"] | components["schemas"]["TimelineBackgroundTaskStarted"] | components["schemas"]["TimelineBackgroundTaskEnded"] | components["schemas"]["TimelinePermissionRequest"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description A request from an agent-side extension through ctx.ui (extension_ui_request in Pi RPC). notify is a notification
          *     (level info, warning or error); setStatus sets or clears a status (cleared when message is empty). select,
@@ -6323,6 +6789,19 @@ export interface components {
             at: string;
         };
         InboxQuestion: {
+            /**
+             * @description Present only on a question that asks the console to approve something an Agent's runtime wants to do (a
+             *     permission request, see PermissionRequest): its options are Approve and Reject, a typed answer rejects and
+             *     tells the Agent why, and answering it answers the request. Such a question does not expire while the
+             *     request is pending, and closes when the request is answered elsewhere or cancelled.
+             * @enum {string}
+             */
+            kind?: "permission";
+            /**
+             * Format: uuid
+             * @description The permission request a question of kind permission asks about
+             */
+            permissionRequestId?: string;
             options: components["schemas"]["InboxQuestionOption"][];
             /** Format: date-time */
             expiresAt: string;
@@ -11253,6 +11732,262 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    startConversationScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationScanInput"];
+            };
+        };
+        responses: {
+            /** @description The scan, started */
+            202: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationScan"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getConversationScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scan */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationScan"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startConversationImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationImportInput"];
+            };
+        };
+        responses: {
+            /** @description The import, started */
+            202: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationImport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getConversationImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The import */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationImport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPermissionSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putPermissionSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PermissionSettings"];
+            };
+        };
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listPermissionRequests: {
+        parameters: {
+            query?: {
+                state?: "pending";
+            };
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requests */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionRequestList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    answerPermissionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                permissionRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PermissionAnswer"];
+            };
+        };
+        responses: {
+            /** @description The request as answered */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionRequest"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listTaskNodePermissionRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requests */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskNodePermissionRequests"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getTextGenerationSettings: {

@@ -11,9 +11,10 @@ export interface TaskEventDataMap {
   'sleep.updated': Schemas['SseSleepUpdated']
   'task.node.queue.updated': Schemas['TaskNodeQueue']
   'task.node.background_tasks.updated': Schemas['TaskNodeBackgroundTasks']
+  'task.node.permission_requests.updated': Schemas['TaskNodePermissionRequests']
 }
 export type TaskEvent = { [K in keyof TaskEventDataMap]: { type: K; id: string; data: TaskEventDataMap[K] } }[keyof TaskEventDataMap]
-export const TASK_EVENT_NAMES = ['snapshot', 'task.updated', 'node.updated', 'message.created', 'task.inbox.updated', 'artifact.published', 'sleep.updated', 'task.node.queue.updated', 'task.node.background_tasks.updated'] as const satisfies readonly TaskEvent['type'][]
+export const TASK_EVENT_NAMES = ['snapshot', 'task.updated', 'node.updated', 'message.created', 'task.inbox.updated', 'artifact.published', 'sleep.updated', 'task.node.queue.updated', 'task.node.background_tasks.updated', 'task.node.permission_requests.updated'] as const satisfies readonly TaskEvent['type'][]
 export interface ProjectTaskEventDataMap { snapshot: Schemas['TaskProjectSnapshotEvent']; 'task.updated': Schemas['TaskUpdatedEvent'] }
 export type ProjectTaskEvent = { [K in keyof ProjectTaskEventDataMap]: { type: K; id: string; data: ProjectTaskEventDataMap[K] } }[keyof ProjectTaskEventDataMap]
 export const PROJECT_TASK_EVENT_NAMES = ['snapshot', 'task.updated'] as const

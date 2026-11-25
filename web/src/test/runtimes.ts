@@ -18,8 +18,8 @@ export function runtimeList(claudeCode: Partial<Schemas['RuntimeStatus']> = {}):
 export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
   return {
     runtimes: [
-      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true, stopEndsBackgroundTasks: false }, minVersion: null, setup: null, acpCommandId: null },
-      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' }, acpCommandId: null },
+      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true, stopEndsBackgroundTasks: false, permissionModes: ['full'], workingDirectory: false, localConfig: false }, minVersion: null, setup: null, acpCommandId: null },
+      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false, permissionModes: ['supervised', 'accept_edits', 'auto', 'full'], workingDirectory: true, localConfig: true }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' }, acpCommandId: null },
     ],
   }
 }
@@ -34,7 +34,7 @@ export const codexDefinition: Schemas['RuntimeDefinition'] = {
   name: 'Codex',
   providers: ['codex-cli'],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false },
+  capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false, permissionModes: ['supervised', 'accept_edits', 'auto', 'full'], workingDirectory: true, localConfig: true },
   minVersion: '0.167.0',
   acpCommandId: null,
   setup: { install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: 'https://developers.openai.com/codex/cli' },
@@ -49,13 +49,14 @@ export function codexStatus(overrides: Partial<Schemas['RuntimeStatus']> = {}): 
 }
 
 // Grok and Antigravity as the server defines them (ACP-DESIGN.md): CLIs on this computer with their own login and the real home, no
-// commands of their own, no Pi extensions. Stopping a Grok reply ends its process, and with it the background tasks.
+// commands of their own, no Pi extensions. Stopping a Grok reply ends its process, and with it the background tasks. Neither offers
+// Auto-accept edits (T3); they keep an Agent's own folder but have no configuration of the person's to use.
 const acp = (id: 'grok' | 'antigravity', name: string, binary: string, stopEndsBackgroundTasks = false): Schemas['RuntimeDefinition'] => ({
   id,
   name,
   providers: [`${id}-cli`],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks },
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks, permissionModes: ['supervised', 'auto', 'full'], workingDirectory: true, localConfig: false },
   minVersion: null,
   setup: { install: null, login: binary, docsUrl: null },
   acpCommandId: null,
@@ -79,7 +80,7 @@ export const acpCommandDefinition = (commandId = acpCommandId, name = 'Hermes'):
   name,
   providers: [`acp-${commandId}`],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false },
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false, permissionModes: ['supervised', 'full'], workingDirectory: true, localConfig: false },
   minVersion: null,
   setup: null,
   acpCommandId: commandId,

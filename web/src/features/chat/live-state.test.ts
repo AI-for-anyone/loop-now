@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '@/api/events'
 import type { Schemas } from '@/api/client'
-import { makeBackgroundTask, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
+import { makeBackgroundTask, makeMessage, makePermissionRequest, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { initialLiveState, isBusy, liveReducer, queuedCounts, type LiveState } from './live-state'
 
 const apply = (state: LiveState, ...events: AgentEvent[]) => events.reduce((s, event) => liveReducer(s, { type: 'event', event }), state)
@@ -178,6 +178,16 @@ describe('liveReducer', () => {
     expect(next.backgroundTasks).toEqual([server])
     expect(isBusy(next)).toBe(false)
     expect(apply(next, { type: 'background_tasks.updated', id: '3-0', data: { tasks: [] } }).backgroundTasks).toEqual([])
+  })
+
+  it('pending permission requests come from the snapshot and are replaced whole by permission_requests.updated', () => {
+    const first = makePermissionRequest({ title: 'npm install' })
+    const second = makePermissionRequest({ title: 'Edit src/app.ts', kind: 'file_change' })
+    const state = apply(initialLiveState, { type: 'snapshot', id: '1-0', data: { status: makeStatus('a', { permissionRequests: [first] }), currentText: null, queuedRuns: [], queueItems: [] } })
+    expect(state.permissionRequests).toEqual([first])
+    const next = apply(state, { type: 'permission_requests.updated', id: '2-0', data: { requests: [first, second] } })
+    expect(next.permissionRequests).toEqual([first, second])
+    expect(apply(next, { type: 'permission_requests.updated', id: '3-0', data: { requests: [] } }).permissionRequests).toEqual([])
   })
 
   it('updates the session state', () => {

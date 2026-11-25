@@ -68,6 +68,26 @@ export function makeBackgroundTask(overrides: Partial<Schemas['BackgroundTask']>
   }
 }
 
+// A permission request waiting for an answer: by default a Claude Code command in some run.
+export function makePermissionRequest(overrides: Partial<Schemas['PermissionRequest']> = {}): Schemas['PermissionRequest'] {
+  return {
+    id: id(),
+    agentId: id(),
+    runId: id(),
+    taskId: null,
+    nodeRunId: null,
+    runtime: 'claude-code',
+    kind: 'command',
+    title: 'npm install',
+    detail: 'npm install --save-dev vitest',
+    createdAt: '2026-10-12T07:59:30Z',
+    state: 'pending',
+    answeredAt: null,
+    reason: null,
+    ...overrides,
+  }
+}
+
 export function makeMessage(overrides: Partial<Schemas['Message']> = {}): Schemas['Message'] {
   return { id: id(), role: 'user', origin: 'console', text: 'Hello', createdAt: now, sessionEpoch: 1, run: makeRun(), ...overrides }
 }
@@ -99,6 +119,10 @@ export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['A
     configVersion: 1,
     busy: false,
     backgroundTaskCount: 0,
+    workingDirectory: null,
+    useLocalConfig: false,
+    permissionMode: 'full',
+    importedFrom: null,
     session: { state: 'active', epoch: 1 },
     clis: [],
     modelCredential: null,
@@ -142,6 +166,7 @@ export function makeStatus(agentId: string, overrides: Partial<Schemas['AgentSta
     session: { state: 'active', epoch: 1 },
     backgroundTasks: [],
     restartOnNextMessage: false,
+    permissionRequests: [],
     ...overrides,
   }
 }
