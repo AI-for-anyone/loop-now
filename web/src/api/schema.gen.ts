@@ -635,6 +635,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/path-picks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose a folder or file in this computer's own dialog and get its full path
+         * @description For the console in a browser, which cannot learn a full path (the desktop app uses its own dialog instead). The
+         *     console port listens only on this computer, so the dialog shows on the screen the browser is on.
+         *     The dialog opens in front of other windows (it may take one click before it gets the keyboard), and the request
+         *     is answered when the person chooses or cancels, with no time limit; closing the request closes the dialog at
+         *     once. One dialog is open at a time.
+         *     kind directory chooses a folder, with a button to make a new one; kind file chooses a file, with hidden files
+         *     shown. On macOS a chosen application (.app) stands for the program inside it, Contents/MacOS/ and the
+         *     CFBundleExecutable from its Info.plist; when that cannot be read or is not there, the .app is returned as chosen.
+         *     defaultPath, such as the field's current value, is where the dialog opens when, without surrounding spaces, it is
+         *     an absolute path that exists (a file opens its folder); anything else opens the dialog where it usually opens.
+         *     Only macOS for now, in a logged-in desktop session; Context.pathPicker says whether it works here.
+         *     Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why); 409
+         *     path_picker_busy when a dialog is already open; 422 when defaultPath holds a NUL character.
+         */
+        post: operations["createPathPick"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -3689,10 +3721,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -3747,6 +3779,11 @@ export interface components {
                 name: string;
             };
             limits: components["schemas"]["Limits"];
+            /**
+             * @description Whether POST /path-picks can show this computer's own dialog to choose a folder or file: true on macOS in a
+             *     logged-in desktop session (other systems later). Always false for an external identity, which may not call it.
+             */
+            pathPicker: boolean;
         };
         Limits: {
             /** @description Byte limit for a single uploaded file */
@@ -4092,6 +4129,16 @@ export interface components {
             /** @description The draft, to put in the editor */
             text: string;
             writer: components["schemas"]["TextGenerationWriter"];
+        };
+        /** @description The same request as the desktop app's pickPath. */
+        PathPickRequest: {
+            /** @enum {string} */
+            kind: "directory" | "file";
+            defaultPath?: string;
+        };
+        PathPick: {
+            /** @description The full path chosen, on the computer the server runs on; null when the person cancelled */
+            path: string | null;
         };
         ModelList: {
             providerId: string;
@@ -8793,7 +8840,8 @@ export interface components {
          * @description Conflicts with the current state. `error.code` values:
          *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
          *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
-         *     `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`.
+         *     `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
+         *     `path_picker_busy`.
          */
         Conflict: {
             headers: {
@@ -11008,6 +11056,36 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    createPathPick: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PathPickRequest"];
+            };
+        };
+        responses: {
+            /** @description The chosen path, or null when the person cancelled */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PathPick"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listModels: {
