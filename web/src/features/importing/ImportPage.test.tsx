@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
-import { apiUrl, defaultProject, makeProject, projectsUrl } from '@/test/api'
+import { apiUrl, defaultProject, errorBody, makeProject, projectsUrl } from '@/test/api'
 import { makeImport, makeImportConversation, makeImportFolder, makeScan } from '@/test/importing'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
@@ -61,7 +61,10 @@ const notes = makeImportFolder({
 const running = makeScan({ state: 'running', filesTotal: 316, filesDone: 128, folders: [] })
 const found = makeScan({ folders: [t3, notes] })
 
-afterEach(() => window.localStorage.clear())
+afterEach(() => {
+  window.localStorage.clear()
+  window.sessionStorage.clear()
+})
 
 describe('The import page', () => {
   it('looks for the last 30 days, shows progress, then the suggested folders checked and the rest on asking', async () => {
@@ -89,7 +92,7 @@ describe('The import page', () => {
     const folder = within(other).getByRole('checkbox', { name: '/code/loop-now' })
     expect(folder).not.toBeChecked()
     expect(within(other).getByText('Joins project “loop-now”')).toBeInTheDocument()
-    await user.click(within(other).getByRole('button', { name: 'Show conversations' }))
+    await user.click(within(other).getByRole('button', { name: 'Show the conversations in /code/loop-now' }))
     // Already imported: no check, a link to its Agent.
     expect(within(other).getByRole('checkbox', { name: 'Release' })).toBeDisabled()
     expect(within(other).getByRole('link', { name: 'Open Agent' })).toHaveAttribute('href', '/agents/00000000-0000-7000-8000-00000000aaaa/chat')
@@ -154,6 +157,64 @@ describe('The import page', () => {
   })
 })
 
+describe('The import page when things go wrong', () => {
+  it('Import is sent once, however often it is clicked while it starts', async () => {
+    backend({ scans: [found], imports: [makeImport({ state: 'done' })] })
+    // The import takes a moment to start.
+    let posts = 0
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(http.post(apiUrl('/conversation-imports'), async () => {
+      posts += 1
+      await gate
+      return HttpResponse.json(makeImport({ state: 'done' }), { status: 202 })
+    }))
+    const user = userEvent.setup()
+    renderRoutes(routes, '/import')
+    const start = await screen.findByRole('button', { name: 'Import' })
+    await user.dblClick(start)
+    await user.click(start)
+    expect(start).toBeDisabled()
+    release()
+    await screen.findByText('Import done')
+    expect(posts).toBe(1)
+  })
+
+  it('a read of the import that fails stops reading, says so and can read again', async () => {
+    let fail = true
+    const reads: number[] = []
+    backend({ scans: [found], imports: [makeImport({ state: 'running', done: 1, total: 2 })] })
+    server.use(http.get(apiUrl('/conversation-imports/:id'), () => {
+      reads.push(Date.now())
+      return fail ? HttpResponse.json(errorBody('not_found', 'No such import.'), { status: 404 }) : HttpResponse.json(makeImport({ state: 'done', done: 2, total: 2 }))
+    }))
+    const user = userEvent.setup()
+    renderRoutes(routes, '/import')
+    await user.click(await screen.findByRole('button', { name: 'Import' }))
+    expect(await screen.findByText(/can’t be read/)).toBeInTheDocument()
+    const count = reads.length
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(reads).toHaveLength(count)
+    fail = false
+    await user.click(screen.getByRole('button', { name: 'Read it again' }))
+    expect(await screen.findByText('Import done')).toBeInTheDocument()
+  })
+
+  it('a folder takes at most 4 GB in one import: a check picks the newest that fit', async () => {
+    const big = (sessionId: string) => makeImportConversation({ sessionId, title: sessionId, sizeBytes: 1.5 * 1024 ** 3 })
+    const heavy = makeImportFolder({ path: '/code/heavy', conversations: [big('one'), big('two'), big('three')] })
+    const api = backend({ scans: [makeScan({ folders: [heavy] })], imports: [makeImport({ state: 'done' })] })
+    const user = userEvent.setup()
+    renderRoutes(routes, '/import')
+    expect(await screen.findByRole('checkbox', { name: 'one' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'two' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'three' })).toBeDisabled()
+    expect(screen.getByText(/One import takes at most 100 conversations and 4 GB/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(api.importBodies[0]?.folders[0].sessionIds).toEqual(['one', 'two']))
+  })
+})
+
 describe('Where the import page opens from', () => {
   it('a fresh install with no Agents opens it by itself, once: Skip goes back and it stays skipped', async () => {
     backend({ scans: [found] })
@@ -168,6 +229,26 @@ describe('Where the import page opens from', () => {
     expect(await screen.findByRole('link', { name: 'Import conversations' })).toHaveAttribute('href', '/import')
   })
 
+  it('on a fresh install it can be skipped while it is still looking, and it does not open by itself twice in one session', async () => {
+    backend({ scans: [running] })
+    const { snapshot, user } = await renderOverview()
+    await snapshot([])
+    expect(await screen.findByText('Looking for conversations…')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }))
+    await snapshot([])
+    expect(await screen.findByRole('link', { name: 'Import conversations' })).toBeInTheDocument()
+  })
+
+  it('once opened by itself, the overview does not send the person back to it in the same session', async () => {
+    window.sessionStorage.setItem('loop-now.importShown', '1')
+    backend({ scans: [found] })
+    const { snapshot } = await renderOverview()
+    await snapshot([])
+    expect(await screen.findByRole('link', { name: 'Import conversations' })).toBeInTheDocument()
+    expect(screen.queryByText(/This is the first time Loop Now is open/)).toBeNull()
+    window.sessionStorage.clear()
+  })
+
   it('with Agents the overview stays the overview', async () => {
     backend({ scans: [found] })
     const { snapshot } = await renderOverview()
@@ -176,9 +257,18 @@ describe('Where the import page opens from', () => {
     expect(screen.queryByRole('heading', { name: 'Import conversations' })).toBeNull()
   })
 
-  it('Settings opens it any time, and a project offers it for each of its folders', async () => {
+  it('Settings opens it any time', async () => {
     server.use(...baseHandlers([]), http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{}', revision: 1 })))
     renderRoutes(routes, '/settings')
     expect(await screen.findByRole('link', { name: 'Open the import page' })).toHaveAttribute('href', '/import')
+  })
+
+  it('a project offers it for each of its local directories, for that folder and into that project', async () => {
+    const { localModeBackend, dir } = await import('@/test/local-mode')
+    const local = localModeBackend({ projects: { [defaultProject.id]: { revision: 1, directories: [dir('/Users/me/code/app', 'Main repo')] } } })
+    server.use(...baseHandlers([]), ...local.handlers)
+    renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/settings`)
+    const link = await screen.findByRole('link', { name: 'Import the conversations in /Users/me/code/app' })
+    expect(link).toHaveAttribute('href', `/import?${new URLSearchParams({ path: '/Users/me/code/app', project: defaultProject.id })}`)
   })
 })

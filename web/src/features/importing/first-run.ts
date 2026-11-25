@@ -17,3 +17,23 @@ export function skipFirstRunImport(): void {
     // Nothing to remember it in; the page may open again next time.
   }
 }
+
+// The page opened by itself in this browser session already: going back to the overview does not bring it back (a scan that keeps
+// failing must not trap the person on it).
+const SHOWN = 'loop-now.importShown'
+
+export function firstRunImportShown(): boolean {
+  try {
+    return window.sessionStorage.getItem(SHOWN) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markFirstRunImportShown(): void {
+  try {
+    window.sessionStorage.setItem(SHOWN, '1')
+  } catch {
+    // Nothing to remember it in.
+  }
+}

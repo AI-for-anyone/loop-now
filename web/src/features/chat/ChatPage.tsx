@@ -129,7 +129,7 @@ export function ChatPage() {
   const running = runningTasks.length
   const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(runningTasks[0]?.runtime ?? agent.runtime)} count={running} /> : null
   // Requests waiting for an approval: as cards in the replies that asked, and one line above the message box that leads to the first.
-  const permissionRequests = synced ? live.permissionRequests : (status.data?.permissionRequests ?? [])
+  const permissionRequests = (synced ? live.permissionRequests : (status.data?.permissionRequests ?? [])).filter((request) => request.taskId === null)
   const replyRuntime = (synced ? live.current?.run : status.data?.currentRun)?.selection?.runtime ?? agent.runtime
   const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
@@ -232,7 +232,7 @@ export function ChatPage() {
           runner={<RunnerChip agent={agent} />}
           notice={
             <>
-              {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
+              {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} onLocate={(runId) => void navigate(`${location.pathname}#run-${encodeURIComponent(runId)}`)} />}
               {restartNotice}
             </>
           }

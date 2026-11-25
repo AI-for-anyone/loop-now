@@ -5,7 +5,6 @@ import { RadioCard, RadioCards } from '@/components/ui/radio-cards'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { t } from '@/i18n'
 import { effectiveMode, PERMISSION_MODES } from '@/lib/permissions'
-import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 
 type Mode = Schemas['PermissionMode']
@@ -52,13 +51,19 @@ export function PermissionModePicker({
         <ToggleGroup
           aria-labelledby={labelledBy}
           aria-describedby={hintId}
-          className={cn(segmentedClass, 'h-8 max-w-full flex-wrap justify-self-start')}
+          // Separate pills that wrap (a phone's popover is narrower than the four together).
+          className="flex max-w-full flex-wrap justify-start gap-1.5"
           value={value}
           disabled={disabled}
           onValueChange={(next) => next && onChange(next as Mode)}
         >
           {MODES.map((mode) => (
-            <ToggleGroupItem key={mode} value={mode} disabled={onlyFull && mode !== 'full'} className={cn(segmentedItemClass, 'gap-1 px-2.5 text-[12.5px]')}>
+            <ToggleGroupItem
+              key={mode}
+              value={mode}
+              disabled={onlyFull && mode !== 'full'}
+              className="h-8 gap-1 rounded-full border-2 border-ink bg-paper-raised px-2.5 text-[12.5px] font-black text-ink-700 focus-visible:shadow-focus data-[state=on]:bg-riso-yellow data-[state=on]:text-ink"
+            >
               <PermissionModeIcon mode={mode} className="size-3.5" />
               {t.permissions.modes[mode].name}
             </ToggleGroupItem>

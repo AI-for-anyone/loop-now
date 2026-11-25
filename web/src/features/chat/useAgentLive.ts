@@ -57,6 +57,10 @@ function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
       // either pushes this event (contract AgentCommand.available).
       void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
       break
+    // A request answered or cancelled leaves the list: an open run record reads again to say how.
+    case 'permission_requests.updated':
+      void client.invalidateQueries({ queryKey: ['timeline', agentId] })
+      break
     // The running list replaces the status's list; the Agent details and the list carry the count.
     case 'background_tasks.updated':
       client.setQueryData<Schemas['AgentStatus']>(keys.agentStatus(agentId), (status) => status && { ...status, backgroundTasks: event.data.tasks, restartOnNextMessage: status.restartOnNextMessage && event.data.tasks.length > 0 })

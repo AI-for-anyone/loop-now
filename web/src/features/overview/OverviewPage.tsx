@@ -1,6 +1,6 @@
 import { useId, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
-import { firstRunImportSkipped } from '@/features/importing/first-run'
+import { firstRunImportShown, firstRunImportSkipped } from '@/features/importing/first-run'
 import { PlusIcon } from 'lucide-react'
 import { reachability, type Schemas } from '@/api/client'
 import type { ConnectionState } from '@/api/events'
@@ -125,7 +125,7 @@ function OverviewContent({ overview, query }: { overview: Overview; query: Scope
         {noAgents ? (
           filter.kind === 'all' ? (
             // A fresh install (no Agents anywhere) opens the import page once, as T3's welcome page; skipping it is remembered.
-            firstRunImportSkipped() ? <EmptyOverview onCreate={() => setCreating(true)} /> : <Navigate to="/import?first=1" replace />
+            firstRunImportSkipped() || firstRunImportShown() ? <EmptyOverview onCreate={() => setCreating(true)} /> : <Navigate to="/import?first=1" replace />
           ) : (
             <OverviewScopeEmpty project={filter.kind === 'project' ? (filter.project ?? null) : null} />
           )

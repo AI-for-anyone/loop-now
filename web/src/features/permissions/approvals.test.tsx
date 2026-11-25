@@ -61,6 +61,17 @@ describe('Approving in the chat', () => {
     expect(await within(editCard).findByRole('status')).toHaveTextContent('Rejected · Reason: Wait until I read the diff')
   })
 
+  it('Reject takes a typed reason too, so the Agent is told why', async () => {
+    const api = answers((body) => HttpResponse.json({ ...push, state: 'rejected', reason: body.reason ?? null, answeredAt: '2026-10-12T08:01:00Z' }))
+    const { user, emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [api.handler] })
+    await emit('snapshot', snapshot([push]))
+    const pushCard = card('git push origin main')
+    await user.type(within(pushCard).getByRole('textbox', { name: 'Reason to reject' }), 'Not on main')
+    await user.click(within(pushCard).getByRole('button', { name: 'Reject' }))
+    await waitFor(() => expect(api.calls).toEqual([{ id: push.id, body: { decision: 'reject', reason: 'Not on main' } }]))
+    expect(await within(pushCard).findByRole('status')).toHaveFocus()
+  })
+
   it('answered elsewhere first (the Inbox): 409 shows how it was answered, not an error', async () => {
     const api = answers(() => HttpResponse.json(errorBody('permission_request_answered', 'Already answered.', { details: { request: { ...push, state: 'rejected', reason: 'Not now', answeredAt: '2026-10-12T08:01:00Z' } } }), { status: 409 }))
     const { user, emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [api.handler] })
@@ -113,6 +124,17 @@ describe('Imported history in the chat', () => {
     expect(order(screen.getByText('Yes, PR #83.'))).toBeLessThan(order(separators[1]))
     expect(order(separators[1])).toBeLessThan(order(screen.getByText('Dispatched.')))
     // Only the Agent's own turn has a run record.
+    expect(within(log).getAllByRole('button', { name: /^Run log/ })).toHaveLength(1)
+  })
+})
+
+describe('Imported history at a page edge', () => {
+  it('an imported turn whose prompt is on an older page still counts as imported', async () => {
+    const run = makeRun({ usageReported: false })
+    const own = makeRun()
+    await renderChat({ agent, hasMore: true, messages: [makeMessage({ role: 'assistant', text: 'Yes, PR #83.', run, origin: 'imported' }), makeMessage({ text: 'Go on', run: own }), makeMessage({ role: 'assistant', text: 'Going.', run: own })] })
+    const log = screen.getByRole('log')
+    expect(within(log).getAllByRole('separator').map((line) => line.getAttribute('aria-label'))).toEqual(['Continued in Loop Now from here'])
     expect(within(log).getAllByRole('button', { name: /^Run log/ })).toHaveLength(1)
   })
 })

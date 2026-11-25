@@ -14,8 +14,8 @@ import { t } from '@/i18n'
 import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { skipFirstRunImport } from './first-run'
-import { counts, folderCheck, groupFolders, importable, importBody, initialSelection, MAX_PER_FOLDER, withConversation, withFolder, type FolderGroup, type Selection } from './selection'
+import { markFirstRunImportShown, skipFirstRunImport } from './first-run'
+import { counts, fits, folderCheck, groupFolders, importable, importBody, initialSelection, pickable, withConversation, withFolder, type FolderGroup, type Selection } from './selection'
 
 type Folder = Schemas['ImportFolder']
 type Conversation = Schemas['ImportConversation']
@@ -51,12 +51,13 @@ function Check({ checked, onChange, disabled, label, describedBy }: { checked: b
 function Progress({ label, done, total, children }: { label: string; done: number; total: number; children?: ReactNode }) {
   const share = total > 0 ? Math.min(1, done / total) : 0
   return (
-    <div role="status" className="flex flex-col gap-3 rounded-card bg-paper-raised px-5 py-4 shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--riso-blue)]">
-      <p className="flex items-center gap-2 text-[15px] font-black">
+    // The label is announced once; the count is a progress bar a screen reader reads on demand, not every time it moves.
+    <div className="flex flex-col gap-3 rounded-card bg-paper-raised px-5 py-4 shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--riso-blue)]">
+      <p role="status" className="flex items-center gap-2 text-[15px] font-black">
         <LoaderCircleIcon aria-hidden="true" className="riso-spin size-4 text-pink-text motion-reduce:animate-none" strokeWidth={3} />
         {label}
       </p>
-      <span aria-hidden="true" className="riso-skeleton relative block h-3.5 overflow-hidden rounded-full shadow-[inset_0_0_0_2px_var(--ink)]">
+      <span role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} className="riso-skeleton relative block h-3.5 overflow-hidden rounded-full shadow-[inset_0_0_0_2px_var(--ink)]">
         <span className="riso-halftone absolute inset-y-0 left-0 rounded-full bg-riso-blue transition-[width] motion-reduce:transition-none" style={{ width: `${Math.max(share * 100, total > 0 ? 4 : 0)}%` }} />
       </span>
       {children && <p className="text-[12.5px] font-bold text-ink-700">{children}</p>}
@@ -64,6 +65,7 @@ function Progress({ label, done, total, children }: { label: string; done: numbe
   )
 }
 
+// full: one more would not fit in this folder's import (100 conversations, 4 GB).
 function ConversationRow({ folder, conversation, picked, full, onPick }: { folder: Folder; conversation: Conversation; picked: boolean; full: boolean; onPick: (checked: boolean) => void }) {
   const c = copy.conversation
   const metaId = useId()
@@ -115,7 +117,8 @@ function FolderRow({ folder, selection, onChange, projects, open, onToggle }: { 
   const listId = useId()
   const project = folder.projectId ? projects.find((p) => p.id === folder.projectId) : undefined
   const picked = selection.get(folder.path)
-  const full = (picked?.size ?? 0) >= MAX_PER_FOLDER
+  // More than one import takes (100 conversations, 4 GB): the rest wait for another import.
+  const limited = pickable(folder).length < folder.conversations.filter(importable).length
   const anyImportable = folder.conversations.some(importable)
   return (
     <li data-folder={folder.path} className="border-b-[1.5px] border-dashed border-ink/25 last:border-b-0">
@@ -137,12 +140,13 @@ function FolderRow({ folder, selection, onChange, projects, open, onToggle }: { 
             )}
             {picked && <span className="font-black text-pink-text">{copy.pickedInFolder(picked.size)}</span>}
           </p>
-          {(folder.truncated || full) && <p className="text-[12px] font-bold text-ink-700">{f.truncated}</p>}
+          {(folder.truncated || limited) && <p className="text-[12px] font-bold text-ink-700">{f.truncated}</p>}
         </div>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={listId}
+          aria-label={open ? f.hideLabel(folder.path) : f.showLabel(folder.path)}
           onClick={onToggle}
           className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-black text-riso-blue outline-none hover:bg-tint-blue focus-visible:shadow-focus"
         >
@@ -158,7 +162,7 @@ function FolderRow({ folder, selection, onChange, projects, open, onToggle }: { 
               folder={folder}
               conversation={conversation}
               picked={picked?.has(conversation.sessionId) ?? false}
-              full={full}
+              full={!fits(selection, folder, conversation.sessionId)}
               onPick={(checked) => onChange(withConversation(selection, folder, conversation.sessionId, checked))}
             />
           ))}
@@ -213,9 +217,8 @@ function FoundTiles({ folders }: { folders: Folder[] }) {
   )
 }
 
-function FoundFolders({ scan, projectId, first, onImport }: { scan: Schemas['ConversationScan']; projectId: string | null; first: boolean; onImport: (body: Schemas['ConversationImportInput']) => void }) {
+function FoundFolders({ scan, projectId, starting, onImport }: { scan: Schemas['ConversationScan']; projectId: string | null; starting: boolean; onImport: (body: Schemas['ConversationImportInput']) => void }) {
   const projects = useProjects().data?.projects ?? []
-  const navigate = useNavigate()
   const [selection, setSelection] = useState<Selection>(() => (projectId ? new Map(scan.folders.flatMap((folder) => [...withFolder(new Map(), folder, true)])) : initialSelection(scan.folders)))
   const suggested = scan.folders.filter((folder) => folder.preChecked)
   // T3: the suggested folders first; everything found on asking. A project's own entry shows all of its folder's conversations.
@@ -261,12 +264,9 @@ function FoundFolders({ scan, projectId, first, onImport }: { scan: Schemas['Con
         <p role="status" className="min-w-0 flex-1 text-[14px] font-black">
           {total.conversations > 0 ? copy.selected(total.folders, total.conversations) : copy.nothingSelected}
         </p>
-        {first && (
-          <Button type="button" variant="ghost" onClick={() => { skipFirstRunImport(); void navigate('/') }}>
-            {copy.skip}
-          </Button>
-        )}
-        <Button type="button" size="lg" disabled={total.conversations === 0} onClick={() => onImport(importBody(scan.operationId, scan.folders, selection, projectId))}>
+        {/* Sent once: the button waits while the import starts (a second one could make a second project for the same folder). */}
+        <Button type="button" size="lg" disabled={total.conversations === 0 || starting} onClick={() => onImport(importBody(scan.operationId, scan.folders, selection, projectId))}>
+          {starting && <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} />}
           {copy.start}
         </Button>
       </div>
@@ -279,6 +279,8 @@ function ImportResult({ first, scan, onAgain }: { first: Schemas['ConversationIm
   const client = useQueryClient()
   const projects = useProjects()
   const operation = result.data ?? first
+  // A read that fails (the server restarted and forgot the import) stops the polling; it says so and can be tried again.
+  const lost = result.isError && operation.state === 'running'
   const finished = operation.state !== 'running'
   useEffect(() => {
     // New projects and Agents: the sidebar and the lists read them again.
@@ -288,7 +290,16 @@ function ImportResult({ first, scan, onAgain }: { first: Schemas['ConversationIm
   const nameOf = (projectId: string) => projects.data?.projects.find((p) => p.id === projectId)?.name
   return (
     <div className="flex flex-col gap-5 overflow-y-auto px-[clamp(14px,3vw,40px)] pt-6 pb-10">
-      {!finished ? (
+      {lost ? (
+        <div role="alert" className="flex flex-col items-start gap-2 rounded-card bg-tint-red px-5 py-4 shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--red)]">
+          <p className="text-[15px] font-black text-red-text">{copy.progressLost}</p>
+          <ErrorAlert error={result.error} />
+          <Button type="button" variant="secondary" onClick={() => void result.refetch()}>
+            <RotateCwIcon aria-hidden="true" strokeWidth={2.8} />
+            {copy.readAgain}
+          </Button>
+        </div>
+      ) : !finished ? (
         <Progress label={copy.importing(operation.done, operation.total)} done={operation.done} total={operation.total} />
       ) : operation.state === 'failed' ? (
         <div role="alert" className="flex flex-col gap-2 rounded-card bg-tint-red px-5 py-4 shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--red)]">
@@ -356,6 +367,11 @@ export function ImportPage() {
   const [startError, setStartError] = useState<unknown>(null)
   const [imported, setImported] = useState<Schemas['ConversationImport'] | null>(null)
   const [importError, setImportError] = useState<unknown>(null)
+  const [starting, setStarting] = useState(false)
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (first) markFirstRunImportShown()
+  }, [first])
   const request = `${since}:${path ?? ''}:${attempt}`
   const asked = useRef<string | null>(null)
 
@@ -363,6 +379,9 @@ export function ImportPage() {
     if (asked.current === request) return
     asked.current = request
     setStartError(null)
+    // A new scan starts over: nothing imported from it yet.
+    setImported(null)
+    setImportError(null)
     // The newest 30 days by default (T3); “All” reads the whole history.
     startConversationScan({ since: since === 'recent' ? new Date(Date.now() - 30 * DAY_MS).toISOString() : null, path })
       .then((scan) => setStarted({ key: request, scan }))
@@ -372,8 +391,13 @@ export function ImportPage() {
   const live = useConversationScan(started?.key === request ? started.scan : null)
   const scan = started?.key === request ? (live.data ?? started.scan) : null
   const importNow = (body: Schemas['ConversationImportInput']) => {
+    if (starting) return
+    setStarting(true)
     setImportError(null)
-    startConversationImport(body).then(setImported).catch((error: unknown) => setImportError(error))
+    startConversationImport(body)
+      .then(setImported)
+      .catch((error: unknown) => setImportError(error))
+      .finally(() => setStarting(false))
   }
 
   return (
@@ -390,6 +414,12 @@ export function ImportPage() {
               <p className="font-black">{copy.keepRunning}</p>
               <p>{copy.sameFolder}</p>
             </StickyNote>
+            {first && !imported && (
+              // A fresh install can always leave: while it looks, after a failed look, with nothing found.
+              <Button type="button" variant="ghost" onClick={() => { skipFirstRunImport(); void navigate('/') }}>
+                {copy.skip}
+              </Button>
+            )}
             {!imported && (
               <ToggleGroup aria-label={copy.sinceLabel} className={cn(segmentedClass, 'h-9')} value={since} onValueChange={(value) => value && setSince(value as 'recent' | 'all')}>
                 <ToggleGroupItem value="recent" className={segmentedItemClass}>
@@ -403,7 +433,7 @@ export function ImportPage() {
           </div>
           {imported && scan ? (
             <ImportResult first={imported} scan={scan} onAgain={() => { setImported(null); setAttempt((n) => n + 1) }} />
-          ) : startError !== null || live.isError ? (
+          ) : startError !== null || (live.isError && scan?.state !== 'done') ? (
             <div className="flex flex-col items-start gap-3 px-[clamp(14px,3vw,40px)] pt-6">
               <p className="text-[15px] font-black text-red-text">{copy.scanFailed}</p>
               <ErrorAlert error={startError ?? live.error} />
@@ -430,16 +460,11 @@ export function ImportPage() {
           ) : scan.folders.length === 0 ? (
             <div className="flex flex-col items-start gap-3 px-[clamp(14px,3vw,40px)] pt-6">
               <p className="text-[15px] font-black">{since === 'recent' ? copy.nothingRecent : copy.nothing}</p>
-              {first && (
-                <Button type="button" variant="ghost" onClick={() => skipFirstRunImport()} asChild>
-                  <Link to="/">{copy.skip}</Link>
-                </Button>
-              )}
             </div>
           ) : (
             <>
               {importError !== null && <ErrorAlert error={importError} className="mx-[clamp(14px,3vw,40px)] mt-4 w-auto" />}
-              <FoundFolders key={scan.operationId} scan={scan} projectId={projectId} first={first} onImport={importNow} />
+              <FoundFolders key={scan.operationId} scan={scan} projectId={projectId} starting={starting} onImport={importNow} />
             </>
           )}
         </div>

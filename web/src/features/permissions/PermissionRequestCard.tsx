@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { CheckIcon, LoaderCircleIcon, XIcon } from 'lucide-react'
 import { answerPermissionRequest } from '@/api/permissions'
 import { ApiError, type Schemas } from '@/api/client'
@@ -32,6 +32,12 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
   const [reason, setReason] = useState('')
   const ids = { title: useId(), reason: useId() }
   const done = answered ?? elsewhere
+  // The buttons go once it is answered: focus moves to how it was answered, so it is not lost and the outcome is read out.
+  const outcome = useRef<HTMLParagraphElement>(null)
+  const settled = done !== null
+  useEffect(() => {
+    if (settled && document.activeElement === document.body) outcome.current?.focus()
+  }, [settled])
   const answer = (decision: 'approve' | 'reject', text?: string) => {
     if (sending || done) return
     setSending(decision)
@@ -80,7 +86,7 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
           <pre className="max-h-60 min-w-0 overflow-auto rounded-input bg-ink px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-[#f3efe4] [overflow-wrap:anywhere]">{request.detail}</pre>
         )}
         {done ? (
-          <p role="status" className={cn('inline-flex items-center gap-1.5 self-start rounded-full px-3 text-[13px] leading-7 font-black', done.state === 'approved' ? 'bg-tint-green text-green-text' : done.state === 'rejected' ? 'bg-tint-red text-red-text' : 'bg-ink/[0.07] text-ink-700')}>
+          <p ref={outcome} tabIndex={-1} role="status" className={cn('inline-flex items-center gap-1.5 self-start rounded-full px-3 text-[13px] leading-7 font-black outline-none focus-visible:shadow-focus', done.state === 'approved' ? 'bg-tint-green text-green-text' : done.state === 'rejected' ? 'bg-tint-red text-red-text' : 'bg-ink/[0.07] text-ink-700')}>
             {done.state === 'approved' ? <CheckIcon aria-hidden="true" className="size-4" strokeWidth={3} /> : <XIcon aria-hidden="true" className="size-4" strokeWidth={3} />}
             {elsewhere ? copy.answeredElsewhere(outcomeOf(elsewhere)) : outcomeOf(done)}
           </p>
@@ -91,9 +97,10 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
                 {sending === 'approve' ? <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} /> : <CheckIcon aria-hidden="true" strokeWidth={3} />}
                 {sending === 'approve' ? copy.approving : copy.approve}
               </Button>
-              <Button type="button" size="sm" variant="danger-outline" disabled={sending !== null} onClick={() => answer('reject')}>
-                {sending === 'reject' && !reason.trim() ? <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} /> : <XIcon aria-hidden="true" strokeWidth={3} />}
-                {sending === 'reject' && !reason.trim() ? copy.rejecting : copy.reject}
+              {/* Reject takes the reason when one is typed: it is never dropped on the way. */}
+              <Button type="button" size="sm" variant="danger-outline" disabled={sending !== null} onClick={() => answer('reject', reason.trim() || undefined)}>
+                {sending === 'reject' ? <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} /> : <XIcon aria-hidden="true" strokeWidth={3} />}
+                {sending === 'reject' ? copy.rejecting : copy.reject}
               </Button>
             </div>
             <form onSubmit={submitReason} className="flex min-w-0 flex-wrap items-center gap-2">

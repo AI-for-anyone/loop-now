@@ -64,7 +64,9 @@ export function ProjectLocalDirectories({ projectId }: { projectId: string }) {
             // A project's folder can bring its terminal conversations in: the import page, for that folder and into this project.
             extra={(entry) => (
               <Button size="sm" variant="ghost" asChild>
-                <Link to={`/import?${new URLSearchParams({ path: entry.path, project: projectId })}`}>{t.importing.entry.project}</Link>
+                <Link to={`/import?${new URLSearchParams({ path: entry.path, project: projectId })}`} aria-label={t.importing.entry.projectLabel(entry.path)}>
+                  {t.importing.entry.project}
+                </Link>
               </Button>
             )}
           />
@@ -190,7 +192,7 @@ function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNod
           </span>
         )}
       </div>
-      {actions && <div className="ml-auto flex shrink-0 gap-1">{actions}</div>}
+      {actions && <div className="ml-auto flex max-w-full flex-wrap justify-end gap-1">{actions}</div>}
     </li>
   )
 }

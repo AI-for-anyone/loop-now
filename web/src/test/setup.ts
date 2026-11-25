@@ -44,6 +44,7 @@ afterEach(() => {
   toastStore.reset()
   // The recently used project or platform is remembered in browser storage and must not carry over to the next test.
   window.localStorage.clear()
+  window.sessionStorage.clear()
 })
 afterAll(() => server.close())
 

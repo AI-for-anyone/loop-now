@@ -17,6 +17,10 @@ export const startConversationImport = (input: Schemas['ConversationImportInput'
 
 const running = (state: Schemas['ConversationScan']['state'] | undefined) => state === undefined || state === 'running'
 
+// Read again while it runs; not after an error (the page says so and offers to read again), and not when the window gets focus: a
+// finished operation does not change, and the server forgets it after a while.
+const poll = (query: { state: { status: string; data?: { state: Schemas['ConversationScan']['state'] } } }) => (query.state.status !== 'error' && running(query.state.data?.state) ? POLL_MS : false)
+
 // first: the operation as the POST returned it, shown until the first read.
 export function useConversationScan(first: Schemas['ConversationScan'] | null) {
   const operationId = first?.operationId ?? ''
@@ -27,7 +31,8 @@ export function useConversationScan(first: Schemas['ConversationScan'] | null) {
     initialDataUpdatedAt: 0,
     retry: false,
     queryFn: ({ signal }) => call(api.GET('/conversation-scans/{operationId}', { signal, params: { path: { operationId } } })),
-    refetchInterval: (query) => (running(query.state.data?.state) ? POLL_MS : false),
+    refetchInterval: poll,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -40,6 +45,7 @@ export function useConversationImport(first: Schemas['ConversationImport'] | nul
     initialDataUpdatedAt: 0,
     retry: false,
     queryFn: ({ signal }) => call(api.GET('/conversation-imports/{operationId}', { signal, params: { path: { operationId } } })),
-    refetchInterval: (query) => (running(query.state.data?.state) ? POLL_MS : false),
+    refetchInterval: poll,
+    refetchOnWindowFocus: false,
   })
 }

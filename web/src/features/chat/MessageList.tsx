@@ -120,7 +120,7 @@ function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated
 }
 
 // A turn copied from the conversation an Agent was imported from (origin imported).
-const imported = (turn: Turn) => turn.user?.origin === 'imported'
+const imported = (turn: Turn) => (turn.user?.origin ?? turn.origin) === 'imported'
 
 // When the previous turn was interrupted and this turn is the message sent as the interrupt, draw a cut line between the two turns.
 function interruptedBy(previous: Turn, turn: Turn) {

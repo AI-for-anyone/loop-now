@@ -3,8 +3,10 @@ import type { Schemas } from '@/api/client'
 type Folder = Schemas['ImportFolder']
 type Conversation = Schemas['ImportConversation']
 
-// One import takes at most this many conversations per folder (contract ConversationImportInput.sessionIds); the newest are offered.
+// One import takes at most this many conversations, and this many bytes of their records, per folder (the server refuses the whole
+// import past either); the newest are offered first.
 export const MAX_PER_FOLDER = 100
+export const MAX_BYTES_PER_FOLDER = 4 * 1024 ** 3
 
 // The picked conversations of each folder, by folder path.
 export type Selection = ReadonlyMap<string, ReadonlySet<string>>
@@ -12,8 +14,24 @@ export type Selection = ReadonlyMap<string, ReadonlySet<string>>
 // A conversation can be imported unless it already was (it links to its Agent instead) or the scan says why not.
 export const importable = (conversation: Conversation) => conversation.agentId === null && conversation.skipReason === null
 
-// The conversations of a folder that a check on the folder picks: the newest importable ones, up to the limit of one import.
-export const pickable = (folder: Folder) => folder.conversations.filter(importable).slice(0, MAX_PER_FOLDER)
+// The conversations of a folder that a check on the folder picks: the newest importable ones, up to the limits of one import.
+export function pickable(folder: Folder): Conversation[] {
+  const picked: Conversation[] = []
+  let bytes = 0
+  for (const conversation of folder.conversations.filter(importable)) {
+    if (picked.length >= MAX_PER_FOLDER || bytes + conversation.sizeBytes > MAX_BYTES_PER_FOLDER) break
+    picked.push(conversation)
+    bytes += conversation.sizeBytes
+  }
+  return picked
+}
+
+// Whether one more conversation still fits in a folder's import.
+export function fits(selection: Selection, folder: Folder, sessionId: string): boolean {
+  const picked = selection.get(folder.path) ?? new Set<string>()
+  const bytes = folder.conversations.filter((c) => picked.has(c.sessionId) || c.sessionId === sessionId).reduce((sum, c) => sum + c.sizeBytes, 0)
+  return picked.size < MAX_PER_FOLDER && bytes <= MAX_BYTES_PER_FOLDER
+}
 
 // What the page starts with (T3): every suggested folder checked, with its importable conversations.
 export function initialSelection(folders: Folder[]): Selection {
@@ -30,7 +48,7 @@ export function withFolder(selection: Selection, folder: Folder, checked: boolea
 export function withConversation(selection: Selection, folder: Folder, sessionId: string, checked: boolean): Selection {
   const current = new Set(selection.get(folder.path) ?? [])
   if (checked) {
-    if (current.size >= MAX_PER_FOLDER) return selection
+    if (!fits(selection, folder, sessionId)) return selection
     current.add(sessionId)
   } else current.delete(sessionId)
   const next = new Map(selection)

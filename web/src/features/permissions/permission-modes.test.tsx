@@ -51,6 +51,12 @@ describe('The permission mode in the message box', () => {
     expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toContainEqual(expect.stringMatching(/^Claude Code,/))
   })
 
+  it('an Agent that asks before acting is not offered Pi either', async () => {
+    const { user } = await renderChat({ agent: claude({ permissionMode: 'supervised' }), handlers: catalogHandlers })
+    const picker = await openRunner(user)
+    expect((await within(picker).findAllByRole('tab')).map((tab) => tab.getAttribute('aria-label'))).not.toContainEqual(expect.stringMatching(/^Pi,/))
+  })
+
   it('an Agent on Full access with no folder still is', async () => {
     const { user } = await renderChat({ agent: claude(), handlers: catalogHandlers })
     const picker = await openRunner(user)

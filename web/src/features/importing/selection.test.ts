@@ -40,6 +40,16 @@ describe('What the import page picks', () => {
     expect(withConversation(selection, folder, many[MAX_PER_FOLDER].sessionId, true)).toBe(selection)
   })
 
+  it('one import takes at most 4 GB of a folder: a folder check stops before it, and no more can be added', () => {
+    const gb = 1024 ** 3
+    const folder = makeImportFolder({ conversations: [makeImportConversation({ sizeBytes: 3 * gb }), makeImportConversation({ sizeBytes: 2 * gb }), makeImportConversation({ sizeBytes: 0.5 * gb })] })
+    const [a, b, c] = folder.conversations
+    const selection = withFolder(new Map(), folder, true)
+    expect([...selection.get(folder.path)!]).toEqual([a.sessionId])
+    expect(withConversation(selection, folder, b.sessionId, true)).toBe(selection)
+    expect([...withConversation(selection, folder, c.sessionId, true).get(folder.path)!]).toEqual([a.sessionId, c.sessionId])
+  })
+
   it('groups git folders by remote (clones of one remote share a group), newest first, and puts the rest under Other folders', () => {
     const app = makeImportFolder({ path: '/code/app', repository: { remote: 'git@github.com:me/app.git', mainCheckout: '/code/app' } })
     const notes = makeImportFolder({ path: '/tmp/notes', git: false, repository: null })
