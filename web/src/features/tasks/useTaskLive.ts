@@ -1,5 +1,6 @@
 import { taskInboxKeys, taskInboxProjection } from '@/api/task-inbox'
 import { applyTaskNodeBackgroundEvent, taskNodeBackgroundKeys } from '@/api/background-tasks'
+import { applyTaskNodePermissionEvent, taskNodePermissionKeys } from '@/api/permissions'
 import { taskNodeQueueKeys, taskNodeQueueProjection } from '@/api/task-node-queue'
 import { taskMessageProjection } from './message-projection'
 import { useEffect, useState } from 'react'
@@ -64,8 +65,15 @@ export function useTaskLive(id: string, project: boolean) {
           void client.invalidateQueries({ queryKey: taskInboxKeys.timeline(id, event.data.nodeRunId) })
           return
         }
+        // A node's waiting permission requests are replaced whole; its run records say how each one was answered.
+        if (!project && event.type === 'task.node.permission_requests.updated') {
+          if (event.data.taskId !== id) return
+          applyTaskNodePermissionEvent(client, id, event.data)
+          void client.invalidateQueries({ queryKey: taskInboxKeys.timeline(id, event.data.nodeRunId) })
+          return
+        }
         // Queue events only carry changes; after a (re)connection snapshot, read each shown queue once.
-        if (!project && event.type === 'snapshot') { taskMessageProjection(client).connection(id); taskInboxProjection(client).connection(id); void client.invalidateQueries({ queryKey: taskNodeQueueKeys.task(id) }); void client.invalidateQueries({ queryKey: taskNodeBackgroundKeys.task(id) }) }
+        if (!project && event.type === 'snapshot') { taskMessageProjection(client).connection(id); taskInboxProjection(client).connection(id); void client.invalidateQueries({ queryKey: taskNodeQueueKeys.task(id) }); void client.invalidateQueries({ queryKey: taskNodeBackgroundKeys.task(id) }); void client.invalidateQueries({ queryKey: taskNodePermissionKeys.task(id) }) }
         if (!project && event.type === 'sleep.updated') {
           const store = sleepProjections(client)
           if (!store.update(event.data, { task: id })) return

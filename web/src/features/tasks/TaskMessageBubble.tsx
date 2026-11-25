@@ -1,4 +1,5 @@
 import { TaskRunRecord } from './TaskRunRecord'
+import { PermissionRequestCard } from '@/features/permissions/PermissionRequestCard'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { turnErrorText } from './turn-error'
 import type { Schemas } from '@/api/client'
@@ -9,7 +10,7 @@ import { t } from '@/i18n'
 
 const copy = t.taskInbox
 
-export function TaskMessageBubble({ message, agent, taskId, nodeRunId, runtimeId }: { message: Schemas['TaskMessage']; agent: { id: string; name: string }; taskId?: string; nodeRunId?: string; runtimeId?: string }) {
+export function TaskMessageBubble({ message, agent, taskId, nodeRunId, runtimeId, requests = [] }: { message: Schemas['TaskMessage']; agent: { id: string; name: string }; taskId?: string; nodeRunId?: string; runtimeId?: string; requests?: Schemas['PermissionRequest'][] }) {
   const runtimes = useRuntimeLookup()
   // A turn stopped by a person is labelled “已停止” (Stopped), not shown as an error.
   const stopped = message.status === 'interrupted' && message.errorCode === 'user_stopped'
@@ -21,6 +22,7 @@ export function TaskMessageBubble({ message, agent, taskId, nodeRunId, runtimeId
   return <AgentChatReply agent={agent} metadata={<><Badge tone="info">{copy.workOutput}</Badge><time dateTime={message.createdAt}>{t.chat.time(message.createdAt)}</time>{message.status !== 'completed' && <Badge tone={message.status === 'failed' ? 'danger' : message.status === 'interrupted' ? 'interrupted' : 'busy'} role="status">{stopped ? t.chat.status.user_stopped : t.tasks.messageStatuses[message.status]}</Badge>}</>}>
     <Markdown text={message.text} cursor={message.status === 'running'} />
     {!stopped && (message.errorCode || message.errorMessage) && <p className="rounded-input bg-tint-red p-3 text-sm break-words text-red-text">{turnErrorText(message.errorCode ?? null, message.errorMessage ?? null, message.runtime ? runtimes.name(message.runtime) : null)}</p>}
+    {requests.map(request => <PermissionRequestCard key={request.id} request={request} agentName={agent.name} />)}
     {taskId && nodeRunId && runtimeId && <TaskRunRecord taskId={taskId} nodeRunId={nodeRunId} runId={message.runId} agentId={agent.id} runtimeId={runtimeId} />}
   </AgentChatReply>
 }
