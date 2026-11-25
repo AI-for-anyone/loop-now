@@ -397,3 +397,60 @@ func TestImportRefusals(t *testing.T) {
 		t.Fatalf("partial import: %+v", op)
 	}
 }
+
+// A Claude Code conversation imported while it is mid-reply is copied up to its last finished turn (the reply ended,
+// and the records about that end): the fork never resumes inside a turn, and the chat shows what the copy holds. One
+// with no finished turn is not copied: the Agent starts a new session, and the chat still shows the conversation.
+func TestClaudeCaptureEndsAtLastFinishedTurn(t *testing.T) {
+	f := newFixture(t)
+	repo := f.repo("midturn", "")
+	id := "u0000001-1111-4111-8111-111111111111"
+	at := f.at(time.Hour)
+	rec := func(m map[string]any) map[string]any {
+		m["sessionId"], m["cwd"], m["timestamp"] = id, repo, at
+		return m
+	}
+	user := func(text string) map[string]any {
+		return rec(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}})
+	}
+	finished := lines(
+		user("first question"),
+		rec(map[string]any{"type": "assistant", "message": map[string]any{"role": "assistant", "model": "claude-opus-5-5", "stop_reason": "end_turn",
+			"content": []any{map[string]any{"type": "text", "text": "first answer"}}}}),
+		rec(map[string]any{"type": "system", "subtype": "turn_duration", "durationMs": 1200}),
+	)
+	unfinished := lines(
+		user("second question"),
+		rec(map[string]any{"type": "assistant", "message": map[string]any{"role": "assistant", "model": "claude-opus-5-5", "stop_reason": "tool_use",
+			"content": []any{map[string]any{"type": "text", "text": "looking"}, map[string]any{"type": "tool_use", "id": "t1", "name": "SendMessage", "input": map[string]any{}}}}}),
+		rec(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "t1", "content": "sent"}}}}),
+		rec(map[string]any{"type": "api-request", "requestId": "r1"}),
+	)
+	f.write(".claude/projects/-midturn/"+id+".jsonl", finished+unfinished)
+	none := "u0000002-1111-4111-8111-111111111111"
+	f.write(".claude/projects/-midturn/"+none+".jsonl", strings.ReplaceAll(unfinished, id, none))
+	s, st := importEnv(t, f)
+	op := runImport(t, s, doneScan(t, s).OperationID, apitypes.ConversationImportFolder{Path: repo, SessionIDs: []string{id, none}})
+	if op.State != "done" || len(op.Errors) != 0 {
+		t.Fatalf("import: %+v", op)
+	}
+	ctx := context.Background()
+	a, _ := st.GetAgent(ctx, agentOf(t, op, id))
+	if got, _ := os.ReadFile(a.ImportedFrom.Capture); string(got) != finished {
+		t.Fatalf("the copy ends after the last finished turn:\n%s", got)
+	}
+	page, _ := st.ListMessages(ctx, a.ID, store.MessageQuery{Limit: 50})
+	if len(page.Items) != 2 || page.Items[1].Text != "first answer" {
+		t.Fatalf("the chat shows what the copy holds: %d", len(page.Items))
+	}
+	b, _ := st.GetAgent(ctx, agentOf(t, op, none))
+	if b.ImportedFrom.Capture != "" {
+		t.Fatalf("nothing finished, nothing copied: %q", b.ImportedFrom.Capture)
+	}
+	if _, err := os.Stat(filepath.Join(folders.AgentRoot(s.WorkRoot, b.ID), claudeCaptureFile)); !os.IsNotExist(err) {
+		t.Fatalf("no copy left behind: %v", err)
+	}
+	if page, _ := st.ListMessages(ctx, b.ID, store.MessageQuery{Limit: 50}); len(page.Items) != 2 || page.Items[0].Text != "second question" {
+		t.Fatalf("the chat still shows the conversation: %d", len(page.Items))
+	}
+}

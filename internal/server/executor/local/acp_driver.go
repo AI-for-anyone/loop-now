@@ -67,8 +67,8 @@ type acpFlavor struct {
 	forget func(home, cwd, sessionID string) error
 	// inputCache is whether the input count the agent reports includes the cached part (see usageRecord).
 	inputCache acpInputCache
-	// sessionModes are the agent's session modes (session/set_mode) for Auto-accept edits and Auto, used when its
-	// session offers them.
+	// sessionModes are the agent's session modes (session/set_mode) for the permission modes, used when its session
+	// offers them.
 	sessionModes map[string]string
 }
 
@@ -98,9 +98,13 @@ func localCommandFlavor(rt agentruntime.Runtime) acpFlavor {
 // relied on: a stop ends the process.
 var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "grok login", pluginSkills: true, killOnStop: true,
 	args: func(snap agentconfig.Snapshot, d agentDirs) []string {
-		args := []string{"agent"}
-		if permissionMode(snap) == executor.ModeFull {
-			args = append(args, "--always-approve")
+		// Outside Full access Grok's own --permission-mode (before agent) decides what it asks about; without it Grok
+		// uses the mode the person configured (measured on 1.0.92).
+		var args []string
+		if mode := permissionMode(snap); mode == executor.ModeFull {
+			args = []string{"agent", "--always-approve"}
+		} else {
+			args = []string{"--permission-mode", grokModes[mode], "agent"}
 		}
 		args = append(args, "--model", snap.ModelID)
 		if effort := acpEffort(snap); effort != "" {
@@ -116,7 +120,10 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 		return append(args, "stdio")
 	},
 	forget:     forgetGrokSession,
-	inputCache: cacheInside, sessionModes: map[string]string{executor.ModeAuto: "auto"}}
+	inputCache: cacheInside}
+
+// grokModes are Grok's --permission-mode values for the modes other than Full access.
+var grokModes = map[string]string{executor.ModeSupervised: "default", executor.ModeAcceptEdits: "acceptEdits", executor.ModeAuto: "auto"}
 
 // antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model is chosen in the session, by the id that carries
 // the thinking level (see acpSessionModel).
@@ -127,7 +134,9 @@ var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "ag
 		}
 		return []string{"acp"}
 	},
-	sessionModes: map[string]string{executor.ModeAcceptEdits: "auto_edit", executor.ModeAuto: "auto"},
+	// Its session modes (1.5.14): default asks before edits and commands as the person's own agy permission settings
+	// say (agy acp takes no settings of its own), accept-edits, auto (only when the account has it), plan.
+	sessionModes: map[string]string{executor.ModeSupervised: "default", executor.ModeAcceptEdits: "accept-edits", executor.ModeAuto: "auto"},
 	background:   antigravityBackgroundCommand,
 	writeArgs:    func(string, string) []string { return []string{"acp"} },
 	forget:       forgetAntigravitySession,
@@ -664,8 +673,8 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 			return ad.startFailure(p, err)
 		}
 	}
-	// Auto-accept edits and Auto are the agent's own session modes, when its session offers them; otherwise it stays in
-	// its default mode and asks (Supervised).
+	// The permission mode is the agent's own session mode, when its session offers it; otherwise it stays in the mode
+	// it starts in.
 	if mode, ok := ad.f.sessionModes[permissionMode(snap)]; ok && slices.Contains(modes, mode) {
 		if err := ap.SetMode(ctx, ap.sessionID, mode); err != nil {
 			return ad.startFailure(p, err)

@@ -88,7 +88,7 @@ func (f *fixture) claude(id, cwd string, ago time.Duration, prompts ...string) s
 		recs = append(recs,
 			map[string]any{"type": "user", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "user", "content": p}},
 			map[string]any{"type": "assistant", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "assistant", "model": "claude-opus-5-5",
-				"content": []any{map[string]any{"type": "text", "text": "answer to " + p}}}})
+				"stop_reason": "end_turn", "content": []any{map[string]any{"type": "text", "text": "answer to " + p}}}})
 	}
 	p := f.write(".claude/projects/"+strings.ReplaceAll(cwd, "/", "-")+"/"+id+".jsonl", lines(recs...))
 	f.touch(p, ago)

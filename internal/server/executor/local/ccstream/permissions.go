@@ -10,9 +10,11 @@ import (
 // ToolPermission is a can_use_tool request: with --permission-prompts host, Claude Code asks the host whether it may use
 // a tool.
 type ToolPermission struct {
-	ToolName  string
-	Input     json.RawMessage
-	ToolUseID string
+	ToolName    string
+	DisplayName string // how Claude Code names the tool, when it says
+	Description string // what the call does, as Claude Code describes it
+	Input       json.RawMessage
+	ToolUseID   string
 	// Reason is why Claude Code asks (decision_reason), or the path that is blocked (blocked_path), when it says.
 	Reason string
 }
@@ -39,12 +41,15 @@ func (c *Client) SetPermissions(fn PermissionFunc) {
 type wireControlRequest struct {
 	RequestID string `json:"request_id"`
 	Request   struct {
-		Subtype        string          `json:"subtype"`
-		ToolName       string          `json:"tool_name"`
-		Input          json.RawMessage `json:"input"`
-		ToolUseID      string          `json:"tool_use_id"`
-		DecisionReason string          `json:"decision_reason"`
-		BlockedPath    string          `json:"blocked_path"`
+		Subtype            string          `json:"subtype"`
+		ToolName           string          `json:"tool_name"`
+		DisplayName        string          `json:"display_name"`
+		Description        string          `json:"description"`
+		Input              json.RawMessage `json:"input"`
+		ToolUseID          string          `json:"tool_use_id"`
+		DecisionReason     string          `json:"decision_reason"`
+		DecisionReasonType string          `json:"decision_reason_type"`
+		BlockedPath        string          `json:"blocked_path"`
 	} `json:"request"`
 }
 
@@ -59,9 +64,13 @@ func (c *Client) controlRequest(line []byte) {
 		c.controlReply(r.RequestID, nil, "not supported by this host: "+r.Request.Subtype)
 		return
 	}
-	p := ToolPermission{ToolName: r.Request.ToolName, Input: r.Request.Input, ToolUseID: r.Request.ToolUseID, Reason: r.Request.DecisionReason}
-	if p.Reason == "" && r.Request.BlockedPath != "" {
+	p := ToolPermission{ToolName: r.Request.ToolName, DisplayName: r.Request.DisplayName, Description: r.Request.Description, Input: r.Request.Input,
+		ToolUseID: r.Request.ToolUseID, Reason: r.Request.DecisionReason}
+	switch {
+	case p.Reason == "" && r.Request.BlockedPath != "":
 		p.Reason = "Blocked path: " + r.Request.BlockedPath
+	case p.Reason == "":
+		p.Reason = r.Request.DecisionReasonType
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
 	c.mu.Lock()

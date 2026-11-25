@@ -192,11 +192,11 @@ func TestWorkingFolderAndLocalConfigCapabilities(t *testing.T) {
 	}
 }
 
-// The permission modes each runtime offers: Claude Code, Codex and Antigravity all four, Grok no Auto-accept edits, a
-// local ACP command Supervised and Full access, Pi Full access only.
+// The permission modes each runtime offers: Claude Code, Codex, Grok and Antigravity all four, a local ACP command
+// Supervised and Full access, Pi Full access only.
 func TestPermissionModesPerRuntime(t *testing.T) {
 	all := []string{"supervised", "accept_edits", "auto", "full"}
-	want := map[string][]string{Pi: {"full"}, ClaudeCode: all, Codex: all, Antigravity: all, Grok: {"supervised", "auto", "full"}}
+	want := map[string][]string{Pi: {"full"}, ClaudeCode: all, Codex: all, Antigravity: all, Grok: all}
 	for id, modes := range want {
 		r, _ := ByID(id)
 		if !slices.Equal(r.Capabilities.PermissionModes, modes) {

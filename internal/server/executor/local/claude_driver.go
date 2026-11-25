@@ -346,11 +346,16 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if _, err := os.Stat(d.claudeMCP); err == nil {
 		args = append(args, "--mcp-config", d.claudeMCP)
 	}
-	mode, prompts := claudeModes[permissionMode(snap)], "host"
+	mode := claudeModes[permissionMode(snap)]
 	if mode == "bypassPermissions" {
-		prompts = "none" // nothing asks: anything that would still prompt is denied
+		// Nothing asks: anything that would still prompt is denied.
+		args = append(args, "--permission-mode", mode, "--permission-prompts", "none")
+	} else {
+		// Prompts come to Loop Now as can_use_tool control requests; without --permission-prompt-tool stdio claude
+		// denies what needs approval instead of asking (measured on 2.1.332).
+		args = append(args, "--permission-mode", mode, "--permission-prompts", "host", "--permission-prompt-tool", "stdio")
 	}
-	args = append(args, "--permission-mode", mode, "--permission-prompts", prompts, "--system-prompt-snapshot", "off")
+	args = append(args, "--system-prompt-snapshot", "off")
 	if _, err := os.Stat(d.prompt); err == nil {
 		args = append(args, "--append-system-prompt-file", d.prompt)
 	}
@@ -453,6 +458,10 @@ func claudeToolRequest(t ccstream.ToolPermission) (kind, title, detail string) {
 	if b, err := json.MarshalIndent(json.RawMessage(t.Input), "", "  "); err == nil {
 		pretty = string(b)
 	}
+	name := t.DisplayName
+	if name == "" {
+		name = t.ToolName
+	}
 	switch t.ToolName {
 	case "Bash":
 		return executor.PermissionCommand, "Run " + firstLine(in.Command), in.Command
@@ -465,8 +474,11 @@ func claudeToolRequest(t ccstream.ToolPermission) (kind, title, detail string) {
 	case "WebFetch":
 		return executor.PermissionTool, "Fetch " + in.URL, pretty
 	}
-	title = t.ToolName
-	if in.Description != "" {
+	title = name
+	switch {
+	case t.Description != "":
+		title += ": " + firstLine(t.Description)
+	case in.Description != "":
 		title += ": " + firstLine(in.Description)
 	}
 	return executor.PermissionTool, title, pretty
@@ -524,7 +536,8 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		// conversation continues as usual in this process, and the next start opens a new session.
 		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.cwd, "version", cp.version)
 	}
-	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) {
+	// With the person's own configuration their Skills are expected: only other Agents are checked.
+	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) && !p.ownConfig {
 		checkClaudeSkills(p, init)
 	}
 	switch tr.ErrorCode {
