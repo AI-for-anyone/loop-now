@@ -62,6 +62,7 @@ export const errors = {
     path_picker_busy: 'A dialog to choose a path is already open; choose or cancel there first.',
     background_task_not_found: 'No such background task',
     background_task_ended: 'This background task has already ended',
+    permission_request_answered: 'This request has already been answered',
     internal_error: 'Internal server error',
   },
   unknown: 'Unknown error',

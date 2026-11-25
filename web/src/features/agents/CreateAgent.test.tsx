@@ -68,6 +68,24 @@ describe('Creating an Agent', () => {
     await waitFor(() => expect(created).toMatchObject({ name: 'Issue sorter', prompt: 'Written: Sort issues' }))
   })
 
+  it('when new Agents ask before acting, a Pi Agent is said to run with full access, and no mode is sent for it', async () => {
+    let created: Schemas['AgentCreate'] | null = null
+    const { user } = setup((body) => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }) })
+    server.use(http.get(apiUrl('/permission-settings'), () => HttpResponse.json({ defaultMode: 'supervised' })))
+    const dialog = await fill(user, 'Notes')
+    expect(await within(dialog).findByText("Pi doesn't ask for approval; this Agent will run with full access")).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(created).not.toBeNull())
+    expect(created).not.toHaveProperty('permissionMode')
+  })
+
+  it('with new Agents on Full access nothing more is said', async () => {
+    const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
+    const dialog = await fill(user, 'Notes')
+    await within(dialog).findByText('Pi')
+    expect(within(dialog).queryByText(/doesn't ask for approval/)).toBeNull()
+  })
+
   it('picks a supported thinking level from the same model catalog and saves the explicit choice on create', async () => {
     let created: Schemas['AgentCreate'] | null = null
     const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, thinkingLevel: body.thinkingLevel }), { status: 201 }) })

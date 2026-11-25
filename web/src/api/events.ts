@@ -16,6 +16,7 @@ export interface AgentEventDataMap {
   'sleep.updated': Schemas['SseSleepUpdated']
   'queue.updated': Schemas['SseQueueUpdated']
   'background_tasks.updated': Schemas['SseBackgroundTasksUpdated']
+  'permission_requests.updated': Schemas['SsePermissionRequestsUpdated']
 }
 
 export type AgentEventName = keyof AgentEventDataMap
@@ -31,6 +32,7 @@ export const AGENT_EVENT_NAMES = [
   'sleep.updated',
   'queue.updated',
   'background_tasks.updated',
+  'permission_requests.updated',
 ] as const satisfies readonly AgentEventName[]
 
 export type AgentEvent = {
