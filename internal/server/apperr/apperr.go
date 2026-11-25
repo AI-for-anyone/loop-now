@@ -49,6 +49,8 @@ const (
 	CodePluginBlocked                   = "plugin_blocked"
 	CodePluginFailed                    = "plugin_failed"
 	CodePluginTimeout                   = "plugin_timeout"
+	CodeTextGenerationUnavailable       = "text_generation_unavailable"
+	CodeTextGenerationFailed            = "text_generation_failed"
 	CodeRateLimited                     = "rate_limited"
 )
 

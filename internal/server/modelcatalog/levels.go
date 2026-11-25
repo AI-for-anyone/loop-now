@@ -71,3 +71,6 @@ func LevelModelID(id, level string) string {
 	}
 	return id
 }
+
+// ValidThinkingLevel reports whether level is one of the thinking levels the platform knows.
+func ValidThinkingLevel(level string) bool { return slices.Contains(thinkingLevels, level) }

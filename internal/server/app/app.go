@@ -57,6 +57,7 @@ import (
 	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/server/textgen"
 	"loop-now/internal/server/webui"
 )
 
@@ -532,6 +533,15 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			CodexEnv: a.Executor.CodexHelperEnv, CodexBin: o.CodexBin, ACPEnv: a.Executor.ACPHelperEnv, GrokBin: o.GrokBin, AntigravityBin: o.AntigravityBin},
 		PiCommands: a.Executor.Commands,
 	}
+	// Writing with AI uses the local CLIs' own logins, their status (with its cache) and their live model lists, which
+	// are read again in the background when they have grown old, as on GET /runtimes.
+	a.API.TextGeneration = &textgen.Service{Store: a.Store, Models: models, Runner: a.Executor, Log: log,
+		Statuses: func(ctx context.Context) []runtimes.Status {
+			if a.API.ModelListRead != nil {
+				a.API.ModelListRead("")
+			}
+			return a.API.Runtimes.List(ctx, false)
+		}}
 	// The local ACP commands people added are runtimes too, before anything runs.
 	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
