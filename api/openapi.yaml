@@ -75,6 +75,7 @@ tags:
   - name: plugins
   - name: local-mode
   - name: text-generation
+  - name: path-picks
 
 paths:
   "/agents/{agentId}/message-images/{imageId}": {"put":{"tags":["conversation"],"operationId":"uploadAgentMessageImage","x-access":"console","parameters":[{"name":"agentId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}},{"name":"imageId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}],"responses":{"201":{"description":"Uploads under a stable imageId; the same content in the same scope may be uploaded again. Uploading does not send a message or mark anything as read.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/MessageImage"}}}},"401":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"403":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"404":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"409":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"412":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"413":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"422":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"500":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"503":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}},"requestBody":{"required":true,"content":{"image/png":{"schema":{"type":"string","format":"binary"}},"image/jpeg":{"schema":{"type":"string","format":"binary"}},"image/webp":{"schema":{"type":"string","format":"binary"}}}}}}
@@ -1954,6 +1955,43 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+
+  /path-picks:
+    post:
+      tags: [path-picks]
+      operationId: createPathPick
+      x-access: console
+      summary: Choose a folder or file in this computer's own dialog and get its full path
+      description: |
+        For the console in a browser, which cannot learn a full path (the desktop app uses its own dialog instead). The
+        console port listens only on this computer, so the dialog shows on the screen the browser is on.
+        The dialog opens in front of other windows (it may take one click before it gets the keyboard), and the request
+        is answered when the person chooses or cancels, with no time limit; closing the request closes the dialog at
+        once. One dialog is open at a time.
+        kind directory chooses a folder, with a button to make a new one; kind file chooses a file, with hidden files
+        shown. On macOS a chosen application (.app) stands for the program inside it, Contents/MacOS/ and the
+        CFBundleExecutable from its Info.plist; when that cannot be read or is not there, the .app is returned as chosen.
+        defaultPath, such as the field's current value, is where the dialog opens when, without surrounding spaces, it is
+        an absolute path that exists (a file opens its folder); anything else opens the dialog where it usually opens.
+        Only macOS for now, in a logged-in desktop session; Context.pathPicker says whether it works here.
+        Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why); 409
+        path_picker_busy when a dialog is already open; 422 when defaultPath holds a NUL character.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PathPickRequest" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The chosen path, or null when the person cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PathPick" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -10148,7 +10186,8 @@ components:
         Conflicts with the current state. `error.code` values:
         `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
         project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
-        `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`.
+        `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
+        `path_picker_busy`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10428,6 +10467,8 @@ components:
 - plugin_timeout: the plugin did not respond in time (504)
 - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409)
 - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
+- path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409)
+- path_picker_busy: a dialog to choose a path is already open (409)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -10484,7 +10525,9 @@ components:
           "plugin_timeout",
           "runtime_in_use",
           "text_generation_unavailable",
-          "text_generation_failed"
+          "text_generation_failed",
+          "path_picker_unavailable",
+          "path_picker_busy"
         ],
         "type": "string"
       }
@@ -10529,7 +10572,7 @@ components:
 
     Context:
       type: object
-      required: [organization, project, limits]
+      required: [organization, project, limits, pathPicker]
       additionalProperties: false
       properties:
         organization:
@@ -10548,6 +10591,11 @@ components:
             organizationId: { type: string, format: uuid }
             name: { type: string }
         limits: { $ref: "#/components/schemas/Limits" }
+        pathPicker:
+          type: boolean
+          description: |
+            Whether POST /path-picks can show this computer's own dialog to choose a folder or file: true on macOS in a
+            logged-in desktop session (other systems later). Always false for an external identity, which may not call it.
 
     Limits: {"type":"object","required":["maxUploadFile","maxFolderUpload","maxMessage","maxInboxMessage","maxSkillArchive","maxSkillEntries","maxCredential","textEdit"],"additionalProperties":false,"properties":{"maxUploadFile":{"type":"integer","description":"Byte limit for a single uploaded file"},"maxFolderUpload":{"type":"integer","format":"int64","description":"Byte limit for a single file uploaded to an Agent folder or a context folder"},"maxMessage":{"type":"integer","description":"Byte limit for a single message"},"maxInboxMessage":{"type":"integer","description":"Byte limit for the body of a single Inbox message"},"maxSkillArchive":{"type":"integer","description":"Total byte limit of a Skill archive after extraction"},"maxSkillEntries":{"type":"integer","description":"Maximum number of entries in a Skill archive"},"maxCredential":{"type":"integer","description":"Byte limit for a single credential"},"textEdit":{"type":"object","required":["maxBytes","extensions"],"additionalProperties":false,"properties":{"maxBytes":{"type":"integer"},"extensions":{"type":"array","items":{"type":"string"}}}},"maxMessageImages":{"type":"integer","minimum":1,"maximum":8},"maxMessageImageBytes":{"type":"integer","format":"int64","minimum":1},"maxMessageImagePixels":{"type":"integer","format":"int64","minimum":1}}}
     Health:
@@ -11034,6 +11082,25 @@ components:
       properties:
         text: { type: string, minLength: 1, description: "The draft, to put in the editor" }
         writer: { $ref: "#/components/schemas/TextGenerationWriter" }
+
+    PathPickRequest:
+      description: The same request as the desktop app's pickPath.
+      type: object
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [directory, file] }
+        defaultPath: { type: string, maxLength: 4096 }
+
+    PathPick:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path:
+          type: [string, "null"]
+          minLength: 1
+          description: The full path chosen, on the computer the server runs on; null when the person cancelled
 
     ModelList:
       type: object
