@@ -1,5 +1,6 @@
 import type { Messages } from '..'
 import { agents, createAgent } from './agents'
+import { background } from './background'
 import { app, connection } from './app'
 import { chat } from './chat'
 import { common } from './common'
@@ -38,6 +39,7 @@ export const enUS: Messages = {
   createAgent,
   folders,
   chat,
+  background,
   prompts,
   config,
   skills,

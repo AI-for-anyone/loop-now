@@ -6,6 +6,17 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Background tasks you can see and stop
+
+- When Claude Code, Codex, Grok or Antigravity moves a command (or a sub-agent) to the background, the reply ends as the CLI ends it, and the work stays visible: a "Background N" mark next to the Agent's state opens the list (what runs, which reply started it, for how long) with Stop and Stop all; idle Agents with running work are marked in the sidebar, the overview and the project's Agents.
+- The tool card in the reply that started it shows "running in the background", then how it ended: status, exit code, duration, why it was stopped, and the last part of its output.
+- When Claude Code, Grok or Antigravity replies by itself after a background task ends, that reply appears as a reply of its own, headed by the task it followed; its tokens count as yours in Stats. Codex does not reply by itself.
+- Antigravity no longer keeps a reply open until its background commands finish.
+- An Agent with running background work is not stopped for being idle. Background tasks end when the session is reset, the runtime is switched, the Agent is deleted, Loop Now quits, or a setting that restarts the CLI takes effect (the message box says so first); each is recorded with its reason. On Grok and Antigravity, stopping a reply also ends its background tasks, and Stop says so first. After a crash, tasks that were running are marked "outcome unknown".
+- A step of a multi-step task still waits for its background tasks and the CLI's follow-up (30 minutes of silence at most, `LOOP_NOW_ACP_BACKGROUND_WAIT`, now for every runtime); the step shows them and they can be stopped one by one.
+- API: `BackgroundTask`, `AgentStatus.backgroundTasks`, `Run.backgroundTasks`, run origin `background`, stop endpoints for Agents and task nodes, events `background_tasks.updated` and `task.node.background_tasks.updated`. Codex is now started with its experimental API, for `thread/backgroundTerminals/terminate`.
+- Upgrade: migration 16 adds the `background_tasks` table and rebuilds `runs` once.
+
 ### Token usage for Antigravity, Grok and local ACP commands
 
 - Replies from Antigravity, Grok and your own ACP commands now count their tokens in Usage and Stats, as Claude Code and Codex already do: input, output, cache reads and writes, and reasoning, as the CLI itself reports them at the end of each reply. Nothing else is read: no login files and no service APIs.

@@ -1,5 +1,6 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
+import { endSummary } from './background-text'
 
 type Entry = Schemas['TimelineEntry']
 type Run = Schemas['Run']
@@ -253,6 +254,26 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
             detail: [entry.toolName === 'bash' && !command ? t.timeline.detail.commandUnavailable : null, state].filter(Boolean).join(' · ') || null,
             duration: entry.durationMs !== null ? t.timeline.duration(entry.durationMs) : null,
             tone: entry.state === 'succeeded' ? 'ok' : entry.state === 'failed' ? 'fail' : noResult ? 'neutral' : 'warn',
+          }),
+        )
+        break
+      }
+      // A tool of this reply went on in the background: its label (the command, or what a sub-agent does). Its end may come long
+      // after the reply: how it ended, why it was stopped, and the last part of its output.
+      case 'background_task_started':
+        steps.push(step(entry, index, { label: t.timeline.step.background_task_started, field: entry.taskId, command: entry.kind === 'command' ? entry.label : null, detail: entry.kind === 'command' ? null : `${t.background.kind[entry.kind]} · ${entry.label}`, tone: 'warn' }))
+        break
+      case 'background_task_ended': {
+        const label = entries.find((other) => other.type === 'background_task_started' && other.taskId === entry.taskId)
+        steps.push(
+          step(entry, index, {
+            label: t.timeline.step.background_task_ended,
+            field: entry.taskId,
+            command: label?.type === 'background_task_started' && label.kind === 'command' ? label.label : null,
+            detail: endSummary({ status: entry.status, exitCode: entry.exitCode }),
+            lines: entry.stopReason ? [t.background.card.stopReason[entry.stopReason]] : entry.status === 'unknown' ? [t.background.card.unknownHint] : [],
+            output: entry.output || null,
+            tone: entry.status === 'completed' ? 'ok' : entry.status === 'failed' ? 'fail' : 'neutral',
           }),
         )
         break

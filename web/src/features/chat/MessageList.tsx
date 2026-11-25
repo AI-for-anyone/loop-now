@@ -18,6 +18,9 @@ import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
 import { unfinishedTool } from './tool-state'
 import { runStartedAt } from './time'
 import { InboxReminder } from './InboxReminder'
+import { BackgroundFollowUpLine } from './BackgroundFollowUp'
+import { BackgroundToolCards } from './BackgroundToolCard'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { MessageRuler } from './MessageRuler'
 import { turnPreview, useVisibleTurns } from './ruler'
 
@@ -28,6 +31,14 @@ function UserBubble({ message, run }: { message: Schemas['Message']; run: Schema
 function PlatformReminder({ agentId, message, run, slept }: { agentId: string; message: Schemas['Message']; run: Schemas['Run']; slept?: number }) {
   if (message.origin === 'inbox_reminder') return <InboxReminder agentId={agentId} messageId={run.triggerInboxMessageId ?? message.run?.triggerInboxMessageId} at={message.createdAt} wakeSleepId={run.wakeSleepId ?? message.run?.wakeSleepId} />
   return <SleepWakeLine text={message.text} at={message.createdAt} sleepId={run.wakeSleepId ?? message.run?.wakeSleepId} slept={slept} />
+}
+// A reply the CLI wrote by itself after background work ended has no person's message above it: one line says which task it follows,
+// named by the runtime that ran it.
+function BackgroundFollowUp({ message, run, agent }: { message: Schemas['Message']; run: Schemas['Run']; agent: Partial<Pick<Schemas['Agent'], 'runtime'>> }) {
+  const runtimes = useRuntimeLookup()
+  const tasks = run.triggerBackgroundTasks ?? message.run?.triggerBackgroundTasks ?? []
+  const runtime = tasks[0]?.runtime ?? run.selection?.runtime ?? agent.runtime
+  return <BackgroundFollowUpLine tasks={tasks} runtimeName={runtime ? runtimes.name(runtime) : ''} at={message.createdAt} />
 }
 // A deadline wake follows straight on from the turn that went to sleep: sleep starts only once that turn
 // completes, and any new work in between would have woken it early. So the gap between them is the sleep.
@@ -49,6 +60,8 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
   // are no messages (including old runs that finished before the upgrade) is a single line
   // "命令已执行，没有回复" (Command ran; no reply) shown.
   const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
+  const backgroundTools = new Set((run.backgroundTasks ?? []).flatMap((task) => (task.toolCallId ? [task.toolCallId] : [])))
+  const toolNames = new Map(run.tools.map((tool) => [tool.toolCallId, tool.toolName]))
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
       <FailureNote run={run} runtime={agent.runtime} />
@@ -69,7 +82,9 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
           </p>
         )
       )}
-      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} />
+      {/* Tools that went on in the background are cards of their own, with how they ended; the others stay chips. */}
+      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} exclude={backgroundTools} />
+      <BackgroundToolCards tasks={run.backgroundTasks ?? []} toolNames={toolNames} />
       <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />
     </AgentChatReply>
   )
@@ -360,7 +375,9 @@ export function MessageList({
                   <div className="flex min-w-0 flex-1 flex-col gap-[22px]">
                     {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
                     {turn.user &&
-                      ((turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
+                      (turn.user.origin === 'background' ? (
+                        <BackgroundFollowUp message={turn.user} run={turn.run} agent={agent} />
+                      ) : (turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
                         <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
                       ) : (
                         <UserBubble message={turn.user} run={turn.run} />

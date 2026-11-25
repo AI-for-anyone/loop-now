@@ -164,6 +164,9 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 		}
 	}
 	entries = append(entries, toolEntries(run.Tools)...)
+	for _, b := range backgroundEntries(run.BackgroundTasks) {
+		entries = append(entries, timed{at: b.at, v: b.value})
+	}
 	commands := toolCommands(events)
 	for i := range entries {
 		entries[i].v = withToolCommand(entries[i].v, commands)

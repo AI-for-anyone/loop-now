@@ -529,6 +529,9 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
 		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
+	if run.Origin == executor.OriginBackground {
+		return s.executeFollowUp(ctx, agentID, run), ""
+	}
 	msg := store.Message{}
 	if run.Origin == executor.OriginConsoleCompact {
 		msg.Text = store.ParseCompaction(run.Compaction).Instructions // instructions recorded at run start; runs even if the request has disconnected
@@ -555,21 +558,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	}
 	pollCtx, stopPoll := context.WithCancel(ctx)
 	defer stopPoll()
-	go func() {
-		t := time.NewTicker(s.o.abortPollInterval())
-		defer t.Stop()
-		for {
-			select {
-			case <-pollCtx.Done():
-				return
-			case <-t.C:
-				if st, err := s.st.RunStatus(pollCtx, run.ID); err == nil && st == "aborting" {
-					beforeInterrupt(run.ID)
-					_ = s.ex.Interrupt(pollCtx, agentID, run.ID)
-				}
-			}
-		}
-	}()
+	go s.pollAbort(pollCtx, agentID, run.ID)
 	sink := &runSink{s: s, agentID: agentID, runID: run.ID}
 	release, gateErr := s.PauseDispatch(ctx, agentID)
 	if gateErr != nil {
@@ -637,6 +626,24 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}, command
 	}
 	return res, command
+}
+
+// pollAbort checks the database for the run's interrupt flag until ctx ends (in case the interrupt notification is
+// lost), and interrupts the run when it is set.
+func (s *Service) pollAbort(ctx context.Context, agentID, runID uuid.UUID) {
+	t := time.NewTicker(s.o.abortPollInterval())
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if st, err := s.st.RunStatus(ctx, runID); err == nil && st == "aborting" {
+				beforeInterrupt(runID)
+				_ = s.ex.Interrupt(ctx, agentID, runID)
+			}
+		}
+	}
 }
 
 // recordDispatch records who the run is dispatched to (from the Agent's configuration now), so a run that fails before
@@ -720,6 +727,8 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 		end.Status, end.EndReason = "interrupted", "user_interrupt"
 	case outcomeVoided:
 		end.Status, end.EndReason = "interrupted", "no_pending_messages"
+	case executor.OutcomeMerged:
+		end.Status, end.EndReason = "interrupted", "merged_into_reply"
 	default:
 		end.Status, end.ErrorCode, end.ErrorMessage = "failed", res.ErrorCode, res.ErrorMessage
 	}
@@ -1177,6 +1186,19 @@ func (s *Service) Status(ctx context.Context, agentID uuid.UUID) (apitypes.Agent
 	out.Sleep, out.SleepRevision, err = s.st.ActiveSleepProjection(ctx, agentID, uuid.Nil)
 	if err != nil {
 		return out, err
+	}
+	running, err := s.st.RunningBackgroundTasks(ctx, agentID)
+	if err != nil {
+		return out, err
+	}
+	out.BackgroundTasks = apitypes.FromBackgroundTasks(running)
+	if rc, ok := s.ex.(executor.RestartChecker); ok && len(running) > 0 {
+		// Only while tasks run: the next message's restart would stop them. Reading the settings is not free, so it is
+		// not done otherwise.
+		if out.RestartOnNextMessage, err = rc.RestartOnNextMessage(ctx, agentID); err != nil {
+			s.log.Warn("could not tell whether the next message restarts the runtime", "agentId", agentID, "err", err)
+			out.RestartOnNextMessage = false
+		}
 	}
 	return out, nil
 }

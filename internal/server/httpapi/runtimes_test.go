@@ -51,8 +51,11 @@ func TestListRuntimeDefinitions(t *testing.T) {
 		len(got.Runtimes[1].Providers) != 1 || got.Runtimes[1].Providers[0] != "claude-code" {
 		t.Fatalf("runtime definitions: %+v", got)
 	}
-	if caps := got.Runtimes[1].Capabilities; caps["accounts"] != "local" || caps["realHome"] != true || caps["bundled"] != false || len(caps) != 5 {
+	if caps := got.Runtimes[1].Capabilities; caps["accounts"] != "local" || caps["realHome"] != true || caps["bundled"] != false || caps["stopEndsBackgroundTasks"] != false || len(caps) != 6 {
 		t.Fatalf("claude-code capabilities: %v", caps)
+	}
+	if caps := got.Runtimes[3].Capabilities; caps["stopEndsBackgroundTasks"] != true {
+		t.Fatalf("stopping a Grok reply ends its process and its background tasks: %v", caps)
 	}
 }
 

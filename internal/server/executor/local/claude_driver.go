@@ -397,11 +397,27 @@ func claudeEnv(env []string) []string {
 	return out
 }
 
-// attach hooks up usage and rate limit events.
+// attach hooks up usage, rate limit events and background tasks, and the turns Claude Code begins by itself.
 func (cd claudeDriver) attach(p *proc) {
 	if cp := claudeOf(p); cp != nil {
 		cp.SetObserver(claudeObserver{e: cd.e, p: p})
+		cp.SetSelfTurns(func() runturn.SelfTurn { return cd.e.selfTurnBegan(p, "") })
 	}
+}
+
+// stopBackground asks Claude Code to stop each task (control request stop_task).
+func (cd claudeDriver) stopBackground(ctx context.Context, p *proc, ids []string) error {
+	cp := claudeOf(p)
+	if cp == nil {
+		return nil
+	}
+	var errs []error
+	for _, id := range ids {
+		if err := cp.StopTask(ctx, id); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // ready: claude only prints init after it receives the first message, so a successful start means the process is up; an
@@ -492,8 +508,64 @@ func (o claudeObserver) runID(inTurn bool) *uuid.UUID {
 }
 
 func (o claudeObserver) Usage(u ccstream.Usage, inTurn bool) {
-	o.e.obs.Usage(o.p.agentID, o.runID(inTurn), executor.Usage{Kind: "assistant", Provider: agentruntime.ClaudeCodeProvider, Model: u.Model, ResponseModel: u.Model,
-		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning})
+	o.e.usage(o.p, executor.Usage{Kind: "assistant", Provider: agentruntime.ClaudeCodeProvider, Model: u.Model, ResponseModel: u.Model,
+		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning}, inTurn)
+}
+
+// TaskStarted lists a task Claude Code moved to the background: a Bash command is labelled with the command, a
+// sub-agent or anything else with Claude Code's description.
+func (o claudeObserver) TaskStarted(t ccstream.Task) {
+	kind, label := executor.BackgroundOther, t.Description
+	switch t.Type {
+	case "local_bash":
+		kind = executor.BackgroundCommand
+		if t.Command != "" {
+			label = t.Command
+		}
+	case "local_agent", "remote_agent":
+		kind = executor.BackgroundSubagent
+	}
+	if label == "" {
+		label = t.ID
+	}
+	o.e.bgStarted(o.p, executor.BackgroundTask{ID: t.ID, Kind: kind, Label: label, ToolCallID: t.ToolUseID})
+}
+
+// TaskEnded records a task's end with the end of the output Claude Code wrote for it. A stopped task keeps the reason
+// its stop was asked for (none when Claude Code stopped it by itself).
+func (o claudeObserver) TaskEnded(t ccstream.TaskEnd) {
+	end := executor.BackgroundEnd{Status: executor.BackgroundCompleted, Output: outputTail(t.OutputFile)}
+	switch t.Status {
+	case "failed":
+		end.Status = executor.BackgroundFailed
+	case "stopped", "killed":
+		end.Status, end.StopReason = executor.BackgroundStopped, o.p.bgStopReason(t.ID)
+	}
+	o.e.bgEnded(o.p, t.ID, end)
+}
+
+// outputTail reads the end of a background task's output file, as much as is kept; nil when there is none.
+func outputTail(path string) *string {
+	if path == "" {
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
+	from := max(info.Size()-executor.BackgroundOutputLimit-4, 0) // a few bytes more, so the tail can start on a character
+	buf := make([]byte, info.Size()-from)
+	n, err := f.ReadAt(buf, from)
+	if err != nil && n < len(buf) && !errors.Is(err, io.EOF) {
+		return nil
+	}
+	out := executor.TailOutput(string(buf[:n]))
+	return &out
 }
 
 func (o claudeObserver) RateLimit(info map[string]any, inTurn bool) {

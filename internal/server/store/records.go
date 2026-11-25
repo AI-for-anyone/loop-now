@@ -264,10 +264,18 @@ func (s *Store) fillRuns(ctx context.Context, runs ...*Run) error {
 	if err != nil {
 		return err
 	}
+	started, followed, err := s.backgroundFor(ctx, ids)
+	if err != nil {
+		return err
+	}
 	for _, r := range runs {
 		r.Tools = tools[r.ID]
 		if r.Tools == nil {
 			r.Tools = []ToolEvent{}
+		}
+		r.BackgroundTasks, r.TriggerBackgroundTasks = started[r.ID], followed[r.ID]
+		if r.BackgroundTasks == nil {
+			r.BackgroundTasks = []BackgroundTask{}
 		}
 		r.Usage = totals[r.ID]
 		if m, ok := models[r.ID]; ok {

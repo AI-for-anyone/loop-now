@@ -88,7 +88,7 @@ func agentQueue(ctx context.Context, q queueQuerier, agentID uuid.UUID) ([]Queue
 	}
 	rows, err := q.Query(ctx, `SELECT r.id, r.origin, r.priority, r.queued_at, cm.text, cm.images FROM runs r
 		JOIN conversation_messages cm ON cm.id = r.user_message_id
-		WHERE r.agent_id = $1 AND r.status = 'queued' AND r.origin <> 'sleep_wake' ORDER BY r.priority, r.queue_seq`, agentID)
+		WHERE r.agent_id = $1 AND r.status = 'queued' AND r.origin NOT IN ('sleep_wake', 'background') ORDER BY r.priority, r.queue_seq`, agentID)
 	if err != nil {
 		return nil, err
 	}

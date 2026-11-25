@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '@/api/events'
 import type { Schemas } from '@/api/client'
-import { makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
+import { makeBackgroundTask, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { initialLiveState, isBusy, liveReducer, queuedCounts, type LiveState } from './live-state'
 
 const apply = (state: LiveState, ...events: AgentEvent[]) => events.reduce((s, event) => liveReducer(s, { type: 'event', event }), state)
@@ -164,6 +164,20 @@ describe('liveReducer', () => {
     expect(state.runs[queuedRun.id]).toEqual(queuedRun)
     // A send result is recorded only in the history part; busy/idle state and the queue still follow the events.
     expect(state.queued).toEqual([])
+  })
+
+  it('background tasks come from the snapshot and are replaced whole by background_tasks.updated, which leaves busy alone', () => {
+    const build = makeBackgroundTask({ label: 'npm run build' })
+    const server = makeBackgroundTask({ label: 'npm run dev' })
+    const state = apply(
+      initialLiveState,
+      { type: 'snapshot', id: '1-0', data: { status: makeStatus('a', { backgroundTasks: [build] }), currentText: null, queuedRuns: [], queueItems: [] } },
+    )
+    expect(state.backgroundTasks).toEqual([build])
+    const next = apply(state, { type: 'background_tasks.updated', id: '2-0', data: { tasks: [server] } })
+    expect(next.backgroundTasks).toEqual([server])
+    expect(isBusy(next)).toBe(false)
+    expect(apply(next, { type: 'background_tasks.updated', id: '3-0', data: { tasks: [] } }).backgroundTasks).toEqual([])
   })
 
   it('updates the session state', () => {

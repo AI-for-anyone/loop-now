@@ -106,8 +106,12 @@ type Options struct {
 	// GrokBin and AntigravityBin are the grok and agy executables; empty means look them up on the PATH of the user's
 	// login shell (UserPath).
 	GrokBin, AntigravityBin string
-	// ACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
-	// prompt has returned) may hear nothing from the agent before it ends; 0 means 30 minutes.
+	// BackgroundStopWait is how long stopping background tasks waits for the runtime to report their end before
+	// returning them as they are; 0 means 3 seconds.
+	BackgroundStopWait time.Duration
+	// ACPBackgroundWait is how long a task instance's turn that waits for its background tasks (after its prompt has
+	// returned, on any runtime) may hear nothing from the runtime before it stops them (task_limit) and ends; 0 means 30
+	// minutes.
 	ACPBackgroundWait time.Duration
 	// TextTempDir is where "Write with AI" makes the empty folder each run of a CLI works in (removed afterwards); empty
 	// means the system's temporary folder.
@@ -143,6 +147,10 @@ type Executor struct {
 	pending  map[uuid.UUID]int
 	closedCh chan struct{}
 	claude   *claudecli.Probe // cache of claude's version and session record directory
+	// followUps turns the replies a CLI gives by itself into runs (see SetFollowUps); nil until set.
+	followUps atomic.Pointer[executor.FollowUpHost]
+	// followUpQueue holds, per Agent, the replies its CLI began by itself that no run has taken yet (guarded by mu).
+	followUpQueue map[uuid.UUID][]*followUp
 }
 
 type proc struct {
@@ -185,6 +193,15 @@ type proc struct {
 	revokeErr           error
 	stopDone            chan struct{}
 	stopErr             error
+	bg                  procBackground // the background tasks its CLI started
+	// replyStopping: a reply on it is being stopped; if the process ends meanwhile, its background tasks were stopped
+	// with the reply.
+	replyStopping atomic.Bool
+	// selfTurn is the reply its CLI is giving by itself, if any (guarded by Executor.mu).
+	selfTurn *followUp
+	// task: it runs a task instance; thinking is the thinking level it started with.
+	task     bool
+	thinking *string
 }
 
 type run struct {
@@ -203,6 +220,9 @@ type stopCause struct {
 	reason   string
 	runID    *uuid.UUID
 	forAgent *uuid.UUID // the Agent a slot is freed for (when reason is evicted)
+	// bg is the reason the process's running background tasks are recorded as stopped for; empty decides it from
+	// reason (see backgroundStopReason).
+	bg string
 }
 
 // Stop reasons (the reason of pi.stopped).
@@ -255,8 +275,13 @@ func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Ins
 	}
 	return &Executor{o: o, src: src, tmpl: tmpl, inst: inst, log: log, obs: obs,
 		procs: map[uuid.UUID]*proc{}, runs: map[uuid.UUID]*run{}, handoffs: map[uuid.UUID]*RuntimeHandoff{},
-		live: map[*proc]struct{}{}, pending: map[uuid.UUID]int{}, closedCh: make(chan struct{}), claude: &claudecli.Probe{}}
+		live: map[*proc]struct{}{}, pending: map[uuid.UUID]int{}, closedCh: make(chan struct{}), claude: &claudecli.Probe{},
+		followUpQueue: map[uuid.UUID][]*followUp{}}
 }
+
+// SetFollowUps sets who turns the replies a runtime's CLI gives by itself (after background tasks ended) into runs; it
+// is set once the conversation service exists. Until then such replies are dropped.
+func (e *Executor) SetFollowUps(h executor.FollowUpHost) { e.followUps.Store(&h) }
 
 func (e *Executor) event(agentID uuid.UUID, runID *uuid.UUID, typ string, data map[string]any) {
 	if runID != nil && *runID == uuid.Nil {
@@ -282,6 +307,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		delete(e.runs, req.AgentID)
 		e.mu.Unlock()
 	}()
+	if req.Origin == executor.OriginBackground {
+		return e.executeFollowUp(runCtx, r, req, sink)
+	}
 
 	snap, err := e.src.ExecutionSnapshot(runCtx, req.AgentID)
 	if errors.Is(err, agentconfig.ErrCredentialUnavailable) {
@@ -357,11 +385,26 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	if req.Origin == executor.OriginConsoleCompact {
 		return e.compact(ctx, p, r, req, snap), nil
 	}
-	tr, err := p.rt.Prompt(ctx, req.Message, sinkAdapter{s: sink, command: func(id, name, command string) {
-		if command = toolcommand.Display(name, command); command != "" {
-			e.event(snap.AgentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
+	adapter := sinkAdapter{s: sink, command: func(id, name, command string) { e.toolCommand(snap.AgentID, runID, id, name, command) },
+		event: func(typ string, data map[string]any) { e.event(snap.AgentID, &runID, typ, data) }}
+	// Replies the CLI began by itself and no run has taken came before this message: they go first in this reply. The
+	// tasks that ended so far are the CLI's to tell about in this reply.
+	before := e.absorbFollowUps(ctx, p, runID, adapter)
+	e.bgTakeEnded(p)
+	tr, err := p.rt.Prompt(ctx, req.Message, adapter, req.Images...)
+	if before != "" && err == nil {
+		tr.Text = before + "\n\n" + tr.Text
+	}
+	if p.task && err == nil && tr.Outcome == runturn.OutcomeCompleted {
+		// A task instance's turn waits for the background work it started and the CLI's own reply about it.
+		after, stopped := e.holdForBackground(ctx, p, r, runID, adapter)
+		if after != "" {
+			tr.Text = strings.TrimSpace(tr.Text + "\n\n" + after)
 		}
-	}, event: func(typ string, data map[string]any) { e.event(snap.AgentID, &runID, typ, data) }}, req.Images...)
+		if stopped {
+			tr.Outcome = runturn.OutcomeAborted
+		}
+	}
 	exitCode, exitMsg := p.drv.exited()
 	if errors.Is(err, runturn.ErrExited) {
 		tr, err = runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: exitCode, ErrorMessage: exitMsg}, nil
@@ -415,6 +458,13 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	return res, nil
 }
 
+// toolCommand records the command of a tool call (bash and the like) on the run, in its safe display form.
+func (e *Executor) toolCommand(agentID, runID uuid.UUID, id, name, command string) {
+	if command = toolcommand.Display(name, command); command != "" {
+		e.event(agentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
+	}
+}
+
 func failed(code, msg string, version int64) executor.Result {
 	return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: code, ErrorMessage: msg, ConfigVersion: version}
 }
@@ -462,7 +512,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if e.reusable(p, snap) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -551,6 +601,14 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	return p, nil
 }
 
+// reusable reports whether the live process p can take a message with the config snap: nothing that needs a restart
+// changed since it started.
+func (e *Executor) reusable(p *proc, snap agentconfig.Snapshot) bool {
+	return p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity &&
+		p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() &&
+		p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p)
+}
+
 func alive(p *proc) bool {
 	select {
 	case <-p.rt.Done():
@@ -563,7 +621,7 @@ func alive(p *proc) bool {
 func (e *Executor) lruIdleLocked() *proc {
 	var victim *proc
 	for _, p := range e.procs {
-		if p.busy || e.handoffs[p.agentID] != nil {
+		if p.busy || e.handoffs[p.agentID] != nil || p.bgBusyLocked() {
 			continue
 		}
 		if victim == nil || p.lastUsed.Before(victim.lastUsed) {
@@ -680,7 +738,8 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	client := st.rt
 	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
 		version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
-		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
+		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{}),
+		task: snap.TaskID != uuid.Nil, thinking: snap.ThinkingLevel}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity
 	}
@@ -733,7 +792,7 @@ func (e *Executor) retire(p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	go e.stop(p, stopCause{})
+	go e.stop(p, stopCause{bg: executor.StopReplyStopped})
 }
 
 // discard removes an exited process from the process table, records the unexpected exit, and makes sure its process
@@ -779,6 +838,9 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 func (e *Executor) turnFinished(p *proc) error {
 	sessionErr := e.recordSession(p)
 	p.curRun.Store(nil)
+	if alive(p) && !exiting(p) {
+		p.replyStopping.Store(false)
+	}
 	e.mu.Lock()
 	p.busy = false
 	p.lastUsed = time.Now()
@@ -828,6 +890,12 @@ func (e *Executor) recordSession(p *proc) error {
 func (e *Executor) idleExpired(p *proc) {
 	e.mu.Lock()
 	if e.procs[p.agentID] != p || p.busy || e.handoffs[p.agentID] != nil {
+		e.mu.Unlock()
+		return
+	}
+	if p.bgBusyLocked() {
+		// Not idle while background tasks run (they would end with the process): look again after another timeout.
+		p.idleTimer.Reset(e.o.IdleTimeout)
 		e.mu.Unlock()
 		return
 	}
@@ -893,6 +961,9 @@ func (e *Executor) stop(p *proc, why stopCause) {
 			defer p.authBridge.Close()
 		}
 		begin := time.Now() // the stop event is recorded at the time stopping began, not after the process ended
+		// The background tasks end with the process: record why first, so it is their end even if the runtime reports
+		// one as it goes.
+		e.bgEndAll(p, backgroundStopReason(p, why))
 		p.stopping.Store(true)
 		e.revokeProcToken(p) // revoke the token first: once the process starts stopping it must not call the Agent API any more
 		if p.revokeErr != nil {
@@ -913,6 +984,7 @@ func (e *Executor) stop(p *proc, why stopCause) {
 			}
 		}
 		e.removeProcPidFile(p)
+		e.endFollowUps(p)
 		if why.reason != "" {
 			e.recordStop(p, why, begin)
 		}
@@ -1038,6 +1110,7 @@ func (e *Executor) Interrupt(_ context.Context, agentID, runID uuid.UUID) error 
 // abort first clears Pi's internal queue, then aborts the current run; it keeps trying within the interrupt timeout and
 // force-kills the process after the timeout (the session file is kept).
 func (e *Executor) abort(r *run, p *proc) {
+	p.replyStopping.Store(true)
 	deadline := time.Now().Add(e.o.AbortTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)

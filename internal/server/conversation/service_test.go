@@ -41,6 +41,33 @@ type fakeExec struct {
 	// beforeSnapshot, when set, is called after the conversation service has dispatched a message and before the fake
 	// reads the Agent's configuration, the way the local executor reads its execution snapshot.
 	beforeSnapshot func(req executor.Request)
+	// followUpMerged makes a run of origin background find no reply of the CLI's to record (another run took it).
+	followUpMerged bool
+	// stopBackground, when set, answers StopBackground (the fake then implements executor.BackgroundStopper).
+	stopBackground func(agentID uuid.UUID, id, reason string) (executor.BackgroundTask, error)
+	// restart is what RestartOnNextMessage answers.
+	restart atomic.Bool
+}
+
+func (f *fakeExec) RestartOnNextMessage(context.Context, uuid.UUID) (bool, error) {
+	return f.restart.Load(), nil
+}
+
+func (f *fakeExec) StopBackground(_ context.Context, agentID uuid.UUID, id, reason string) (executor.BackgroundTask, error) {
+	if f.stopBackground == nil {
+		return executor.BackgroundTask{}, executor.ErrBackgroundNotFound
+	}
+	return f.stopBackground(agentID, id, reason)
+}
+
+func (f *fakeExec) StopAllBackground(ctx context.Context, agentID uuid.UUID, reason string) ([]executor.BackgroundTask, error) {
+	out := []executor.BackgroundTask{}
+	for _, id := range []string{"a", "c"} {
+		if t, err := f.StopBackground(ctx, agentID, id, reason); err == nil {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 func newFakeExec() *fakeExec {
@@ -48,6 +75,9 @@ func newFakeExec() *fakeExec {
 }
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
+	if req.Origin == executor.OriginBackground {
+		return f.followUp(ctx, req, sink)
+	}
 	compact := req.Origin == executor.OriginConsoleCompact
 	prefix := executor.RunIDLine(req.RunID)
 	// A Pi command from the conversation page goes to Pi verbatim (without the run ID): a name containing handled is
@@ -141,6 +171,43 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{TokensBefore: 100, EstimatedTokensAfter: 40}}, nil
 	}
 	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "Reply: " + req.Message, ConfigVersion: 1}, nil
+}
+
+// followUp records a reply the CLI gives by itself: nothing is sent to the runtime (the message is empty); it blocks
+// like "block" until released or interrupted.
+func (f *fakeExec) followUp(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
+	if req.Message != "" {
+		return executor.Result{}, fmt.Errorf("a follow-up sends nothing to the runtime, got %q", req.Message)
+	}
+	f.mu.Lock()
+	merged := f.followUpMerged
+	f.mu.Unlock()
+	if merged {
+		f.started <- "follow-up merged"
+		return executor.Result{Outcome: executor.OutcomeMerged}, nil
+	}
+	ctl := make(chan string, 4)
+	f.mu.Lock()
+	if f.running[req.AgentID] != nil {
+		f.mu.Unlock()
+		return executor.Result{}, fmt.Errorf("two runs at once for the same Agent")
+	}
+	f.running[req.AgentID], f.runIDs[req.AgentID] = ctl, req.RunID
+	f.order = append(f.order, "follow-up")
+	f.mu.Unlock()
+	defer func() { f.mu.Lock(); delete(f.running, req.AgentID); delete(f.runIDs, req.AgentID); f.mu.Unlock() }()
+	f.started <- "follow-up"
+	sink.Running(1, executor.Selection{Runtime: "claude-code", Provider: "claude-code", ModelID: "m"})
+	sink.TextDelta("It finished.")
+	select {
+	case c := <-ctl:
+		if c == "interrupt" {
+			return executor.Result{Outcome: executor.OutcomeInterrupted, Text: "It finished.", ConfigVersion: 1}, nil
+		}
+	case <-ctx.Done():
+		return executor.Result{}, ctx.Err()
+	}
+	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "It finished.", ConfigVersion: 1}, nil
 }
 
 func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {

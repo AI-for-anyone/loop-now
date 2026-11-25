@@ -2,6 +2,7 @@ import type { Schemas } from '@/api/client'
 import { newerRun, type MessagePages } from '@/api/queries'
 import type { LiveState } from './live-state'
 import { isVoidedRun } from './run-status-text'
+import { latestBackgroundTasks } from './background-text'
 import { compareTimes, runStartedAt } from './time'
 
 type Message = Schemas['Message']
@@ -33,10 +34,16 @@ export function buildTurns(
   const messages = [...history, ...Object.values(live.messages).filter((message) => !known.has(message.id))]
   // The same run may have several copies of its data (history, events, send result and live state), arriving in no fixed order; when
   // merging, the state only moves forward, never back,
-  // and at the same phase the live copy wins (it has the tool states received one by one).
+  // and at the same phase the live copy wins (it has the tool states received one by one). Background tasks are merged task by task, since
+  // an ended run's tasks still end later (a snapshot's history can be newer than the live copy of the same ended run).
+  const mergeRuns = (a: Run, b: Run): Run => {
+    const chosen = newerRun(a, b)
+    const lists = [a.backgroundTasks ?? [], b.backgroundTasks ?? []]
+    return lists.some((list) => list.length > 0) ? { ...chosen, backgroundTasks: latestBackgroundTasks(lists) } : chosen
+  }
   const effectiveRun = (run: Run): Run =>
     [live.runs[run.id], live.current?.run.id === run.id ? live.current.run : undefined, live.queued.find((r) => r.id === run.id)].reduce<Run>(
-      (merged, other) => (other ? newerRun(merged, other) : merged),
+      (merged, other) => (other ? mergeRuns(merged, other) : merged),
       run,
     )
 
@@ -50,7 +57,7 @@ export function buildTurns(
       byRun.set(run.id, turn)
       order.push(turn)
     } else {
-      turn.run = newerRun(turn.run, run)
+      turn.run = mergeRuns(turn.run, run)
     }
     if (message.role === 'user') turn.user = message
     else turn.reply = { text: message.text, live: false }

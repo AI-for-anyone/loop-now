@@ -36,6 +36,8 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { Markdown } from '@/features/chat/Markdown'
 import { t } from '@/i18n'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
+import { stopAllTaskNodeBackgroundTasks, stopTaskNodeBackgroundTask, useTaskNodeBackgroundTasks } from '@/api/background-tasks'
+import { BackgroundTasksMark, type BackgroundStopper } from '@/features/chat/BackgroundTasks'
 
 const inboxCopy = t.taskInbox
 
@@ -73,6 +75,15 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   const activeRunId = nodeMessages.data?.retainedMessages.filter(m => m.nodeRunId === node.id && (m.status === 'starting' || m.status === 'running')).at(-1)?.runId
   const stop = useStopReply((runId, actionId) => stopTaskNodeRun(detail.task.id, node.id, runId, { actionId, expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId }), error => nodeConflictNotice(error, 'stop'))
   const refreshMessages = () => void client.invalidateQueries({ queryKey: taskKeys.messages(detail.task.id, node.id) })
+  // Background tasks the node's turns started: the turn waits for them, so the node shows them (with Stop) while they run, and its Stop
+  // ends them with the turn.
+  const background = useTaskNodeBackgroundTasks(detail.task.id, node.id, current)
+  const backgroundTasks = current && background.data?.nodeRunId === node.id ? background.data.tasks : []
+  const target = { taskId: detail.task.id, nodeRunId: node.id, agentId: node.agentId, runtimeId: node.runtimeId }
+  const backgroundStopper: BackgroundStopper = {
+    stop: (taskId, actionId) => stopTaskNodeBackgroundTask(target, taskId, actionId),
+    stopAll: (actionId) => stopAllTaskNodeBackgroundTasks(target, actionId),
+  }
   // Editing a cancelled message puts its text and images back into the draft after what is already there.
   // Replying to a question this node asked you: the composer sends text as the answer until the question leaves 'open'.
   const [replying, setReplying] = useState<{ nodeRunId: string; messageId: string } | null>(null)
@@ -165,6 +176,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
+                <BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />
                 <TaskBadge className="ml-auto" status={node.status} />
               </NodeHeading>
               {/* Next to the reason note are the recovery actions: fluorescent-pink “重试当前节点” (Retry current node), and beside it
@@ -205,6 +217,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
                 queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
                 stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
+                stopAlso={backgroundTasks.length}
                 reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
               {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
               {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}

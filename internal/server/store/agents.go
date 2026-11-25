@@ -56,6 +56,8 @@ type AgentListItem struct {
 	Agent
 	Busy         bool
 	SessionState string
+	// BackgroundTasks is how many background tasks run on the Agent's runtime process.
+	BackgroundTasks int
 }
 
 // The set of statuses of a run in progress (consistent with the runs_one_active_per_agent index).
@@ -154,7 +156,8 @@ func (s *Store) ListAgentsFiltered(ctx context.Context, f ScopeFilter) ([]AgentL
 func (s *Store) listAgents(ctx context.Context, where string, args ...any) ([]AgentListItem, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+agentColumns+`,
 			EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = agents.id AND r.status IN `+activeRunStatuses+`),
-			coalesce(sess.state, 'none')
+			coalesce(sess.state, 'none'),
+			(SELECT count(*) FROM background_tasks b WHERE b.agent_id = agents.id AND b.status = 'running')
 		FROM agents LEFT JOIN agent_sessions sess ON sess.agent_id = agents.id
 		WHERE agents.deleted_at IS NULL AND `+where+`
 		ORDER BY agents.created_at, agents.id`, args...)
@@ -163,7 +166,7 @@ func (s *Store) listAgents(ctx context.Context, where string, args ...any) ([]Ag
 	}
 	items, err := db.CollectRows(rows, func(row db.CollectableRow) (AgentListItem, error) {
 		var it AgentListItem
-		err := row.Scan(append(agentFields(&it.Agent), &it.Busy, &it.SessionState)...)
+		err := row.Scan(append(agentFields(&it.Agent), &it.Busy, &it.SessionState, &it.BackgroundTasks)...)
 		return it, err
 	})
 	if err != nil {

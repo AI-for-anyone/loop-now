@@ -53,6 +53,8 @@ const (
 	CodeTextGenerationFailed            = "text_generation_failed"
 	CodePathPickerUnavailable           = "path_picker_unavailable"
 	CodePathPickerBusy                  = "path_picker_busy"
+	CodeBackgroundTaskNotFound          = "background_task_not_found"
+	CodeBackgroundTaskEnded             = "background_task_ended"
 	CodeRateLimited                     = "rate_limited"
 )
 
@@ -89,6 +91,11 @@ func Is(err error, code string) bool {
 // NotFound returns a 404.
 func NotFound(what string) *Error {
 	return &Error{Status: http.StatusNotFound, Code: CodeNotFound, Message: what + " not found."}
+}
+
+// NotFoundCode returns a 404 with a code of its own.
+func NotFoundCode(code, message string) *Error {
+	return &Error{Status: http.StatusNotFound, Code: code, Message: message}
 }
 
 // Validation returns a 422 carrying field-level errors.

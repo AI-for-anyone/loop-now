@@ -35,7 +35,7 @@ func ClampBudget(n int) int {
 type Message struct {
 	ID        uuid.UUID
 	Role      string // user or assistant
-	Origin    string // console, inbox_reminder or sleep_wake
+	Origin    string // console, inbox_reminder, sleep_wake or background
 	Status    string // the status of the turn it belongs to
 	Text      string
 	Images    int
@@ -176,6 +176,8 @@ func render(m Message) string {
 		label += ", platform reminder"
 	case m.Role == "user" && m.Origin == "sleep_wake":
 		label += ", sleep wake-up"
+	case m.Role == "user" && m.Origin == "background":
+		label += ", background work ended"
 	case m.Role == "assistant" && (m.Status == "failed" || m.Status == "interrupted"):
 		label += ", " + m.Status + " (partial)"
 	}

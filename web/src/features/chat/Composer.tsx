@@ -1,6 +1,6 @@
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowUpIcon } from 'lucide-react'
+import { ArrowUpIcon, TriangleAlertIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -77,6 +77,11 @@ interface ComposerProps {
   // Who runs the Agent now (the runner chip), at the start of the line below the input box.
   runner?: ReactNode
   reply?: QuestionReply
+  // One line above the input box that the next message needs to say first (the next message restarts the CLI and stops its background
+  // tasks).
+  notice?: ReactNode
+  // How many background tasks stopping or interrupting this reply also stops (the runtime's stop ends its process); 0 when none.
+  stopAlso?: number
 }
 
 const encoder = new TextEncoder()
@@ -89,7 +94,7 @@ const platformNames = (list: CommandList | undefined) => (list ? new Set(list.co
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -348,7 +353,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
 
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
-  const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
+  const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
@@ -380,6 +385,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       )}
       <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
       {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
+      {notice}
       {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
           leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
       <div className="flex min-w-0 flex-col">
@@ -392,7 +398,10 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
           {runner}
           {status}
-          {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
+          {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
+          {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
+          {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
+          {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
         </div>
         {connection}
       </div>
@@ -468,6 +477,17 @@ export function KeyHint({
         </>
       )}
     </p>
+  )
+}
+
+// Next to the key hints when stopping or interrupting the reply also stops background tasks (the runtime's stop ends its process, or a
+// task node's turn takes its tasks with it).
+export function StopAlsoWarning({ count }: { count: number }) {
+  return (
+    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full bg-tint-red px-2.5 text-[12px] leading-[22px] font-black text-red-text shadow-[inset_0_0_0_1.5px_var(--red)]">
+      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
+      {t.background.stopWarning(count)}
+    </span>
   )
 }
 

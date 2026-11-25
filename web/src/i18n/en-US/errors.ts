@@ -60,6 +60,8 @@ export const errors = {
     path_picker_unavailable: "Can't choose a path here",
     // Word for word the server's message, so it is not repeated after this.
     path_picker_busy: 'A dialog to choose a path is already open; choose or cancel there first.',
+    background_task_not_found: 'No such background task',
+    background_task_ended: 'This background task has already ended',
     internal_error: 'Internal server error',
   },
   unknown: 'Unknown error',

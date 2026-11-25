@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { makeMessage, makeMessagePage, makeRun } from '@/test/api'
+import { makeBackgroundTask, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import type { MessagePages } from '@/api/queries'
 import { initialLiveState, liveReducer, type LiveState } from './live-state'
 import { buildTurns } from './turns'
@@ -49,6 +49,20 @@ describe('buildTurns', () => {
     expect(turns).toHaveLength(1)
     expect(turns[0].run.status).toBe('completed')
     expect(turns[0].reply).toEqual({ text: 'Final reply', live: false })
+  })
+
+  it('a background task that ended stays ended whichever copy of its ended run wins: a reconnect’s history beats an older live copy', () => {
+    const running = makeBackgroundTask({ label: 'npm run build' })
+    const ended = { ...running, status: 'completed' as const, exitCode: 0, endedAt: '2026-10-12T08:30:00Z' }
+    const later = makeBackgroundTask({ label: 'npm run dev' })
+    const live = makeRun({ status: 'completed', backgroundTasks: [running, later] })
+    const history = { ...live, backgroundTasks: [ended] }
+    const state: LiveState = { ...initialLiveState, runs: { [live.id]: live } }
+    const { turns } = buildTurns(page([makeMessage({ text: 'Build', run: history })]), state)
+    expect(turns[0].run.backgroundTasks.map((task) => [task.label, task.status])).toEqual([['npm run build', 'completed'], ['npm run dev', 'running']])
+    // And the other way round: a newer live copy is not undone by an older history.
+    const { turns: again } = buildTurns(page([makeMessage({ text: 'Build', run: { ...live, backgroundTasks: [running] } })]), { ...initialLiveState, runs: { [live.id]: history } })
+    expect(again[0].run.backgroundTasks.map((task) => task.status)).toEqual(['completed'])
   })
 
   it('merges messages and runs from events and send results on top of the history; stale state read by the history request does not overwrite them', () => {

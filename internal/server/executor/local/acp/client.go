@@ -37,29 +37,25 @@ type Options struct {
 	// LoadQuiet is how long a session/load that keeps replaying but never answers may stay quiet before it counts as
 	// loaded (some agents never answer it); 0 means 2 seconds.
 	LoadQuiet time.Duration
-	// Background, when set, keeps a turn open after its prompt has returned while the agent goes on with work it
-	// reports on by itself (see Background); nil ends the turn with the prompt.
+	// Background, when set, lets commands still running when a prompt ends go on in the background, and takes the
+	// replies the agent gives by itself after they end (see Background); nil closes them with the prompt.
 	Background *Background
 	// RejectPermissions turns down every permission request (the agent's own reject option, else cancelled) instead of
 	// granting it.
 	RejectPermissions bool
 }
 
-// Background is how a turn waits for work the agent goes on with after its prompt has returned. Antigravity moves a
-// command that takes longer than its wait to the background and answers the prompt; the command's end comes later,
-// with no prompt open, and the agent then replies by itself, each reply ending with usage_update. Such a turn ends once
-// no holding tool is open and no reply is open or expected, after Settle without any message from the agent.
+// Background is how an agent's work after a prompt is followed. Antigravity moves a command that takes longer than its
+// wait to the background and answers the prompt; the command's end comes later, with no prompt open, and the agent
+// then replies by itself, each reply ending with usage_update.
 type Background struct {
-	// Holds reports whether a tool still open when the prompt returns goes on and is reported on later; kind is its
-	// ACP kind and rawInput its raw input.
+	// Holds reports whether a tool still open when the prompt ends goes on in the background and reports its end later;
+	// kind is its ACP kind and rawInput its raw input.
 	Holds func(kind string, rawInput json.RawMessage) bool
-	// QuietLimit ends a turn that a holding tool keeps open once nothing has come from the agent for this long (the
-	// end of a command may be lost); its open tools are closed without a result.
-	QuietLimit time.Duration
-	// ReplyQuietLimit ends a turn that only waits for the agent's own reply once nothing has come for this long.
-	ReplyQuietLimit time.Duration
-	// Settle is how long a turn that waits for nothing stays open for a reply the agent may still begin.
+	// Settle is how long a reply the agent gives by itself stays open after its usage_update, for more to come.
 	Settle time.Duration
+	// ReplyQuietLimit ends such a reply once nothing has come for this long (its usage_update may be lost).
+	ReplyQuietLimit time.Duration
 }
 
 // RPCError is an error response from the agent.
@@ -106,6 +102,15 @@ type Client struct {
 	loading  *loading
 	closed   bool
 	observer Observer
+	// selfTurns receives the prompts the agent runs by itself; session is the session the client runs (set by its
+	// first prompt), whose background tasks and own prompts count.
+	selfTurns func(about string) runturn.SelfTurn
+	session   string
+	// background are the tools that went on in the background when their prompt ended, by tool call id.
+	background map[string]*bgTool
+	// ours are the ids the agent gave the client's own prompts (the last few), so a late announcement of one is not
+	// taken for a prompt of the agent's own.
+	ours []string
 
 	done    chan struct{}
 	exitErr error
@@ -131,7 +136,8 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{o: o, stdin: stdin, stderr: &ring{limit: 64 << 10}, pending: map[int64]chan reply{}, done: make(chan struct{})}
+	c := &Client{o: o, stdin: stdin, stderr: &ring{limit: 64 << 10}, pending: map[int64]chan reply{}, done: make(chan struct{}),
+		background: map[string]*bgTool{}}
 	cmd.Stderr = c.stderr
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = 2 * time.Second
@@ -257,6 +263,8 @@ func (c *Client) handle(line []byte) {
 	case m.Method != "":
 		if m.Method == "session/update" {
 			c.update(m.Params)
+		} else if strings.HasPrefix(m.Method, "_x.ai/") {
+			c.xai(m.Method, m.Params)
 		}
 	case m.ID != nil:
 		var id int64

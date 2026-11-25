@@ -59,6 +59,8 @@ export const errors = {
     text_generation_failed: '没写成',
     path_picker_unavailable: '这台电脑没法弹出选择窗口',
     path_picker_busy: '已经有一个选择窗口开着，先在那里选好或取消',
+    background_task_not_found: '找不到这个后台任务',
+    background_task_ended: '这个后台任务已经结束了',
     internal_error: '服务端内部错误',
   } satisfies Record<S['ErrorCode'], string>,
   unknown: '未知错误',

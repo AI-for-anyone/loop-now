@@ -73,9 +73,10 @@ function shownState(state: Schemas['ToolState'], unfinished: UnfinishedTool): Sc
 // so the same toolCallId may have several entries; they are merged in order of appearance and only the latest state is shown.
 // Interrupted tools turn gray with a dashed border; those with no result get a plain gray chip, told apart from running (blue, spinning),
 // succeeded (green) and failed (red).
-export function ToolList({ tools: events, unfinished = 'running' }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool }) {
+// exclude: tool calls shown another way (those that went on in the background).
+export function ToolList({ tools: events, unfinished = 'running', exclude }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool; exclude?: ReadonlySet<string> }) {
   const latest = new Map<string, Schemas['ToolEvent']>()
-  for (const event of events) latest.set(event.toolCallId, event)
+  for (const event of events) if (!exclude?.has(event.toolCallId)) latest.set(event.toolCallId, event)
   const tools = [...latest.values()]
   if (tools.length === 0) return null
   return (

@@ -81,9 +81,9 @@ func TestBaselineShape(t *testing.T) {
 	}
 	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables),
 	// migration 2 adds the 3 tables for local mode, migration 13 the local ACP commands, and migration 15 who writes
-	// with AI.
-	if len(ts) != 95 {
-		t.Errorf("%d tables in total, want 95", len(ts))
+	// with AI, migration 16 background tasks.
+	if len(ts) != 96 {
+		t.Errorf("%d tables in total, want 96", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
@@ -128,7 +128,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 15
+const latestVersion = 16
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.
@@ -724,5 +724,96 @@ func TestToolNoResultMigration(t *testing.T) {
 	}
 	if ti, ok := tables(t, d)["run_tool_events"]; !ok || ti.schema != db.EventsSchema || !ti.strict {
 		t.Fatalf("run_tool_events stays a STRICT table in events.db: %+v", ti)
+	}
+}
+
+// v16 lets a run come from the runtime's own follow-up after background work ended (origin background, end reason
+// merged_into_reply) and keeps background tasks in a table of their own, removed with the run or task turn that started
+// them; existing runs and their messages are kept.
+func TestBackgroundTasksMigration(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 15); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(d)
+	defaults, err := st.EnsureDefaults(ctx, "o", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, userID := uuid.New(), uuid.New()
+	selection := `{"runtime":"claude-code","provider":"claude-code","modelId":"m","thinkingLevel":null}`
+	if _, err := d.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, queued_at, started_at, ended_at, end_reason, selection)
+		VALUES ($1, $2, $3, 1, 1, 1, 'interrupted', 'console', now(), now(), now(), 'user_stopped', $4)`, runID, agent.ID, userID, selection); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(ctx, `INSERT INTO conversation_messages (id, agent_id, seq, role, text, run_id, session_epoch) VALUES ($1, $2, 1, 'user', 'hi', $3, 1)`, userID, agent.ID, runID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin) VALUES ($1, $2, $3, 1, 0, 2, 'queued', 'background')`, uuid.New(), agent.ID, uuid.New()); err == nil {
+		t.Fatal("version 15 refuses origin background")
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetRun(ctx, runID)
+	if err != nil || got.Status != "interrupted" || got.EndReason != "user_stopped" || got.UserMessageID != userID || got.Selection == nil {
+		t.Fatalf("the run should be kept: %+v %v", got, err)
+	}
+	follow := uuid.New()
+	if _, err := d.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, end_reason, ended_at) VALUES ($1, $2, $3, 1, 0, 2, 'interrupted', 'background', 'merged_into_reply', now())`, follow, agent.ID, uuid.New()); err != nil {
+		t.Fatalf("origin background and end reason merged_into_reply are accepted: %v", err)
+	}
+	insertTask := func(id uuid.UUID, run any, status string, ended any) error {
+		_, err := d.Exec(ctx, `INSERT INTO background_tasks (id, agent_id, run_id, native_id, runtime, kind, label, started_at, status, ended_at, follow_up_run_id)
+			VALUES ($1, $2, $3, 'b1', 'claude-code', 'command', 'sleep 20', now(), $4, $5, $6)`, id, agent.ID, run, status, ended, follow)
+		return err
+	}
+	task := uuid.New()
+	if err := insertTask(task, runID, "completed", int64(1700000000000)); err != nil {
+		t.Fatal(err)
+	}
+	if err := insertTask(uuid.New(), nil, "running", nil); err == nil {
+		t.Fatal("a background task belongs to a run or a task turn")
+	}
+	if err := insertTask(uuid.New(), runID, "running", int64(1700000000000)); err == nil {
+		t.Fatal("a running task has no end")
+	}
+	if err := insertTask(uuid.New(), runID, "lost", int64(1700000000000)); err == nil {
+		t.Fatal("an unknown status is refused")
+	}
+	if _, err := d.Exec(ctx, `DELETE FROM runs WHERE id = $1`, follow); err != nil {
+		t.Fatal(err)
+	}
+	var followed *string
+	if err := d.QueryRow(ctx, `SELECT follow_up_run_id FROM background_tasks WHERE id = $1`, task).Scan(&followed); err != nil || followed != nil {
+		t.Fatalf("deleting the follow-up run clears the link: %v %v", followed, err)
+	}
+	if _, err := d.Exec(ctx, `DELETE FROM conversation_messages WHERE run_id = $1`, runID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(ctx, `DELETE FROM runs WHERE id = $1`, runID); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := d.QueryRow(ctx, `SELECT count(*) FROM background_tasks`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("a run's background tasks go with it: %d %v", n, err)
+	}
+	rows, err := d.Query(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("there should be no foreign key errors after the migration")
 	}
 }

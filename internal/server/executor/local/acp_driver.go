@@ -189,11 +189,7 @@ const (
 func (f acpFlavor) clientOptions(o Options) acp.Options {
 	opts := acp.Options{Kill: procgroup.Kill}
 	if f.background != nil {
-		wait := o.ACPBackgroundWait
-		if wait <= 0 {
-			wait = defaultACPBackgroundWait
-		}
-		opts.Background = &acp.Background{Holds: f.background, QuietLimit: wait, ReplyQuietLimit: acpReplyQuiet, Settle: acpSettle}
+		opts.Background = &acp.Background{Holds: f.background, ReplyQuietLimit: acpReplyQuiet, Settle: acpSettle}
 	}
 	return opts
 }
@@ -463,11 +459,36 @@ func acpEnv(env []string) []string {
 	return out
 }
 
-// attach passes on the usage the agent reports for each prompt.
+// attach passes on the usage the agent reports for each prompt, its background tasks and the prompts it runs by itself.
 func (ad acpDriver) attach(p *proc) {
 	if ap := acpOf(p); ap != nil {
 		ap.SetObserver(acpObserver{e: ad.e, p: p, f: ad.f})
+		ap.SetSelfTurns(func(about string) runturn.SelfTurn { return ad.e.selfTurnBegan(p, about) })
 	}
+}
+
+// stopBackground stops tasks with the agent's means: Grok kills each (_x.ai/task/kill); Antigravity has no means to
+// stop one, so session/cancel ends all of the session's background commands, each recorded with the reason of this
+// stop.
+func (ad acpDriver) stopBackground(ctx context.Context, p *proc, ids []string) error {
+	ap := acpOf(p)
+	if ap == nil || len(ids) == 0 {
+		return nil
+	}
+	if ad.f.background != nil {
+		reason := p.bgStopReason(ids[0])
+		for _, t := range ad.e.bgRunning(p) {
+			p.bgSetStopReason(t.ID, reason)
+		}
+		return ap.CancelBackground(ap.sessionID)
+	}
+	var errs []error
+	for _, id := range ids {
+		if err := ap.KillTask(ctx, ap.sessionID, id); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // acpObserver records the usage an ACP agent reports with each prompt's result as one model call of the turn. Only
@@ -480,7 +501,35 @@ type acpObserver struct {
 }
 
 func (o acpObserver) Usage(u acp.Usage) {
-	o.e.obs.Usage(o.p.agentID, o.p.curRun.Load(), o.f.usageRecord(u, o.p.provider, o.p.model))
+	o.e.usage(o.p, o.f.usageRecord(u, o.p.provider, o.p.model), true)
+}
+
+// TaskStarted lists a command the agent moved to the background, labelled with the command.
+func (o acpObserver) TaskStarted(t acp.Task) {
+	label := t.Command
+	if label == "" {
+		label = t.Description
+	}
+	if label == "" {
+		label = t.ID
+	}
+	o.e.bgStarted(o.p, executor.BackgroundTask{ID: t.ID, Kind: executor.BackgroundCommand, Label: label, ToolCallID: t.ToolCallID})
+}
+
+// TaskEnded records its end: failed with an exit code other than 0, else completed; killed is stopped, with the reason a stop was
+// asked for (none when the agent killed it by itself).
+func (o acpObserver) TaskEnded(t acp.TaskEnd) {
+	end := executor.BackgroundEnd{Status: executor.BackgroundCompleted, ExitCode: t.ExitCode, Output: t.Output}
+	switch {
+	case t.Killed || o.p.bgStopReason(t.ID) != "":
+		end.Status, end.StopReason = executor.BackgroundStopped, o.p.bgStopReason(t.ID)
+		if end.StopReason == "" && o.p.replyStopping.Load() {
+			end.StopReason = executor.StopReplyStopped // a reply's stop (session/cancel) ended it
+		}
+	case t.ExitCode != nil && *t.ExitCode != 0:
+		end.Status = executor.BackgroundFailed
+	}
+	o.e.bgEnded(o.p, t.ID, end)
 }
 
 // usageRecord is the usage record for what an ACP agent reports for a prompt: the input leaves out the cached part,

@@ -14,7 +14,8 @@ type InitializeResult struct {
 // Initialize opens the connection (initialize, then initialized). It does not ask for the experimental API.
 func (c *Client) Initialize(ctx context.Context, name, version string) (InitializeResult, error) {
 	var out InitializeResult
-	params := map[string]any{"clientInfo": map[string]any{"name": name, "title": name, "version": version}}
+	params := map[string]any{"clientInfo": map[string]any{"name": name, "title": name, "version": version},
+		"capabilities": map[string]any{"experimentalApi": true}}
 	if err := c.Call(ctx, "initialize", params, &out); err != nil {
 		return out, err
 	}

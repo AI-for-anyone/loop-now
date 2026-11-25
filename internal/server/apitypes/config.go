@@ -195,32 +195,36 @@ type AgentListItem struct {
 	Runtime       string             `json:"runtime"`
 	ConfigVersion int64              `json:"configVersion"`
 	Busy          bool               `json:"busy"`
-	SessionState  string             `json:"sessionState"`
-	CreatedAt     time.Time          `json:"createdAt"`
-	UpdatedAt     time.Time          `json:"updatedAt"`
+	// BackgroundTaskCount is how many background tasks run on the Agent's runtime process.
+	BackgroundTaskCount int       `json:"backgroundTaskCount"`
+	SessionState        string    `json:"sessionState"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 // Agent mirrors the Agent schema.
 type Agent struct {
-	ServiceTier     *string         `json:"serviceTier"`
-	ThinkingLevel   *string         `json:"thinkingLevel"`
-	ID              uuid.UUID       `json:"id"`
-	Scope           string          `json:"scope"`
-	ProjectID       *uuid.UUID      `json:"projectId"`
-	IsManager       bool            `json:"isManager"`
-	Name            string          `json:"name"`
-	Address         *string         `json:"address"`
-	Model           ModelRef        `json:"model"`
-	Runtime         string          `json:"runtime"`
-	Prompt          string          `json:"prompt"`
-	PromptVersion   int64           `json:"promptVersion"`
-	ConfigVersion   int64           `json:"configVersion"`
-	Busy            bool            `json:"busy"`
-	Session         SessionInfo     `json:"session"`
-	Clis            []AgentCli      `json:"clis"`
-	ModelCredential *CredentialMeta `json:"modelCredential"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
+	ServiceTier   *string    `json:"serviceTier"`
+	ThinkingLevel *string    `json:"thinkingLevel"`
+	ID            uuid.UUID  `json:"id"`
+	Scope         string     `json:"scope"`
+	ProjectID     *uuid.UUID `json:"projectId"`
+	IsManager     bool       `json:"isManager"`
+	Name          string     `json:"name"`
+	Address       *string    `json:"address"`
+	Model         ModelRef   `json:"model"`
+	Runtime       string     `json:"runtime"`
+	Prompt        string     `json:"prompt"`
+	PromptVersion int64      `json:"promptVersion"`
+	ConfigVersion int64      `json:"configVersion"`
+	Busy          bool       `json:"busy"`
+	// BackgroundTaskCount is how many background tasks run on the Agent's runtime process.
+	BackgroundTaskCount int             `json:"backgroundTaskCount"`
+	Session             SessionInfo     `json:"session"`
+	Clis                []AgentCli      `json:"clis"`
+	ModelCredential     *CredentialMeta `json:"modelCredential"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
 }
 
 // CredentialMeta mirrors the CredentialMeta schema.
@@ -326,13 +330,13 @@ func AgentAddress(a store.Agent) *string {
 func FromAgentListItem(a store.AgentListItem) AgentListItem {
 	return AgentListItem{Sleep: a.Sleep, SleepRevision: a.SleepRevision, ID: a.ID, Scope: ScopeOf(a.ProjectID), ProjectID: a.ProjectID, IsManager: a.IsManager,
 		Name: a.Name, Address: AgentAddress(a.Agent), Model: ModelRef{a.ModelProvider, a.ModelID}, Runtime: agentruntime.ForProvider(a.ModelProvider).ID, ConfigVersion: a.ConfigVersion, ThinkingLevel: a.ThinkingLevel, ServiceTier: a.ServiceTier,
-		Busy: a.Busy, SessionState: a.SessionState, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
+		Busy: a.Busy, BackgroundTaskCount: a.BackgroundTasks, SessionState: a.SessionState, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
 }
 
 // FromAgentDetail converts Agent details.
 func FromAgentDetail(d agentconfig.AgentDetail) Agent {
 	out := Agent{ID: d.Agent.ID, Scope: ScopeOf(d.Agent.ProjectID), ProjectID: d.Agent.ProjectID, IsManager: d.Agent.IsManager, Name: d.Agent.Name, Address: AgentAddress(d.Agent), Model: ModelRef{d.Agent.ModelProvider, d.Agent.ModelID}, Runtime: agentruntime.ForProvider(d.Agent.ModelProvider).ID,
-		Prompt: d.Agent.Prompt, PromptVersion: d.Agent.PromptVersion, ConfigVersion: d.Agent.ConfigVersion, Busy: d.Busy, ThinkingLevel: d.Agent.ThinkingLevel, ServiceTier: d.Agent.ServiceTier,
+		Prompt: d.Agent.Prompt, PromptVersion: d.Agent.PromptVersion, ConfigVersion: d.Agent.ConfigVersion, Busy: d.Busy, BackgroundTaskCount: d.BackgroundTasks, ThinkingLevel: d.Agent.ThinkingLevel, ServiceTier: d.Agent.ServiceTier,
 		Session: SessionInfo{State: d.Session.State, Epoch: d.Session.Epoch}, Clis: []AgentCli{},
 		ModelCredential: FromCredential(d.ModelCredential), CreatedAt: d.Agent.CreatedAt, UpdatedAt: d.Agent.UpdatedAt}
 	for _, c := range d.CLIs {
