@@ -6679,7 +6679,7 @@ paths:
   /tasks/{taskId}/events:
     {
       "get": {
-        "description": "Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes.",
+        "description": "Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes. task.node.background_tasks.updated fully replaces a node's running background tasks (same structure as GET …/nodes/{nodeRunId}/background-tasks) whenever one starts, ends or is asked to stop.",
         "operationId": "streamTaskEvents",
         "parameters": [
           {
@@ -6875,6 +6875,9 @@ paths:
           },
           "task.node.queue.updated": {
             "$ref": "#/components/schemas/TaskNodeQueue"
+          },
+          "task.node.background_tasks.updated": {
+            "$ref": "#/components/schemas/TaskNodeBackgroundTasks"
           }
         }
       }
@@ -8900,6 +8903,99 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TaskNodeQueueActionReceipt" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /tasks/{taskId}/nodes/{nodeRunId}/background-tasks:
+    parameters:
+      - { in: path, name: taskId, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: nodeRunId, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [tasks]
+      operationId: listTaskNodeBackgroundTasks
+      x-access: console
+      summary: The background tasks running for this node
+      description: |
+        The background tasks (see BackgroundTask) still running on the node's task instance that turns of this node
+        started, oldest first; task.node.background_tasks.updated on the task's event stream replaces the list whenever
+        one starts, ends or is asked to stop. A turn of a task instance waits for the background tasks it started and
+        for the runtime's reply after they end, so they run while the node's turn is still in progress.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The running list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskNodeBackgroundTasks" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskId}/nodes/{nodeRunId}/background-tasks/{backgroundTaskId}/stop:
+    parameters:
+      - { in: path, name: taskId, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: nodeRunId, required: true, schema: { type: string, format: uuid } }
+      - name: backgroundTaskId
+        in: path
+        required: true
+        description: BackgroundTask.id
+        schema: { type: string, minLength: 1 }
+    post:
+      tags: [tasks]
+      operationId: stopTaskNodeBackgroundTask
+      x-access: console
+      summary: Stop one background task of this node
+      description: |
+        As POST /agents/{agentId}/background-tasks/{backgroundTaskId}/stop, for a task the node's turns started; the
+        node's turn goes on (and ends once nothing else holds it). 404 `background_task_not_found` when the node has no
+        task with this id; 409 `background_task_ended` (details BackgroundTaskEndedDetails) when it has already ended;
+        409 `task_conflict` when expectedAgentId or expectedRuntimeId no longer match the node, as for stopping the
+        node's reply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskNodeQueueActionInput" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The task after the stop was asked for
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackgroundTask" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /tasks/{taskId}/nodes/{nodeRunId}/background-tasks/stop:
+    parameters:
+      - { in: path, name: taskId, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: nodeRunId, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [tasks]
+      operationId: stopAllTaskNodeBackgroundTasks
+      x-access: console
+      summary: Stop all background tasks of this node
+      description: |
+        As stopping one, for every task of this node running when the request arrives; the node's turn goes on. With none
+        running it returns an empty list; 409 `task_conflict` when expectedAgentId or expectedRuntimeId no longer match.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskNodeQueueActionInput" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The tasks that were running, after the stop was asked for
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackgroundTaskList" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -19108,6 +19204,19 @@ components:
           description: One entry per message, in the order the server actually picks them up (by the turn's priority and queue_seq, then by send order within a turn); kind is always inbox, and runId is the turn that carries it
           type: array
           items: { $ref: "#/components/schemas/QueueItem" }
+
+    TaskNodeBackgroundTasks:
+      type: object
+      additionalProperties: false
+      required: [taskId, nodeRunId, runtimeId, tasks]
+      properties:
+        taskId: { type: string, format: uuid }
+        nodeRunId: { type: string, format: uuid }
+        runtimeId: { type: string, format: uuid }
+        tasks:
+          description: Running background tasks that turns of this node started, oldest first
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
 
     TaskNodeQueueActionInput:
       type: object
