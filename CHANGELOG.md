@@ -4,6 +4,15 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
+## Unreleased
+
+### Write with AI
+
+- Every Prompt has a "Write with AI" button: the Prompt of a new Agent, an Agent's Prompt on its config page, and a project's Prompt. Say in a line what the Agent (or the project) should do; the draft replaces the text in the box, Undo brings the old text back, and nothing is saved until you save as before. With text already in the box, the request may be left empty to have it improved.
+- Settings has a new section, "Writing with AI", that says who writes. Automatic, the default, takes the first CLI on this computer that is ready (Claude Code, Codex, Antigravity, Grok, then your own ACP commands) and a small, quick model of it. You can choose one instead; when it is not ready, the draft says who wrote it instead.
+- Each draft runs that CLI once with its own login on this computer, in an empty temporary folder, without tools, plugins or MCP servers, and leaves nothing in the CLI's history. No Agent is created. The bundled Pi does not write: its keys belong to a project or an Agent.
+- API: `GET`/`PUT /text-generation-settings` and `POST /prompt-drafts`; new error codes `text_generation_unavailable` and `text_generation_failed`.
+
 ## v0.3.0
 
 Antigravity works as it should: commands that printed output no longer stay "in progress" (the same fix covers Grok and local ACP commands), a reply waits for the commands Antigravity runs in the background and shows what it says about them afterwards, and its models have thinking levels. In the desktop app, path fields have a "Choose…" button that opens the system's dialog.

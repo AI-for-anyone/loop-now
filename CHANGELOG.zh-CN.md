@@ -4,6 +4,15 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
+## 未发布
+
+### AI 帮写
+
+- 每个 Prompt 旁边都有「AI 帮写」按钮：新建 Agent 时的 Prompt、Agent 配置页里的 Prompt、项目的 Prompt。用一句话说想让 Agent（或项目）做什么，写好的内容会替换框里的文字，点“撤销”能换回原来的；不点保存就不会存下来，保存方式和以前一样。框里已经有内容时，要求可以不填，直接让它改得更好。
+- 设置里新增「AI 帮写」一节，用来选由谁来写。默认是“自动”：用这台电脑上第一个能用的 CLI（Claude Code、Codex、Antigravity、Grok，然后是你自己添加的 ACP 命令），挑它一个又小又快的模型。也可以自己选一个；选的那个暂时用不了时，结果里会说明这次改由谁写的。
+- 每次写都只运行那个 CLI 一次，用它在这台电脑上自己的登录，在一个空的临时文件夹里运行，不用工具、插件和 MCP 服务，也不在 CLI 的历史里留下记录。不会新建 Agent。内置的 Pi 不能用来写：它的 key 属于某个项目或 Agent。
+- 接口：`GET`/`PUT /text-generation-settings` 和 `POST /prompt-drafts`；新增错误码 `text_generation_unavailable` 和 `text_generation_failed`。
+
 ## v0.3.0
 
 Antigravity 用起来正常了：打印了输出的命令不再一直显示“进行中”（Grok 和自己添加的 ACP 命令也一起修好了），回复会等 Antigravity 放到后台的命令跑完，并显示它之后说的话；它的模型也有了思考等级。桌面版的路径输入框旁有了“选择…”按钮，会打开系统自己的选择窗口。
