@@ -471,6 +471,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.Executor.CleanupStaleExceptPending(ctx, protectedLark); err != nil {
 		return a, err
 	}
+	// Background tasks do not outlive the runtime processes of an earlier server: those still recorded as running become
+	// unknown.
+	if err = tasks.ReconcileBackgroundTasks(ctx, a.Store, time.Now()); err != nil {
+		return a, err
+	}
 	// State directories of plugin provider subscription accounts: at startup, delete versions that are no longer needed
 	// and the staging directories of logins that did not finish last time.
 	a.sweepProviderStates(ctx, true)
@@ -490,6 +495,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	a.Tasks.Coord = a.Coord
 	recorder.StatusChanged = a.Conv.EmitAgentStatus
+	recorder.BackgroundChanged = a.Conv.BackgroundChanged
+	a.Executor.SetFollowUps(a.Conv)
 	a.Config.AgentChanged = a.Conv.EmitAgentStatus
 	if err = a.configureCLIImport(ctx, cfg, o, templates, res.WorkRoot); err != nil {
 		return a, err

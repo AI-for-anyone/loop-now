@@ -257,6 +257,7 @@ func (s *Service) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 type AgentDetail struct {
 	Agent           store.Agent
 	Busy            bool
+	BackgroundTasks int // how many background tasks run on the Agent's runtime process
 	Session         store.AgentSession
 	CLIs            []CLIView
 	ModelCredential *CredentialView
@@ -294,6 +295,9 @@ func (s *Service) GetAgentDetail(ctx context.Context, id uuid.UUID) (AgentDetail
 		return d, err
 	}
 	if d.Busy, err = s.Store.AgentBusy(ctx, id); err != nil {
+		return d, err
+	}
+	if d.BackgroundTasks, err = s.Store.BackgroundTaskCount(ctx, id); err != nil {
 		return d, err
 	}
 	d.CLIs, d.ModelCredential, err = s.credentialViews(ctx, id)

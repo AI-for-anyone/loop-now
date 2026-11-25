@@ -124,10 +124,12 @@ func TestBuildDescribesTurns(t *testing.T) {
 	reminder.Origin = "inbox_reminder"
 	wake := msg("user", "Your sleep is over")
 	wake.Origin = "sleep_wake"
-	all := []contexthandoff.Message{pictured, failed, reminder, stopped, wake, tools}
+	ended := msg("user", "Platform notice: background task \"make test\" (completed) ended")
+	ended.Origin = "background"
+	all := []contexthandoff.Message{pictured, failed, reminder, stopped, wake, ended, tools}
 	block := contexthandoff.Build(all, "Claude Code", "Pi", contexthandoff.DefaultBudget)
 	for _, want := range []string{"partial answer before the error", "failed", "interrupted", "bash ×3 (1 failed)", "read ×1",
-		"2 images not carried", "platform reminder", "sleep wake-up"} {
+		"2 images not carried", "platform reminder", "sleep wake-up", "user, background work ended"} {
 		if !strings.Contains(block.Text, want) {
 			t.Fatalf("the block lacks %q:\n%s", want, block.Text)
 		}

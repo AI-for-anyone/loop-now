@@ -53,6 +53,78 @@ type Run struct {
 	Selection *RunSelection `json:"selection"`
 	// ContextHandoff is set only on a turn that carried the saved conversation over to a new runtime.
 	ContextHandoff *ContextHandoff `json:"contextHandoff,omitempty"`
+	// BackgroundTasks are the background tasks the run started; TriggerBackgroundTasks, only on a reply the CLI gave by
+	// itself (origin background), the tasks whose end it followed.
+	BackgroundTasks        []BackgroundTask `json:"backgroundTasks"`
+	TriggerBackgroundTasks []BackgroundTask `json:"triggerBackgroundTasks,omitempty"`
+}
+
+// BackgroundTask mirrors the BackgroundTask schema.
+type BackgroundTask struct {
+	ID              string     `json:"id"`
+	Runtime         string     `json:"runtime"`
+	Kind            string     `json:"kind"`
+	Label           string     `json:"label"`
+	RunID           uuid.UUID  `json:"runId"`
+	ToolCallID      *string    `json:"toolCallId"`
+	StartedAt       time.Time  `json:"startedAt"`
+	Status          string     `json:"status"`
+	EndedAt         *time.Time `json:"endedAt"`
+	ExitCode        *int64     `json:"exitCode"`
+	StopReason      *string    `json:"stopReason"`
+	StopRequestedAt *time.Time `json:"stopRequestedAt"`
+	Output          *string    `json:"output"`
+}
+
+// FromBackgroundTask converts a stored background task; runId is the run or task turn that started it.
+func FromBackgroundTask(t store.BackgroundTask) BackgroundTask {
+	out := BackgroundTask{ID: t.NativeID, Runtime: t.Runtime, Kind: t.Kind, Label: t.Label, ToolCallID: t.ToolCallID, StartedAt: t.StartedAt,
+		Status: t.Status, EndedAt: t.EndedAt, ExitCode: t.ExitCode, StopReason: t.StopReason, StopRequestedAt: t.StopRequestedAt, Output: t.Output}
+	switch {
+	case t.RunID != nil:
+		out.RunID = *t.RunID
+	case t.TaskTurnID != nil:
+		out.RunID = *t.TaskTurnID
+	}
+	return out
+}
+
+// SseBackgroundTasksUpdated mirrors the SseBackgroundTasksUpdated schema.
+type SseBackgroundTasksUpdated struct {
+	Tasks []BackgroundTask `json:"tasks"`
+}
+
+// TaskNodeBackgroundTasks mirrors the TaskNodeBackgroundTasks schema.
+type TaskNodeBackgroundTasks struct {
+	TaskID    uuid.UUID        `json:"taskId"`
+	NodeRunID uuid.UUID        `json:"nodeRunId"`
+	RuntimeID uuid.UUID        `json:"runtimeId"`
+	Tasks     []BackgroundTask `json:"tasks"`
+}
+
+// BackgroundTaskEndedDetails mirrors the BackgroundTaskEndedDetails schema.
+type BackgroundTaskEndedDetails struct {
+	Task BackgroundTask `json:"task"`
+}
+
+// Operations of stopping background tasks (agent_actions.operation).
+const (
+	BackgroundStopOne = "stop_background_task"
+	BackgroundStopAll = "stop_all_background_tasks"
+)
+
+// BackgroundTaskList mirrors the BackgroundTaskList schema.
+type BackgroundTaskList struct {
+	Tasks []BackgroundTask `json:"tasks"`
+}
+
+// FromBackgroundTasks converts a list; never nil.
+func FromBackgroundTasks(ts []store.BackgroundTask) []BackgroundTask {
+	out := make([]BackgroundTask, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, FromBackgroundTask(t))
+	}
+	return out
 }
 
 // RunSelection mirrors the RunSelection schema.
@@ -127,6 +199,10 @@ type AgentStatus struct {
 	ProcessPID       *int               `json:"processPid"`
 	ProcessStartedAt *time.Time         `json:"processStartedAt"`
 	Session          SessionInfo        `json:"session"`
+	// BackgroundTasks are the background tasks running on the Agent's runtime process, oldest first;
+	// RestartOnNextMessage says that, while they run, the next message restarts the process (which stops them).
+	BackgroundTasks      []BackgroundTask `json:"backgroundTasks"`
+	RestartOnNextMessage bool             `json:"restartOnNextMessage"`
 }
 
 // AgentBusyDetails mirrors the AgentBusyDetails schema. CurrentRunID is the run in progress, or the earliest queued run
@@ -158,6 +234,8 @@ const (
 	EventRunEnded       = "run.ended"
 	EventSessionUpdated = "session.updated"
 	EventQueueUpdated   = "queue.updated"
+	// EventBackgroundTasksUpdated carries the Agent's running background tasks (SseBackgroundTasksUpdated).
+	EventBackgroundTasksUpdated = "background_tasks.updated"
 )
 
 // SseSnapshot mirrors the SseSnapshot schema.
@@ -327,6 +405,10 @@ func FromRun(r store.Run) Run {
 	}
 	for _, t := range r.Tools {
 		out.Tools = append(out.Tools, ToolEvent{ToolCallID: t.ToolCallID, ToolName: t.ToolName, State: t.State, At: t.At})
+	}
+	out.BackgroundTasks = FromBackgroundTasks(r.BackgroundTasks)
+	if r.Origin == executor.OriginBackground {
+		out.TriggerBackgroundTasks = FromBackgroundTasks(r.TriggerBackgroundTasks)
 	}
 	return out
 }

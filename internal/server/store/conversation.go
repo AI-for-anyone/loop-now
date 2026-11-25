@@ -57,6 +57,10 @@ type Run struct {
 	Tools          []ToolEvent
 	Usage          UsageTotals
 	Model          *ModelRef // provider and model of the last assistant call; nil when there is none
+	// BackgroundTasks are the background tasks the run started; TriggerBackgroundTasks, on a reply the CLI gave by
+	// itself, the tasks whose end it followed (nil for other runs). Both are filled with tools and usage.
+	BackgroundTasks        []BackgroundTask
+	TriggerBackgroundTasks []BackgroundTask
 }
 
 // ToolEvent is the status record of one tool call (without arguments or output).
@@ -112,7 +116,7 @@ func runFields(r *Run) []any {
 func scanRun(row db.Scanner) (Run, error) {
 	var r Run
 	err := row.Scan(runFields(&r)...)
-	r.Tools = []ToolEvent{}
+	r.Tools, r.BackgroundTasks = []ToolEvent{}, []BackgroundTask{}
 	return r, err
 }
 
@@ -180,7 +184,8 @@ func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun)
 			return apperr.Conflict(apperr.CodeSessionMissing, "The session file is missing. Confirm reopening the session in the console first.")
 		}
 		status, priority := "queued", 1
-		if in.WhenBusy == "interrupt" {
+		if in.WhenBusy == "interrupt" || in.Origin == "background" {
+			// A reply the CLI gives by itself goes first: the CLI is giving it now.
 			priority = 0
 		}
 		var startedAt *time.Time

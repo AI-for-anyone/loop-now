@@ -106,6 +106,9 @@ type Options struct {
 	// GrokBin and AntigravityBin are the grok and agy executables; empty means look them up on the PATH of the user's
 	// login shell (UserPath).
 	GrokBin, AntigravityBin string
+	// BackgroundStopWait is how long stopping background tasks waits for the runtime to report their end before
+	// returning them as they are; 0 means 3 seconds.
+	BackgroundStopWait time.Duration
 	// ACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
 	// prompt has returned) may hear nothing from the agent before it ends; 0 means 30 minutes.
 	ACPBackgroundWait time.Duration
@@ -143,6 +146,8 @@ type Executor struct {
 	pending  map[uuid.UUID]int
 	closedCh chan struct{}
 	claude   *claudecli.Probe // cache of claude's version and session record directory
+	// followUps turns the replies a CLI gives by itself into runs (see SetFollowUps); nil until set.
+	followUps atomic.Pointer[executor.FollowUpHost]
 }
 
 type proc struct {
@@ -185,6 +190,7 @@ type proc struct {
 	revokeErr           error
 	stopDone            chan struct{}
 	stopErr             error
+	bg                  procBackground // the background tasks its CLI started
 }
 
 type run struct {
@@ -257,6 +263,10 @@ func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Ins
 		procs: map[uuid.UUID]*proc{}, runs: map[uuid.UUID]*run{}, handoffs: map[uuid.UUID]*RuntimeHandoff{},
 		live: map[*proc]struct{}{}, pending: map[uuid.UUID]int{}, closedCh: make(chan struct{}), claude: &claudecli.Probe{}}
 }
+
+// SetFollowUps sets who turns the replies a runtime's CLI gives by itself (after background tasks ended) into runs; it
+// is set once the conversation service exists. Until then such replies are dropped.
+func (e *Executor) SetFollowUps(h executor.FollowUpHost) { e.followUps.Store(&h) }
 
 func (e *Executor) event(agentID uuid.UUID, runID *uuid.UUID, typ string, data map[string]any) {
 	if runID != nil && *runID == uuid.Nil {

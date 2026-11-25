@@ -24,6 +24,9 @@ type Recorder struct {
 	Log   *slog.Logger
 	// StatusChanged is called after the Agent's process state changes, to push the overview; may be nil.
 	StatusChanged func(agentID uuid.UUID)
+	// BackgroundChanged is called after a background task of the Agent was kept (it started, ended or a stop was asked
+	// for), with the run that started it; may be nil.
+	BackgroundChanged func(agentID, runID uuid.UUID)
 }
 
 var _ executor.Observer = (*Recorder)(nil)

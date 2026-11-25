@@ -24,6 +24,10 @@ func TestCapabilitiesMatchDrivers(t *testing.T) {
 		_, lists := drv.(sessionLister)
 		_, commands := drv.(nativeCommander)
 		_, writes := drv.(textWriter)
+		acp, isACP := drv.(acpDriver)
+		if kills := isACP && acp.f.killOnStop; rt.Capabilities.StopEndsBackgroundTasks != kills {
+			t.Errorf("%s: stopEndsBackgroundTasks is %v, but a stop ends the process: %v", rt.ID, rt.Capabilities.StopEndsBackgroundTasks, kills)
+		}
 		if (rt.TextGeneration != nil) != writes {
 			t.Errorf("%s: writes texts in the registry %v, the driver implements it: %v", rt.ID, rt.TextGeneration != nil, writes)
 		}

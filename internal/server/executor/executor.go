@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -67,6 +68,125 @@ const (
 // OriginConsoleCompact is a manual compaction from the console; it uses a real run but produces no conversation
 // message.
 const OriginConsoleCompact = "console_compact"
+
+// OriginBackground is a reply the runtime's CLI gave by itself after background work it started had ended. Its run sends
+// nothing to the runtime: the executor records the reply the CLI is giving (or gave) as this run.
+const OriginBackground = "background"
+
+// OutcomeMerged is the outcome of a run of origin background whose reply went into another run (the person's message
+// that was starting when the CLI began it); the run did nothing.
+const OutcomeMerged = "merged"
+
+// Background task kinds, statuses and stop reasons, matching BackgroundTask in the OpenAPI spec.
+const (
+	BackgroundCommand  = "command"
+	BackgroundSubagent = "subagent"
+	BackgroundOther    = "other"
+
+	BackgroundRunning   = "running"
+	BackgroundCompleted = "completed"
+	BackgroundFailed    = "failed"
+	BackgroundStopped   = "stopped"
+	BackgroundUnknown   = "unknown"
+
+	StopByPerson        = "person"
+	StopReplyStopped    = "reply_stopped"
+	StopSettingsChanged = "settings_changed"
+	StopRuntimeSwitched = "runtime_switched"
+	StopSessionReset    = "session_reset"
+	StopAgentDeleted    = "agent_deleted"
+	StopTaskStarted     = "task_started"
+	StopShutdown        = "shutdown"
+	StopTaskLimit       = "task_limit"
+)
+
+// BackgroundStopReasons are all the reasons a background task can be stopped for; BackgroundTask.stopReason in openapi
+// must list them all (checked by the api contract test).
+var BackgroundStopReasons = []string{StopByPerson, StopReplyStopped, StopSettingsChanged, StopRuntimeSwitched, StopSessionReset,
+	StopAgentDeleted, StopTaskStarted, StopShutdown, StopTaskLimit}
+
+// BackgroundOutputLimit is how many bytes of the end of a background task's output are kept; BackgroundLabelLimit is how
+// many characters of its label.
+const (
+	BackgroundOutputLimit = 4096
+	BackgroundLabelLimit  = 4096
+)
+
+// BackgroundTask is work the runtime's CLI started in the background during a reply that outlives the reply. Key
+// identifies its record (made when it starts); ID is the runtime's own id; RunID is the run (for a task instance, the
+// task turn) that started it.
+type BackgroundTask struct {
+	Key             uuid.UUID
+	ID              string
+	Runtime         string
+	Kind            string
+	Label           string
+	RunID           uuid.UUID
+	ToolCallID      string
+	StartedAt       time.Time
+	Status          string
+	EndedAt         *time.Time
+	ExitCode        *int64
+	StopReason      string
+	StopRequestedAt *time.Time
+	Output          *string
+}
+
+// BackgroundEnd is how a background task ended.
+type BackgroundEnd struct {
+	Status     string // completed / failed / stopped / unknown
+	ExitCode   *int64
+	StopReason string
+	Output     *string
+}
+
+// TailOutput returns the last BackgroundOutputLimit bytes of output, cut at a character boundary.
+func TailOutput(output string) string {
+	if len(output) <= BackgroundOutputLimit {
+		return output
+	}
+	cut := len(output) - BackgroundOutputLimit
+	for cut < len(output) && !utf8.RuneStart(output[cut]) {
+		cut++
+	}
+	return output[cut:]
+}
+
+// ClipLabel returns label cut to BackgroundLabelLimit characters.
+func ClipLabel(label string) string {
+	if utf8.RuneCountInString(label) <= BackgroundLabelLimit {
+		return label
+	}
+	return string([]rune(label)[:BackgroundLabelLimit])
+}
+
+// BackgroundObserver is an Observer that also keeps background tasks: the executor reports a task when it starts, when
+// a stop is asked for and when it ends (the first end reported is its end). agentID is the executor's Agent (for a task
+// instance, its runtime id).
+type BackgroundObserver interface {
+	BackgroundTask(agentID uuid.UUID, t BackgroundTask)
+}
+
+// Expected failures of stopping background tasks.
+var (
+	// ErrBackgroundNotFound: no task with this id runs on the Agent's runtime process.
+	ErrBackgroundNotFound = errors.New("no such background task is running")
+)
+
+// BackgroundStopper is implemented by executors whose runtimes start background tasks. StopBackground stops one of the
+// Agent's running tasks (ErrBackgroundNotFound when none with this id runs), StopAllBackground every one; both return
+// the tasks as they are after the stop was asked for, waiting a little for the runtime to confirm the end.
+type BackgroundStopper interface {
+	StopBackground(ctx context.Context, agentID uuid.UUID, id, reason string) (BackgroundTask, error)
+	StopAllBackground(ctx context.Context, agentID uuid.UUID, reason string) ([]BackgroundTask, error)
+}
+
+// FollowUpHost turns the replies a runtime's CLI gives by itself into runs. FollowUp is called (on its own goroutine)
+// when the CLI of a regular Agent begins such a reply: the host creates a run of origin background for it, whose
+// Execute then records the reply; triggers are the background tasks whose end the reply follows.
+type FollowUpHost interface {
+	FollowUp(agentID uuid.UUID, triggers []BackgroundTask)
+}
 
 // TaskStartHandoff is what a task instance of a runtime that cannot copy the regular session starts from (its baseline
 // file, snapshot ForkSessionFile): the regular conversation as it was when the task started, as a handoff block that

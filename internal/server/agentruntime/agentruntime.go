@@ -74,6 +74,9 @@ type Capabilities struct {
 	PluginExtensions bool `json:"pluginExtensions"`
 	// Bundled: ships with the platform; no install or login check on this computer.
 	Bundled bool `json:"bundled"`
+	// StopEndsBackgroundTasks: stopping a reply ends the runtime's process, and with it the background tasks its CLI
+	// started.
+	StopEndsBackgroundTasks bool `json:"stopEndsBackgroundTasks"`
 	// SessionCommands lists which of SessionCommands work.
 	SessionCommands []string `json:"-"`
 	// TaskFork: a task instance can start from a copy of the regular session.
@@ -271,7 +274,7 @@ var registry = []Runtime{
 		ID:             Grok,
 		Name:           "Grok",
 		Providers:      []string{GrokProvider},
-		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true},
 		Setup:          grokSetup,
 		MinVersion:     "1.0.88",
 		TextGeneration: &TextGeneration{Rank: 4},

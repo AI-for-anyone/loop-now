@@ -146,6 +146,8 @@ const (
 	TimelineModelRateLimit    = "model_rate_limit"
 	TimelineContextHandoff    = "context_handoff"
 	TimelineBackgroundWait    = "background_wait_timeout"
+	TimelineBackgroundStarted = "background_task_started"
+	TimelineBackgroundEnded   = "background_task_ended"
 )
 
 // TimelineBase holds the fields every entry has.
@@ -354,6 +356,25 @@ type TimelineContextHandoffEntry struct {
 type TimelineBackgroundWaitTimeoutEntry struct {
 	TimelineBase
 	LimitMs int64 `json:"limitMs"`
+}
+
+// TimelineBackgroundTaskStartedEntry mirrors the TimelineBackgroundTaskStarted schema.
+type TimelineBackgroundTaskStartedEntry struct {
+	TimelineBase
+	TaskID     string  `json:"taskId"`
+	Kind       string  `json:"kind"`
+	Label      string  `json:"label"`
+	ToolCallID *string `json:"toolCallId"`
+}
+
+// TimelineBackgroundTaskEndedEntry mirrors the TimelineBackgroundTaskEnded schema.
+type TimelineBackgroundTaskEndedEntry struct {
+	TimelineBase
+	TaskID     string  `json:"taskId"`
+	Status     string  `json:"status"`
+	ExitCode   *int64  `json:"exitCode"`
+	StopReason *string `json:"stopReason"`
+	Output     *string `json:"output"`
 }
 
 // TimelineSleepEntry exposes the persistent sleep transition, never its internal scheduling fields.
