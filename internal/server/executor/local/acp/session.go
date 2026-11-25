@@ -197,6 +197,9 @@ type turn struct {
 	// the agent last began a reply, so a reply is to come. last is when the agent last sent anything.
 	settled, replying, expecting bool
 	last                         time.Time
+	// self is the id of the prompt the agent runs by itself that this turn is; end is told how it ended.
+	self string
+	end  func(runturn.Result)
 }
 
 // openTool is a tool call that has started and not ended; holds: it keeps the turn open after the prompt (see
@@ -222,6 +225,19 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 	if c.closed {
 		c.mu.Unlock()
 		return runturn.Result{}, ErrExited
+	}
+	c.session = sessionID
+	if c.turn != nil && c.turn.self != "" {
+		// The agent runs a prompt of its own: this one only starts after it. Wait for it to end, so its output is not
+		// taken for the reply to this one.
+		self := c.turn
+		c.mu.Unlock()
+		select {
+		case <-self.done:
+		case <-ctx.Done():
+			return runturn.Result{}, ctx.Err()
+		}
+		return c.Prompt(ctx, sessionID, text, sink, images...)
 	}
 	if c.turn != nil {
 		c.mu.Unlock()
@@ -562,9 +578,13 @@ func (t *turn) finish(outcome runturn.Outcome, code, msg string) {
 		}
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.result = runturn.Result{Outcome: outcome, Text: t.text.String(), ErrorCode: code, ErrorMessage: msg}
+	result := t.result
 	close(t.done)
+	t.mu.Unlock()
+	if t.end != nil {
+		t.end(result)
+	}
 }
 
 func rpcMessage(err error) string {

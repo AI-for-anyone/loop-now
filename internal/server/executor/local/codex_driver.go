@@ -556,6 +556,44 @@ func (o codexObserver) RateLimit(info map[string]any, inTurn bool) {
 	o.e.event(o.p.agentID, o.runID(inTurn), store.EventModelRateLimit, map[string]any{"info": info})
 }
 
+// CommandBackgrounded lists a command still running when its turn completed (Codex gives no follow-up turn for it).
+func (o codexObserver) CommandBackgrounded(c codexapp.Command) {
+	label := c.Command
+	if label == "" {
+		label = c.ItemID
+	}
+	o.e.bgStarted(o.p, executor.BackgroundTask{ID: c.ItemID, Kind: executor.BackgroundCommand, Label: label, ToolCallID: c.ItemID})
+}
+
+// CommandEnded records its end: completed with exit code 0, failed otherwise; stopped when a stop was asked for.
+func (o codexObserver) CommandEnded(c codexapp.Command, status string, exitCode *int64, output *string) {
+	end := executor.BackgroundEnd{Status: executor.BackgroundCompleted, ExitCode: exitCode, Output: output}
+	if status == "failed" || status == "declined" || exitCode != nil && *exitCode != 0 {
+		end.Status = executor.BackgroundFailed
+	}
+	if reason := o.p.bgStopReason(c.ItemID); reason != "" {
+		end.Status, end.StopReason = executor.BackgroundStopped, reason
+	}
+	o.e.bgEnded(o.p, c.ItemID, end)
+}
+
+// stopBackground terminates each command (thread/backgroundTerminals/terminate).
+func (codexDriver) stopBackground(ctx context.Context, p *proc, ids []string) error {
+	cp := codexOf(p)
+	if cp == nil {
+		return nil
+	}
+	var errs []error
+	for _, id := range ids {
+		if ok, err := cp.TerminateCommand(ctx, id); err != nil {
+			errs = append(errs, err)
+		} else if !ok {
+			errs = append(errs, fmt.Errorf("codex did not terminate command %s", id))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // codexTextConfig are the -c overrides of a Codex text run: no plugins, apps or connectors and no hooks, besides not
 // reading the user's config.toml at all (--ignore-user-config; the login is still found through CODEX_HOME).
 var codexTextConfig = []string{"features.plugins=false", "features.apps=false", "features.connectors=false",

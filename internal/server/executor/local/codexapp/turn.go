@@ -62,6 +62,7 @@ type turn struct {
 	lastMessage     string          // the agent message item text was last streamed for
 	streamed        map[string]bool // agent message items that streamed deltas
 	tools           map[string]string
+	commands        map[string]Command // command items in progress, by item id
 	failure         *TurnError
 }
 
@@ -89,7 +90,7 @@ func (c *Client) Compact(ctx context.Context, threadID string) (runturn.Result, 
 }
 
 func (c *Client) runTurn(ctx context.Context, threadID string, sink runturn.Sink, method string, params map[string]any) (runturn.Result, error) {
-	t := &turn{c: c, sink: sink, threadID: threadID, done: make(chan struct{}), streamed: map[string]bool{}, tools: map[string]string{}}
+	t := &turn{c: c, sink: sink, threadID: threadID, done: make(chan struct{}), streamed: map[string]bool{}, tools: map[string]string{}, commands: map[string]Command{}}
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -305,6 +306,11 @@ func (t *turn) item(raw json.RawMessage, completed bool) {
 	if !completed {
 		t.mu.Lock()
 		t.tools[id] = name
+		if kind == "commandExecution" {
+			command, _ := item["command"].(string)
+			pid, _ := item["processId"].(string)
+			t.commands[id] = Command{ItemID: id, Command: command, ProcessID: pid}
+		}
 		t.mu.Unlock()
 		t.sink.ToolStarted(id, name)
 		if command, _ := item["command"].(string); command != "" {
@@ -316,6 +322,10 @@ func (t *turn) item(raw json.RawMessage, completed bool) {
 		}
 		return
 	}
+	t.mu.Lock()
+	delete(t.tools, id)
+	delete(t.commands, id)
+	t.mu.Unlock()
 	status, _ := item["status"].(string)
 	failed := status == "failed" || status == "declined"
 	if code, ok := item["exitCode"].(float64); ok && code != 0 {
@@ -328,6 +338,7 @@ func (t *turn) item(raw json.RawMessage, completed bool) {
 }
 
 func (t *turn) completed(status string, turnErr *TurnError) {
+	t.background()
 	t.mu.Lock()
 	if t.finished {
 		t.mu.Unlock()
@@ -357,6 +368,33 @@ func (t *turn) completed(status string, turnErr *TurnError) {
 			}
 		}
 		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, Text: text, ErrorCode: code, ErrorMessage: msg})
+	}
+}
+
+// background hands the commands still running as the turn completes over to the client: their ends come later, with
+// no turn, and go to this turn's sink. Each is reported as running in the background.
+func (t *turn) background() {
+	t.mu.Lock()
+	var moved []*bgCommand
+	for id, cmd := range t.commands {
+		moved = append(moved, &bgCommand{Command: cmd, threadID: t.threadID, name: t.tools[id], sink: t.sink})
+		delete(t.commands, id)
+		delete(t.tools, id)
+	}
+	t.mu.Unlock()
+	if len(moved) == 0 || t.sink == nil {
+		return
+	}
+	t.c.mu.Lock()
+	for _, b := range moved {
+		t.c.background[b.ItemID] = b
+	}
+	obs := t.c.observer
+	t.c.mu.Unlock()
+	if bo, ok := obs.(BackgroundObserver); ok {
+		for _, b := range moved {
+			bo.CommandBackgrounded(b.Command)
+		}
 	}
 }
 

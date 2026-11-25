@@ -106,6 +106,10 @@ type Client struct {
 	loading  *loading
 	closed   bool
 	observer Observer
+	// selfTurns receives the prompts the agent runs by itself; session is the session the client runs (set by its
+	// first prompt), whose background tasks and own prompts count.
+	selfTurns func() runturn.SelfTurn
+	session   string
 
 	done    chan struct{}
 	exitErr error
@@ -257,6 +261,8 @@ func (c *Client) handle(line []byte) {
 	case m.Method != "":
 		if m.Method == "session/update" {
 			c.update(m.Params)
+		} else if strings.HasPrefix(m.Method, "_x.ai/") {
+			c.xai(m.Method, m.Params)
 		}
 	case m.ID != nil:
 		var id int64

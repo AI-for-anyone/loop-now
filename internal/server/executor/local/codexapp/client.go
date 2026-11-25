@@ -1,6 +1,7 @@
 // Package codexapp drives `codex app-server`, the protocol the local Codex CLI offers to applications: JSON-RPC 2.0
-// over stdio, one JSON message per line. Only methods of the stable protocol are used (initialize does not ask for
-// the experimental API). One process holds one thread (a conversation) at a time: a turn sends the message with
+// over stdio, one JSON message per line. Methods of the stable protocol are used, and one of the experimental API,
+// which initialize asks for: thread/backgroundTerminals/terminate, the only way to stop a command Codex runs in the
+// background. One process holds one thread (a conversation) at a time: a turn sends the message with
 // turn/start and reads notifications until turn/completed. Requests the server sends to the client (approvals, user
 // input, elicitation) are answered at once, so a turn never waits for a person. Unknown notifications and unknown
 // fields are ignored.
@@ -52,6 +53,73 @@ type Observer interface {
 	RateLimit(info map[string]any, inTurn bool)
 }
 
+// BackgroundObserver is an Observer that also hears of commands that outlive their turn: Codex completes a turn while a
+// command it started still runs, and reports the command's end later, with no turn of its own.
+type BackgroundObserver interface {
+	// CommandBackgrounded is a command still running when its turn completed.
+	CommandBackgrounded(c Command)
+	// CommandEnded is its end: Codex's status (completed, failed, declined), exit code and output, when given.
+	CommandEnded(c Command, status string, exitCode *int64, output *string)
+}
+
+// Command is a command item: its id (the tool call's), the command line and Codex's id of its process.
+type Command struct {
+	ItemID, Command, ProcessID string
+}
+
+// bgCommand is a command running in the background: its end goes to the sink of the turn that started it.
+type bgCommand struct {
+	Command
+	threadID, name string
+	sink           runturn.Sink
+}
+
+// TerminateCommand stops a command running in the background (thread/backgroundTerminals/terminate) and reports
+// whether Codex terminated it; its end comes as usual. A command not running in the background is not terminated.
+func (c *Client) TerminateCommand(ctx context.Context, itemID string) (bool, error) {
+	c.mu.Lock()
+	b := c.background[itemID]
+	c.mu.Unlock()
+	if b == nil || b.ProcessID == "" {
+		return false, nil
+	}
+	var out struct {
+		Terminated bool `json:"terminated"`
+	}
+	err := c.Call(ctx, "thread/backgroundTerminals/terminate", map[string]any{"threadId": b.threadID, "processId": b.ProcessID}, &out)
+	return out.Terminated, err
+}
+
+// commandEnded ends a command running in the background when Codex completes its item; false when the item is not one.
+func (c *Client) commandEnded(params json.RawMessage) bool {
+	var p struct {
+		Item struct {
+			ID               string  `json:"id"`
+			Type             string  `json:"type"`
+			Status           string  `json:"status"`
+			ExitCode         *int64  `json:"exitCode"`
+			AggregatedOutput *string `json:"aggregatedOutput"`
+		} `json:"item"`
+	}
+	if json.Unmarshal(params, &p) != nil || p.Item.Type != "commandExecution" {
+		return false
+	}
+	c.mu.Lock()
+	b := c.background[p.Item.ID]
+	delete(c.background, p.Item.ID)
+	obs := c.observer
+	c.mu.Unlock()
+	if b == nil {
+		return false
+	}
+	failed := p.Item.Status == "failed" || p.Item.Status == "declined" || p.Item.ExitCode != nil && *p.Item.ExitCode != 0
+	b.sink.ToolEnded(b.ItemID, b.name, failed)
+	if bo, ok := obs.(BackgroundObserver); ok {
+		bo.CommandEnded(b.Command, p.Item.Status, p.Item.ExitCode, p.Item.AggregatedOutput)
+	}
+	return true
+}
+
 // Usage is the token usage of one model call.
 type Usage struct {
 	Input, CachedInput, Output, Reasoning, Total int64
@@ -101,6 +169,8 @@ type Client struct {
 	turn     *turn
 	observer Observer
 	closed   bool
+	// background are the commands still running after the turn that started them completed, by item id.
+	background map[string]*bgCommand
 	// lastStarted reports whether the latest turn started (the server gave it an id).
 	lastStarted bool
 
@@ -125,7 +195,8 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{o: o, stdin: stdin, stderr: &ring{limit: stderrLimit}, pending: map[int64]chan reply{}, done: make(chan struct{})}
+	c := &Client{o: o, stdin: stdin, stderr: &ring{limit: stderrLimit}, pending: map[int64]chan reply{}, done: make(chan struct{}),
+		background: map[string]*bgCommand{}}
 	cmd.Stderr = c.stderr
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = exitGrace
@@ -358,6 +429,9 @@ func (c *Client) notification(method string, params json.RawMessage) {
 		if obs != nil {
 			obs.RateLimit(info, inTurn)
 		}
+		return
+	}
+	if method == "item/completed" && c.commandEnded(params) {
 		return
 	}
 	c.mu.Lock()

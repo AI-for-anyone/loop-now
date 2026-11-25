@@ -2,7 +2,8 @@
 // subset of the app-server protocol the platform uses (JSON-RPC over stdio, one JSON per line), without network access
 // and without reading any credentials. Like the real one, a thread is saved (under $CODEX_HOME/fake-threads) only
 // once it has had a turn; resuming, archiving or listing a thread that was never saved fails with "no rollout found".
-// The granular approval policy is refused, as it is without the experimental API.
+// The granular approval policy is refused. thread/backgroundTerminals/terminate needs the experimental API asked for at
+// initialize (as the real one does): it ends a command still running in the background (by its processId).
 //
 // The text of each message decides the reply (the first "fake:" word in it):
 //
@@ -23,6 +24,9 @@
 //	fake:exit           stream a little text, then exit with code 3
 //	fake:whole          send the reply as one completed item without deltas
 //	fake:two            reply with two message items, first and second
+//	fake:background <dur> <cmd>
+//	                    start a command item (processId pty-<n>) and complete the turn while it runs; the item completes
+//	                    after <dur> (exit code 0, its output in aggregatedOutput), with no turn of its own
 //	anything else       reply echo: <text>
 //
 // `exec` runs one turn on the message read from stdin (the last argument is -) and prints its events as JSON lines
@@ -151,6 +155,17 @@ type server struct {
 	nextReq int
 	waiting map[string]chan json.RawMessage // id of a request to the client -> its result
 	stops   map[string]chan struct{}        // running turn id -> closed on turn/interrupt
+	// experimental: initialize asked for the experimental API; terminals are the commands running in the background,
+	// by processId.
+	experimental bool
+	terminals    map[string]*terminal
+	nextPty      int
+}
+
+type terminal struct {
+	threadID, turnID string
+	item             map[string]any
+	timer            *time.Timer
 }
 
 func (s *server) write(v any) {
@@ -190,7 +205,7 @@ func (s *server) ask(method string, params any) json.RawMessage {
 }
 
 func serve() {
-	s := &server{threads: map[string]*thread{}, waiting: map[string]chan json.RawMessage{}, stops: map[string]chan struct{}{}}
+	s := &server{threads: map[string]*thread{}, waiting: map[string]chan json.RawMessage{}, stops: map[string]chan struct{}{}, terminals: map[string]*terminal{}}
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 64<<10), 64<<20)
 	for sc.Scan() {
@@ -234,8 +249,9 @@ func (s *server) request(id json.RawMessage, method string, raw json.RawMessage)
 	switch method {
 	case "initialize":
 		if caps, ok := p["capabilities"].(map[string]any); ok && caps["experimentalApi"] == true {
-			s.fail(id, -32600, "fakecodex: the experimental API must not be asked for")
-			return
+			s.mu.Lock()
+			s.experimental = true
+			s.mu.Unlock()
 		}
 		s.result(id, map[string]any{"userAgent": "fakecodex/" + version(), "codexHome": codexHome(), "platformFamily": "unix", "platformOs": "macos"})
 	case "model/list":
@@ -354,6 +370,15 @@ func (s *server) request(id json.RawMessage, method string, raw json.RawMessage)
 			s.notify("item/completed", map[string]any{"threadId": tid, "turnId": turnID, "item": item})
 			s.notify("turn/completed", map[string]any{"threadId": tid, "turn": map[string]any{"id": turnID, "items": []any{}, "status": "completed"}})
 		}()
+	case "thread/backgroundTerminals/terminate":
+		s.mu.Lock()
+		experimental := s.experimental
+		s.mu.Unlock()
+		if !experimental {
+			s.fail(id, -32600, "thread/backgroundTerminals/terminate requires experimentalApi capability")
+			return
+		}
+		s.result(id, map[string]any{"terminated": s.endTerminal(str("processId"), true)})
 	case "turn/interrupt":
 		s.mu.Lock()
 		stop := s.stops[str("turnId")]
@@ -509,6 +534,19 @@ func (s *server) turn(t *thread, turnID string, p map[string]any, stop chan stru
 	case "fake:two":
 		reply("first")
 		reply("second")
+	case "fake:background":
+		durText, command, _ := strings.Cut(arg, " ")
+		dur, _ := time.ParseDuration(durText)
+		s.mu.Lock()
+		s.nextPty++
+		pty := fmt.Sprintf("pty-%d", s.nextPty)
+		item := map[string]any{"type": "commandExecution", "id": newID(), "command": command, "cwd": t.Cwd, "processId": pty, "status": "inProgress", "commandActions": []any{}}
+		term := &terminal{threadID: tid, turnID: turnID, item: item}
+		s.terminals[pty] = term
+		s.mu.Unlock()
+		s.notify("item/started", map[string]any{"threadId": tid, "turnId": turnID, "item": item, "startedAtMs": 0})
+		term.timer = time.AfterFunc(dur, func() { s.endTerminal(pty, false) })
+		reply("started")
 	default:
 		reply("echo: " + text)
 	}
@@ -584,4 +622,27 @@ func execTurn(args []string) {
 		reply("echo: " + strings.TrimSpace(text))
 	}
 	event(map[string]any{"type": "turn.completed", "usage": map[string]any{"input_tokens": 10, "output_tokens": 5}})
+}
+
+// endTerminal ends a command running in the background: it completes (its time is up) or is terminated; it reports
+// whether one was running.
+func (s *server) endTerminal(pty string, terminated bool) bool {
+	s.mu.Lock()
+	t := s.terminals[pty]
+	delete(s.terminals, pty)
+	s.mu.Unlock()
+	if t == nil {
+		return false
+	}
+	t.timer.Stop()
+	item := map[string]any{}
+	for k, v := range t.item {
+		item[k] = v
+	}
+	item["status"], item["exitCode"], item["aggregatedOutput"] = "completed", 0, strings.Repeat("noise\n", 1000)+"finished\n"
+	if terminated {
+		item["status"], item["exitCode"], item["aggregatedOutput"] = "failed", -1, "terminated\n"
+	}
+	s.notify("item/completed", map[string]any{"threadId": t.threadID, "turnId": t.turnID, "item": item})
+	return true
 }

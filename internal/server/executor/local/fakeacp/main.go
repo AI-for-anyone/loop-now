@@ -28,6 +28,13 @@
 //	                  ends before the prompt does (its end comes within the prompt, as agy's for a quick command).
 //	                  FAKEACP_WAKE_DELAY (a duration) is how long such a reply takes to begin and to finish.
 //	                  session/cancel ends the session's commands still running, without a word.
+//	fake:bgtask <dur> <cmd>
+//	                  as Grok's run_terminal_command moved to the background: the tool call completes at once,
+//	                  _x.ai/task_backgrounded and a background_tasks list follow, reply started. After <dur> (or on
+//	                  _x.ai/task/kill {sessionId, taskId}) the task ends: _x.ai/task_completed with its snapshot, an
+//	                  updated list, and Grok replies by itself in a prompt of its own (_x.ai/queue/changed runningPromptId
+//	                  task-completed-<task id>, text "background done", turn_completed with its usage) once no prompt of
+//	                  the client runs.
 //	fake:permission   ask for permission, then reply permission=<chosen option>
 //	fake:sleep <dur>  wait for the duration (the word after it), or until cancelled, then reply slept
 //	fake:slow         stream a dot every 50ms until cancelled
@@ -166,6 +173,79 @@ type server struct {
 	running map[string]string
 	ended   map[string]int
 	waking  map[string]bool
+	// tasks are Grok's background tasks still running, by task id; turns is held, per session, while a prompt (the
+	// client's or Grok's own) runs.
+	tasks map[string]*grokTask
+	turns map[string]*sync.Mutex
+}
+
+type grokTask struct {
+	sid, id, command string
+	timer            *time.Timer
+}
+
+// turnLock is the session's prompt lock.
+func (s *server) turnLock(sid string) *sync.Mutex {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.turns[sid] == nil {
+		s.turns[sid] = &sync.Mutex{}
+	}
+	return s.turns[sid]
+}
+
+func (s *server) xai(method string, sid string, update map[string]any) {
+	s.write(map[string]any{"jsonrpc": "2.0", "method": method, "params": map[string]any{"sessionId": sid, "update": update}})
+}
+
+// grokTaskList is the background_tasks list of a session's running tasks.
+func (s *server) grokTaskList(sid string, ended *grokTask, exit any) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := []any{}
+	for _, t := range s.tasks {
+		if t.sid == sid {
+			list = append(list, map[string]any{"task_id": t.id, "command": t.command, "description": "Run it", "kind": "bash", "status": "running"})
+		}
+	}
+	if ended != nil {
+		list = append(list, map[string]any{"task_id": ended.id, "command": ended.command, "description": "Run it", "kind": "bash", "status": "completed", "exit_code": exit})
+	}
+	return map[string]any{"sessionUpdate": "background_tasks", "tasks": list}
+}
+
+// endGrokTask ends a background task, by its time or killed, and has Grok reply by itself once no prompt runs.
+func (s *server) endGrokTask(id string, killed bool) bool {
+	s.mu.Lock()
+	t := s.tasks[id]
+	delete(s.tasks, id)
+	s.mu.Unlock()
+	if t == nil {
+		return false
+	}
+	t.timer.Stop()
+	snapshot := map[string]any{"task_id": t.id, "command": t.command, "output": strings.Repeat("noise\n", 1000) + "finished\n", "exit_code": 0, "signal": nil,
+		"completed": true, "kind": "bash", "explicitly_killed": false}
+	var exit any = 0
+	if killed {
+		snapshot["output"], snapshot["exit_code"], snapshot["signal"], snapshot["completed"], snapshot["explicitly_killed"] = "", nil, "SIGKILL", false, true
+		exit = nil
+	}
+	s.xai("_x.ai/task_completed", t.sid, map[string]any{"sessionUpdate": "task_completed", "task_snapshot": snapshot})
+	s.xai("_x.ai/session_notification", t.sid, s.grokTaskList(t.sid, t, exit))
+	go func() {
+		lock := s.turnLock(t.sid)
+		lock.Lock()
+		defer lock.Unlock()
+		prompt := "task-completed-" + t.id
+		s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/queue/changed", "params": map[string]any{"sessionId": t.sid, "entries": []any{}, "runningPromptId": prompt}})
+		s.update(t.sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "background done"}})
+		u := map[string]any{"inputTokens": 700, "outputTokens": 9, "totalTokens": 709, "cachedReadTokens": 500, "cacheCreationTokens": 0, "reasoningTokens": 4, "modelCalls": 1}
+		u["modelUsage"] = map[string]any{"fake-1-build": maps.Clone(u)}
+		s.xai("_x.ai/session_notification", t.sid, map[string]any{"sessionUpdate": "turn_completed", "prompt_id": prompt, "stop_reason": "end_turn", "usage": u})
+		s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/queue/changed", "params": map[string]any{"sessionId": t.sid, "entries": []any{}, "runningPromptId": nil}})
+	}()
+	return true
 }
 
 func (s *server) write(v any) {
@@ -267,7 +347,7 @@ func models() map[string]any {
 
 func serve(args []string) {
 	s := &server{args: args, sessions: map[string]*session{}, waiting: map[string]chan json.RawMessage{}, cancels: map[string]chan struct{}{},
-		running: map[string]string{}, ended: map[string]int{}, waking: map[string]bool{}}
+		running: map[string]string{}, ended: map[string]int{}, waking: map[string]bool{}, tasks: map[string]*grokTask{}, turns: map[string]*sync.Mutex{}}
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 64<<10), 64<<20)
 	for sc.Scan() {
@@ -371,6 +451,20 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 		}
 		s.mu.Unlock()
 		s.result(id, map[string]any{})
+	case "_x.ai/task/kill":
+		sid, task := str("sessionId"), str("taskId")
+		s.mu.Lock()
+		known := s.sessions[sid] != nil
+		s.mu.Unlock()
+		if !known {
+			s.result(id, map[string]any{"result": nil, "error": "session not found"})
+			return
+		}
+		outcome := "not_found"
+		if s.endGrokTask(task, true) {
+			outcome = "killed"
+		}
+		s.result(id, map[string]any{"result": map[string]any{"task_id": task, "outcome": outcome}, "error": nil})
 	case "session/prompt":
 		s.mu.Lock()
 		ss := s.sessions[str("sessionId")]
@@ -405,6 +499,9 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		s.fail(id, -32000, "Authentication required", nil)
 		return
 	}
+	lock := s.turnLock(ss.ID)
+	lock.Lock()
+	defer lock.Unlock()
 	prior := len(ss.Prompts)
 	ss.Prompts = append(ss.Prompts, text)
 	ss.save()
@@ -480,6 +577,22 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		}
 		reply("backgrounded")
 		s.update(ss.ID, usage())
+	case "fake:bgtask":
+		durText, command, _ := strings.Cut(arg, " ")
+		dur, _ := time.ParseDuration(durText)
+		tid, task := newID(), newID()
+		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": "Run " + command, "kind": "execute", "status": "pending",
+			"rawInput": map[string]any{"command": command, "description": "Run it", "timeout": 0, "background": true}})
+		s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": "completed", "rawOutput": "[bg] " + command + " (" + task + ")"})
+		t := &grokTask{sid: ss.ID, id: task, command: command}
+		s.mu.Lock()
+		s.tasks[task] = t
+		s.mu.Unlock()
+		t.timer = time.AfterFunc(dur, func() { s.endGrokTask(task, false) })
+		s.xai("_x.ai/task_backgrounded", ss.ID, map[string]any{"sessionUpdate": "task_backgrounded", "tool_call_id": tid, "task_id": task, "command": command,
+			"cwd": ss.Cwd, "output_file": filepath.Join(home(), task+".log"), "description": "Run it"})
+		s.xai("_x.ai/session_notification", ss.ID, s.grokTaskList(ss.ID, nil, nil))
+		reply("started")
 	case "fake:permission":
 		r := s.ask("session/request_permission", map[string]any{"sessionId": ss.ID, "toolCall": map[string]any{"toolCallId": newID()},
 			"options": []any{map[string]any{"optionId": "no", "name": "Reject", "kind": "reject_once"}, map[string]any{"optionId": "yes", "name": "Allow", "kind": "allow_once"}}})
