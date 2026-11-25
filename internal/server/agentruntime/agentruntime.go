@@ -296,7 +296,7 @@ var registry = []Runtime{
 		Name:      "Grok",
 		Providers: []string{GrokProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true,
-			PermissionModes: []string{ModeSupervised, ModeAuto, ModeFull}, WorkingDirectory: true},
+			PermissionModes: allModes(), WorkingDirectory: true},
 		Setup:          grokSetup,
 		MinVersion:     "1.0.88",
 		TextGeneration: &TextGeneration{Rank: 4},

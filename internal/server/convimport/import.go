@@ -1,10 +1,12 @@
 package convimport
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -301,11 +303,21 @@ func (s *Service) capture(c Conversation, root string) (string, []Message, error
 		if _, err := folders.CloneFile(c.Path, path); err != nil {
 			return "", nil, fmt.Errorf("could not copy the conversation: %w", err)
 		}
-		if err := cutAfterLastRecord(path); err != nil {
+		finished, err := cutAfterLastTurn(path)
+		if err != nil {
 			return "", nil, fmt.Errorf("could not copy the conversation: %w", err)
 		}
+		read := path
+		if !finished {
+			// No turn finished yet: nothing to continue from (resuming mid-turn would answer that turn first). The
+			// Agent starts a new session; the chat still shows the conversation.
+			if err := os.Remove(path); err != nil {
+				return "", nil, err
+			}
+			path, read = "", c.Path
+		}
 		r := &claudeReader{onMessage: keep}
-		if _, err := eachRecord(o, path, false, r.record); err != nil {
+		if _, err := eachRecord(o, read, false, r.record); err != nil {
 			return "", nil, fmt.Errorf("could not read the conversation: %w", err)
 		}
 		return path, messages, nil
@@ -331,34 +343,62 @@ func (s *Service) capture(c Conversation, root string) (string, []Message, error
 	return "", nil, fmt.Errorf("unknown CLI %s", c.CLI)
 }
 
-// cutAfterLastRecord drops a last line still being written (one without its newline).
-func cutAfterLastRecord(path string) error {
+// cutAfterLastTurn cuts a copied Claude Code session after its last finished turn: a top-level reply that ended
+// (stop_reason end_turn or stop_sequence) or the turn_duration record Claude Code writes after a turn, and the system
+// records that follow it. A turn still running when the copy was taken (its tool calls, results and requests) and a
+// last line still being written are dropped, so the fork never resumes inside a turn. false: no turn finished (the
+// copy is left as it was).
+func cutAfterLastTurn(path string) (bool, error) {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	size := info.Size()
-	buf := make([]byte, 64<<10)
-	for end := size; end > 0; {
-		start := max(end-int64(len(buf)), 0)
-		chunk := buf[:end-start]
-		if _, err := f.ReadAt(chunk, start); err != nil {
-			return err
+	var cut, offset int64
+	ended := false
+	r := bufio.NewReaderSize(f, 256<<10)
+	for {
+		line, err := r.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			break // a last line without its newline is still being written
 		}
-		if i := strings.LastIndexByte(string(chunk), '\n'); i >= 0 {
-			if keep := start + int64(i) + 1; keep < size {
-				return f.Truncate(keep)
+		if err != nil {
+			return false, err
+		}
+		offset += int64(len(line))
+		var rec struct {
+			Type        string `json:"type"`
+			Subtype     string `json:"subtype"`
+			IsSidechain bool   `json:"isSidechain"`
+			Message     *struct {
+				StopReason *string `json:"stop_reason"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(line, &rec) != nil || rec.IsSidechain {
+			continue
+		}
+		switch {
+		case rec.Type == "assistant":
+			stop := ""
+			if rec.Message != nil && rec.Message.StopReason != nil {
+				stop = *rec.Message.StopReason
 			}
-			return nil
+			ended = stop == "end_turn" || stop == "stop_sequence"
+			if ended {
+				cut = offset
+			}
+		case rec.Type == "system" && rec.Subtype == "turn_duration":
+			ended, cut = true, offset
+		case rec.Type == "system" && ended:
+			cut = offset
+		case rec.Type == "user" || rec.Type == "attachment":
+			ended = false
 		}
-		end = start
 	}
-	return f.Truncate(0)
+	if cut == 0 {
+		return false, nil
+	}
+	return true, f.Truncate(cut)
 }
 
 // model is the Agent's model: the conversation's last one when the runtime lists it (for Claude Code, the alias of its

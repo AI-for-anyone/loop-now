@@ -3,6 +3,7 @@ package convimport
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,7 +88,7 @@ func (f *fixture) claude(id, cwd string, ago time.Duration, prompts ...string) s
 		recs = append(recs,
 			map[string]any{"type": "user", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "user", "content": p}},
 			map[string]any{"type": "assistant", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "assistant", "model": "claude-opus-5-5",
-				"content": []any{map[string]any{"type": "text", "text": "answer to " + p}}}})
+				"stop_reason": "end_turn", "content": []any{map[string]any{"type": "text", "text": "answer to " + p}}}})
 	}
 	p := f.write(".claude/projects/"+strings.ReplaceAll(cwd, "/", "-")+"/"+id+".jsonl", lines(recs...))
 	f.touch(p, ago)
@@ -372,5 +373,74 @@ func TestReadsNoCredentialFiles(t *testing.T) {
 		if !conversation && !gitMeta || strings.Contains(p, "credentials") || base == "auth.json" || base == ".claude.json" {
 			t.Fatalf("opened %s", p)
 		}
+	}
+}
+
+// queued is a prompt that arrived while Claude Code was busy, as Claude Code records it: an attachment of type
+// queued_command. origin is the person (human), another session (peer, with its body and name), or a sub-agent's
+// report (peer with handback).
+func queued(id, cwd, at string, origin map[string]any, prompt string) map[string]any {
+	return map[string]any{"type": "attachment", "sessionId": id, "cwd": cwd, "timestamp": at,
+		"attachment": map[string]any{"type": "queued_command", "commandMode": "prompt", "prompt": prompt, "origin": origin, "isMeta": origin["kind"] == "peer"}}
+}
+
+// Prompts that arrived while Claude Code was busy (typed by the person, or sent by another session) are prompts too;
+// sub-agent reports and task notifications are not. A session whose prompts all came that way is not empty (a slash
+// command alone does not name it, but shows as typed).
+func TestClaudeQueuedPromptsCount(t *testing.T) {
+	f := newFixture(t)
+	cwd := f.repo("busy-session", "")
+	id := "s1000001-1111-4111-8111-111111111111"
+	at := f.at(time.Hour)
+	reply := func(text string) map[string]any {
+		return map[string]any{"type": "assistant", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "assistant", "model": "claude-opus-5-5",
+			"content": []any{map[string]any{"type": "text", "text": text}}}}
+	}
+	f.write(".claude/projects/-busy-session/"+id+".jsonl", lines(
+		map[string]any{"type": "user", "sessionId": id, "cwd": cwd, "timestamp": at, "message": map[string]any{"role": "user", "content": "<command-name>/model</command-name><command-message>model</command-message><command-args></command-args>"}},
+		queued(id, cwd, at, map[string]any{"kind": "peer", "name": "loop-now-main", "from": "uds:/tmp/x.sock", "body": "Build the scanner\nper the plan"},
+			`<cross-session-message from="uds:/tmp/x.sock">Build the scanner</cross-session-message>`),
+		reply("Starting."),
+		map[string]any{"type": "attachment", "sessionId": id, "cwd": cwd, "timestamp": at, "attachment": map[string]any{"type": "queued_command", "commandMode": "task-notification",
+			"prompt": "<task-notification>done</task-notification>", "origin": map[string]any{"kind": "task-notification"}}},
+		queued(id, cwd, at, map[string]any{"kind": "peer", "name": "helper", "body": "[Subagent hand-back] report", "handback": true}, "<agent-message>report</agent-message>"),
+		queued(id, cwd, at, map[string]any{"kind": "human"}, "Also add tests"),
+		reply("Added."),
+	))
+	_, c := find(t, f.scan(ScanOptions{}), id)
+	if c.SkipReason != "" || c.FirstPrompt != "Build the scanner\nper the plan" || c.Title != "Build the scanner" || c.MessageCount != 5 {
+		t.Fatalf("conversation: %+v", c)
+	}
+	var msgs []Message
+	r := &claudeReader{onMessage: func(m Message) { msgs = append(msgs, m) }}
+	_, _ = eachRecord(ScanOptions{}.withDefaults(), c.Path, false, r.record)
+	if len(msgs) != 5 || msgs[0].Text != "/model" || msgs[1].Text != "From loop-now-main:\nBuild the scanner\nper the plan" || msgs[3].Role != "user" || msgs[3].Text != "Also add tests" {
+		t.Fatalf("messages: %+v", msgs)
+	}
+}
+
+// Folders that are not projects are left out of the list entirely: Loop Now's own Agent workspaces (and anything a
+// Loop Now run started, by its run header), Codex's scratch folders under Documents/Codex, Downloads, temporary
+// folders, and apps' data under Library (Claude's scratch workspaces among them).
+func TestLeavesOutScratchAndLoopNowFolders(t *testing.T) {
+	f := newFixture(t)
+	keep := f.repo("src/real", "")
+	tmp := t.TempDir()
+	for i, dir := range []string{
+		f.path("Downloads/thing"),
+		f.path("Documents/Codex/2026-11-25/scratch"),
+		f.path("Library/Application Support/Claude/scratch-workspaces/abc"),
+		f.path("Library/Application Support/Some App/projects/x"),
+		filepath.Join(tmp, "build"),
+		"/Users/Shared/loop-now-desktop/default/agents/0199a6a2-1111-7111-8111-111111111111/workspace",
+		"/elsewhere/trial/agents/0199a6a2-2222-7222-8222-222222222222/workspace/sub",
+	} {
+		f.claude(fmt.Sprintf("t%07d-1111-4111-8111-111111111111", i), dir, time.Hour, "hello")
+	}
+	f.claude("t1000000-1111-4111-8111-111111111111", keep, time.Hour, "Run ID for this turn: 0199a6a2-3333\n\nhello")
+	f.claude("t2000000-1111-4111-8111-111111111111", keep, time.Hour, "a real one")
+	folders := f.scan(ScanOptions{Home: f.home, Excluded: []string{tmp}})
+	if len(folders) != 1 || folders[0].Path != keep || len(folders[0].Conversations) != 1 || folders[0].Conversations[0].SessionID != "t2000000-1111-4111-8111-111111111111" {
+		t.Fatalf("listed: %+v", folders)
 	}
 }

@@ -56,6 +56,44 @@ type claudeRecord struct {
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
+	// Attachment of type queued_command is a prompt that arrived while Claude Code was busy (see queuedPrompt).
+	Attachment *struct {
+		Type        string          `json:"type"`
+		CommandMode string          `json:"commandMode"`
+		Prompt      json.RawMessage `json:"prompt"`
+		Timestamp   string          `json:"timestamp"`
+		Origin      *struct {
+			Kind     string          `json:"kind"`
+			Name     string          `json:"name"`
+			Body     string          `json:"body"`
+			Handback json.RawMessage `json:"handback"`
+		} `json:"origin"`
+	} `json:"attachment"`
+}
+
+// queuedPrompt is the prompt a queued_command attachment carries: one the person typed while Claude Code was busy
+// (origin human), or a message another session sent (origin peer, shown as from that session; its body names the
+// conversation). A sub-agent's report (a peer hand-back) and a task notification are not prompts.
+func queuedPrompt(rec claudeRecord) (shown, titleText string, ok bool) {
+	a := rec.Attachment
+	if rec.Type != "attachment" || a == nil || a.Type != "queued_command" || a.CommandMode != "prompt" {
+		return "", "", false
+	}
+	if o := a.Origin; o != nil && o.Kind == "peer" {
+		if len(o.Handback) > 0 && string(o.Handback) != "null" && string(o.Handback) != "false" {
+			return "", "", false
+		}
+		body := strings.TrimSpace(o.Body)
+		if body == "" {
+			return "", "", false
+		}
+		if o.Name != "" {
+			return "From " + o.Name + ":\n" + body, body, true
+		}
+		return body, body, true
+	}
+	shown, titleText = claudeUserText(contentText(a.Prompt))
+	return shown, titleText, shown != ""
 }
 
 // claudeSyntheticModel is the model Claude Code names its own local errors with ("API Error"): not a model to continue
@@ -104,29 +142,37 @@ func (r *claudeReader) record(line []byte) bool {
 		t := claudeTitle(*rec.CustomTitle)
 		r.customTitle = &t // an empty rename clears it
 	}
-	if (rec.Type != "user" && rec.Type != "assistant") || rec.Message == nil {
-		return true
-	}
 	at := parseTime(rec.Timestamp)
+	var text, titleText, role string
+	if shown, title, ok := queuedPrompt(rec); ok {
+		role, text, titleText = "user", shown, title
+		if at.IsZero() {
+			at = parseTime(rec.Attachment.Timestamp)
+		}
+	} else {
+		if (rec.Type != "user" && rec.Type != "assistant") || rec.Message == nil {
+			return true
+		}
+		role, text = rec.Type, contentText(rec.Message.Content)
+		titleText = text
+		if rec.Type == "user" {
+			text, titleText = claudeUserText(text)
+		} else if model := strings.TrimSpace(rec.Message.Model); model != "" && model != claudeSyntheticModel {
+			r.m.model = model
+		}
+	}
 	if !at.IsZero() && at.After(r.m.lastAt) {
 		r.m.lastAt = at
-	}
-	text := contentText(rec.Message.Content)
-	titleText := text
-	if rec.Type == "user" {
-		text, titleText = claudeUserText(text)
-	} else if model := strings.TrimSpace(rec.Message.Model); model != "" && model != claudeSyntheticModel {
-		r.m.model = model
 	}
 	if text == "" {
 		return true
 	}
 	r.m.messages++
-	if rec.Type == "user" && r.m.firstPrompt == "" && strings.TrimSpace(titleText) != "" {
-		r.m.firstPrompt, r.m.titlePrompt = clip(text, promptLimit), titleText
+	if role == "user" && r.m.firstPrompt == "" && strings.TrimSpace(titleText) != "" {
+		r.m.firstPrompt, r.m.titlePrompt = clip(titleText, promptLimit), titleText
 	}
 	if r.onMessage != nil {
-		r.onMessage(Message{Role: rec.Type, Text: text, At: at})
+		r.onMessage(Message{Role: role, Text: text, At: at})
 	}
 	return true
 }

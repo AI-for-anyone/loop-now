@@ -78,6 +78,10 @@ func TestModeFlagsPerRuntime(t *testing.T) {
 		if argValue(args, "--permission-mode") != flag || argValue(args, "--permission-prompts") != prompts {
 			t.Errorf("%s: %v", mode, args)
 		}
+		// Without --permission-prompt-tool stdio, claude denies what needs approval instead of asking.
+		if (argValue(args, "--permission-prompt-tool") == "stdio") == (mode == "full") {
+			t.Errorf("%s: --permission-prompt-tool %v", mode, args)
+		}
 	}
 	legacy := h.claudeAgent(nil)
 	h.exec(legacy, "hello")
@@ -212,9 +216,10 @@ func TestCodexApprovalBecomesRequest(t *testing.T) {
 	}
 }
 
-// Grok and Antigravity drop their approve-everything flag outside Full access and use their own session modes for
-// Auto-accept edits and Auto when the session offers them (a mode Grok lacks runs as Supervised); their permission
-// requests become permission requests: approving picks the agent's allow-once option, rejecting its reject-once.
+// Grok and Antigravity drop their approve-everything flag outside Full access. Grok takes the mode as its own
+// --permission-mode; Antigravity switches its session to the mode (default, accept-edits, auto) when the session offers
+// it. Their permission requests become permission requests: approving picks the agent's allow-once option, rejecting
+// its reject-once.
 func TestACPPermissionBecomesRequest(t *testing.T) {
 	asker := newFakeAsker()
 	type cfg struct {
@@ -239,14 +244,19 @@ func TestACPPermissionBecomesRequest(t *testing.T) {
 		return false
 	}
 	grok := newACPHarness(t, "grok", withAsker(asker))
-	for mode, want := range map[string]cfg{"full": {Mode: ""}, "supervised": {Mode: ""}, "accept_edits": {Mode: ""}, "auto": {Mode: "auto"}} {
+	// Grok takes its permission mode before agent (its session lists no modes); Full access is --always-approve.
+	for mode, want := range map[string]string{"full": "", "supervised": "default", "accept_edits": "acceptEdits", "auto": "auto"} {
 		c := config(grok, grok.acpAgent(func(s *agentconfig.Snapshot) { s.PermissionMode = mode }))
-		if has(c.Args, "--always-approve") != (mode == "full") || c.Mode != want.Mode {
+		pm := ""
+		if len(c.Args) > 2 && c.Args[0] == "--permission-mode" {
+			pm = c.Args[1]
+		}
+		if has(c.Args, "--always-approve") != (mode == "full") || pm != want || c.Mode != "" {
 			t.Errorf("grok %s: %+v", mode, c)
 		}
 	}
 	agy := newACPHarness(t, "agy", withAsker(asker))
-	for mode, want := range map[string]string{"full": "", "supervised": "", "accept_edits": "auto_edit", "auto": "auto"} {
+	for mode, want := range map[string]string{"full": "", "supervised": "default", "accept_edits": "accept-edits", "auto": "auto"} {
 		c := config(agy, agy.acpAgent(func(s *agentconfig.Snapshot) { s.PermissionMode = mode }))
 		if has(c.Args, "--dangerously-skip-permissions") != (mode == "full") || c.Mode != want {
 			t.Errorf("agy %s: %+v", mode, c)
@@ -270,5 +280,23 @@ func TestACPPermissionBecomesRequest(t *testing.T) {
 	asker.set(executor.PermissionAnswer{Reason: "no"}, false)
 	if res, _ := grok.exec(id, "fake:permission"); !strings.HasSuffix(res.Text, "permission=no") {
 		t.Fatalf("rejected: %+v", res)
+	}
+}
+
+// An Agent with the person's own configuration may see Skills that are not Loop Now's: no warning about them.
+func TestNoOutsideSkillsWarningWithOwnConfig(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	h.env["FAKECLAUDE_EXTRA_SKILLS"] = "their-skill"
+	own := h.claudeAgent(func(s *agentconfig.Snapshot) { s.UseLocalConfig = true })
+	if res, _ := h.exec(own, "hello"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("turn: %+v", res)
+	}
+	if strings.Contains(h.logs.String(), "their-skill") {
+		t.Fatalf("warned about the person's own Skills: %s", h.logs.String())
+	}
+	plain := h.claudeAgent(nil)
+	h.exec(plain, "hello")
+	if !strings.Contains(h.logs.String(), "their-skill") {
+		t.Fatal("other Agents still warn")
 	}
 }

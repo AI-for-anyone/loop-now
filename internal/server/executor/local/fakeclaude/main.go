@@ -27,8 +27,9 @@
 //	                   Claude Code replies by itself: a turn of its own (init, text "background done", result with usage)
 //	fake:wait <dur>    reply waited after <dur>
 //	fake:ask <cmd>     ask the host to use the Bash tool on <cmd> (a can_use_tool control request, as with
-//	                   --permission-prompts host), then reply allowed, or denied: <message>; an interrupt while waiting
-//	                   cancels the request (control_cancel_request) and ends the turn interrupted
+//	                   --permission-prompt-tool stdio, in claude 2.1.332's shape), then reply allowed, or denied:
+//	                   <message>; an interrupt while waiting cancels the request (control_cancel_request) and ends the
+//	                   turn interrupted. Without --permission-prompt-tool stdio it replies sandbox-denied at once.
 //	anything else      reply echo: <text>
 //
 // FAKECLAUDE_FOLLOWUP_NO_RESULT=1 leaves out the result of such a turn of its own.
@@ -215,9 +216,12 @@ func purge(args []string) {
 type flags struct {
 	model, sessionID, resume string
 	fork                     bool
-	tools                    []string
-	mcp                      []string
-	skills                   []string // Skills from --plugin-dir (<plugin name>:<Skill name>) and FAKECLAUDE_EXTRA_SKILLS
+	// promptTool is --permission-prompt-tool: with stdio, permission prompts come to the host as can_use_tool control
+	// requests; without it (as claude 2.1.332 does), a tool that needs approval is denied at once.
+	promptTool string
+	tools      []string
+	mcp        []string
+	skills     []string // Skills from --plugin-dir (<plugin name>:<Skill name>) and FAKECLAUDE_EXTRA_SKILLS
 }
 
 func parse(args []string) flags {
@@ -237,6 +241,8 @@ func parse(args []string) flags {
 			f.sessionID = next()
 		case "--resume", "-r":
 			f.resume = next()
+		case "--permission-prompt-tool":
+			f.promptTool = next()
 		case "--fork-session":
 			f.fork = true
 		case "--plugin-dir":
@@ -505,8 +511,13 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 		result(map[string]any{"subtype": "success", "is_error": true, "result": "Not logged in · Please run /login", "terminal_reason": "api_error", "api_error_status": nil}, map[string]any{})
 		return
 	case "fake:ask":
+		if f.promptTool != "stdio" {
+			reply(model, "sandbox-denied")
+			break
+		}
 		emit(map[string]any{"type": "control_request", "request_id": "perm-1", "request": map[string]any{"subtype": "can_use_tool", "tool_name": "Bash",
-			"input": map[string]any{"command": arg, "description": "Run " + arg}, "tool_use_id": "toolu_ask", "permission_suggestions": []any{}}})
+			"display_name": "Bash", "input": map[string]any{"command": arg, "description": "Run " + arg}, "description": "Run " + arg,
+			"decision_reason_type": "subcommandResults", "tool_use_id": "toolu_ask"}})
 	ask:
 		for in := range lines {
 			switch {

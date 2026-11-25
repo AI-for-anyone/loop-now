@@ -14,7 +14,8 @@
 //
 //	fake:history      reply history=<earlier prompts in this session>
 //	fake:config       reply with the session's settings (JSON: cwd, MCP server names, model, start arguments, mode set
-//	                  with session/set_mode); a new session offers the modes default, auto and, for agy, auto_edit
+//	                  with session/set_mode); a new agy session offers the modes default, accept-edits, auto and plan,
+//	                  a Grok one none
 //	fake:env          reply with the environment variables the platform cares about (JSON)
 //	fake:images       reply images=<number of images>
 //	fake:tool <cmd>   run one execute tool call, then reply ran
@@ -754,11 +755,15 @@ func nativePrompt(ss *session, p map[string]any) {
 	}
 }
 
-// sessionModes are the session modes a new session offers: agy's auto_edit and auto, Grok's auto.
-func sessionModes() map[string]any {
-	modes := []any{map[string]any{"id": "default", "name": "Default"}, map[string]any{"id": "auto", "name": "Auto"}}
-	if flavor() == "agy" {
-		modes = append(modes, map[string]any{"id": "auto_edit", "name": "Accept edits"})
+// sessionModes are the session modes a new session offers, as the real agents do: agy's default, accept-edits, auto and
+// plan (agy 1.5.14); Grok lists none (1.0.92).
+func sessionModes() any {
+	if flavor() != "agy" {
+		return nil
+	}
+	var modes []any
+	for _, id := range []string{"default", "accept-edits", "auto", "plan"} {
+		modes = append(modes, map[string]any{"id": id, "name": id})
 	}
 	return map[string]any{"currentModeId": "default", "availableModes": modes}
 }
