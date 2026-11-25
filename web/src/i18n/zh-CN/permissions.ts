@@ -31,7 +31,9 @@ export const permissions = {
     approving: '正在批准…',
     rejecting: '正在拒绝…',
     reasonLabel: '拒绝理由',
-    reasonPlaceholder: '写下理由会拒绝它，并把理由告诉它',
+    reasonPlaceholder: '写下理由会拒绝它',
+    reasonTold: { 'claude-code': '写下理由会拒绝它，并把理由告诉它' } as Record<string, string>,
+    reasonNotTold: (runtime: string) => `${runtime} 收不到理由，理由只记在这个请求上`,
     rejectWithReason: '拒绝并说明',
     waiting: (count: number) => `${count} 个请求在等你批准，回复先停在这里`,
     alsoInInbox: '收件箱里也有这个问题，在哪边回答都行',
@@ -47,6 +49,7 @@ export const permissions = {
     title: (agent: string) => `${agent} 请求批准`,
     open: '去对话里看',
     badge: '请求批准：回答就是批准或拒绝，写下理由会拒绝它',
+    cancelled: '已取消：还没回答，回复就结束了',
   },
   desktop: {
     title: (agent: string) => `${agent} 请求批准`,

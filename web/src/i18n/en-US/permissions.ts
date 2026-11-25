@@ -26,7 +26,10 @@ export const permissions = {
     approving: 'Approving…',
     rejecting: 'Rejecting…',
     reasonLabel: 'Reason to reject',
-    reasonPlaceholder: 'A reason rejects the request and tells the Agent why',
+    // Only runtimes that pass the reason on to the Agent say it is told (the server stores it either way).
+    reasonPlaceholder: 'A typed reason rejects the request',
+    reasonTold: { 'claude-code': 'A reason rejects the request and tells the Agent why' } as Record<string, string>,
+    reasonNotTold: (runtime: string) => `${runtime} isn't told the reason; it is kept with the request here`,
     rejectWithReason: 'Reject with reason',
     waiting: (count: number) => `${count} ${count === 1 ? 'request is' : 'requests are'} waiting for your approval; the reply waits here`,
     alsoInInbox: 'The same question is in the Inbox; answer it in either place',
@@ -41,6 +44,8 @@ export const permissions = {
     title: (agent: string) => `${agent} asks for approval`,
     open: 'See it in the chat',
     badge: 'Asks for approval: answering approves or rejects; a typed reason rejects it',
+    // The request was cancelled (the reply was stopped or ended, or the CLI exited), so the question closed unanswered.
+    cancelled: 'Cancelled: the reply ended before it was answered',
   },
   desktop: {
     title: (agent: string) => `${agent} asks for approval`,

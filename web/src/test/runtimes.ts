@@ -49,20 +49,20 @@ export function codexStatus(overrides: Partial<Schemas['RuntimeStatus']> = {}): 
 }
 
 // Grok and Antigravity as the server defines them (ACP-DESIGN.md): CLIs on this computer with their own login and the real home, no
-// commands of their own, no Pi extensions. Stopping a Grok reply ends its process, and with it the background tasks. Neither offers
-// Auto-accept edits (T3); they keep an Agent's own folder but have no configuration of the person's to use.
-const acp = (id: 'grok' | 'antigravity', name: string, binary: string, stopEndsBackgroundTasks = false): Schemas['RuntimeDefinition'] => ({
+// commands of their own, no Pi extensions. Stopping a Grok reply ends its process, and with it the background tasks. Antigravity offers
+// every permission mode, Grok all but Auto-accept edits; they keep an Agent's own folder but have no configuration of the person's to use.
+const acp = (id: 'grok' | 'antigravity', name: string, binary: string, permissionModes: Schemas['PermissionMode'][], stopEndsBackgroundTasks = false): Schemas['RuntimeDefinition'] => ({
   id,
   name,
   providers: [`${id}-cli`],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks, permissionModes: ['supervised', 'auto', 'full'], workingDirectory: true, localConfig: false },
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks, permissionModes, workingDirectory: true, localConfig: false },
   minVersion: null,
   setup: { install: null, login: binary, docsUrl: null },
   acpCommandId: null,
 })
-export const grokDefinition = acp('grok', 'Grok', 'grok', true)
-export const antigravityDefinition = acp('antigravity', 'Antigravity', 'agy')
+export const grokDefinition = acp('grok', 'Grok', 'grok', ['supervised', 'auto', 'full'], true)
+export const antigravityDefinition = acp('antigravity', 'Antigravity', 'agy', ['supervised', 'accept_edits', 'auto', 'full'])
 
 // GET /runtime-definitions with every runtime the console knows.
 export const withAllRuntimes = (): Schemas['RuntimeDefinitionList'] => ({ runtimes: [...withCodex().runtimes, grokDefinition, antigravityDefinition] })
