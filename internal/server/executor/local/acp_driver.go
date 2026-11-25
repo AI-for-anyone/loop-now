@@ -108,18 +108,24 @@ var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "ag
 // sessionIDPattern is what a session id must look like before it names a file or folder to remove.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-// forgetGrokSession removes the folder Grok keeps for a session (.grok/sessions/<working folder, escaped>/<id>), and
-// the working folder's own folder when that leaves it empty.
+// forgetGrokSession removes the folder Grok keeps for a working folder (.grok/sessions/<working folder, escaped>): the
+// session's own folder and the prompt history, which holds what was sent. The working folder is a text run's own
+// (see WriteText), so the whole folder is the run's; anything else is refused, so a mistake can never reach
+// .grok/sessions itself or the sessions of another folder.
 func forgetGrokSession(home, cwd, sessionID string) error {
 	if !sessionIDPattern.MatchString(sessionID) {
 		return fmt.Errorf("unexpected session id %q", sessionID)
 	}
-	parent := filepath.Join(home, ".grok", "sessions", url.PathEscape(cwd))
-	if err := os.RemoveAll(filepath.Join(parent, sessionID)); err != nil {
-		return err
+	if !filepath.IsAbs(home) || !filepath.IsAbs(cwd) || filepath.Base(cwd) != textWorkDir || !strings.HasPrefix(filepath.Base(filepath.Dir(cwd)), textDirPrefix) {
+		return fmt.Errorf("not a text run's working folder: %q", cwd)
 	}
-	_ = os.Remove(parent) // only when empty: another session of the same folder stays
-	return nil
+	sessions := filepath.Join(home, ".grok", "sessions")
+	name := url.PathEscape(cwd)
+	target := filepath.Join(sessions, name)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || filepath.Dir(target) != sessions || filepath.Base(target) != name {
+		return fmt.Errorf("unexpected Grok session folder %q", name)
+	}
+	return os.RemoveAll(target)
 }
 
 // forgetAntigravitySession removes what agy keeps for a session under .gemini/antigravity-cli: its conversation

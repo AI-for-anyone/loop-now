@@ -25,6 +25,13 @@ type textWriter interface {
 	writeText(ctx context.Context, dir, scratch string, req executor.TextRequest) (string, error)
 }
 
+// textDirPrefix starts the name of each text run's own temporary folder, and textWorkDir is the folder in it the CLI
+// works in; cleaning up after a run relies on both.
+const (
+	textDirPrefix = "loop-now-write-"
+	textWorkDir   = "work"
+)
+
 // WriteText writes one short text with the local CLI of req.Runtime (see executor.TextRequest). It returns the CLI's
 // reply as is; an empty reply is not an error here.
 func (e *Executor) WriteText(ctx context.Context, req executor.TextRequest) (string, error) {
@@ -32,7 +39,7 @@ func (e *Executor) WriteText(ctx context.Context, req executor.TextRequest) (str
 	if !ok {
 		return "", &executor.TextFailure{Unavailable: true, Message: "This runtime does not write texts with AI."}
 	}
-	root, err := os.MkdirTemp(e.o.TextTempDir, "loop-now-write-")
+	root, err := os.MkdirTemp(e.o.TextTempDir, textDirPrefix)
 	if err != nil {
 		return "", fmt.Errorf("create a temporary folder: %w", err)
 	}
@@ -41,7 +48,7 @@ func (e *Executor) WriteText(ctx context.Context, req executor.TextRequest) (str
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		root = real
 	}
-	dir := filepath.Join(root, "work")
+	dir := filepath.Join(root, textWorkDir)
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create a temporary folder: %w", err)
 	}
