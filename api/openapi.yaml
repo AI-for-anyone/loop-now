@@ -74,6 +74,7 @@ tags:
   - name: external-identities
   - name: plugins
   - name: local-mode
+  - name: text-generation
 
 paths:
   "/agents/{agentId}/message-images/{imageId}": {"put":{"tags":["conversation"],"operationId":"uploadAgentMessageImage","x-access":"console","parameters":[{"name":"agentId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}},{"name":"imageId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}],"responses":{"201":{"description":"Uploads under a stable imageId; the same content in the same scope may be uploaded again. Uploading does not send a message or mark anything as read.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/MessageImage"}}}},"401":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"403":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"404":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"409":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"412":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"413":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"422":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"500":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"503":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}},"requestBody":{"required":true,"content":{"image/png":{"schema":{"type":"string","format":"binary"}},"image/jpeg":{"schema":{"type":"string","format":"binary"}},"image/webp":{"schema":{"type":"string","format":"binary"}}}}}}
@@ -1850,6 +1851,109 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /text-generation-settings:
+    get:
+      tags: [text-generation]
+      operationId: getTextGenerationSettings
+      x-access: console
+      summary: Who writes with AI ("Write with AI"), and who would write right now
+      description: |
+        "Write with AI" drafts a Prompt (POST /prompt-drafts) with one short run of a CLI installed on this computer,
+        using that CLI's own login; no Agent is created. Only runtimes whose accounts are local
+        (RuntimeCapabilities.accounts) write; the bundled Pi does not.
+        selection is the runtime model a person chose; null is Automatic: the first ready runtime in the order Claude
+        Code, Codex, Antigravity, Grok, then the local ACP commands in the order they were added, with a small model from
+        its live model list: Claude Code a Haiku model, Codex a Luna model (else a -mini model) at the low thinking
+        level, Antigravity a Neon model (else a Flash model) at its lowest thinking level, the others their first listed
+        model; the first listed model when no preferred one is listed, and the model's default thinking level when the
+        preferred one is not offered. A
+        runtime is ready when GET /runtimes reports it available and not logged out (its 30-second cache is used) and
+        its model list has the model.
+        writer says who would write now: the chosen one when it is ready; otherwise Automatic's choice, with fellBack
+        true when a chosen one was passed over; null when no runtime is ready.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The setting and who would write now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TextGenerationSettings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [text-generation]
+      operationId: putTextGenerationSettings
+      x-access: console
+      summary: Choose who writes with AI
+      description: |
+        selection null goes back to Automatic. A provider that no runtime with local accounts runs is refused (422,
+        field selection.provider). The model and thinking level are not checked against the live model list, which can
+        be out of date while a CLI is logged out; when writing, one that is not listed then falls back to Automatic.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TextGenerationSettingsPut" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The saved setting and who would write now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TextGenerationSettings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /prompt-drafts:
+    post:
+      tags: [text-generation]
+      operationId: createPromptDraft
+      x-access: console
+      summary: Write a draft of an Agent's or a project's Prompt with AI
+      description: |
+        Asks the writer (GET /text-generation-settings; a chosen one that is not ready falls back to Automatic for this
+        request, with writer.fellBack true) once and returns its draft. Nothing is saved: the console puts the draft in
+        the editor, and the person saves as usual.
+        The writer runs as a new session of the CLI in an empty temporary folder that is removed afterwards, with the
+        CLI's own login and without Loop Now Skills, loopctl, plugins, MCP servers or tools; every permission request
+        is refused, and the session is not kept in the CLI's history. The model is given an instruction for an Agent
+        Prompt or a project Prompt, the Agent's name, the project's name and its Prompt (for an Agent in a project, so
+        the Agent Prompt does not repeat it), currentText and request. One surrounding code fence is removed from the
+        reply.
+        The request is answered when the draft is ready (at most 3 minutes); closing the request stops the CLI at once.
+        The texts of the request and the draft are not logged. A few drafts are written at a time; more wait for their
+        turn within the same 3 minutes.
+        Errors: 409 text_generation_unavailable when no runtime is ready (the message says how to set one up); 502
+        text_generation_failed when the CLI fails, tries to use a tool, runs over 3 minutes or returns nothing (the
+        message carries the CLI's own reason, such as a used-up limit or a revoked login); 404 for an Agent or project
+        that does not exist; 422 when request and currentText are both empty, a text is too long, or the ids do not
+        fit the target.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PromptDraftRequest" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The draft and who wrote it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromptDraft" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The writer failed (text_generation_failed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -10044,7 +10148,7 @@ components:
         Conflicts with the current state. `error.code` values:
         `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
         project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
-        `runtime_in_use` (details is RuntimeInUseDetails).
+        `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10322,6 +10426,8 @@ components:
 - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409)
 - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502)
 - plugin_timeout: the plugin did not respond in time (504)
+- text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409)
+- text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -10376,7 +10482,9 @@ components:
           "plugin_blocked",
           "plugin_failed",
           "plugin_timeout",
-          "runtime_in_use"
+          "runtime_in_use",
+          "text_generation_unavailable",
+          "text_generation_failed"
         ],
         "type": "string"
       }
@@ -10833,6 +10941,99 @@ components:
         subscriptionType:
           type: [string, "null"]
           description: Subscription type, such as max
+
+    TextGenerationSelection:
+      description: A runtime model chosen to write with AI
+      type: object
+      required: [provider, modelId]
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+          minLength: 1
+          description: The model provider (ModelProvider.id) of a runtime whose accounts are local, such as claude-code or codex-cli
+        modelId: { type: string, minLength: 1, maxLength: 256 }
+        thinkingLevel:
+          description: The thinking level; null or left out uses the model's default
+          anyOf:
+            - $ref: "#/components/schemas/ThinkingLevel"
+            - type: "null"
+
+    TextGenerationWriter:
+      description: The runtime and model that write (or would write now)
+      type: object
+      required: [runtime, provider, modelId, modelName, thinkingLevel, fellBack]
+      additionalProperties: false
+      properties:
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        provider: { type: string }
+        modelId: { type: string }
+        modelName: { type: string, description: "The model's name in the model list (its id when the list has none)" }
+        thinkingLevel:
+          description: The thinking level used; null when the model's default is used
+          anyOf:
+            - $ref: "#/components/schemas/ThinkingLevel"
+            - type: "null"
+        fellBack:
+          type: boolean
+          description: The chosen one was not ready (not installed, not logged in, too old, or its model is no longer listed), so Automatic's choice writes instead
+
+    TextGenerationSettings:
+      type: object
+      required: [selection, writer]
+      additionalProperties: false
+      properties:
+        selection:
+          description: The chosen runtime model; null is Automatic
+          oneOf:
+            - $ref: "#/components/schemas/TextGenerationSelection"
+            - type: "null"
+        writer:
+          description: Who would write now; null when no runtime is ready
+          oneOf:
+            - $ref: "#/components/schemas/TextGenerationWriter"
+            - type: "null"
+
+    TextGenerationSettingsPut:
+      type: object
+      required: [selection]
+      additionalProperties: false
+      properties:
+        selection:
+          description: The runtime model to write with; null is Automatic
+          oneOf:
+            - $ref: "#/components/schemas/TextGenerationSelection"
+            - type: "null"
+
+    PromptDraftRequest:
+      description: |
+        target agent: an existing Agent's Prompt (agentId), or a new Agent's (no agentId; projectId is the project it
+        will be in, none for a platform Agent). target project: the Prompt of the project projectId. agentName is the
+        name as typed so far; with agentId it replaces the saved name. agentId and agentName are refused with target
+        project, and projectId together with agentId (422).
+      type: object
+      required: [target, request, currentText]
+      additionalProperties: false
+      properties:
+        target: { type: string, enum: [agent, project] }
+        agentId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        agentName: { type: string, maxLength: 100 }
+        request:
+          type: string
+          maxLength: 4000
+          description: What the person wants, in their words; may be empty only when currentText is not
+        currentText:
+          type: string
+          description: The text in the editor now, which the draft improves or replaces; may be empty. Limited only by the request size, as the Prompt endpoints are.
+
+    PromptDraft:
+      type: object
+      required: [text, writer]
+      additionalProperties: false
+      properties:
+        text: { type: string, minLength: 1, description: "The draft, to put in the editor" }
+        writer: { $ref: "#/components/schemas/TextGenerationWriter" }
 
     ModelList:
       type: object

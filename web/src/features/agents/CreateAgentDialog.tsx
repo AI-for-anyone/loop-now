@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { RunnerPicker } from '@/components/runner-picker/RunnerPicker'
 import { RuntimeDifferences } from '@/features/agent-config/RuntimeNotes'
+import { PromptWriter } from '@/features/writing/PromptWriter'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
 import type { Schemas } from '@/api/client'
 import { useCreateAgent } from '@/api/queries'
@@ -52,7 +53,8 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent kind="create" className="sm:max-w-[860px]">
+      {/* Escape inside the Write with AI panel closes that panel, not the dialog with everything typed in it. */}
+      <DialogContent kind="create" className="sm:max-w-[860px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>
@@ -86,10 +88,15 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
             <Input id="create-agent-name" value={name} aria-invalid={nameError ? true : undefined} onChange={(e) => setName(e.target.value)} />
             <FieldError message={nameError} />
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="create-agent-prompt">{t.config.basic.prompt}</Label>
-            <Textarea id="create-agent-prompt" rows={4} placeholder={t.config.basic.promptPlaceholder} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-          </div>
+          {/* Write with AI knows the project (none for a platform Agent) and the name typed so far, when it is a valid name. */}
+          <PromptWriter
+            label={<Label htmlFor="create-agent-prompt">{t.config.basic.prompt}</Label>}
+            text={prompt}
+            onReplace={setPrompt}
+            ask={{ target: 'agent', ...(scope.kind === 'project' ? { projectId: scope.project.id } : {}), ...(name.trim() && !nameRuleError(name) ? { agentName: name } : {}) }}
+          >
+            {(writing) => <Textarea id="create-agent-prompt" rows={4} placeholder={t.config.basic.promptPlaceholder} value={prompt} disabled={writing} onChange={(e) => setPrompt(e.target.value)} />}
+          </PromptWriter>
           {!isAgentNameConflict(create.error) && <ErrorAlert error={unmatchedFieldError(create.error, (field) => field === 'name' || field === 'thinkingLevel' || field === 'serviceTier' || isModelField(field))} />}
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={onClose}>

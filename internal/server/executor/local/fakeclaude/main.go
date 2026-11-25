@@ -22,6 +22,12 @@
 //	fake:usage2        result carries usage for two models
 //	anything else      reply echo: <text>
 //
+// With --output-format json (print mode, one message read whole from stdin, one result printed) the first "fake:"
+// word anywhere in the message decides: fake:args, fake:env and fake:stdin (the message as read) reply as above;
+// fake:error <msg> ends with an error result and exit code 1; fake:slow waits until it is killed; fake:empty replies
+// nothing; anything else replies echo: <message>. Without --no-session-persistence it writes a session record, as the
+// real one does.
+//
 // Environment variables: FAKECLAUDE_VERSION changes the version; FAKECLAUDE_EXIT_AT_START=1 reports an unknown option
 // and exits right at startup; FAKECLAUDE_NO_INIT=1 prints nothing even when a message arrives; FAKECLAUDE_LOGGED_IN=0,
 // or a .fakeclaude-logged-out file under HOME, makes auth status report logged out; FAKECLAUDE_AUTH_FAIL=1 makes auth
@@ -35,9 +41,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -90,7 +98,52 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: unknown option '--bogus-flag'")
 		os.Exit(1)
 	}
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--output-format" && args[i+1] == "json" {
+			printMode(args)
+			return
+		}
+	}
 	run(args)
+}
+
+// printMode answers one message read whole from stdin with one JSON result, as claude -p --output-format json does.
+func printMode(args []string) {
+	in, _ := io.ReadAll(os.Stdin)
+	text := string(in)
+	if !slices.Contains(args, "--no-session-persistence") {
+		s := &session{id: "fake-print-session"}
+		s.path = transcript(s.id)
+		s.record(text)
+	}
+	cmd, arg := "", ""
+	if i := strings.Index(text, "fake:"); i >= 0 {
+		line, _, _ := strings.Cut(text[i:], "\n")
+		cmd, arg, _ = strings.Cut(strings.TrimSpace(line), " ")
+	}
+	result := func(isError bool, r string) {
+		b, _ := json.Marshal(map[string]any{"type": "result", "subtype": "success", "is_error": isError, "duration_ms": 1, "num_turns": 1,
+			"result": r, "session_id": "fake-print-session", "total_cost_usd": 0.001})
+		fmt.Println(string(b))
+	}
+	switch cmd {
+	case "fake:args":
+		b, _ := json.Marshal(os.Args[1:])
+		result(false, string(b))
+	case "fake:env":
+		result(false, envReport())
+	case "fake:stdin":
+		result(false, text)
+	case "fake:error":
+		result(true, arg)
+		os.Exit(1)
+	case "fake:slow":
+		time.Sleep(time.Hour)
+	case "fake:empty":
+		result(false, "")
+	default:
+		result(false, "echo: "+strings.TrimSpace(text))
+	}
 }
 
 func authStatus() {

@@ -114,6 +114,41 @@ type Runtime struct {
 	Command *LocalCommand
 	// CommandID is that command's id.
 	CommandID uuid.UUID
+	// TextGeneration says how the runtime writes short texts with its local login ("Write with AI", such as a Prompt
+	// draft); nil for a runtime that does not write them.
+	TextGeneration *TextGeneration
+}
+
+// TextGeneration is how Automatic uses a runtime that writes texts: the order it is tried in and the small model it
+// writes with, chosen from the runtime's live model list.
+type TextGeneration struct {
+	// Rank orders the runtimes Automatic tries, lowest first; the local ACP commands come after the built-in runtimes,
+	// in their own order.
+	Rank int
+	// Models are parts of the id or name (ignoring case) of the models Automatic prefers, in order: the first listed
+	// model that matches the first part, else the second, and so on; none, or no match, means the first listed model.
+	Models []string
+	// Level is the thinking level Automatic uses when the model offers it: a level, or LowestLevel for the model's
+	// lowest; empty means the model's default level.
+	Level string
+}
+
+// LowestLevel as TextGeneration.Level means the model's lowest thinking level.
+const LowestLevel = "lowest"
+
+// localCommandWriterRank puts the local ACP commands after the built-in runtimes in Automatic's order.
+const localCommandWriterRank = 100
+
+// Writers returns the runtimes that write texts, in the order Automatic tries them.
+func Writers() []Runtime {
+	var out []Runtime
+	for _, r := range All() {
+		if r.TextGeneration != nil {
+			out = append(out, r)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b Runtime) int { return a.TextGeneration.Rank - b.TextGeneration.Rank })
+	return out
 }
 
 // LocalCommand is a program on this computer that speaks the Agent Client Protocol over stdio, added by a person: an
@@ -136,7 +171,7 @@ func LocalCommandRuntimeID(id uuid.UUID) string { return LocalCommandPrefix + id
 func LocalCommandRuntime(id uuid.UUID, name string, cmd LocalCommand) Runtime {
 	rid := LocalCommandRuntimeID(id)
 	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
-		Command: &cmd, CommandID: id}
+		Command: &cmd, CommandID: id, TextGeneration: &TextGeneration{Rank: localCommandWriterRank}}
 }
 
 var (
@@ -211,11 +246,12 @@ var registry = []Runtime{
 			SessionCommands: SessionCommands, TaskFork: true, ReadsEntryFile: true},
 	},
 	{
-		ID:           ClaudeCode,
-		Name:         "Claude Code",
-		Providers:    []string{ClaudeCodeProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
-		Setup:        claudeCodeSetup,
+		ID:             ClaudeCode,
+		Name:           "Claude Code",
+		Providers:      []string{ClaudeCodeProvider},
+		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
+		Setup:          claudeCodeSetup,
+		TextGeneration: &TextGeneration{Rank: 1, Models: []string{"haiku"}},
 	},
 	{
 		// Codex runs as `codex app-server` with the user's Codex home (CODEX_HOME) and the Agent's own HOME: its login
@@ -225,29 +261,32 @@ var registry = []Runtime{
 		Providers: []string{CodexProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, SessionCommands: []string{CommandCompact}, TaskFork: true,
 			ReadsEntryFile: true},
-		Setup:      codexSetup,
-		MinVersion: "0.167.0",
+		Setup:          codexSetup,
+		MinVersion:     "0.167.0",
+		TextGeneration: &TextGeneration{Rank: 2, Models: []string{"luna", "-mini"}, Level: "low"},
 	},
 	{
 		// Grok runs as `grok agent ... stdio`, an Agent Client Protocol agent, with this computer's login (kept under the
 		// real HOME). The model and reasoning effort are given when it starts.
-		ID:           Grok,
-		Name:         "Grok",
-		Providers:    []string{GrokProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
-		Setup:        grokSetup,
-		MinVersion:   "1.0.88",
+		ID:             Grok,
+		Name:           "Grok",
+		Providers:      []string{GrokProvider},
+		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Setup:          grokSetup,
+		MinVersion:     "1.0.88",
+		TextGeneration: &TextGeneration{Rank: 4},
 	},
 	{
 		// Antigravity runs as `agy acp`, an Agent Client Protocol agent, with this computer's login (kept under the real
 		// HOME). It lists a model once per thinking level (gemini-4-neon-high); the catalog has one model with those
 		// levels (see modelcatalog.MergeLevelModels).
-		ID:           Antigravity,
-		Name:         "Antigravity",
-		Providers:    []string{AntigravityProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
-		Setup:        antigravitySetup,
-		MinVersion:   "1.5.14",
+		ID:             Antigravity,
+		Name:           "Antigravity",
+		Providers:      []string{AntigravityProvider},
+		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Setup:          antigravitySetup,
+		MinVersion:     "1.5.14",
+		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},
 	},
 }
 
@@ -301,6 +340,11 @@ func Known(id string) bool {
 func (r Runtime) clone() Runtime {
 	r.Providers = slices.Clone(r.Providers)
 	r.Capabilities.SessionCommands = slices.Clone(r.Capabilities.SessionCommands)
+	if r.TextGeneration != nil {
+		tg := *r.TextGeneration
+		tg.Models = slices.Clone(tg.Models)
+		r.TextGeneration = &tg
+	}
 	if r.Command != nil {
 		c := *r.Command
 		c.Args, c.Env = slices.Clone(c.Args), maps.Clone(c.Env)

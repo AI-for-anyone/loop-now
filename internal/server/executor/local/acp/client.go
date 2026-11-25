@@ -1,8 +1,8 @@
 // Package acp is a client of the Agent Client Protocol (protocol version 1): JSON-RPC 2.0 over stdio, one JSON message
 // per line, with the agent as the server. It opens or loads a session, sends prompts and streams session/update
 // notifications until the prompt's response gives the stop reason. Permission requests from the agent are granted
-// with the agent's own "allow" option, so a turn never waits for a person; the client offers no file system or
-// terminal of its own. Unknown notifications and fields are ignored.
+// with the agent's own "allow" option, so a turn never waits for a person (or all turned down, see
+// Options.RejectPermissions); the client offers no file system or terminal of its own. Unknown notifications and fields are ignored.
 package acp
 
 import (
@@ -40,6 +40,9 @@ type Options struct {
 	// Background, when set, keeps a turn open after its prompt has returned while the agent goes on with work it
 	// reports on by itself (see Background); nil ends the turn with the prompt.
 	Background *Background
+	// RejectPermissions turns down every permission request (the agent's own reject option, else cancelled) instead of
+	// granting it.
+	RejectPermissions bool
 }
 
 // Background is how a turn waits for work the agent goes on with after its prompt has returned. Antigravity moves a
@@ -275,7 +278,8 @@ func (c *Client) handle(line []byte) {
 }
 
 // answer replies to a request from the agent: a permission request gets the agent's own allow option (allow always
-// first, then allow once); anything else (file system, terminal: the client offers neither) gets "method not found".
+// first, then allow once), or with RejectPermissions its reject option (reject once first, then reject always);
+// anything else (file system, terminal: the client offers neither) gets "method not found".
 func (c *Client) answer(id json.RawMessage, method string, params json.RawMessage) {
 	if method != "session/request_permission" {
 		_ = c.send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": -32601, "message": "not supported by this client: " + method}})
@@ -288,8 +292,11 @@ func (c *Client) answer(id json.RawMessage, method string, params json.RawMessag
 		} `json:"options"`
 	}
 	_ = json.Unmarshal(params, &p)
-	choice := ""
-	for _, kind := range []string{"allow_always", "allow_once"} {
+	choice, kinds := "", []string{"allow_always", "allow_once"}
+	if c.o.RejectPermissions {
+		kinds = []string{"reject_once", "reject_always"}
+	}
+	for _, kind := range kinds {
 		for _, o := range p.Options {
 			if o.Kind == kind && choice == "" {
 				choice = o.OptionID

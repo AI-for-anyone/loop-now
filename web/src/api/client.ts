@@ -180,6 +180,8 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   plugin_failed: true,
   plugin_timeout: true,
   runtime_in_use: true,
+  text_generation_unavailable: true,
+  text_generation_failed: true,
   cli_auth_in_progress: true,
   credential_selection_mode_conflict: true,
 }

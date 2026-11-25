@@ -12,6 +12,7 @@ import { renderConfig } from '@/test/config'
 import { projectBackend } from '@/test/projects'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
+import { textGenerationBackend } from '@/test/text-generation'
 
 const promptInput = () => screen.getByLabelText('Agent prompt')
 const saveAgent = () => screen.getByRole('button', { name: 'Save Agent prompt' })
@@ -138,4 +139,36 @@ describe('Project prompt: separate saving and leaving', () => {
     expect(requests[1]).toEqual({prompt:'Project draft',expectedPromptVersion:2})
   })
 
+})
+
+describe('Write with AI in the Prompt editors', () => {
+  it("writes the Agent prompt for this Agent; the draft is an unsaved edit that saves the usual way", async () => {
+    const agent = makeAgent({ prompt: 'Original' }), submissions: Schemas['AgentUpdate'][] = []
+    const backend = textGenerationBackend()
+    const { user } = await renderConfig({ agent, handlers: [
+      ...backend.handlers,
+      http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => { const body = await request.json() as Schemas['AgentUpdate']; submissions.push(body); return HttpResponse.json({ ...agent, ...body, promptVersion: 2 }) }),
+    ] })
+    const section = screen.getByRole('region', { name: 'Prompt' })
+    await user.click(within(section).getByRole('button', { name: 'Write with AI' }))
+    await user.type(within(section).getByLabelText('What should it do?'), 'Sort issues')
+    await user.click(within(section).getByRole('button', { name: 'Write' }))
+    await waitFor(() => expect(promptInput()).toHaveValue('Written: Sort issues'))
+    expect(backend.state.drafts).toEqual([{ target: 'agent', agentId: agent.id, request: 'Sort issues', currentText: 'Original' }])
+    expect(within(section).getByText('Unsaved')).toBeInTheDocument()
+    expect(submissions).toEqual([])
+    await user.click(saveAgent())
+    await waitFor(() => expect(submissions).toEqual([{ prompt: 'Written: Sort issues', expectedPromptVersion: 1 }]))
+  })
+  it('writes the project prompt for the project', async () => {
+    const backend = textGenerationBackend()
+    const { user } = setupProject(backend.handlers)
+    const input = await screen.findByRole('textbox', { name: 'Project prompt' })
+    await user.click(screen.getByRole('button', { name: 'Write with AI' }))
+    await user.type(screen.getByLabelText('What should it do?'), 'Mobile app')
+    await user.click(screen.getByRole('button', { name: 'Write' }))
+    await waitFor(() => expect(input).toHaveValue('Written: Mobile app'))
+    expect(backend.state.drafts).toEqual([{ target: 'project', projectId: defaultProject.id, request: 'Mobile app', currentText: '' }])
+    expect(screen.getByRole('button', { name: 'Save project prompt' })).toBeEnabled()
+  })
 })

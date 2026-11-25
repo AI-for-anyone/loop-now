@@ -25,6 +25,13 @@
 //	fake:two            reply with two message items, first and second
 //	anything else       reply echo: <text>
 //
+// `exec` runs one turn on the message read from stdin (the last argument is -) and prints its events as JSON lines
+// (--json), writing the last message to the file of --output-last-message. The first "fake:" word anywhere in the
+// message decides: fake:args, fake:env and fake:stdin (the message as read) reply with those; fake:tool <cmd> starts a
+// command item, waits 2 seconds, then replies ran; fake:error <msg> ends with turn.failed and exit code 1; fake:slow
+// waits until it is killed; fake:empty replies nothing; anything else replies echo: <message>. Without --ephemeral it
+// saves the session under $CODEX_HOME/sessions, as the real one does.
+//
 // Environment: FAKECODEX_VERSION changes the version; FAKECODEX_ARGS_FILE gets one line per start (JSON: arguments
 // and environment); login status reports logged out when $CODEX_HOME/.fakecodex-logged-out exists;
 // FAKECODEX_MODELS (JSON array) replaces the model list, and so does $CODEX_HOME/.fakecodex-models.json; when
@@ -37,6 +44,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +85,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Logged in using ChatGPT")
 	case len(args) > 0 && args[0] == "app-server":
 		serve()
+	case len(args) > 0 && args[0] == "exec":
+		execTurn(args[1:])
 	default:
 		fmt.Fprintln(os.Stderr, "fakecodex: unknown arguments", args)
 		os.Exit(2)
@@ -503,4 +513,75 @@ func (s *server) turn(t *thread, turnID string, p map[string]any, stop chan stru
 		reply("echo: " + text)
 	}
 	done("completed", nil)
+}
+
+// execTurn answers one message as codex exec --json does.
+func execTurn(args []string) {
+	var outFile string
+	ephemeral := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--output-last-message", "-o":
+			if i+1 < len(args) {
+				outFile = args[i+1]
+			}
+		case "--ephemeral":
+			ephemeral = true
+		}
+	}
+	in, _ := io.ReadAll(os.Stdin)
+	text := string(in)
+	thread := newID()
+	if !ephemeral {
+		dir := filepath.Join(codexHome(), "sessions")
+		_ = os.MkdirAll(dir, 0o700)
+		_ = os.WriteFile(filepath.Join(dir, "rollout-"+thread+".jsonl"), in, 0o600)
+	}
+	event := func(v map[string]any) {
+		b, _ := json.Marshal(v)
+		fmt.Println(string(b))
+	}
+	event(map[string]any{"type": "thread.started", "thread_id": thread})
+	event(map[string]any{"type": "turn.started"})
+	cmd, arg := "", ""
+	if i := strings.Index(text, "fake:"); i >= 0 {
+		line, _, _ := strings.Cut(text[i:], "\n")
+		cmd, arg, _ = strings.Cut(strings.TrimSpace(line), " ")
+	}
+	reply := func(r string) {
+		event(map[string]any{"type": "item.completed", "item": map[string]any{"id": "item_1", "type": "agent_message", "text": r}})
+		if outFile != "" {
+			_ = os.WriteFile(outFile, []byte(r), 0o600)
+		}
+	}
+	switch cmd {
+	case "fake:args":
+		b, _ := json.Marshal(os.Args[1:])
+		reply(string(b))
+	case "fake:env":
+		env := map[string]string{}
+		for _, k := range []string{"CODEX_HOME", "HOME", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY", "CODEX_SANDBOX"} {
+			if v, ok := os.LookupEnv(k); ok {
+				env[k] = v
+			}
+		}
+		b, _ := json.Marshal(env)
+		reply(string(b))
+	case "fake:stdin":
+		reply(text)
+	case "fake:tool":
+		event(map[string]any{"type": "item.started", "item": map[string]any{"id": "item_0", "type": "command_execution", "command": arg, "status": "in_progress"}})
+		time.Sleep(2 * time.Second)
+		event(map[string]any{"type": "item.completed", "item": map[string]any{"id": "item_0", "type": "command_execution", "command": arg, "exit_code": 0, "status": "completed"}})
+		reply("ran")
+	case "fake:error":
+		event(map[string]any{"type": "turn.failed", "error": map[string]any{"message": arg}})
+		os.Exit(1)
+	case "fake:slow":
+		time.Sleep(time.Hour)
+	case "fake:empty":
+	default:
+		reply("echo: " + strings.TrimSpace(text))
+	}
+	event(map[string]any{"type": "turn.completed", "usage": map[string]any{"input_tokens": 10, "output_tokens": 5}})
 }

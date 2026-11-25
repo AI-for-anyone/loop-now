@@ -5,6 +5,9 @@
 // found.") or, for agy, succeeds empty, as the real ones do. FAKEACP_LOAD_SILENT=1 replays a session's history but
 // never answers session/load (as Grok sometimes does). $FAKEACP_HOME/.logged-out makes models report logged out and
 // prompts fail with auth_required. FAKEACP_ARGS_FILE gets one line per start (JSON: arguments and environment).
+// With FAKEACP_NATIVE_HOME every new session also leaves the records the real CLI keeps under its HOME, even with no
+// prompt: agy .gemini/antigravity-cli/conversations/<id>.db (with -wal) and brain/<id>/, Grok
+// .grok/sessions/<escaped cwd>/<id>/; Grok also appends each prompt to .grok/sessions/<escaped cwd>/prompt_history.jsonl.
 // FAKEACP_SLOW (a duration) delays --version and models; FAKEACP_HANG=grok or agy makes them hang for that flavor.
 //
 // The first "fake:" word of a prompt decides the reply:
@@ -39,6 +42,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -331,6 +335,7 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 		s.mu.Lock()
 		s.sessions[ss.ID] = ss
 		s.mu.Unlock()
+		nativeRecord(ss)
 		s.result(id, map[string]any{"sessionId": ss.ID, "models": models()})
 	case "session/load":
 		sid := str("sessionId")
@@ -374,6 +379,7 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 			s.fail(id, -32602, "unknown session", nil)
 			return
 		}
+		nativePrompt(ss, p)
 		go s.prompt(id, ss, p, cancel)
 	default:
 		s.fail(id, -32601, "fakeacp: unknown method "+method, nil)
@@ -520,4 +526,41 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		reply("echo: " + text)
 	}
 	stop("end_turn")
+}
+
+// nativeRecord leaves the records the real CLI keeps for a new session under FAKEACP_NATIVE_HOME (see the package
+// comment).
+func nativeRecord(ss *session) {
+	root := os.Getenv("FAKEACP_NATIVE_HOME")
+	if root == "" {
+		return
+	}
+	if flavor() == "agy" {
+		dir := filepath.Join(root, ".gemini", "antigravity-cli")
+		_ = os.MkdirAll(filepath.Join(dir, "conversations"), 0o700)
+		_ = os.MkdirAll(filepath.Join(dir, "brain", ss.ID), 0o700)
+		for _, f := range []string{filepath.Join(dir, "conversations", ss.ID+".db"), filepath.Join(dir, "conversations", ss.ID+".db-wal"), filepath.Join(dir, "brain", ss.ID, "notes.md")} {
+			_ = os.WriteFile(f, []byte("record"), 0o600)
+		}
+		return
+	}
+	dir := filepath.Join(root, ".grok", "sessions", url.PathEscape(ss.Cwd), ss.ID)
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "chat_history.jsonl"), []byte("record"), 0o600)
+}
+
+// nativePrompt appends a prompt to Grok's prompt history of the session's folder under FAKEACP_NATIVE_HOME, as the real
+// one does.
+func nativePrompt(ss *session, p map[string]any) {
+	root := os.Getenv("FAKEACP_NATIVE_HOME")
+	if root == "" || flavor() == "agy" {
+		return
+	}
+	dir := filepath.Join(root, ".grok", "sessions", url.PathEscape(ss.Cwd))
+	_ = os.MkdirAll(dir, 0o700)
+	b, _ := json.Marshal(map[string]any{"sessionId": ss.ID, "prompt": p["prompt"]})
+	if f, err := os.OpenFile(filepath.Join(dir, "prompt_history.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+		f.Write(append(b, '\n'))
+		f.Close()
+	}
 }

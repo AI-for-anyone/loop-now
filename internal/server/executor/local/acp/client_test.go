@@ -442,3 +442,12 @@ func TestBackgroundStop(t *testing.T) {
 		t.Fatal("still in a prompt")
 	}
 }
+
+// With RejectPermissions every permission request is turned down: the agent's own reject option when it offers one.
+func TestRejectPermissions(t *testing.T) {
+	h := newHarness(t, "agy")
+	c, _ := h.start(acp.Options{RejectPermissions: true})
+	if r := prompt(t, c, newSession(t, c, h), "fake:permission", nil); r.Text != "permission=no" {
+		t.Fatalf("a permission request is turned down with the reject option: %q", r.Text)
+	}
+}

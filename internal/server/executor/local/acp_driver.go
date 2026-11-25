@@ -8,11 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +59,12 @@ type acpFlavor struct {
 	// background: the agent goes on with commands after its prompt has returned and reports on them by itself, so a
 	// turn waits for them (see acp.Background); holds says which open tools do that.
 	background func(kind string, rawInput json.RawMessage) bool
+	// writeArgs are the arguments that start the agent to write a text (see writeText): the model and effort when they
+	// are given at start, and none of the flags that approve every tool; nil means args (a local command).
+	writeArgs func(model, effort string) []string
+	// forget removes what the CLI keeps under home for the session sessionID it opened in cwd (its history entry), after
+	// a text run; nil when that is not known.
+	forget func(home, cwd, sessionID string) error
 }
 
 // localCommandFlavor runs a local ACP command: its own arguments, the program's default model, Skills listed in the
@@ -76,7 +85,15 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 			args = append(args, "--reasoning-effort", effort)
 		}
 		return append(args, "--plugin-dir", d.acpPlugin, "stdio")
-	}}
+	},
+	writeArgs: func(model, effort string) []string {
+		args := []string{"--permission-mode", "default", "agent", "--model", model}
+		if effort != "" {
+			args = append(args, "--reasoning-effort", effort)
+		}
+		return append(args, "stdio")
+	},
+	forget: forgetGrokSession}
 
 // antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model is chosen in the session, by the id that carries
 // the thinking level (see acpSessionModel).
@@ -84,7 +101,52 @@ var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "ag
 	args: func(agentconfig.Snapshot, agentDirs) []string {
 		return []string{"acp", "--dangerously-skip-permissions"}
 	},
-	background: antigravityBackgroundCommand}
+	background: antigravityBackgroundCommand,
+	writeArgs:  func(string, string) []string { return []string{"acp"} },
+	forget:     forgetAntigravitySession}
+
+// sessionIDPattern is what a session id must look like before it names a file or folder to remove.
+var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// forgetGrokSession removes the folder Grok keeps for a working folder (.grok/sessions/<working folder, escaped>): the
+// session's own folder and the prompt history, which holds what was sent. The working folder is a text run's own
+// (see WriteText), so the whole folder is the run's; anything else is refused, so a mistake can never reach
+// .grok/sessions itself or the sessions of another folder.
+func forgetGrokSession(home, cwd, sessionID string) error {
+	if !sessionIDPattern.MatchString(sessionID) {
+		return fmt.Errorf("unexpected session id %q", sessionID)
+	}
+	if !filepath.IsAbs(home) || !filepath.IsAbs(cwd) || filepath.Base(cwd) != textWorkDir || !strings.HasPrefix(filepath.Base(filepath.Dir(cwd)), textDirPrefix) {
+		return fmt.Errorf("not a text run's working folder: %q", cwd)
+	}
+	sessions := filepath.Join(home, ".grok", "sessions")
+	name := url.PathEscape(cwd)
+	target := filepath.Join(sessions, name)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || filepath.Dir(target) != sessions || filepath.Base(target) != name {
+		return fmt.Errorf("unexpected Grok session folder %q", name)
+	}
+	return os.RemoveAll(target)
+}
+
+// forgetAntigravitySession removes what agy keeps for a session under .gemini/antigravity-cli: its conversation
+// database (conversations/<id>.db and the files beside it), brain/<id> and annotations/<id>.pbtxt.
+func forgetAntigravitySession(home, _, sessionID string) error {
+	if !sessionIDPattern.MatchString(sessionID) {
+		return fmt.Errorf("unexpected session id %q", sessionID)
+	}
+	dir := filepath.Join(home, ".gemini", "antigravity-cli")
+	var errs []error
+	for _, p := range []string{
+		filepath.Join(dir, "conversations", sessionID+".db"), filepath.Join(dir, "conversations", sessionID+".db-wal"),
+		filepath.Join(dir, "conversations", sessionID+".db-shm"), filepath.Join(dir, "conversations", sessionID+".db-journal"),
+		filepath.Join(dir, "brain", sessionID), filepath.Join(dir, "annotations", sessionID+".pbtxt"),
+	} {
+		if err := os.RemoveAll(p); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
 
 // antigravityBackgroundCommand reports whether an open tool is a command agy goes on running after the prompt: its
 // run_command (kind execute) moves to the background when it outlasts WaitMsBeforeAsync, its end comes with no prompt
@@ -697,4 +759,179 @@ func (e *Executor) grokModels(ctx context.Context, bin string, env []string) ([]
 		out = append(out, model)
 	}
 	return out, nil
+}
+
+// acpTextLimit is the most text a text run collects before it is stopped.
+const acpTextLimit = 1 << 20
+
+// writeText runs the agent once in dir with this computer's login: started without the flags that approve every tool,
+// a new session with no MCP servers, the model and level chosen as for an Agent, one prompt (the instructions first),
+// every permission request turned down. A tool it starts (other than thinking or fetching a web page) ends the run at
+// once, as a failure. Afterwards the process ends and the session's record in the CLI's own history is removed.
+func (ad acpDriver) writeText(ctx context.Context, dir, _ string, req executor.TextRequest) (string, error) {
+	e, f := ad.e, ad.f
+	bin, err := e.acpBinary(ctx, f)
+	if err != nil {
+		return "", textUnavailable("%s was not found on this computer: %s is not on the login shell's PATH. Install it and log in first.", ad.name(), f.binary)
+	}
+	home, err := e.o.RealHome()
+	if err != nil || !filepath.IsAbs(home) {
+		return "", textUnavailable("Could not read the server user's home directory (%s needs this computer's login).", ad.name())
+	}
+	if f.command == nil {
+		if _, err := ad.acpVersion(ctx, bin); err != nil {
+			var fl *failure
+			if errors.As(err, &fl) {
+				return "", textUnavailable("%s", fl.msg)
+			}
+			return "", textUnavailable("%v", err)
+		}
+	}
+	effort := ""
+	if req.ThinkingLevel != nil && *req.ThinkingLevel != "off" {
+		effort = *req.ThinkingLevel
+	}
+	args := f.args(agentconfig.Snapshot{}, agentDirs{})
+	if f.writeArgs != nil {
+		args = f.writeArgs(req.Model, effort)
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Env = acpEnv(e.ACPHelperEnv(ctx))
+	if c := f.command; c != nil {
+		for _, k := range slices.Sorted(maps.Keys(c.Env)) {
+			cmd.Env = append(cmd.Env, k+"="+c.Env[k])
+		}
+	}
+	cmd.Dir = dir
+	procgroup.Configure(cmd)
+	client, err := acp.Start(cmd, acp.Options{Kill: procgroup.Kill, RejectPermissions: true})
+	if err != nil {
+		return "", textFailed("Could not start %s: %v", ad.name(), err)
+	}
+	_ = procgroup.Started(cmd)
+	sessionID := ""
+	defer func() {
+		_ = client.CloseStdin()
+		client.Kill()
+		select {
+		case <-client.Done():
+		case <-time.After(5 * time.Second):
+		}
+		if sessionID != "" && f.forget != nil {
+			if err := f.forget(home, dir, sessionID); err != nil && e.log != nil {
+				e.log.Warn("could not remove the session a text run left in the CLI's history", "runtime", f.runtime, "err", err)
+			}
+		}
+	}()
+	stopped := make(chan struct{})
+	defer close(stopped)
+	go func() {
+		select {
+		case <-ctx.Done():
+			client.Kill()
+		case <-stopped:
+		}
+	}()
+	if _, err := client.Initialize(ctx, acpClientName, "1"); err != nil {
+		return "", ad.textStartFailure(ctx, client, err)
+	}
+	s, err := client.NewSession(ctx, dir, nil)
+	if err != nil {
+		return "", ad.textStartFailure(ctx, client, err)
+	}
+	sessionID = s.ID
+	if f.modelInSession && req.Model != modelcatalog.LocalCommandDefaultModel {
+		model := req.Model
+		if req.ThinkingLevel != nil {
+			model = modelcatalog.LevelModelID(model, *req.ThinkingLevel)
+		}
+		if err := client.SetModel(ctx, s.ID, model); err != nil {
+			return "", ad.textStartFailure(ctx, client, err)
+		}
+	}
+	sink := &textSink{kill: client.Kill}
+	r, err := client.Prompt(ctx, s.ID, textPrompt(req), sink)
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	text, tool, over := sink.result()
+	switch {
+	case tool != "":
+		return "", textFailed("%s tried to use a tool while writing (%s), so it was stopped. Try again, or choose another writer.", ad.name(), tool)
+	case over:
+		return "", textFailed("%s wrote more than Loop Now takes for a draft, so it was stopped.", ad.name())
+	case err != nil:
+		return "", textFailed("%s could not write it: %v", ad.name(), err)
+	case r.Outcome == runturn.OutcomeFailed && r.ErrorCode == executor.ErrRuntimeLoginRequired:
+		return "", textFailed("%s", ad.loginMessage())
+	case r.Outcome == runturn.OutcomeFailed:
+		reason := r.ErrorMessage
+		if reason == "" {
+			reason = lastLines(client.Stderr(), 3)
+		}
+		return "", textFailed("%s could not write it: %s", ad.name(), reason)
+	case r.Outcome == runturn.OutcomeAborted:
+		return "", textFailed("%s stopped before it finished writing.", ad.name())
+	}
+	return text, nil
+}
+
+// textStartFailure is a failure before the prompt: a login the agent asks for, or the process's own words.
+func (ad acpDriver) textStartFailure(ctx context.Context, client *acp.Client, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if acp.IsAuthRequired(err) {
+		return textFailed("%s", ad.loginMessage())
+	}
+	if errors.Is(err, runturn.ErrExited) {
+		return textFailed("%s exited while starting. %s", ad.name(), lastLines(client.Stderr(), 3))
+	}
+	return textFailed("%s did not start: %v", ad.name(), err)
+}
+
+// textSink collects a text run's reply; a tool other than thinking or fetching a web page, or too long a reply, ends
+// the process at once.
+type textSink struct {
+	kill func()
+	mu   sync.Mutex
+	text strings.Builder
+	tool string
+	over bool
+}
+
+func (s *textSink) TextDelta(delta string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.text.Len()+len(delta) > acpTextLimit {
+		if !s.over {
+			s.over = true
+			go s.kill()
+		}
+		return
+	}
+	s.text.WriteString(delta)
+}
+
+func (s *textSink) ToolStarted(_, name string) {
+	if name == "think" || name == "fetch" {
+		return
+	}
+	s.mu.Lock()
+	first := s.tool == ""
+	if first {
+		s.tool = name
+	}
+	s.mu.Unlock()
+	if first {
+		go s.kill()
+	}
+}
+
+func (s *textSink) ToolEnded(string, string, bool) {}
+
+func (s *textSink) result() (text, tool string, over bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.text.String(), s.tool, s.over
 }

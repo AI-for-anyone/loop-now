@@ -82,6 +82,27 @@ type TaskStartHandoff struct {
 	BudgetBytes      int    `json:"budgetBytes"`
 }
 
+// TextRequest is one short text a runtime's local CLI writes with its own login ("Write with AI", such as a Prompt
+// draft), outside any Agent: a new session in an empty temporary folder, without the platform's Skills, plugins, MCP
+// servers or tools, and not kept in the CLI's history.
+type TextRequest struct {
+	Runtime string
+	Model   string
+	// ThinkingLevel is nil for the model's default.
+	ThinkingLevel *string
+	// Instructions say what to write and how; Prompt carries the material and the person's request.
+	Instructions, Prompt string
+}
+
+// TextFailure is why a text was not written. Unavailable: the runtime's CLI cannot be used on this computer (not found,
+// too old, cannot start); otherwise the CLI ran and failed. Message says so in plain words, with the CLI's own reason.
+type TextFailure struct {
+	Unavailable bool
+	Message     string
+}
+
+func (f *TextFailure) Error() string { return f.Message }
+
 // CompactionResult is the result of one manual compaction. A non-empty Skipped means Pi did not compact (the session is
 // too short, was already compacted, or an extension cancelled it); this is still a normal completion and all token
 // counts are 0. Otherwise the fields hold the token counts before and after compaction.

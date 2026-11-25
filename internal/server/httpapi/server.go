@@ -39,6 +39,7 @@ import (
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/server/textgen"
 )
 
 // Options are the parameters of the HTTP layer.
@@ -85,8 +86,10 @@ type Server struct {
 	Inbox              *inbox.Service
 	Folders            *folders.Service
 	LocalMode          *localmode.Service
-	Tasks              *tasks.Service
-	Log                *slog.Logger
+	// TextGeneration writes with AI (Prompt drafts); when nil nobody writes.
+	TextGeneration *textgen.Service
+	Tasks          *tasks.Service
+	Log            *slog.Logger
 	// PiCommands returns the command list Pi reported the last time the Agent started it (nil if Pi has never been
 	// started); when PiCommands is nil the command list is always empty.
 	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
@@ -150,6 +153,9 @@ func (s *Server) Routes() []Route {
 		{"PATCH", "/acp-commands/{commandId}", "updateAcpCommand", ConsoleOnly, s.updateACPCommand},
 		{"DELETE", "/acp-commands/{commandId}", "deleteAcpCommand", ConsoleOnly, s.deleteACPCommand},
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
+		{"GET", "/text-generation-settings", "getTextGenerationSettings", ConsoleOnly, s.getTextGenerationSettings},
+		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
+		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},
 		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
 		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},
 		{"GET", "/agents/{agentId}/local-directories", "getAgentLocalDirectories", ConsoleOnly, s.getAgentLocalDirectories},

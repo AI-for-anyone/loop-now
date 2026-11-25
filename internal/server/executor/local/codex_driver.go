@@ -555,3 +555,99 @@ func (o codexObserver) Usage(u codexapp.Usage, inTurn bool) {
 func (o codexObserver) RateLimit(info map[string]any, inTurn bool) {
 	o.e.event(o.p.agentID, o.runID(inTurn), store.EventModelRateLimit, map[string]any{"info": info})
 }
+
+// codexTextConfig are the -c overrides of a Codex text run: no plugins, apps or connectors and no hooks, besides not
+// reading the user's config.toml at all (--ignore-user-config; the login is still found through CODEX_HOME).
+var codexTextConfig = []string{"features.plugins=false", "features.apps=false", "features.connectors=false",
+	"features.hooks=false", "features.codex_hooks=false"}
+
+// writeText runs codex exec once in dir with this computer's login: ephemeral (nothing in Codex's history), outside a
+// repository, in the read-only sandbox, without the user's config.toml (and so without their MCP servers, hooks and
+// plugins), the chosen model and effort, everything on stdin. A command, file change or MCP tool it starts ends the
+// run at once, as a failure.
+func (cd codexDriver) writeText(ctx context.Context, dir, scratch string, req executor.TextRequest) (string, error) {
+	e := cd.e
+	bin, err := e.codexBinary(ctx)
+	if err != nil {
+		return "", textUnavailable("Codex was not found on this computer: codex is not on the login shell's PATH. Install Codex and log in first.")
+	}
+	if e.codexHome() == "" {
+		return "", textUnavailable("Could not read the server user's home directory (Codex needs this computer's login).")
+	}
+	if _, err := e.codexVersion(ctx, bin); err != nil {
+		var f *failure
+		if errors.As(err, &f) {
+			return "", textUnavailable("%s", f.msg)
+		}
+		return "", textUnavailable("%v", err)
+	}
+	outFile := filepath.Join(scratch, "last-message.txt")
+	args := []string{"exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--sandbox", "read-only", "--model", req.Model}
+	if req.ThinkingLevel != nil && *req.ThinkingLevel != "off" {
+		args = append(args, "-c", `model_reasoning_effort="`+*req.ThinkingLevel+`"`)
+	}
+	for _, c := range codexTextConfig {
+		args = append(args, "-c", c)
+	}
+	args = append(args, "--json", "--color", "never", "--output-last-message", outFile, "-")
+	cmd := exec.Command(bin, args...)
+	cmd.Env = e.CodexHelperEnv(ctx)
+	cmd.Dir = dir
+	var tool, failed, last string
+	res, err := oneShot(ctx, cmd, textPrompt(req), func(line []byte) bool {
+		var ev struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+			Error   struct {
+				Message string `json:"message"`
+			} `json:"error"`
+			Item struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"item"`
+		}
+		if json.Unmarshal(line, &ev) != nil {
+			return true
+		}
+		switch ev.Type {
+		case "item.started", "item.updated", "item.completed":
+			switch ev.Item.Type {
+			case "command_execution", "file_change", "mcp_tool_call":
+				tool = ev.Item.Type
+				return false
+			case "agent_message":
+				if ev.Type == "item.completed" {
+					last = ev.Item.Text
+				}
+			}
+		case "turn.failed":
+			failed = ev.Error.Message
+		case "error":
+			failed = ev.Message
+		}
+		return true
+	})
+	if err != nil {
+		return "", textFailed("Could not start Codex: %v", err)
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	if tool != "" {
+		return "", textFailed("Codex tried to run a command or use a tool while writing (%s), so it was stopped. Try again, or choose another writer.", tool)
+	}
+	if failed != "" || res.exit != nil {
+		reason := failed
+		if reason == "" {
+			reason = lastLines(res.stderr, 3)
+		}
+		if reason == "" {
+			reason = res.exit.Error()
+		}
+		return "", textFailed("Codex could not write it: %s", reason)
+	}
+	if b, err := os.ReadFile(outFile); err == nil && len(b) > 0 {
+		return string(b), nil
+	}
+	return last, nil
+}
