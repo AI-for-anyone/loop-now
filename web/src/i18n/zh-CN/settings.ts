@@ -94,4 +94,23 @@ export const settings = {
     failed: '安装失败',
     unsupported_platform: '无当前平台安装包',
   } satisfies Record<S['CliTemplate']['install']['status'], string>,
+  // Who writes with AI (Prompt drafts): Automatic, or one CLI with its own login on this computer and a model of it.
+  writing: {
+    title: 'AI 帮写',
+    hint: '写 Prompt 时点「AI 帮写」，就由这里选的命令行工具来写。它用自己在这台电脑上的登录，不会新建 Agent。',
+    who: '由谁来写',
+    automatic: '自动',
+    // Under "Automatic" in the rail: who that is now, or the rule while another one is chosen.
+    now: (name: string) => `现在是 ${name}`,
+    firstReady: '第一个能用的',
+    noneReady: '都还不能用',
+    automaticBody: '用这台电脑上第一个能用的命令行工具，挑它一个又小又快的模型来写。',
+    writesNow: '现在由它来写',
+    useAutomatic: '改用自动',
+    usingAutomatic: '正在用自动',
+    thinkingNote: '自动时不用选档位',
+    noWriter: '这台电脑上还没有能用来写的命令行工具。先在「Agent 运行时」里装好一个并登录。',
+    toRuntimes: '去 Agent 运行时',
+    fellBack: (chosen: string, writer: string) => `你选的 ${chosen} 现在用不了，暂时由 ${writer} 来写。`,
+  },
 } as const
