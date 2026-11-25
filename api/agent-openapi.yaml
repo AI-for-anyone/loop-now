@@ -2265,9 +2265,13 @@ components:
       enum: [user, assistant]
 
     MessageOrigin:
-      description: Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
+      description: |
+        Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder
+        after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the
+        sleep is due; background means the runtime's CLI replied by itself after background work it started had ended
+        (Run.triggerBackgroundTasks names that work), and the user message is generated text saying so
       type: string
-      enum: [console, inbox_reminder, sleep_wake]
+      enum: [console, inbox_reminder, sleep_wake, background]
 
     Whoami:
       type: object
@@ -2495,6 +2499,8 @@ components:
 - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409)
 - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409)
 - run_not_active: when stopping a reply, this run has already ended (409)
+- background_task_not_found: the Agent has no background task with this id (404)
+- background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails)
 - action_conflict: the same actionId was used for an action with different content (409)
 - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422)
 - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409)
@@ -2565,7 +2571,9 @@ components:
           "text_generation_unavailable",
           "text_generation_failed",
           "path_picker_unavailable",
-          "path_picker_busy"
+          "path_picker_busy",
+          "background_task_not_found",
+          "background_task_ended"
         ],
         "type": "string"
       }
@@ -8699,6 +8707,8 @@ components:
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineContextHandoff"
         - $ref: "#/components/schemas/TimelineBackgroundWaitTimeout"
+        - $ref: "#/components/schemas/TimelineBackgroundTaskStarted"
+        - $ref: "#/components/schemas/TimelineBackgroundTaskEnded"
         - $ref: "#/components/schemas/TimelineExtensionUI"
         - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
@@ -8726,9 +8736,42 @@ components:
           session_missing: "#/components/schemas/TimelineSessionMissing"
           context_handoff: "#/components/schemas/TimelineContextHandoff"
           background_wait_timeout: "#/components/schemas/TimelineBackgroundWaitTimeout"
+          background_task_started: "#/components/schemas/TimelineBackgroundTaskStarted"
+          background_task_ended: "#/components/schemas/TimelineBackgroundTaskEnded"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
           model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
+
+    TimelineBackgroundTaskStarted:
+      description: A background task (see BackgroundTask) started in this run; it may outlive the run
+      type: object
+      required: [type, at, taskId, kind, label, toolCallId]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [background_task_started] }
+        at: { type: string, format: date-time }
+        taskId: { type: string }
+        kind: { type: string, enum: [command, subagent, other] }
+        label: { type: string }
+        toolCallId: { type: [string, "null"] }
+
+    TimelineBackgroundTaskEnded:
+      description: |
+        A background task this run started has ended; recorded on this run even when the end came after the run ended
+        (at says when). Fields as in BackgroundTask.
+      type: object
+      required: [type, at, taskId, status, exitCode, stopReason, output]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [background_task_ended] }
+        at: { type: string, format: date-time }
+        taskId: { type: string }
+        status: { type: string, enum: [completed, failed, stopped, unknown] }
+        exitCode: { type: [integer, "null"] }
+        stopReason:
+          type: [string, "null"]
+          enum: [person, reply_stopped, settings_changed, runtime_switched, session_reset, agent_deleted, task_started, shutdown, task_limit, null]
+        output: { type: [string, "null"] }
 
     TimelineBackgroundWaitTimeout:
       description: |
@@ -9077,6 +9120,70 @@ components:
       description: Retired folder source kind, used only by workspace sync entries in old task run records
       type: string
       enum: [git, files]
+    BackgroundTask:
+      description: |
+        Work that the runtime's CLI started in the background during a reply and that outlives the reply: a command
+        (Claude Code's background Bash, a Codex command still running when its turn completed, a Grok terminal command
+        moved to the background, an Antigravity command moved to the background), a sub-agent, or other work. The reply
+        ends when the CLI ends it; the task is listed until it ends. It belongs to the run that started it, and its end
+        is recorded on that run even when other replies came in between. When the CLI replies by itself after the end,
+        that reply is a run of origin background. Tasks do not outlive the runtime's process: when the process exits
+        unexpectedly, or the server restarts, the ones still running become unknown.
+      type: object
+      required: [id, runtime, kind, label, runId, toolCallId, startedAt, status, endedAt, exitCode, stopReason, stopRequestedAt, output]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: The runtime's own id of the task (for Codex, the id of the command's item); unique among an Agent's running tasks
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        kind:
+          type: string
+          enum: [command, subagent, other]
+          description: command, a shell command; subagent, an agent the CLI started to work on its own; other, anything else the CLI runs in the background
+        label:
+          type: string
+          description: The command, else the CLI's own description of the task (at most 4096 characters)
+        runId: { type: string, format: uuid, description: The run that started the task }
+        toolCallId:
+          type: [string, "null"]
+          description: The tool call in that run that started the task (Run.tools); null when the runtime does not say
+        startedAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [running, completed, failed, stopped, unknown]
+          description: |
+            running until the runtime reports the end. completed and failed are as the runtime reported them; stopped
+            means it was stopped (stopReason says why); unknown means it can no longer be followed (the runtime's
+            process exited or the server restarted while it ran) and the runtime never said how it ended.
+        endedAt: { type: [string, "null"], format: date-time }
+        exitCode:
+          type: [integer, "null"]
+          description: The command's exit code, when the runtime gives one
+        stopReason:
+          type: [string, "null"]
+          enum: [person, reply_stopped, settings_changed, runtime_switched, session_reset, agent_deleted, task_started, shutdown, task_limit, null]
+          description: |
+            Why a stopped task was stopped (null otherwise): person, from the list (one task or all of them);
+            reply_stopped, the reply was stopped and the runtime's stop ends its process
+            (RuntimeCapabilities.stopEndsBackgroundTasks), or a task instance's turn waiting for it was stopped;
+            settings_changed, a change of settings restarted the runtime's process (model, thinking level, Prompt,
+            Skills, credentials, plugin grants, /reload); runtime_switched, the Agent moved to another runtime;
+            session_reset, a new session was started or another one resumed (/new, /resume); agent_deleted, the Agent was
+            deleted; task_started, a task that starts from this Agent's session was started; shutdown, Loop Now was
+            quitting; task_limit, a task instance's turn waited for it for LOOP_NOW_ACP_BACKGROUND_WAIT without hearing
+            anything from the runtime.
+        stopRequestedAt:
+          type: [string, "null"]
+          format: date-time
+          description: When a stop was asked for; while the task is still running it is being stopped
+        output:
+          type: [string, "null"]
+          description: |
+            The end of the task's output when the runtime gives it with the end: at most 4096 bytes of UTF-8, the last
+            ones, cut at a character boundary; null while running and when the runtime gives none.
+
     ToolState:
       description: |
         started: the tool is running; succeeded and failed: the runtime reported how it ended. no_result: the turn ended
@@ -9094,10 +9201,12 @@ components:
         - user_cancelled: withdrawn or cancelled by a person while queued; merged_into_interrupt: all of its messages
           were moved into an interrupt reminder; no_pending_messages: all messages the reminder carried were already
           read or cancelled.
-        None of the last five ran any tool or model; the conversation stream should hide user_cancelled,
-        merged_into_interrupt and no_pending_messages.
+        - merged_into_reply: a follow-up reply (origin background) whose output went into another reply that was
+          starting when the runtime's CLI began it; that reply recorded it.
+        None of the last six ran any tool or model; the conversation stream should hide user_cancelled,
+        merged_into_interrupt, no_pending_messages and merged_into_reply.
       type: [string, "null"]
-      enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, null]
+      enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, merged_into_reply, null]
     RunErrorCode: {"description":"- credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)\n- cli_install_failed: installing the CLI failed\n- workspace_sync_failed: syncing the workspace failed (such as a failed clone)\n- session_missing: the session is missing (its file, or for Codex its thread, no longer exists)\n- pi_start_failed: Pi failed to start or timed out while starting\n- pi_exited: the Pi process exited unexpectedly\n- pi_error: Pi reported that this turn ended with an error\n- internal_error: internal server error (such as the database being temporarily unavailable); this reply could not run\n- plugin_blocked: a plugin rejected this turn's operation, or the run conditions changed\n- image_unsupported: the model actually used for this turn does not support images; the turn neither sent the images nor switched models\n- runtime_unavailable: the runtime's CLI (Claude Code, Codex) is not available on this computer (not on the login shell's PATH, its version cannot be read, or it is older than the runtime's minVersion)\n- runtime_login_required: the runtime's CLI on this computer is not logged in, or its login was revoked; the user must log in on this computer and try again\n- runtime_start_failed: the runtime's CLI exited before the first turn started, or timed out while starting (the message includes the version and the tail of the error output)\n- runtime_exited: the runtime's CLI process exited unexpectedly during this turn\n- runtime_error: the runtime's CLI reported that this turn ended with an error (such as the usage limit being used up)\n","type":"string","enum":["credential_unavailable","cli_install_failed","workspace_sync_failed","session_missing","pi_start_failed","pi_exited","pi_error","internal_error","plugin_blocked","image_unsupported","runtime_unavailable","runtime_login_required","runtime_start_failed","runtime_exited","runtime_error"]}
     RunStatus:
       type: string
@@ -9151,7 +9260,7 @@ components:
 
     Run:
       type: object
-      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, usageReported, model, selection]
+      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, usageReported, model, selection, backgroundTasks]
       additionalProperties: false
       properties:
         triggerInboxMessageId:
@@ -9235,6 +9344,18 @@ components:
         tools:
           type: array
           items: { $ref: "#/components/schemas/ToolEvent" }
+        backgroundTasks:
+          description: |
+            The background tasks this run started, in any status, in the order they started; empty for other runs. A
+            task's start or end after the run ended updates the run (run.updated, with the same status).
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
+        triggerBackgroundTasks:
+          description: |
+            Present only on a run of origin background: the background tasks whose end this reply of the runtime's CLI
+            followed, as they ended
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
         usage:
           description: Sum of all usage of this run (including compaction, cache warming and tool usage)
           $ref: "#/components/schemas/UsageTotals"
@@ -9348,7 +9469,7 @@ components:
 
     AgentStatus:
       type: object
-      required: [sleep, sleepRevision, agentId, busy, currentRun, queued, processState, processPid, processStartedAt, session]
+      required: [sleep, sleepRevision, agentId, busy, currentRun, queued, processState, processPid, processStartedAt, session, backgroundTasks, restartOnNextMessage]
       additionalProperties: false
       properties:
         sleep:
@@ -9373,6 +9494,18 @@ components:
           type: [string, "null"]
           format: date-time
         session: { $ref: "#/components/schemas/SessionInfo" }
+        backgroundTasks:
+          description: |
+            The background tasks still running on the Agent's runtime process, oldest first. busy says nothing about
+            them: an Agent can be idle while they run.
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
+        restartOnNextMessage:
+          description: |
+            While background tasks run (backgroundTasks is not empty): the Agent's settings changed since its runtime
+            process started, so the next message restarts the process, which stops them (stopReason
+            settings_changed). Always false when no background task runs.
+          type: boolean
 
     ProcessState:
       type: string
