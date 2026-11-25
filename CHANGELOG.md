@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Token usage for Antigravity, Grok and local ACP commands
+
+- Replies from Antigravity, Grok and your own ACP commands now count their tokens in Usage and Stats, as Claude Code and Codex already do: input, output, cache reads and writes, and reasoning, as the CLI itself reports them at the end of each reply. Nothing else is read: no login files and no service APIs.
+- Not counted: the follow-up Antigravity writes by itself after its background commands finish (it reports no token counts for it), and a Grok reply that was stopped.
+
 ### Choose a folder or a program in the browser too
 
 - When the console is opened in a browser on the Mac where Loop Now runs, path fields have the same "Choose…" button as the desktop app: Loop Now opens the Mac's own dialog, and the full path is filled in. It works for an Agent's or a project's local folders, a plugin installed from a local folder, and the command of a local ACP command (an `.app` fills in the program inside it).
