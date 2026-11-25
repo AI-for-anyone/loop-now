@@ -337,7 +337,12 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if effort := claudeEffort(snap); effort != "" {
 		args = append(args, "--effort", effort)
 	}
-	args = append(args, "--setting-sources", "", "--settings", claudeSettings, "--strict-mcp-config")
+	own := localConfig(snap)
+	if !own {
+		// The person's settings, CLAUDE.md files and MCP servers are not read; auto memory and Claude Code's own Skills
+		// are off. With the person's own configuration Claude Code reads all of them, as in their terminal.
+		args = append(args, "--setting-sources", "", "--settings", claudeSettings, "--strict-mcp-config")
+	}
 	if _, err := os.Stat(d.claudeMCP); err == nil {
 		args = append(args, "--mcp-config", d.claudeMCP)
 	}
@@ -345,12 +350,18 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if _, err := os.Stat(d.prompt); err == nil {
 		args = append(args, "--append-system-prompt-file", d.prompt)
 	}
-	args = append(args, "--plugin-dir", d.claudePlugin, "--tools", strings.Join(ClaudeCodeTools, ","))
+	args = append(args, "--plugin-dir", d.claudePlugin)
+	if !own {
+		args = append(args, "--tools", strings.Join(ClaudeCodeTools, ","))
+	}
 	sessionID, sessionArgs := claudeSessionArgs(spec)
 	args = append(args, sessionArgs...)
+	if err := checkWorkDir(snap, d); err != nil {
+		return started{}, err
+	}
 	cmd := exec.Command(bin, args...)
 	cmd.Env = claudeEnv(spec.env)
-	cmd.Dir = d.workspace
+	cmd.Dir = workDir(snap, d)
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		return started{}, err
@@ -438,7 +449,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	defer cancel()
 	home, _ := e.o.RealHome()
 	env := e.claudeHelperEnv(ctx, home)
-	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.dirs.workspace, cp.sessionID); path != "" {
+	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.cwd, cp.sessionID); path != "" {
 		p.sessMu.Lock()
 		p.sessionFile = path
 		p.sessMu.Unlock()
@@ -446,7 +457,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		// The session record written by claude was not found (for example on Windows, where it encodes the working
 		// directory differently from us): the turn ends normally and this is not treated as a save failure; the
 		// conversation continues as usual in this process, and the next start opens a new session.
-		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.dirs.workspace, "version", cp.version)
+		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.cwd, "version", cp.version)
 	}
 	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) {
 		checkClaudeSkills(p, init)

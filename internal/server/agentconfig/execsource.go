@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
@@ -53,9 +54,15 @@ type Snapshot struct {
 	ModelEnv         map[string]string
 	CLIPayloads      map[string]clitemplate.Payload
 	Session          store.AgentSession
-	// ForkSessionFile is used only on the first start of a task instance; the platform produces it by a stable copy,
-	// and it never comes from user config.
+	// ForkSessionFile is used only on the first start of a task instance, or of an Agent imported from a conversation
+	// (the copy taken at import); the platform produces it by a stable copy, and it never comes from user config.
 	ForkSessionFile string
+	// WorkingDirectory is the folder a regular Agent works in (its CLI's working directory); empty: its own folder. A
+	// task step never works there: it keeps its own copy of the Agent's folder.
+	WorkingDirectory string
+	// UseLocalConfig: the runtime loads the person's own CLI configuration, as in their terminal (runtimes with the
+	// localConfig capability).
+	UseLocalConfig bool
 	// Plugins is what the granted plugins hand to Pi; it is read when Pi starts.
 	Plugins PluginAssets
 	// ProviderState is the state of a plugin provider subscription account (plugins/SPEC.md §13); present only when the
@@ -170,6 +177,19 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 		return Snapshot{}, err
 	}
 	snap.Session = captured.Session
+	rt := agentruntime.ForProvider(a.ModelProvider)
+	if a.WorkingDirectory != nil {
+		snap.WorkingDirectory = *a.WorkingDirectory
+	}
+	snap.UseLocalConfig = a.UseLocalConfig
+	// The person's own configuration: this computer's logins and PATH, and no project accounts.
+	ownConfig := a.UseLocalConfig && rt.Capabilities.LocalConfig
+	// An imported Agent's first turn continues the copy taken at import, on the runtime of the conversation.
+	if f := a.ImportedFrom; f != nil && f.Capture != "" && snap.Session.State == "none" && snap.Session.Epoch == 1 {
+		if src, ok := agentruntime.ForImportedCLI(f.CLI); ok && src.ID == rt.ID {
+			snap.ForkSessionFile = f.Capture
+		}
+	}
 	skills, err := s.Store.ListAgentSkills(ctx, agentID)
 	if err != nil {
 		return Snapshot{}, err
@@ -184,6 +204,9 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	// Folder sources are retired: the folder of a regular or platform Agent is its working directory, and no source is
 	// synced at startup any more.
 	snap.CLIs = captured.CLIs
+	if ownConfig {
+		snap.CLIs = nil
+	}
 	managed := captured.ModelAuthManaged
 	if managed {
 		snap.ModelBinding = captured.ModelAuth
@@ -202,6 +225,9 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	for _, r := range rows {
 		if managed && r.Purpose == store.PurposeModel {
 			continue
+		}
+		if ownConfig && r.Purpose != store.PurposeModel {
+			continue // project accounts do not apply to an Agent using the person's own configuration
 		}
 		if r.LarkBinding != nil {
 			if !r.LarkBinding.Valid() || r.LarkBinding.AgentID != agentID || a.ProjectID == nil || r.LarkBinding.ProjectID != *a.ProjectID {
@@ -275,6 +301,9 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 		if snap.Local, err = s.LocalAccess(ctx, agentID); err != nil {
 			return Snapshot{}, err
 		}
+	}
+	if ownConfig {
+		snap.Local.UserPath, snap.Local.Logins = true, true
 	}
 	if snap.ProviderState, err = ResolveProviderState(ctx, s.ProviderState, snap); err != nil {
 		return Snapshot{}, err

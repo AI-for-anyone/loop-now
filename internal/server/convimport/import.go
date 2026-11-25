@@ -364,10 +364,11 @@ func cutAfterLastRecord(path string) error {
 // model is the Agent's model: the conversation's last one when the runtime lists it (for Claude Code, the alias of its
 // family, such as opus for claude-opus-5-5), else the first model the runtime lists.
 func (s *Service) model(c Conversation) (string, string, error) {
-	provider, runtime := agentruntime.ClaudeCodeProvider, "Claude Code"
-	if c.CLI == CLICodex {
-		provider, runtime = agentruntime.CodexProvider, "Codex"
+	rt, ok := agentruntime.ForImportedCLI(c.CLI)
+	if !ok || len(rt.Providers) == 0 {
+		return "", "", fmt.Errorf("conversations of %s cannot be imported", c.CLI)
 	}
+	provider, runtime := rt.Providers[0], rt.Name
 	var p *modelcatalog.Provider
 	if s.Models != nil {
 		p, _ = s.Models.Provider(provider)

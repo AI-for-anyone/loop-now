@@ -275,6 +275,10 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		Model         *modelInput     `json:"model"`
 		Prompt        json.RawMessage `json:"prompt"`
 		Expected      json.RawMessage `json:"expectedPromptVersion"`
+		// WorkingDirectory: a folder, or null to clear it; omitted keeps it.
+		WorkingDirectory json.RawMessage `json:"workingDirectory"`
+		UseLocalConfig   *bool           `json:"useLocalConfig"`
+		PermissionMode   *string         `json:"permissionMode"`
 	}
 	if err := readJSON(w, r, jsonLimit, &in); err != nil {
 		s.fail(w, r, err)
@@ -308,6 +312,14 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 	if in.Model != nil {
 		p.Provider, p.ModelID = &in.Model.Provider, &in.Model.ModelID
 	}
+	if len(in.WorkingDirectory) > 0 {
+		p.WorkingDirectorySet = true
+		if err := json.Unmarshal(in.WorkingDirectory, &p.WorkingDirectory); err != nil {
+			s.fail(w, r, apperr.Invalid("workingDirectory", "Must be a folder path or null."))
+			return
+		}
+	}
+	p.UseLocalConfig, p.PermissionMode = in.UseLocalConfig, in.PermissionMode
 	if _, err := s.Config.UpdateAgent(r.Context(), id, p); err != nil {
 		s.fail(w, r, err)
 		return

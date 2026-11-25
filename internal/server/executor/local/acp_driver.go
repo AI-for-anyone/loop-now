@@ -430,7 +430,10 @@ func (ad acpDriver) start(ctx context.Context, spec startSpec) (started, error) 
 			cmd.Env = append(cmd.Env, k+"="+c.Env[k])
 		}
 	}
-	cmd.Dir = d.workspace
+	if err := checkWorkDir(snap, d); err != nil {
+		return started{}, err
+	}
+	cmd.Dir = workDir(snap, d)
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		return started{}, err
@@ -571,7 +574,7 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 	if spec.sessionFile != "" {
 		lost := !agent.LoadSession
 		if !lost {
-			s, err := ap.LoadSession(ctx, spec.sessionFile, d.workspace, mcp)
+			s, err := ap.LoadSession(ctx, spec.sessionFile, workDir(snap, d), mcp)
 			lost = acpSessionNotFound(err) || (err == nil && ad.f.emptyLoadIsMissing && s.Replayed == 0)
 			if err != nil && !lost {
 				return ad.startFailure(p, err)
@@ -585,7 +588,7 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 		}
 		ap.sessionID, ap.started = spec.sessionFile, true
 	} else {
-		s, err := ap.NewSession(ctx, d.workspace, mcp)
+		s, err := ap.NewSession(ctx, workDir(snap, d), mcp)
 		if err != nil {
 			return ad.startFailure(p, err)
 		}

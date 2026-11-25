@@ -33,8 +33,15 @@ var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
 	runtime := agentruntime.ForProvider(snap.Provider)
+	cwd := workDir(snap, d)
+	if cwd != d.workspace {
+		local = fmt.Sprintf("- Your working directory: %s, a folder on this computer the person picked. You work there as they do in their terminal; its own CLAUDE.md or AGENTS.md belongs to that folder.\n", cwd) + local
+	}
+	// A runtime that reads AGENTS.md by itself reads it in its working directory: with a working folder, the Agent's
+	// own entry is included here instead.
+	readsOwnEntry := runtime.Capabilities.ReadsEntryFile && cwd == d.workspace
 	ownEntry, ownContent := "", ""
-	if !runtime.Capabilities.ReadsEntryFile {
+	if !readsOwnEntry {
 		var err error
 		if ownEntry, ownContent, err = readOwnEntry(d.workspace); err != nil {
 			return "", err
@@ -58,12 +65,15 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 		name, shared = "Global context folder", "read and written by platform Agents and by people"
 	}
 	own := "Your own folder (also your working directory and your own context)"
+	if cwd != d.workspace {
+		own = "Your own folder (your own context; the person sees it as your folder)"
+	}
 	if snap.TaskID != uuid.Nil {
 		own = "Your folder in this task (your working directory; copied from your regular folder when the task started and reclaimed when the task ends)"
 	}
 	entry := filepath.Join(layer, "AGENTS.md")
 	runtimeName, loaded := runtime.Name, "already loaded by "+runtime.Name+" if it exists"
-	if !runtime.Capabilities.ReadsEntryFile {
+	if !readsOwnEntry {
 		loaded = "its content is included below if it exists"
 	}
 	var b strings.Builder

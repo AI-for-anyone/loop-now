@@ -169,3 +169,25 @@ func TestTextWriters(t *testing.T) {
 		t.Fatal("ByID must return a copy")
 	}
 }
+
+// Every runtime but the bundled Pi can work in a folder the person picks; Claude Code and Codex can also load the
+// person's own CLI configuration. Every runtime offers Full access; Pi offers nothing else.
+func TestWorkingFolderAndLocalConfigCapabilities(t *testing.T) {
+	want := map[string][2]bool{Pi: {false, false}, ClaudeCode: {true, true}, Codex: {true, true}, Grok: {true, false}, Antigravity: {true, false}}
+	for _, r := range All() {
+		w, ok := want[r.ID]
+		if !ok {
+			continue
+		}
+		if c := r.Capabilities; c.WorkingDirectory != w[0] || c.LocalConfig != w[1] || !slices.Contains(c.PermissionModes, "full") {
+			t.Errorf("%s: %+v", r.ID, c)
+		}
+	}
+	if pi, _ := ByID(Pi); !slices.Equal(pi.Capabilities.PermissionModes, []string{"full"}) {
+		t.Errorf("Pi offers Full access only: %v", pi.Capabilities.PermissionModes)
+	}
+	cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"})
+	if c := cmd.Capabilities; !c.WorkingDirectory || c.LocalConfig || !slices.Contains(c.PermissionModes, "full") {
+		t.Errorf("a local ACP command: %+v", c)
+	}
+}

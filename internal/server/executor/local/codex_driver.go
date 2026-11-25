@@ -192,9 +192,12 @@ func (cd codexDriver) start(ctx context.Context, spec startSpec) (started, error
 	if err != nil {
 		return started{}, err
 	}
+	if err := checkWorkDir(snap, d); err != nil {
+		return started{}, err
+	}
 	cmd := exec.Command(bin, "app-server")
 	cmd.Env = codexEnv(spec.env, codexHome)
-	cmd.Dir = d.workspace
+	cmd.Dir = workDir(snap, d)
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		return started{}, err
@@ -244,7 +247,7 @@ func (cd codexDriver) ready(ctx context.Context, p *proc, spec startSpec) error 
 	if err := cp.SetSkillRoots(ctx, []string{d.codexSkills}); err != nil {
 		return cd.startFailure(p, err)
 	}
-	opts := codexapp.ThreadOptions{Cwd: d.workspace, Model: snap.ModelID, Config: codexMCPConfig(snap.Plugins.MCPServers)}
+	opts := codexapp.ThreadOptions{Cwd: workDir(snap, d), Model: snap.ModelID, Config: codexMCPConfig(snap.Plugins.MCPServers)}
 	if b, err := os.ReadFile(d.prompt); err == nil {
 		opts.DeveloperInstructions = string(b)
 	}

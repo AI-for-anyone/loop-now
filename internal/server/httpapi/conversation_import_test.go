@@ -99,3 +99,29 @@ func TestConversationImportEndpoints(t *testing.T) {
 	}
 	e.expect(404, "GET", "/conversation-imports/00000000-0000-4000-8000-000000000000", nil)
 }
+
+// An Agent can be given a working folder and the person's own configuration on create and update; Pi takes neither a
+// working folder nor a mode other than Full access, and an Agent with a working folder cannot move to Pi.
+func TestAgentWorkingFolderSettings(t *testing.T) {
+	e := newEnv(t)
+	e.api.Config.Models = modelcatalog.New("1", nil, []modelcatalog.Provider{
+		{ID: "anthropic", APIKeyEnvVars: []string{"ANTHROPIC_API_KEY"}, Models: []modelcatalog.Model{{ID: "claude-x", Name: "Claude X", Input: []string{"text"}}}},
+		modelcatalog.ClaudeCodeProvider()})
+	dir := t.TempDir()
+	e.expect(422, "POST", e.agents(), map[string]any{"name": "pi", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}, "workingDirectory": dir})
+	e.expect(422, "POST", e.agents(), map[string]any{"name": "pi", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}, "permissionMode": "supervised"})
+	a := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "here", "model": map[string]any{"provider": "claude-code", "modelId": "opus"},
+		"workingDirectory": dir, "useLocalConfig": true}))
+	if a.WorkingDirectory == nil || *a.WorkingDirectory != dir || !a.UseLocalConfig || a.PermissionMode != "full" || a.ImportedFrom != nil {
+		t.Fatalf("created: %+v", a)
+	}
+	e.expect(422, "PATCH", "/agents/"+a.ID.String(), map[string]any{"model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}})
+	b := decode[apitypes.Agent](t, e.expect(200, "PATCH", "/agents/"+a.ID.String(), map[string]any{"workingDirectory": nil, "useLocalConfig": false}))
+	if b.WorkingDirectory != nil || b.UseLocalConfig || b.ConfigVersion != a.ConfigVersion+1 {
+		t.Fatalf("cleared: %+v", b)
+	}
+	plain := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "plain", "model": map[string]any{"provider": "anthropic", "modelId": "claude-x"}}))
+	if plain.WorkingDirectory != nil || plain.UseLocalConfig || plain.PermissionMode != "full" {
+		t.Fatalf("defaults: %+v", plain)
+	}
+}
