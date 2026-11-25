@@ -125,9 +125,9 @@ type TextGeneration struct {
 	// Rank orders the runtimes Automatic tries, lowest first; the local ACP commands come after the built-in runtimes,
 	// in their own order.
 	Rank int
-	// Model is a part of the id or name (ignoring case) of the model Automatic prefers; empty means the first listed
-	// model, which is also used when no listed model matches.
-	Model string
+	// Models are parts of the id or name (ignoring case) of the models Automatic prefers, in order: the first listed
+	// model that matches the first part, else the second, and so on; none, or no match, means the first listed model.
+	Models []string
 	// Level is the thinking level Automatic uses when the model offers it: a level, or LowestLevel for the model's
 	// lowest; empty means the model's default level.
 	Level string
@@ -251,7 +251,7 @@ var registry = []Runtime{
 		Providers:      []string{ClaudeCodeProvider},
 		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
 		Setup:          claudeCodeSetup,
-		TextGeneration: &TextGeneration{Rank: 1, Model: "haiku"},
+		TextGeneration: &TextGeneration{Rank: 1, Models: []string{"haiku"}},
 	},
 	{
 		// Codex runs as `codex app-server` with the user's Codex home (CODEX_HOME) and the Agent's own HOME: its login
@@ -263,7 +263,7 @@ var registry = []Runtime{
 			ReadsEntryFile: true},
 		Setup:          codexSetup,
 		MinVersion:     "0.167.0",
-		TextGeneration: &TextGeneration{Rank: 2, Model: "-mini", Level: "low"},
+		TextGeneration: &TextGeneration{Rank: 2, Models: []string{"luna", "-mini"}, Level: "low"},
 	},
 	{
 		// Grok runs as `grok agent ... stdio`, an Agent Client Protocol agent, with this computer's login (kept under the
@@ -286,7 +286,7 @@ var registry = []Runtime{
 		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",
-		TextGeneration: &TextGeneration{Rank: 3, Model: "flash", Level: LowestLevel},
+		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"flash"}, Level: LowestLevel},
 	},
 }
 
@@ -342,6 +342,7 @@ func (r Runtime) clone() Runtime {
 	r.Capabilities.SessionCommands = slices.Clone(r.Capabilities.SessionCommands)
 	if r.TextGeneration != nil {
 		tg := *r.TextGeneration
+		tg.Models = slices.Clone(tg.Models)
 		r.TextGeneration = &tg
 	}
 	if r.Command != nil {

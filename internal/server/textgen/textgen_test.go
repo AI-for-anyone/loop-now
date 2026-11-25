@@ -44,7 +44,7 @@ func model(id, name string, levels ...string) modelcatalog.Model {
 func fullCatalog() catalog {
 	return catalog{
 		agentruntime.ClaudeCodeProvider:  {model("opus", "Claude Opus (latest)", "low", "medium", "high"), model("haiku", "Claude Haiku (latest)", "low", "medium", "high")},
-		agentruntime.CodexProvider:       {model("gpt-6", "GPT-6", "low", "medium", "high"), model("gpt-6-mini", "GPT-6 mini", "minimal", "low", "medium")},
+		agentruntime.CodexProvider:       {model("gpt-6.2-sol", "GPT-6.2 Sol", "low", "medium", "high"), model("gpt-6-mini", "GPT-6 mini", "minimal", "low", "medium"), model("gpt-6-luna", "GPT-6 Luna", "low", "medium", "high")},
 		agentruntime.AntigravityProvider: {model("gemini-4-pro", "Gemini 4 Pro", "low", "high"), model("gemini-4-flash", "Gemini 4 Flash", "low", "medium", "high")},
 		agentruntime.GrokProvider:        {model("grok-5", "Grok 5", "low", "high"), model("grok-5-fast", "Grok 5 Fast")},
 	}
@@ -165,7 +165,7 @@ func TestAutomatic(t *testing.T) {
 		runtime, model, name, l string
 	}{
 		{append(all, agentruntime.ClaudeCode), agentruntime.ClaudeCode, "haiku", "Claude Haiku (latest)", ""},
-		{all, agentruntime.Codex, "gpt-6-mini", "GPT-6 mini", "low"},
+		{all, agentruntime.Codex, "gpt-6-luna", "GPT-6 Luna", "low"},
 		{all[2:], agentruntime.Antigravity, "gemini-4-flash", "Gemini 4 Flash", "low"},
 		{all[3:], agentruntime.Grok, "grok-5", "Grok 5", ""},
 		{[]string{agentruntime.Pi}, "", "", "", ""},
@@ -186,12 +186,16 @@ func TestAutomatic(t *testing.T) {
 		}
 	}
 
-	// A runtime whose list has no models (not read yet) is passed over; a preferred model that is not listed gives the
-	// first listed model at its default level.
-	e.svc.Models = catalog{agentruntime.CodexProvider: {model("gpt-6", "GPT-6", "medium", "high")}, agentruntime.ClaudeCodeProvider: {}}
+	// A runtime whose list has no models (not read yet) is passed over; the next preference serves when the first is
+	// not listed; with none listed, the first listed model at its default level.
+	e.svc.Models = catalog{agentruntime.CodexProvider: {model("gpt-6.2-sol", "GPT-6.2 Sol"), model("gpt-6-mini", "GPT-6 mini", "low")}, agentruntime.ClaudeCodeProvider: {}}
 	e.statuses.set(agentruntime.ClaudeCode, agentruntime.Codex)
+	if w := writerOf(t, e); w == nil || w.Runtime != agentruntime.Codex || w.ModelID != "gpt-6-mini" || level(w) != "low" {
+		t.Fatalf("no Luna model, a mini one: %+v", w)
+	}
+	e.svc.Models = catalog{agentruntime.CodexProvider: {model("gpt-6", "GPT-6", "medium", "high")}}
 	if w := writerOf(t, e); w == nil || w.Runtime != agentruntime.Codex || w.ModelID != "gpt-6" || w.ThinkingLevel != nil {
-		t.Fatalf("no mini model: %+v", w)
+		t.Fatalf("no preferred model: %+v", w)
 	}
 
 	// A local ACP command writes after the built-in runtimes, with its default model.
@@ -281,11 +285,11 @@ func TestAgentDraft(t *testing.T) {
 		return "  ```markdown\nYou sort new issues.\n```\n", nil
 	}
 	d, err := e.svc.Draft(ctx, textgen.DraftRequest{Target: textgen.TargetAgent, AgentID: &agent.ID, Request: "每天早上把新 issue 分类", CurrentText: "Sort issues."}) // check-english: zh (a request in Chinese reaches the writer as is)
-	if err != nil || d.Text != "You sort new issues." || d.Writer.Runtime != agentruntime.Codex || d.Writer.ModelID != "gpt-6-mini" {
+	if err != nil || d.Text != "You sort new issues." || d.Writer.Runtime != agentruntime.Codex || d.Writer.ModelID != "gpt-6-luna" {
 		t.Fatalf("draft: %+v %v", d, err)
 	}
 	req := e.runner.last(t)
-	if req.Runtime != agentruntime.Codex || req.Model != "gpt-6-mini" || req.ThinkingLevel == nil || *req.ThinkingLevel != "low" {
+	if req.Runtime != agentruntime.Codex || req.Model != "gpt-6-luna" || req.ThinkingLevel == nil || *req.ThinkingLevel != "low" {
 		t.Fatalf("request: %+v", req)
 	}
 	if !strings.Contains(req.Instructions, "Prompt of an Agent") || !strings.Contains(req.Instructions, "Reply with the Prompt only") {

@@ -148,24 +148,24 @@ func TestTextWriters(t *testing.T) {
 		t.Fatalf("Automatic's order: %v, want %v", order, want)
 	}
 	for id, tg := range map[string]TextGeneration{
-		ClaudeCode:  {Model: "haiku"},
-		Codex:       {Model: "-mini", Level: "low"},
-		Antigravity: {Model: "flash", Level: LowestLevel},
+		ClaudeCode:  {Models: []string{"haiku"}},
+		Codex:       {Models: []string{"luna", "-mini"}, Level: "low"},
+		Antigravity: {Models: []string{"flash"}, Level: LowestLevel},
 		Grok:        {},
 	} {
 		r, _ := ByID(id)
-		if got := *r.TextGeneration; got.Model != tg.Model || got.Level != tg.Level {
+		if got := *r.TextGeneration; !slices.Equal(got.Models, tg.Models) || got.Level != tg.Level {
 			t.Errorf("%s: small model %+v, want %+v", id, got, tg)
 		}
 	}
 	r, _ := ByID(LocalCommandRuntimeID(a))
-	if r.TextGeneration.Model != "" || r.TextGeneration.Level != "" {
+	if len(r.TextGeneration.Models) != 0 || r.TextGeneration.Level != "" {
 		t.Errorf("a local command writes with its default model: %+v", r.TextGeneration)
 	}
 	// A copy does not share the registry's entry.
 	r, _ = ByID(ClaudeCode)
-	r.TextGeneration.Model = "changed"
-	if again, _ := ByID(ClaudeCode); again.TextGeneration.Model != "haiku" {
+	r.TextGeneration.Models[0] = "changed"
+	if again, _ := ByID(ClaudeCode); again.TextGeneration.Models[0] != "haiku" {
 		t.Fatal("ByID must return a copy")
 	}
 }

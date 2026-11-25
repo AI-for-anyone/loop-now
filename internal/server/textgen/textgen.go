@@ -185,7 +185,7 @@ func (s *Service) writer(ctx context.Context, sel *store.TextGenerationSelection
 			if !ok || len(p.Models) == 0 {
 				continue
 			}
-			m := preferredModel(p.Models, rt.TextGeneration.Model)
+			m := preferredModel(p.Models, rt.TextGeneration.Models)
 			return &Writer{Runtime: rt.ID, Provider: provider, ModelID: m.ID, ModelName: modelName(m),
 				ThinkingLevel: preferredLevel(m, rt.TextGeneration.Level), FellBack: sel != nil}
 		}
@@ -220,10 +220,11 @@ func modelName(m modelcatalog.Model) string {
 	return m.ID
 }
 
-// preferredModel is the first listed model whose id or name contains prefer (ignoring case), else the first listed.
-func preferredModel(models []modelcatalog.Model, prefer string) modelcatalog.Model {
-	if prefer != "" {
-		p := strings.ToLower(prefer)
+// preferredModel is the first listed model whose id or name contains the first of prefer (ignoring case), else the
+// second, and so on; else the first listed model.
+func preferredModel(models []modelcatalog.Model, prefer []string) modelcatalog.Model {
+	for _, want := range prefer {
+		p := strings.ToLower(want)
 		for _, m := range models {
 			if strings.Contains(strings.ToLower(m.ID), p) || strings.Contains(strings.ToLower(m.Name), p) {
 				return m
