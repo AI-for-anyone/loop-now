@@ -4654,11 +4654,11 @@ export interface components {
             /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt?: string;
-            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one. */
             workingDirectory?: string | null;
             /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
             useLocalConfig?: boolean;
-            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            /** @description Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an Agent whose mode is not full. A change applies from the next message. */
             permissionMode?: components["schemas"]["PermissionMode"];
         };
         ProjectPrompt: {
@@ -4696,11 +4696,11 @@ export interface components {
              * @description Required when prompt is present (including empty text and unchanged text); independent of configVersion, and a stale value returns 412.
              */
             expectedPromptVersion?: number;
-            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one. */
             workingDirectory?: string | null;
             /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
             useLocalConfig?: boolean;
-            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            /** @description Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an Agent whose mode is not full. A change applies from the next message. */
             permissionMode?: components["schemas"]["PermissionMode"];
         };
         Agent: {
