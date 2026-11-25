@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { apiUrl, defaultProject, projectsUrl, unknownEndpointBody } from './api'
+import { apiUrl, context, defaultProject, projectsUrl, unknownEndpointBody } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
 import { commandList } from './commands'
 import { runtimeDefinitions, runtimeList } from './runtimes'
@@ -41,6 +41,8 @@ export const server = setupServer(
   // nor Agents have registered local directories yet (tests that need them override with localModeBackend).
   http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
   http.get(apiUrl('/text-generation-settings'), () => HttpResponse.json(automaticSettings())),
+  // Read wherever a path can be chosen (whether this computer's dialog can be shown in a browser): false unless a test says otherwise.
+  http.get(apiUrl('/context'), () => HttpResponse.json(context)),
   http.get(apiUrl('/projects/:projectId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [] })),
   http.get(apiUrl('/agents/:agentId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [], projectId: null, inherited: [] })),
   http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: params.agentId, items: [] })),

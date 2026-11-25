@@ -32,6 +32,7 @@ import (
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
+	"loop-now/internal/server/pathpicker"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/reqid"
@@ -88,8 +89,10 @@ type Server struct {
 	LocalMode          *localmode.Service
 	// TextGeneration writes with AI (Prompt drafts); when nil nobody writes.
 	TextGeneration *textgen.Service
-	Tasks          *tasks.Service
-	Log            *slog.Logger
+	// PathPicker shows this computer's own dialog to choose a path (POST /path-picks); when nil there is none.
+	PathPicker *pathpicker.Picker
+	Tasks      *tasks.Service
+	Log        *slog.Logger
 	// PiCommands returns the command list Pi reported the last time the Agent started it (nil if Pi has never been
 	// started); when PiCommands is nil the command list is always empty.
 	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
@@ -156,6 +159,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/text-generation-settings", "getTextGenerationSettings", ConsoleOnly, s.getTextGenerationSettings},
 		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
 		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},
+		{"POST", "/path-picks", "createPathPick", ConsoleOnly, s.createPathPick},
 		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
 		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},
 		{"GET", "/agents/{agentId}/local-directories", "getAgentLocalDirectories", ConsoleOnly, s.getAgentLocalDirectories},

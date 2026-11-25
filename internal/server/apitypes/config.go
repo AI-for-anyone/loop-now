@@ -44,6 +44,13 @@ type Context struct {
 		Name           string    `json:"name"`
 	} `json:"project"`
 	Limits Limits `json:"limits"`
+	// PathPicker says whether POST /path-picks can show this computer's own dialog; false for an external identity.
+	PathPicker bool `json:"pathPicker"`
+}
+
+// PathPick mirrors the PathPick schema: the chosen path, or null when the person cancelled.
+type PathPick struct {
+	Path *string `json:"path"`
 }
 
 // Limits mirrors the Limits schema.

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { apiUrl, errorBody } from '@/test/api'
 import { inDesktopShell } from '@/test/desktop'
+import { serverShowsDialog } from '@/test/path-picks'
 import { makeComponents, makeManifest, makePlugin, makePreview, makeResolvedSource } from '@/test/plugins'
 import { keys } from '@/api/queries'
 import { renderWithQuery } from '@/test/render'
@@ -176,7 +177,20 @@ describe('Installing a plugin: read manifest → confirm → install', () => {
     await waitFor(() => expect(previews).toEqual([{ source: { kind: 'local', location: '/Users/me/plugins/mine' } }]))
   })
 
-  it('in a browser, a local folder is typed: there is no “Choose…”', async () => {
+  it('in a browser whose server can show this computer\'s dialog, a local folder can be chosen there', async () => {
+    const picks = serverShowsDialog({ path: '/Users/me/plugins/mine' })
+    const user = userEvent.setup()
+    const { previews } = handlers()
+    renderInstall()
+    await user.click(screen.getByRole('radio', { name: 'Local folder' }))
+    await user.click(await screen.findByRole('button', { name: 'Choose…' }))
+    await waitFor(() => expect(screen.getByLabelText('Absolute path to a folder on the server machine')).toHaveValue('/Users/me/plugins/mine'))
+    expect(picks.requests).toEqual([{ kind: 'directory' }])
+    await user.click(screen.getByRole('button', { name: 'Read manifest' }))
+    await waitFor(() => expect(previews).toEqual([{ source: { kind: 'local', location: '/Users/me/plugins/mine' } }]))
+  })
+
+  it('in a browser whose server cannot show the dialog, a local folder is typed: there is no “Choose…”', async () => {
     const user = userEvent.setup()
     handlers()
     renderInstall()

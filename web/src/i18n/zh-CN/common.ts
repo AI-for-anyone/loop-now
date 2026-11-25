@@ -31,6 +31,10 @@ export const common = {
   required: '请填写此项',
   upload: '上传',
   uploading: '上传中…',
-  // Next to a path input in the desktop window: opens the system's own dialog for a folder or file.
+  // Next to a path input: opens the system's own dialog for a folder or file (the desktop window's, or in a browser the one Loop Now's
+  // server shows on its computer).
   choosePath: '选择…',
+  // In a browser, while the server's dialog is open: it opens in front, but on macOS usually without the keyboard.
+  choosingPath: '选择中…',
+  choosingPathHint: '选择窗口已在这台电脑上打开。按键没反应的话，先在窗口上点一下。',
 } as const
