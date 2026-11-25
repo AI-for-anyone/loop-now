@@ -162,3 +162,19 @@ func TestLocalConfigUsesOwnLogins(t *testing.T) {
 		t.Fatalf("own configuration: CLIs %v payloads %v local %+v %v", snap.CLIs, snap.CLIPayloads, snap.Local, err)
 	}
 }
+
+// The default mode applies only where the runtime offers it: an Agent created on Pi without a mode gets Full access
+// whatever the default is, while an explicit Supervised on Pi is refused.
+func TestDefaultModeOnlyWhereOffered(t *testing.T) {
+	e := localAgentsEnv(t)
+	ctx := context.Background()
+	e.svc.DefaultMode = func(context.Context) (string, error) { return "supervised", nil }
+	a, err := e.svc.CreateAgent(ctx, e.scope, "pi", "anthropic", "claude-x", "")
+	if err != nil || a.PermissionMode != "full" {
+		t.Fatalf("Pi without a mode: %+v %v", a, err)
+	}
+	if _, err := e.svc.CreateAgentWithSettings(ctx, e.scope, "pi-asked", "anthropic", "claude-x", "", nil, nil,
+		agentconfig.AgentSettings{PermissionMode: strPtr("supervised")}); fieldOf(t, err) != "permissionMode" {
+		t.Fatalf("Pi with Supervised asked for: %v", err)
+	}
+}
