@@ -51,6 +51,8 @@ const (
 	CodePluginTimeout                   = "plugin_timeout"
 	CodeTextGenerationUnavailable       = "text_generation_unavailable"
 	CodeTextGenerationFailed            = "text_generation_failed"
+	CodePathPickerUnavailable           = "path_picker_unavailable"
+	CodePathPickerBusy                  = "path_picker_busy"
 	CodeRateLimited                     = "rate_limited"
 )
 

@@ -29,6 +29,9 @@ func (s *Server) getContext(w http.ResponseWriter, r *http.Request) {
 	c.Organization.ID, c.Organization.Name = s.O.Defaults.Organization.ID, s.O.Defaults.Organization.Name
 	c.Project.ID, c.Project.OrganizationID, c.Project.Name = s.O.Defaults.Project.ID, s.O.Defaults.Project.OrganizationID, s.O.Defaults.Project.Name
 	c.Limits = s.O.Limits
+	if p, _ := auth.From(r.Context()); p.Kind == auth.KindConsole && s.PathPicker != nil {
+		c.PathPicker = s.PathPicker.Available()
+	}
 	writeJSON(w, http.StatusOK, c)
 }
 

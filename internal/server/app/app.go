@@ -48,6 +48,7 @@ import (
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
+	"loop-now/internal/server/pathpicker"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
@@ -542,6 +543,9 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			}
 			return a.API.Runtimes.List(ctx, false)
 		}}
+	// The console in a browser asks the server for this computer's own dialog to choose a path (the desktop app has its
+	// own); it works on macOS in a logged-in desktop session.
+	a.API.PathPicker = &pathpicker.Picker{Log: log}
 	// The local ACP commands people added are runtimes too, before anything runs.
 	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
