@@ -3732,6 +3732,10 @@ paths:
         withdraw or cancel, a message leaving the queue after it is read, a reminder becoming void). Runs voided before
         they ran (Run.endReason is user_cancelled, merged_into_interrupt or no_pending_messages) should be hidden in the
         conversation stream; run records show them as usual.
+
+        `background_tasks.updated` carries the full list of the Agent's running background tasks whenever one starts,
+        ends or is asked to stop (the snapshot's `status.backgroundTasks` holds it at snapshot time). The run that started
+        the task also gets `run.updated` (Run.backgroundTasks), even when it has ended.
       parameters:
         - name: Last-Event-ID
           in: header
@@ -3757,6 +3761,7 @@ paths:
         session.updated: { $ref: "#/components/schemas/SseSessionUpdated" }
         sleep.updated: { $ref: "#/components/schemas/SseSleepUpdated" }
         queue.updated: { $ref: "#/components/schemas/SseQueueUpdated" }
+        background_tasks.updated: { $ref: "#/components/schemas/SseBackgroundTasksUpdated" }
 
   /agents/{agentId}/runs/{runId}/timeline:
     parameters:
@@ -3913,6 +3918,73 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /agents/{agentId}/background-tasks/{backgroundTaskId}/stop:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - name: backgroundTaskId
+        in: path
+        required: true
+        description: BackgroundTask.id
+        schema: { type: string, minLength: 1 }
+    post:
+      tags: [conversation]
+      operationId: stopBackgroundTask
+      x-access: console
+      summary: Stop one of the Agent's running background tasks
+      description: |
+        Asks the runtime to stop the task, with its own means where it has one (Claude Code's stop_task), else by ending
+        the command's process group; the reply that started it and the Agent's current reply go on. Returns once the end
+        is recorded, or after a few seconds with the task still running and stopRequestedAt set when the runtime has not
+        confirmed the end yet (the end then comes with background_tasks.updated). The task ends as stopped with
+        stopReason person, unless it ended by itself first. 404 `background_task_not_found` when the Agent has no task
+        with this id; 409 `background_task_ended` (details BackgroundTaskEndedDetails) when it has already ended. Asking
+        again while it is being stopped returns it as it is. actionId rules are the same as for stopping a reply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentQueueActionInput" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The task after the stop was asked for
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackgroundTask" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /agents/{agentId}/background-tasks/stop:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      tags: [conversation]
+      operationId: stopAllBackgroundTasks
+      x-access: console
+      summary: Stop all of the Agent's running background tasks
+      description: |
+        As stopping one task, for every task running when the request arrives; the Agent's current reply goes on. With
+        none running it returns an empty list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentQueueActionInput" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The tasks that were running, after the stop was asked for
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackgroundTaskList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /agents/{agentId}/inbox-messages/{messageId}/promote-to-interrupt:
@@ -10410,8 +10482,9 @@ components:
             code: { $ref: "#/components/schemas/ErrorCode" }
             message: { type: string }
             details:
-              description: Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist
+              description: Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist; background_task_ended carries BackgroundTaskEndedDetails
               oneOf:
+                - $ref: "#/components/schemas/BackgroundTaskEndedDetails"
                 - $ref: "#/components/schemas/VerificationVersionConflictDetails"
                 - $ref: "#/components/schemas/VerificationConflictDetails"
                 - $ref: "#/components/schemas/VerificationUnsupportedDetails"
@@ -10457,6 +10530,8 @@ components:
 - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409)
 - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409)
 - run_not_active: when stopping a reply, this run has already ended (409)
+- background_task_not_found: the Agent has no background task with this id (404)
+- background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails)
 - action_conflict: the same actionId was used for an action with different content (409)
 - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422)
 - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409)
@@ -10527,7 +10602,9 @@ components:
           "text_generation_unavailable",
           "text_generation_failed",
           "path_picker_unavailable",
-          "path_picker_busy"
+          "path_picker_busy",
+          "background_task_not_found",
+          "background_task_ended"
         ],
         "type": "string"
       }
@@ -10919,7 +10996,7 @@ components:
     RuntimeCapabilities:
       description: What a runtime can do. Thinking levels and image input are per model, in the model catalog.
       type: object
-      required: [accounts, realHome, nativeCommands, pluginExtensions, bundled]
+      required: [accounts, realHome, nativeCommands, pluginExtensions, bundled, stopEndsBackgroundTasks]
       additionalProperties: false
       properties:
         accounts:
@@ -10945,6 +11022,12 @@ components:
         bundled:
           type: boolean
           description: Ships with the platform and needs no install or login on this computer; GET /runtimes always reports it as available.
+        stopEndsBackgroundTasks:
+          type: boolean
+          description: |
+            Stopping a reply (Stop, or an interrupting message) ends the runtime's process, and with it the Agent's
+            background tasks (they are recorded as stopped with reason reply_stopped). When false, stopping a reply leaves
+            them running.
 
     RuntimeStatus:
       type: object
@@ -11212,7 +11295,7 @@ components:
 
     AgentListItem:
       type: object
-      required: [sleep, sleepRevision, id, scope, projectId, isManager, name, address, model, runtime, configVersion, busy, sessionState, createdAt, updatedAt]
+      required: [sleep, sleepRevision, id, scope, projectId, isManager, name, address, model, runtime, configVersion, busy, backgroundTaskCount, sessionState, createdAt, updatedAt]
       additionalProperties: false
       properties:
         sleep:
@@ -11250,6 +11333,10 @@ components:
             - type: "null"
         configVersion: { type: integer }
         busy: { type: boolean }
+        backgroundTaskCount:
+          type: integer
+          minimum: 0
+          description: How many background tasks run on the Agent's runtime process (see AgentStatus.backgroundTasks); the Agent can be idle while they run
         sessionState: { $ref: "#/components/schemas/SessionState" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -11441,7 +11528,7 @@ components:
 
     Agent:
       type: object
-      required: [id, scope, projectId, isManager, name, address, model, runtime, prompt, promptVersion, configVersion, busy, session, clis, modelCredential, createdAt, updatedAt]
+      required: [id, scope, projectId, isManager, name, address, model, runtime, prompt, promptVersion, configVersion, busy, backgroundTaskCount, session, clis, modelCredential, createdAt, updatedAt]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -11480,6 +11567,10 @@ components:
         promptVersion: { type: integer, format: int64, minimum: 1 }
         configVersion: { type: integer }
         busy: { type: boolean }
+        backgroundTaskCount:
+          type: integer
+          minimum: 0
+          description: How many background tasks run on the Agent's runtime process (see AgentStatus.backgroundTasks); the Agent can be idle while they run
         session: { $ref: "#/components/schemas/SessionInfo" }
         clis:
           type: array
@@ -11921,10 +12012,103 @@ components:
         - user_cancelled: withdrawn or cancelled by a person while queued; merged_into_interrupt: all of its messages
           were moved into an interrupt reminder; no_pending_messages: all messages the reminder carried were already
           read or cancelled.
-        None of the last five ran any tool or model; the conversation stream should hide user_cancelled,
-        merged_into_interrupt and no_pending_messages.
+        - merged_into_reply: a follow-up reply (origin background) whose output went into another reply that was
+          starting when the runtime's CLI began it; that reply recorded it.
+        None of the last six ran any tool or model; the conversation stream should hide user_cancelled,
+        merged_into_interrupt, no_pending_messages and merged_into_reply.
       type: [string, "null"]
-      enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, null]
+      enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, merged_into_reply, null]
+
+    BackgroundTask:
+      description: |
+        Work that the runtime's CLI started in the background during a reply and that outlives the reply: a command
+        (Claude Code's background Bash, a Codex command still running when its turn completed, a Grok terminal command
+        moved to the background, an Antigravity command moved to the background), a sub-agent, or other work. The reply
+        ends when the CLI ends it; the task is listed until it ends. It belongs to the run that started it, and its end
+        is recorded on that run even when other replies came in between. When the CLI replies by itself after the end,
+        that reply is a run of origin background. Tasks do not outlive the runtime's process: when the process exits
+        unexpectedly, or the server restarts, the ones still running become unknown.
+      type: object
+      required: [id, runtime, kind, label, runId, toolCallId, startedAt, status, endedAt, exitCode, stopReason, stopRequestedAt, output]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: The runtime's own id of the task (for Codex, the id of the command's item); unique among an Agent's running tasks
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        kind:
+          type: string
+          enum: [command, subagent, other]
+          description: command, a shell command; subagent, an agent the CLI started to work on its own; other, anything else the CLI runs in the background
+        label:
+          type: string
+          description: The command, else the CLI's own description of the task (at most 4096 characters)
+        runId: { type: string, format: uuid, description: The run that started the task }
+        toolCallId:
+          type: [string, "null"]
+          description: The tool call in that run that started the task (Run.tools); null when the runtime does not say
+        startedAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [running, completed, failed, stopped, unknown]
+          description: |
+            running until the runtime reports the end. completed and failed are as the runtime reported them; stopped
+            means it was stopped (stopReason says why); unknown means it can no longer be followed (the runtime's
+            process exited or the server restarted while it ran) and the runtime never said how it ended.
+        endedAt: { type: [string, "null"], format: date-time }
+        exitCode:
+          type: [integer, "null"]
+          description: The command's exit code, when the runtime gives one
+        stopReason:
+          type: [string, "null"]
+          enum: [person, reply_stopped, settings_changed, runtime_switched, session_reset, agent_deleted, task_started, shutdown, task_limit, null]
+          description: |
+            Why a stopped task was stopped (null otherwise): person, from the list (one task or all of them);
+            reply_stopped, the reply was stopped and the runtime's stop ends its process
+            (RuntimeCapabilities.stopEndsBackgroundTasks), or a task instance's turn waiting for it was stopped;
+            settings_changed, a change of settings restarted the runtime's process (model, thinking level, Prompt,
+            Skills, credentials, plugin grants, /reload); runtime_switched, the Agent moved to another runtime;
+            session_reset, a new session was started or another one resumed (/new, /resume); agent_deleted, the Agent was
+            deleted; task_started, a task that starts from this Agent's session was started; shutdown, Loop Now was
+            quitting; task_limit, a task instance's turn waited for it for LOOP_NOW_ACP_BACKGROUND_WAIT without hearing
+            anything from the runtime.
+        stopRequestedAt:
+          type: [string, "null"]
+          format: date-time
+          description: When a stop was asked for; while the task is still running it is being stopped
+        output:
+          type: [string, "null"]
+          description: |
+            The end of the task's output when the runtime gives it with the end: at most 4096 bytes of UTF-8, the last
+            ones, cut at a character boundary; null while running and when the runtime gives none.
+
+    BackgroundTaskList:
+      type: object
+      required: [tasks]
+      additionalProperties: false
+      properties:
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
+
+    BackgroundTaskEndedDetails:
+      description: Details for background_task_ended, the task as it ended
+      type: object
+      required: [task]
+      additionalProperties: false
+      properties:
+        task: { $ref: "#/components/schemas/BackgroundTask" }
+
+    SseBackgroundTasksUpdated:
+      description: The Agent's running background tasks, oldest first (the full list, as AgentStatus.backgroundTasks)
+      type: object
+      required: [tasks]
+      additionalProperties: false
+      properties:
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
 
     ToolState:
       description: |
@@ -11946,7 +12130,7 @@ components:
 
     Run:
       type: object
-      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, usageReported, model, selection]
+      required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, usageReported, model, selection, backgroundTasks]
       additionalProperties: false
       properties:
         triggerInboxMessageId:
@@ -12030,6 +12214,18 @@ components:
         tools:
           type: array
           items: { $ref: "#/components/schemas/ToolEvent" }
+        backgroundTasks:
+          description: |
+            The background tasks this run started, in any status, in the order they started; empty for other runs. A
+            task's start or end after the run ended updates the run (run.updated, with the same status).
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
+        triggerBackgroundTasks:
+          description: |
+            Present only on a run of origin background: the background tasks whose end this reply of the runtime's CLI
+            followed, as they ended
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
         usage:
           description: Sum of all usage of this run (including compaction, cache warming and tool usage)
           $ref: "#/components/schemas/UsageTotals"
@@ -12136,9 +12332,13 @@ components:
       enum: [user, assistant]
 
     MessageOrigin:
-      description: Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
+      description: |
+        Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder
+        after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the
+        sleep is due; background means the runtime's CLI replied by itself after background work it started had ended
+        (Run.triggerBackgroundTasks names that work), and the user message is generated text saying so
       type: string
-      enum: [console, inbox_reminder, sleep_wake]
+      enum: [console, inbox_reminder, sleep_wake, background]
 
     Message: {"type":"object","required":["id","role","origin","text","createdAt","sessionEpoch","run"],"additionalProperties":false,"properties":{"id":{"type":"string","format":"uuid"},"role":{"$ref":"#/components/schemas/MessageRole"},"origin":{"description":"Taken from the run the message belongs to; a user message and its reply have the same value. For a platform reminder turn, the user message text is the reminder text generated when the run starts","$ref":"#/components/schemas/MessageOrigin"},"text":{"type":"string"},"createdAt":{"type":"string","format":"date-time"},"sessionEpoch":{"type":"integer","minimum":1},"run":{"description":"The run this message belongs to; a user message and its reply carry the same run","$ref":"#/components/schemas/Run"},"images":{"type":"array","items":{"$ref":"#/components/schemas/MessageImage"}}}}
     ConversationPage:
@@ -12250,7 +12450,7 @@ components:
 
     AgentStatus:
       type: object
-      required: [sleep, sleepRevision, agentId, busy, currentRun, queued, processState, processPid, processStartedAt, session]
+      required: [sleep, sleepRevision, agentId, busy, currentRun, queued, processState, processPid, processStartedAt, session, backgroundTasks, restartOnNextMessage]
       additionalProperties: false
       properties:
         sleep:
@@ -12275,6 +12475,18 @@ components:
           type: [string, "null"]
           format: date-time
         session: { $ref: "#/components/schemas/SessionInfo" }
+        backgroundTasks:
+          description: |
+            The background tasks still running on the Agent's runtime process, oldest first. busy says nothing about
+            them: an Agent can be idle while they run.
+          type: array
+          items: { $ref: "#/components/schemas/BackgroundTask" }
+        restartOnNextMessage:
+          description: |
+            While background tasks run (backgroundTasks is not empty): the Agent's settings changed since its runtime
+            process started, so the next message restarts the process, which stops them (stopReason
+            settings_changed). Always false when no background task runs.
+          type: boolean
 
     SseSnapshot:
       type: object
@@ -12743,8 +12955,9 @@ components:
     StatsOriginTokens:
       description: |
         Tokens split by the source that triggered the run. Regular runs go by runs.origin: console (your messages, plus
-        manual compactions with /compact from the console), inbox_reminder (Inbox reminders), sleep_wake (scheduled
-        wakes); task turns go by their origin: console_node counts toward console, inbox_reminder toward inboxReminder,
+        manual compactions with /compact from the console, plus the replies a runtime's CLI gives by itself after its
+        background work ended, origin background), inbox_reminder (Inbox reminders), sleep_wake (scheduled wakes); task
+        turns go by their origin: console_node counts toward console, inbox_reminder toward inboxReminder,
         sleep_wake toward sleepWake, task_node toward task; usage that belongs to no run (for example cache warming
         between two turns) counts toward other. The five fields sum to tokens.totals.total.
       type: object
@@ -13033,6 +13246,8 @@ components:
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineContextHandoff"
         - $ref: "#/components/schemas/TimelineBackgroundWaitTimeout"
+        - $ref: "#/components/schemas/TimelineBackgroundTaskStarted"
+        - $ref: "#/components/schemas/TimelineBackgroundTaskEnded"
         - $ref: "#/components/schemas/TimelineExtensionUI"
         - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
@@ -13060,6 +13275,8 @@ components:
           session_missing: "#/components/schemas/TimelineSessionMissing"
           context_handoff: "#/components/schemas/TimelineContextHandoff"
           background_wait_timeout: "#/components/schemas/TimelineBackgroundWaitTimeout"
+          background_task_started: "#/components/schemas/TimelineBackgroundTaskStarted"
+          background_task_ended: "#/components/schemas/TimelineBackgroundTaskEnded"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
           model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
@@ -13408,6 +13625,37 @@ components:
         sessionFile:
           type: [string, "null"]
           description: The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex)
+
+    TimelineBackgroundTaskStarted:
+      description: A background task (see BackgroundTask) started in this run; it may outlive the run
+      type: object
+      required: [type, at, taskId, kind, label, toolCallId]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [background_task_started] }
+        at: { type: string, format: date-time }
+        taskId: { type: string }
+        kind: { type: string, enum: [command, subagent, other] }
+        label: { type: string }
+        toolCallId: { type: [string, "null"] }
+
+    TimelineBackgroundTaskEnded:
+      description: |
+        A background task this run started has ended; recorded on this run even when the end came after the run ended
+        (at says when). Fields as in BackgroundTask.
+      type: object
+      required: [type, at, taskId, status, exitCode, stopReason, output]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [background_task_ended] }
+        at: { type: string, format: date-time }
+        taskId: { type: string }
+        status: { type: string, enum: [completed, failed, stopped, unknown] }
+        exitCode: { type: [integer, "null"] }
+        stopReason:
+          type: [string, "null"]
+          enum: [person, reply_stopped, settings_changed, runtime_switched, session_reset, agent_deleted, task_started, shutdown, task_limit, null]
+        output: { type: [string, "null"] }
 
     TimelineBackgroundWaitTimeout:
       description: |
