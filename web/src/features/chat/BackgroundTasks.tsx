@@ -137,7 +137,8 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate }: { tas
 
 // The mark next to the Agent's state while background tasks run: “后台任务 N” (Background N), a yellow tilted pill with a spinning
 // mark, so an idle Agent with work still going does not look finished. It opens the list.
-export function BackgroundTasksMark({ tasks, stopper, origin, className }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; className?: string }) {
+// hint: what the list is about (by default, that the reply has ended and these still run).
+export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; hint?: string; className?: string }) {
   const [open, setOpen] = useState(false)
   if (tasks.length === 0) return null
   return (
@@ -162,7 +163,7 @@ export function BackgroundTasksMark({ tasks, stopper, origin, className }: { tas
           aria-label={t.background.title}
           className="z-50 flex max-h-[min(520px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)] outline-none"
         >
-          <BackgroundPanelHead count={tasks.length} />
+          <BackgroundPanelHead count={tasks.length} hint={hint} />
           <div className="min-h-0 flex-1 overflow-y-auto">
             <BackgroundTaskList tasks={tasks} stopper={stopper} origin={origin} onNavigate={() => setOpen(false)} />
           </div>
@@ -172,12 +173,12 @@ export function BackgroundTasksMark({ tasks, stopper, origin, className }: { tas
   )
 }
 
-export function BackgroundPanelHead({ count, children }: { count: number; children?: ReactNode }) {
+export function BackgroundPanelHead({ count, hint = t.background.hint, children }: { count: number; hint?: string; children?: ReactNode }) {
   return (
     <div className="flex shrink-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-b-2 border-ink bg-tint-yellow px-4 py-2.5">
       <span className="font-display-cn text-[20px] leading-tight">{t.background.title}</span>
       <span className="rounded-full bg-ink px-2 text-[12px] leading-5 font-black text-riso-yellow">{t.background.running(count)}</span>
-      <span className="basis-full text-[12.5px] font-bold text-ink-700">{t.background.hint}</span>
+      <span className="basis-full text-[12.5px] font-bold text-ink-700">{hint}</span>
       {children}
     </div>
   )

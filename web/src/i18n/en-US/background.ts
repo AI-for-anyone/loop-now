@@ -13,6 +13,7 @@ export const background = {
   title: 'Background tasks',
   running: (count: number) => `${count} running`,
   hint: 'The reply has ended; these are still going',
+  nodeHint: 'This step finishes only once they end; stopping one does not stop the step',
   kind: { command: 'Command', subagent: 'Sub-agent', other: 'Task' } satisfies Record<Task['kind'], string>,
   fromReply: (number: number) => `reply #${number}`,
   fromReplyAt: (time: string) => `the reply at ${time}`,

@@ -401,12 +401,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
           {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
           {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
-          {busy && stopAlso > 0 && (
-            <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full bg-tint-red px-2.5 text-[12px] leading-[22px] font-black text-red-text shadow-[inset_0_0_0_1.5px_var(--red)]">
-              <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
-              {t.background.stopWarning(stopAlso)}
-            </span>
-          )}
+          {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
         </div>
         {connection}
       </div>
@@ -482,6 +477,17 @@ export function KeyHint({
         </>
       )}
     </p>
+  )
+}
+
+// Next to the key hints when stopping or interrupting the reply also stops background tasks (the runtime's stop ends its process, or a
+// task node's turn takes its tasks with it).
+export function StopAlsoWarning({ count }: { count: number }) {
+  return (
+    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full bg-tint-red px-2.5 text-[12px] leading-[22px] font-black text-red-text shadow-[inset_0_0_0_1.5px_var(--red)]">
+      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
+      {t.background.stopWarning(count)}
+    </span>
   )
 }
 

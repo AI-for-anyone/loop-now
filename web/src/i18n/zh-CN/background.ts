@@ -12,6 +12,7 @@ export const background = {
   title: '后台任务',
   running: (count: number) => `${count} 个在运行`,
   hint: '回复已经结束，这些还在跑',
+  nodeHint: '这一步要等它们结束才会完成；停掉其中一个不会停掉这一步',
   kind: { command: '命令', subagent: '子代理', other: '任务' } satisfies Record<Task['kind'], string>,
   // Which reply started it: its number when the conversation has it, otherwise its time.
   fromReply: (number: number) => `第 ${number} 轮回复`,

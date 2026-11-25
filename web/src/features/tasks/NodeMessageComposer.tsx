@@ -13,7 +13,7 @@ import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
-import { KeyHint, StopMark, type QuestionReply, type StopControl } from '@/features/chat/Composer'
+import { KeyHint, StopAlsoWarning, StopMark, type QuestionReply, type StopControl } from '@/features/chat/Composer'
 import { barKbdClass, mac } from '@/features/chat/composer-style'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
@@ -24,11 +24,12 @@ const copy = t.taskInbox
 // The border belongs to the shared container; the text area grows with its content and scrolls on its own once it hits the limit.
 const inputClass = 'min-h-10 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[9px] text-[15px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
-type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply }
+type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply; stopAlso?: number }
 // queue: the node's queue tray, attached to the top of the input.
 // stop: given while the node has a reply in progress; with an empty draft the send button becomes stop.
 // reply: answering a question the node asked you; the text goes out as that answer (an Inbox reply), not as a node message.
-export function NodeMessageComposer({ taskId, draft, current, disabled, capability, text, onChange, onImages, imageLimits, onAccepted, onAction, queue, stop, reply }: Props) {
+// stopAlso: the background tasks this node's turns started; stopping or interrupting the turn stops them too, and the box says so.
+export function NodeMessageComposer({ taskId, draft, current, disabled, capability, text, onChange, onImages, imageLimits, onAccepted, onAction, queue, stop, reply, stopAlso = 0 }: Props) {
   const client = useQueryClient(), busy = useRef(false)
   const [localError, setLocalError] = useState(''), [reading, setReading] = useState(false), [preparing, setPreparing] = useState(false), [uploads, setUploads] = useState<ImageUploads>({})
   const canSend = current && !disabled && capability?.canSend === true && capability.taskId === taskId && capability.nodeRunId === draft.nodeRunId && capability.agentId === draft.agentId && capability.runtimeId === draft.runtimeId
@@ -100,7 +101,7 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   const editor = <Textarea aria-label={t.tasks.draft} placeholder={reply ? t.consoleInbox.replyPlaceholder : t.tasks.draftPlaceholder(draft.agentName)} value={text} readOnly={!current} onChange={event => onChange(event.target.value)} onKeyDown={keyDown} rows={1} className={inputClass} />
   const sendLabel = pending || answering ? t.tasks.sending : t.chat.send
   const showStop = current && stop !== undefined && !reply && !unknown && !text.trim() && !draft.images?.length
-  const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
+  const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
   // Draft images sit inside the same border, above the text row; the corners tighten when they show.
   // Redesign step 5 (same as the chat page's input area): a round add-image button on the left, a pill input with a navy outline in the
   // middle, and a fluorescent-pink round stamp for sending on the right (it can stop while busy).
@@ -117,7 +118,10 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   </div>
   return <div className="grid gap-2">
     <div className="flex min-w-0 flex-col">{queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[50px]')}>{queue}</div>}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{field}</ImagePicker> : field()}</div>
-    {current && <KeyHint stop={stop !== undefined} className={cn('justify-start text-[12px] text-ink-700', imageLimits && onImages && 'sm:pl-[52px]')} kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} />}
+    {current && <div className={cn('flex flex-wrap items-center gap-x-3.5 gap-y-1.5', imageLimits && onImages && 'sm:pl-[52px]')}>
+      <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-[12px] text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} />
+      {stop !== undefined && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+    </div>}
     {localError && <p role="alert" className="text-sm text-red-text">{localError}</p>}<ErrorAlert error={answer.error} />{answer.outcome === 'ordinary' && <p role="status" className="text-sm font-bold">{t.inbox.question.ordinary}</p>}<ErrorAlert error={unconfirmedNotFound ? null : error} />{unconfirmedNotFound && <p role="status" className="text-sm">{copy.notFound}</p>}
     {targetMismatch && <p role="status" className="text-sm">{t.tasks.targetChanged}</p>}
     {unknown && <><p role="status" className="text-sm">{t.tasks.sendUnknown}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={pending} onClick={() => void recover()}>{reading ? copy.reading : copy.readOriginal}</Button>{current && <Button size="sm" disabled={!canSend || pending} onClick={() => void submit()}>{t.tasks.retryOriginalMessage}</Button>}</div></>}
