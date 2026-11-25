@@ -1,4 +1,5 @@
 import { taskInboxKeys, taskInboxProjection } from '@/api/task-inbox'
+import { applyTaskNodeBackgroundEvent, taskNodeBackgroundKeys } from '@/api/background-tasks'
 import { taskNodeQueueKeys, taskNodeQueueProjection } from '@/api/task-node-queue'
 import { taskMessageProjection } from './message-projection'
 import { useEffect, useState } from 'react'
@@ -56,8 +57,15 @@ export function useTaskLive(id: string, project: boolean) {
         if (!project && event.type === 'message.created' && taskMessageProjection(client).message(id, event.id, event.data)) return
         if (!project && event.type === 'task.inbox.updated' && taskInboxProjection(client).event(id, event.id, event.data)) return
         if (!project && event.type === 'task.node.queue.updated' && taskNodeQueueProjection(client).event(client, id, event.data)) return
+        // A node's running background tasks are replaced whole, and its replies' records (which say how each one ended) are read again.
+        if (!project && event.type === 'task.node.background_tasks.updated') {
+          if (event.data.taskId !== id) return
+          applyTaskNodeBackgroundEvent(client, id, event.data)
+          void client.invalidateQueries({ queryKey: taskInboxKeys.timeline(id, event.data.nodeRunId) })
+          return
+        }
         // Queue events only carry changes; after a (re)connection snapshot, read each shown queue once.
-        if (!project && event.type === 'snapshot') { taskMessageProjection(client).connection(id); taskInboxProjection(client).connection(id); void client.invalidateQueries({ queryKey: taskNodeQueueKeys.task(id) }) }
+        if (!project && event.type === 'snapshot') { taskMessageProjection(client).connection(id); taskInboxProjection(client).connection(id); void client.invalidateQueries({ queryKey: taskNodeQueueKeys.task(id) }); void client.invalidateQueries({ queryKey: taskNodeBackgroundKeys.task(id) }) }
         if (!project && event.type === 'sleep.updated') {
           const store = sleepProjections(client)
           if (!store.update(event.data, { task: id })) return

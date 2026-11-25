@@ -58,6 +58,7 @@ describe('event names match the contract', () => {
       'session.updated': 'SseSessionUpdated',
       'sleep.updated': 'SseSleepUpdated',
       'queue.updated': 'SseQueueUpdated',
+      'background_tasks.updated': 'SseBackgroundTasksUpdated',
     })
   })
 
@@ -83,7 +84,7 @@ describe('event names match the contract', () => {
 it('task and project task list event names and schemas match the contract', () => {
   const task = sseEventsFromContract('/tasks/{taskId}/events')
   expect(Object.keys(task).sort()).toEqual([...TASK_EVENT_NAMES].sort())
-  expect(task).toEqual({ snapshot: 'TaskSnapshotEvent', 'task.updated': 'TaskUpdatedEvent', 'node.updated': 'TaskNodeUpdatedEvent', 'message.created': 'TaskMessage', 'task.inbox.updated': 'TaskNodeInboxRecord', 'artifact.published': 'TaskArtifactEvent', 'sleep.updated': 'SseSleepUpdated', 'task.node.queue.updated': 'TaskNodeQueue' })
+  expect(task).toEqual({ snapshot: 'TaskSnapshotEvent', 'task.updated': 'TaskUpdatedEvent', 'node.updated': 'TaskNodeUpdatedEvent', 'message.created': 'TaskMessage', 'task.inbox.updated': 'TaskNodeInboxRecord', 'artifact.published': 'TaskArtifactEvent', 'sleep.updated': 'SseSleepUpdated', 'task.node.queue.updated': 'TaskNodeQueue', 'task.node.background_tasks.updated': 'TaskNodeBackgroundTasks' })
   const project = sseEventsFromContract('/projects/{projectId}/tasks/events')
   expect(Object.keys(project).sort()).toEqual([...PROJECT_TASK_EVENT_NAMES].sort())
   expect(project).toEqual({ snapshot: 'TaskProjectSnapshotEvent', 'task.updated': 'TaskUpdatedEvent' })

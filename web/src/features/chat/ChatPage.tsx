@@ -26,6 +26,8 @@ import { newerSleep } from '@/features/sleep/projection'
 import { useAgentConsoleMessages } from '@/api/console-inbox'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { CommandLine } from '@/features/plugins/ChatLines'
+import { useRuntimeLookup } from '@/lib/runtime'
+import { RestartNotice } from './BackgroundTasks'
 import type { Schemas } from '@/api/client'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -116,13 +118,32 @@ export function ChatPage() {
   const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
   const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
   const phase = live.current ? runPhaseText(live.current.run) : null
+  // Background tasks the next message, or stopping this reply, would stop: the next message restarts the CLI after a settings change;
+  // on some runtimes stopping a reply ends the process.
+  // The runtimes are the ones running now: the tasks' own, and the current reply's (the Agent's runtime may already be set to another for
+  // the next message).
+  const runtimes = useRuntimeLookup()
+  const runningTasks = synced ? live.backgroundTasks : (status.data?.backgroundTasks ?? [])
+  const running = runningTasks.length
+  const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(runningTasks[0]?.runtime ?? agent.runtime)} count={running} /> : null
+  const replyRuntime = (synced ? live.current?.run : status.data?.currentRun)?.selection?.runtime ?? agent.runtime
+  const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
+
+  // The numbers of the loaded replies that started a running background task, so the header's list can name them.
+  // The turns change with every streamed piece of text; the numbers only when one of them changes, so the header is not told every time.
+  const backgroundTasks = live.backgroundTasks
+  const numbered =
+    turnsBefore === undefined
+      ? ''
+      : turns.flatMap((turn, index) => (backgroundTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
+  const replyNumbers = useMemo(() => Object.fromEntries(numbered ? numbered.split(',').map((pair) => { const [runId, number] = pair.split('='); return [runId, Number(number)] }) : []), [numbered])
 
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.
   useEffect(() => {
-    if (synced) reportLiveStatus({ busy, phase, sleep })
-  }, [synced, busy, phase, sleep, reportLiveStatus])
+    if (synced) reportLiveStatus({ busy, phase, sleep, backgroundTasks, replyNumbers })
+  }, [synced, busy, phase, sleep, backgroundTasks, replyNumbers, reportLiveStatus])
   useEffect(() => () => reportLiveStatus(null), [reportLiveStatus])
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
@@ -204,6 +225,8 @@ export function ChatPage() {
             </>
           }
           runner={<RunnerChip agent={agent} />}
+          notice={restartNotice}
+          stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
             // Busy hint: a fluorescent pink dot with a navy outline, no background fill.

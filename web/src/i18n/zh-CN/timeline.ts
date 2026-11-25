@@ -59,6 +59,8 @@ export const timeline = {
     message_cancelled: '一条 Inbox 消息被取消',
     session_missing: '会话找不到了',
     model_rate_limit: '订阅额度',
+    background_task_started: '转到后台运行',
+    background_task_ended: '后台任务结束',
     // The reply had ended but commands it runs in the background were still going; the turn waited, and the runtime sent nothing for
     // limitMs, so the turn ended there (tools still open were closed as no_result).
     background_wait_timeout: (limitMs: number) => `等后台命令时运行时 ${formatSlept(limitMs)}没有任何消息，这一轮在这里结束`,

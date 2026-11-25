@@ -37,6 +37,7 @@ export const chat = {
     user_cancelled: 'Withdrawn while queued; never ran',
     merged_into_interrupt: 'Turned into an interrupt; this turn never ran',
     no_pending_messages: 'Messages were read or cancelled; this turn never ran',
+    merged_into_reply: 'The end of background work went into a reply starting at the same moment; this turn never ran',
     sleep_superseded: 'Scheduled wake taken over by new work',
     sleep_invalidated: 'Scheduled wake no longer valid',
   },

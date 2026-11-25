@@ -22,9 +22,10 @@ export function useRunRuntimeName(fallback?: AgentRuntime | null) {
   }
 }
 
-// Turns voided while still queued that never ran (withdrawn, all messages turned into interrupts, messages already read or cancelled):
-// hidden in the conversation flow, shown as usual in the run record.
-const VOIDED: ReadonlySet<Run['endReason']> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages'])
+// Turns voided while still queued that never ran (withdrawn, all messages turned into interrupts, messages already read or cancelled, a
+// follow-up after background work that went into a reply starting at the same moment): hidden in the conversation flow, shown as usual
+// in the run record.
+const VOIDED: ReadonlySet<Run['endReason']> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages', 'merged_into_reply'])
 export const isVoidedRun = (run: Run) => VOIDED.has(run.endReason)
 
 // Status text of a reply. A completed reply shows no status.

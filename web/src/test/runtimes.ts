@@ -18,8 +18,8 @@ export function runtimeList(claudeCode: Partial<Schemas['RuntimeStatus']> = {}):
 export function runtimeDefinitions(): Schemas['RuntimeDefinitionList'] {
   return {
     runtimes: [
-      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true }, minVersion: null, setup: null, acpCommandId: null },
-      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' }, acpCommandId: null },
+      { id: 'pi', name: 'Pi', providers: [], isDefault: true, capabilities: { accounts: 'managed', realHome: false, nativeCommands: true, pluginExtensions: true, bundled: true, stopEndsBackgroundTasks: false }, minVersion: null, setup: null, acpCommandId: null },
+      { id: 'claude-code', name: 'Claude Code', providers: ['claude-code'], isDefault: false, capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false }, minVersion: null, setup: { install: 'curl -fsSL https://claude.ai/install.sh | bash', login: 'claude', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' }, acpCommandId: null },
     ],
   }
 }
@@ -34,7 +34,7 @@ export const codexDefinition: Schemas['RuntimeDefinition'] = {
   name: 'Codex',
   providers: ['codex-cli'],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false },
+  capabilities: { accounts: 'local', realHome: false, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false },
   minVersion: '0.167.0',
   acpCommandId: null,
   setup: { install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: 'https://developers.openai.com/codex/cli' },
@@ -49,18 +49,18 @@ export function codexStatus(overrides: Partial<Schemas['RuntimeStatus']> = {}): 
 }
 
 // Grok and Antigravity as the server defines them (ACP-DESIGN.md): CLIs on this computer with their own login and the real home, no
-// commands of their own, no Pi extensions.
-const acp = (id: 'grok' | 'antigravity', name: string, binary: string): Schemas['RuntimeDefinition'] => ({
+// commands of their own, no Pi extensions. Stopping a Grok reply ends its process, and with it the background tasks.
+const acp = (id: 'grok' | 'antigravity', name: string, binary: string, stopEndsBackgroundTasks = false): Schemas['RuntimeDefinition'] => ({
   id,
   name,
   providers: [`${id}-cli`],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false },
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks },
   minVersion: null,
   setup: { install: null, login: binary, docsUrl: null },
   acpCommandId: null,
 })
-export const grokDefinition = acp('grok', 'Grok', 'grok')
+export const grokDefinition = acp('grok', 'Grok', 'grok', true)
 export const antigravityDefinition = acp('antigravity', 'Antigravity', 'agy')
 
 // GET /runtime-definitions with every runtime the console knows.
@@ -79,7 +79,7 @@ export const acpCommandDefinition = (commandId = acpCommandId, name = 'Hermes'):
   name,
   providers: [`acp-${commandId}`],
   isDefault: false,
-  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false },
+  capabilities: { accounts: 'local', realHome: true, nativeCommands: false, pluginExtensions: false, bundled: false, stopEndsBackgroundTasks: false },
   minVersion: null,
   setup: null,
   acpCommandId: commandId,

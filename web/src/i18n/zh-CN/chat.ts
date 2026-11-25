@@ -47,6 +47,7 @@ export const chat = {
     user_cancelled: '排队中被撤回，没有执行',
     merged_into_interrupt: '消息已转为打断，这一轮没有执行',
     no_pending_messages: '消息已被读取或取消，这一轮没有执行',
+    merged_into_reply: '后台任务结束的消息并入了同时开始的回复，这一轮没有执行',
     sleep_superseded: 'sleep 到期安排已由新工作承接',
     sleep_invalidated: 'sleep 到期安排已失效',
   },

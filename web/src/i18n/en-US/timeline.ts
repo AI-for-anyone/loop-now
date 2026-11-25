@@ -58,6 +58,8 @@ export const timeline = {
     message_cancelled: 'An Inbox message was cancelled',
     session_missing: 'Session not found',
     model_rate_limit: 'Subscription limit',
+    background_task_started: 'Went on in the background',
+    background_task_ended: 'A background task ended',
     background_wait_timeout: (limitMs: number) => `While waiting on background commands, the runtime sent nothing for ${formatSlept(limitMs)}; the turn ended here`,
     ended: {
       completed: 'Completed',

@@ -7,6 +7,14 @@ export function runStartedAt(run: Run): string {
   return run.startedAt ?? run.queuedAt
 }
 
+// A running clock for how long something has run: 0:07, 1:23, 1:02:03. Digits and colons read the same in every UI language.
+export function elapsedClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(total / 3600), minutes = Math.floor((total % 3600) / 60), seconds = total % 60
+  const two = (value: number) => String(value).padStart(2, '0')
+  return hours > 0 ? `${hours}:${two(minutes)}:${two(seconds)}` : `${minutes}:${two(seconds)}`
+}
+
 // Compare two RFC 3339 times numerically. The server (Go) drops trailing zeros from fractional seconds, so the number of digits varies
 // and comparing them as strings sorts them wrong; Date.parse is only precise to the millisecond, so the fractional part is padded to
 // nanoseconds and compared separately.

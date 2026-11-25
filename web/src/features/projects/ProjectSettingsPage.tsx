@@ -27,6 +27,7 @@ import { ProjectLocalDirectories } from '@/features/local-mode/LocalDirectories'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet } from '@/components/Sheet'
 import { SectionToc, SheetSection } from '@/components/SheetSections'
+import { BackgroundCountTag } from '@/features/chat/BackgroundTasks'
 
 // The numbered sections of the project settings; their order is the order of the section ruler (redesign: the same set-up as
 // the Agent Config tab, laid out on one sheet, with the section ruler in the stub on the right).
@@ -174,11 +175,15 @@ function NameCard({ project }: { project: Schemas['Project'] }) {
   )
 }
 
+// Busy or idle; an idle Agent whose background tasks still run says so next to it.
 const statusBadge = (agent: Schemas['AgentListItem']) =>
   agent.busy ? (
     <Badge tone="busy">{t.agents.busy}</Badge>
   ) : (
-    <Badge tone="success">{t.agents.idle}</Badge>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Badge tone="success">{t.agents.idle}</Badge>
+      <BackgroundCountTag count={agent.backgroundTaskCount} />
+    </span>
   )
 
 // Manager: assign, change or remove it from among this project's Agents; takes effect immediately with no confirmation
