@@ -43,10 +43,11 @@ func model(id, name string, levels ...string) modelcatalog.Model {
 // fullCatalog lists models the way the local CLIs do: the small model is not first.
 func fullCatalog() catalog {
 	return catalog{
-		agentruntime.ClaudeCodeProvider:  {model("opus", "Claude Opus (latest)", "low", "medium", "high"), model("haiku", "Claude Haiku (latest)", "low", "medium", "high")},
-		agentruntime.CodexProvider:       {model("gpt-6.2-sol", "GPT-6.2 Sol", "low", "medium", "high"), model("gpt-6-mini", "GPT-6 mini", "minimal", "low", "medium"), model("gpt-6-luna", "GPT-6 Luna", "low", "medium", "high")},
-		agentruntime.AntigravityProvider: {model("gemini-4-pro", "Gemini 4 Pro", "low", "high"), model("gemini-4-flash", "Gemini 4 Flash", "low", "medium", "high")},
-		agentruntime.GrokProvider:        {model("grok-5", "Grok 5", "low", "high"), model("grok-5-fast", "Grok 5 Fast")},
+		agentruntime.ClaudeCodeProvider: {model("opus", "Claude Opus (latest)", "low", "medium", "high"), model("haiku", "Claude Haiku (latest)", "low", "medium", "high")},
+		agentruntime.CodexProvider:      {model("gpt-6.2-sol", "GPT-6.2 Sol", "low", "medium", "high"), model("gpt-6-mini", "GPT-6 mini", "minimal", "low", "medium"), model("gpt-6-luna", "GPT-6 Luna", "low", "medium", "high")},
+		agentruntime.AntigravityProvider: {model("gemini-4-pro", "Gemini 4 Pro", "low", "high"), model("gemini-3.8-flash", "Gemini 3.8 Flash", "low", "medium", "high"),
+			model("gemini-4-neon", "Gemini 4 Neon", "low", "medium", "high", "xhigh"), model("gemini-pro-orchestrator-neon", "Orchestrator (Neon)")},
+		agentruntime.GrokProvider: {model("grok-5", "Grok 5", "low", "high"), model("grok-5-fast", "Grok 5 Fast")},
 	}
 }
 
@@ -166,7 +167,7 @@ func TestAutomatic(t *testing.T) {
 	}{
 		{append(all, agentruntime.ClaudeCode), agentruntime.ClaudeCode, "haiku", "Claude Haiku (latest)", ""},
 		{all, agentruntime.Codex, "gpt-6-luna", "GPT-6 Luna", "low"},
-		{all[2:], agentruntime.Antigravity, "gemini-4-flash", "Gemini 4 Flash", "low"},
+		{all[2:], agentruntime.Antigravity, "gemini-4-neon", "Gemini 4 Neon", "low"},
 		{all[3:], agentruntime.Grok, "grok-5", "Grok 5", ""},
 		{[]string{agentruntime.Pi}, "", "", "", ""},
 	} {
@@ -196,6 +197,12 @@ func TestAutomatic(t *testing.T) {
 	e.svc.Models = catalog{agentruntime.CodexProvider: {model("gpt-6", "GPT-6", "medium", "high")}}
 	if w := writerOf(t, e); w == nil || w.Runtime != agentruntime.Codex || w.ModelID != "gpt-6" || w.ThinkingLevel != nil {
 		t.Fatalf("no preferred model: %+v", w)
+	}
+	// Antigravity without a Neon model writes with a Flash one, at its lowest level.
+	e.svc.Models = catalog{agentruntime.AntigravityProvider: {model("gemini-4-pro", "Gemini 4 Pro", "low", "high"), model("gemini-3.8-flash", "Gemini 3.8 Flash", "low", "medium", "high")}}
+	e.statuses.set(agentruntime.Antigravity)
+	if w := writerOf(t, e); w == nil || w.ModelID != "gemini-3.8-flash" || level(w) != "low" {
+		t.Fatalf("no Neon model, a Flash one: %+v", w)
 	}
 
 	// A local ACP command writes after the built-in runtimes, with its default model.
