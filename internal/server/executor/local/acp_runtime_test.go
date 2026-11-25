@@ -17,6 +17,7 @@ import (
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/executor/local/acp"
 	"loop-now/internal/server/store"
 	"loop-now/internal/testutil/fakeacpbin"
 )
@@ -408,6 +409,77 @@ func TestAntigravityRecordedLevelID(t *testing.T) {
 		}
 		if err := json.Unmarshal([]byte(res.Text), &cfg); err != nil || cfg.Model != "fake-high" {
 			t.Fatalf("level %v: %+v %v", level, res, err)
+		}
+	}
+}
+
+// Each turn of Grok, Antigravity or a local ACP command records the usage the CLI reports with the prompt's result: one
+// model call on the turn, for the Agent's provider and model. Grok's input count includes its cache reads,
+// Antigravity's leaves them out (a local command's is decided by its total); reasoning is part of output; the model Grok
+// says it used is the response model.
+func TestACPUsage(t *testing.T) {
+	cmdID := uuid.Must(uuid.NewV7())
+	agentruntime.SetLocalCommands([]agentruntime.Runtime{agentruntime.LocalCommandRuntime(cmdID, "My Agent",
+		agentruntime.LocalCommand{Command: fakeacpbin.Path(t), Args: []string{"acp"}})})
+	t.Cleanup(func() { agentruntime.SetLocalCommands(nil) })
+	local := agentruntime.LocalCommandRuntimeID(cmdID)
+	for _, c := range []struct {
+		flavor, provider, model, response string
+		input, read, output, reasoning    int64
+	}{
+		{"agy", "antigravity-cli", "fake", "fake", 1200, 800, 30, 12},
+		{"grok", "grok-cli", "fake-1", "fake-1-build", 1931 - 217, 217, 31, 30},
+		{"agy", local, "default", "default", 1200, 800, 30, 12},
+	} {
+		h := newACPHarness(t, c.flavor, nil)
+		id := h.agent(func(s *agentconfig.Snapshot) { s.Provider, s.ModelID = c.provider, c.model })
+		run, res := h.execRun(id, "hello")
+		h.obs.mu.Lock()
+		usage := slices.Clone(h.obs.usage)
+		h.obs.mu.Unlock()
+		if res.Outcome != executor.OutcomeCompleted || len(usage) != 1 {
+			t.Fatalf("%s: %+v %+v", c.provider, res, usage)
+		}
+		u := usage[0]
+		if u.agent != id || u.run == nil || *u.run != run || u.u.Kind != "assistant" || u.u.Provider != c.provider || u.u.Model != c.model ||
+			u.u.ResponseModel != c.response || u.u.StopReason != "end_turn" || u.u.Input != c.input || u.u.CacheRead != c.read ||
+			u.u.CacheWrite != 0 || u.u.Output != c.output || u.u.Reasoning == nil || *u.u.Reasoning != c.reasoning {
+			t.Fatalf("%s: %+v run %v", c.provider, u.u, u.run)
+		}
+	}
+}
+
+func count(v int64) *int64 { return &v }
+
+// How the counts an ACP agent reports become a usage record: the input leaves out the cached part, recorded as cache
+// reads and writes. Antigravity's input never has it, Grok's always does, and another agent's has it when its input
+// and output alone make its total. Reasoning is part of output.
+func TestACPUsageRecord(t *testing.T) {
+	other := acpFlavor{runtime: "acp-other"}
+	for _, c := range []struct {
+		name                       string
+		f                          acpFlavor
+		u                          acp.Usage
+		input, read, write, output int64
+		reasoning                  *int64
+		response                   string
+	}{
+		{"agy, even when input and output make the total", antigravityFlavor, acp.Usage{Input: 1200, Output: 30, CacheRead: 800, Total: count(1230), Thought: count(12)},
+			1200, 800, 0, 30, count(12), "m"},
+		{"grok 1.0.92", grokFlavor, acp.Usage{Input: 19319, Output: 31, CacheRead: 2176, Total: count(19350), Thought: count(30), Model: "grok-4.7-build"},
+			17143, 2176, 0, 31, count(30), "grok-4.7-build"},
+		{"grok without a total", grokFlavor, acp.Usage{Input: 100, Output: 5, CacheRead: 40, CacheWrite: 10}, 50, 40, 10, 5, nil, "m"},
+		{"grok, more cache than input", grokFlavor, acp.Usage{Input: 10, CacheRead: 40}, 0, 40, 0, 0, nil, "m"},
+		{"another agent: in the input", other, acp.Usage{Input: 100, Output: 5, CacheRead: 40, Total: count(105)}, 60, 40, 0, 5, nil, "m"},
+		{"another agent: beside the input", other, acp.Usage{Input: 100, Output: 5, CacheRead: 40, Total: count(145)}, 100, 40, 0, 5, nil, "m"},
+		{"another agent: no total", other, acp.Usage{Input: 100, Output: 5, CacheRead: 40}, 100, 40, 0, 5, nil, "m"},
+		{"reasoning over output", other, acp.Usage{Input: 1, Output: 5, Thought: count(9)}, 1, 0, 0, 5, count(5), "m"},
+	} {
+		r := c.f.usageRecord(c.u, "prov", "m")
+		if r.Kind != "assistant" || r.Provider != "prov" || r.Model != "m" || r.ResponseModel != c.response || r.Input != c.input ||
+			r.CacheRead != c.read || r.CacheWrite != c.write || r.Output != c.output || (r.Reasoning == nil) != (c.reasoning == nil) ||
+			(r.Reasoning != nil && *r.Reasoning != *c.reasoning) {
+			t.Errorf("%s: %+v", c.name, r)
 		}
 	}
 }

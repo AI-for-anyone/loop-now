@@ -6,6 +6,11 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### Antigravity、Grok 和自己添加的 ACP 命令有了用量
+
+- Antigravity、Grok 和你自己添加的 ACP 命令的回复，现在会在用量和统计里计入 token，和 Claude Code、Codex 一样：输入、输出、缓存读写和思考，按 CLI 自己在每轮回复结束时报告的数字记录。不读其他任何东西：不读登录文件，也不调用服务的接口。
+- 不计入的：Antigravity 在后台命令结束后自己补的回复（它不报告这部分的 token 数），以及被停止的 Grok 回复。
+
 ### 在浏览器里也能选择文件夹和程序
 
 - 在运行 Loop Now 的这台 Mac 上用浏览器打开控制台时，路径输入框旁边也有和桌面版一样的「选择…」按钮：Loop Now 会打开 Mac 自己的选择窗口，选好后自动填入完整路径。适用于 Agent 和项目的本机目录、从本地文件夹安装插件、自己添加的 ACP 命令的程序（选 `.app` 时会填入它里面的程序）。

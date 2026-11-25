@@ -65,7 +65,22 @@ type acpFlavor struct {
 	// forget removes what the CLI keeps under home for the session sessionID it opened in cwd (its history entry), after
 	// a text run; nil when that is not known.
 	forget func(home, cwd, sessionID string) error
+	// inputCache is whether the input count the agent reports includes the cached part (see usageRecord).
+	inputCache acpInputCache
 }
+
+// acpInputCache is whether an agent's input token count includes the cached part (cache reads and writes, which it
+// reports beside it).
+type acpInputCache int
+
+const (
+	// cacheByTotal: it does when the input and output alone make the reported total.
+	cacheByTotal acpInputCache = iota
+	// cacheApart: it never does (Antigravity: Gemini's input count leaves out cache reads).
+	cacheApart
+	// cacheInside: it always does (Grok: input plus output is its total, with the cache reads inside the input).
+	cacheInside
+)
 
 // localCommandFlavor runs a local ACP command: its own arguments, the program's default model, Skills listed in the
 // platform prompt, a stop by session/cancel (then the executor's kill after the timeout), and a session that loads
@@ -93,7 +108,8 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 		}
 		return append(args, "stdio")
 	},
-	forget: forgetGrokSession}
+	forget:     forgetGrokSession,
+	inputCache: cacheInside}
 
 // antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model is chosen in the session, by the id that carries
 // the thinking level (see acpSessionModel).
@@ -103,7 +119,8 @@ var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "ag
 	},
 	background: antigravityBackgroundCommand,
 	writeArgs:  func(string, string) []string { return []string{"acp"} },
-	forget:     forgetAntigravitySession}
+	forget:     forgetAntigravitySession,
+	inputCache: cacheApart}
 
 // sessionIDPattern is what a session id must look like before it names a file or folder to remove.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
@@ -446,7 +463,49 @@ func acpEnv(env []string) []string {
 	return out
 }
 
-func (acpDriver) attach(*proc) {}
+// attach passes on the usage the agent reports for each prompt.
+func (ad acpDriver) attach(p *proc) {
+	if ap := acpOf(p); ap != nil {
+		ap.SetObserver(acpObserver{e: ad.e, p: p, f: ad.f})
+	}
+}
+
+// acpObserver records the usage an ACP agent reports with each prompt's result as one model call of the turn. Only
+// what the agent sends is used: Antigravity's own replies after its background commands end with usage_update, which
+// has the context's size and no token counts, so they are not counted.
+type acpObserver struct {
+	e *Executor
+	p *proc
+	f acpFlavor
+}
+
+func (o acpObserver) Usage(u acp.Usage) {
+	o.e.obs.Usage(o.p.agentID, o.p.curRun.Load(), o.f.usageRecord(u, o.p.provider, o.p.model))
+}
+
+// usageRecord is the usage record for what an ACP agent reports for a prompt: the input leaves out the cached part,
+// which is recorded as cache reads and writes (see acpInputCache); reasoning is part of output; the response model is
+// the model the agent says it used, else the Agent's model.
+func (f acpFlavor) usageRecord(u acp.Usage, provider, model string) executor.Usage {
+	cache := u.CacheRead + u.CacheWrite
+	inside := f.inputCache == cacheInside ||
+		f.inputCache == cacheByTotal && cache > 0 && u.Total != nil && *u.Total == u.Input+u.Output
+	input := u.Input
+	if inside {
+		input = max(u.Input-cache, 0)
+	}
+	var reasoning *int64
+	if u.Thought != nil {
+		r := min(*u.Thought, u.Output)
+		reasoning = &r
+	}
+	response := u.Model
+	if response == "" {
+		response = model
+	}
+	return executor.Usage{Kind: "assistant", Provider: provider, Model: model, ResponseModel: response, StopReason: u.StopReason,
+		Input: input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: reasoning}
+}
 
 // ready opens the connection and the session: it loads the recorded session (its replayed history is not passed on) or
 // opens a new one, chooses the model when the runtime takes it in the session, and decides whether the platform prompt
