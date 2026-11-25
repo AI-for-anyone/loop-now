@@ -2505,6 +2505,8 @@ components:
 - plugin_timeout: the plugin did not respond in time (504)
 - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409)
 - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
+- path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409)
+- path_picker_busy: a dialog to choose a path is already open (409)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -2561,7 +2563,9 @@ components:
           "plugin_timeout",
           "runtime_in_use",
           "text_generation_unavailable",
-          "text_generation_failed"
+          "text_generation_failed",
+          "path_picker_unavailable",
+          "path_picker_busy"
         ],
         "type": "string"
       }
