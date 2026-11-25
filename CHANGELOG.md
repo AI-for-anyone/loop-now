@@ -4,6 +4,15 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
+## Unreleased
+
+### Choose a folder or a program in the browser too
+
+- When the console is opened in a browser on the Mac where Loop Now runs, path fields have the same "Choose…" button as the desktop app: Loop Now opens the Mac's own dialog, and the full path is filled in. It works for an Agent's or a project's local folders, a plugin installed from a local folder, and the command of a local ACP command (an `.app` fills in the program inside it).
+- The dialog shows above the browser, but macOS gives it the keyboard only after a click on it; the field says so while it waits. Closing the form closes the dialog.
+- Not offered when Loop Now runs without a logged-in desktop session (over SSH, as a system service) or on Windows and Linux for now; the path can still be typed. The desktop app is unchanged.
+- API: `POST /path-picks` and `Context.pathPicker`; new error codes `path_picker_unavailable` and `path_picker_busy`.
+
 ## v0.3.1
 
 Write with AI: every Prompt has a button that drafts it for you with a CLI already on this computer (Claude Code, Codex, Antigravity or Grok, using its own login). Settings says which one writes; by default the first one that is ready, with a small, quick model. No Agent is created and nothing is saved until you save.

@@ -4,6 +4,15 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
+## 未发布
+
+### 在浏览器里也能选择文件夹和程序
+
+- 在运行 Loop Now 的这台 Mac 上用浏览器打开控制台时，路径输入框旁边也有和桌面版一样的「选择…」按钮：Loop Now 会打开 Mac 自己的选择窗口，选好后自动填入完整路径。适用于 Agent 和项目的本机目录、从本地文件夹安装插件、自己添加的 ACP 命令的程序（选 `.app` 时会填入它里面的程序）。
+- 选择窗口会显示在浏览器上面，但 macOS 要先在窗口上点一下，键盘才有用；等待时输入框下面会提示。关掉表单，选择窗口也会关掉。
+- Loop Now 不在登录着的桌面会话里运行时（比如通过 SSH 或作为系统服务），以及暂时在 Windows 和 Linux 上，不显示这个按钮，仍可手动输入路径。桌面版不变。
+- 接口：`POST /path-picks` 和 `Context.pathPicker`；新增错误码 `path_picker_unavailable` 和 `path_picker_busy`。
+
 ## v0.3.1
 
 AI 帮写：每个 Prompt 旁边都有一个按钮，用这台电脑上已经装好的 CLI（Claude Code、Codex、Antigravity 或 Grok，用它自己的登录）帮你写出来。设置里可以选由谁来写，默认用第一个能用的，挑它又小又快的模型。不会新建 Agent，你不点保存就不会存下来。
