@@ -127,3 +127,45 @@ func TestLocalCommands(t *testing.T) {
 		t.Fatal("removed")
 	}
 }
+
+// The runtimes whose accounts are local write texts with AI and the bundled Pi does not; Automatic tries Claude Code,
+// Codex, Antigravity and Grok, then the local ACP commands in their order, each with its small model.
+func TestTextWriters(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	SetLocalCommands([]Runtime{LocalCommandRuntime(a, "First", LocalCommand{Command: "first"}), LocalCommandRuntime(b, "Second", LocalCommand{Command: "second"})})
+	defer SetLocalCommands(nil)
+	for _, r := range All() {
+		if (r.TextGeneration != nil) != (r.Capabilities.Accounts == AccountsLocal) {
+			t.Errorf("%s: writes texts %v, accounts %s", r.ID, r.TextGeneration != nil, r.Capabilities.Accounts)
+		}
+	}
+	var order []string
+	for _, r := range Writers() {
+		order = append(order, r.ID)
+	}
+	want := []string{ClaudeCode, Codex, Antigravity, Grok, LocalCommandRuntimeID(a), LocalCommandRuntimeID(b)}
+	if !slices.Equal(order, want) {
+		t.Fatalf("Automatic's order: %v, want %v", order, want)
+	}
+	for id, tg := range map[string]TextGeneration{
+		ClaudeCode:  {Model: "haiku"},
+		Codex:       {Model: "-mini", Level: "low"},
+		Antigravity: {Model: "flash", Level: LowestLevel},
+		Grok:        {},
+	} {
+		r, _ := ByID(id)
+		if got := *r.TextGeneration; got.Model != tg.Model || got.Level != tg.Level {
+			t.Errorf("%s: small model %+v, want %+v", id, got, tg)
+		}
+	}
+	r, _ := ByID(LocalCommandRuntimeID(a))
+	if r.TextGeneration.Model != "" || r.TextGeneration.Level != "" {
+		t.Errorf("a local command writes with its default model: %+v", r.TextGeneration)
+	}
+	// A copy does not share the registry's entry.
+	r, _ = ByID(ClaudeCode)
+	r.TextGeneration.Model = "changed"
+	if again, _ := ByID(ClaudeCode); again.TextGeneration.Model != "haiku" {
+		t.Fatal("ByID must return a copy")
+	}
+}
