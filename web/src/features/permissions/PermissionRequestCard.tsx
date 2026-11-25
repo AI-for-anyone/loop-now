@@ -6,6 +6,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { t } from '@/i18n'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { PermissionModeIcon } from './PermissionModePicker'
 
@@ -25,6 +26,7 @@ const outcomeOf = (request: Pick<Request, 'state' | 'reason'>) => (request.reaso
 // change itself, and Approve / Reject; a typed reason rejects it and tells the Agent why. The same question is in the Inbox; whichever
 // answer comes first counts, and the other side is told so. Once answered here it shows how until the list drops it.
 export function PermissionRequestCard({ request, agentName }: { request: Request; agentName: string }) {
+  const runtimes = useRuntimeLookup()
   const [sending, setSending] = useState<'approve' | 'reject' | null>(null)
   const [answered, setAnswered] = useState<Request | null>(null)
   const [elsewhere, setElsewhere] = useState<Request | null>(null)
@@ -107,11 +109,12 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
               <label htmlFor={ids.reason} className="sr-only">
                 {copy.reasonLabel}
               </label>
-              <Input id={ids.reason} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={copy.reasonPlaceholder} maxLength={4000} disabled={sending !== null} className="h-9 min-w-0 flex-[1_1_260px] text-[13.5px]" />
+              <Input id={ids.reason} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={copy.reasonTold[request.runtime] ?? copy.reasonPlaceholder} maxLength={4000} disabled={sending !== null} className="h-9 min-w-0 flex-[1_1_260px] text-[13.5px]" />
               <Button type="submit" size="sm" variant="secondary" disabled={sending !== null || !reason.trim()}>
                 {copy.rejectWithReason}
               </Button>
             </form>
+            {copy.reasonTold[request.runtime] === undefined && <p className="text-[12px] font-bold text-ink-700">{copy.reasonNotTold(runtimes.name(request.runtime))}</p>}
             <p className="text-[12px] text-ink-500">{copy.alsoInInbox}</p>
           </>
         )}

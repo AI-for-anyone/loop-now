@@ -145,6 +145,8 @@ function QuestionCaption({ message, question, answerable }: { message: Message; 
     if (result.by.kind !== 'console') return <span>{text.answeredBy(partyName(result.by), time)}</span>
     return <span>{result.optionLabel ? text.chosen(time, result.optionLabel) : text.answeredByText(time, result.textPreview)}</span>
   }
+  // An approval question closes as expired when its request is cancelled; it never waited out its time.
+  if (question.kind === 'permission' && question.state === 'expired') return <span>{t.permissions.inbox.cancelled}</span>
   return <span>{t.inbox.question.state[question.state]}{question.state === 'expired' && ` ${t.chat.metaSeparator} ${t.inbox.question.expires(question.expiresAt)}`}</span>
 }
 

@@ -9,7 +9,7 @@ import { createTestQueryClient } from '@/test/render'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { buildSteps } from '@/features/chat/timeline-steps'
-import { runtimeName } from '@/test/runtimes'
+import { runtimeName, withCodex } from '@/test/runtimes'
 import { QuestionChoices } from '@/features/console-inbox/ConsoleMessage'
 
 const agent = makeAgent({ name: 'Coordinator', model: { provider: 'claude-code', modelId: 'opus' }, runtime: 'claude-code', permissionMode: 'supervised' })
@@ -70,6 +70,16 @@ describe('Approving in the chat', () => {
     await user.click(within(pushCard).getByRole('button', { name: 'Reject' }))
     await waitFor(() => expect(api.calls).toEqual([{ id: push.id, body: { decision: 'reject', reason: 'Not on main' } }]))
     expect(await within(pushCard).findByRole('status')).toHaveFocus()
+  })
+
+  it('a runtime that is not told the reason says so under the field; Claude Code is told it', async () => {
+    const codex = makePermissionRequest({ agentId: agent.id, runId: running.id, runtime: 'codex', title: 'npm publish' })
+    const { emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex()))] })
+    await emit('snapshot', snapshot([push, codex]))
+    expect(within(card('git push origin main')).getByRole('textbox', { name: 'Reason to reject' })).toHaveAttribute('placeholder', 'A reason rejects the request and tells the Agent why')
+    expect(within(card('git push origin main')).queryByText(/isn't told the reason/)).toBeNull()
+    expect(within(card('npm publish')).getByRole('textbox', { name: 'Reason to reject' })).toHaveAttribute('placeholder', 'A typed reason rejects the request')
+    expect(within(card('npm publish')).getByText("Codex isn't told the reason; it is kept with the request here")).toBeInTheDocument()
   })
 
   it('answered elsewhere first (the Inbox): 409 shows how it was answered, not an error', async () => {
@@ -151,6 +161,20 @@ describe('Approvals elsewhere', () => {
     )
     expect(screen.getByText('Asks for approval: answering approves or rejects; a typed reason rejects it')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  })
+
+  it('an approval question whose request was cancelled reads as cancelled, not as expired at a time', () => {
+    const message = makeInboxMessage({ from: agentParty(agent), to: consoleParty, text: 'git push', question: { kind: 'permission', permissionRequestId: push.id, options: [{ id: '1', label: 'Approve' }, { id: '2', label: 'Reject' }], expiresAt: '2026-12-01T00:00:00Z', state: 'expired', answer: null } })
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <MemoryRouter>
+          <QuestionChoices message={message} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText('Cancelled: the reply ended before it was answered')).toBeInTheDocument()
+    expect(screen.queryByText(/^Expires/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
   })
 
   it('the run record keeps what was asked and how it was answered', () => {
