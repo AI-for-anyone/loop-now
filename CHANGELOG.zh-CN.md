@@ -6,6 +6,17 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### 能看到、能停止的后台任务
+
+- Claude Code、Codex、Grok 或 Antigravity 把命令（或子 Agent）放到后台时，回复随 CLI 结束，后台的活仍然看得到：Agent 状态旁的“后台任务 N”打开列表（在跑什么、哪轮回复启动的、跑了多久），可以单个停止或全部停止；侧边栏、总览和项目的 Agent 列表里，空闲但后台有活的 Agent 会有标记。
+- 启动它的那轮回复里，命令卡片先显示“在后台运行”，结束后显示结果：状态、退出码、用时、停止原因和最后一段输出。
+- Claude Code、Grok 或 Antigravity 在后台任务结束后自己接着回复时，这段回复单独成条，开头写明是哪个任务结束后说的；它的 token 在统计里算在你名下。Codex 不会自己接着回复。
+- Antigravity 不再一直保持“回复中”等后台命令跑完。
+- 后台有活的 Agent 不会因为空闲被关掉。重置会话、换运行时、删除 Agent、退出 Loop Now，或某个需要重启 CLI 的设置生效时（输入框上方会先提示），后台任务会被停掉，并记下原因。在 Grok 和 Antigravity 上，停止回复也会停掉它的后台任务，停止按钮会先说明。意外退出后，原来在跑的任务标为“结束情况未知”。
+- 多步任务里的每一步仍然等后台任务和 CLI 的后续回复（最多 30 分钟没有动静，`LOOP_NOW_ACP_BACKGROUND_WAIT`，现在对所有运行时生效）；这一步会列出它们，可以单个停止。
+- 接口：`BackgroundTask`、`AgentStatus.backgroundTasks`、`Run.backgroundTasks`、运行来源 `background`、Agent 和任务节点的停止接口、事件 `background_tasks.updated` 和 `task.node.background_tasks.updated`。Codex 现在以实验接口启动，以便用 `thread/backgroundTerminals/terminate`。
+- 升级：迁移 16 新增 `background_tasks` 表，并重建一次 `runs` 表。
+
 ### Antigravity、Grok 和自己添加的 ACP 命令有了用量
 
 - Antigravity、Grok 和你自己添加的 ACP 命令的回复，现在会在用量和统计里计入 token，和 Claude Code、Codex 一样：输入、输出、缓存读写和思考，按 CLI 自己在每轮回复结束时报告的数字记录。不读其他任何东西：不读登录文件，也不调用服务的接口。
