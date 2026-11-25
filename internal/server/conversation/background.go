@@ -21,9 +21,10 @@ import (
 var _ executor.FollowUpHost = (*Service)(nil)
 
 // FollowUp implements executor.FollowUpHost: the runtime's CLI began a reply by itself after background tasks ended.
-// The reply becomes a run of origin background whose user message says which tasks ended; it starts at once when the
-// Agent is idle, and otherwise goes first in the queue (the executor keeps the reply until the run is dispatched).
-func (s *Service) FollowUp(agentID uuid.UUID, triggers []executor.BackgroundTask) {
+// The reply becomes the run runID, of origin background, whose user message says which tasks ended; it starts at once
+// when the Agent is idle, and otherwise goes first in the queue (the executor keeps the reply until the run is
+// dispatched).
+func (s *Service) FollowUp(agentID, runID uuid.UUID, triggers []executor.BackgroundTask) {
 	ctx := s.ctx
 	if ctx.Err() != nil {
 		return
@@ -33,7 +34,6 @@ func (s *Service) FollowUp(agentID uuid.UUID, triggers []executor.BackgroundTask
 		keys = append(keys, t.Key)
 	}
 	text := FollowUpText(triggers)
-	runID := uuid.Must(uuid.NewV7())
 	owner := coord.LockValue(runID.String(), s.o.InstanceID.String())
 	in := store.NewRun{AgentID: agentID, RunID: runID, Text: text, Origin: executor.OriginBackground, InstanceID: s.o.InstanceID, RequestID: reqid.From(ctx)}
 	acquired, err := s.co.Acquire(ctx, agentID.String(), owner)

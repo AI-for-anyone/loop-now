@@ -20,7 +20,16 @@
 //	fake:exit          print a little text, then exit with exit code 3
 //	fake:ratelimit     print a rate_limit_event first, then reply
 //	fake:usage2        result carries usage for two models
+//	fake:background <dur> <cmd>
+//	                   run <cmd> with the Bash tool in the background (as Claude Code 2.1.332 reports it: background_tasks_changed,
+//	                   task_started, a tool result naming the task and its output file), reply started; after <dur> the task
+//	                   ends (task_updated, task_notification, an empty background_tasks_changed) and, when no turn is going on,
+//	                   Claude Code replies by itself: a turn of its own (init, text "background done", result with usage)
+//	fake:wait <dur>    reply waited after <dur>
 //	anything else      reply echo: <text>
+//
+// The control request stop_task (request.task_id) stops a background task: it ends as stopped (killed), and Claude Code
+// replies by itself as after any end; every control request is answered with success.
 //
 // With --output-format json (print mode, one message read whole from stdin, one result printed) the first "fake:"
 // word anywhere in the message decides: fake:args, fake:env and fake:stdin (the message as read) reply as above;
@@ -57,7 +66,19 @@ import (
 var (
 	outMu sync.Mutex
 	out   = bufio.NewWriter(os.Stdout)
+	// turnMu is held while a turn is written: a reply Claude Code gives by itself waits for the turn in progress, and
+	// the next message waits for such a reply.
+	turnMu sync.Mutex
+	// tasks are the background tasks running, by task id.
+	tasksMu sync.Mutex
+	tasks   = map[string]*bgTask{}
+	nextBg  int
 )
+
+type bgTask struct {
+	id, toolUse, command, outFile string
+	timer                         *time.Timer
+}
 
 func emit(v any) {
 	b, _ := json.Marshal(v)
@@ -346,6 +367,7 @@ type inbound struct {
 	RequestID string `json:"request_id"`
 	Request   struct {
 		Subtype string `json:"subtype"`
+		TaskID  string `json:"task_id"`
 	} `json:"request"`
 	Message struct {
 		Content json.RawMessage `json:"content"`
@@ -381,14 +403,19 @@ func run(args []string) {
 			switch in.Type {
 			case "control_request":
 				emit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": in.RequestID, "response": map[string]any{}}})
+				if in.Request.Subtype == "stop_task" {
+					go endTask(in.Request.TaskID, false, sess, model)
+				}
 			case "user":
 				if os.Getenv("FAKECLAUDE_NO_INIT") == "1" {
 					continue
 				}
 				text, images := content(in.Message.Content)
+				turnMu.Lock()
 				prior := sess.count
 				sess.record(text)
 				turn(f, sess, model, text, images, prior, lines, sigint)
+				turnMu.Unlock()
 			}
 		}
 	}
@@ -499,6 +526,31 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 	case "fake:ratelimit":
 		emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "allowed", "rateLimitType": "five_hour", "resetsAt": 1794382800}})
 		reply(model, "limited")
+	case "fake:background":
+		durText, command, _ := strings.Cut(arg, " ")
+		dur, _ := time.ParseDuration(durText)
+		tasksMu.Lock()
+		nextBg++
+		t := &bgTask{id: fmt.Sprintf("b%d", nextBg), toolUse: fmt.Sprintf("toolu_bg_%d", nextBg), command: command}
+		t.outFile = filepath.Join(os.TempDir(), fmt.Sprintf("fakeclaude-%d-%s.output", os.Getpid(), t.id))
+		tasks[t.id] = t
+		list := backgroundList()
+		tasksMu.Unlock()
+		stream(nil, map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_bg", "model": model}})
+		stream(nil, map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash", "input": map[string]any{}}})
+		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_bg", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash",
+			"input": map[string]any{"command": command, "description": "Run it in the background", "run_in_background": true}}}}})
+		emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": list, "session_id": sess.id})
+		emit(map[string]any{"type": "system", "subtype": "task_started", "task_id": t.id, "tool_use_id": t.toolUse, "is_backgrounded": true, "task_type": "local_bash",
+			"description": "Run it in the background", "session_id": sess.id})
+		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": t.toolUse,
+			"content": "Command running in background with ID: " + t.id + ". Output is being written to: " + t.outFile, "is_error": false}}}})
+		t.timer = time.AfterFunc(dur, func() { endTask(t.id, true, sess, model) })
+		reply(model, "started")
+	case "fake:wait":
+		dur, _ := time.ParseDuration(arg)
+		time.Sleep(dur)
+		reply(model, "waited")
 	case "fake:usage2":
 		usage["claude-helper-fake"] = map[string]any{"inputTokens": 1, "outputTokens": 1, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "thinkingTokens": 7}
 		reply(model, "two models")
@@ -558,4 +610,44 @@ func envReport() string {
 		"LOOPCTL_AGENT_URL": os.Getenv("LOOPCTL_AGENT_URL"), "hasToken": os.Getenv("LOOPCTL_AGENT_TOKEN") != "", "forbidden": forbidden, "cwd": cwd,
 		"PI_CODING_AGENT_DIR": os.Getenv("PI_CODING_AGENT_DIR")})
 	return string(b)
+}
+
+// backgroundList is the background_tasks_changed list of the running tasks; tasksMu is held.
+func backgroundList() []any {
+	list := []any{}
+	for _, t := range tasks {
+		list = append(list, map[string]any{"task_id": t.id, "task_type": "local_bash", "description": "Run it in the background", "tool_use_id": t.toolUse})
+	}
+	return list
+}
+
+// endTask ends a background task, completed (its time is up) or stopped (killed), as Claude Code reports it; when no
+// turn is going on, Claude Code then replies by itself.
+func endTask(id string, completed bool, sess *session, model string) {
+	tasksMu.Lock()
+	t := tasks[id]
+	delete(tasks, id)
+	list := backgroundList()
+	tasksMu.Unlock()
+	if t == nil {
+		return
+	}
+	t.timer.Stop()
+	patch, status := "completed", "completed"
+	if !completed {
+		patch, status = "killed", "stopped"
+	}
+	_ = os.WriteFile(t.outFile, []byte(strings.Repeat("noise\n", 1000)+"finished\n"), 0o600)
+	emit(map[string]any{"type": "system", "subtype": "task_updated", "task_id": t.id, "patch": map[string]any{"status": patch, "end_time": time.Now().UnixMilli()}, "session_id": sess.id})
+	emit(map[string]any{"type": "system", "subtype": "task_notification", "task_id": t.id, "tool_use_id": t.toolUse, "status": status, "output_file": t.outFile,
+		"summary": "Background command \"Run it in the background\" " + status, "session_id": sess.id})
+	emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": list, "session_id": sess.id})
+	if !turnMu.TryLock() {
+		return // the turn in progress takes the notification
+	}
+	defer turnMu.Unlock()
+	emit(map[string]any{"type": "system", "subtype": "init", "session_id": sess.id, "model": model, "claude_code_version": version(), "tools": []string{}, "skills": []string{}, "mcp_servers": []any{}})
+	reply(model, "background done")
+	result(map[string]any{"subtype": "success", "is_error": false, "result": "background done", "terminal_reason": "completed"},
+		map[string]any{model: map[string]any{"inputTokens": 7, "outputTokens": 3, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "thinkingTokens": 0}})
 }

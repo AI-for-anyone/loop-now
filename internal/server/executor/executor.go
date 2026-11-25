@@ -188,10 +188,10 @@ type RestartChecker interface {
 }
 
 // FollowUpHost turns the replies a runtime's CLI gives by itself into runs. FollowUp is called (on its own goroutine)
-// when the CLI of a regular Agent begins such a reply: the host creates a run of origin background for it, whose
+// when the CLI of a regular Agent begins such a reply: the host creates the run runID, of origin background, whose
 // Execute then records the reply; triggers are the background tasks whose end the reply follows.
 type FollowUpHost interface {
-	FollowUp(agentID uuid.UUID, triggers []BackgroundTask)
+	FollowUp(agentID, runID uuid.UUID, triggers []BackgroundTask)
 }
 
 // TaskStartHandoff is what a task instance of a runtime that cannot copy the regular session starts from (its baseline

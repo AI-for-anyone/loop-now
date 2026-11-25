@@ -48,7 +48,7 @@ func TestBackgroundRunMakesAgentBusy(t *testing.T) {
 	first := e.history()[0].Run.ID
 	task := e.bgTask(first, "b1", "completed")
 
-	e.svc.FollowUp(e.agent, []executor.BackgroundTask{execTask(task)})
+	e.svc.FollowUp(e.agent, uuid.Must(uuid.NewV7()), []executor.BackgroundTask{execTask(task)})
 	e.waitStarted("follow-up")
 	st, err := e.svc.Status(context.Background(), e.agent)
 	if err != nil || !st.Busy || st.CurrentRun == nil {
@@ -97,7 +97,7 @@ func TestBackgroundFollowUpQueuesFirst(t *testing.T) {
 	e.waitStarted("block current")
 	e.mustSend("queued before", "queue")
 	task := e.bgTask(run.Run.ID, "b1", "completed")
-	e.svc.FollowUp(e.agent, []executor.BackgroundTask{execTask(task)})
+	e.svc.FollowUp(e.agent, uuid.Must(uuid.NewV7()), []executor.BackgroundTask{execTask(task)})
 	q, err := e.svc.Queue(context.Background(), e.agent)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestBackgroundFollowUpQueuesFirst(t *testing.T) {
 func TestBackgroundFollowUpMerged(t *testing.T) {
 	e := newEnv(t)
 	e.ex.followUpMerged = true
-	e.svc.FollowUp(e.agent, nil)
+	e.svc.FollowUp(e.agent, uuid.Must(uuid.NewV7()), nil)
 	e.waitStarted("follow-up merged")
 	e.waitIdle()
 	h := e.history()

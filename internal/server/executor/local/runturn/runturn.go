@@ -22,6 +22,13 @@ type Sink interface {
 	ToolEnded(toolCallID, toolName string, isError bool)
 }
 
+// SelfTurn receives a turn the runtime begins by itself, with no message from the platform (its reply after background
+// work it started has ended): the turn's text and tools go to it as to a Sink, and End says how the turn ended.
+type SelfTurn interface {
+	Sink
+	End(Result)
+}
+
 // Outcome is how a turn ended.
 type Outcome string
 

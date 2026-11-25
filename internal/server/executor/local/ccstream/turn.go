@@ -36,6 +36,28 @@ type wireLine struct {
 	APIErrorStatus *int                      `json:"api_error_status"`
 	Errors         []string                  `json:"errors"`
 	ModelUsage     map[string]wireModelUsage `json:"model_usage_since_last_result"`
+
+	// background tasks: system/background_tasks_changed, task_started, task_updated, task_notification
+	Tasks          []wireTask `json:"tasks"`
+	TaskID         string     `json:"task_id"`
+	ToolUseID      string     `json:"tool_use_id"`
+	TaskType       string     `json:"task_type"`
+	Description    string     `json:"description"`
+	IsBackgrounded *bool      `json:"is_backgrounded"`
+	Patch          struct {
+		Status         string `json:"status"`
+		IsBackgrounded *bool  `json:"is_backgrounded"`
+	} `json:"patch"`
+	Status     string `json:"status"`
+	OutputFile string `json:"output_file"`
+	Summary    string `json:"summary"`
+}
+
+type wireTask struct {
+	TaskID      string `json:"task_id"`
+	ToolUseID   string `json:"tool_use_id"`
+	TaskType    string `json:"task_type"`
+	Description string `json:"description"`
 }
 
 type wireModelUsage struct {
@@ -79,8 +101,11 @@ type turn struct {
 	done   chan struct{}
 	result runturn.Result
 
-	finished    bool
-	detached    bool // the caller no longer waits: sink is not called any more
+	finished bool
+	detached bool // the caller no longer waits: sink is not called any more
+	// self: Claude Code began this turn by itself; end is told how it ended.
+	self        bool
+	end         func(runturn.Result)
 	interrupted bool
 	signalled   bool
 	ackedAt     time.Time
@@ -121,6 +146,116 @@ func (t *turn) finish(res runturn.Result) {
 	t.finished = true
 	t.result = res
 	close(t.done)
+	if t.end != nil {
+		t.end(res)
+	}
+}
+
+// beginsTurn reports whether a line with no turn open is the start of a turn Claude Code begins by itself.
+func beginsTurn(m wireLine) bool {
+	switch m.Type {
+	case "system":
+		return m.Subtype == "init"
+	case "stream_event", "assistant":
+		return m.ParentToolUseID == nil
+	}
+	return false
+}
+
+// selfTurn starts a turn Claude Code began by itself, when there is a place for it and no turn is open; it returns the
+// turn now open.
+func (c *Client) selfTurn(m wireLine) *turn {
+	c.mu.Lock()
+	t, hook := c.turn, c.selfTurns
+	start := t == nil && hook != nil && !c.exiting && !c.closed && beginsTurn(m)
+	c.mu.Unlock()
+	if !start {
+		return t
+	}
+	st := hook()
+	nt := newTurn(st)
+	nt.self, nt.end = true, st.End
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.turn != nil {
+		// A message was sent meanwhile: what follows is its turn.
+		st.End(runturn.Result{Outcome: runturn.OutcomeCompleted})
+		return c.turn
+	}
+	c.turn = nt
+	return nt
+}
+
+// background handles the system messages about background tasks (on the reader goroutine).
+func (c *Client) background(m wireLine, obs Observer) {
+	bo, _ := obs.(BackgroundObserver)
+	started := func(t Task) {
+		if c.tasks[t.ID] || c.ended[t.ID] || t.ID == "" {
+			return
+		}
+		c.tasks[t.ID] = true
+		if t.Command == "" && t.ToolUseID != "" {
+			t.Command = c.commands[t.ToolUseID]
+		}
+		if bo != nil {
+			bo.TaskStarted(t)
+		}
+	}
+	switch m.Subtype {
+	case "background_tasks_changed":
+		// The list says what kind each task is; a task is reported when task_started (or task_updated) says it went to
+		// the background, which names the tool call that started it.
+		for _, t := range m.Tasks {
+			if f, ok := c.foreground[t.TaskID]; ok && f.Type == "" {
+				f.Type = t.TaskType
+				c.foreground[t.TaskID] = f
+			} else if !ok && !c.tasks[t.TaskID] {
+				c.foreground[t.TaskID] = Task{ID: t.TaskID, ToolUseID: t.ToolUseID, Type: t.TaskType, Description: t.Description}
+			}
+		}
+	case "task_started":
+		t := Task{ID: m.TaskID, ToolUseID: m.ToolUseID, Type: m.TaskType, Description: m.Description}
+		if prev, ok := c.foreground[m.TaskID]; ok && t.Type == "" {
+			t.Type = prev.Type
+		}
+		if m.IsBackgrounded != nil && *m.IsBackgrounded {
+			delete(c.foreground, m.TaskID)
+			started(t)
+		} else {
+			c.foreground[m.TaskID] = t
+		}
+	case "task_updated":
+		if m.Patch.IsBackgrounded != nil && *m.Patch.IsBackgrounded {
+			t, ok := c.foreground[m.TaskID]
+			if !ok {
+				t = Task{ID: m.TaskID}
+			}
+			delete(c.foreground, m.TaskID)
+			started(t)
+		}
+		switch m.Patch.Status {
+		case "completed", "failed", "killed":
+			delete(c.foreground, m.TaskID)
+		}
+	case "task_notification":
+		delete(c.foreground, m.TaskID)
+		if !c.tasks[m.TaskID] || c.ended[m.TaskID] {
+			return
+		}
+		delete(c.tasks, m.TaskID)
+		c.ended[m.TaskID] = true
+		if bo != nil {
+			bo.TaskEnded(TaskEnd{ID: m.TaskID, Status: m.Status, OutputFile: m.OutputFile, Summary: m.Summary})
+		}
+	}
+}
+
+// rememberCommand keeps the Bash command of a tool call, to label the background task it may start.
+func (c *Client) rememberCommand(id, command string) {
+	if len(c.commands) >= 256 {
+		clear(c.commands)
+	}
+	c.commands[id] = command
 }
 
 // exited ends this turn when the process exits: if it was being interrupted it counts as interrupted; exiting before
@@ -145,8 +280,8 @@ func (c *Client) handleLine(line []byte) {
 	if json.Unmarshal(line, &m) != nil {
 		return
 	}
+	t := c.selfTurn(m)
 	c.mu.Lock()
-	t := c.turn
 	active := t != nil && !t.detached
 	obs := c.observer
 	c.mu.Unlock()
@@ -157,6 +292,7 @@ func (c *Client) handleLine(line []byte) {
 			c.init = &Init{SessionID: m.SessionID, Model: m.Model, Version: m.Version, Tools: m.Tools, Skills: m.Skills, MCPServers: m.MCPServers}
 			c.mu.Unlock()
 		}
+		c.background(m, obs)
 	case "stream_event":
 		if t == nil || m.ParentToolUseID != nil {
 			return
@@ -195,13 +331,16 @@ func (c *Client) handleLine(line []byte) {
 					t.sink.ToolStarted(b.ID, b.Name)
 				}
 			}
-			if b.Name != "Bash" || !active {
+			if b.Name != "Bash" {
 				continue
 			}
 			var in struct {
 				Command string `json:"command"`
 			}
 			if json.Unmarshal(b.Input, &in) == nil && in.Command != "" {
+				c.rememberCommand(b.ID, in.Command)
+			}
+			if active && in.Command != "" {
 				if s, ok := t.sink.(interface {
 					ToolCommand(id, name, command string)
 				}); ok {

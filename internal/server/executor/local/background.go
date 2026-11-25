@@ -60,7 +60,7 @@ func (e *Executor) reportBackground(p *proc, t executor.BackgroundTask) {
 // says otherwise. A task already running with the same id is not started again.
 func (e *Executor) bgStarted(p *proc, t executor.BackgroundTask) {
 	if t.RunID == uuid.Nil {
-		run := p.curRun.Load()
+		run := e.replyRun(p)
 		if run == nil {
 			p.log.Warn("a background task started with no reply to tie it to; it is not listed", "taskId", t.ID)
 			return
@@ -295,8 +295,12 @@ func (e *Executor) RestartOnNextMessage(ctx context.Context, agentID uuid.UUID) 
 	return !e.reusable(p, snap), nil
 }
 
-// bgBusy reports whether the process has background work going on: tasks running (they would end with it).
-func (p *proc) bgBusy() bool {
+// bgBusyLocked reports whether the process has background work going on: tasks running (they would end with it) or a
+// reply its CLI is giving by itself. Executor.mu is held.
+func (p *proc) bgBusyLocked() bool {
+	if p.selfTurn != nil {
+		return true
+	}
 	p.bg.mu.Lock()
 	defer p.bg.mu.Unlock()
 	return len(p.bg.running) > 0

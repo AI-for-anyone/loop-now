@@ -63,6 +63,26 @@ type Observer interface {
 	RateLimit(info map[string]any, inTurn bool)
 }
 
+// BackgroundObserver is an Observer that also hears of background tasks: work Claude Code runs in the background (a
+// Bash command with run_in_background, a sub-agent) that outlives the turn that started it.
+type BackgroundObserver interface {
+	// TaskStarted is a task moved to the background (once per task).
+	TaskStarted(t Task)
+	// TaskEnded is its end (once per task).
+	TaskEnded(e TaskEnd)
+}
+
+// Task is a background task as Claude Code reports it. Command is the Bash command that started it, when it is one.
+type Task struct {
+	ID, ToolUseID, Type, Description, Command string
+}
+
+// TaskEnd is how a background task ended: Status is completed, failed or stopped; OutputFile is where Claude Code wrote
+// its output; Summary is Claude Code's one-line account.
+type TaskEnd struct {
+	ID, Status, OutputFile, Summary string
+}
+
 // Usage is one model's usage in a turn.
 type Usage struct {
 	Model      string
@@ -112,11 +132,20 @@ type Client struct {
 	mu       sync.Mutex
 	turn     *turn
 	observer Observer
-	init     *Init
-	last     ResultInfo
-	controls map[string]chan bool // request_id of an interrupt control message -> whether it succeeded
-	closed   bool                 // stdout has ended
-	exiting  bool                 // SIGINT sent or process ended: it is sure to exit, so no new messages are written
+	// selfTurns receives the turns Claude Code begins by itself (its reply after background work ended); nil drops them.
+	selfTurns func() runturn.SelfTurn
+	// commands are the Bash commands of recent tool calls, by tool_use id (to label background tasks); tasks are the
+	// background tasks reported, foreground the tasks not (yet) in the background, ended those whose end was reported.
+	// All are used by the reader goroutine only.
+	commands   map[string]string
+	tasks      map[string]bool
+	foreground map[string]Task
+	ended      map[string]bool
+	init       *Init
+	last       ResultInfo
+	controls   map[string]chan bool // request_id of an interrupt control message -> whether it succeeded
+	closed     bool                 // stdout has ended
+	exiting    bool                 // SIGINT sent or process ended: it is sure to exit, so no new messages are written
 
 	done    chan struct{}
 	exitErr error
@@ -154,7 +183,8 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	c := &Client{o: o, stdin: stdin, process: cmd.Process, pid: cmd.Process.Pid, stderr: ring, controls: map[string]chan bool{}, done: make(chan struct{})}
+	c := &Client{o: o, stdin: stdin, process: cmd.Process, pid: cmd.Process.Pid, stderr: ring, controls: map[string]chan bool{}, done: make(chan struct{}),
+		commands: map[string]string{}, tasks: map[string]bool{}, foreground: map[string]Task{}, ended: map[string]bool{}}
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
@@ -201,6 +231,50 @@ func (c *Client) SetObserver(o Observer) {
 	c.mu.Unlock()
 }
 
+// SetSelfTurns sets where the turns Claude Code begins by itself go.
+func (c *Client) SetSelfTurns(f func() runturn.SelfTurn) {
+	c.mu.Lock()
+	c.selfTurns = f
+	c.mu.Unlock()
+}
+
+// StopTask asks Claude Code to stop a background task (control request stop_task) and waits for its answer; the end
+// is reported to the observer as Claude Code gives it.
+func (c *Client) StopTask(ctx context.Context, taskID string) error {
+	id := "loop-now-stop-task-" + strconv.FormatUint(c.nextID.Add(1), 10)
+	ack := make(chan bool, 1)
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return runturn.ErrExited
+	}
+	c.controls[id] = ack
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.controls, id)
+		c.mu.Unlock()
+	}()
+	b, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": map[string]any{"subtype": "stop_task", "task_id": taskID}})
+	if err := c.write(b); err != nil {
+		return err
+	}
+	select {
+	case ok, open := <-ack:
+		if !open {
+			return runturn.ErrExited
+		}
+		if !ok {
+			return fmt.Errorf("ccstream: Claude Code refused to stop task %s", taskID)
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.done:
+		return runturn.ErrExited
+	}
+}
+
 // Init returns the latest system/init; nil when none has been received yet.
 func (c *Client) Init() *Init {
 	c.mu.Lock()
@@ -242,6 +316,18 @@ func (c *Client) Prompt(ctx context.Context, text string, sink runturn.Sink, ima
 		c.mu.Unlock()
 		c.awaitExit()
 		return runturn.Result{}, runturn.ErrExited
+	}
+	if c.turn != nil && c.turn.self {
+		// Claude Code is in a turn of its own: the message would only be read after it. Wait for it to end, so its
+		// output is not taken for the reply to this message.
+		self := c.turn
+		c.mu.Unlock()
+		select {
+		case <-self.done:
+		case <-ctx.Done():
+			return runturn.Result{}, ctx.Err()
+		}
+		return c.Prompt(ctx, text, sink, images...)
 	}
 	if c.turn != nil {
 		c.mu.Unlock()
