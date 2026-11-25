@@ -463,7 +463,7 @@ func acpEnv(env []string) []string {
 func (ad acpDriver) attach(p *proc) {
 	if ap := acpOf(p); ap != nil {
 		ap.SetObserver(acpObserver{e: ad.e, p: p, f: ad.f})
-		ap.SetSelfTurns(func() runturn.SelfTurn { return ad.e.selfTurnBegan(p) })
+		ap.SetSelfTurns(func(about string) runturn.SelfTurn { return ad.e.selfTurnBegan(p, about) })
 	}
 }
 

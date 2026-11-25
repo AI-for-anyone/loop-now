@@ -40,8 +40,8 @@ func TestGrokBackgroundAndFollowUp(t *testing.T) {
 		t.Fatalf("ended: %+v", end)
 	}
 	call := host.next(t)
-	if len(call.triggers) != 1 || call.triggers[0].ID != task {
-		t.Fatalf("follow-up of the task: %+v", call)
+	if len(call.triggers) != 1 || call.triggers[0].ID != task || call.triggers[0].Status != executor.BackgroundCompleted || call.triggers[0].EndedAt == nil {
+		t.Fatalf("the follow-up names the task it follows, as it ended: %+v", call)
 	}
 	follow := newSink()
 	res, err = h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, follow)

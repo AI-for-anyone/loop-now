@@ -191,8 +191,9 @@ type turn struct {
 	cancelled bool
 	finished  bool
 	result    runturn.Result
-	// usageSeen: in a reply of the agent's own (ownReply), its last message was usage_update.
-	usageSeen bool
+	// usageSeen: in a reply of the agent's own (ownReply), its last message was usage_update. toolSince: a tool call came
+	// since the last text, so the next text is a new paragraph.
+	usageSeen, toolSince bool
 	// self is the id of the prompt the agent runs by itself that this turn is (ownReply for a reply with no prompt);
 	// end is told how it ended.
 	self string
@@ -396,12 +397,20 @@ func (c *Client) update(params json.RawMessage) {
 	switch u.Kind {
 	case "agent_message_chunk":
 		if u.Text != "" {
+			text := u.Text
 			t.mu.Lock()
-			t.text.WriteString(u.Text)
+			if t.toolSince && t.text.Len() > 0 && !strings.HasPrefix(text, "\n") {
+				text = "\n\n" + text // the agent gives no break between text before and after a tool call
+			}
+			t.toolSince = false
+			t.text.WriteString(text)
 			t.mu.Unlock()
-			t.sink.TextDelta(u.Text)
+			t.sink.TextDelta(text)
 		}
 	case "tool_call":
+		t.mu.Lock()
+		t.toolSince = true
+		t.mu.Unlock()
 		name := u.ToolKind
 		if name == "" || name == "other" {
 			name = u.Title
