@@ -161,6 +161,8 @@ func (s *Server) Routes() []Route {
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
 		{"POST", "/conversation-scans", "startConversationScan", ConsoleOnly, s.startConversationScan},
 		{"GET", "/conversation-scans/{operationId}", "getConversationScan", ConsoleOnly, s.getConversationScan},
+		{"POST", "/conversation-imports", "startConversationImport", ConsoleOnly, s.startConversationImport},
+		{"GET", "/conversation-imports/{operationId}", "getConversationImport", ConsoleOnly, s.getConversationImport},
 		{"GET", "/text-generation-settings", "getTextGenerationSettings", ConsoleOnly, s.getTextGenerationSettings},
 		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
 		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},

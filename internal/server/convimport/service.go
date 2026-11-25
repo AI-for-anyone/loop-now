@@ -25,9 +25,21 @@ type Service struct {
 	CodexHome      func() string
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
+	// Models is the model catalog (an imported Agent's model); WorkRoot holds the Agents' folders (the copy an Agent
+	// continues from); OrgID is the organization new projects go to.
+	Models   Models
+	WorkRoot string
+	OrgID    uuid.UUID
+	// DefaultMode is the permission mode new Agents get; nil is full.
+	DefaultMode func(context.Context) (string, error)
+	// AgentCreated is told about each Agent an import creates; may be nil.
+	AgentCreated func(uuid.UUID)
+	// MaxFolderBytes overrides MaxImportBytes (tests); zero keeps it.
+	MaxFolderBytes int64
 
-	mu    sync.Mutex
-	scans map[string]*scanOp
+	mu      sync.Mutex
+	scans   map[string]*scanOp
+	imports map[string]*importOp
 }
 
 // scanOp is a scan in progress or done.
@@ -130,11 +142,20 @@ func (s *Service) forgetLocked() {
 			delete(s.scans, id)
 		}
 	}
+	for id, op := range s.imports {
+		if !op.ended.IsZero() && now.Sub(op.ended) > keepOperations {
+			delete(s.imports, id)
+		}
+	}
 }
 
 // folderViews is what the console is shown of the folders: each with the project that already has it as a local
 // directory, and each conversation with the Agent it was imported as.
 func (s *Service) folderViews(ctx context.Context, folders []Folder) ([]apitypes.ImportFolder, error) {
+	imported, err := s.Store.ImportedAgents(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]apitypes.ImportFolder, 0, len(folders))
 	for _, f := range folders {
 		v := apitypes.ImportFolder{Path: f.Path, Git: f.Git, LastActiveAt: f.LastActiveAt, PreChecked: f.PreChecked, Truncated: f.Truncated,
@@ -161,6 +182,9 @@ func (s *Service) folderViews(ctx context.Context, folders []Folder) ([]apitypes
 			if c.SkipReason != "" {
 				reason := c.SkipReason
 				cv.SkipReason = &reason
+			}
+			if id, ok := imported[c.CLI][c.SessionID]; ok {
+				cv.AgentID = &id
 			}
 			v.Conversations = append(v.Conversations, cv)
 		}

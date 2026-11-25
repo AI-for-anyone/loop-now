@@ -81,7 +81,10 @@ type codexReader struct {
 	events    bool
 	pending   []Message // user messages from response items, used only when no user_message event comes
 	onMessage func(Message)
-	lastTurn  string
+	// lastTurn is the last turn that ended (finished or stopped), and messagesAtTurn how many messages came up to then:
+	// a fork from that turn holds those messages.
+	lastTurn       string
+	messagesAtTurn int
 }
 
 func (r *codexReader) record(line []byte) bool {
@@ -111,9 +114,8 @@ func (r *codexReader) record(line []byte) bool {
 		if p.Cwd != "" && r.m.cwd == "" {
 			r.m.cwd = p.Cwd
 		}
-		if p.TurnID != "" {
-			r.lastTurn = p.TurnID
-		}
+	case rec.Type == "event_msg" && (p.Type == "task_complete" || p.Type == "turn_aborted") && p.TurnID != "":
+		r.lastTurn, r.messagesAtTurn = p.TurnID, r.m.messages
 	case rec.Type == "event_msg" && p.Type == "user_message":
 		if !r.events {
 			r.events, r.pending = true, nil

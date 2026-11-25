@@ -555,7 +555,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// own); it works on macOS in a logged-in desktop session.
 	a.API.PathPicker = &pathpicker.Picker{Log: log}
 	// Importing conversations reads only Claude Code's and Codex's conversation records on this computer.
-	a.API.ConvImport = &convimport.Service{Store: a.Store, ClaudeProjects: a.Executor.ClaudeProjectsDir, CodexHome: a.Executor.CodexHome}
+	a.API.ConvImport = &convimport.Service{Store: a.Store, ClaudeProjects: a.Executor.ClaudeProjectsDir, CodexHome: a.Executor.CodexHome,
+		Models: models, WorkRoot: res.WorkRoot, OrgID: defaults.Organization.ID, AgentCreated: a.Conv.EmitAgentStatus}
 	// The local ACP commands people added are runtimes too, before anything runs.
 	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {

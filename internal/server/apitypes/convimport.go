@@ -54,3 +54,54 @@ type ImportConversation struct {
 	AgentID      *uuid.UUID `json:"agentId"`
 	SkipReason   *string    `json:"skipReason"`
 }
+
+// ConversationImportInput mirrors the ConversationImportInput schema.
+type ConversationImportInput struct {
+	ScanID  string                     `json:"scanId"`
+	Folders []ConversationImportFolder `json:"folders"`
+}
+
+// ConversationImportFolder is one item of ConversationImportInput.folders.
+type ConversationImportFolder struct {
+	Path       string     `json:"path"`
+	ProjectID  *uuid.UUID `json:"projectId"`
+	SessionIDs []string   `json:"sessionIds"`
+}
+
+// ConversationImport mirrors the ConversationImport schema.
+type ConversationImport struct {
+	OperationID string          `json:"operationId"`
+	State       string          `json:"state"`
+	Error       *string         `json:"error"`
+	Done        int             `json:"done"`
+	Total       int             `json:"total"`
+	Projects    []ImportProject `json:"projects"`
+	Agents      []ImportedAgent `json:"agents"`
+	Errors      []ImportError   `json:"errors"`
+}
+
+// ImportProject is one item of ConversationImport.projects.
+type ImportProject struct {
+	Path      string    `json:"path"`
+	ProjectID uuid.UUID `json:"projectId"`
+}
+
+// ImportedAgent is one item of ConversationImport.agents.
+type ImportedAgent struct {
+	SessionID string    `json:"sessionId"`
+	AgentID   uuid.UUID `json:"agentId"`
+}
+
+// ImportError is one item of ConversationImport.errors.
+type ImportError struct {
+	SessionID string `json:"sessionId"`
+	Message   string `json:"message"`
+}
+
+// ImportedFrom mirrors the ImportedFrom schema.
+type ImportedFrom struct {
+	CLI        string    `json:"cli"`
+	SessionID  string    `json:"sessionId"`
+	Path       string    `json:"path"`
+	ImportedAt time.Time `json:"importedAt"`
+}

@@ -178,6 +178,8 @@ func render(m Message) string {
 		label += ", sleep wake-up"
 	case m.Role == "user" && m.Origin == "background":
 		label += ", background work ended"
+	case m.Origin == "imported":
+		label += ", imported from the terminal"
 	case m.Role == "assistant" && (m.Status == "failed" || m.Status == "interrupted"):
 		label += ", " + m.Status + " (partial)"
 	}

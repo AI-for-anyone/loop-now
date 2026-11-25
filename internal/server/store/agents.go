@@ -32,6 +32,59 @@ type Agent struct {
 	OrgID         *uuid.UUID // organization of its project; empty for a platform Agent
 	OrgName       string     // organization and project names of its project, for the address; empty for a platform Agent
 	ProjectName   string
+	// WorkingDirectory is the folder the Agent works in; nil is its own workspace. UseLocalConfig: it loads the
+	// person's own CLI configuration. PermissionMode is how much it may do without asking (PermissionMode*).
+	WorkingDirectory *string
+	UseLocalConfig   bool
+	PermissionMode   string
+	// ImportedFrom is the conversation the Agent was imported from; nil for other Agents.
+	ImportedFrom *ImportedFrom
+
+	imported importedColumns
+}
+
+// Permission modes, matching the PermissionMode schema.
+const (
+	PermissionModeSupervised  = "supervised"
+	PermissionModeAcceptEdits = "accept_edits"
+	PermissionModeAuto        = "auto"
+	PermissionModeFull        = "full"
+)
+
+// ImportedFrom is the conversation an Agent was imported from.
+type ImportedFrom struct {
+	CLI        string // claude / codex
+	SessionID  string // Claude Code's session id, Codex's thread id
+	Path       string // the original record, never changed
+	ImportedAt time.Time
+	// Capture is the copy taken at import that the Agent's first turn continues from: a copy of Claude Code's session
+	// file, or a JSON file naming Codex's thread and its last finished turn ({threadId, lastTurnId}).
+	Capture string
+}
+
+// importedColumns are the agents.imported_* columns as read.
+type importedColumns struct {
+	cli, sessionID, path, capture *string
+	at                            *time.Time
+}
+
+// finish sets the fields made from several columns once a row is read.
+func (a *Agent) finish() {
+	c := a.imported
+	if c.cli == nil || c.sessionID == nil {
+		a.ImportedFrom = nil
+		return
+	}
+	a.ImportedFrom = &ImportedFrom{CLI: *c.cli, SessionID: *c.sessionID}
+	if c.path != nil {
+		a.ImportedFrom.Path = *c.path
+	}
+	if c.capture != nil {
+		a.ImportedFrom.Capture = *c.capture
+	}
+	if c.at != nil {
+		a.ImportedFrom.ImportedAt = *c.at
+	}
 }
 
 // Address returns the Agent's Inbox address; ok is false when the name does not satisfy the naming rules.
@@ -71,16 +124,22 @@ const agentColumns = `agents.id, agents.project_id, agents.name, agents.model_pr
 	EXISTS (SELECT 1 FROM projects mp WHERE mp.manager_agent_id = agents.id),
 	(SELECT ap.organization_id FROM projects ap WHERE ap.id = agents.project_id),
 	coalesce((SELECT ao.name FROM projects ap JOIN organizations ao ON ao.id = ap.organization_id WHERE ap.id = agents.project_id), ''),
-	coalesce((SELECT ap.name FROM projects ap WHERE ap.id = agents.project_id), ''), agents.thinking_level, agents.service_tier`
+	coalesce((SELECT ap.name FROM projects ap WHERE ap.id = agents.project_id), ''), agents.thinking_level, agents.service_tier,
+	agents.working_directory, agents.use_local_config, agents.permission_mode,
+	agents.imported_cli, agents.imported_session_id, agents.imported_path, agents.imported_capture, agents.imported_at`
 
+// agentFields are the scan destinations of agentColumns; call Agent.finish after the scan.
 func agentFields(a *Agent) []any {
 	return []any{&a.ID, &a.ProjectID, &a.Name, &a.ModelProvider, &a.ModelID, &a.Prompt, &a.ConfigVersion, &a.CreatedAt, &a.UpdatedAt, &a.PromptVersion,
-		&a.IsManager, &a.OrgID, &a.OrgName, &a.ProjectName, &a.ThinkingLevel, &a.ServiceTier}
+		&a.IsManager, &a.OrgID, &a.OrgName, &a.ProjectName, &a.ThinkingLevel, &a.ServiceTier,
+		&a.WorkingDirectory, &a.UseLocalConfig, &a.PermissionMode,
+		&a.imported.cli, &a.imported.sessionID, &a.imported.path, &a.imported.capture, &a.imported.at}
 }
 
 func scanAgent(row db.Scanner) (Agent, error) {
 	var a Agent
 	err := row.Scan(agentFields(&a)...)
+	a.finish()
 	return a, err
 }
 
@@ -167,6 +226,7 @@ func (s *Store) listAgents(ctx context.Context, where string, args ...any) ([]Ag
 	items, err := db.CollectRows(rows, func(row db.CollectableRow) (AgentListItem, error) {
 		var it AgentListItem
 		err := row.Scan(append(agentFields(&it.Agent), &it.Busy, &it.SessionState, &it.BackgroundTasks)...)
+		it.finish()
 		return it, err
 	})
 	if err != nil {

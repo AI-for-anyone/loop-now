@@ -29,7 +29,7 @@ func agentListItem() map[string]any {
 func agentDetail() map[string]any {
 	return map[string]any{"id": agentUUID, "scope": "project", "projectId": projectUUID, "isManager": false, "address": agentAddress, "name": "dev", "model": modelRef, "runtime": "pi",
 		"prompt": "p", "promptVersion": 1, "configVersion": 1, "busy": false, "backgroundTaskCount": 0, "session": sessionInfo, "clis": []any{},
-		"modelCredential": nil, "createdAt": now, "updatedAt": now}
+		"modelCredential": nil, "workingDirectory": nil, "useLocalConfig": false, "permissionMode": "full", "importedFrom": nil, "createdAt": now, "updatedAt": now}
 }
 
 func credentialMeta() map[string]any {
@@ -110,7 +110,7 @@ func messagePage() map[string]any {
 
 func agentStatus() map[string]any {
 	return map[string]any{"agentId": agentUUID, "busy": false, "sleep": nil, "sleepRevision": 0, "currentRun": nil, "queued": map[string]any{"interrupt": 0, "normal": 0},
-		"processState": "idle", "processPid": 4242, "processStartedAt": now, "session": sessionInfo, "backgroundTasks": []any{}, "restartOnNextMessage": false}
+		"processState": "idle", "processPid": 4242, "processStartedAt": now, "session": sessionInfo, "backgroundTasks": []any{}, "permissionRequests": []any{}, "restartOnNextMessage": false}
 }
 
 func modelProviderList() map[string]any {
