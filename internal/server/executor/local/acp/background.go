@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,9 +99,32 @@ func (c *Client) xai(method string, params json.RawMessage) {
 			bo.TaskEnded(TaskEnd{ID: u.Snapshot.TaskID, ExitCode: u.Snapshot.ExitCode, Output: u.Snapshot.Output, Killed: u.Snapshot.ExplicitlyKilled})
 		}
 	case method == "_x.ai/queue/changed" && p.RunningPromptID != nil && *p.RunningPromptID != "":
-		c.beginSelfTurn(p.SessionID, *p.RunningPromptID)
+		c.mu.Lock()
+		mine := c.turn != nil && c.turn.self == ""
+		c.mu.Unlock()
+		if mine {
+			c.ownPrompt(*p.RunningPromptID)
+		} else {
+			c.beginSelfTurn(p.SessionID, *p.RunningPromptID)
+		}
 	case method == "_x.ai/session_notification" && u.SessionUpdate == "turn_completed" && u.PromptID != "":
 		c.endSelfTurn(u.PromptID, u.StopReason, p.Update)
+	}
+}
+
+// ownPrompt remembers an id the agent gave one of the client's prompts.
+func (c *Client) ownPrompt(id string) {
+	if id == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if slices.Contains(c.ours, id) {
+		return
+	}
+	c.ours = append(c.ours, id)
+	if len(c.ours) > 16 {
+		c.ours = c.ours[1:]
 	}
 }
 
@@ -108,7 +132,7 @@ func (c *Client) xai(method string, params json.RawMessage) {
 func (c *Client) beginSelfTurn(sessionID, promptID string) {
 	c.mu.Lock()
 	hook := c.selfTurns
-	open := c.turn != nil || c.closed || hook == nil
+	open := c.turn != nil || c.closed || hook == nil || slices.Contains(c.ours, promptID)
 	c.mu.Unlock()
 	if open {
 		return
@@ -117,12 +141,14 @@ func (c *Client) beginSelfTurn(sessionID, promptID string) {
 	t := &turn{sessionID: sessionID, sink: st, done: make(chan struct{}), changed: make(chan struct{}, 1), tools: map[string]openTool{},
 		self: promptID, end: st.End}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.turn != nil {
+		c.mu.Unlock()
 		st.End(runturn.Result{Outcome: runturn.OutcomeCompleted})
 		return
 	}
 	c.turn = t
+	c.mu.Unlock()
+	go c.followOwnReply(t)
 }
 
 // endSelfTurn ends the agent's own prompt promptID at its turn_completed, reporting its usage.
@@ -242,19 +268,27 @@ func (c *Client) ownReply(u sessionUpdate) *turn {
 	return nt
 }
 
-// followOwnReply ends a reply the agent gives by itself: Settle after its usage_update with nothing more, or
-// ReplyQuietLimit after its last message.
+// selfQuietLimit ends a prompt the agent runs by itself (which ends with its turn_completed) once nothing has come
+// for this long, so a lost end does not keep the client's next prompt waiting for good.
+const selfQuietLimit = 10 * time.Minute
+
+// followOwnReply ends a turn the agent runs by itself when it does not end otherwise: a reply with no prompt (ownReply)
+// Settle after its usage_update with nothing more, or ReplyQuietLimit after its last message; a prompt of its own
+// selfQuietLimit after its last message.
 func (c *Client) followOwnReply(t *turn) {
-	bg := c.o.Background
-	timer := time.NewTimer(bg.ReplyQuietLimit)
+	quietLimit, settle := selfQuietLimit, time.Duration(0)
+	if bg := c.o.Background; bg != nil && t.self == ownReply {
+		quietLimit, settle = bg.ReplyQuietLimit, bg.Settle
+	}
+	timer := time.NewTimer(quietLimit)
 	defer timer.Stop()
 	for {
 		select {
 		case <-t.changed:
 			t.mu.Lock()
-			wait := bg.ReplyQuietLimit
-			if t.usageSeen {
-				wait = bg.Settle
+			wait := quietLimit
+			if t.usageSeen && t.self == ownReply {
+				wait = settle
 			}
 			t.mu.Unlock()
 			timer.Reset(wait)

@@ -44,7 +44,9 @@
 //	anything else     reply echo: <text>
 //
 // A prompt that ends normally (end_turn) reports its token usage as the CLI it plays does: agy in the result's usage,
-// Grok in the result's _meta.usage and in a _x.ai/session_notification turn_completed before it.
+// Grok in the result's _meta.usage and in a _x.ai/session_notification turn_completed before it. Grok announces each
+// prompt it runs with _x.ai/queue/changed (runningPromptId, its prompt id prompt-<n>, also in the result's _meta) and
+// its end with runningPromptId null; FAKEACP_LATE_QUEUE=1 announces a client's prompt once more after its answer.
 package main
 
 import (
@@ -503,6 +505,22 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 	lock.Lock()
 	defer lock.Unlock()
 	prior := len(ss.Prompts)
+	promptID := fmt.Sprintf("prompt-%d", prior+1)
+	if flavor() != "agy" {
+		queue := func(running any) {
+			s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/queue/changed", "params": map[string]any{"sessionId": ss.ID, "entries": []any{}, "runningPromptId": running}})
+		}
+		queue(promptID)
+		defer func() {
+			queue(nil)
+			if os.Getenv("FAKEACP_LATE_QUEUE") == "1" {
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					queue(promptID)
+				}()
+			}
+		}()
+	}
 	ss.Prompts = append(ss.Prompts, text)
 	ss.save()
 	reply := func(t string) {
@@ -515,7 +533,7 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 	}
 	stop := func(reason string) { s.result(id, map[string]any{"stopReason": reason}) }
 	// A prompt that ends normally reports its usage as the real CLIs do (see promptUsage).
-	ended := func() { s.result(id, s.promptUsage(ss.ID)) }
+	ended := func() { s.result(id, s.promptUsage(ss.ID, promptID)) }
 	cmd, arg := "", ""
 	if i := strings.Index(text, "fake:"); i >= 0 {
 		w := strings.Fields(text[i:])
@@ -651,7 +669,7 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 // made up): agy 1.5.14 in the result's usage (input leaves out cache reads; output includes thoughts), after a
 // usage_update; Grok 1.0.92 in its _meta.usage (input includes cache reads; output includes reasoning), with flat
 // copies in _meta and the same usage in its own turn_completed notification first.
-func (s *server) promptUsage(sid string) map[string]any {
+func (s *server) promptUsage(sid, promptID string) map[string]any {
 	if flavor() == "agy" {
 		s.update(sid, usage())
 		return map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 1200, "outputTokens": 30, "cachedReadTokens": 800,
@@ -661,8 +679,8 @@ func (s *server) promptUsage(sid string) map[string]any {
 		"reasoningTokens": 30, "modelCalls": 1, "apiDurationMs": 3111, "costUsdTicks": 355600000}
 	u["modelUsage"] = map[string]any{"fake-1-build": maps.Clone(u)}
 	s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/session_notification", "params": map[string]any{"sessionId": sid,
-		"update": map[string]any{"sessionUpdate": "turn_completed", "usage": u}}})
-	return map[string]any{"stopReason": "end_turn", "_meta": map[string]any{"usage": u, "totalTokens": 1962, "modelId": "fake-1", "inputTokens": 1931,
+		"update": map[string]any{"sessionUpdate": "turn_completed", "prompt_id": promptID, "usage": u}}})
+	return map[string]any{"stopReason": "end_turn", "_meta": map[string]any{"usage": u, "totalTokens": 1962, "modelId": "fake-1", "inputTokens": 1931, "promptId": promptID,
 		"outputTokens": 31}}
 }
 

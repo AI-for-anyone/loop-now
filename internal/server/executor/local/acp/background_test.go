@@ -119,3 +119,29 @@ func TestGrokKillTask(t *testing.T) {
 		t.Fatal("an unknown session is an error")
 	}
 }
+
+// Grok's announcement that it runs one of the client's own prompts, coming late (after the prompt answered), is not a
+// prompt of Grok's own: the next prompt does not wait for it.
+func TestGrokLateQueueIsNotASelfTurn(t *testing.T) {
+	h := newHarness(t, "grok")
+	h.env = []string{"FAKEACP_LATE_QUEUE=1"}
+	c, _ := h.start(acp.Options{})
+	turns := make(chan *selfTurn, 4)
+	c.SetSelfTurns(func() runturn.SelfTurn {
+		s := &selfTurn{sink: &sink{}, ended: make(chan runturn.Result, 1)}
+		turns <- s
+		return s
+	})
+	sess := newSession(t, c, h)
+	prompt(t, c, sess, "hello", nil)
+	time.Sleep(200 * time.Millisecond) // the late announcement comes
+	start := time.Now()
+	if r := prompt(t, c, sess, "again", nil); r.Text != "echo: again" || time.Since(start) > 2*time.Second {
+		t.Fatalf("the next prompt runs at once: %+v after %v", r, time.Since(start))
+	}
+	select {
+	case s := <-turns:
+		t.Fatalf("no self turn: %+v", s)
+	default:
+	}
+}

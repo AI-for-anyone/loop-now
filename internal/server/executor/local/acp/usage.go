@@ -34,6 +34,14 @@ func (c *Client) SetObserver(o Observer) {
 
 // observe passes on the usage of a prompt's result, when it has any.
 func (c *Client) observe(result json.RawMessage) {
+	var meta struct {
+		Meta struct {
+			PromptID string `json:"promptId"`
+		} `json:"_meta"`
+	}
+	if json.Unmarshal(result, &meta) == nil {
+		c.ownPrompt(meta.Meta.PromptID)
+	}
 	u, ok := parseUsage(result)
 	if !ok {
 		return

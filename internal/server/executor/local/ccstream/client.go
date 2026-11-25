@@ -51,6 +51,9 @@ type Options struct {
 	Kill func(pid int) error
 	// MaxLine is the limit for one line of output; 0 means 64 MiB (images and long tool results are all on one line).
 	MaxLine int
+	// SelfQuiet ends a turn Claude Code began by itself once no output has come for this long (its result may be
+	// lost), so the next message does not wait for it for good; 0 means 10 minutes.
+	SelfQuiet time.Duration
 }
 
 // Observer receives usage and events whether or not a turn is in progress; inTurn tells whether it happened during a
@@ -162,6 +165,9 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	}
 	if o.MaxLine <= 0 {
 		o.MaxLine = maxLine
+	}
+	if o.SelfQuiet <= 0 {
+		o.SelfQuiet = 10 * time.Minute
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

@@ -150,3 +150,21 @@ func TestTaskEndedDuringTurn(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+// A turn Claude Code began by itself that never ends (its result is lost) ends after SelfQuiet without output, so the
+// next message does not wait for it for good.
+func TestSelfTurnEndsWhenQuiet(t *testing.T) {
+	c := start(t, ccstream.Options{SelfQuiet: 300 * time.Millisecond}, "FAKECLAUDE_FOLLOWUP_NO_RESULT=1")
+	c.SetObserver(newBgObs())
+	turns := withSelfTurns(c)
+	if _, err := c.Prompt(ctx(t), "fake:background 100ms true", newSink()); err != nil {
+		t.Fatal(err)
+	}
+	self := recv(t, turns, "a self turn")
+	if r := recv(t, self.ended, "its end"); r.Outcome != runturn.OutcomeCompleted || r.Text != "background done" {
+		t.Fatalf("ended when quiet: %+v", r)
+	}
+	if res, err := c.Prompt(ctx(t), "hello", newSink()); err != nil || res.Text != "echo: hello" {
+		t.Fatalf("the next message runs: %+v %v", res, err)
+	}
+}

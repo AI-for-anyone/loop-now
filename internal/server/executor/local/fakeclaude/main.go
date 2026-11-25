@@ -28,6 +28,8 @@
 //	fake:wait <dur>    reply waited after <dur>
 //	anything else      reply echo: <text>
 //
+// FAKECLAUDE_FOLLOWUP_NO_RESULT=1 leaves out the result of such a turn of its own.
+//
 // The control request stop_task (request.task_id) stops a background task: it ends as stopped (killed), and Claude Code
 // replies by itself as after any end; every control request is answered with success.
 //
@@ -648,6 +650,9 @@ func endTask(id string, completed bool, sess *session, model string) {
 	defer turnMu.Unlock()
 	emit(map[string]any{"type": "system", "subtype": "init", "session_id": sess.id, "model": model, "claude_code_version": version(), "tools": []string{}, "skills": []string{}, "mcp_servers": []any{}})
 	reply(model, "background done")
+	if os.Getenv("FAKECLAUDE_FOLLOWUP_NO_RESULT") == "1" {
+		return // the reply's result is lost
+	}
 	result(map[string]any{"subtype": "success", "is_error": false, "result": "background done", "terminal_reason": "completed"},
 		map[string]any{model: map[string]any{"inputTokens": 7, "outputTokens": 3, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "thinkingTokens": 0}})
 }

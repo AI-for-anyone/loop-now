@@ -108,6 +108,9 @@ type Client struct {
 	session   string
 	// background are the tools that went on in the background when their prompt ended, by tool call id.
 	background map[string]*bgTool
+	// ours are the ids the agent gave the client's own prompts (the last few), so a late announcement of one is not
+	// taken for a prompt of the agent's own.
+	ours []string
 
 	done    chan struct{}
 	exitErr error

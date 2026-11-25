@@ -442,7 +442,7 @@ func (c *Client) update(params json.RawMessage) {
 			t.toolEnded(u.ToolCallID, u.Status == "failed")
 		}
 	}
-	if t.self == ownReply {
+	if t.self != "" {
 		select {
 		case t.changed <- struct{}{}:
 		default:

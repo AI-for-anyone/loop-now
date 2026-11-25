@@ -103,9 +103,11 @@ type turn struct {
 
 	finished bool
 	detached bool // the caller no longer waits: sink is not called any more
-	// self: Claude Code began this turn by itself; end is told how it ended.
+	// self: Claude Code began this turn by itself; end is told how it ended; activity is nudged at each line while it
+	// is open.
 	self        bool
 	end         func(runturn.Result)
+	activity    chan struct{}
 	interrupted bool
 	signalled   bool
 	ackedAt     time.Time
@@ -174,16 +176,44 @@ func (c *Client) selfTurn(m wireLine) *turn {
 	}
 	st := hook()
 	nt := newTurn(st)
-	nt.self, nt.end = true, st.End
+	nt.self, nt.end, nt.activity = true, st.End, make(chan struct{}, 1)
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.turn != nil {
 		// A message was sent meanwhile: what follows is its turn.
+		t := c.turn
+		c.mu.Unlock()
 		st.End(runturn.Result{Outcome: runturn.OutcomeCompleted})
-		return c.turn
+		return t
 	}
 	c.turn = nt
+	c.mu.Unlock()
+	go c.watchSelfTurn(nt)
 	return nt
+}
+
+// watchSelfTurn ends a turn Claude Code began by itself once no output has come for SelfQuiet: completed with the text
+// so far.
+func (c *Client) watchSelfTurn(t *turn) {
+	timer := time.NewTimer(c.o.SelfQuiet)
+	defer timer.Stop()
+	for {
+		select {
+		case <-t.activity:
+			timer.Reset(c.o.SelfQuiet)
+		case <-t.done:
+			return
+		case <-timer.C:
+			c.mu.Lock()
+			if c.turn != t {
+				c.mu.Unlock()
+				return
+			}
+			c.turn = nil
+			c.mu.Unlock()
+			t.finish(runturn.Result{Outcome: runturn.OutcomeCompleted, Text: t.partial()})
+			return
+		}
+	}
 }
 
 // background handles the system messages about background tasks (on the reader goroutine).
@@ -281,6 +311,12 @@ func (c *Client) handleLine(line []byte) {
 		return
 	}
 	t := c.selfTurn(m)
+	if t != nil && t.self {
+		select {
+		case t.activity <- struct{}{}:
+		default:
+		}
+	}
 	c.mu.Lock()
 	active := t != nil && !t.detached
 	obs := c.observer
