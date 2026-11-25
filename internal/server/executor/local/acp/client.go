@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/runturn"
 )
 
@@ -96,10 +97,13 @@ type Client struct {
 	stderr  *ring
 	nextID  atomic.Int64
 
-	mu       sync.Mutex
-	pending  map[int64]chan reply
-	turn     *turn
-	loading  *loading
+	mu      sync.Mutex
+	pending map[int64]chan reply
+	turn    *turn
+	loading *loading
+	// permit answers permission requests; asking cancels each one still waiting for its answer, by request id.
+	permit   PermissionFunc
+	asking   map[string]context.CancelCauseFunc
 	closed   bool
 	observer Observer
 	// selfTurns receives the prompts the agent runs by itself; session is the session the client runs (set by its
@@ -290,6 +294,9 @@ func (c *Client) handle(line []byte) {
 // first, then allow once), or with RejectPermissions its reject option (reject once first, then reject always);
 // anything else (file system, terminal: the client offers neither) gets "method not found".
 func (c *Client) answer(id json.RawMessage, method string, params json.RawMessage) {
+	if method == "session/request_permission" && c.askPermission(id, params) {
+		return
+	}
 	if method != "session/request_permission" {
 		_ = c.send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": -32601, "message": "not supported by this client: " + method}})
 		return
@@ -320,6 +327,7 @@ func (c *Client) answer(id json.RawMessage, method string, params json.RawMessag
 }
 
 func (c *Client) shutdown(err error) {
+	c.endPermissions(executor.CancelProcessExited)
 	c.mu.Lock()
 	c.closed = true
 	pending := c.pending

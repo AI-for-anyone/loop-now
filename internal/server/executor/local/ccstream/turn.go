@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/runturn"
 )
 
@@ -406,6 +407,15 @@ func (c *Client) handleLine(line []byte) {
 		if obs != nil && m.RateLimitInfo != nil {
 			obs.RateLimit(m.RateLimitInfo, t != nil)
 		}
+	case "control_request":
+		c.controlRequest(line)
+	case "control_cancel_request":
+		var r struct {
+			RequestID string `json:"request_id"`
+		}
+		if json.Unmarshal(line, &r) == nil {
+			c.controlCancel(r.RequestID)
+		}
 	case "control_response":
 		var r struct {
 			Subtype   string `json:"subtype"`
@@ -455,6 +465,11 @@ func (c *Client) finishTurn(t *turn, m wireLine, obs Observer) {
 	}
 	c.turn = nil
 	interrupted := t.interrupted
+	if interrupted {
+		c.cancelAskingLocked(executor.CancelReplyStopped)
+	} else {
+		c.cancelAskingLocked(executor.CancelReplyEnded)
+	}
 	c.mu.Unlock()
 	switch {
 	case !info.IsError && info.Subtype == "success":

@@ -1,7 +1,9 @@
 package local
 
 import (
+	"context"
 	"os"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -35,4 +37,32 @@ func checkWorkDir(snap agentconfig.Snapshot, d agentDirs) error {
 		return fail(executor.ErrRuntimeStartFailed, "The Agent's working folder %s is not a folder on this computer any more. Pick another one on the Agent's settings page.", dir)
 	}
 	return nil
+}
+
+// permissionMode is the permission mode the runtime runs in: the Agent's when the runtime offers it, else supervised
+// when it can ask, else full (Pi). An empty mode (a task snapshot from before modes) is full.
+func permissionMode(snap agentconfig.Snapshot) string {
+	mode := snap.PermissionMode
+	if mode == "" {
+		return executor.ModeFull
+	}
+	offered := capabilities(snap).PermissionModes
+	switch {
+	case slices.Contains(offered, mode):
+		return mode
+	case slices.Contains(offered, executor.ModeSupervised):
+		return executor.ModeSupervised
+	}
+	return executor.ModeFull
+}
+
+// askPermission asks a person about something p's runtime wants to do, for the run p is replying to; it waits until
+// someone answers or ctx ends (the request is then cancelled and the answer is a rejection).
+func (e *Executor) askPermission(ctx context.Context, p *proc, kind, title, detail string) executor.PermissionAnswer {
+	run := p.curRun.Load()
+	if e.o.Permissions == nil || run == nil {
+		return executor.PermissionAnswer{Reason: "No one can answer permission requests for this reply."}
+	}
+	return e.o.Permissions.AskPermission(ctx, executor.PermissionAsk{AgentID: p.agentID, RunID: *run, Runtime: p.drv.runtime(),
+		Kind: kind, Title: title, Detail: executor.ClipDetail(detail)})
 }

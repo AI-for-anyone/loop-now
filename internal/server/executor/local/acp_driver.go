@@ -67,6 +67,9 @@ type acpFlavor struct {
 	forget func(home, cwd, sessionID string) error
 	// inputCache is whether the input count the agent reports includes the cached part (see usageRecord).
 	inputCache acpInputCache
+	// sessionModes are the agent's session modes (session/set_mode) for Auto-accept edits and Auto, used when its
+	// session offers them.
+	sessionModes map[string]string
 }
 
 // acpInputCache is whether an agent's input token count includes the cached part (cache reads and writes, which it
@@ -95,7 +98,11 @@ func localCommandFlavor(rt agentruntime.Runtime) acpFlavor {
 // relied on: a stop ends the process.
 var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "grok login", pluginSkills: true, killOnStop: true,
 	args: func(snap agentconfig.Snapshot, d agentDirs) []string {
-		args := []string{"agent", "--always-approve", "--model", snap.ModelID}
+		args := []string{"agent"}
+		if permissionMode(snap) == executor.ModeFull {
+			args = append(args, "--always-approve")
+		}
+		args = append(args, "--model", snap.ModelID)
 		if effort := acpEffort(snap); effort != "" {
 			args = append(args, "--reasoning-effort", effort)
 		}
@@ -109,18 +116,22 @@ var grokFlavor = acpFlavor{runtime: agentruntime.Grok, binary: "grok", login: "g
 		return append(args, "stdio")
 	},
 	forget:     forgetGrokSession,
-	inputCache: cacheInside}
+	inputCache: cacheInside, sessionModes: map[string]string{executor.ModeAuto: "auto"}}
 
 // antigravityFlavor: `agy acp --dangerously-skip-permissions`; the model is chosen in the session, by the id that carries
 // the thinking level (see acpSessionModel).
 var antigravityFlavor = acpFlavor{runtime: agentruntime.Antigravity, binary: "agy", login: "agy acp --login", modelInSession: true, emptyLoadIsMissing: true,
-	args: func(agentconfig.Snapshot, agentDirs) []string {
-		return []string{"acp", "--dangerously-skip-permissions"}
+	args: func(snap agentconfig.Snapshot, _ agentDirs) []string {
+		if permissionMode(snap) == executor.ModeFull {
+			return []string{"acp", "--dangerously-skip-permissions"}
+		}
+		return []string{"acp"}
 	},
-	background: antigravityBackgroundCommand,
-	writeArgs:  func(string, string) []string { return []string{"acp"} },
-	forget:     forgetAntigravitySession,
-	inputCache: cacheApart}
+	sessionModes: map[string]string{executor.ModeAcceptEdits: "auto_edit", executor.ModeAuto: "auto"},
+	background:   antigravityBackgroundCommand,
+	writeArgs:    func(string, string) []string { return []string{"acp"} },
+	forget:       forgetAntigravitySession,
+	inputCache:   cacheApart}
 
 // sessionIDPattern is what a session id must look like before it names a file or folder to remove.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
@@ -467,7 +478,50 @@ func (ad acpDriver) attach(p *proc) {
 	if ap := acpOf(p); ap != nil {
 		ap.SetObserver(acpObserver{e: ad.e, p: p, f: ad.f})
 		ap.SetSelfTurns(func(about string) runturn.SelfTurn { return ad.e.selfTurnBegan(p, about) })
+		if p.mode != executor.ModeFull {
+			ap.SetPermissions(func(ctx context.Context, r acp.PermissionRequest) bool {
+				kind, title, detail := acpPermission(r)
+				return ad.e.askPermission(ctx, p, kind, title, detail).Approved
+			})
+		}
 	}
+}
+
+// acpPermission is how an ACP permission request is shown: an execute tool is a command, an edit, delete or move a file
+// change, a fetch network access, anything else a tool.
+func acpPermission(r acp.PermissionRequest) (kind, title, detail string) {
+	var in struct {
+		Command string `json:"command"`
+	}
+	_ = json.Unmarshal(r.RawInput, &in)
+	detail = string(r.RawInput)
+	if b, err := json.MarshalIndent(json.RawMessage(r.RawInput), "", "  "); err == nil && len(r.RawInput) > 0 {
+		detail = string(b)
+	}
+	switch r.Kind {
+	case "execute":
+		kind = executor.PermissionCommand
+		if in.Command != "" {
+			detail = in.Command
+		}
+	case "edit", "delete", "move":
+		kind = executor.PermissionFileChange
+		if len(r.Content) > 0 && string(r.Content) != "null" {
+			detail = string(r.Content)
+		}
+	case "fetch":
+		kind = executor.PermissionNetwork
+	default:
+		kind = executor.PermissionTool
+	}
+	title = firstLine(r.Title)
+	if title == "" {
+		title = firstLine(in.Command)
+	}
+	if title == "" {
+		title = "Use a tool"
+	}
+	return kind, title, detail
 }
 
 // stopBackground stops tasks with the agent's means: Grok kills each (_x.ai/task/kill); Antigravity has no means to
@@ -571,10 +625,12 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 		return ad.startFailure(p, err)
 	}
 	mcp := acpMCPServers(snap.Plugins.MCPServers)
+	var modes []string // the session modes the agent offers
 	if spec.sessionFile != "" {
 		lost := !agent.LoadSession
 		if !lost {
 			s, err := ap.LoadSession(ctx, spec.sessionFile, workDir(snap, d), mcp)
+			modes = s.Modes
 			lost = acpSessionNotFound(err) || (err == nil && ad.f.emptyLoadIsMissing && s.Replayed == 0)
 			if err != nil && !lost {
 				return ad.startFailure(p, err)
@@ -592,7 +648,7 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 		if err != nil {
 			return ad.startFailure(p, err)
 		}
-		ap.sessionID = s.ID
+		ap.sessionID, modes = s.ID, s.Modes
 		// A task instance's first session starts with the regular conversation (the runtime cannot copy the session).
 		if snap.ForkSessionFile != "" {
 			var h executor.TaskStartHandoff
@@ -605,6 +661,13 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 	}
 	if ad.f.modelInSession && snap.ModelID != modelcatalog.LocalCommandDefaultModel {
 		if err := ap.SetModel(ctx, ap.sessionID, acpSessionModel(snap)); err != nil {
+			return ad.startFailure(p, err)
+		}
+	}
+	// Auto-accept edits and Auto are the agent's own session modes, when its session offers them; otherwise it stays in
+	// its default mode and asks (Supervised).
+	if mode, ok := ad.f.sessionModes[permissionMode(snap)]; ok && slices.Contains(modes, mode) {
+		if err := ap.SetMode(ctx, ap.sessionID, mode); err != nil {
 			return ad.startFailure(p, err)
 		}
 	}

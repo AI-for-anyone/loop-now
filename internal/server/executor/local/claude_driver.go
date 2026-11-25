@@ -346,7 +346,11 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if _, err := os.Stat(d.claudeMCP); err == nil {
 		args = append(args, "--mcp-config", d.claudeMCP)
 	}
-	args = append(args, "--permission-mode", "bypassPermissions", "--permission-prompts", "none", "--system-prompt-snapshot", "off")
+	mode, prompts := claudeModes[permissionMode(snap)], "host"
+	if mode == "bypassPermissions" {
+		prompts = "none" // nothing asks: anything that would still prompt is denied
+	}
+	args = append(args, "--permission-mode", mode, "--permission-prompts", prompts, "--system-prompt-snapshot", "off")
 	if _, err := os.Stat(d.prompt); err == nil {
 		args = append(args, "--append-system-prompt-file", d.prompt)
 	}
@@ -413,7 +417,68 @@ func (cd claudeDriver) attach(p *proc) {
 	if cp := claudeOf(p); cp != nil {
 		cp.SetObserver(claudeObserver{e: cd.e, p: p})
 		cp.SetSelfTurns(func() runturn.SelfTurn { return cd.e.selfTurnBegan(p, "") })
+		if p.mode != executor.ModeFull {
+			cp.SetPermissions(func(ctx context.Context, t ccstream.ToolPermission) ccstream.ToolDecision {
+				kind, title, detail := claudeToolRequest(t)
+				a := cd.e.askPermission(ctx, p, kind, title, detail)
+				if a.Approved {
+					return ccstream.ToolDecision{Allow: true}
+				}
+				msg := strings.TrimSpace(a.Reason)
+				if msg == "" {
+					msg = "The person did not allow this. Do not try it another way; say what you needed it for."
+				}
+				return ccstream.ToolDecision{Message: msg}
+			})
+		}
 	}
+}
+
+// claudeModes are Claude Code's --permission-mode values for each permission mode.
+var claudeModes = map[string]string{executor.ModeSupervised: "manual", executor.ModeAcceptEdits: "acceptEdits", executor.ModeAuto: "auto",
+	executor.ModeFull: "bypassPermissions"}
+
+// claudeToolRequest is how a can_use_tool request is shown: Bash is a command (its command line), the file tools a file
+// change (the file, and the change), anything else a tool (its input).
+func claudeToolRequest(t ccstream.ToolPermission) (kind, title, detail string) {
+	var in struct {
+		Command      string `json:"command"`
+		Description  string `json:"description"`
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+		URL          string `json:"url"`
+	}
+	_ = json.Unmarshal(t.Input, &in)
+	pretty := string(t.Input)
+	if b, err := json.MarshalIndent(json.RawMessage(t.Input), "", "  "); err == nil {
+		pretty = string(b)
+	}
+	switch t.ToolName {
+	case "Bash":
+		return executor.PermissionCommand, "Run " + firstLine(in.Command), in.Command
+	case "Edit", "MultiEdit", "Write", "NotebookEdit":
+		file := in.FilePath
+		if file == "" {
+			file = in.NotebookPath
+		}
+		return executor.PermissionFileChange, t.ToolName + " " + file, pretty
+	case "WebFetch":
+		return executor.PermissionTool, "Fetch " + in.URL, pretty
+	}
+	title = t.ToolName
+	if in.Description != "" {
+		title += ": " + firstLine(in.Description)
+	}
+	return executor.PermissionTool, title, pretty
+}
+
+// firstLine is the first line of s, at most 200 characters.
+func firstLine(s string) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200]) + "…"
+	}
+	return s
 }
 
 // stopBackground asks Claude Code to stop each task (control request stop_task).

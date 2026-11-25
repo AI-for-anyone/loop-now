@@ -191,3 +191,20 @@ func TestWorkingFolderAndLocalConfigCapabilities(t *testing.T) {
 		t.Errorf("a local ACP command: %+v", c)
 	}
 }
+
+// The permission modes each runtime offers: Claude Code, Codex and Antigravity all four, Grok no Auto-accept edits, a
+// local ACP command Supervised and Full access, Pi Full access only.
+func TestPermissionModesPerRuntime(t *testing.T) {
+	all := []string{"supervised", "accept_edits", "auto", "full"}
+	want := map[string][]string{Pi: {"full"}, ClaudeCode: all, Codex: all, Antigravity: all, Grok: {"supervised", "auto", "full"}}
+	for id, modes := range want {
+		r, _ := ByID(id)
+		if !slices.Equal(r.Capabilities.PermissionModes, modes) {
+			t.Errorf("%s: %v, want %v", id, r.Capabilities.PermissionModes, modes)
+		}
+	}
+	cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"})
+	if !slices.Equal(cmd.Capabilities.PermissionModes, []string{"supervised", "full"}) {
+		t.Errorf("a local ACP command: %v", cmd.Capabilities.PermissionModes)
+	}
+}

@@ -58,6 +58,8 @@ type Configuration struct {
 	Prompt              string          `json:"prompt"`
 	Skills              []Skill         `json:"skills"`
 	CLIs                []string        `json:"clis"`
+	// PermissionMode is the Agent's permission mode when the task started; empty in tasks from before modes (full).
+	PermissionMode string `json:"permissionMode,omitempty"`
 }
 
 // CredentialPayload is only for explicit reads by the internal run; it must not be serialized by default or printed in

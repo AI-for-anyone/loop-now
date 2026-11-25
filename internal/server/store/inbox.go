@@ -185,10 +185,12 @@ func inboxSelect(previewChars int) string {
 	// converted with iso_time() into strings Go can parse.
 	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, substr(m.text, 1, ` + n + `), coalesce(m.when_busy, ''),
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
-		(SELECT json_object('options', json(q.options), 'expiresAt', iso_time(q.expires_at), 'state', q.state, 'answer',
+		(SELECT json_patch(json_object('options', json(q.options), 'expiresAt', iso_time(q.expires_at), 'state', q.state, 'answer',
 			CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE json_object('messageId', q.answer_message_id, 'optionId', q.answer_option_id,
 				'optionLabel', (SELECT opt.value ->> 'label' FROM json_each(q.options) opt WHERE opt.value ->> 'id' = q.answer_option_id),
-				'textPreview', substr(a.text, 1, ` + n + `), 'by', json(q.answered_by), 'at', iso_time(q.answered_at)) END)
+				'textPreview', substr(a.text, 1, ` + n + `), 'by', json(q.answered_by), 'at', iso_time(q.answered_at)) END),
+				coalesce((SELECT json_object('kind', 'permission', 'permissionRequestId', pr.id) FROM permission_requests pr
+					WHERE pr.question_message_id = q.message_id), '{}'))
 			FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id = q.answer_message_id WHERE q.message_id = m.id),
 		CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE json_object('messageId', m.answers_message_id, 'optionId', m.answer_option_id,
 			'optionLabel', (SELECT opt.value ->> 'label' FROM inbox_questions q, json_each(q.options) opt

@@ -26,6 +26,9 @@
 //	                   ends (task_updated, task_notification, an empty background_tasks_changed) and, when no turn is going on,
 //	                   Claude Code replies by itself: a turn of its own (init, text "background done", result with usage)
 //	fake:wait <dur>    reply waited after <dur>
+//	fake:ask <cmd>     ask the host to use the Bash tool on <cmd> (a can_use_tool control request, as with
+//	                   --permission-prompts host), then reply allowed, or denied: <message>; an interrupt while waiting
+//	                   cancels the request (control_cancel_request) and ends the turn interrupted
 //	anything else      reply echo: <text>
 //
 // FAKECLAUDE_FOLLOWUP_NO_RESULT=1 leaves out the result of such a turn of its own.
@@ -371,6 +374,13 @@ type inbound struct {
 		Subtype string `json:"subtype"`
 		TaskID  string `json:"task_id"`
 	} `json:"request"`
+	Response struct {
+		RequestID string `json:"request_id"`
+		Response  struct {
+			Behavior string `json:"behavior"`
+			Message  string `json:"message"`
+		} `json:"response"`
+	} `json:"response"`
 	Message struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
@@ -494,6 +504,26 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 	case "fake:notloggedin":
 		result(map[string]any{"subtype": "success", "is_error": true, "result": "Not logged in · Please run /login", "terminal_reason": "api_error", "api_error_status": nil}, map[string]any{})
 		return
+	case "fake:ask":
+		emit(map[string]any{"type": "control_request", "request_id": "perm-1", "request": map[string]any{"subtype": "can_use_tool", "tool_name": "Bash",
+			"input": map[string]any{"command": arg, "description": "Run " + arg}, "tool_use_id": "toolu_ask", "permission_suggestions": []any{}}})
+	ask:
+		for in := range lines {
+			switch {
+			case in.Type == "control_response" && in.Response.RequestID == "perm-1":
+				if in.Response.Response.Behavior == "allow" {
+					reply(model, "allowed")
+				} else {
+					reply(model, "denied: "+in.Response.Response.Message)
+				}
+				break ask
+			case in.Type == "control_request" && in.Request.Subtype == "interrupt":
+				emit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": in.RequestID, "response": map[string]any{}}})
+				emit(map[string]any{"type": "control_cancel_request", "request_id": "perm-1"})
+				result(map[string]any{"subtype": "error_during_execution", "is_error": true, "result": nil, "terminal_reason": "aborted_streaming"}, map[string]any{})
+				return
+			}
+		}
 	case "fake:slow", "fake:noack":
 		stream(nil, map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_slow", "model": model}})
 		stream(nil, map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}})

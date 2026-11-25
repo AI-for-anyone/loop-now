@@ -60,3 +60,15 @@ func backgroundEntries(tasks []store.BackgroundTask) []taskNodeTimelineItem {
 	}
 	return out
 }
+
+// permissionEntries are the timeline entries of a run's permission requests, at the time each was asked, with how it
+// ended.
+func permissionEntries(requests []store.PermissionRequest) []taskNodeTimelineItem {
+	out := make([]taskNodeTimelineItem, 0, len(requests))
+	for _, r := range requests {
+		out = append(out, taskNodeTimelineItem{id: r.ID, at: r.CreatedAt, value: apitypes.TimelinePermissionRequestEntry{
+			TimelineBase: base(apitypes.TimelinePermissionRequest, r.CreatedAt), RequestID: r.ID, Kind: r.Kind, Title: r.Title, State: r.State,
+			AnsweredAt: r.AnsweredAt, Reason: r.Reason}})
+	}
+	return out
+}

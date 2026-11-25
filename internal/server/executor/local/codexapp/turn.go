@@ -235,6 +235,11 @@ func (t *turn) notification(c *Client, method string, params json.RawMessage) {
 			t.mu.Unlock()
 		}
 	case "turn/completed":
+		if p.Turn.Status == "interrupted" {
+			c.endApprovals(executor.CancelReplyStopped)
+		} else {
+			c.endApprovals(executor.CancelReplyEnded)
+		}
 		t.completed(p.Turn.Status, p.Turn.Error)
 	}
 }

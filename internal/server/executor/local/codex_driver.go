@@ -231,7 +231,21 @@ func codexEnv(env []string, codexHome string) []string {
 func (cd codexDriver) attach(p *proc) {
 	if cp := codexOf(p); cp != nil {
 		cp.SetObserver(codexObserver{e: cd.e, p: p, model: cp.model})
+		if p.mode != executor.ModeFull {
+			cp.SetApprovals(func(ctx context.Context, a codexapp.Approval) bool {
+				return cd.e.askPermission(ctx, p, a.Kind, a.Title, a.Detail).Approved
+			})
+		}
 	}
+}
+
+// codexModes are the thread's approval settings for each permission mode (T3's): Supervised asks for anything outside
+// a read-only sandbox, Auto-accept edits lets it write in the working folder and asks for the rest, Auto has Codex's
+// reviewer decide first; Full access asks nothing (today's settings).
+var codexModes = map[string][3]string{
+	executor.ModeSupervised:  {"untrusted", "read-only", ""},
+	executor.ModeAcceptEdits: {"on-request", "workspace-write", ""},
+	executor.ModeAuto:        {"on-request", "workspace-write", "auto_review"},
 }
 
 // ready opens the connection, gives Codex the Agent's Skill directory and opens the thread: it continues the recorded
@@ -248,6 +262,9 @@ func (cd codexDriver) ready(ctx context.Context, p *proc, spec startSpec) error 
 		return cd.startFailure(p, err)
 	}
 	opts := codexapp.ThreadOptions{Cwd: workDir(snap, d), Model: snap.ModelID, Config: codexMCPConfig(snap.Plugins.MCPServers)}
+	if m, ok := codexModes[permissionMode(snap)]; ok {
+		opts.ApprovalPolicy, opts.Sandbox, opts.ApprovalsReviewer = m[0], m[1], m[2]
+	}
 	if b, err := os.ReadFile(d.prompt); err == nil {
 		opts.DeveloperInstructions = string(b)
 	}

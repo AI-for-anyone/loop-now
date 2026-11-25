@@ -99,8 +99,10 @@ const (
 	ModeFull        = "full"
 )
 
-// fullOnly is the permission modes of a runtime that cannot ask before acting.
+// fullOnly is the permission modes of a runtime that cannot ask before acting; allModes those of one that has all.
 func fullOnly() []string { return []string{ModeFull} }
+
+func allModes() []string { return []string{ModeSupervised, ModeAcceptEdits, ModeAuto, ModeFull} }
 
 // Setup is how a person sets a runtime up on this computer: commands for a terminal, shown by the console and never run
 // by the platform. Nil fields mean there is nothing to show.
@@ -190,7 +192,8 @@ func LocalCommandRuntimeID(id uuid.UUID) string { return LocalCommandPrefix + id
 // program's own login on this computer; it cannot copy a session for a task.
 func LocalCommandRuntime(id uuid.UUID, name string, cmd LocalCommand) Runtime {
 	rid := LocalCommandRuntimeID(id)
-	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, PermissionModes: fullOnly(), WorkingDirectory: true},
+	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, PermissionModes: []string{ModeSupervised, ModeFull},
+		WorkingDirectory: true},
 		Command: &cmd, CommandID: id, TextGeneration: &TextGeneration{Rank: localCommandWriterRank}}
 }
 
@@ -269,7 +272,7 @@ var registry = []Runtime{
 		ID:        ClaudeCode,
 		Name:      "Claude Code",
 		Providers: []string{ClaudeCodeProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true, PermissionModes: fullOnly(), WorkingDirectory: true,
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true, PermissionModes: allModes(), WorkingDirectory: true,
 			LocalConfig: true},
 		Setup:          claudeCodeSetup,
 		TextGeneration: &TextGeneration{Rank: 1, Models: []string{"haiku"}},
@@ -281,7 +284,7 @@ var registry = []Runtime{
 		Name:      "Codex",
 		Providers: []string{CodexProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, SessionCommands: []string{CommandCompact}, TaskFork: true,
-			ReadsEntryFile: true, PermissionModes: fullOnly(), WorkingDirectory: true, LocalConfig: true},
+			ReadsEntryFile: true, PermissionModes: allModes(), WorkingDirectory: true, LocalConfig: true},
 		Setup:          codexSetup,
 		MinVersion:     "0.167.0",
 		TextGeneration: &TextGeneration{Rank: 2, Models: []string{"luna", "-mini"}, Level: "low"},
@@ -292,8 +295,8 @@ var registry = []Runtime{
 		ID:        Grok,
 		Name:      "Grok",
 		Providers: []string{GrokProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true, PermissionModes: fullOnly(),
-			WorkingDirectory: true},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true,
+			PermissionModes: []string{ModeSupervised, ModeAuto, ModeFull}, WorkingDirectory: true},
 		Setup:          grokSetup,
 		MinVersion:     "1.0.88",
 		TextGeneration: &TextGeneration{Rank: 4},
@@ -305,7 +308,7 @@ var registry = []Runtime{
 		ID:        Antigravity,
 		Name:      "Antigravity",
 		Providers: []string{AntigravityProvider},
-		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true, PermissionModes: fullOnly(),
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true, PermissionModes: allModes(),
 			WorkingDirectory: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",

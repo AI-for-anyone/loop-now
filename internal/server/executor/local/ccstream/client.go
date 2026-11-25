@@ -147,8 +147,11 @@ type Client struct {
 	init       *Init
 	last       ResultInfo
 	controls   map[string]chan bool // request_id of an interrupt control message -> whether it succeeded
-	closed     bool                 // stdout has ended
-	exiting    bool                 // SIGINT sent or process ended: it is sure to exit, so no new messages are written
+	// permit answers can_use_tool requests; asking cancels each request still waiting for its answer, by request_id.
+	permit  PermissionFunc
+	asking  map[string]context.CancelCauseFunc
+	closed  bool // stdout has ended
+	exiting bool // SIGINT sent or process ended: it is sure to exit, so no new messages are written
 
 	done    chan struct{}
 	exitErr error
@@ -549,6 +552,7 @@ func (c *Client) shutdown(exitErr error) func() {
 	c.mu.Lock()
 	c.exitErr = exitErr
 	c.closed = true
+	c.cancelAskingLocked(executor.CancelProcessExited)
 	t := c.turn
 	c.turn = nil
 	started := c.init != nil

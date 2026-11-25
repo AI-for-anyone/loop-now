@@ -25,10 +25,12 @@ func InsertExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID,
 	return err
 }
 
-// IsExtensionDialogTx reports whether a question is an extension dialog.
+// IsExtensionDialogTx reports whether a question is answered to a runtime waiting on it rather than to the Agent: an
+// extension dialog or a permission request. Its answer does not remind the Agent, and its end needs no notice.
 func IsExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID) (bool, error) {
 	var ok bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM extension_dialogs WHERE question_message_id=$1)`, question).Scan(&ok)
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM extension_dialogs WHERE question_message_id=$1)
+		OR EXISTS(SELECT 1 FROM permission_requests WHERE question_message_id=$1)`, question).Scan(&ok)
 	return ok, err
 }
 

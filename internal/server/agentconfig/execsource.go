@@ -63,6 +63,9 @@ type Snapshot struct {
 	// UseLocalConfig: the runtime loads the person's own CLI configuration, as in their terminal (runtimes with the
 	// localConfig capability).
 	UseLocalConfig bool
+	// PermissionMode is the Agent's permission mode (a task instance's: the one its Agent had when the task started);
+	// empty is full (task snapshots from before modes). A mode the runtime lacks runs as supervised.
+	PermissionMode string
 	// Plugins is what the granted plugins hand to Pi; it is read when Pi starts.
 	Plugins PluginAssets
 	// ProviderState is the state of a plugin provider subscription account (plugins/SPEC.md §13); present only when the
@@ -182,6 +185,7 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 		snap.WorkingDirectory = *a.WorkingDirectory
 	}
 	snap.UseLocalConfig = a.UseLocalConfig
+	snap.PermissionMode = a.PermissionMode
 	// The person's own configuration: this computer's logins and PATH, and no project accounts.
 	ownConfig := a.UseLocalConfig && rt.Capabilities.LocalConfig
 	// An imported Agent's first turn continues the copy taken at import, on the runtime of the conversation.
