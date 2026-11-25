@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, type HttpHandler } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
@@ -19,12 +19,14 @@ type Body = { actionId: string; expectedAgentId: string; expectedRuntimeId: stri
 
 // The current node of a task, whose turn is running and waits for its background tasks; the reply's record says which tools went to the
 // background and how they ended.
-function setup(running: Schemas['BackgroundTask'][], entries: Schemas['TimelineEntry'][] = []) {
+function setup(running: Schemas['BackgroundTask'][], entries: Schemas['TimelineEntry'][] = [], extra: HttpHandler[] = []) {
   const detail = makeTaskDetail(defaultProject.id)
   const node = detail.nodes[1]
   const reply: Schemas['TaskMessage'] = { ...makeTaskMessage(nodeId, 'Building now.'), status: 'running' }
   const stops: Array<{ path: string; body: Body }> = []
   server.use(
+    // Within one call the first match wins: the test's own handlers come first.
+    ...extra,
     ...baseHandlers([]),
     http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
     http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
@@ -75,6 +77,35 @@ describe('Background tasks of a task node', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /background tasks? (is|are) running/ })).toBeNull())
   })
 
+  it('an event that comes while the list is being read wins over the older read', async () => {
+    const build = makeBackgroundTask({ label: 'cargo build' })
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let reads = 0
+    const slowRead = http.get(apiUrl(`/tasks/${taskId}/nodes/:node/background-tasks`), async ({ params }) => {
+      reads += 1
+      await gate
+      return HttpResponse.json({ taskId, nodeRunId: params.node, runtimeId: 'old-read', tasks: params.node === nodeId ? [build] : [] })
+    })
+    const { node, events } = setup([build], [], [slowRead])
+    await waitFor(() => expect(reads).toBe(1))
+    await waitFor(() => expect(events()).toBeDefined())
+    await screen.findByText('Building now.')
+    act(() => events().emit('task.node.background_tasks.updated', { taskId, nodeRunId: nodeId, runtimeId: node.runtimeId, tasks: [] }, '30'))
+    await act(async () => { release(); await new Promise((resolve) => setTimeout(resolve, 50)) })
+    expect(screen.queryByRole('button', { name: /background tasks? (is|are) running/ })).toBeNull()
+  })
+
+  it('a refusal other than “already ended” is said under the task, and it is not shown as stopping', async () => {
+    const build = makeBackgroundTask({ label: 'cargo build' })
+    const { user } = setup([build])
+    server.use(http.post(apiUrl(`/tasks/${taskId}/nodes/:node/background-tasks/:task/stop`), () => HttpResponse.json({ error: { code: 'task_conflict', message: 'The node has moved on.' } }, { status: 409 })))
+    await user.click(await screen.findByRole('button', { name: /open to see or stop them/ }))
+    await user.click(await screen.findByRole('button', { name: 'Stop background task: cargo build' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The node has moved on.')
+    expect(screen.getByRole('button', { name: 'Stop background task: cargo build' })).toBeEnabled()
+  })
+
   it('stopping the node’s turn stops its background tasks too, and the box says so first', async () => {
     setup([makeBackgroundTask()])
     expect(await screen.findByText('Stopping or interrupting also stops 1 background task')).toBeInTheDocument()
@@ -94,7 +125,7 @@ describe('Background tasks of a task node', () => {
     setup([running], entries)
     const testCard = (await screen.findByText('cargo test', { selector: '[data-background-tool] span' })).closest('[data-background-tool]') as HTMLElement
     // The live list's start time drives the clock.
-    expect(within(testCard).getByRole('status')).toHaveTextContent('Running in the background · 1:00')
+    expect(testCard).toHaveTextContent('Running in the background · 1:00')
     const fmtCard = screen.getByText('cargo fmt --check', { selector: '[data-background-tool] span' }).closest('[data-background-tool]') as HTMLElement
     expect(within(fmtCard).getByRole('status')).toHaveTextContent('Failed in the background')
     expect(fmtCard).toHaveTextContent('exit code 1')

@@ -120,22 +120,24 @@ export function ChatPage() {
   const phase = live.current ? runPhaseText(live.current.run) : null
   // Background tasks the next message, or stopping this reply, would stop: the next message restarts the CLI after a settings change;
   // on some runtimes stopping a reply ends the process.
+  // The runtimes are the ones running now: the tasks' own, and the current reply's (the Agent's runtime may already be set to another for
+  // the next message).
   const runtimes = useRuntimeLookup()
-  const running = synced ? live.backgroundTasks.length : (status.data?.backgroundTasks.length ?? 0)
-  const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(agent.runtime)} count={running} /> : null
-  const stopAlso = runtimes.get(agent.runtime)?.capabilities.stopEndsBackgroundTasks ? running : 0
+  const runningTasks = synced ? live.backgroundTasks : (status.data?.backgroundTasks ?? [])
+  const running = runningTasks.length
+  const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(runningTasks[0]?.runtime ?? agent.runtime)} count={running} /> : null
+  const replyRuntime = (synced ? live.current?.run : status.data?.currentRun)?.selection?.runtime ?? agent.runtime
+  const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
   // The numbers of the loaded replies that started a running background task, so the header's list can name them.
+  // The turns change with every streamed piece of text; the numbers only when one of them changes, so the header is not told every time.
   const backgroundTasks = live.backgroundTasks
-  const replyNumbers = useMemo(() => {
-    const numbers: Record<string, number> = {}
-    if (turnsBefore === undefined) return numbers
-    turns.forEach((turn, index) => {
-      if (backgroundTasks.some((task) => task.runId === turn.run.id)) numbers[turn.run.id] = turnsBefore + index + 1
-    })
-    return numbers
-  }, [backgroundTasks, turns, turnsBefore])
+  const numbered =
+    turnsBefore === undefined
+      ? ''
+      : turns.flatMap((turn, index) => (backgroundTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
+  const replyNumbers = useMemo(() => Object.fromEntries(numbered ? numbered.split(',').map((pair) => { const [runId, number] = pair.split('='); return [runId, Number(number)] }) : []), [numbered])
 
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { api, call } from './client'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { api, call, type Schemas } from './client'
 
 // Stop one of an Agent's background tasks, or all of them (contract BackgroundTask). A call returns once the end is recorded, or after a
 // few seconds with the task still running and stopRequestedAt set; the end then arrives through background_tasks.updated. Repeating an
@@ -17,12 +17,27 @@ export const taskNodeBackgroundKeys = {
   node: (taskId: string, nodeRunId: string) => ['taskNodeBackground', taskId, nodeRunId] as const,
 }
 
+// Events seen per node. A read that was already under way when one came returns what the event left instead: the event is newer.
+const nodeEvents = new Map<string, number>()
+const eventsSeen = (taskId: string, nodeRunId: string) => nodeEvents.get(`${taskId}/${nodeRunId}`) ?? 0
+
+export function applyTaskNodeBackgroundEvent(client: QueryClient, taskId: string, list: Schemas['TaskNodeBackgroundTasks']) {
+  nodeEvents.set(`${taskId}/${list.nodeRunId}`, eventsSeen(taskId, list.nodeRunId) + 1)
+  client.setQueryData(taskNodeBackgroundKeys.node(taskId, list.nodeRunId), list)
+}
+
 export function useTaskNodeBackgroundTasks(taskId: string, nodeRunId: string, enabled: boolean) {
+  const client = useQueryClient()
+  const queryKey = taskNodeBackgroundKeys.node(taskId, nodeRunId)
   return useQuery({
-    queryKey: taskNodeBackgroundKeys.node(taskId, nodeRunId),
+    queryKey,
     enabled,
     retry: false,
-    queryFn: ({ signal }) => call(api.GET('/tasks/{taskId}/nodes/{nodeRunId}/background-tasks', { signal, params: { path: { taskId, nodeRunId } } })),
+    queryFn: async ({ signal }) => {
+      const seen = eventsSeen(taskId, nodeRunId)
+      const list = await call(api.GET('/tasks/{taskId}/nodes/{nodeRunId}/background-tasks', { signal, params: { path: { taskId, nodeRunId } } }))
+      return eventsSeen(taskId, nodeRunId) === seen ? list : (client.getQueryData<Schemas['TaskNodeBackgroundTasks']>(queryKey) ?? list)
+    },
   })
 }
 

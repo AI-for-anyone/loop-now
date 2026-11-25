@@ -1,5 +1,5 @@
 import { taskInboxKeys, taskInboxProjection } from '@/api/task-inbox'
-import { taskNodeBackgroundKeys } from '@/api/background-tasks'
+import { applyTaskNodeBackgroundEvent, taskNodeBackgroundKeys } from '@/api/background-tasks'
 import { taskNodeQueueKeys, taskNodeQueueProjection } from '@/api/task-node-queue'
 import { taskMessageProjection } from './message-projection'
 import { useEffect, useState } from 'react'
@@ -60,7 +60,7 @@ export function useTaskLive(id: string, project: boolean) {
         // A node's running background tasks are replaced whole, and its replies' records (which say how each one ended) are read again.
         if (!project && event.type === 'task.node.background_tasks.updated') {
           if (event.data.taskId !== id) return
-          client.setQueryData(taskNodeBackgroundKeys.node(id, event.data.nodeRunId), event.data)
+          applyTaskNodeBackgroundEvent(client, id, event.data)
           void client.invalidateQueries({ queryKey: taskInboxKeys.timeline(id, event.data.nodeRunId) })
           return
         }

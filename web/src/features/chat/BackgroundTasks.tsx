@@ -1,5 +1,5 @@
 import { BotIcon, ChevronDownIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { ApiError, type Schemas } from '@/api/client'
@@ -34,8 +34,11 @@ export interface BackgroundStopper {
   stopAll: (actionId: string) => Promise<unknown>
 }
 
-// The request was answered with 409: the task (or every task) had already ended, which is what the person wanted.
-const alreadyEnded = (error: unknown) => error instanceof ApiError && error.status === 409
+// The task (or every task) had already ended, which is what the person wanted. Other refusals (a task node that moved on: task_conflict)
+// are said under the row.
+const alreadyEnded = (error: unknown) => error instanceof ApiError && error.code === 'background_task_ended'
+
+export type BackgroundStopControl = ReturnType<typeof useBackgroundStop>
 
 function useBackgroundStop(stopper: BackgroundStopper) {
   const actions = useQueueActions()
@@ -59,9 +62,11 @@ function useBackgroundStop(stopper: BackgroundStopper) {
 
 // The running background tasks of an Agent (or of a task's node): what each one is, which reply started it, how long it has run, and Stop;
 // Stop all below when there are several. Shown in the panel of the header mark, and in a task node's header.
-export function BackgroundTaskList({ tasks, stopper, origin, onNavigate }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; onNavigate?: () => void }) {
+// control: the stop state, when it must outlive the list (the panel closes and opens again); otherwise the list keeps its own.
+export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control: shared }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; onNavigate?: () => void; control?: BackgroundStopControl }) {
   const now = useNow(1000, tasks.length > 0)
-  const control = useBackgroundStop(stopper)
+  const own = useBackgroundStop(stopper)
+  const control = shared ?? own
   if (tasks.length === 0) return <p role="status" className="px-4 py-3 text-[13.5px] font-bold text-ink-500">{t.background.allEnded}</p>
   const allError = control.error('all')
   return (
@@ -138,14 +143,24 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate }: { tas
 // The mark next to the Agent's state while background tasks run: “后台任务 N” (Background N), a yellow tilted pill with a spinning
 // mark, so an idle Agent with work still going does not look finished. It opens the list.
 // hint: what the list is about (by default, that the reply has ended and these still run).
+// While the list is open it stays when the last task ends (it says they all ended, and focus is not lost); closed, the mark goes. Stopping
+// is kept here, so a retry after an unknown outcome still repeats its actionId after the list was closed and opened again.
 export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; hint?: string; className?: string }) {
   const [open, setOpen] = useState(false)
-  if (tasks.length === 0) return null
+  const control = useBackgroundStop(stopper)
+  const trigger = useRef<HTMLButtonElement>(null)
+  // The focused Stop went with the last task: focus returns to the mark, which now says they all ended.
+  const ended = open && tasks.length === 0
+  useEffect(() => {
+    if (ended && (document.activeElement === null || document.activeElement === document.body)) trigger.current?.focus()
+  }, [ended])
+  if (tasks.length === 0 && !open) return null
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger
+        ref={trigger}
         data-background-mark
-        aria-label={t.background.markLabel(tasks.length)}
+        aria-label={tasks.length > 0 ? t.background.markLabel(tasks.length) : t.background.allEnded}
         className={cn(
           'riso-tilt inline-flex min-h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-black whitespace-nowrap text-ink outline-none [--tilt-bg:var(--riso-yellow)] [--tilt-shadow:inset_0_0_0_2px_var(--ink),2px_2px_0_var(--ink)] [--tilt:2deg] focus-visible:shadow-focus',
           className,
@@ -165,7 +180,7 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
         >
           <BackgroundPanelHead count={tasks.length} hint={hint} />
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <BackgroundTaskList tasks={tasks} stopper={stopper} origin={origin} onNavigate={() => setOpen(false)} />
+            <BackgroundTaskList tasks={tasks} stopper={stopper} origin={origin} onNavigate={() => setOpen(false)} control={control} />
           </div>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>

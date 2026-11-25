@@ -69,8 +69,12 @@ describe('The background tasks mark and list in the Agent header', () => {
     // One task: no Stop all.
     expect(screen.queryByRole('button', { name: /^Stop all/ })).toBeNull()
 
+    // The list is open when the last one ends: it stays and says so (focus is not lost); once closed, the mark is gone.
     await emit('background_tasks.updated', { tasks: [] })
-    await waitFor(() => expect(screen.queryByRole('button', { name: /background tasks? (is|are) running/ })).toBeNull())
+    expect(await screen.findByText('All background tasks have ended.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'All background tasks have ended.' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'All background tasks have ended.' })).toBeNull())
   })
 
   it('before the live stream says anything, the header shows the tasks from the status', async () => {

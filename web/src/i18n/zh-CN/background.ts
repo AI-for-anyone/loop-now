@@ -30,6 +30,7 @@ export const background = {
   // A backgrounded tool in a reply, and how it ended.
   card: {
     label: '后台任务',
+    listLabel: '转到后台的工具',
     runningFor: (clock: string) => `在后台运行 · ${clock}`,
     stopping: (clock: string) => `正在停止 · ${clock}`,
     status: { running: '在后台运行', completed: '后台已完成', failed: '后台出错', stopped: '后台已停止', unknown: '后台结果未知' } satisfies Record<Task['status'], string>,
@@ -48,7 +49,7 @@ export const background = {
       shutdown: 'Loop Now 退出时停止',
       task_limit: '超过等待上限，自动停止',
     } satisfies Record<NonNullable<Task['stopReason']>, string>,
-    unknownHint: 'Loop Now 重启过，不知道它最后怎样了',
+    unknownHint: 'CLI 意外退出或 Loop Now 重启过，不知道它最后怎样了',
   },
   // The heading of a reply the CLI wrote by itself after background work ended (no person's message above it).
   // The task's label sits between before and after, in its own type.

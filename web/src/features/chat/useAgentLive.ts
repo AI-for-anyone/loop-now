@@ -60,6 +60,8 @@ function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
     // The running list replaces the status's list; the Agent details and the list carry the count.
     case 'background_tasks.updated':
       client.setQueryData<Schemas['AgentStatus']>(keys.agentStatus(agentId), (status) => status && { ...status, backgroundTasks: event.data.tasks, restartOnNextMessage: status.restartOnNextMessage && event.data.tasks.length > 0 })
+      // Whether the next message restarts the CLI can turn on when a task starts after a settings change: read the status again.
+      void client.invalidateQueries({ queryKey: keys.agentStatus(agentId) })
       void client.invalidateQueries({ queryKey: keys.agent(agentId) })
       void client.invalidateQueries({ queryKey: keys.agents })
       break

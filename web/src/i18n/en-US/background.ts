@@ -29,6 +29,7 @@ export const background = {
   allEnded: 'All background tasks have ended.',
   card: {
     label: 'Background task',
+    listLabel: 'Tools that went on in the background',
     runningFor: (clock: string) => `Running in the background · ${clock}`,
     stopping: (clock: string) => `Stopping · ${clock}`,
     status: { running: 'Running in the background', completed: 'Finished in the background', failed: 'Failed in the background', stopped: 'Stopped', unknown: 'Outcome unknown' } satisfies Record<Task['status'], string>,
@@ -47,7 +48,7 @@ export const background = {
       shutdown: 'stopped when Loop Now quit',
       task_limit: 'stopped at the waiting limit',
     } satisfies Record<NonNullable<Task['stopReason']>, string>,
-    unknownHint: 'Loop Now restarted, so how it ended is unknown',
+    unknownHint: 'The CLI exited unexpectedly or Loop Now restarted, so how it ended is unknown',
   },
   followUp: {
     before: 'After background task “',

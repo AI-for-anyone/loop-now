@@ -30,7 +30,7 @@ export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: 
   // Tools that went on in the background are cards (as in an Agent's chat), told by the record; the node's live list is read from the
   // cache only (the node panel keeps it), for whether one was asked to stop.
   const running = useTaskNodeBackgroundTasks(taskId, nodeRunId, false).data?.tasks
-  const background = tasksFromTimeline(entries, runId, running)
+  const background = tasksFromTimeline(entries, runId, running, latest ? unfinishedTool(latest.run) !== 'running' : false)
   const backgroundTools = new Set(background.flatMap(task => task.toolCallId ? [task.toolCallId] : []))
   const duration = latest ? runDurationMs(latest.run) : null
   return <div className="mt-2 grid min-w-0 gap-2" data-task-run-id={runId}>

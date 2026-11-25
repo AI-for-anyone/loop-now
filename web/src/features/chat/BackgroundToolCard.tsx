@@ -29,7 +29,8 @@ function RunningPill({ task, stopping }: { task: Task; stopping: boolean }) {
   const now = useNow(1000)
   const clock = elapsedClock(now - Date.parse(task.startedAt))
   return (
-    <span role="status" className="inline-flex min-h-[24px] shrink-0 items-center gap-1.5 rounded-full bg-riso-yellow px-2.5 text-[12.5px] leading-6 font-black whitespace-nowrap text-ink shadow-[inset_0_0_0_2px_var(--ink)]">
+    // Not a live region: its clock changes every second. The pill that replaces it once the task ends is one.
+    <span data-running-pill className="inline-flex min-h-[24px] shrink-0 items-center gap-1.5 rounded-full bg-riso-yellow px-2.5 text-[12.5px] leading-6 font-black whitespace-nowrap text-ink shadow-[inset_0_0_0_2px_var(--ink)]">
       <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" strokeWidth={3} />
       <span className="tabular-nums">{stopping ? t.background.card.stopping(clock) : t.background.card.runningFor(clock)}</span>
     </span>
@@ -107,7 +108,7 @@ export function BackgroundToolCards({ tasks, toolNames }: { tasks: Task[]; toolN
   if (tasks.length === 0) return null
   const ordered = [...tasks].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
   return (
-    <ul aria-label={t.background.title} className="flex min-w-0 flex-col gap-2.5">
+    <ul aria-label={t.background.card.listLabel} className="flex min-w-0 flex-col gap-2.5">
       {ordered.map((task) => (
         <li key={task.id} className="min-w-0">
           <BackgroundToolCard task={task} toolName={task.toolCallId ? toolNames?.get(task.toolCallId) : undefined} />

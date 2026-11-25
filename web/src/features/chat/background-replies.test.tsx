@@ -35,7 +35,9 @@ describe('Background work in the replies', () => {
     expect(within(tools).queryByText('Bash')).toBeNull()
     const card = screen.getByText('npm test').closest('[data-background-tool]') as HTMLElement
     expect(within(card).getByText('Bash')).toBeInTheDocument()
-    expect(within(card).getByRole('status')).toHaveTextContent('Running in the background · 1:23')
+    expect(card).toHaveTextContent('Running in the background · 1:23')
+    // The clock changes every second, so it is not a live region.
+    expect(within(card).queryByRole('status')).toBeNull()
 
     const ended: Schemas['BackgroundTask'] = { ...withRun, status: 'failed', exitCode: 1, endedAt: '2026-10-12T08:01:49Z', output: 'FAIL src/a.test.ts\n1 failed' }
     await emit('run.updated', { run: { ...run, backgroundTasks: [ended] } })
@@ -98,6 +100,17 @@ describe('Background work in the run record and the ruler', () => {
     ])
     expect(steps[2].output).toBe('error TS2322')
     expect(steps[3].lines).toEqual(['stopped by you'])
+  })
+
+  it('a node reply’s task with no end in the loaded record is running only while it can be', async () => {
+    const { tasksFromTimeline } = await import('./background-text')
+    const entries: Schemas['TimelineEntry'][] = [{ type: 'background_task_started', at: '2026-10-12T08:00:01Z', taskId: 'bg1', kind: 'command', label: 'make', toolCallId: 'call_1' }]
+    const live = makeBackgroundTask({ id: 'bg1', stopRequestedAt: '2026-10-12T08:01:00Z' })
+    expect(tasksFromTimeline(entries, 'run', undefined, false).map((task) => task.status)).toEqual(['running'])
+    expect(tasksFromTimeline(entries, 'run', [live], false)[0].stopRequestedAt).toBe('2026-10-12T08:01:00Z')
+    // Its end is on a page not loaded yet: the reply has ended, or the node's list no longer has it.
+    expect(tasksFromTimeline(entries, 'run', undefined, true)).toEqual([])
+    expect(tasksFromTimeline(entries, 'run', [], false)).toEqual([])
   })
 
   it('the ruler names a follow-up reply by the task it follows', () => {
