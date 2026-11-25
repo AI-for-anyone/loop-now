@@ -72,6 +72,11 @@ export const importing = {
   errors: (count: number) => `${count} 段没有导入成功`,
   openProject: (name: string) => `打开项目「${name}」`,
   again: '再导入一些',
+  // The conversation an imported Agent continues, in its chat.
+  history: {
+    divider: '导入的历史：从终端的对话复制过来',
+    continued: '以下是在 Loop Now 里接着说的',
+  },
   // Entries: Settings, and a project (for its folder).
   entry: {
     settingsTitle: '导入对话',

@@ -73,6 +73,10 @@ export const importing = {
   errors: (count: number) => `${plural(count, 'conversation was', 'conversations were')} not imported`,
   openProject: (name: string) => `Open project “${name}”`,
   again: 'Import more',
+  history: {
+    divider: 'Imported history, copied from the terminal conversation',
+    continued: 'Continued in Loop Now from here',
+  },
   entry: {
     settingsTitle: 'Import conversations',
     settingsHint: 'Continue your terminal Claude Code and Codex conversations in Loop Now.',

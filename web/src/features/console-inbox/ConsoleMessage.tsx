@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import { CheckIcon, ReplyIcon, XIcon } from 'lucide-react'
+import { CheckIcon, HandIcon, ReplyIcon, XIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -90,6 +90,12 @@ export function QuestionChoices({ message, answerable = true, onReply }: { messa
   }
   return (
     <section aria-label={text.question} className="flex min-w-0 flex-col gap-2">
+      {question.kind === 'permission' && (
+        <p data-permission-question className="inline-flex items-center gap-1.5 self-start rounded-stamp bg-riso-pink px-2 text-[12px] leading-[22px] font-black text-ink shadow-[inset_0_0_0_1.5px_var(--ink)]">
+          <HandIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
+          {t.permissions.inbox.badge}
+        </p>
+      )}
       {question.options.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {question.options.map((option) => {

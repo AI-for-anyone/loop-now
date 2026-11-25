@@ -59,6 +59,7 @@ export const timeline = {
     session_missing: 'Session not found',
     model_rate_limit: 'Subscription limit',
     background_task_started: 'Went on in the background',
+    permission_request: (kind: string) => `Asked for approval to ${kind}`,
     background_task_ended: 'A background task ended',
     background_wait_timeout: (limitMs: number) => `While waiting on background commands, the runtime sent nothing for ${formatSlept(limitMs)}; the turn ended here`,
     ended: {

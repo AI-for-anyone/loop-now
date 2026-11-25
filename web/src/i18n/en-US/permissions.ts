@@ -33,10 +33,13 @@ export const permissions = {
     states: { pending: 'Waiting', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' },
     reason: (text: string) => `Reason: ${text}`,
     stopRejects: 'Stopping the reply rejects every request still waiting',
+    show: 'Show me',
+    cancelReasons: { reply_stopped: 'the reply was stopped', reply_ended: 'the reply ended', process_exited: 'the CLI exited' } as Record<string, string>,
   },
   inbox: {
     title: (agent: string) => `${agent} asks for approval`,
     open: 'See it in the chat',
+    badge: 'Asks for approval: answering approves or rejects; a typed reason rejects it',
   },
   desktop: {
     title: (agent: string) => `${agent} asks for approval`,

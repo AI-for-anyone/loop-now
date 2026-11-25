@@ -37,11 +37,14 @@ export const permissions = {
     states: { pending: '等待中', approved: '已批准', rejected: '已拒绝', cancelled: '已取消' },
     reason: (text: string) => `理由：${text}`,
     stopRejects: '停止回复会拒绝所有还在等的请求',
+    show: '去看看',
+    cancelReasons: { reply_stopped: '回复被停止', reply_ended: '回复结束了', process_exited: 'CLI 退出了' } as Record<string, string>,
   },
   // Inbox: a question of kind permission.
   inbox: {
     title: (agent: string) => `${agent} 请求批准`,
     open: '去对话里看',
+    badge: '请求批准：回答就是批准或拒绝，写下理由会拒绝它',
   },
   desktop: {
     title: (agent: string) => `${agent} 请求批准`,
