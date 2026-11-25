@@ -207,10 +207,11 @@ type openTool struct {
 	holds    bool
 }
 
-// Prompt sends one message (session/prompt) and waits for its stop reason, streaming text and tool calls to sink.
-// With Background the turn can go on after the prompt returns (see Background). Tools still open when the turn ends
-// are closed without a result. It returns ErrExited when the process has already exited; when the process exits
-// during the turn the result is failed with runtime_exited. When ctx ends it stops waiting.
+// Prompt sends one message (session/prompt) and waits for its stop reason, streaming text and tool calls to sink; the
+// usage its result reports goes to the observer (see SetObserver). With Background the turn can go on after the prompt
+// returns (see Background). Tools still open when the turn ends are closed without a result. It returns ErrExited when
+// the process has already exited; when the process exits during the turn the result is failed with runtime_exited. When
+// ctx ends it stops waiting.
 func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runturn.Sink, images ...messageimage.Content) (runturn.Result, error) {
 	blocks := []any{map[string]any{"type": "text", "text": text}}
 	for _, img := range images {
@@ -264,6 +265,7 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 					StopReason string `json:"stopReason"`
 				}
 				_ = json.Unmarshal(r.result, &out)
+				c.observe(r.result)
 				if t.stopped(out.StopReason) {
 					rearm()
 				}

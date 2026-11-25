@@ -39,8 +39,8 @@ func TestGrokTaskStartsWithTheConversation(t *testing.T) {
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": agent.ID})
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "the password is silver otter"})
 	s.waitIdle(path)
-	if r := s.replies(path); r[len(r)-1].Run.Status != "completed" || r[len(r)-1].Run.UsageReported {
-		t.Fatalf("the regular conversation runs on Grok, which reports no usage: %+v", r[len(r)-1].Run)
+	if r := s.replies(path); r[len(r)-1].Run.Status != "completed" || !r[len(r)-1].Run.UsageReported || r[len(r)-1].Run.Usage.Input == 0 {
+		t.Fatalf("the regular conversation runs on Grok, which reports its usage: %+v", r[len(r)-1].Run)
 	}
 
 	body, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "grok task", Request: map[string]any{},
@@ -108,5 +108,9 @@ func TestGrokTaskStartsWithTheConversation(t *testing.T) {
 	}
 	if handoff["reason"] != "task_start" || handoff["fromRuntime"] != "grok" || handoff["toRuntime"] != "grok" || handoff["includedMessages"] == float64(0) {
 		t.Fatalf("handoff record: %+v", handoff)
+	}
+	var calls int
+	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE task_id=$1 AND provider='grok-cli' AND input > 0`, created.Task.ID).Scan(&calls); err != nil || calls == 0 {
+		t.Fatalf("the task's turn records the usage Grok reports: %d %v", calls, err)
 	}
 }

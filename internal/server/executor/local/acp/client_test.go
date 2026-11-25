@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -449,5 +451,67 @@ func TestRejectPermissions(t *testing.T) {
 	c, _ := h.start(acp.Options{RejectPermissions: true})
 	if r := prompt(t, c, newSession(t, c, h), "fake:permission", nil); r.Text != "permission=no" {
 		t.Fatalf("a permission request is turned down with the reject option: %q", r.Text)
+	}
+}
+
+// usageObserver keeps the usage the client passes on.
+type usageObserver struct {
+	mu  sync.Mutex
+	got []string
+}
+
+func (o *usageObserver) Usage(u acp.Usage) {
+	opt := func(v *int64) string {
+		if v == nil {
+			return "-"
+		}
+		return fmt.Sprint(*v)
+	}
+	o.mu.Lock()
+	o.got = append(o.got, fmt.Sprintf("%s in=%d out=%d read=%d write=%d total=%s thought=%s model=%s", u.StopReason, u.Input, u.Output,
+		u.CacheRead, u.CacheWrite, opt(u.Total), opt(u.Thought), u.Model))
+	o.mu.Unlock()
+}
+
+func (o *usageObserver) list() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.Clone(o.got)
+}
+
+// The usage an agent reports with a prompt's result is passed on once per prompt, as the agent reports it: agy's in the
+// ACP field, Grok's in _meta (Grok's copy in its own turn_completed notification is not counted again). A cancelled
+// prompt reports none, and agy's own replies after background commands carry no token counts, so they add none.
+func TestPromptReportsUsage(t *testing.T) {
+	for _, c := range []struct{ flavor, want string }{
+		{"agy", "end_turn in=1200 out=30 read=800 write=0 total=2030 thought=12 model="},
+		{"grok", "end_turn in=1931 out=31 read=217 write=0 total=1962 thought=30 model=fake-1-build"},
+	} {
+		h := agyBackgroundHarness(t)
+		h.flavor = c.flavor
+		cl, _ := h.start(acp.Options{Background: background(time.Minute)})
+		obs := &usageObserver{}
+		cl.SetObserver(obs)
+		sess := newSession(t, cl, h)
+		prompt(t, cl, sess, "hello", nil)
+		if got := obs.list(); len(got) != 1 || got[0] != c.want {
+			t.Fatalf("%s: %q", c.flavor, got)
+		}
+		done := make(chan runturn.Result, 1)
+		s := &sink{}
+		go func() { done <- prompt(t, cl, sess, "fake:slow", s) }()
+		waitText(t, s)
+		if err := cl.Cancel(); err != nil {
+			t.Fatal(err)
+		}
+		if r := result(t, done); r.Outcome != runturn.OutcomeAborted || len(obs.list()) != 1 {
+			t.Fatalf("%s: a cancelled prompt: %+v %q", c.flavor, r, obs.list())
+		}
+		if c.flavor != "agy" {
+			continue
+		}
+		if r := prompt(t, cl, sess, "fake:background 300ms", nil); r.Text != "backgrounded\n\nreported 1" || len(obs.list()) != 2 {
+			t.Fatalf("agy's own reply: %+v %q", r, obs.list())
+		}
 	}
 }

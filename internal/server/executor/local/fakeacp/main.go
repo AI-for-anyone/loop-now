@@ -35,6 +35,9 @@
 //	fake:refusal      stop with refusal
 //	fake:exit         stream a little text, then exit with code 3
 //	anything else     reply echo: <text>
+//
+// A prompt that ends normally (end_turn) reports its token usage as the CLI it plays does: agy in the result's usage,
+// Grok in the result's _meta.usage and in a _x.ai/session_notification turn_completed before it.
 package main
 
 import (
@@ -42,6 +45,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -413,6 +417,8 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		}
 	}
 	stop := func(reason string) { s.result(id, map[string]any{"stopReason": reason}) }
+	// A prompt that ends normally reports its usage as the real CLIs do (see promptUsage).
+	ended := func() { s.result(id, s.promptUsage(ss.ID)) }
 	cmd, arg := "", ""
 	if i := strings.Index(text, "fake:"); i >= 0 {
 		w := strings.Fields(text[i:])
@@ -525,7 +531,26 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 	default:
 		reply("echo: " + text)
 	}
-	stop("end_turn")
+	ended()
+}
+
+// promptUsage is the result of a prompt that ends normally, with its token usage as the real CLIs report it (numbers
+// made up): agy 1.5.14 in the result's usage (input leaves out cache reads; output includes thoughts), after a
+// usage_update; Grok 1.0.92 in its _meta.usage (input includes cache reads; output includes reasoning), with flat
+// copies in _meta and the same usage in its own turn_completed notification first.
+func (s *server) promptUsage(sid string) map[string]any {
+	if flavor() == "agy" {
+		s.update(sid, usage())
+		return map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 1200, "outputTokens": 30, "cachedReadTokens": 800,
+			"cachedWriteTokens": 0, "thoughtTokens": 12, "totalTokens": 2030}}
+	}
+	u := map[string]any{"inputTokens": 1931, "outputTokens": 31, "totalTokens": 1962, "cachedReadTokens": 217, "cacheCreationTokens": 0,
+		"reasoningTokens": 30, "modelCalls": 1, "apiDurationMs": 3111, "costUsdTicks": 355600000}
+	u["modelUsage"] = map[string]any{"fake-1-build": maps.Clone(u)}
+	s.write(map[string]any{"jsonrpc": "2.0", "method": "_x.ai/session_notification", "params": map[string]any{"sessionId": sid,
+		"update": map[string]any{"sessionUpdate": "turn_completed", "usage": u}}})
+	return map[string]any{"stopReason": "end_turn", "_meta": map[string]any{"usage": u, "totalTokens": 1962, "modelId": "fake-1", "inputTokens": 1931,
+		"outputTokens": 31}}
 }
 
 // nativeRecord leaves the records the real CLI keeps for a new session under FAKEACP_NATIVE_HOME (see the package

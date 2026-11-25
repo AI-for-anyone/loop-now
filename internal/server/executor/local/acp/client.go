@@ -100,11 +100,12 @@ type Client struct {
 	stderr  *ring
 	nextID  atomic.Int64
 
-	mu      sync.Mutex
-	pending map[int64]chan reply
-	turn    *turn
-	loading *loading
-	closed  bool
+	mu       sync.Mutex
+	pending  map[int64]chan reply
+	turn     *turn
+	loading  *loading
+	closed   bool
+	observer Observer
 
 	done    chan struct{}
 	exitErr error
