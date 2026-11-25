@@ -326,14 +326,14 @@ func TestTurnEndClosesOpenTools(t *testing.T) {
 
 // background is how Antigravity's turns wait for its background commands, with short limits for tests: the agent
 // takes 400ms to begin a reply of its own, longer than the settle time.
-func background(quiet time.Duration) *acp.Background {
+func background() *acp.Background {
 	return &acp.Background{
 		Holds: func(kind string, raw json.RawMessage) bool {
 			var in struct{ IsDaemon bool }
 			_ = json.Unmarshal(raw, &in)
 			return kind == "execute" && !in.IsDaemon
 		},
-		QuietLimit: quiet, ReplyQuietLimit: 5 * time.Second, Settle: 200 * time.Millisecond,
+		ReplyQuietLimit: 5 * time.Second, Settle: 200 * time.Millisecond,
 	}
 }
 
@@ -343,106 +343,109 @@ func agyBackgroundHarness(t *testing.T) *harness {
 	return h
 }
 
-// Commands the agent moved to the background keep the turn open after the prompt has returned. A command that ends
-// before the prompt does reports its end within the prompt; one still running when the prompt returns reports it later,
-// and the agent then replies by itself. Those ends and replies belong to the turn, which ends once no command runs and
-// no reply is open or expected. A command that ends during such a reply is answered by another one. The ends carry
-// the command's output as a content list, as agy's do.
-func TestBackgroundCommandsHoldTheTurn(t *testing.T) {
+// agyWithTasks starts agy with Background and records its background tasks and its own replies.
+func agyWithTasks(t *testing.T) (*acp.Client, string, *bgObserver, chan *selfTurn) {
+	t.Helper()
 	h := agyBackgroundHarness(t)
-	c, _ := h.start(acp.Options{Background: background(time.Minute)})
-	sess := newSession(t, c, h)
+	c, _ := h.start(acp.Options{Background: background()})
+	obs := newBgObserver()
+	c.SetObserver(obs)
+	turns := make(chan *selfTurn, 8)
+	c.SetSelfTurns(func() runturn.SelfTurn {
+		s := &selfTurn{sink: &sink{}, ended: make(chan runturn.Result, 1)}
+		turns <- s
+		return s
+	})
+	return c, newSession(t, c, h), obs, turns
+}
+
+// The prompt ends when the agent ends it. A command still running then goes on in the background: it is reported with
+// its command line and stays open on the turn that started it, whose sink gets its end later, with the output. A
+// command that ends within the prompt is a tool like any other. The reply the agent then gives by itself is a self
+// turn, which ends once usage_update has come and nothing more for Settle.
+func TestBackgroundCommandsGoOn(t *testing.T) {
+	c, sess, obs, turns := agyWithTasks(t)
 	s := &sink{}
-	// now ends within the prompt; 300ms ends and is reported from 700ms to 1100ms; 900ms ends during that reply and is
-	// reported from 1500ms; 2500ms is reported from 2900ms.
-	r := prompt(t, c, sess, "fake:background now 300ms 900ms 2500ms", s)
-	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded\n\nreported 1\n\nreported 1\n\nreported 1" || r.Text != s.String() {
-		t.Fatalf("result: %+v %q", r, s.String())
-	}
-	if s.toolList() != "start:execute,end:execute:ok,start:execute,start:execute,start:execute,end:execute:ok,end:execute:ok,end:execute:ok" || len(s.timedOut) != 0 {
-		t.Fatalf("tools: %s %v", s.toolList(), s.timedOut)
-	}
-	// Commands that end before the agent begins its reply are reported together.
-	s = &sink{}
-	if r := prompt(t, c, sess, "fake:background 300ms 400ms", s); r.Text != "backgrounded\n\nreported 2" || s.toolList() != "start:execute,start:execute,end:execute:ok,end:execute:ok" {
-		t.Fatalf("together: %+v %s", r, s.toolList())
-	}
-	// A command that ends within the prompt holds nothing: the turn ends with the prompt.
-	s = &sink{}
 	start := time.Now()
-	if r := prompt(t, c, sess, "fake:background now", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:ok" || time.Since(start) > time.Second {
-		t.Fatalf("within the prompt: %+v %s after %v", r, s.toolList(), time.Since(start))
+	r := prompt(t, c, sess, "fake:background now 300ms", s)
+	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded" || time.Since(start) > time.Second {
+		t.Fatalf("the prompt ends at once: %+v after %v", r, time.Since(start))
+	}
+	if s.toolList() != "start:execute,end:execute:ok,start:execute" {
+		t.Fatalf("the command running in the background stays open: %s", s.toolList())
+	}
+	obs.mu.Lock()
+	started := append([]acp.Task(nil), obs.started...)
+	obs.mu.Unlock()
+	if len(started) != 1 || started[0].Command != "sleep 300ms" || started[0].ToolCallID != started[0].ID {
+		t.Fatalf("background task: %+v", started)
+	}
+	end := recv(t, obs.ended, "its end")
+	if end.ID != started[0].ID || end.Killed || end.ExitCode == nil || *end.ExitCode != 0 || end.Output == nil || *end.Output != "finished" {
+		t.Fatalf("end: %+v", end)
+	}
+	if s.toolList() != "start:execute,end:execute:ok,start:execute,end:execute:ok" {
+		t.Fatalf("its end goes to the turn that started it: %s", s.toolList())
+	}
+	self := recv(t, turns, "the agent's own reply")
+	res := recv(t, self.ended, "its end")
+	if res.Outcome != runturn.OutcomeCompleted || strings.TrimSpace(res.Text) != "reported 1" {
+		t.Fatalf("own reply: %+v", res)
+	}
+	if c.InPrompt() {
+		t.Fatal("no turn is open")
 	}
 }
 
-// When the end of a background command never comes, the turn ends after the quiet limit: the command is closed
-// without a result and the sink is told why.
-func TestBackgroundEndLost(t *testing.T) {
-	h := agyBackgroundHarness(t)
-	c, _ := h.start(acp.Options{Background: background(600 * time.Millisecond)})
+// A daemon command does not go on as a background task (it may never end): it is closed without a result when the
+// prompt ends. An agent run without Background has none.
+func TestBackgroundDaemonAndOtherAgents(t *testing.T) {
+	c, sess, obs, _ := agyWithTasks(t)
 	s := &sink{}
-	start := time.Now()
-	r := prompt(t, c, newSession(t, c, h), "fake:background lost", s)
-	if r.Outcome != runturn.OutcomeCompleted || r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" {
-		t.Fatalf("result: %+v %s", r, s.toolList())
+	if r := prompt(t, c, sess, "fake:background daemon", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" {
+		t.Fatalf("daemon: %+v %s", r, s.toolList())
 	}
-	if len(s.timedOut) != 1 || s.timedOut[0] != 600*time.Millisecond || time.Since(start) < 600*time.Millisecond {
-		t.Fatalf("quiet limit: %v after %v", s.timedOut, time.Since(start))
-	}
-}
-
-// A daemon command does not hold the turn (it may never end); it is closed without a result when the turn ends. An
-// agent run without Background holds nothing.
-func TestBackgroundDaemonAndOtherAgentsDoNotHold(t *testing.T) {
-	h := agyBackgroundHarness(t)
-	c, _ := h.start(acp.Options{Background: background(time.Minute)})
-	s := &sink{}
-	if r := prompt(t, c, newSession(t, c, h), "fake:background daemon", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" || len(s.timedOut) != 0 {
-		t.Fatalf("daemon: %+v %s %v", r, s.toolList(), s.timedOut)
+	obs.mu.Lock()
+	n := len(obs.started)
+	obs.mu.Unlock()
+	if n != 0 {
+		t.Fatal("a daemon is not a background task")
 	}
 	g := newHarness(t, "grok")
 	gc, _ := g.start(acp.Options{})
 	s = &sink{}
-	start := time.Now()
-	if r := prompt(t, gc, newSession(t, gc, g), "fake:background 2s", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" || time.Since(start) > time.Second {
-		t.Fatalf("without Background: %+v %s after %v", r, s.toolList(), time.Since(start))
+	if r := prompt(t, gc, newSession(t, gc, g), "fake:background 2s", s); r.Text != "backgrounded" || s.toolList() != "start:execute,end:execute:none" {
+		t.Fatalf("without Background: %+v %s", r, s.toolList())
 	}
 }
 
-// A stop while the turn waits for a background command sends session/cancel (which ends the agent's commands) and
-// ends the turn as stopped at once.
-func TestBackgroundStop(t *testing.T) {
-	h := agyBackgroundHarness(t)
-	c, _ := h.start(acp.Options{Background: background(time.Minute)})
-	sess := newSession(t, c, h)
+// CancelBackground ends the session's background commands with session/cancel (the agent says nothing about them):
+// each is reported killed and closed without a result on the turn that started it. With a prompt open it refuses.
+func TestCancelBackground(t *testing.T) {
+	c, sess, obs, _ := agyWithTasks(t)
 	s := &sink{}
-	done := make(chan runturn.Result, 1)
-	go func() {
-		r, _ := c.Prompt(ctx(t), sess, "fake:background 10s", s)
-		done <- r
-	}()
-	deadline := time.Now().Add(10 * time.Second)
-	for s.String() != "backgrounded" && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	time.Sleep(300 * time.Millisecond) // the prompt has returned and the turn waits
-	if !c.InPrompt() {
-		t.Fatal("the turn waits for the command")
-	}
-	if err := c.Cancel(); err != nil {
+	prompt(t, c, sess, "fake:background 10s 20s", s)
+	if err := c.CancelBackground(sess); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case r := <-done:
-		if r.Outcome != runturn.OutcomeAborted || s.toolList() != "start:execute,end:execute:none" {
-			t.Fatalf("stopped: %+v %s", r, s.toolList())
+	for range 2 {
+		if end := recv(t, obs.ended, "an end"); !end.Killed {
+			t.Fatalf("killed: %+v", end)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the turn did not end after the stop")
 	}
-	if c.InPrompt() {
-		t.Fatal("still in a prompt")
+	if s.toolList() != "start:execute,start:execute,end:execute:none,end:execute:none" {
+		t.Fatalf("closed without a result: %s", s.toolList())
 	}
+	done := make(chan struct{})
+	go func() { defer close(done); prompt(t, c, sess, "fake:sleep 1s", nil) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !c.InPrompt() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := c.CancelBackground(sess); err == nil {
+		t.Fatal("refused while a prompt runs")
+	}
+	<-done
 }
 
 // With RejectPermissions every permission request is turned down: the agent's own reject option when it offers one.
@@ -489,7 +492,7 @@ func TestPromptReportsUsage(t *testing.T) {
 	} {
 		h := agyBackgroundHarness(t)
 		h.flavor = c.flavor
-		cl, _ := h.start(acp.Options{Background: background(time.Minute)})
+		cl, _ := h.start(acp.Options{Background: background()})
 		obs := &usageObserver{}
 		cl.SetObserver(obs)
 		sess := newSession(t, cl, h)
@@ -510,8 +513,12 @@ func TestPromptReportsUsage(t *testing.T) {
 		if c.flavor != "agy" {
 			continue
 		}
-		if r := prompt(t, cl, sess, "fake:background 300ms", nil); r.Text != "backgrounded\n\nreported 1" || len(obs.list()) != 2 {
-			t.Fatalf("agy's own reply: %+v %q", r, obs.list())
+		if r := prompt(t, cl, sess, "fake:background 300ms", nil); r.Text != "backgrounded" || len(obs.list()) != 2 {
+			t.Fatalf("a prompt that leaves a command running: %+v %q", r, obs.list())
+		}
+		time.Sleep(1500 * time.Millisecond) // the command ends, and agy replies by itself
+		if len(obs.list()) != 2 {
+			t.Fatalf("agy's own reply: %q", obs.list())
 		}
 	}
 }

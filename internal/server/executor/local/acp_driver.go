@@ -189,11 +189,7 @@ const (
 func (f acpFlavor) clientOptions(o Options) acp.Options {
 	opts := acp.Options{Kill: procgroup.Kill}
 	if f.background != nil {
-		wait := o.ACPBackgroundWait
-		if wait <= 0 {
-			wait = defaultACPBackgroundWait
-		}
-		opts.Background = &acp.Background{Holds: f.background, QuietLimit: wait, ReplyQuietLimit: acpReplyQuiet, Settle: acpSettle}
+		opts.Background = &acp.Background{Holds: f.background, ReplyQuietLimit: acpReplyQuiet, Settle: acpSettle}
 	}
 	return opts
 }
@@ -471,11 +467,20 @@ func (ad acpDriver) attach(p *proc) {
 	}
 }
 
-// stopBackground kills each task (Grok's _x.ai/task/kill).
+// stopBackground stops tasks with the agent's means: Grok kills each (_x.ai/task/kill); Antigravity has no means to
+// stop one, so session/cancel ends all of the session's background commands, each recorded with the reason of this
+// stop.
 func (ad acpDriver) stopBackground(ctx context.Context, p *proc, ids []string) error {
 	ap := acpOf(p)
-	if ap == nil {
+	if ap == nil || len(ids) == 0 {
 		return nil
+	}
+	if ad.f.background != nil {
+		reason := p.bgStopReason(ids[0])
+		for _, t := range ad.e.bgRunning(p) {
+			p.bgSetStopReason(t.ID, reason)
+		}
+		return ap.CancelBackground(ap.sessionID)
 	}
 	var errs []error
 	for _, id := range ids {
@@ -518,6 +523,9 @@ func (o acpObserver) TaskEnded(t acp.TaskEnd) {
 	switch {
 	case t.Killed || o.p.bgStopReason(t.ID) != "":
 		end.Status, end.StopReason = executor.BackgroundStopped, o.p.bgStopReason(t.ID)
+		if end.StopReason == "" && o.p.replyStopping.Load() {
+			end.StopReason = executor.StopReplyStopped // a reply's stop (session/cancel) ended it
+		}
 	case t.ExitCode != nil && *t.ExitCode != 0:
 		end.Status = executor.BackgroundFailed
 	}

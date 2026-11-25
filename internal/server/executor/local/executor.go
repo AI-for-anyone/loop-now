@@ -109,8 +109,9 @@ type Options struct {
 	// BackgroundStopWait is how long stopping background tasks waits for the runtime to report their end before
 	// returning them as they are; 0 means 3 seconds.
 	BackgroundStopWait time.Duration
-	// ACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
-	// prompt has returned) may hear nothing from the agent before it ends; 0 means 30 minutes.
+	// ACPBackgroundWait is how long a task instance's turn that waits for its background tasks (after its prompt has
+	// returned, on any runtime) may hear nothing from the runtime before it stops them (task_limit) and ends; 0 means 30
+	// minutes.
 	ACPBackgroundWait time.Duration
 	// TextTempDir is where "Write with AI" makes the empty folder each run of a CLI works in (removed afterwards); empty
 	// means the system's temporary folder.
@@ -393,6 +394,16 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	tr, err := p.rt.Prompt(ctx, req.Message, adapter, req.Images...)
 	if before != "" && err == nil {
 		tr.Text = before + "\n\n" + tr.Text
+	}
+	if p.task && err == nil && tr.Outcome == runturn.OutcomeCompleted {
+		// A task instance's turn waits for the background work it started and the CLI's own reply about it.
+		after, stopped := e.holdForBackground(ctx, p, r, runID, adapter)
+		if after != "" {
+			tr.Text = strings.TrimSpace(tr.Text + "\n\n" + after)
+		}
+		if stopped {
+			tr.Outcome = runturn.OutcomeAborted
+		}
 	}
 	exitCode, exitMsg := p.drv.exited()
 	if errors.Is(err, runturn.ErrExited) {

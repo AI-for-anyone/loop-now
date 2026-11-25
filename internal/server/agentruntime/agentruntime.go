@@ -286,7 +286,7 @@ var registry = []Runtime{
 		ID:             Antigravity,
 		Name:           "Antigravity",
 		Providers:      []string{AntigravityProvider},
-		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true},
+		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",
 		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},

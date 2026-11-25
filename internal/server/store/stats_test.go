@@ -332,3 +332,30 @@ func TestStatsCountsManualCompactionAsConsole(t *testing.T) {
 		t.Fatalf("manual compactions should count as console: %+v", got)
 	}
 }
+
+// A reply a runtime's CLI gave by itself after background work it started had ended continues work a person asked for,
+// so its usage counts as console (its run keeps origin background).
+func TestStatsBackgroundCountsAsConsole(t *testing.T) {
+	s := sqlitetest.NewStore(t)
+	ctx := context.Background()
+	dc, err := s.EnsureDefaults(ctx, "org", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "alpha", "anthropic", "claude-x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := statsSeed{t: t, s: s, base: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)}
+	follow := uuid.New()
+	mustExec(t, s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,queued_at,started_at,running_at,ended_at)
+		VALUES($1,$2,$3,1,0,1,'completed','background',$4,$4,$4,$5)`, follow, a.ID, uuid.New(), e.at(time.Hour), e.at(time.Hour+time.Minute))
+	e.usage(a.ID, time.Hour+30*time.Second, "assistant", &follow, nil, nil, 400, 20, 0, 0)
+	r, err := s.Stats(ctx, store.ScopeFilter{}, e.at(0), e.at(24*time.Hour), 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ByOrigin.Totals; got.Console != 420 || got.Other != 0 {
+		t.Fatalf("a follow-up counts as console: %+v", got)
+	}
+}

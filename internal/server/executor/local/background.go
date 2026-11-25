@@ -39,6 +39,13 @@ func (b *procBackground) notifyLocked() {
 	b.changed = make(chan struct{})
 }
 
+// bgNotify wakes those that wait for a change of the process's background work.
+func (p *proc) bgNotify() {
+	p.bg.mu.Lock()
+	p.bg.notifyLocked()
+	p.bg.mu.Unlock()
+}
+
 // bgChanged returns a channel closed at the next change of the process's background tasks.
 func (p *proc) bgChanged() <-chan struct{} {
 	p.bg.mu.Lock()
@@ -269,6 +276,16 @@ func (e *Executor) tasksNow(p *proc, ids []string) ([]executor.BackgroundTask, b
 		}
 	}
 	return out, pending
+}
+
+// bgSetStopReason records reason as the one a stop of the task id was asked for with.
+func (p *proc) bgSetStopReason(id, reason string) {
+	p.bg.mu.Lock()
+	defer p.bg.mu.Unlock()
+	if p.bg.stopReasons == nil {
+		p.bg.stopReasons = map[string]string{}
+	}
+	p.bg.stopReasons[id] = reason
 }
 
 // bgStopReason is the reason a stop of the task id was asked for with; empty when none was.

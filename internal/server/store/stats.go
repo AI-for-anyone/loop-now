@@ -297,7 +297,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		// model, by Agent, and overall.
 		rows, err = tx.Query(ctx, `WITH x AS (
 			SELECT u.agent_id, `+statsBucket("u.at")+` AS bucket,
-				CASE WHEN r.id IS NOT NULL THEN CASE r.origin WHEN 'console' THEN 'console' WHEN 'console_compact' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'other' END
+				CASE WHEN r.id IS NOT NULL THEN CASE r.origin WHEN 'console' THEN 'console' WHEN 'console_compact' THEN 'console' WHEN 'background' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'other' END
 					WHEN t.id IS NOT NULL THEN CASE t.origin WHEN 'console_node' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'task' END
 					ELSE 'other' END AS origin,
 				coalesce(r.origin, t.origin) = 'sleep_wake' AND coalesce(r.queued_at, t.queued_at) >= $3 AND coalesce(r.queued_at, t.queued_at) < $4 AS wake,

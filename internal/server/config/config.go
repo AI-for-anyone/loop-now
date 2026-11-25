@@ -102,8 +102,8 @@ const (
 	// EnvCodexModelsRefresh is how often the models the local Codex lists are read again (a short-lived codex
 	// app-server); 0 turns it off.
 	EnvCodexModelsRefresh = "LOOP_NOW_CODEX_MODELS_REFRESH"
-	// EnvACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
-	// reply has ended) may hear nothing from the agent before it ends and closes the commands without a result.
+	// EnvACPBackgroundWait is how long a task instance's turn that waits for its background tasks (on any runtime, after
+	// its reply has ended) may hear nothing from the runtime before it stops them and ends.
 	EnvACPBackgroundWait  = "LOOP_NOW_ACP_BACKGROUND_WAIT"
 	EnvLoopctlDistDir     = "LOOP_NOW_LOOPCTL_DIST_DIR"
 	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"

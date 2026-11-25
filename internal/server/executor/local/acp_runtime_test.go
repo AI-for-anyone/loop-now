@@ -370,15 +370,15 @@ func TestACPLoginConclusions(t *testing.T) {
 	}
 }
 
-// Antigravity's commands moved to the background keep the run going after the prompt returns: their ends and the reply
-// agy then gives by itself belong to the run. A command whose end never comes is closed without a result once the run
-// has heard nothing for the background wait, and the run record says why. Another runtime's tool left open when the
-// turn ends is closed without a result too.
+// In a task instance, Antigravity's commands moved to the background keep the turn going after the prompt returns:
+// their ends and the reply agy then gives by itself belong to the turn. A command whose end never comes is stopped and
+// closed without a result once the turn has heard nothing for the background wait, and the run record says why.
+// Another runtime's tool left open when the turn ends is closed without a result.
 func TestACPBackgroundCommands(t *testing.T) {
-	h := newACPHarness(t, "agy", func(o *Options) { o.ACPBackgroundWait = 800 * time.Millisecond })
-	id := h.acpAgent(nil)
+	h := newACPHarness(t, "agy", func(o *Options) { o.ACPBackgroundWait, o.BackgroundStopWait = 800*time.Millisecond, time.Second })
+	id := h.acpAgent(asTask)
 	res, sink := h.exec(id, "fake:background 300ms")
-	if res.Outcome != executor.OutcomeCompleted || !strings.HasSuffix(res.Text, "backgrounded\n\nreported 1") || strings.Join(sink.tools, ",") != "execute:started,execute:succeeded" {
+	if res.Outcome != executor.OutcomeCompleted || res.Text != "backgrounded\n\nreported 1" || strings.Join(sink.tools, ",") != "execute:started,execute:succeeded" {
 		t.Fatalf("background command: %+v %v", res, sink.tools)
 	}
 	res, sink = h.exec(id, "fake:background lost")

@@ -577,6 +577,9 @@ func (o codexObserver) CommandEnded(c codexapp.Command, status string, exitCode 
 	o.e.bgEnded(o.p, c.ItemID, end)
 }
 
+// noFollowUp: Codex does not reply by itself after a command running in the background ended.
+func (codexDriver) noFollowUp() {}
+
 // stopBackground terminates each command (thread/backgroundTerminals/terminate).
 func (codexDriver) stopBackground(ctx context.Context, p *proc, ids []string) error {
 	cp := codexOf(p)

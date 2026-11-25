@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -145,28 +146,37 @@ func (e *Executor) selfTurnBegan(p *proc) runturn.SelfTurn {
 	host := e.followUps.Load()
 	e.mu.Lock()
 	p.selfTurn = f
-	if p.task || host == nil {
+	if !p.task && host == nil {
 		e.mu.Unlock()
-		p.log.Warn("the runtime replied by itself; the reply is not recorded", "task", p.task)
+		p.log.Warn("the runtime replied by itself; the reply is not recorded")
 		f.take(uuid.Nil, discardSink{})
 		return f
 	}
+	// A task instance's reply goes into the turn that waits for it (or the instance's next turn): no run is made.
 	e.followUpQueue[p.agentID] = append(e.followUpQueue[p.agentID], f)
 	e.mu.Unlock()
-	triggers := slices.Clone(f.triggers)
-	go (*host).FollowUp(p.agentID, f.runID, triggers)
+	p.bgNotify()
+	if !p.task {
+		triggers := slices.Clone(f.triggers)
+		go (*host).FollowUp(p.agentID, f.runID, triggers)
+	}
 	return f
 }
 
 // followUpEnded forgets the reply as the one the process is giving.
 func (e *Executor) followUpEnded(f *followUp) {
+	var ended []*proc
 	e.mu.Lock()
 	for p := range e.live {
 		if p.selfTurn == f {
 			p.selfTurn = nil
+			ended = append(ended, p)
 		}
 	}
 	e.mu.Unlock()
+	for _, p := range ended {
+		p.bgNotify()
+	}
 }
 
 // takeFollowUp takes the follow-up made for the run runID; nil when there is none (another run took it, or the process
@@ -315,3 +325,112 @@ type discardSink struct{}
 func (discardSink) TextDelta(string)               {}
 func (discardSink) ToolStarted(string, string)     {}
 func (discardSink) ToolEnded(string, string, bool) {}
+
+// quietRuntime is a driver whose CLI does not reply by itself after its background work ended (Codex).
+type quietRuntime interface {
+	noFollowUp()
+}
+
+// holdForBackground keeps a task instance's turn (the run runID) open after its prompt while background tasks of the
+// process run, and until the CLI's own reply after one ended has come and ended; that reply goes into the turn, and
+// its text is returned. When nothing comes from the runtime for the background wait (Options.ACPBackgroundWait) the
+// tasks still running are stopped (task_limit) and the turn ends, saying why. When the run is stopped meanwhile, the
+// tasks are stopped with it and stopped reports true.
+func (e *Executor) holdForBackground(ctx context.Context, p *proc, r *run, runID uuid.UUID, sink sinkAdapter) (string, bool) {
+	limit := e.o.ACPBackgroundWait
+	if limit <= 0 {
+		limit = defaultACPBackgroundWait
+	}
+	replyWait := min(acpReplyQuiet, limit)
+	_, quiet := p.drv.(quietRuntime)
+	var texts []string
+	last, expect := time.Now(), false
+	poll := time.NewTicker(50 * time.Millisecond)
+	defer poll.Stop()
+	stop := func(reason string) {
+		var ids []string
+		for _, t := range e.bgRunning(p) {
+			ids = append(ids, t.ID)
+		}
+		if len(ids) > 0 {
+			e.stopTasks(ctx, p, ids, reason)
+		}
+	}
+	for {
+		changed := p.bgChanged()
+		for _, f := range e.takeFollowUps(p.agentID) {
+			f.take(runID, &followOnSink{sinkAdapter: sink})
+			for done := false; !done; {
+				select {
+				case <-f.done:
+					done = true
+				case <-poll.C:
+					if r.interrupted.Load() {
+						stop(executor.StopReplyStopped)
+						return strings.Join(texts, "\n\n"), true
+					}
+				case <-ctx.Done():
+					return strings.Join(texts, "\n\n"), false
+				}
+			}
+			if text := strings.TrimSpace(f.result.Text); text != "" {
+				texts = append(texts, text)
+			}
+			last, expect = time.Now(), false
+		}
+		running := len(e.bgRunning(p))
+		e.mu.Lock()
+		replying := p.selfTurn != nil
+		e.mu.Unlock()
+		if running == 0 && !expect && !replying {
+			return strings.Join(texts, "\n\n"), false
+		}
+		wait := limit
+		if running == 0 {
+			wait = replyWait
+		}
+		timer := time.NewTimer(time.Until(last.Add(wait)))
+		select {
+		case <-changed:
+			timer.Stop()
+			if len(e.bgRunning(p)) < running && !quiet {
+				expect = true // the CLI replies by itself after a task ended
+			}
+			last = time.Now()
+		case <-timer.C:
+			if running > 0 {
+				stop(executor.StopTaskLimit)
+				sink.BackgroundWaitTimedOut(limit)
+			}
+			return strings.Join(texts, "\n\n"), false
+		case <-poll.C:
+			timer.Stop()
+			if r.interrupted.Load() {
+				stop(executor.StopReplyStopped)
+				return strings.Join(texts, "\n\n"), true
+			}
+		case <-ctx.Done():
+			timer.Stop()
+			return strings.Join(texts, "\n\n"), false
+		}
+	}
+}
+
+// followOnSink passes on a reply that follows another in the same turn: its text starts after a blank line, without
+// the reply's own leading blank lines, as the turn's final text has it.
+type followOnSink struct {
+	sinkAdapter
+	started bool
+}
+
+func (s *followOnSink) TextDelta(d string) {
+	if !s.started {
+		d = strings.TrimLeft(d, " \t\r\n")
+		if d == "" {
+			return
+		}
+		s.started = true
+		d = "\n\n" + d
+	}
+	s.sinkAdapter.TextDelta(d)
+}
