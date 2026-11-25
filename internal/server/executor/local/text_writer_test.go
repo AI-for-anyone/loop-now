@@ -304,3 +304,45 @@ func TestLocalCommandWritesText(t *testing.T) {
 	}
 	emptyDir(t, tmp)
 }
+
+// Grok's folder for a text run's working folder goes as a whole (its prompt history holds what was sent), and only
+// that: the guards refuse a working folder that is not absolute or not a text run's, so the removal can never reach
+// .grok/sessions itself or another folder's sessions.
+func TestForgetGrokSession(t *testing.T) {
+	home := t.TempDir()
+	sessions := filepath.Join(home, ".grok", "sessions")
+	run := filepath.Join(t.TempDir(), "loop-now-write-123", "work")
+	mine := filepath.Join(sessions, url.PathEscape(run))
+	theirs := filepath.Join(sessions, url.PathEscape("/Users/someone/project"), "01-theirs")
+	for _, d := range []string{filepath.Join(mine, "01-mine"), theirs} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(mine, "prompt_history.jsonl"), []byte("what was sent"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cwd := range []string{"", "work", "loop-now-write-1/work", "/", "/Users/someone/project", filepath.Dir(run)} {
+		if err := forgetGrokSession(home, cwd, "01-mine"); err == nil {
+			t.Errorf("cwd %q must be refused", cwd)
+		}
+	}
+	if err := forgetGrokSession("relative-home", run, "01-mine"); err == nil {
+		t.Error("a relative home must be refused")
+	}
+	if _, err := os.Stat(mine); err != nil {
+		t.Fatalf("a refused removal removes nothing: %v", err)
+	}
+	if err := forgetGrokSession(home, run, "01-mine"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(mine); !os.IsNotExist(err) {
+		t.Fatalf("the run's folder goes as a whole: %v", err)
+	}
+	if _, err := os.Stat(theirs); err != nil {
+		t.Fatalf("another folder's sessions stay: %v", err)
+	}
+	if _, err := os.Stat(sessions); err != nil {
+		t.Fatalf(".grok/sessions stays: %v", err)
+	}
+}
