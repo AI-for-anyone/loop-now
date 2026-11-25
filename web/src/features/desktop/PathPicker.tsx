@@ -77,7 +77,7 @@ function ServerPathPicker({ kind, value, onPick, disabled, children }: PickerPro
   }
 
   return (
-    <div className="grid min-w-0 gap-1.5">
+    <div className="grid min-w-0">
       <div className="flex min-w-0 items-center gap-2 [&>:first-child]:min-w-0 [&>:first-child]:flex-1">
         {children}
         {/* While the dialog is open the button stays focusable (aria-disabled), so the focus is still here when the browser comes back. */}
@@ -94,14 +94,17 @@ function ServerPathPicker({ kind, value, onPick, disabled, children }: PickerPro
           {waiting ? t.common.choosingPath : t.common.choosePath}
         </Button>
       </div>
-      {waiting && (
-        <p id={hintId} role="status" className="flex items-start gap-1.5 text-[12.5px] leading-snug font-bold text-ink-700">
-          <MousePointerClickIcon aria-hidden="true" className="mt-px size-4 shrink-0 text-riso-pink" strokeWidth={2.5} />
-          {t.common.choosingPathHint}
-        </p>
-      )}
+      {/* The live region is there before its text, so screen readers say the text when it appears; empty, it takes no room. */}
+      <div role="status">
+        {waiting && (
+          <p id={hintId} className="mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-snug font-bold text-ink-700">
+            <MousePointerClickIcon aria-hidden="true" className="mt-px size-4 shrink-0 text-riso-pink" strokeWidth={2.5} />
+            {t.common.choosingPathHint}
+          </p>
+        )}
+      </div>
       {error !== null && (
-        <p role="alert" className="text-[13.5px] leading-snug font-bold text-red-text">
+        <p role="alert" className="mt-1.5 text-[13.5px] leading-snug font-bold text-red-text">
           {describeError(error)}
         </p>
       )}

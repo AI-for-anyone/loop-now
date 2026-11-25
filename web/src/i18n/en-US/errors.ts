@@ -56,8 +56,10 @@ export const errors = {
     runtime_in_use: 'Agents still run on this runtime; move them to another runtime first',
     text_generation_unavailable: 'No CLI on this computer can write yet',
     text_generation_failed: "Couldn't write it",
-    path_picker_unavailable: "This computer can't show the dialog to choose a path",
-    path_picker_busy: 'A dialog to choose a path is already open. Choose or cancel there first.',
+    // Followed by the server's reason, a sentence of its own ("The dialog could not be shown: …").
+    path_picker_unavailable: "Can't choose a path here",
+    // Word for word the server's message, so it is not repeated after this.
+    path_picker_busy: 'A dialog to choose a path is already open; choose or cancel there first.',
     internal_error: 'Internal server error',
   },
   unknown: 'Unknown error',

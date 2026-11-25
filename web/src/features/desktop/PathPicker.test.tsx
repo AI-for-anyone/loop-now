@@ -30,6 +30,8 @@ describe('Choosing a path in a browser, with the dialog Loop Now\'s server shows
     const dialog = serverShowsDialog('hold')
     const { user } = setup({ initial: '  /Users/me/code  ' })
     const choose = await screen.findByRole('button', { name: 'Choose…' })
+    // The live region is already there, empty, so its text is announced when it appears.
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
     await user.click(choose)
     expect(choose).toHaveAccessibleName('Choosing…')
     expect(choose).toHaveAttribute('aria-disabled', 'true')
@@ -45,7 +47,7 @@ describe('Choosing a path in a browser, with the dialog Loop Now\'s server shows
     await waitFor(() => expect(input).toHaveValue('/Users/me/picked'))
     expect(choose).toHaveAccessibleName('Choose…')
     expect(choose).not.toHaveAttribute('aria-disabled')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
     await user.type(input, '/sub')
     expect(input).toHaveValue('/Users/me/picked/sub')
   })
@@ -69,14 +71,15 @@ describe('Choosing a path in a browser, with the dialog Loop Now\'s server shows
   })
 
   it.each([
-    ['another dialog is already open', { status: 409, code: 'path_picker_busy' as const }, 'A dialog to choose a path is already open. Choose or cancel there first.'],
-    ['this computer cannot show one, with the server\'s reason', { status: 409, code: 'path_picker_unavailable' as const, message: 'no logged-in desktop session' }, "This computer can't show the dialog to choose a path: no logged-in desktop session"],
+    // The server's own messages: the busy one says what the copy says, so it is not repeated; the other reasons follow the copy.
+    ['another dialog is already open', { status: 409, code: 'path_picker_busy' as const, message: 'A dialog to choose a path is already open; choose or cancel there first.' }, 'A dialog to choose a path is already open; choose or cancel there first.'],
+    ['this computer cannot show one, with the server\'s reason', { status: 409, code: 'path_picker_unavailable' as const, message: 'The dialog could not be shown: No user interaction allowed. (-1713)' }, "Can't choose a path here: The dialog could not be shown: No user interaction allowed. (-1713)"],
     ['anything else', { status: 500, code: 'internal_error' as const }, 'Internal server error'],
   ])('a refusal is said under the field (%s), and goes away with the next try', async (_case, refusal, said) => {
     const dialog = serverShowsDialog(refusal)
     const { user } = setup({ initial: '/Users/me/code' })
     await user.click(await screen.findByRole('button', { name: 'Choose…' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(said)
+    expect((await screen.findByRole('alert')).textContent).toBe(said)
     expect(screen.getByLabelText('Path')).toHaveValue('/Users/me/code')
 
     dialog.answer = { path: '/Users/me/picked' }
