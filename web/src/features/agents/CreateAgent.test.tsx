@@ -59,6 +59,11 @@ describe('Creating an Agent', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Write' }))
     await waitFor(() => expect(within(dialog).getByLabelText('Prompt')).toHaveValue('Written: Sort issues'))
     expect(backend.state.drafts).toEqual([{ target: 'agent', projectId: defaultProject.id, agentName: 'Issue sorter', request: 'Sort issues', currentText: '' }])
+    // Escape in the panel closes the panel, not the dialog with everything typed in it.
+    await user.click(within(dialog).getByRole('button', { name: 'Write with AI' }))
+    await user.keyboard('{Escape}')
+    expect(within(dialog).queryByRole('region', { name: 'Write with AI' })).toBeNull()
+    expect(screen.getByRole('dialog')).toBe(dialog)
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(created).toMatchObject({ name: 'Issue sorter', prompt: 'Written: Sort issues' }))
   })

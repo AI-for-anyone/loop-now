@@ -378,6 +378,17 @@ describe('runner picker', () => {
       expect(await runnerTab(document.body, 'Automatic')).toHaveAttribute('aria-selected', 'true')
     })
 
+    it('Right arrow on the first entry goes into its panel', async () => {
+      useCatalog()
+      const user = userEvent.setup()
+      renderWithQuery(<Picker offers={local} lead={automatic} initial={{ provider: 'claude-code', modelId: 'opus' }} />)
+      await vi.waitFor(async () => expect(await runnerTab(document.body, 'Claude Code')).toHaveAttribute('aria-selected', 'true'))
+      const first = await runnerTab(document.body, 'Automatic')
+      await user.click(first)
+      await user.keyboard('{ArrowRight}')
+      expect(screen.getByRole('button', { name: 'Use automatic' })).toHaveFocus()
+    })
+
     it('with a model chosen, its runtime is looked at first, not the first entry', async () => {
       useCatalog()
       renderWithQuery(<Picker offers={local} lead={automatic} initial={{ provider: 'claude-code', modelId: 'opus' }} />)

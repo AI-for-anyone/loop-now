@@ -92,6 +92,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
   const searchRef = useRef<HTMLInputElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
   const thinkingRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   const providers = catalog.data?.providers ?? []
   const valueProvider = value ? providers.find((provider) => provider.id === value.provider) : undefined
@@ -238,11 +239,13 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
             tabId={tabId}
             panelId={panelId}
             onBrowse={browse}
-            onLeave={() => searchRef.current?.focus()}
+            // Right arrow leaves the rail for the model search, or for the first control in the first entry's own panel.
+            onLeave={() => (leading ? panelRef.current?.querySelector<HTMLElement>('button:not([disabled]), a[href], input, textarea')?.focus() : searchRef.current?.focus())}
           />
         )}
       </div>
       <div
+        ref={panelRef}
         id={panelId}
         role="tabpanel"
         aria-labelledby={leading ? leadTab : browsedId ? tabId(browsedId) : undefined}

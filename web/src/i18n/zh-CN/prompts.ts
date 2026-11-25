@@ -1,3 +1,5 @@
+import { formatElapsed } from './format'
+
 export const prompts = {
   sectionTitle: 'Prompt', projectTitle: '项目 Prompt', agentTitle: 'Agent Prompt',
   saveProject: '保存项目 Prompt', saveAgent: '保存 Agent Prompt',
@@ -28,8 +30,10 @@ export const prompts = {
     by: (name: string) => `由 ${name} 写`, change: '换一个',
     checking: '正在看由谁来写…', noWriter: '这台电脑上还没有能用来写的命令行工具。', setUp: '去设置',
     unknownWriter: '读不到由谁来写；写的时候由服务器来挑。',
-    write: '写', writing: '正在写…', seconds: (seconds: number) => `${seconds} 秒`, stop: '停止',
+    write: '写', writing: '正在写…', elapsed: (ms: number) => formatElapsed(ms), stop: '停止',
     replaced: '已替换', filled: '已填入', undo: '撤销',
     fellBack: (chosen: string, writer: string) => `你选的 ${chosen} 这次用不了，改由 ${writer} 写的。`,
+    // The same when the chosen one is not known (who writes could not be read).
+    fellBackUnknown: (writer: string) => `你选的那个这次用不了，改由 ${writer} 写的。`,
   },
 } as const

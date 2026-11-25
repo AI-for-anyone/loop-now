@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
@@ -41,6 +41,7 @@ describe('Write with AI beside a Prompt', () => {
     await user.click(open())
     expect(open()).toHaveAttribute('aria-expanded', 'true')
     expect(request()).toHaveFocus()
+    expect(request()).toHaveAttribute('maxlength', '4000')
     expect(request()).toHaveAttribute('placeholder', 'e.g. Every morning, sort the new GitHub issues and post them to the Lark group')
     expect(within(panel()).getByText('It fills the box when done. You can undo.')).toBeInTheDocument()
     expect(await within(panel()).findByText('By Claude Code · Claude Haiku (latest)')).toBeInTheDocument()
@@ -63,9 +64,43 @@ describe('Write with AI beside a Prompt', () => {
     expect(state.drafts).toEqual([{ target: 'agent', agentId: '0196a1b2-0000-7000-8000-000000000001', request: 'Sort new issues', currentText: 'Answer questions.' }])
     expect(editor()).toHaveValue('Written: Sort new issues')
     expect(screen.queryByRole('region', { name: 'Write with AI' })).toBeNull()
+    // Focus goes back to the button that opened the panel, not to the page.
+    await vi.waitFor(() => expect(open()).toHaveFocus())
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(editor()).toHaveValue('Answer questions.')
     expect(screen.queryByText('Replaced')).toBeNull()
+    expect(open()).toHaveFocus()
+  })
+
+  it('a double click on Write writes once: the second click does not land on Stop', async () => {
+    const { user, state } = setup({
+      draft: async (body) => {
+        await delay(100)
+        return HttpResponse.json({ text: `Written: ${body.request}`, writer: haikuWriter() } satisfies Schemas['PromptDraft'])
+      },
+    })
+    await user.click(open())
+    await user.type(request(), 'Sort new issues')
+    await user.dblClick(write())
+    expect(await screen.findByText('Filled in')).toBeInTheDocument()
+    expect(state.drafts).toHaveLength(1)
+    expect(state.aborted).toBe(0)
+  })
+
+  it('Escape closes the panel and gives focus back to the button; while writing it stops', async () => {
+    const { user, state } = setup({ draft: neverAnswers })
+    await user.click(open())
+    await user.type(request(), 'Sort new issues')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('region', { name: 'Write with AI' })).toBeNull()
+    expect(open()).toHaveFocus()
+    await user.click(open())
+    await user.click(write())
+    await within(panel()).findByRole('status')
+    request().focus()
+    await user.keyboard('{Escape}')
+    await vi.waitFor(() => expect(state.aborted).toBe(1))
+    expect(panel()).toBeInTheDocument()
   })
 
   it('with text in the box the request may be empty (make it better), and Ctrl+Enter writes', async () => {
@@ -83,7 +118,10 @@ describe('Write with AI beside a Prompt', () => {
     await user.click(open())
     await user.type(request(), 'Sort new issues')
     await user.click(write())
-    expect(await within(panel()).findByRole('status')).toHaveTextContent('Writing…')
+    const status = await within(panel()).findByRole('status')
+    expect(status).toHaveTextContent('Writing…')
+    // The time so far ticks every second; it is left out of what screen readers announce.
+    expect(within(status).getByText('0 s')).toHaveAttribute('aria-hidden', 'true')
     expect(editor()).toBeDisabled()
     expect(request()).toHaveAttribute('readonly')
     await user.click(within(panel()).getByRole('button', { name: 'Stop' }))
@@ -127,6 +165,15 @@ describe('Write with AI beside a Prompt', () => {
     await user.type(request(), 'Sort new issues')
     await user.click(write())
     expect(await screen.findByText("Claude Code · opus couldn't write this time, so Claude Code · Claude Haiku (latest) wrote it.")).toBeInTheDocument()
+  })
+
+  it('when the chosen one could not write and the setting could not be read, still says who wrote it', async () => {
+    const { user } = setup({ draft: (body) => HttpResponse.json({ text: `Written: ${body.request}`, writer: haikuWriter({ fellBack: true }) } satisfies Schemas['PromptDraft']) })
+    server.use(http.get(apiUrl('/text-generation-settings'), () => HttpResponse.json(errorBody('internal_error'), { status: 500 })))
+    await user.click(open())
+    await user.type(request(), 'Sort new issues')
+    await user.click(write())
+    expect(await screen.findByText("The one you chose couldn't write this time, so Claude Code · Claude Haiku (latest) wrote it.")).toBeInTheDocument()
   })
 
   it('the undo line goes once the text is edited', async () => {

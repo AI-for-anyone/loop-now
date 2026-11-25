@@ -1,4 +1,5 @@
 import type { Messages } from '..'
+import { formatElapsed } from './format'
 
 export const prompts = {
   sectionTitle: 'Prompt',
@@ -49,11 +50,12 @@ export const prompts = {
     unknownWriter: "Couldn't read who writes; the server picks one when you write.",
     write: 'Write',
     writing: 'Writing…',
-    seconds: (seconds: number) => `${seconds}s`,
+    elapsed: (ms: number) => formatElapsed(ms),
     stop: 'Stop',
     replaced: 'Replaced',
     filled: 'Filled in',
     undo: 'Undo',
     fellBack: (chosen: string, writer: string) => `${chosen} couldn't write this time, so ${writer} wrote it.`,
+    fellBackUnknown: (writer: string) => `The one you chose couldn't write this time, so ${writer} wrote it.`,
   },
 } satisfies Messages['prompts']

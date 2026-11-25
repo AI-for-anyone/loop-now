@@ -6,7 +6,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody } from '@/test/api'
 import { chooseModel, runnerTab } from '@/test/model-picker'
 import { renderRoutes } from '@/test/render'
-import { runtimeList } from '@/test/runtimes'
+import { runtimeList, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { automaticSettings, haikuWriter, textGenerationBackend } from '@/test/text-generation'
 import { chooseThinking } from '@/test/thinking'
@@ -76,8 +76,9 @@ describe('Who writes with AI, in global settings', () => {
   })
 
   it('when the chosen one is not ready, says who writes instead', async () => {
+    server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex())))
     setup({ settings: { selection: { provider: 'claude-code', modelId: 'opus' }, writer: haikuWriter({ runtime: 'codex', provider: 'codex-cli', modelId: 'gpt-5-mini', modelName: 'GPT-5 mini', fellBack: true }) } })
-    expect(await screen.findByText("Claude Code · opus can't write right now, so codex · GPT-5 mini writes for now.")).toBeInTheDocument()
+    expect(await screen.findByText("Claude Code · opus can't write right now, so Codex · GPT-5 mini writes for now.")).toBeInTheDocument()
   })
 
   it('a failed save says why and shows what is saved again', async () => {

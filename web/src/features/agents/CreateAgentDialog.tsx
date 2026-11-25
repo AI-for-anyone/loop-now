@@ -53,7 +53,8 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent kind="create" className="sm:max-w-[860px]">
+      {/* Escape inside the Write with AI panel closes that panel, not the dialog with everything typed in it. */}
+      <DialogContent kind="create" className="sm:max-w-[860px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>

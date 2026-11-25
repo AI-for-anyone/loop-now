@@ -26,6 +26,9 @@ interface Written {
   fellBack: string | null
 }
 
+// The longest request the server takes (PromptDraftRequest.request).
+const MAX_REQUEST = 4000
+
 const linkClass = 'font-black underline decoration-riso-pink decoration-2 underline-offset-4 hover:text-riso-blue'
 
 // Who writes, at the foot of the panel; read only while the panel is open.
@@ -84,10 +87,18 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
   const [written, setWritten] = useState<Written | null>(null)
   const controller = useRef<AbortController | null>(null)
   const button = useRef<HTMLButtonElement>(null)
+  // Set when a draft has been put in the box: the button gets the focus back once it is enabled again (after the render that closes the
+  // panel), so the focus does not fall to the page.
+  const refocus = useRef(false)
   const settings = useTextGenerationSettings(open)
   const writing = startedAt !== null
   const now = useNow(1000, writing)
   useEffect(() => () => controller.current?.abort(), [])
+  useEffect(() => {
+    if (writing || !refocus.current) return
+    refocus.current = false
+    button.current?.focus()
+  }, [writing])
 
   const hasText = text.trim() !== ''
   const noWriter = settings.data !== undefined && settings.data.writer === null
@@ -103,16 +114,18 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
   const write = async () => {
     if (!canWrite) return
     const before = text
+    // Who was chosen when the request went out, for the note when someone else wrote it instead.
+    const chosen = settings.data?.selection
     const signal = (controller.current = new AbortController()).signal
     setStartedAt(Date.now())
     setError(null)
     try {
       const draft = await writePromptDraft({ ...ask, request: request.trim(), currentText: text }, signal)
       onReplace(draft.text)
-      const chosen = settings.data?.selection
-      setWritten({ before, after: draft.text, fellBack: draft.writer.fellBack && chosen ? copy.fellBack(selectionName(chosen, lookup), writerName(draft.writer, lookup)) : null })
+      const writer = writerName(draft.writer, lookup)
+      setWritten({ before, after: draft.text, fellBack: !draft.writer.fellBack ? null : chosen ? copy.fellBack(selectionName(chosen, lookup), writer) : copy.fellBackUnknown(writer) })
       setOpen(false)
-      button.current?.focus()
+      refocus.current = true
     } catch (cause) {
       if (!signal.aborted) setError(cause)
     } finally {
@@ -126,8 +139,16 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
       void write()
     }
   }
+  // Escape stops a draft being written, otherwise closes the panel. A dialog around the editor (New Agent) is kept open: it lets an Escape
+  // from inside [data-prompt-writer] through (CreateAgentDialog).
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape') return
+    event.stopPropagation()
+    if (writing) controller.current?.abort()
+    else close()
+  }
   const example = ask.target === 'project' ? copy.examples.project : hasText ? copy.examples.improve : copy.examples.agent
-  const seconds = startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000))
+  const elapsed = startedAt === null ? 0 : Math.max(0, now - startedAt)
 
   return (
     <div className="grid min-w-0 gap-1.5">
@@ -139,7 +160,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
         </Button>
       </div>
       {open && (
-        <section id={panelId} aria-labelledby={titleId} className="relative mt-1.5 mb-1 grid min-w-0 gap-3 rounded-card border-2 border-ink bg-tint-yellow px-4 pt-3.5 pb-3 shadow-[4px_4px_0_var(--riso-pink)]">
+        <section id={panelId} aria-labelledby={titleId} data-prompt-writer onKeyDown={onPanelKeyDown} className="relative mt-1.5 mb-1 grid min-w-0 gap-3 rounded-card border-2 border-ink bg-tint-yellow px-4 pt-3.5 pb-3 shadow-[4px_4px_0_var(--riso-pink)]">
           {/* A tab pointing up at the button that opened the panel. */}
           <span aria-hidden="true" className="absolute -top-[9px] right-9 size-4 rotate-45 rounded-tl-[3px] border-t-2 border-l-2 border-ink bg-tint-yellow" />
           <h3 id={titleId} className="flex items-center gap-2 font-display-cn text-[21px] leading-none text-ink">
@@ -152,6 +173,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
               id={requestId}
               rows={2}
               autoFocus
+              maxLength={MAX_REQUEST}
               className="min-h-[68px] bg-paper-raised text-[14px] read-only:text-ink-500"
               placeholder={example}
               value={request}
@@ -175,9 +197,13 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
                 <p role="status" className="inline-flex items-center gap-1.5 rounded-full bg-riso-pink px-3 py-1 text-[13px] font-black text-ink">
                   <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" strokeWidth={3} />
                   {copy.writing}
-                  <span className="font-medium tabular-nums">{copy.seconds(seconds)}</span>
+                  {/* Ticks every second, so it stays out of what screen readers announce. */}
+                  <span aria-hidden="true" className="font-medium tabular-nums">
+                    {copy.elapsed(elapsed)}
+                  </span>
                 </p>
-                <Button type="button" variant="secondary" size="xs" className="border-2 border-ink" onClick={() => controller.current?.abort()}>
+                {/* Stop takes the place of Write: the second click of a double click on Write must not stop the draft it started. */}
+                <Button type="button" variant="secondary" size="xs" className="border-2 border-ink" onClick={(event) => event.detail < 2 && controller.current?.abort()}>
                   {copy.stop}
                 </Button>
               </>
@@ -208,11 +234,16 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
             onClick={() => {
               onReplace(written.before)
               setWritten(null)
+              button.current?.focus()
             }}
           >
             {copy.undo}
           </Button>
-          {written.fellBack && <p className="basis-full text-[12.5px] font-bold text-ink-700">{written.fellBack}</p>}
+          {written.fellBack && (
+            <p role="status" className="basis-full text-[12.5px] font-bold text-ink-700">
+              {written.fellBack}
+            </p>
+          )}
         </div>
       )}
       {children(writing)}
