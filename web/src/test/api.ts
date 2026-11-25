@@ -39,10 +39,31 @@ export function makeRun(overrides: Partial<Schemas['Run']> = {}): Schemas['Run']
     abortRequestedAt: null,
     endedAt: now,
     tools: [],
+    backgroundTasks: [],
     usage: { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     model: null,
     selection: null,
     usageReported: true,
+    ...overrides,
+  }
+}
+
+// A background task a CLI started: by default a running command from a Claude Code reply, started a minute before `now`.
+export function makeBackgroundTask(overrides: Partial<Schemas['BackgroundTask']> = {}): Schemas['BackgroundTask'] {
+  return {
+    id: `bg-${id().slice(-6)}`,
+    runtime: 'claude-code',
+    kind: 'command',
+    label: 'npm run build',
+    runId: id(),
+    toolCallId: `toolu_${id().slice(-6)}`,
+    startedAt: '2026-10-12T07:59:00Z',
+    status: 'running',
+    endedAt: null,
+    exitCode: null,
+    stopReason: null,
+    stopRequestedAt: null,
+    output: null,
     ...overrides,
   }
 }
@@ -54,7 +75,7 @@ export function makeMessage(overrides: Partial<Schemas['Message']> = {}): Schema
 // One page of conversation history (matching the contract). Turn counts default to treating "this page is the whole history": no
 // turns before it, and the total is the number of turns on this page (one run is one turn; runs still queued, or voided while
 // queued without ever really running, don't count). Paging fixtures supply hasMore, turnsBefore and turnsTotal themselves.
-const VOIDED: ReadonlySet<string | null> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages'])
+const VOIDED: ReadonlySet<string | null> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages', 'merged_into_reply'])
 export function makeMessagePage(messages: Schemas['Message'][] = [], overrides: Partial<Schemas['MessagePage']> = {}): Schemas['MessagePage'] {
   const turns = new Set(messages.filter((message) => message.run.status !== 'queued' && !VOIDED.has(message.run.endReason)).map((message) => message.run.id))
   return { messages, hasMore: false, hasMoreAfter: false, turnsBefore: 0, turnsTotal: turns.size, ...overrides }
@@ -77,6 +98,7 @@ export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['A
     promptVersion: 1,
     configVersion: 1,
     busy: false,
+    backgroundTaskCount: 0,
     session: { state: 'active', epoch: 1 },
     clis: [],
     modelCredential: null,
@@ -98,6 +120,7 @@ export function toListItem(agent: Schemas['Agent'], sessionState: Schemas['Sessi
     runtime: agent.runtime,
     configVersion: agent.configVersion,
     busy: agent.busy,
+    backgroundTaskCount: agent.backgroundTaskCount,
     sessionState,
     sleep: null,
     sleepRevision: 0,
@@ -117,6 +140,8 @@ export function makeStatus(agentId: string, overrides: Partial<Schemas['AgentSta
     processPid: null,
     processStartedAt: null,
     session: { state: 'active', epoch: 1 },
+    backgroundTasks: [],
+    restartOnNextMessage: false,
     ...overrides,
   }
 }

@@ -1648,6 +1648,10 @@ export interface paths {
          *     withdraw or cancel, a message leaving the queue after it is read, a reminder becoming void). Runs voided before
          *     they ran (Run.endReason is user_cancelled, merged_into_interrupt or no_pending_messages) should be hidden in the
          *     conversation stream; run records show them as usual.
+         *
+         *     `background_tasks.updated` carries the full list of the Agent's running background tasks whenever one starts,
+         *     ends or is asked to stop (the snapshot's `status.backgroundTasks` holds it at snapshot time). The run that started
+         *     the task also gets `run.updated` (Run.backgroundTasks), even when it has ended.
          */
         get: operations["streamAgentEvents"];
         put?: never;
@@ -1792,6 +1796,59 @@ export interface paths {
          *     are the same as for promoting to an interrupt.
          */
         post: operations["stopRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/background-tasks/{backgroundTaskId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+                /** @description BackgroundTask.id */
+                backgroundTaskId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop one of the Agent's running background tasks
+         * @description Asks the runtime to stop the task, with its own means where it has one (Claude Code's stop_task), else by ending
+         *     the command's process group; the reply that started it and the Agent's current reply go on. Returns once the end
+         *     is recorded, or after a few seconds with the task still running and stopRequestedAt set when the runtime has not
+         *     confirmed the end yet (the end then comes with background_tasks.updated). The task ends as stopped with
+         *     stopReason person, unless it ended by itself first. 404 `background_task_not_found` when the Agent has no task
+         *     with this id; 409 `background_task_ended` (details BackgroundTaskEndedDetails) when it has already ended. Asking
+         *     again while it is being stopped returns it as it is. actionId rules are the same as for stopping a reply.
+         */
+        post: operations["stopBackgroundTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/background-tasks/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop all of the Agent's running background tasks
+         * @description As stopping one task, for every task running when the request arrives; the Agent's current reply goes on. With
+         *     none running it returns an empty list.
+         */
+        post: operations["stopAllBackgroundTasks"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3094,7 +3151,7 @@ export interface paths {
         };
         /**
          * Task SSE, with snapshot and task/node/artifact updates
-         * @description Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes.
+         * @description Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes. task.node.background_tasks.updated fully replaces a node's running background tasks (same structure as GET …/nodes/{nodeRunId}/background-tasks) whenever one starts, ends or is asked to stop.
          */
         get: operations["streamTaskEvents"];
         put?: never;
@@ -3506,6 +3563,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{taskId}/nodes/{nodeRunId}/background-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The background tasks running for this node
+         * @description The background tasks (see BackgroundTask) still running on the node's task instance that turns of this node
+         *     started, oldest first; task.node.background_tasks.updated on the task's event stream replaces the list whenever
+         *     one starts, ends or is asked to stop. A turn of a task instance waits for the background tasks it started and
+         *     for the runtime's reply after they end, so they run while the node's turn is still in progress.
+         */
+        get: operations["listTaskNodeBackgroundTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/nodes/{nodeRunId}/background-tasks/{backgroundTaskId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+                /** @description BackgroundTask.id */
+                backgroundTaskId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop one background task of this node
+         * @description As POST /agents/{agentId}/background-tasks/{backgroundTaskId}/stop, for a task the node's turns started; the
+         *     node's turn goes on (and ends once nothing else holds it). 404 `background_task_not_found` when the node has no
+         *     task with this id; 409 `background_task_ended` (details BackgroundTaskEndedDetails) when it has already ended;
+         *     409 `task_conflict` when expectedAgentId or expectedRuntimeId no longer match the node, as for stopping the
+         *     node's reply.
+         */
+        post: operations["stopTaskNodeBackgroundTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/nodes/{nodeRunId}/background-tasks/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop all background tasks of this node
+         * @description As stopping one, for every task of this node running when the request arrives; the node's turn goes on. With none
+         *     running it returns an empty list; 409 `task_conflict` when expectedAgentId or expectedRuntimeId no longer match.
+         */
+        post: operations["stopAllTaskNodeBackgroundTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{taskId}/nodes/{nodeRunId}/inbox-messages": {
         parameters: {
             query?: never;
@@ -3715,16 +3851,16 @@ export interface components {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
-                /** @description Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist */
-                details?: components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["RuntimeInUseDetails"] | components["schemas"]["NotFoundDetails"];
+                /** @description Depends on the code; runtime_in_use carries RuntimeInUseDetails; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none; not_found carries NotFoundDetails when the request matches no endpoint and none when a resource does not exist; background_task_ended carries BackgroundTaskEndedDetails */
+                details?: components["schemas"]["BackgroundTaskEndedDetails"] | components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"] | components["schemas"]["RuntimeInUseDetails"] | components["schemas"]["NotFoundDetails"];
                 fields?: components["schemas"]["FieldError"][];
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -4045,6 +4181,12 @@ export interface components {
             pluginExtensions: boolean;
             /** @description Ships with the platform and needs no install or login on this computer; GET /runtimes always reports it as available. */
             bundled: boolean;
+            /**
+             * @description Stopping a reply (Stop, or an interrupting message) ends the runtime's process, and with it the Agent's
+             *     background tasks (they are recorded as stopped with reason reply_stopped). When false, stopping a reply leaves
+             *     them running.
+             */
+            stopEndsBackgroundTasks: boolean;
         };
         RuntimeStatus: {
             id: components["schemas"]["AgentRuntime"];
@@ -4228,6 +4370,8 @@ export interface components {
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             configVersion: number;
             busy: boolean;
+            /** @description How many background tasks run on the Agent's runtime process (see AgentStatus.backgroundTasks); the Agent can be idle while they run */
+            backgroundTaskCount: number;
             sessionState: components["schemas"]["SessionState"];
             /** Format: date-time */
             createdAt: string;
@@ -4383,6 +4527,8 @@ export interface components {
             promptVersion: number;
             configVersion: number;
             busy: boolean;
+            /** @description How many background tasks run on the Agent's runtime process (see AgentStatus.backgroundTasks); the Agent can be idle while they run */
+            backgroundTaskCount: number;
             session: components["schemas"]["SessionInfo"];
             clis: components["schemas"]["AgentCli"][];
             modelCredential: components["schemas"]["CredentialMeta"] | null;
@@ -4676,11 +4822,88 @@ export interface components {
          *     - user_cancelled: withdrawn or cancelled by a person while queued; merged_into_interrupt: all of its messages
          *       were moved into an interrupt reminder; no_pending_messages: all messages the reminder carried were already
          *       read or cancelled.
-         *     None of the last five ran any tool or model; the conversation stream should hide user_cancelled,
-         *     merged_into_interrupt and no_pending_messages.
+         *     - merged_into_reply: a follow-up reply (origin background) whose output went into another reply that was
+         *       starting when the runtime's CLI began it; that reply recorded it.
+         *     None of the last six ran any tool or model; the conversation stream should hide user_cancelled,
+         *     merged_into_interrupt, no_pending_messages and merged_into_reply.
          * @enum {string|null}
          */
-        RunEndReason: "user_interrupt" | "user_stopped" | "server_restart" | "sleep_superseded" | "sleep_invalidated" | "user_cancelled" | "merged_into_interrupt" | "no_pending_messages" | null;
+        RunEndReason: "user_interrupt" | "user_stopped" | "server_restart" | "sleep_superseded" | "sleep_invalidated" | "user_cancelled" | "merged_into_interrupt" | "no_pending_messages" | "merged_into_reply" | null;
+        /**
+         * @description Work that the runtime's CLI started in the background during a reply and that outlives the reply: a command
+         *     (Claude Code's background Bash, a Codex command still running when its turn completed, a Grok terminal command
+         *     moved to the background, an Antigravity command moved to the background), a sub-agent, or other work. The reply
+         *     ends when the CLI ends it; the task is listed until it ends. It belongs to the run that started it, and its end
+         *     is recorded on that run even when other replies came in between. When the CLI replies by itself after the end,
+         *     that reply is a run of origin background. Tasks do not outlive the runtime's process: when the process exits
+         *     unexpectedly, or the server restarts, the ones still running become unknown.
+         */
+        BackgroundTask: {
+            /** @description The runtime's own id of the task (for Codex, the id of the command's item); unique among an Agent's running tasks */
+            id: string;
+            runtime: components["schemas"]["AgentRuntime"];
+            /**
+             * @description command, a shell command; subagent, an agent the CLI started to work on its own; other, anything else the CLI runs in the background
+             * @enum {string}
+             */
+            kind: "command" | "subagent" | "other";
+            /** @description The command, else the CLI's own description of the task (at most 4096 characters) */
+            label: string;
+            /**
+             * Format: uuid
+             * @description The run that started the task
+             */
+            runId: string;
+            /** @description The tool call in that run that started the task (Run.tools); null when the runtime does not say */
+            toolCallId: string | null;
+            /** Format: date-time */
+            startedAt: string;
+            /**
+             * @description running until the runtime reports the end. completed and failed are as the runtime reported them; stopped
+             *     means it was stopped (stopReason says why); unknown means it can no longer be followed (the runtime's
+             *     process exited or the server restarted while it ran) and the runtime never said how it ended.
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed" | "stopped" | "unknown";
+            /** Format: date-time */
+            endedAt: string | null;
+            /** @description The command's exit code, when the runtime gives one */
+            exitCode: number | null;
+            /**
+             * @description Why a stopped task was stopped (null otherwise): person, from the list (one task or all of them);
+             *     reply_stopped, the reply was stopped and the runtime's stop ends its process
+             *     (RuntimeCapabilities.stopEndsBackgroundTasks), or a task instance's turn waiting for it was stopped;
+             *     settings_changed, a change of settings restarted the runtime's process (model, thinking level, Prompt,
+             *     Skills, credentials, plugin grants, /reload); runtime_switched, the Agent moved to another runtime;
+             *     session_reset, a new session was started or another one resumed (/new, /resume); agent_deleted, the Agent was
+             *     deleted; task_started, a task that starts from this Agent's session was started; shutdown, Loop Now was
+             *     quitting; task_limit, a task instance's turn waited for it for LOOP_NOW_ACP_BACKGROUND_WAIT without hearing
+             *     anything from the runtime.
+             * @enum {string|null}
+             */
+            stopReason: "person" | "reply_stopped" | "settings_changed" | "runtime_switched" | "session_reset" | "agent_deleted" | "task_started" | "shutdown" | "task_limit" | null;
+            /**
+             * Format: date-time
+             * @description When a stop was asked for; while the task is still running it is being stopped
+             */
+            stopRequestedAt: string | null;
+            /**
+             * @description The end of the task's output when the runtime gives it with the end: at most 4096 bytes of UTF-8, the last
+             *     ones, cut at a character boundary; null while running and when the runtime gives none.
+             */
+            output: string | null;
+        };
+        BackgroundTaskList: {
+            tasks: components["schemas"]["BackgroundTask"][];
+        };
+        /** @description Details for background_task_ended, the task as it ended */
+        BackgroundTaskEndedDetails: {
+            task: components["schemas"]["BackgroundTask"];
+        };
+        /** @description The Agent's running background tasks, oldest first (the full list, as AgentStatus.backgroundTasks) */
+        SseBackgroundTasksUpdated: {
+            tasks: components["schemas"]["BackgroundTask"][];
+        };
         /**
          * @description started: the tool is running; succeeded and failed: the runtime reported how it ended. no_result: the turn ended
          *     while the tool was still open and the runtime never said how it ended (for example a command still running in
@@ -4771,6 +4994,16 @@ export interface components {
             /** Format: date-time */
             endedAt: string | null;
             tools: components["schemas"]["ToolEvent"][];
+            /**
+             * @description The background tasks this run started, in any status, in the order they started; empty for other runs. A
+             *     task's start or end after the run ended updates the run (run.updated, with the same status).
+             */
+            backgroundTasks: components["schemas"]["BackgroundTask"][];
+            /**
+             * @description Present only on a run of origin background: the background tasks whose end this reply of the runtime's CLI
+             *     followed, as they ended
+             */
+            triggerBackgroundTasks?: components["schemas"]["BackgroundTask"][];
             /** @description Sum of all usage of this run (including compaction, cache warming and tool usage) */
             usage: components["schemas"]["UsageTotals"];
             /**
@@ -4858,10 +5091,13 @@ export interface components {
         /** @enum {string} */
         MessageRole: "user" | "assistant";
         /**
-         * @description Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
+         * @description Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder
+         *     after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the
+         *     sleep is due; background means the runtime's CLI replied by itself after background work it started had ended
+         *     (Run.triggerBackgroundTasks names that work), and the user message is generated text saying so
          * @enum {string}
          */
-        MessageOrigin: "console" | "inbox_reminder" | "sleep_wake";
+        MessageOrigin: "console" | "inbox_reminder" | "sleep_wake" | "background";
         Message: {
             /** Format: uuid */
             id: string;
@@ -4983,6 +5219,17 @@ export interface components {
              */
             processStartedAt: string | null;
             session: components["schemas"]["SessionInfo"];
+            /**
+             * @description The background tasks still running on the Agent's runtime process, oldest first. busy says nothing about
+             *     them: an Agent can be idle while they run.
+             */
+            backgroundTasks: components["schemas"]["BackgroundTask"][];
+            /**
+             * @description While background tasks run (backgroundTasks is not empty): the Agent's settings changed since its runtime
+             *     process started, so the next message restarts the process, which stops them (stopReason
+             *     settings_changed). Always false when no background task runs.
+             */
+            restartOnNextMessage: boolean;
         };
         SseSnapshot: {
             status: components["schemas"]["AgentStatus"];
@@ -5304,8 +5551,9 @@ export interface components {
         };
         /**
          * @description Tokens split by the source that triggered the run. Regular runs go by runs.origin: console (your messages, plus
-         *     manual compactions with /compact from the console), inbox_reminder (Inbox reminders), sleep_wake (scheduled
-         *     wakes); task turns go by their origin: console_node counts toward console, inbox_reminder toward inboxReminder,
+         *     manual compactions with /compact from the console, plus the replies a runtime's CLI gives by itself after its
+         *     background work ended, origin background), inbox_reminder (Inbox reminders), sleep_wake (scheduled wakes); task
+         *     turns go by their origin: console_node counts toward console, inbox_reminder toward inboxReminder,
          *     sleep_wake toward sleepWake, task_node toward task; usage that belongs to no run (for example cache warming
          *     between two turns) counts toward other. The five fields sum to tokens.totals.total.
          */
@@ -5473,7 +5721,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineBackgroundWaitTimeout"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineContextHandoff"] | components["schemas"]["TimelineBackgroundWaitTimeout"] | components["schemas"]["TimelineBackgroundTaskStarted"] | components["schemas"]["TimelineBackgroundTaskEnded"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description A request from an agent-side extension through ctx.ui (extension_ui_request in Pi RPC). notify is a notification
          *     (level info, warning or error); setStatus sets or clears a status (cleared when message is empty). select,
@@ -5839,6 +6087,41 @@ export interface components {
             at: string;
             /** @description The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex) */
             sessionFile: string | null;
+        };
+        /** @description A background task (see BackgroundTask) started in this run; it may outlive the run */
+        TimelineBackgroundTaskStarted: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "background_task_started";
+            /** Format: date-time */
+            at: string;
+            taskId: string;
+            /** @enum {string} */
+            kind: "command" | "subagent" | "other";
+            label: string;
+            toolCallId: string | null;
+        };
+        /**
+         * @description A background task this run started has ended; recorded on this run even when the end came after the run ended
+         *     (at says when). Fields as in BackgroundTask.
+         */
+        TimelineBackgroundTaskEnded: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "background_task_ended";
+            /** Format: date-time */
+            at: string;
+            taskId: string;
+            /** @enum {string} */
+            status: "completed" | "failed" | "stopped" | "unknown";
+            exitCode: number | null;
+            /** @enum {string|null} */
+            stopReason: "person" | "reply_stopped" | "settings_changed" | "runtime_switched" | "session_reset" | "agent_deleted" | "task_started" | "shutdown" | "task_limit" | null;
+            output: string | null;
         };
         /**
          * @description The runtime's reply had ended while commands it runs in the background were still going (Antigravity moves a
@@ -7724,6 +8007,16 @@ export interface components {
             runtimeId: string;
             /** @description One entry per message, in the order the server actually picks them up (by the turn's priority and queue_seq, then by send order within a turn); kind is always inbox, and runId is the turn that carries it */
             items: components["schemas"]["QueueItem"][];
+        };
+        TaskNodeBackgroundTasks: {
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            nodeRunId: string;
+            /** Format: uuid */
+            runtimeId: string;
+            /** @description Running background tasks that turns of this node started, oldest first */
+            tasks: components["schemas"]["BackgroundTask"][];
         };
         TaskNodeQueueActionInput: {
             /** Format: uuid */
@@ -13375,6 +13668,73 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    stopBackgroundTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+                /** @description BackgroundTask.id */
+                backgroundTaskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentQueueActionInput"];
+            };
+        };
+        responses: {
+            /** @description The task after the stop was asked for */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundTask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    stopAllBackgroundTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentQueueActionInput"];
+            };
+        };
+        responses: {
+            /** @description The tasks that were running, after the stop was asked for */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundTaskList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
     promoteAgentInboxMessage: {
         parameters: {
             query?: never;
@@ -17252,6 +17612,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskNodeQueueActionReceipt"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listTaskNodeBackgroundTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The running list */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskNodeBackgroundTasks"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    stopTaskNodeBackgroundTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+                /** @description BackgroundTask.id */
+                backgroundTaskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskNodeQueueActionInput"];
+            };
+        };
+        responses: {
+            /** @description The task after the stop was asked for */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundTask"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    stopAllTaskNodeBackgroundTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskNodeQueueActionInput"];
+            };
+        };
+        responses: {
+            /** @description The tasks that were running, after the stop was asked for */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackgroundTaskList"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
