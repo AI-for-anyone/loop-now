@@ -61,6 +61,8 @@ export const timeline = {
     model_rate_limit: '订阅额度',
     // The reply had ended but commands it runs in the background were still going; the turn waited, and the runtime sent nothing for
     // limitMs, so the turn ended there (tools still open were closed as no_result).
+    background_task_started: '转到后台运行',
+    background_task_ended: '后台任务结束',
     background_wait_timeout: (limitMs: number) => `等后台命令时运行时 ${formatSlept(limitMs)}没有任何消息，这一轮在这里结束`,
     ended: {
       completed: '完成',

@@ -20,6 +20,10 @@ function clip(text: string) {
 export function turnPreview(turn: Turn): string {
   const user = turn.user
   if (user?.origin === 'inbox_reminder') return t.chat.ruler.labeled(t.chat.inboxReminder.title, t.chat.inboxReminder.received)
+  if (user?.origin === 'background') {
+    const label = clip(turn.run.triggerBackgroundTasks?.[0]?.label ?? user.run?.triggerBackgroundTasks?.[0]?.label ?? '')
+    return label ? t.chat.ruler.labeled(t.background.followUp.ruler, label) : t.background.followUp.ruler
+  }
   if (user?.origin === 'sleep_wake') {
     const note = clip(sleepWakeNote(user.text)?.note ?? '')
     return note ? t.chat.ruler.labeled(t.sleep.woke, note) : t.sleep.woke
