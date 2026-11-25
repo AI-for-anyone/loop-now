@@ -181,6 +181,12 @@ type BackgroundStopper interface {
 	StopAllBackground(ctx context.Context, agentID uuid.UUID, reason string) ([]BackgroundTask, error)
 }
 
+// RestartChecker is implemented by executors that can tell whether an Agent's next message restarts its runtime
+// process (its settings changed since the process started).
+type RestartChecker interface {
+	RestartOnNextMessage(ctx context.Context, agentID uuid.UUID) (bool, error)
+}
+
 // FollowUpHost turns the replies a runtime's CLI gives by itself into runs. FollowUp is called (on its own goroutine)
 // when the CLI of a regular Agent begins such a reply: the host creates a run of origin background for it, whose
 // Execute then records the reply; triggers are the background tasks whose end the reply follows.

@@ -236,3 +236,24 @@ func TestStopBackgroundTask(t *testing.T) {
 		t.Fatalf("an unknown Agent: %v", err)
 	}
 }
+
+// While background tasks run, the status says whether the next message restarts the runtime's process (and so stops
+// them); with none running it is always false.
+func TestRestartOnNextMessageFlag(t *testing.T) {
+	e := newEnv(t)
+	e.mustSend("start it", "")
+	e.waitStarted("start it")
+	e.waitIdle()
+	e.ex.restart.Store(true)
+	if st, err := e.svc.Status(context.Background(), e.agent); err != nil || st.RestartOnNextMessage {
+		t.Fatalf("no task runs: %+v %v", st, err)
+	}
+	e.bgTask(e.history()[0].Run.ID, "a", "running")
+	if st, err := e.svc.Status(context.Background(), e.agent); err != nil || !st.RestartOnNextMessage {
+		t.Fatalf("a task runs and the settings changed: %+v %v", st, err)
+	}
+	e.ex.restart.Store(false)
+	if st, err := e.svc.Status(context.Background(), e.agent); err != nil || st.RestartOnNextMessage {
+		t.Fatalf("a task runs, the settings are the same: %+v %v", st, err)
+	}
+}

@@ -191,6 +191,9 @@ type proc struct {
 	stopDone            chan struct{}
 	stopErr             error
 	bg                  procBackground // the background tasks its CLI started
+	// replyStopping: a reply on it is being stopped; if the process ends meanwhile, its background tasks were stopped
+	// with the reply.
+	replyStopping atomic.Bool
 }
 
 type run struct {
@@ -209,6 +212,9 @@ type stopCause struct {
 	reason   string
 	runID    *uuid.UUID
 	forAgent *uuid.UUID // the Agent a slot is freed for (when reason is evicted)
+	// bg is the reason the process's running background tasks are recorded as stopped for; empty decides it from
+	// reason (see backgroundStopReason).
+	bg string
 }
 
 // Stop reasons (the reason of pi.stopped).
@@ -472,7 +478,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if e.reusable(p, snap) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -561,6 +567,14 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	return p, nil
 }
 
+// reusable reports whether the live process p can take a message with the config snap: nothing that needs a restart
+// changed since it started.
+func (e *Executor) reusable(p *proc, snap agentconfig.Snapshot) bool {
+	return p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity &&
+		p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() &&
+		p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p)
+}
+
 func alive(p *proc) bool {
 	select {
 	case <-p.rt.Done():
@@ -573,7 +587,7 @@ func alive(p *proc) bool {
 func (e *Executor) lruIdleLocked() *proc {
 	var victim *proc
 	for _, p := range e.procs {
-		if p.busy || e.handoffs[p.agentID] != nil {
+		if p.busy || e.handoffs[p.agentID] != nil || p.bgBusy() {
 			continue
 		}
 		if victim == nil || p.lastUsed.Before(victim.lastUsed) {
@@ -743,7 +757,7 @@ func (e *Executor) retire(p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	go e.stop(p, stopCause{})
+	go e.stop(p, stopCause{bg: executor.StopReplyStopped})
 }
 
 // discard removes an exited process from the process table, records the unexpected exit, and makes sure its process
@@ -789,6 +803,9 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 func (e *Executor) turnFinished(p *proc) error {
 	sessionErr := e.recordSession(p)
 	p.curRun.Store(nil)
+	if alive(p) && !exiting(p) {
+		p.replyStopping.Store(false)
+	}
 	e.mu.Lock()
 	p.busy = false
 	p.lastUsed = time.Now()
@@ -838,6 +855,12 @@ func (e *Executor) recordSession(p *proc) error {
 func (e *Executor) idleExpired(p *proc) {
 	e.mu.Lock()
 	if e.procs[p.agentID] != p || p.busy || e.handoffs[p.agentID] != nil {
+		e.mu.Unlock()
+		return
+	}
+	if p.bgBusy() {
+		// Not idle while background tasks run (they would end with the process): look again after another timeout.
+		p.idleTimer.Reset(e.o.IdleTimeout)
 		e.mu.Unlock()
 		return
 	}
@@ -903,6 +926,9 @@ func (e *Executor) stop(p *proc, why stopCause) {
 			defer p.authBridge.Close()
 		}
 		begin := time.Now() // the stop event is recorded at the time stopping began, not after the process ended
+		// The background tasks end with the process: record why first, so it is their end even if the runtime reports
+		// one as it goes.
+		e.bgEndAll(p, backgroundStopReason(p, why))
 		p.stopping.Store(true)
 		e.revokeProcToken(p) // revoke the token first: once the process starts stopping it must not call the Agent API any more
 		if p.revokeErr != nil {
@@ -1048,6 +1074,7 @@ func (e *Executor) Interrupt(_ context.Context, agentID, runID uuid.UUID) error 
 // abort first clears Pi's internal queue, then aborts the current run; it keeps trying within the interrupt timeout and
 // force-kills the process after the timeout (the session file is kept).
 func (e *Executor) abort(r *run, p *proc) {
+	p.replyStopping.Store(true)
 	deadline := time.Now().Add(e.o.AbortTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)

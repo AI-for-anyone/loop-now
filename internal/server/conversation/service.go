@@ -1192,6 +1192,14 @@ func (s *Service) Status(ctx context.Context, agentID uuid.UUID) (apitypes.Agent
 		return out, err
 	}
 	out.BackgroundTasks = apitypes.FromBackgroundTasks(running)
+	if rc, ok := s.ex.(executor.RestartChecker); ok && len(running) > 0 {
+		// Only while tasks run: the next message's restart would stop them. Reading the settings is not free, so it is
+		// not done otherwise.
+		if out.RestartOnNextMessage, err = rc.RestartOnNextMessage(ctx, agentID); err != nil {
+			s.log.Warn("could not tell whether the next message restarts the runtime", "agentId", agentID, "err", err)
+			out.RestartOnNextMessage = false
+		}
+	}
 	return out, nil
 }
 

@@ -45,6 +45,12 @@ type fakeExec struct {
 	followUpMerged bool
 	// stopBackground, when set, answers StopBackground (the fake then implements executor.BackgroundStopper).
 	stopBackground func(agentID uuid.UUID, id, reason string) (executor.BackgroundTask, error)
+	// restart is what RestartOnNextMessage answers.
+	restart atomic.Bool
+}
+
+func (f *fakeExec) RestartOnNextMessage(context.Context, uuid.UUID) (bool, error) {
+	return f.restart.Load(), nil
 }
 
 func (f *fakeExec) StopBackground(_ context.Context, agentID uuid.UUID, id, reason string) (executor.BackgroundTask, error) {

@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
 
@@ -135,6 +137,10 @@ func (e *Executor) bgStopRequested(p *proc, id string, at time.Time) bool {
 func (e *Executor) bgRunning(p *proc) []executor.BackgroundTask {
 	p.bg.mu.Lock()
 	defer p.bg.mu.Unlock()
+	return e.bgRunningLocked(p)
+}
+
+func (e *Executor) bgRunningLocked(p *proc) []executor.BackgroundTask {
 	out := make([]executor.BackgroundTask, 0, len(p.bg.running))
 	for _, t := range p.bg.running {
 		out = append(out, *t)
@@ -163,7 +169,10 @@ type backgroundStopper interface {
 	stopBackground(ctx context.Context, p *proc, ids []string) error
 }
 
-var _ executor.BackgroundStopper = (*Executor)(nil)
+var (
+	_ executor.BackgroundStopper = (*Executor)(nil)
+	_ executor.RestartChecker    = (*Executor)(nil)
+)
 
 // StopBackground implements executor.BackgroundStopper.
 func (e *Executor) StopBackground(ctx context.Context, agentID uuid.UUID, id, reason string) (executor.BackgroundTask, error) {
@@ -267,4 +276,76 @@ func (p *proc) bgStopReason(id string) string {
 	p.bg.mu.Lock()
 	defer p.bg.mu.Unlock()
 	return p.bg.stopReasons[id]
+}
+
+// RestartOnNextMessage reports whether the Agent's next message restarts its runtime process: its settings changed
+// since the process started. With no process there is nothing to restart.
+func (e *Executor) RestartOnNextMessage(ctx context.Context, agentID uuid.UUID) (bool, error) {
+	p := e.liveProc(agentID)
+	if p == nil {
+		return false, nil
+	}
+	snap, err := e.src.ExecutionSnapshot(ctx, agentID)
+	if errors.Is(err, agentconfig.ErrCredentialUnavailable) {
+		return false, nil // the next message fails before it reaches the process
+	}
+	if err != nil {
+		return false, err
+	}
+	return !e.reusable(p, snap), nil
+}
+
+// bgBusy reports whether the process has background work going on: tasks running (they would end with it).
+func (p *proc) bgBusy() bool {
+	p.bg.mu.Lock()
+	defer p.bg.mu.Unlock()
+	return len(p.bg.running) > 0
+}
+
+// bgEndAll ends every running task as the process ends: stopped for reason, or unknown when there is none (the
+// process exited by itself).
+func (e *Executor) bgEndAll(p *proc, reason string) {
+	end := executor.BackgroundEnd{Status: executor.BackgroundStopped, StopReason: reason}
+	if reason == "" {
+		end = executor.BackgroundEnd{Status: executor.BackgroundUnknown}
+	}
+	now := time.Now()
+	p.bg.mu.Lock()
+	defer p.bg.mu.Unlock()
+	for _, t := range e.bgRunningLocked(p) {
+		delete(p.bg.running, t.ID)
+		e.endTaskLocked(p, &t, end, now)
+	}
+}
+
+// backgroundStopReason is why the process's background tasks stop when it is stopped for why: the platform's reason
+// for stopping it, or, when it ended by itself, a reply being stopped (the runtime's stop ends the process); empty when
+// it exited unexpectedly.
+func backgroundStopReason(p *proc, why stopCause) string {
+	if why.bg != "" {
+		return why.bg
+	}
+	switch why.reason {
+	case stopConfigChanged:
+		if p.sessionStale.Load() {
+			return executor.StopRuntimeSwitched
+		}
+		return executor.StopSettingsChanged
+	case stopConsoleReload:
+		return executor.StopSettingsChanged
+	case stopReleased:
+		return executor.StopAgentDeleted
+	case stopShutdown:
+		return executor.StopShutdown
+	case stopAbortTimeout:
+		return executor.StopReplyStopped
+	case stopForkSnapshot:
+		return executor.StopTaskStarted
+	case stopSessionReset, stopSessionResumed:
+		return executor.StopSessionReset
+	}
+	if p.replyStopping.Load() {
+		return executor.StopReplyStopped
+	}
+	return ""
 }
