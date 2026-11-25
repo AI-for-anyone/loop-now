@@ -10,6 +10,7 @@ export const permissions = {
   current: (mode: string) => `Permissions: ${mode}`,
   fallback: (runtime: string, mode: string) => `${runtime} has no “${mode}”; it runs as Supervised`,
   onlyFull: (runtime: string) => `${runtime} never asks for approval; it runs with full access only`,
+  newAgentOnlyFull: (runtime: string) => `${runtime} doesn't ask for approval; this Agent will run with full access`,
   nextMessage: 'Applies from the next message',
   saving: 'Saving…',
   saved: 'Saved',

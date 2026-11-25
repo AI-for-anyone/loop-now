@@ -16,6 +16,8 @@ import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
 import { useRuntimeLookup } from '@/lib/runtime'
+import { usePermissionSettings } from '@/api/permissions'
+import { effectiveMode } from '@/lib/permissions'
 import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +52,17 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
   const modelError = missing.model ?? fieldMessages(create.error, isModelField)
   // How the chosen runtime differs from the bundled one, worth knowing the moment it is chosen.
   const chosenRuntime = model ? runtimes.forProvider(model.provider) : undefined
+  // The new Agent gets the default permission mode (Settings). A runtime that never asks (Pi) is created on Full access instead (no mode
+  // is sent; the server decides), and one without the default mode runs it as Supervised: said before it is created.
+  const defaultMode = usePermissionSettings().data?.defaultMode
+  const modeNote =
+    chosenRuntime && defaultMode && defaultMode !== 'full'
+      ? !chosenRuntime.capabilities.permissionModes.includes('supervised')
+        ? t.permissions.newAgentOnlyFull(chosenRuntime.name)
+        : effectiveMode(defaultMode, chosenRuntime) !== defaultMode
+          ? t.permissions.fallback(chosenRuntime.name, t.permissions.modes[defaultMode].name)
+          : null
+      : null
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -76,6 +89,7 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
             />
             <FieldError message={modelError} />
             <FieldError message={fieldMessages(create.error, (field) => field === 'thinkingLevel')} />
+            {modeNote && <p role="note" className="text-[13px] font-bold text-ink-700">{modeNote}</p>}
           </div>
           {(model?.provider === 'openai-codex' || chosenRuntime) && (
             <div className={cn('grid items-start gap-4', model?.provider === 'openai-codex' && chosenRuntime && 'sm:grid-cols-2')}>
