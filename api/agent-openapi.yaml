@@ -2503,6 +2503,8 @@ components:
 - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409)
 - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502)
 - plugin_timeout: the plugin did not respond in time (504)
+- text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409)
+- text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -2557,7 +2559,9 @@ components:
           "plugin_blocked",
           "plugin_failed",
           "plugin_timeout",
-          "runtime_in_use"
+          "runtime_in_use",
+          "text_generation_unavailable",
+          "text_generation_failed"
         ],
         "type": "string"
       }

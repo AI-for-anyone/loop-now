@@ -565,3 +565,69 @@ func copyTree(src, dst string) error {
 		return nil
 	})
 }
+
+// claudeTextSettings is the --settings of a Claude Code text run: no hooks and no auto memory (no settings files are
+// read either, see --setting-sources).
+const claudeTextSettings = `{"disableAllHooks":true,"autoMemoryEnabled":false}`
+
+// writeText runs claude -p once in dir with this computer's login: the instructions as the whole system prompt, the
+// material on stdin, the chosen model and effort; no tools, no Skills or slash commands, no MCP servers, no settings
+// files (and so none of the user's plugins or hooks), the dontAsk permission mode, and no saved session.
+func (cd claudeDriver) writeText(ctx context.Context, dir, _ string, req executor.TextRequest) (string, error) {
+	e := cd.e
+	bin, err := e.claudeBinary(ctx)
+	if err != nil {
+		return "", textUnavailable("Claude Code was not found on this computer: claude is not on the login shell's PATH. Install Claude Code and log in first.")
+	}
+	home, err := e.o.RealHome()
+	if err != nil || !filepath.IsAbs(home) {
+		return "", textUnavailable("Could not read the server user's home directory (Claude Code needs this computer's login).")
+	}
+	args := []string{"-p", "--output-format", "json", "--model", req.Model}
+	if req.ThinkingLevel != nil && claudeEfforts[*req.ThinkingLevel] {
+		args = append(args, "--effort", *req.ThinkingLevel)
+	}
+	if req.Instructions != "" {
+		args = append(args, "--system-prompt", req.Instructions)
+	}
+	args = append(args, "--tools", "", "--setting-sources", "", "--settings", claudeTextSettings, "--strict-mcp-config",
+		"--disable-slash-commands", "--no-session-persistence", "--permission-mode", "dontAsk")
+	cmd := exec.Command(bin, args...)
+	cmd.Env = claudeEnv(e.claudeHelperEnv(ctx, home))
+	cmd.Dir = dir
+	var stdout bytes.Buffer
+	res, err := oneShot(ctx, cmd, req.Prompt, func(line []byte) bool {
+		stdout.Write(line)
+		stdout.WriteByte('\n')
+		return true
+	})
+	if err != nil {
+		return "", textFailed("Could not start Claude Code: %v", err)
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	var out struct {
+		IsError bool     `json:"is_error"`
+		Result  string   `json:"result"`
+		Errors  []string `json:"errors"`
+	}
+	parsed := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &out) == nil
+	if parsed && !out.IsError && res.exit == nil {
+		return out.Result, nil
+	}
+	reason := strings.TrimSpace(out.Result)
+	if reason == "" {
+		reason = strings.TrimSpace(strings.Join(out.Errors, " "))
+	}
+	if reason == "" {
+		reason = lastLines(res.stderr, 3)
+	}
+	if reason == "" && res.exit != nil {
+		reason = res.exit.Error()
+	}
+	if reason == "" {
+		reason = "it returned no result"
+	}
+	return "", textFailed("Claude Code could not write it: %s", reason)
+}

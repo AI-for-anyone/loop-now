@@ -112,3 +112,16 @@ func TestLevelModelID(t *testing.T) {
 		}
 	}
 }
+
+func TestValidThinkingLevel(t *testing.T) {
+	for _, l := range []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"} {
+		if !ValidThinkingLevel(l) {
+			t.Errorf("%s is a level", l)
+		}
+	}
+	for _, l := range []string{"", "ultra", "High"} {
+		if ValidThinkingLevel(l) {
+			t.Errorf("%q is not a level", l)
+		}
+	}
+}

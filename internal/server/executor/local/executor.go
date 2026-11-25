@@ -109,6 +109,9 @@ type Options struct {
 	// ACPBackgroundWait is how long a turn that waits for an agent's background commands (Antigravity's, after its
 	// prompt has returned) may hear nothing from the agent before it ends; 0 means 30 minutes.
 	ACPBackgroundWait time.Duration
+	// TextTempDir is where "Write with AI" makes the empty folder each run of a CLI works in (removed afterwards); empty
+	// means the system's temporary folder.
+	TextTempDir string
 }
 
 // TokenIssuer issues and revokes Agent tokens. A token is issued before Pi starts and revoked when the process stops,
