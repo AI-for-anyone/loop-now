@@ -40,13 +40,14 @@ func model(id, name string, levels ...string) modelcatalog.Model {
 	return modelcatalog.Model{ID: id, Name: name, ThinkingLevels: levels, DefaultThinkingLevel: def}
 }
 
-// fullCatalog lists models the way the local CLIs do: the small model is not first.
+// fullCatalog lists models the way the local CLIs do: the small model is not first, and Antigravity's "Orchestrator
+// (Neon)" comes before Gemini 4 Neon (it must never be picked).
 func fullCatalog() catalog {
 	return catalog{
 		agentruntime.ClaudeCodeProvider: {model("opus", "Claude Opus (latest)", "low", "medium", "high"), model("haiku", "Claude Haiku (latest)", "low", "medium", "high")},
 		agentruntime.CodexProvider:      {model("gpt-6.2-sol", "GPT-6.2 Sol", "low", "medium", "high"), model("gpt-6-mini", "GPT-6 mini", "minimal", "low", "medium"), model("gpt-6-luna", "GPT-6 Luna", "low", "medium", "high")},
 		agentruntime.AntigravityProvider: {model("gemini-4-pro", "Gemini 4 Pro", "low", "high"), model("gemini-3.8-flash", "Gemini 3.8 Flash", "low", "medium", "high"),
-			model("gemini-4-neon", "Gemini 4 Neon", "low", "medium", "high", "xhigh"), model("gemini-pro-orchestrator-neon", "Orchestrator (Neon)")},
+			model("gemini-pro-orchestrator-neon", "Orchestrator (Neon)"), model("gemini-4-neon", "Gemini 4 Neon", "low", "medium", "high", "xhigh")},
 		agentruntime.GrokProvider: {model("grok-5", "Grok 5", "low", "high"), model("grok-5-fast", "Grok 5 Fast")},
 	}
 }

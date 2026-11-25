@@ -150,7 +150,7 @@ func TestTextWriters(t *testing.T) {
 	for id, tg := range map[string]TextGeneration{
 		ClaudeCode:  {Models: []string{"haiku"}},
 		Codex:       {Models: []string{"luna", "-mini"}, Level: "low"},
-		Antigravity: {Models: []string{"neon", "flash"}, Level: LowestLevel},
+		Antigravity: {Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},
 		Grok:        {},
 	} {
 		r, _ := ByID(id)
