@@ -57,6 +57,8 @@ export const errors = {
     runtime_in_use: '还有 Agent 在用这个运行时，先把它们换到别的运行时',
     text_generation_unavailable: '这台电脑上还没有能用来写的命令行工具',
     text_generation_failed: '没写成',
+    path_picker_unavailable: '这台电脑没法弹出选择窗口',
+    path_picker_busy: '已经有一个选择窗口开着，先在那里选好或取消',
     internal_error: '服务端内部错误',
   } satisfies Record<S['ErrorCode'], string>,
   unknown: '未知错误',

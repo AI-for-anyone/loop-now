@@ -182,6 +182,8 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   runtime_in_use: true,
   text_generation_unavailable: true,
   text_generation_failed: true,
+  path_picker_unavailable: true,
+  path_picker_busy: true,
   cli_auth_in_progress: true,
   credential_selection_mode_conflict: true,
 }

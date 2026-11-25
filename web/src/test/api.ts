@@ -136,6 +136,7 @@ export const context: Schemas['Context'] = {
   organization: { id: id(), name: 'test-org' },
   project: { id: id(), organizationId: id(), name: 'test-project' },
   limits,
+  pathPicker: false,
 }
 
 // Default project: the same project as context.project.
