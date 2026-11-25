@@ -24,6 +24,7 @@ import (
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/conversation"
+	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/folders"
@@ -91,6 +92,8 @@ type Server struct {
 	TextGeneration *textgen.Service
 	// PathPicker shows this computer's own dialog to choose a path (POST /path-picks); when nil there is none.
 	PathPicker *pathpicker.Picker
+	// ConvImport finds conversations of the local CLIs and imports them as Agents; nil leaves the endpoints failing.
+	ConvImport *convimport.Service
 	Tasks      *tasks.Service
 	Log        *slog.Logger
 	// PiCommands returns the command list Pi reported the last time the Agent started it (nil if Pi has never been
@@ -156,6 +159,8 @@ func (s *Server) Routes() []Route {
 		{"PATCH", "/acp-commands/{commandId}", "updateAcpCommand", ConsoleOnly, s.updateACPCommand},
 		{"DELETE", "/acp-commands/{commandId}", "deleteAcpCommand", ConsoleOnly, s.deleteACPCommand},
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
+		{"POST", "/conversation-scans", "startConversationScan", ConsoleOnly, s.startConversationScan},
+		{"GET", "/conversation-scans/{operationId}", "getConversationScan", ConsoleOnly, s.getConversationScan},
 		{"GET", "/text-generation-settings", "getTextGenerationSettings", ConsoleOnly, s.getTextGenerationSettings},
 		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
 		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},

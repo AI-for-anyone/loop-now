@@ -125,6 +125,10 @@ func (e *Executor) codexBinary(ctx context.Context) (string, error) {
 	return codexcli.Find(dirs)
 }
 
+// CodexHome is the user's Codex home (CODEX_HOME, else .codex in the real home), where its conversations are; empty
+// when the home cannot be read.
+func (e *Executor) CodexHome() string { return e.codexHome() }
+
 // codexHome is the user's Codex home (CODEX_HOME, else .codex in the real home); empty when the home cannot be read.
 func (e *Executor) codexHome() string {
 	home, err := e.o.RealHome()

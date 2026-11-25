@@ -34,6 +34,7 @@ import (
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/conversation"
+	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/executor/local"
@@ -553,6 +554,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// The console in a browser asks the server for this computer's own dialog to choose a path (the desktop app has its
 	// own); it works on macOS in a logged-in desktop session.
 	a.API.PathPicker = &pathpicker.Picker{Log: log}
+	// Importing conversations reads only Claude Code's and Codex's conversation records on this computer.
+	a.API.ConvImport = &convimport.Service{Store: a.Store, ClaudeProjects: a.Executor.ClaudeProjectsDir, CodexHome: a.Executor.CodexHome}
 	// The local ACP commands people added are runtimes too, before anything runs.
 	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
