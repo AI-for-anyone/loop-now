@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -113,5 +114,42 @@ func (s *Service) material(ctx context.Context, in DraftRequest) (string, error)
 	} else {
 		b.WriteString("\nThe person's request: none given; make the current text better.\n")
 	}
+	// The English labels above pull some models to English; the rule goes last as well.
+	b.WriteString("\nWrite the Prompt in the language of the person's request above (of the current text when there is no request), not in English unless that is their language.")
+	source := request
+	if source == "" {
+		source = current
+	}
+	if lang := scriptLanguage(source); lang != "" {
+		fmt.Fprintf(&b, " That language is %s.", lang)
+	}
+	b.WriteString("\n")
 	return b.String(), nil
+}
+
+// scriptLanguage names the language of s when one script makes it plain: kana make it Japanese, Hangul Korean, and Han
+// (without kana) Chinese, when their characters outnumber the Latin letters; otherwise "".
+func scriptLanguage(s string) string {
+	var latin, han, kana, hangul int
+	for _, r := range s {
+		switch {
+		case unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r):
+			kana++
+		case unicode.Is(unicode.Hangul, r):
+			hangul++
+		case unicode.Is(unicode.Han, r):
+			han++
+		case unicode.Is(unicode.Latin, r):
+			latin++
+		}
+	}
+	switch {
+	case kana > 0 && kana+han > latin:
+		return "Japanese"
+	case hangul > latin && hangul > han:
+		return "Korean"
+	case han > latin:
+		return "Chinese"
+	}
+	return ""
 }

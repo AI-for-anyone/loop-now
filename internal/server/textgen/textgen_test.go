@@ -483,3 +483,36 @@ func TestClean(t *testing.T) {
 		}
 	}
 }
+
+// The material ends with the language rule again, after the English labels; it names the language when the request
+// (or, with no request, the current text) is mostly in Chinese, Japanese or Korean.
+func TestDraftLanguage(t *testing.T) {
+	e := newEnv(t, nil)
+	e.statuses.set(agentruntime.Antigravity)
+	e.svc.Models = catalog{agentruntime.AntigravityProvider: {model("gemini-3.8-flash", "Gemini 3.8 Flash", "low", "high")}}
+	for _, c := range []struct {
+		request, current, names string
+	}{
+		{"每天下午六点把今天 dbt 跑失败的模型整理成一条日报发给我", "", "Chinese"}, // check-english: zh (a Chinese request must name Chinese)
+		{"毎日のレポートをまとめて送ってください", "", "Japanese"},           // check-english: zh (kana make it Japanese, not Chinese)
+		{"매일 실패한 모델을 정리해서 보내 주세요", "", "Korean"},          // check-english: zh (Hangul makes it Korean)
+		{"", "你负责整理日报。", "Chinese"},                       // check-english: zh (with no request, the current text decides)
+		{"a daily report for 数据仓库 failures", "", ""},      // check-english: zh (mostly Latin letters: no language named)
+		{"a daily report of failed dbt models", "", ""},
+	} {
+		if _, err := e.svc.Draft(context.Background(), textgen.DraftRequest{Target: textgen.TargetProject, ProjectID: &e.project.ID, Request: c.request, CurrentText: c.current}); err != nil {
+			t.Fatal(err)
+		}
+		p := strings.TrimSpace(e.runner.last(t).Prompt)
+		lines := strings.Split(p, "\n")
+		last := lines[len(lines)-1]
+		if !strings.Contains(last, "not in English unless that is their language") {
+			t.Errorf("%q: the material must end with the language rule: %q", c.request, last)
+		}
+		for _, lang := range []string{"Chinese", "Japanese", "Korean"} {
+			if named := strings.Contains(last, lang); named != (lang == c.names) {
+				t.Errorf("%q: names %s %v (%q)", c.request+c.current, lang, named, last)
+			}
+		}
+	}
+}
