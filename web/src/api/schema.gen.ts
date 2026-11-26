@@ -3307,13 +3307,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Removes the kept worktree of an ended task
-         * @description For a person, after a task has ended and its worktree was kept because removing it would lose work. Removes
-         *     exactly the recorded worktree. Its uncommitted changes are lost; its commits stay on the task's local branch
-         *     (the commits of a detached HEAD are first saved under `<branch>-detached-<short sha>`); the branch itself and
-         *     anything on the remote are left alone. Returns the task with workspace state removed. 409
-         *     `task_workspace_not_kept` when the task has not ended or its worktree is not kept; replaying an actionId
-         *     returns the same result.
+         * Removes the kept workspace of an ended task
+         * @description For a person, after a task has ended and its workspace was kept because removing it would lose work. Removes
+         *     exactly the recorded worktree or copy under Loop Now's own data folder; the folder the task was created on is
+         *     never touched. Git mode: its uncommitted changes are lost; its commits stay on the task's local branch (the
+         *     commits of a detached HEAD are first saved under `<branch>-detached-<short sha>`); the branch itself and
+         *     anything on the remote are left alone. Copy mode: the files added or changed in the copy are lost. Returns the
+         *     task with workspace state removed. 409 `task_workspace_not_kept` when the task has not ended or its workspace is
+         *     not kept; replaying an actionId returns the same result.
          */
         post: operations["removeTaskWorkspace"];
         delete?: never;
@@ -4071,7 +4072,7 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's worktree can be removed only after the task has ended and when the worktree was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
          * @enum {string}
          */
         ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
@@ -7207,7 +7208,7 @@ export interface components {
             endedAt: string | null;
             link: string;
             version: number;
-            /** @description The branch of the task's workspace; null for a task without one. */
+            /** @description The branch of the task's workspace; null for a task without one or with a copy-mode workspace. */
             branch: string | null;
         };
         TaskNodeRun: {
@@ -7420,7 +7421,7 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
-            /** @description The task's git worktree; null for a task without one. */
+            /** @description The task's workspace (a git worktree or a copy of a folder); null for a task without one. */
             workspace: null | components["schemas"]["TaskWorkspace"];
         };
         TaskDetail: {
@@ -7435,7 +7436,7 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
-            /** @description The task's git worktree; null for a task without one. */
+            /** @description The task's workspace (a git worktree or a copy of a folder); null for a task without one. */
             workspace: null | components["schemas"]["TaskWorkspace"];
         };
         TaskCounts: {
@@ -7502,39 +7503,67 @@ export interface components {
             sourceInboxMessageId?: string | null;
             workspace?: null | components["schemas"]["TaskWorkspaceInput"];
         };
-        /** @description A git worktree for the task. Loop Now creates it on a new branch while the task prepares, every step works in it, and it is removed at the end when nothing would be lost. */
+        /** @description A workspace for the task, made while the task prepares; every step works in it. A folder inside a git work tree gets a git worktree on a new branch (git mode); any other folder is copied and the copy is worked in, so the original is never written (copy mode). */
         TaskWorkspaceInput: {
-            /** @description Absolute path of a folder inside a git work tree on this computer; Loop Now resolves the repository it belongs to. It must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project. */
-            repository: string;
-            /** @description The branch the task starts from. Omitted or null means the remote's default branch (fetched fresh), or the repository's current branch when it has no remote. */
+            /** @description Absolute path of a folder on this computer. It must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project. */
+            folder: string;
+            /**
+             * @description auto (the default) uses git mode when the folder is inside a git work tree and a working git is on this computer, otherwise copy mode. git requires both and is a field error without them; copy copies the folder even when it is in a repository, for a task that only reads it.
+             * @enum {string}
+             */
+            mode?: "auto" | "git" | "copy";
+            /** @description Git mode only. The branch the task starts from. Omitted or null means the remote's default branch (fetched fresh), or the repository's current branch when it has no remote. */
             baseBranch?: string | null;
-            /** @description The branch the task works on. Omitted or null means task/<task number>-<slug of the title>, which must not exist yet. A branch named here may exist already when no work tree has it checked out; the task then continues it. */
+            /** @description Git mode only. The branch the task works on. Omitted or null means task/<task number>-<slug of the title>, which must not exist yet. A branch named here may exist already when no work tree has it checked out; the task then continues it. */
             branch?: string | null;
         };
-        /** @description The task's git worktree. kept is non-null exactly when state is kept. */
+        /** @description The task's workspace. git is non-null exactly in git mode; copy is non-null in copy mode once the copy exists; kept is non-null exactly when state is kept. */
         TaskWorkspace: {
+            /**
+             * @description git, a worktree on the task's branch; copy, a copy of the folder that steps work in while the original is never written.
+             * @enum {string}
+             */
+            mode: "git" | "copy";
+            /** @description The folder named when the task was created. */
+            folder: string;
+            /** @description The worktree or the copy, under Loop Now's own data folder. */
+            path: string;
+            /**
+             * @description pending while the task prepares; active while the workspace is in use; removed after cleanup removed it; kept when it was left in place because removing it would lose work.
+             * @enum {string}
+             */
+            state: "pending" | "active" | "removed" | "kept";
+            kept: null | components["schemas"]["TaskWorkspaceKept"];
+            /** @description Why the mode is not the one the folder suggests, for example a repository copied because this computer has no working git; null otherwise. */
+            modeNote: string | null;
+            git: null | components["schemas"]["TaskWorkspaceGit"];
+            copy: null | components["schemas"]["TaskWorkspaceCopy"];
+        };
+        /** @description The git side of a git-mode workspace. */
+        TaskWorkspaceGit: {
             /** @description Root of the repository's main work tree. */
             repository: string;
-            /** @description The worktree, under Loop Now's own data folder. */
-            path: string;
             branch: string;
             /** @description The branch the task started from; empty while the task is still preparing and none was given. */
             baseBranch: string;
             /** @description The commit the branch started from; null until the worktree is created. */
             baseCommit: string | null;
-            /**
-             * @description pending while the task prepares; active while the worktree is in use; removed after cleanup removed it; kept when it was left in place because removing it would lose work.
-             * @enum {string}
-             */
-            state: "pending" | "active" | "removed" | "kept";
-            kept: null | components["schemas"]["TaskWorkspaceKept"];
         };
-        /** @description What removing a kept worktree would lose. */
+        /** @description The copy of a copy-mode workspace, as made when the task started. */
+        TaskWorkspaceCopy: {
+            /** @description Regular files copied. */
+            files: number;
+            /** @description Total size of the copied files. */
+            bytes: number;
+        };
+        /** @description What removing a kept workspace would lose; the counts that do not apply to the mode are 0. */
         TaskWorkspaceKept: {
-            /** @description Files with changes that are not committed, untracked files included and ignored files not counted. */
+            /** @description Git mode. Files with changes that are not committed, untracked files included and ignored files not counted. */
             uncommittedFiles: number;
-            /** @description Commits of the branch that are neither merged into the base on the remote nor on the branch's own remote ref. */
+            /** @description Git mode. Commits of the branch that are neither merged into the base on the remote nor on the branch's own remote ref. */
             unpushedCommits: number;
+            /** @description Copy mode. Files added or changed in the copy since the task started. */
+            changedFiles: number;
         };
         TaskSubmitInput: {
             /**
@@ -17009,7 +17038,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The task after its worktree was removed */
+            /** @description The task after its workspace was removed */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];

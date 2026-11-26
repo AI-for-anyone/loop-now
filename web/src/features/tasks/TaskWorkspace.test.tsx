@@ -11,7 +11,7 @@ import { makeTaskDetail, makeTaskWorkspace, taskId } from '@/test/tasks'
 import { TaskWorkspace } from './TaskWorkspace'
 
 const projectId = 'p1'
-const kept = (uncommittedFiles: number, unpushedCommits: number) => makeTaskWorkspace({ state: 'kept', kept: { uncommittedFiles, unpushedCommits } })
+const kept = (uncommittedFiles: number, unpushedCommits: number) => makeTaskWorkspace({ state: 'kept', kept: { uncommittedFiles, unpushedCommits, changedFiles: 0 } })
 const show = (workspace: Schemas['TaskWorkspace'] | null) => renderWithQuery(<TaskWorkspace taskId={taskId} projectId={projectId} workspace={workspace} />)
 const removeUrl = apiUrl(`/tasks/${taskId}/workspace/remove`)
 
@@ -25,8 +25,8 @@ describe('the worktree on the task page', () => {
     show(workspace)
     const block = screen.getByRole('region', { name: 'Worktree' })
     expect(within(block).getByText('in use')).toBeVisible()
-    expect(within(block).getByText(workspace.repository)).toBeVisible()
-    expect(within(block).getByText(workspace.branch)).toBeVisible()
+    expect(within(block).getByText(workspace.git!.repository)).toBeVisible()
+    expect(within(block).getByText(workspace.git!.branch)).toBeVisible()
     expect(within(block).getByText('from main @ 4f2c9a1')).toBeVisible()
     expect(within(block).getByText(workspace.path)).toBeVisible()
     const user = userEvent.setup()
@@ -35,13 +35,13 @@ describe('the worktree on the task page', () => {
     expect(within(block).queryByRole('button', { name: 'Remove worktree' })).not.toBeInTheDocument()
   })
   it('while preparing, a base that is not known yet and a missing commit are left out', () => {
-    show(makeTaskWorkspace({ state: 'pending', baseBranch: '', baseCommit: null }))
+    show(makeTaskWorkspace({ state: 'pending', git: { baseBranch: '', baseCommit: null } }))
     const block = screen.getByRole('region', { name: 'Worktree' })
     expect(within(block).getByText('being prepared')).toBeVisible()
     expect(within(block).queryByText(/^from /)).not.toBeInTheDocument()
   })
   it('a base branch without a commit yet reads "from main"', () => {
-    show(makeTaskWorkspace({ state: 'pending', baseCommit: null }))
+    show(makeTaskWorkspace({ state: 'pending', git: { baseCommit: null } }))
     expect(screen.getByText('from main')).toBeVisible()
   })
   it('a removed worktree says so and offers no copy of a folder that is gone', () => {

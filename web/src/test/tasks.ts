@@ -24,11 +24,21 @@ export function makeTaskDetail(projectId: string, projectName = 'test-project'):
 export function makeTaskMessage(nodeRunId = nodeId, text = 'Reply from the task instance', id = '00000000-0000-7000-8000-000000000108'): Schemas['TaskMessage'] {
   return { id, nodeRunId, runId: nodeRunId === oldNodeId ? '00000000-0000-7000-8000-000000000106' : runId, role: 'assistant', origin: 'task_node', text, status: 'completed', createdAt: taskTime }
 }
-// A task's git worktree as the server reports it; by default active, created from main.
-export function makeTaskWorkspace(overrides: Partial<Schemas['TaskWorkspace']> = {}): Schemas['TaskWorkspace'] {
+type WorkspaceOverrides = Partial<Omit<Schemas['TaskWorkspace'], 'git' | 'copy'>> & { git?: Partial<Schemas['TaskWorkspaceGit']> }
+// A task's git-mode workspace (a worktree) as the server reports it; by default active, created from main.
+export function makeTaskWorkspace({ git, ...overrides }: WorkspaceOverrides = {}): Schemas['TaskWorkspace'] {
   return {
-    repository: '/Users/someone/projects/demo', path: `/Users/someone/Library/Application Support/Loop Now/default/worktrees/${taskId}/demo`,
-    branch: 'task/12-general-task-acceptance', baseBranch: 'main', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a', state: 'active', kept: null,
+    mode: 'git', folder: '/Users/someone/projects/demo', path: `/Users/someone/Library/Application Support/Loop Now/default/worktrees/${taskId}/demo`,
+    state: 'active', kept: null, modeNote: null, copy: null,
     ...overrides,
+    git: { repository: '/Users/someone/projects/demo', branch: 'task/12-general-task-acceptance', baseBranch: 'main', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a', ...git },
+  }
+}
+// A task's copy-mode workspace: a copy of a plain folder; by default active, 42 files and 1.5 MB.
+export function makeCopyWorkspace(overrides: Partial<Omit<Schemas['TaskWorkspace'], 'git'>> = {}): Schemas['TaskWorkspace'] {
+  return {
+    mode: 'copy', folder: '/Users/someone/Documents/reports', path: `/Users/someone/Library/Application Support/Loop Now/default/worktrees/${taskId}/reports`,
+    state: 'active', kept: null, modeNote: null, copy: { files: 42, bytes: 1_572_864 },
+    ...overrides, git: null,
   }
 }

@@ -158,9 +158,9 @@ describe('node records and updates', () => {
     first.unmount()
     const workspace = makeTaskWorkspace()
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
-    setup({ ...detail, task: { ...detail.task, branch: workspace.branch }, workspace }); renderRoutes(routes, detailPath())
+    setup({ ...detail, task: { ...detail.task, branch: workspace.git!.branch }, workspace }); renderRoutes(routes, detailPath())
     const block = await screen.findByRole('region', { name: 'Worktree' })
-    expect(within(block).getByText(workspace.branch)).toBeVisible()
+    expect(within(block).getByText(workspace.git!.branch)).toBeVisible()
     expect(block.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
   })
   it('an invalid selected record is stated plainly instead of silently switching to another one', async () => {

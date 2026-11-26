@@ -14,17 +14,18 @@ const stateTone = { pending: 'busy', active: 'info', removed: 'neutral', kept: '
 // action. A task without a worktree renders nothing, so its page looks as it always did.
 export function TaskWorkspace({ taskId, projectId, workspace }: { taskId: string; projectId: string; workspace: Schemas['TaskWorkspace'] | null }) {
   if (!workspace) return null
-  const from = workspace.baseBranch ? copy.from(workspace.baseBranch, workspace.baseCommit?.slice(0, 7) ?? null) : null
+  const git = workspace.git
+  const from = git?.baseBranch ? copy.from(git.baseBranch, git.baseCommit?.slice(0, 7) ?? null) : null
   return <section aria-label={copy.label} className="mb-3 grid min-w-0 gap-2 rounded-card bg-paper-raised px-4 py-3 shadow-[inset_0_0_0_1.5px_var(--ink)]">
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       <h2 className="text-[13.5px] font-black">{copy.label}</h2>
       <Badge variant="chip" tone={stateTone[workspace.state]}>{copy.states[workspace.state]}</Badge>
-      <span className="min-w-0 font-mono text-[13px] font-bold break-all text-riso-blue" title={copy.branch}>{workspace.branch}</span>
+      {git && <span className="min-w-0 font-mono text-[13px] font-bold break-all text-riso-blue" title={copy.branch}>{git.branch}</span>}
       {from && <span className="font-mono text-[12px] text-ink-500">{from}</span>}
     </div>
     <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12.5px]">
       <dt className="font-bold text-ink-700">{copy.repository}</dt>
-      <dd className="min-w-0 font-mono break-all text-ink-700">{workspace.repository}</dd>
+      <dd className="min-w-0 font-mono break-all text-ink-700">{git?.repository ?? workspace.folder}</dd>
       <dt className="font-bold text-ink-700">{copy.path}</dt>
       <dd className="flex min-w-0 items-start gap-2">
         <span className={`min-w-0 font-mono break-all ${workspace.state === 'removed' ? 'text-ink-500 line-through' : 'text-ink-700 select-all'}`} title={workspace.path}>{workspace.path}</span>
@@ -77,7 +78,7 @@ function Kept({ taskId, projectId, workspace }: { taskId: string; projectId: str
     <ConfirmDialog open={asking} onOpenChange={setAsking} title={copy.removeTitle} body={copy.removeBody} confirmLabel={copy.remove} destructive onConfirm={confirm}>
       {(files > 0 || commits > 0) && <ul className="grid gap-1 text-sm">
         {files > 0 && <li className="font-bold text-red-text">{copy.filesLost(files)}</li>}
-        {commits > 0 && <li>{copy.commitsStay(commits, workspace.branch)}</li>}
+        {commits > 0 && <li>{copy.commitsStay(commits, workspace.git?.branch ?? '')}</li>}
       </ul>}
     </ConfirmDialog>
   </div>
