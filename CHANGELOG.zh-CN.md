@@ -19,7 +19,7 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## v0.3.2
 
-可以把这台电脑上 Claude Code 和 Codex 的对话导入进来接着聊；每个 Agent 都有了和 T3 Code 一样的权限模式（全部要批准、自动同意改文件、自动审查、完全放开；默认仍是完全放开）。CLI 放到后台的活现在看得到、能停止。Antigravity、Grok 和自己添加的 ACP 命令也计入用量；在 Mac 上用浏览器打开控制台，也能点「选择…」。升级时会自动执行一次迁移 16 和 17。
+可以把这台电脑上 Claude Code 和 Codex 的对话导入进来接着聊；每个 Agent 都有了和 T3 Code 一样的权限模式（全部要批准、自动同意改文件、自动审查、完全放开；默认仍是完全放开）。CLI 放到后台的活现在看得到、能停止。Antigravity、Grok 和自己添加的 ACP 命令也计入用量；在 Mac 上用浏览器打开控制台，也能点「选择…」。升级时会自动执行一次迁移 16、17 和 18。
 
 ### 导入 Claude Code 和 Codex 的对话
 
@@ -34,7 +34,7 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 要批准的操作出现在发起它的那轮回复里，可以批准、拒绝并写理由；同时出现在收件箱并弹桌面通知，因为 Agent 也会在没人看着时运行。停止会拒绝还在等的请求。Claude Code 能收到拒绝理由。
 - Claude Code 和 Codex 会为模式不允许的每个操作来问。Grok、Antigravity 和自己添加的 ACP 命令按它们自己的权限规则和设置决定问什么，有些命令会直接执行，页面上会写明。Pi 只有“完全放开”。
 - 多步任务的每一步使用任务开始时 Agent 的模式，请求显示在这一步的对话里。
-- 接口：`POST /conversation-scans`、`POST /conversation-imports`，Agent 的 `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`，`/permission-settings`，权限请求及其回答接口和事件，`RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`。迁移 17。
+- 接口：`POST /conversation-scans`、`POST /conversation-imports`，Agent 的 `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`，`/permission-settings`，权限请求及其回答接口和事件，`RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`。迁移 17 和 18。
 
 ### 能看到、能停止的后台任务
 

@@ -19,7 +19,7 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## v0.3.2
 
-Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16 and 17 once.
+Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16, 17 and 18 once.
 
 ### Import your Claude Code and Codex conversations
 
@@ -34,7 +34,7 @@ Import your Claude Code and Codex conversations and continue them in Loop Now, a
 - A request to approve appears in the reply that asked, with Approve, Reject and a reason; also in the Inbox and as a desktop notification, since Agents also run when nobody is watching. Stop rejects pending requests. Claude Code receives the reason.
 - Claude Code and Codex ask for every action their mode does not allow. Grok, Antigravity and local ACP commands decide by their own permission rules and settings, so some commands run without asking; the page says so. Pi has Full access only.
 - A step of a multi-step task uses its Agent's mode as it was when the task started, and shows its requests in the step's chat.
-- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migration 17.
+- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migrations 17 and 18.
 
 ### Background tasks you can see and stop
 
