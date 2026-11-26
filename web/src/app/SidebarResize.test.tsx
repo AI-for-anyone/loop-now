@@ -285,11 +285,12 @@ describe('desktop sidebar resizing', () => {
     expect(scopeButton).toHaveClass('min-w-0')
     expect(within(scopeButton).getByText('test-project')).toHaveClass('min-w-0', 'truncate')
 
-    // Agent row name truncates; right-side marks container stays within the row width and wraps if all three marks are shown at 200px.
+    // Agent row stays on one line: the name truncates while the compact right-side marks do not wrap.
     const row = await within(list).findByRole('link', { name: /loop-now-publicity-with-very-long-name/ })
-    expect(within(row).getByText('loop-now-publicity-with-very-long-name')).toHaveClass('max-w-full', 'truncate')
-    const marks = within(row).getByText('Manager').parentElement!
-    expect(marks).toHaveClass('ml-auto', 'shrink-0', 'max-w-full', 'flex-wrap')
+    expect(within(row).getByText('loop-now-publicity-with-very-long-name')).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    const marks = within(row).getByTitle('Project Manager').parentElement!
+    expect(marks).toHaveClass('shrink-0')
+    expect(marks).not.toHaveClass('flex-wrap')
 
     // Nav labels truncate, search shortcut does not shrink, and connection status truncates its host inside the sidebar.
     expect(within(within(nav).getByRole('link', { name: 'Project settings' })).getByText('Project settings')).toHaveClass('min-w-0', 'flex-1', 'truncate')

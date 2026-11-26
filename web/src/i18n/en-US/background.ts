@@ -57,7 +57,6 @@ export const background = {
     moreTitle: (count: number) => `${plural(count, 'more background task', 'more background tasks')}`,
     ruler: 'After background work',
   },
-  listTag: (count: number) => `Bg ${count}`,
   listTitle: (count: number) => `Idle; ${plural(count, 'background task is', 'background tasks are')} still running`,
   restartWarning: (runtime: string, count: number) => `Settings changed: the next message restarts ${runtime} and stops ${plural(count, 'running background task', 'running background tasks')}.`,
   stopWarning: (count: number) => `Stopping or interrupting also stops ${plural(count, 'background task', 'background tasks')}`,

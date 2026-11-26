@@ -22,7 +22,7 @@ function NavItem({ to, icon, label, current, badge, onClick, compact = false }: 
   return (
     <Link to={to} onClick={onClick} aria-current={current ? 'page' : undefined} className={navRowClass(current, compact ? 'compact' : 'nav')}>
       <NavIcon name={icon} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span title={label} className="min-w-0 flex-1 truncate">{label}</span>
       {badge}
     </Link>
   )
@@ -49,7 +49,9 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <h2 id={headingId} className={navGroupClass}>
-        <span className="min-w-0 truncate">{text.groups.projects}</span>
+        <span title={text.groups.projects} className="min-w-0 truncate">
+          {text.groups.projects}
+        </span>
       </h2>
       {!projects && <p className="px-2.5 text-[12.5px] text-white/75">{t.common.loading}</p>}
       {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-white/75">{text.noProjects}</p>}
@@ -238,7 +240,9 @@ export function Sidebar({
         <NavItem compact to="/stats" icon="stats" label={text.items.stats} current={here.global === 'stats'} />
         <NavItem compact to="/identities" icon="identities" label={text.items.identities} current={here.global === 'identities'} />
         <NavItem compact to="/settings" icon="settings" label={text.items.settings} current={here.global === 'settings'} />
-        <ConnectionStatus className="mt-1.5 ml-2.5 max-w-[calc(100%-0.625rem)] self-start text-[11.5px]" />
+        <div className="mt-1.5 min-w-0 pl-2.5">
+          <ConnectionStatus className="text-[11.5px]" />
+        </div>
       </div>
       {creating && <CreateAgentDialog scope={creating} onClose={() => setCreating(null)} />}
     </nav>

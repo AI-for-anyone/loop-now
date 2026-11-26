@@ -38,7 +38,6 @@ export const shell = {
   },
   chips: {
     busy: '回复中',
-    sleep: 'zZ sleep',
   },
   noProjects: '还没有项目',
   menu: '打开导航',

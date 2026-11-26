@@ -4,14 +4,13 @@ import { cn } from './utils'
 // yellow block with a 2px navy border plus a 4px navy solid offset shadow
 // (matching the project cards), with 3px left on the right for the shadow; a selected Agent row is 40px high with a one-step larger corner
 // radius. Unselected rows keep a transparent border too, so the text does not shift when the selection changes.
-// Agent rows have no fixed height (at least 36px, 40px when selected): when the markers on the right do not fit next to the name, they
-// wrap to the next line and the row grows with its content.
+// Every sidebar row, including Agent rows, stays on one line: the name truncates with an ellipsis instead of wrapping.
 export const navRowClass = (current: boolean, kind: 'nav' | 'agent' | 'compact' = 'nav') =>
   cn(
     'flex min-w-0 items-center border-2 px-2 outline-none focus-visible:shadow-focus',
-    kind === 'agent' ? 'gap-2.5' : 'gap-3',
+    kind === 'agent' ? 'gap-2' : 'gap-3',
     kind === 'compact' ? 'h-[34px] text-[14px]' : 'text-[14.5px]',
-    kind === 'agent' ? (current ? 'min-h-10 rounded-input py-1' : 'min-h-9 rounded-ticket py-1') : kind === 'compact' ? 'rounded-ticket' : 'h-9 rounded-ticket',
+    kind === 'agent' ? (current ? 'h-10 rounded-input' : 'h-9 rounded-ticket') : kind === 'compact' ? 'rounded-ticket' : 'h-9 rounded-ticket',
     current ? 'mr-[3px] border-ink bg-riso-yellow font-black text-ink shadow-[4px_4px_0_var(--ink)]' : 'border-transparent font-bold text-white hover:bg-white/10',
   )
 
