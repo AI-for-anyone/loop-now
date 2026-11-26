@@ -87,6 +87,9 @@ func (s *Service) StartScan(ctx context.Context, in apitypes.ConversationScanInp
 		}
 	}
 	o.Excluded = s.Excluded
+	if s.Store != nil {
+		o.LoopNowAgent = s.Store.RunAgent
+	}
 	op := &scanOp{view: apitypes.ConversationScan{OperationID: uuid.Must(uuid.NewV7()).String(), State: "running", Folders: []apitypes.ImportFolder{}}}
 	o.Progress = func(done, total int) {
 		op.mu.Lock()
@@ -193,7 +196,10 @@ func (s *Service) folderViews(ctx context.Context, folders []Folder) ([]apitypes
 				reason := c.SkipReason
 				cv.SkipReason = &reason
 			}
-			if id, ok := imported[c.CLI][c.SessionID]; ok {
+			if c.AgentID != uuid.Nil {
+				id := c.AgentID
+				cv.AgentID = &id
+			} else if id, ok := imported[c.CLI][c.SessionID]; ok {
 				cv.AgentID = &id
 			}
 			v.Conversations = append(v.Conversations, cv)

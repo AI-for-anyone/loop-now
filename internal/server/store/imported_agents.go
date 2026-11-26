@@ -188,6 +188,16 @@ func (s *Store) ImportedAgents(ctx context.Context) (map[string]map[string]uuid.
 	return out, rows.Err()
 }
 
+// RunAgent returns the live Agent a run belongs to; uuid.Nil when the run is unknown or its Agent was deleted.
+func (s *Store) RunAgent(ctx context.Context, runID uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := s.Pool.QueryRow(ctx, `SELECT a.id FROM runs r JOIN agents a ON a.id = r.agent_id WHERE r.id = $1 AND a.deleted_at IS NULL`, runID).Scan(&id)
+	if IsNotFound(notFoundIfNoRows(err, "Run")) {
+		return uuid.Nil, nil
+	}
+	return id, err
+}
+
 // ImportedAgent returns the live Agent imported from a conversation; nil when there is none.
 func (s *Store) ImportedAgent(ctx context.Context, cli, sessionID string) (*uuid.UUID, error) {
 	return importedAgentTx(ctx, s.Pool, cli, sessionID)

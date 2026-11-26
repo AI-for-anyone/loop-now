@@ -245,6 +245,9 @@ func (s *Service) importConversation(ctx context.Context, projectID uuid.UUID, f
 	if c.SkipReason != "" {
 		return uuid.Nil, errors.New(skipMessages[c.SkipReason])
 	}
+	if c.AgentID != uuid.Nil {
+		return c.AgentID, nil // the Agent's own conversation
+	}
 	if existing, err := s.Store.ImportedAgent(ctx, c.CLI, c.SessionID); err != nil || existing != nil {
 		if err != nil {
 			return uuid.Nil, err
