@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### A reply cut off in the middle is remembered
+
+- When Loop Now quits, crashes or is stopped while an Agent is replying, the Agent now remembers that reply the next time: what it had done, which commands it ran, and where it stopped. Before, the conversation was saved only when a reply ended, so a reply that never ended was lost; for an Agent's very first reply (an imported Agent's included) the whole conversation started over, and an imported Agent went back to the moment of import.
+- Loop Now now notes the conversation as soon as the CLI has saved it, while the reply runs, and once more before it stops the CLI. This applies to Claude Code, Codex, Grok, Antigravity, local ACP commands and Pi.
+
 ### loopctl sets an Agent's folder, configuration, mode and levels
 
 - `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
