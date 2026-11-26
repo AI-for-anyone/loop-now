@@ -6,6 +6,12 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### 20 MiB 以内的文件都能预览
+
+- 文件夹页面（Agent 的文件夹、项目和全局的上下文文件夹）里，20 MiB 以内的文件都能预览和在线编辑，以前只有 1 MiB，图片也一样：3.5 MiB、15 MiB 的图片能直接看，5 MiB 的文本能打开、编辑和保存。更大的文件照旧显示提示和“下载”，提示里写着上限。
+- 上限仍可用 `LOOP_NOW_TEXT_EDIT_MAX` 修改；现在它和 `LOOP_NOW_MAX_FOLDER_UPLOAD`（默认 1 GiB，写进这些文件夹的单个文件上限）比较，不再和 `LOOP_NOW_MAX_UPLOAD_FILE` 比较。把 `LOOP_NOW_MAX_FOLDER_UPLOAD` 设得小于 20 MiB 的服务端，也要同时设置 `LOOP_NOW_TEXT_EDIT_MAX`。
+- 一整个超长列表（几千条以上）的 Markdown 文件，在这个大小下预览可能很慢。
+
 ### CLI 自己接着说话时，上面那行标题只占一行
 
 - 后台任务结束后 CLI 自己接着回复时，回复上面那一行不再把整条命令印出来（以前一条长的 shell 命令会占好几行）。现在写的是“后台任务结束后，Claude Code 接着说：”，后面跟着和回复里一样的小标签（“Bash 后台已完成”“Bash 后台出错”）和时间。点小标签才看命令、跑了多久或怎么结束的、最后的输出。

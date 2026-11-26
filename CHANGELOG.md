@@ -6,6 +6,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Files up to 20 MiB can be previewed
+
+- The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
+- `LOOP_NOW_TEXT_EDIT_MAX` still changes the limit; it is now checked against `LOOP_NOW_MAX_FOLDER_UPLOAD` (1 GiB by default, the limit for one file written to these folders) instead of `LOOP_NOW_MAX_UPLOAD_FILE`, so a server that sets `LOOP_NOW_MAX_FOLDER_UPLOAD` below 20 MiB must also set `LOOP_NOW_TEXT_EDIT_MAX`.
+- A Markdown file that is one very long list (thousands of items) can take a long time to preview at these sizes.
+
 ### The heading above a CLI's own follow-up is one short line
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
