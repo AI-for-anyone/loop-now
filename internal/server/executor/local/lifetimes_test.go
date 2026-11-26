@@ -9,6 +9,7 @@ import (
 
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/store"
 )
 
 // startTask registers a running background task on the Agent's live process, as started by a run of its.
@@ -164,5 +165,54 @@ func TestResetSwitchDeleteShutdownStopTasks(t *testing.T) {
 			}
 			wantStopped(t, obs, "a", c.reason)
 		})
+	}
+}
+
+// exitHoldObs holds the wrap-up of a process that exited by itself at the record of its exit, until release is closed.
+type exitHoldObs struct {
+	recObs
+	held    chan struct{}
+	release chan struct{}
+}
+
+func (o *exitHoldObs) Event(agentID uuid.UUID, runID *uuid.UUID, e executor.Event) {
+	o.recObs.Event(agentID, runID, e)
+	if e.Type == store.EventPiExited {
+		close(o.held)
+		<-o.release
+	}
+}
+
+// Shutdown returns only after the wrap-up of a process that exited by itself has ended, since that wrap-up still writes
+// in the Agent's folder; within its context, as for the processes it stops itself.
+func TestShutdownWaitsForWrapUpOfExitedProcess(t *testing.T) {
+	obs := &exitHoldObs{held: make(chan struct{}), release: make(chan struct{})}
+	h := newHarness(t, func(o *Options) { o.Observer = obs }, "")
+	id := h.agent(nil)
+	h.exec(id, "hi")
+	h.e.mu.Lock()
+	p := h.e.procs[id]
+	h.e.mu.Unlock()
+	_ = p.rt.CloseStdin() // the process exits by itself; watch takes it out of the table and wraps it up
+	select {
+	case <-obs.held:
+	case <-time.After(10 * time.Second):
+		close(obs.release)
+		t.Fatal("the exit was not recorded")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	err := h.e.Shutdown(ctx)
+	cancel()
+	close(obs.release)
+	if err == nil {
+		t.Fatal("Shutdown returned while the exited process was still being wrapped up")
+	}
+	if err := h.e.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-p.stopDone:
+	default:
+		t.Fatal("Shutdown returned before the wrap-up ended")
 	}
 }
