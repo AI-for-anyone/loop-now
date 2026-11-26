@@ -93,8 +93,9 @@ describe('The import page', () => {
     expect(folder).not.toBeChecked()
     expect(within(other).getByText('Joins project “loop-now”')).toBeInTheDocument()
     await user.click(within(other).getByRole('button', { name: 'Show the conversations in /code/loop-now' }))
-    // Already imported: no check, a link to its Agent.
+    // Already in Loop Now (imported before, or an Agent's own conversation): no check, a link to its Agent; never called imported.
     expect(within(other).getByRole('checkbox', { name: 'Release' })).toBeDisabled()
+    expect(within(other).getByText('Already in Loop Now')).toBeInTheDocument()
     expect(within(other).getByRole('link', { name: 'Open Agent' })).toHaveAttribute('href', '/agents/00000000-0000-7000-8000-00000000aaaa/chat')
   })
 

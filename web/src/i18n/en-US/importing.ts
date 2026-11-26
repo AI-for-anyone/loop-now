@@ -31,7 +31,8 @@ export const importing = {
     byCli: (claude: number, codex: number) => `Claude Code ${claude} · Codex ${codex}`,
     folders: 'folders',
     suggested: (count: number) => `${count} suggested`,
-    imported: 'already imported',
+    // Imported before, or a conversation Loop Now itself ran (an imported Agent's fork, an Agent's own session in its folder).
+    imported: 'already in Loop Now',
     importedNote: 'never imported twice',
   },
   groups: { git: 'Git repositories', other: 'Other folders' },
@@ -58,7 +59,7 @@ export const importing = {
     lastActive: (time: string) => formatDayClock(time),
     messages: (count: number) => plural(count, 'message', 'messages'),
     size: (bytes: number) => formatBytes(bytes),
-    imported: 'Imported',
+    imported: 'Already in Loop Now',
     openAgent: 'Open Agent',
     skipped: (reason: string) => `Can't import: ${reason}`,
     untitled: '(no title)',

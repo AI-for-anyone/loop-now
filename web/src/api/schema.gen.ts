@@ -576,6 +576,10 @@ export interface paths {
          *     (~/.codex/sessions), and nothing else: never login, token or credential files. Runs asynchronously: returns 202
          *     with the scan; read its progress and result with GET. Conversations are grouped by folder: a git repository
          *     (its worktrees and checkouts with the same remote folded into it) or, for others, the conversation's own folder.
+         *     A conversation Loop Now ran a turn in (one of its prompts starts with the run line, as in an Agent's own
+         *     session or the fork an imported Agent continues in) is that Agent's: it is listed with its agentId, or left out
+         *     when that Agent is gone. Also left out: conversations in Loop Now's Agent workspaces, and in folders that are
+         *     not projects (~/Downloads, ~/Documents/Codex, ~/Library and the temporary folders).
          */
         post: operations["startConversationScan"];
         delete?: never;
@@ -5277,7 +5281,8 @@ export interface components {
             model: string | null;
             /**
              * Format: uuid
-             * @description The Agent it was already imported as; such a conversation is not imported again
+             * @description The Agent it was already imported as, or the Agent whose own session it is (Loop Now ran a turn in it);
+             *     such a conversation is not imported again: importing it gives that Agent
              */
             agentId: string | null;
             /**
