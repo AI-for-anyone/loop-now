@@ -141,9 +141,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 		return 0, false, err
 	}
 	m.Record.View.Nodes = append(m.Record.View.Nodes, next)
-	m.Record.View.Task.CurrentNodeRunID = &next.ID
-	m.Record.View.Task.CurrentStepID = &next.StepID
-	m.Record.View.Task.CurrentAgentID = &next.AgentID
+	m.Record.SetCurrent(next)
 	m.Record.View.Task.Status, m.Record.View.Task.Reason = "running", nil
 	if err = s.taskLifecycle(ctx, m.Tx, turn, EventRunQueued, map[string]any{"origin": "task_node", "larkBindingRevision": revision, "sourceActionId": action}); err != nil {
 		return 0, false, err
