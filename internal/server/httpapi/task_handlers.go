@@ -101,27 +101,37 @@ func (s *Server) getCurrentTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, d)
 }
 func (s *Server) taskNode(w http.ResponseWriter, r *http.Request) (taskmodel.NodeRun, bool) {
-	id, ok := s.taskID(w, r)
-	if !ok {
+	n, e := s.findTaskNode(r)
+	if e != nil {
+		s.fail(w, r, e)
 		return taskmodel.NodeRun{}, false
+	}
+	return n, true
+}
+
+// findTaskNode returns the node run named by the taskId and nodeRunId of the path, as the caller may see it.
+func (s *Server) findTaskNode(r *http.Request) (taskmodel.NodeRun, error) {
+	if s.Tasks == nil {
+		return taskmodel.NodeRun{}, apperr.NotFound("Task service")
+	}
+	id, e := pathUUID(r, "taskId")
+	if e != nil {
+		return taskmodel.NodeRun{}, e
 	}
 	node, e := pathUUID(r, "nodeRunId")
 	if e != nil {
-		s.fail(w, r, e)
-		return taskmodel.NodeRun{}, false
+		return taskmodel.NodeRun{}, e
 	}
 	d, e := s.Tasks.Get(r.Context(), principal(r), id)
 	if e != nil {
-		s.fail(w, r, e)
-		return taskmodel.NodeRun{}, false
+		return taskmodel.NodeRun{}, e
 	}
 	for _, n := range d.Nodes {
 		if n.ID == node {
-			return n, true
+			return n, nil
 		}
 	}
-	s.fail(w, r, apperr.NotFound("Node run"))
-	return taskmodel.NodeRun{}, false
+	return taskmodel.NodeRun{}, apperr.NotFound("Node run")
 }
 func (s *Server) getTaskNode(w http.ResponseWriter, r *http.Request) {
 	if !s.taskReady(w, r) {
