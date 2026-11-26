@@ -7,8 +7,9 @@ name: release
 # Windows package, see desktop-win. Finally all artifacts are collected into SHA256SUMS; pushing a v* tag creates a
 # GitHub Release from them, and a tag containing - is marked as a pre-release (pre-releases always use -beta.N, e.g.
 # v0.3.0-beta.1). The notes come from that version's section in CHANGELOG.md or the tag annotation
-# (scripts/release/notes.sh). Before that section is named, the release branch collects the change notes in changes/
-# with scripts/release/collect-changes.sh <version>; scripts/release/notes.sh Unreleased previews them.
+# (scripts/release/notes.sh). The release branch writes that section from the descriptions of the pull requests merged
+# since the last release with scripts/release/collect-pr-notes.sh <version> (it needs gh); scripts/release/notes.sh
+# Unreleased previews them.
 # A manual run only builds; it does not create a Release.
 on:
   workflow_dispatch:

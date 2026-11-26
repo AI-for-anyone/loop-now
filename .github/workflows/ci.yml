@@ -16,7 +16,7 @@ jobs:
     name: server (go vet + go test)
     runs-on: ubuntu-latest
     steps:
-      # Two commits deep: on a pull request HEAD is the merge into the base, and the change notes check compares it with HEAD^1.
+      # Two commits deep: on a pull request HEAD is the merge into the base, and the pull request notes check compares it with HEAD^1.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -27,14 +27,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.21.0
-      # A change records its notes as one file changes/<slug>.md, not in CHANGELOG*.md "Unreleased" or MAIN.md's change
-      # list, so queued pull requests do not conflict (release-* branches collect them); see changes/README.md. Checked
-      # on pull requests only: a merge group has no branch name and its pull requests were checked already.
-      - name: Change notes in changes/
+      # A change records its notes in its pull request description (.github/pull_request_template.md), never in
+      # CHANGELOG*.md, a changes/ file or MAIN.md's change list, so queued pull requests do not conflict; release-*
+      # branches write the CHANGELOG files with scripts/release/collect-pr-notes.sh. Checked on pull requests only: a
+      # merge group has no branch name and its pull requests were checked already.
+      - name: Notes in the pull request description
         if: github.event_name == 'pull_request'
-        run: scripts/release/check-change-notes.sh HEAD^1 HEAD "$GITHUB_HEAD_REF"
-      - name: Release scripts (change notes)
-        run: scripts/release/change-notes-test.sh
+        run: scripts/release/check-pr-notes.sh HEAD^1 HEAD "$GITHUB_HEAD_REF"
+      - name: Release scripts (pull request notes)
+        run: scripts/release/pr-notes-test.sh
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
       # Go comments, string literals (tests included) and the API contracts (api/*.yaml) must be in English (a quoted

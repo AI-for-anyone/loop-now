@@ -2,14 +2,34 @@
 
 中文：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)
 
-User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: it adds a note in `changes/` (see `changes/README.md`), and `scripts/release/collect-changes.sh` moves the notes into "## Unreleased" when a release is cut.
+User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
 ## Unreleased
 
-### Change notes are one file per change
+### Pictures an Agent names by path show in its reply
 
-- A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
-- The loopctl guide tells a step in a task with a git workspace to write its notes as such a file when the repository keeps one per change.
+- When an Agent's reply names a picture in its own folder (png, jpg, gif, webp, svg), the picture is shown as a thumbnail: a Markdown image with a relative, absolute or `file://` path, and an absolute path written in code or as plain text (the text stays; the thumbnails follow the paragraph or list item, several in one row). A click opens it large; in a regular conversation the path is a link that opens the file in the Agent's Folder tab.
+- This works in task node conversations too, for the task's copy of the Agent's folder, while the task runs; after the task ends and its copy is reclaimed, only the text (or the image's alt text) is shown.
+- Only files inside the Agent's own folder are shown, read through the folder's content endpoint with the same checks as the Folder tab; a path outside it, a missing file or one above the preview limit stays plain text. SVG is shown as a picture and never run: a script inside it does nothing.
+- The Folder tab can open a given file (`?path=`) and previews SVG files.
+- The loopctl guide tells Agents to show a picture by writing a Markdown image of a file in their own folder.
+- API: `GET /agents/{agentId}/folder` and `GET /tasks/{taskId}/nodes/{nodeRunId}/folder` (`FolderLocation`: `path`, `realPath`), `GET /tasks/{taskId}/nodes/{nodeRunId}/folder/content`.
+
+### A message sent as Claude Code starts a turn of its own gets its own reply
+
+- A message sent at the very moment Claude Code begins a turn by itself (after background work ended) could get that turn's text as its reply, and the turn was recorded empty. The message now waits for that turn and gets its own reply.
+
+### Sidebar Agent rows stay on one line
+
+- An Agent row in the sidebar is always one line: a long name ends with an ellipsis (the full name is in the tooltip) instead of pushing the runtime mark and the status onto a second line.
+- The status is a small symbol instead of a word: a pulsing pink dot while replying, a yellow pill with a shell glyph and the count while background work runs, a moon while sleeping, a flag for the project's Manager. The words are in the tooltip and for screen readers; without motion the dot does not pulse.
+- The other sidebar rows (projects, groups, the project switcher, the connection line) stay on one line too, with tooltips for cut text.
+
+### The page body uses the whole window
+
+- The body of every console page (an Agent's four tabs, a task, the task list, overview, settings, stats, plugins, Skills, identities, import) no longer sits on an inset sheet with a thick border, rounded corners and a drop shadow: it meets the header, the sidebar and the window edges, with a thin ink line under the header and between the sidebar and the page.
+- A conversation uses the width up to the turn ruler (24 px gutters, up to 1600 px); tables and code blocks use all of it, and the message box lines up with the messages. On a 1920 px window the space left of the ruler went from about 360 px to about 37 px. The turn ruler is 40 px wide, and there is less space above the first message and above the message box.
+- Task node conversations get the same width; phones keep their layout with 14 px gutters.
 
 ### The run record says what each tool did
 
