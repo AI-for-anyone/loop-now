@@ -13,7 +13,7 @@ export const runtime = {
   differences: {
     title: (name: string) => `用 ${name} 运行时`,
     home: '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
-    commands: '不经确认直接执行命令，与 Pi 的 Agent 相同。',
+    commands: '运行命令前问不问你，看它的批准模式；「完全放开」时不问，与 Pi 的 Agent 相同。',
     plugins: '只含 Pi 扩展的插件对它不起作用；插件的技能和 MCP 工具可以用。',
     piCommands: '没有 /pi: 命令。',
   },

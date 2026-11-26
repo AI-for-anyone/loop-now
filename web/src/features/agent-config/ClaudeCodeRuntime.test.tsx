@@ -34,7 +34,7 @@ describe('Choosing Claude Code', () => {
     const differences = within(basic).getByRole('region', { name: differencesTitle })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
-      'It runs commands without asking first, the same as Pi Agents.',
+      "Whether it asks before running commands depends on its permission mode; on Full access it doesn't, the same as Pi Agents.",
       'Plugins that only contain Pi extensions don\'t apply to it; plugin skills and MCP tools work.',
       'There are no /pi: commands.',
     ])

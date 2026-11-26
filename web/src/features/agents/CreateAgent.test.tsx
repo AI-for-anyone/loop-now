@@ -187,7 +187,7 @@ describe('Creating an Agent', () => {
     const differences = within(dialog).getByRole('region', { name: 'Running on Claude Code' })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
-      'It runs commands without asking first, the same as Pi Agents.',
+      "Whether it asks before running commands depends on its permission mode; on Full access it doesn't, the same as Pi Agents.",
     ])
     expect(within(dialog).queryByLabelText('Codex speed')).toBeNull()
     await chooseThinking(user, dialog, 'Max')
