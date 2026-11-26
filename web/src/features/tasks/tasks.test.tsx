@@ -514,11 +514,11 @@ describe('task list on the sheet', () => {
     const env = setup()
     const base = env.detail
     const tasks = [
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: 'Sort user feedback for this week', status: 'running', reason: null, currentStepId: 'triage' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: 'Export timeout fix plan', status: 'blocked', reason: 'Continues once you confirm the timeout limit', currentStepId: 'review' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: 'Weekly report draft', status: 'completed', reason: null, currentStepId: 'publish' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: 'Task waiting for a user answer', status: 'waiting', reason: 'Waiting for an answer', currentStepId: null }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: 'Cancelled task', status: 'cancelled', reason: null, currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: 'Sort user feedback for this week', status: 'running', reason: null, currentStepId: 'triage', currentStepTitle: 'Triage' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: 'Export timeout fix plan', status: 'blocked', reason: 'Continues once you confirm the timeout limit', currentStepId: 'review', currentStepTitle: 'Review' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: 'Weekly report draft', status: 'completed', reason: null, currentStepId: 'publish', currentStepTitle: 'Publish' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: 'Task waiting for a user answer', status: 'waiting', reason: 'Waiting for an answer', currentStepId: null, currentStepTitle: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: 'Cancelled task', status: 'cancelled', reason: null, currentStepId: null, currentStepTitle: null }),
     ]
     server.use(
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
@@ -565,12 +565,14 @@ describe('task list on the sheet', () => {
     await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['All5+', 'In progress2', 'Blocked1', 'Completed1+']))
   })
 
-  it('one row per task: a title with a subtitle (the reason), the status (running a fluorescent-pink pill, blocked a tilted red stamp, completed a light-green pill), the current node in monospace, the responsible Agent, and the update time in monospace', async () => {
+  it('one row per task: a single-line title (with reason when blocked), the status (running a fluorescent-pink pill, blocked a tilted red stamp, completed a light-green pill), the current step title with id in the tooltip, the responsible Agent, and the update time in monospace', async () => {
     await renderList()
     const running = rowOf('Sort user feedback for this week')
     expect(running).toHaveClass('border-b-[1.5px]', 'border-dashed')
     expect(within(running).getByText('Running')).toHaveClass('bg-riso-pink', 'rounded-full')
-    expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-tint-blue')
+    const step = within(running).getByText('Triage')
+    expect(step).toHaveClass('bg-tint-blue')
+    expect(step).toHaveAttribute('title', 'triage')
     expect(running.querySelector('time')).toHaveClass('font-mono')
     const blocked = rowOf('Export timeout fix plan')
     expect(within(blocked).getByText('Continues once you confirm the timeout limit')).toBeInTheDocument()

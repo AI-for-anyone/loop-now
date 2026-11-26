@@ -80,7 +80,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
         <div className="flex min-h-0 flex-1">
           {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with
               the content instead of stretching the whole page based on their unscrolled position. */}
-          <div className="relative h-full min-w-0 flex-1 overflow-y-auto pt-[22px] pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,34px)]">
+          <div className="relative h-full min-w-0 flex-1 overflow-y-auto px-[clamp(12px,1.5vw,20px)] pt-3.5 pb-14">
             <ErrorAlert error={tasks.error} />
             {tasks.isPending && <p className="text-[14px] text-ink-500">{t.tasks.loading}</p>}
             {tasks.isSuccess && rows.length === 0 && (
@@ -96,13 +96,13 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
             {rows.length > 0 && (
               <>
                 {/* Table header (decorative; each row carries screen-reader text for the column names): a 2px solid line below it. */}
-                <div aria-hidden="true" className="flex items-center gap-[18px] border-b-2 border-ink px-1 pb-2 text-[12px] font-black text-ink-500 max-sm:hidden">
+                <div aria-hidden="true" className="flex items-center gap-3 border-b-2 border-ink px-1 pb-1.5 text-[12px] font-black text-ink-500 max-sm:hidden">
                   <span className="flex-[0_0_34px]">{t.tasks.number}</span>
-                  <span className="flex-[1_1_280px]">{t.tasks.task}</span>
-                  <span className="flex-[0_0_84px]">{t.tasks.state}</span>
-                  <span className="flex-[0_0_104px]">{t.tasks.currentNode}</span>
-                  <span className="flex-[0_0_130px]">{t.tasks.responsible}</span>
-                  <span className="flex-[0_0_96px] text-right">{t.tasks.updated}</span>
+                  <span className="flex-[1_1_134px]">{t.tasks.task}</span>
+                  <span className="flex-[0_0_114px]">{t.tasks.state}</span>
+                  <span className="flex-[0_0_120px]">{t.tasks.currentNode}</span>
+                  <span className="flex-[0_0_160px]">{t.tasks.responsible}</span>
+                  <span className="flex-[0_0_82px] text-right">{t.tasks.updated}</span>
                 </div>
                 <ul aria-label={t.tasks.title} className="flex flex-col">
                   {shown.map((task) => (
@@ -133,75 +133,106 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   )
 }
 
-// One row per task: monospace number, title (linking to the details) plus subtitle (wait or failure reason), status, monospace current
-// node, responsible Agent (with avatar), monospace updated time.
-// 1.5px dashed lines between rows; the columns wrap when narrow.
+// One compact line per task (~40px): monospace number, single-line title (with full title on hover) plus inline branch or folder-copy
+// label, status chip, current step title (with step id on hover), responsible Agent (with avatar), and monospace updated time.
+// 1.5px dashed lines between rows; at phone width the row wraps into two short lines; a wait/failure reason sits on a tight truncated
+// line beneath only when present.
 function TaskRow({ task, projectName, agentName, pending }: { task: Task; projectName: string; agentName: (id: string) => string; pending?: Parameters<typeof PendingBadge>[0]['counts'] }) {
+  const title = task.title || task.id
+  const stepLabel = task.currentStepTitle || task.currentStepId
   return (
-    <li className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3.5">
-      {/* Number and title form one group (width = number 34px + gap 18px + title from 280px) that doesn't wrap: on narrow screens the
-          number stays to the left of the title. */}
-      <span className="flex min-w-0 flex-[1_1_332px] flex-nowrap items-center gap-x-[18px] max-sm:items-start max-sm:gap-x-2.5">
-        <span className="flex-[0_0_34px] font-mono text-[12px] font-bold text-ink-500 max-sm:leading-[21px]">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b-[1.5px] border-dashed border-ink/25 px-1 py-[7px] max-sm:gap-x-2">
+      {/* Number and title form one group (width = number 34px + gap 12px + title from 134px) that doesn't wrap: on narrow screens they stay
+          together on the first short line. */}
+      <span className="flex min-w-0 flex-[1_1_180px] flex-nowrap items-center gap-x-3 max-sm:basis-full max-sm:gap-x-2">
+        <span className="flex-[0_0_34px] font-mono text-[12px] font-bold text-ink-500">
           <span className="sr-only">{t.tasks.number}</span>
           {t.tasks.numberLabel(task.number)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col leading-[1.4]">
-          <span className="flex min-w-0 items-start gap-2">
-            <Link
-              className="min-w-0 text-[15px] font-black break-words text-ink underline decoration-ink/30 underline-offset-4 hover:text-riso-blue hover:decoration-riso-blue"
-              to={`${tasksPath(projectName)}/${task.id}`}
-            >
-              {task.title || task.id}
-            </Link>
-            <PendingBadge counts={pending} />
-          </span>
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          <Link
+            title={title}
+            className="min-w-0 shrink truncate text-[14px] leading-[22px] font-black text-ink underline decoration-ink/30 underline-offset-3 hover:text-riso-blue hover:decoration-riso-blue"
+            to={`${tasksPath(projectName)}/${task.id}`}
+          >
+            {title}
+          </Link>
+          <PendingBadge counts={pending} />
           {task.branch && <Branch name={task.branch} />}
-          {task.workspaceMode === 'copy' && <span className="w-fit rounded-[4px] bg-tint-blue px-1.5 text-[11.5px] leading-[20px] font-bold text-riso-blue">{t.tasks.workspace.copyLabel}</span>}
-          {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
+          {task.workspaceMode === 'copy' && (
+            <span className="shrink-0 rounded-[4px] bg-tint-blue px-1.5 text-[11px] leading-[18px] font-bold whitespace-nowrap text-riso-blue">
+              {t.tasks.workspace.copyLabel}
+            </span>
+          )}
         </span>
       </span>
-      <span className="flex-[0_0_84px]">
-        <span className="sr-only">{t.tasks.state}</span>
-        <TaskBadge status={task.status} />
-      </span>
-      <span className="min-w-0 flex-[0_0_104px]">
-        <span className="sr-only">{t.tasks.currentNode}</span>
-        {task.currentStepId ? (
-          <span className="rounded-[4px] bg-tint-blue px-2 font-mono text-[12px] leading-[22px] break-all">{task.currentStepId}</span>
-        ) : (
-          <span className="text-ink-500">{t.tasks.none}</span>
-        )}
-      </span>
-      <span className="flex min-w-0 flex-[0_0_130px] items-center gap-2 text-[13.5px] font-bold">
-        <span className="sr-only">{t.tasks.responsible}</span>
-        {task.currentAgentId ? (
-          <>
-            <AgentAvatar size="sm" id={task.currentAgentId} />
-            <span className="min-w-0 truncate" title={agentName(task.currentAgentId)}>
-              {agentName(task.currentAgentId)}
+      {/* On desktop this wrapper disappears (display: contents) so the four metadata columns align directly with the table header; on phone
+          width it groups them into one tight second line without letting the timestamp dangle on a third line. */}
+      <span className="contents max-sm:flex max-sm:min-w-0 max-sm:basis-full max-sm:items-center max-sm:gap-x-1.5">
+        <span className="flex-[0_0_114px] max-sm:flex-none">
+          <span className="sr-only">{t.tasks.state}</span>
+          <TaskBadge status={task.status} className="min-h-[20px] px-2 text-[11.5px] leading-[20px]" />
+        </span>
+        <span className="min-w-0 flex-[0_0_120px] max-sm:max-w-[92px] max-sm:flex-[0_1_auto]">
+          <span className="sr-only">{t.tasks.currentNode}</span>
+          {stepLabel ? (
+            <span
+              title={task.currentStepId ?? undefined}
+              className={cn(
+                'inline-block max-w-full truncate rounded-[4px] bg-tint-blue px-1.5 align-middle text-[12px] leading-[20px] font-bold text-ink',
+                !task.currentStepTitle && 'font-mono font-normal',
+              )}
+            >
+              {stepLabel}
             </span>
-          </>
-        ) : (
-          <span className="text-ink-500">{t.tasks.none}</span>
-        )}
+          ) : (
+            <span className="text-ink-500">{t.tasks.none}</span>
+          )}
+        </span>
+        <span className="flex min-w-0 flex-[0_0_160px] items-center gap-1.5 text-[13px] leading-[20px] font-bold max-sm:flex-[1_1_0px]">
+          <span className="sr-only">{t.tasks.responsible}</span>
+          {task.currentAgentId ? (
+            <>
+              <AgentAvatar size="sm" id={task.currentAgentId} />
+              <span className="min-w-0 truncate" title={agentName(task.currentAgentId)}>
+                {agentName(task.currentAgentId)}
+              </span>
+            </>
+          ) : (
+            <span className="text-ink-500">{t.tasks.none}</span>
+          )}
+        </span>
+        <time dateTime={task.updatedAt} className="flex-[0_0_82px] text-right font-mono text-[11.5px] leading-[20px] whitespace-nowrap text-ink-700 max-sm:ml-auto max-sm:flex-none">
+          {t.tasks.updatedAt(task.updatedAt)}
+        </time>
       </span>
-      <time dateTime={task.updatedAt} className="flex-[0_0_96px] text-right font-mono text-[12px] text-ink-700 max-sm:text-left">
-        {t.tasks.updatedAt(task.updatedAt)}
-      </time>
+      {task.reason && (
+        <span
+          title={task.reason}
+          className={cn('min-w-0 basis-full truncate pl-[46px] text-[12px] leading-[1.35] max-sm:pl-0', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}
+        >
+          {task.reason}
+        </span>
+      )}
     </li>
   )
 }
 
-// The branch of a task with a worktree, under its title: monospace, cut in the middle when the row is too narrow (the whole name is in
-// the hover title and for screen readers).
+// The branch of a task with a worktree, inline after its title: small, muted monospace, cut in the middle when narrow (the whole name is
+// in the hover title and for screen readers).
 function Branch({ name }: { name: string }) {
   const { head, tail } = branchParts(name)
   return (
-    <span data-testid="task-branch" title={name} className="flex max-w-full min-w-0 font-mono text-[12px] leading-[1.6] text-riso-blue">
+    <span data-testid="task-branch" title={name} className="flex max-w-[44%] shrink-0 overflow-hidden font-mono text-[11.5px] leading-[18px] text-ink-500">
       <span className="sr-only">{t.tasks.branchLabel(name)}</span>
-      <span aria-hidden="true" className="min-w-0 truncate">{head}</span>
-      <span aria-hidden="true" className="shrink-0 whitespace-pre">{tail}</span>
+      {head ? (
+        <>
+          <span aria-hidden="true" className="min-w-0 truncate">{head}</span>
+          <span aria-hidden="true" className="shrink-0 whitespace-pre">{tail}</span>
+        </>
+      ) : (
+        <span aria-hidden="true" className="min-w-0 truncate">{tail}</span>
+      )}
     </span>
   )
 }

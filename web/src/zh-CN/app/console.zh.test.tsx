@@ -88,6 +88,7 @@ describe('Chinese console', () => {
   })
   it('tasks', async () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+    detail.task = { ...detail.task, currentStepId: 'verify', currentStepTitle: '验证' }
     server.use(
       ...baseHandlers([]),
       http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
@@ -97,7 +98,9 @@ describe('Chinese console', () => {
     act(() => FakeEventSource.instances.forEach((es) => es.open()))
     expect(await screen.findByRole('heading', { name: '任务', level: 1 })).toBeInTheDocument()
     await screen.findByRole('link', { name: detail.task.title })
-    expect(within(screen.getByRole('list', { name: '任务' })).getByText('阻塞')).toBeVisible()
+    const list = screen.getByRole('list', { name: '任务' })
+    expect(within(list).getByText('阻塞')).toBeVisible()
+    expect(within(list).getByText('验证')).toHaveAttribute('title', 'verify')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['任务'])
   })
 
