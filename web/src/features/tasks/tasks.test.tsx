@@ -148,7 +148,7 @@ describe('node records and updates', () => {
     const d = makeTaskDetail(defaultProject.id); d.cleanup = 'archived'; d.task.status = 'cancelled'; d.nodes[1].question = { id: nodeId, threadId: taskId, messageId: oldNodeId, text: 'Confirm the result?', status: 'closed', canAnswer: false }
     setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: 'General task acceptance' }); await userEvent.click(screen.getByText('Open question · Closed')); expect(screen.getByText('Confirm the result?')).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
-    expect(screen.getByText('Records archived; copies reclaimed')).toBeVisible()
+    expect(screen.getByText('Records archived; Agent copies reclaimed')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); await userEvent.click(screen.getByText('Visit 1 · attempt 1')); expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
   })
   it('a task without a worktree has no worktree block; one with a worktree shows it under the header', async () => {

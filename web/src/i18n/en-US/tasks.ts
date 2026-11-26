@@ -84,7 +84,7 @@ export const tasks = {
   cleanup: {
     none: 'Not archived yet',
     pending: 'Archiving and reclaiming',
-    archived: 'Records archived; copies reclaimed',
+    archived: 'Records archived; Agent copies reclaimed',
     failed: 'Archiving or reclaiming failed; records kept',
   },
   // The task's git worktree, on the task page; shown only for a task that has one.

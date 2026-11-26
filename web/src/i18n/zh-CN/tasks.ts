@@ -32,7 +32,7 @@ export const tasks = {
   visit: (visit: number, attempt: number) => `第 ${visit} 次访问 · 第 ${attempt} 次尝试`,
   statuses: { preparing: '准备中', running: '执行中', waiting: '等待回复', blocked: '阻塞', completed: '已完成', cancelled: '已取消' } satisfies Record<S['TaskStatus'], string>,
   nodeStatuses: { queued: '等待执行', running: '执行中', submitted: '结果已提交，等待当前轮结束', waiting: '等待回复', blocked: '阻塞', completed: '已完成', cancelled: '已取消' } satisfies Record<S['TaskNodeStatus'], string>,
-  cleanup: { none: '尚未归档', pending: '正在归档与回收', archived: '记录已归档，副本已回收', failed: '归档或回收失败，记录保留' } satisfies Record<S['TaskDetail']['cleanup'], string>,
+  cleanup: { none: '尚未归档', pending: '正在归档与回收', archived: '记录已归档，Agent 副本已回收', failed: '归档或回收失败，记录保留' } satisfies Record<S['TaskDetail']['cleanup'], string>,
   workspace: {
     label: '工作区',
     states: { pending: '准备中', active: '使用中', removed: '已删除', kept: '已保留' } satisfies Record<S['TaskWorkspace']['state'], string>,
