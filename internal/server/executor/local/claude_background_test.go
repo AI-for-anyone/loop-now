@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
 
@@ -172,5 +173,33 @@ func TestClaudeFollowUpTakenByStartingRun(t *testing.T) {
 	}
 	if res, _ := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, newSink()); res.Outcome != executor.OutcomeMerged {
 		t.Fatalf("merged: %+v", res)
+	}
+}
+
+// Continuing the session in a new process after background tasks were left running, Claude Code first settles them in
+// an empty turn of its own: the person's message still gets its reply, and no background task, follow-up run or notice
+// comes of them.
+func TestClaudeResumeSettlingStaleTasksKeepsTheReply(t *testing.T) {
+	h, obs, host := newClaudeBg(t)
+	id := h.claudeAgent(nil)
+	if res, _ := h.exec(id, "hello"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("first turn: %+v", res)
+	}
+	h.env["FAKECLAUDE_STALE_TASK"] = "bold1"
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.Prompt = "changed" })
+	res, sink := h.exec(id, "fake:history")
+	if res.Outcome != executor.OutcomeCompleted || res.Text != "history=1" || sink.text.String() != "history=1" {
+		t.Fatalf("the reply after the resume: %+v %q", res, sink.text.String())
+	}
+	if args := h.launches()[1]; !hasFlag(args, "--resume") {
+		t.Fatalf("the second process continues the session: %v", args)
+	}
+	select {
+	case c := <-host.calls:
+		t.Fatalf("a follow-up was asked for: %+v", c)
+	case <-time.After(500 * time.Millisecond):
+	}
+	if r := obs.reports("bold1"); len(r) != 0 {
+		t.Fatalf("a task this process never started was listed: %+v", r)
 	}
 }
