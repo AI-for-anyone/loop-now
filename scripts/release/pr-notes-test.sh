@@ -341,6 +341,37 @@ $(titles "$repo/CHANGELOG.md" "## v0.2.0")"
 [ "$(titles "$repo/CHANGELOG.md" "## v0.3.0")" = "### Pr5 (#5)" ] || fail "the next release repeats a PR:
 $(titles "$repo/CHANGELOG.md" "## v0.3.0")"
 
+# A release branch that merges main (to resolve a conflict, say) without collecting again: #3 is behind the merge, in
+# no version yet, so the next release has it once. The range starts where the release branch was cut, not where it
+# last met main.
+repo="$(new_repo release-merges-main-no-collect)"
+(
+	cd "$repo"
+	merge_pr 2 task/the-scripts scripts
+	g checkout -q -b release-v0.2.0
+	scripts/release/collect-pr-notes.sh v0.2.0 >/dev/null 2>&1
+	commit "release v0.2.0"
+	g checkout -q main
+	merge_pr 3 task/during-release
+	g checkout -q release-v0.2.0
+	now=$((now + 100))
+	GIT_AUTHOR_DATE="@$now +0000" GIT_COMMITTER_DATE="@$now +0000" g merge -q --no-ff -m "Merge branch 'main' into release-v0.2.0" main
+	merge_branch 4 release-v0.2.0
+	g tag v0.2.0
+	merge_pr 5 task/after-release
+	g checkout -q -b release-v0.3.0
+)
+out="$("$repo/scripts/release/collect-pr-notes.sh" v0.3.0 2>&1)" || fail "collect after an uncollected merge of main failed: $out"
+expected='### Pr5 (#5)
+### Pr3 (#3)'
+[ "$(titles "$repo/CHANGELOG.md" "## v0.3.0")" = "$expected" ] || fail "after the release branch merged main without collecting, v0.3.0 has:
+$(titles "$repo/CHANGELOG.md" "## v0.3.0")"
+[ "$(grep -c '(#3)$' "$repo/CHANGELOG.zh-CN.md")" = 1 ] || fail "#3 is not in CHANGELOG.zh-CN.md exactly once"
+[ "$(grep -c '(#2)$' "$repo/CHANGELOG.md")" = 1 ] || fail "#2 is not in CHANGELOG.md exactly once"
+before="$(sums "$repo")"
+"$repo/scripts/release/collect-pr-notes.sh" v0.3.0 >/dev/null 2>&1 || fail "the second collect of v0.3.0 failed"
+[ "$(sums "$repo")" = "$before" ] || fail "the second collect of v0.3.0 changed the files"
+
 # A description with "## English" and no "## 中文" is refused by number, and nothing is written.
 repo="$(new_repo refuse)"
 (cd "$repo" && merge_pr 2 task/the-scripts scripts && merge_pr 3 task/no-chinese)

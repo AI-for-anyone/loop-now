@@ -11,8 +11,8 @@
 # (main merges through the merge queue with merge commits; a release branch that merged main sees those behind the
 # merge too), each description read with "gh pr view N" (gh is used here, in the release process only, never by the
 # product). The previous release is the newest v* tag reachable from HEAD; when that tag is on the merge of a release-*
-# pull request, the range starts where that release branch left main, so a pull request merged into main while the
-# release was being prepared (it is not on the release branch) comes into the next release. Each pull request's notes
+# pull request, the range starts where that release branch was cut from main, so a pull request merged into main while
+# the release was being prepared comes into the next release, unless the release branch merged main and collected it. Each pull request's notes
 # get its number after their titles ("### Title (#N)"); a number already in a title anywhere in the file is not copied
 # again, so running it twice, or a range that reaches back into the previous release, adds nothing twice. The notes go
 # newest first into the version section, above the entries already there (a "## Unreleased" / "## 未发布" section
@@ -66,18 +66,23 @@ if ! previous="$(git -C "$root" describe --tags --abbrev=0 --match 'v[0-9]*' ${e
 	exit 1
 fi
 
-# The range starts at the previous tag, or, when the tag is on the merge of a release branch, where that branch left
-# main: the pull requests merged into main while it was prepared are not in that release's notes.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+# The range starts at the previous tag, or, when the tag is on the merge of a release branch, where that branch was cut
+# from main: the first commit of the branch's first-parent chain that is also on main's. Not the merge-base: a release
+# branch that merged main meets it later, and the pull requests merged into main while it was prepared are not in that
+# release's notes unless it collected again (then their numbers are in the file and are not copied twice).
 lower="$previous"
 subject="$(git -C "$root" log -1 --format=%s "$previous")"
 if [[ "$subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ ([^ ]+) ]] &&
 	case "${BASH_REMATCH[1]#*/}" in release-*) true ;; *) false ;; esac &&
 	git -C "$root" rev-parse -q --verify "$previous^2" >/dev/null; then
-	lower="$(git -C "$root" merge-base "$previous^1" "$previous^2")"
+	git -C "$root" rev-list --first-parent "$previous^1" >"$tmp/main-chain"
+	cut="$(git -C "$root" rev-list --first-parent "$previous^2" | grep -Fx -f "$tmp/main-chain" | head -n 1 || true)"
+	[ -n "$cut" ] || cut="$(git -C "$root" merge-base "$previous^1" "$previous^2")"
+	lower="$cut"
 fi
-
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
 
 # part FILE NAME: the body of the level-2 section NAME of a description, outside code fences, without HTML comments and
 # without leading and trailing blank lines.
@@ -310,5 +315,5 @@ added="$(grep -c '^### ' "$tmp/english" || true)"
 cat "$tmp/out-CHANGELOG.md" >"$root/CHANGELOG.md"
 cat "$tmp/out-CHANGELOG.zh-CN.md" >"$root/CHANGELOG.zh-CN.md"
 
-echo "Pull requests since $previous$([ "$lower" = "$previous" ] || echo " (from where its release branch left main)"): ${#prs[@]}; notes of ${#kept[@]} in \"## $version\" ($added new entr$([ "$added" = 1 ] && echo y || echo ies) this run)."
+echo "Pull requests since $previous$([ "$lower" = "$previous" ] || echo " (from where its release branch was cut)"): ${#prs[@]}; notes of ${#kept[@]} in \"## $version\" ($added new entr$([ "$added" = 1 ] && echo y || echo ies) this run)."
 echo "Next: write the summary paragraph under \"## $version\" in CHANGELOG.md and CHANGELOG.zh-CN.md, check with scripts/release/notes.sh $version, and commit."
