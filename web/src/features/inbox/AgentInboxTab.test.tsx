@@ -119,27 +119,34 @@ describe('Each Agent\'s inbox is read-only', () => {
 describe('Showing the Agent address', () => {
   it('copy address: the clipboard holds the full address', async () => {
     const { user } = await renderAgentInbox(received().slice(0, 1))
-    expect(screen.getByText('test-org/test-project/Code review assistant')).toBeInTheDocument()
-    // English UI issue: the copy button's name glues t.common.copy and t.agents.address.label without a space (“CopyAddress”).
-    await user.click(screen.getByRole('button', { name: 'CopyAddress' }))
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('test-org/test-project/Code review assistant')).toBeInTheDocument()
+    await user.click(within(menu).getByRole('button', { name: 'Copy address' }))
     await expect(navigator.clipboard.readText()).resolves.toBe('test-org/test-project/Code review assistant')
-    expect(await screen.findByRole('button', { name: 'CopyAddress' })).toHaveTextContent('Copied')
+    expect(await within(menu).findByRole('button', { name: 'Copy address' })).toHaveTextContent('Copied')
   })
 
   it('a platform Agent\'s address is its name itself', async () => {
     const watcher = makeAgent({ name: 'Integration patrol', scope: 'platform', projectId: null, address: 'Integration patrol' })
     server.use(http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(watcher)] })), ...baseHandlers([watcher]))
+    const user = userEvent.setup()
     renderRoutes(routes, `/platform/agents/${watcher.id}/config`)
-    expect(await screen.findByText('Integration patrol', { selector: 'span' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'CopyAddress' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('Integration patrol', { selector: 'span' })).toBeInTheDocument()
+    expect(within(menu).getByRole('button', { name: 'Copy address' })).toBeInTheDocument()
   })
 
   it('no address when the name does not meet the rules: a note says to rename it first and to use the internal ID when sending messages', async () => {
     const legacy = makeAgent({ name: 'old/bot', address: null })
     server.use(...baseHandlers([legacy]))
+    const user = userEvent.setup()
     renderRoutes(routes, `${defaultAgentsPath}/${legacy.id}/config`)
-    expect(await screen.findByText(/This Agent has no address yet.*Rename it to get one.*use its internal ID/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'CopyAddress' })).toBeNull()
+    await user.click(await screen.findByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText(/This Agent has no address yet.*Rename it to get one.*use its internal ID/)).toBeInTheDocument()
+    expect(within(menu).queryByRole('button', { name: 'Copy address' })).toBeNull()
   })
 })
 
