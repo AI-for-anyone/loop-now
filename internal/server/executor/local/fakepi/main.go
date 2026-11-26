@@ -145,6 +145,9 @@ func run(args []string) int {
 			s.handle(line)
 		}
 		if err != nil {
+			for _, answer := range s.atExit {
+				answer()
+			}
 			return 0 // exit once stdin ends
 		}
 	}
@@ -351,6 +354,9 @@ type server struct {
 	sess *session
 	cur  *turnRun
 
+	// atExit are answers held until stdin ends (FAKEPI_COMMANDS_AT_EXIT); only the read loop touches it.
+	atExit []func()
+
 	// Sum of all usage this process has reported, for get_session_stats.
 	statsMu sync.Mutex
 	stats   sessionStats
@@ -492,7 +498,13 @@ func (s *server) handle(line []byte) {
 	case "get_state":
 		s.ok(cmd.ID, "get_state", s.state())
 	case "get_commands":
-		s.ok(cmd.ID, "get_commands", map[string]any{"commands": s.commands()})
+		answer := func() { s.ok(cmd.ID, "get_commands", map[string]any{"commands": s.commands()}) }
+		if os.Getenv("FAKEPI_COMMANDS_AT_EXIT") == "1" {
+			// The answer arrives as the platform stops the process: right before exiting.
+			s.atExit = append(s.atExit, answer)
+			break
+		}
+		answer()
 	case "prompt":
 		s.prompt(cmd.ID, cmd.Message, cmd.Images)
 	case "compact":
