@@ -30,6 +30,10 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
 - At every width long Agent, project and menu names end in an ellipsis, and the marks, badges and the "+" button stay whole. On a phone the sidebar is still the drawer, without a handle.
 
+### A task step waits for all of its CLI's background work
+
+- A task step no longer ends, and blocks the task with "ended without submitting a result", while its CLI is still working. Antigravity: a command agy starts in a reply of its own, after an earlier command ended, is now background work of the step like the first one; the step waits for it and for agy's reply about it. For a regular Agent such a command now shows in the "Background N" mark and its end brings a follow-up reply. Claude Code: when a background task starts and ends inside Claude Code's own reply (a watcher that fails at once), the step now waits for the reply Claude Code gives about it afterwards.
+
 ### The heading above a CLI's own follow-up is one short line
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.

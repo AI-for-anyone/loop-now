@@ -189,8 +189,9 @@ type bgTool struct {
 	sink                         runturn.Sink
 }
 
-// handOver moves the tools of a prompt that ended normally that go on in the background (Background.Holds) to the
-// client, reporting each as a background task; the other open tools are closed with the turn.
+// handOver moves the tools of a turn that ended normally that go on in the background (Background.Holds) to the
+// client, reporting each as a background task; the other open tools are closed with the turn. The turn is a prompt of
+// the client's or a reply the agent gave by itself: agy starts commands in its own replies too.
 func (c *Client) handOver(t *turn) {
 	bg := c.o.Background
 	if bg == nil {
@@ -279,7 +280,8 @@ const selfQuietLimit = 10 * time.Minute
 
 // followOwnReply ends a turn the agent runs by itself when it does not end otherwise: a reply with no prompt (ownReply)
 // Settle after its usage_update with nothing more, or ReplyQuietLimit after its last message; a prompt of its own
-// selfQuietLimit after its last message.
+// selfQuietLimit after its last message. Such an end is a normal one: its commands still running go on in the
+// background (handOver), reported before the turn's end so that they belong to the run that records it.
 func (c *Client) followOwnReply(t *turn) {
 	quietLimit, settle := selfQuietLimit, time.Duration(0)
 	if bg := c.o.Background; bg != nil && t.self == ownReply {
@@ -298,6 +300,7 @@ func (c *Client) followOwnReply(t *turn) {
 			t.mu.Unlock()
 			timer.Reset(wait)
 		case <-timer.C:
+			c.handOver(t) // while the turn is still open: an end that comes meanwhile then finds its command
 			c.mu.Lock()
 			if c.turn == t {
 				c.turn = nil
