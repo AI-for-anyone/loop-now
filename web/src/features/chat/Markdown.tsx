@@ -1,8 +1,12 @@
 import { createContext, memo, useContext, useId, useRef, useState, type ComponentProps } from 'react'
+import { ImageOffIcon } from 'lucide-react'
 import ReactMarkdown, { type ExtraProps } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
+import { ImagePreviewDialog } from '@/features/images/ImagePreview'
+import { cn } from '@/lib/utils'
 import { MermaidBlock } from './MermaidBlock'
+import { rehypeImageRows } from './rehype-image-rows'
 import { rehypeLeadLabel } from './rehype-lead-label'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,6 +19,7 @@ function withoutNode<T extends ExtraProps>({ node, ...props }: T) {
 }
 
 const MarkdownSource = createContext({ text: '', streaming: false })
+const InsideLink = createContext(false)
 
 function nodeText(node: ExtraProps['node']): string {
   return node?.children.map(child => child.type === 'text' ? child.value : child.type === 'element' ? nodeText(child) : '').join('') ?? ''
@@ -70,14 +75,92 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
 // Links: once urlTransform has emptied a dangerous protocol, the link is shown as text; only absolute http(s) and mailto links open in
 // a new tab, while in-page anchors (e.g. footnotes) jump within the current page.
 function Link(allProps: ComponentProps<'a'> & ExtraProps) {
-  const { href, ...props } = withoutNode(allProps)
-  if (!href) return <span title={props.title}>{props.children}</span>
-  if (/^(https?:\/\/|mailto:)/i.test(href)) return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />
-  return <a {...props} href={href} />
+  const { href, children, ...props } = withoutNode(allProps)
+  if (!href) return <span title={props.title}>{children}</span>
+  const body = <InsideLink.Provider value={true}>{children}</InsideLink.Provider>
+  if (/^(https?:\/\/|mailto:)/i.test(href)) return <a {...props} href={href} target="_blank" rel="noopener noreferrer">{body}</a>
+  return <a {...props} href={href}>{body}</a>
 }
 
-function Image(allProps: ComponentProps<'img'> & ExtraProps) {
-  return <img {...withoutNode(allProps)} loading="lazy" referrerPolicy="no-referrer" className="max-w-full" />
+type MarkdownImageProps = ComponentProps<'img'> & ExtraProps & { 'data-md-block-image'?: string }
+
+// Reply images render as rounded thumbnails capped at 240px high and 360px wide, keeping aspect ratio; click or Enter opens the shared
+// preview dialog. Images that fail to load (or have a blocked URL) show their alt text in a small box instead of an empty frame.
+function Image(allProps: MarkdownImageProps) {
+  const { src, alt = '', title, className, 'data-md-block-image': blockAttr, ...props } = withoutNode(allProps)
+  const block = blockAttr !== undefined
+  const insideLink = useContext(InsideLink)
+  const [open, setOpen] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const failed = !src || failedSrc === src
+  const tooltip = alt || title || undefined
+
+  if (failed) {
+    return (
+      <span
+        role="img"
+        aria-label={alt || t.images.loadFailed}
+        title={tooltip}
+        data-md-image-error
+        data-md-block-image={block ? '' : undefined}
+        className={cn(
+          block ? 'mt-1.5 flex w-fit' : 'inline-flex align-top',
+          'max-w-[min(100%,360px)] items-center gap-2 rounded-input border border-dashed border-ink/25 bg-paper px-3 py-2 text-[13px] leading-snug text-ink-500',
+        )}
+      >
+        <ImageOffIcon aria-hidden="true" className="size-4 shrink-0" />
+        <span className="min-w-0 break-words">{alt || t.images.loadFailed}</span>
+      </span>
+    )
+  }
+
+  const image = (
+    <img
+      {...props}
+      src={src}
+      alt={alt}
+      title={tooltip}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailedSrc(src)}
+      className={cn(
+        'block h-auto max-h-[240px] w-auto max-w-full',
+        insideLink && 'max-w-[min(100%,360px)] rounded-input border border-ink/20 bg-white',
+        insideLink && block && 'mt-1.5',
+        className,
+      )}
+    />
+  )
+
+  if (insideLink) return image
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={alt ? t.images.enlarge(alt) : t.images.enlargeUnnamed}
+        title={tooltip}
+        onClick={() => setOpen(true)}
+        data-md-image
+        data-md-block-image={block ? '' : undefined}
+        className={cn(
+          block ? 'mt-1.5 block' : 'inline-block align-top',
+          'max-w-[min(100%,360px)] cursor-zoom-in overflow-hidden rounded-input border border-ink/20 bg-white p-0 outline-none hover:border-ink/40 focus-visible:shadow-focus',
+        )}
+      >
+        {image}
+      </button>
+      <ImagePreviewDialog
+        open={open}
+        onOpenChange={setOpen}
+        src={src}
+        alt={alt}
+        title={alt || t.images.unnamed}
+        referrerPolicy="no-referrer"
+        showOriginal
+      />
+    </>
+  )
 }
 
 // A plugin's README doesn't live in the console: relative links have nowhere to resolve to, so only their text is shown; absolute
@@ -167,9 +250,15 @@ export const Markdown = memo(function Markdown({ text, cursor = false, readme = 
           footnoteLabel: t.chat.footnoteLabel,
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
-        // Labels are processed after the cursor: the cursor gets wrapped together with the text after the label and stays at the end
-        // of the text.
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : []), ...(leadLabels ? [rehypeLeadLabel] : [])]}
+        // Image rows run before the cursor so streaming doesn't break a row; labels run after the cursor so the cursor stays at the end
+        // of the text after the label.
+        rehypePlugins={[
+          [rehypeHighlight, { detect: false, ignore: ['mermaid'] }],
+          [rehypePrefixFootnoteLabel, prefix],
+          ...(readme ? [] : [rehypeImageRows]),
+          ...(cursor ? [rehypeCursor] : []),
+          ...(leadLabels ? [rehypeLeadLabel] : []),
+        ]}
         components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, ...tableComponents }}
       >
         {text}

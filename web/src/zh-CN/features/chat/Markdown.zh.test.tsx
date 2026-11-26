@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { Markdown } from '@/features/chat/Markdown'
 
@@ -33,5 +34,87 @@ describe('Markdown rendering and safety', () => {
       expect(back).not.toHaveAttribute('target')
       expect(container.querySelector(`[id="${back.getAttribute('href')!.slice(1)}"]`)).toBe(ref)
     }
+  })
+
+  it('reply image preview and fallback copy use Chinese UI text', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Markdown text="![候选图](https://example.com/a.png)" />)
+    await user.click(screen.getByRole('button', { name: '放大图片：候选图' }))
+    const dialog = await screen.findByRole('dialog', { name: '候选图' })
+    expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', 'https://example.com/a.png')
+    await user.keyboard('{Escape}')
+
+    rerender(<Markdown text="![](https://example.com/broken.png)" />)
+    fireEvent.error(document.querySelector('img')!)
+    expect(screen.getByRole('img', { name: '图片加载失败' })).toHaveTextContent('图片加载失败')
+  })
+
+  it('keeps Chinese caption lines grouped with their images in one row', () => {
+    const reply = [
+      '做了四张候选图：',
+      '',
+      '2D-1：红蓝撞色，适合做封面',
+      '',
+      '![2D-1](https://example.com/1.png)',
+      '',
+      '2D-2：黄底黑线，风格更轻松',
+      '',
+      '![2D-2](https://example.com/2.png)',
+      '',
+      '2D-3：极简留白，突出主体',
+      '',
+      '![2D-3](https://example.com/3.png)',
+      '',
+      '2D-4：复古印刷质感',
+      '',
+      '![2D-4](https://example.com/4.png)',
+    ].join('\n')
+    const { container } = render(<Markdown text={reply} />)
+    expect([...container.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['做了四张候选图：'])
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+    const figures = [...row.querySelectorAll<HTMLElement>('figure.md-image-item')]
+    expect(figures).toHaveLength(4)
+    expect(figures[0].firstElementChild).toHaveTextContent('2D-1：红蓝撞色，适合做封面')
+    expect(within(figures[3]).getByRole('img', { name: '2D-4' })).toBeInTheDocument()
+  })
+
+  it('groups two-line Chinese captions with hard breaks and local file links into rows split by headings and dividers', () => {
+    const reply = [
+      '4 张 **Loop Now** 卡通形象候选图都已经用 `nano-banana-pro`（1:1，2K）生成完成，实际消耗 **60 Tapies**（当前剩余 **1,803 Tapies**），原图全部存进我自己的工作目录并做了本地 Git 提交（`8fffd3f`）。',
+      '',
+      '### 2D 粗边印刷/贴纸风（对齐现有封面风格）',
+      '',
+      '**2D-1**：笑眼很萌，但右上角开口处多了一根细白连线。  ',
+      '本地文件：[mascot-2d-1.png](file:///workspace/assets/mascot/mascot-2d-1.png)',
+      '![Loop Now 2D-1](https://example.com/2d-1.png)',
+      '',
+      '**2D-2（2D 首推）**：右上角小黄块干净悬浮，身体开口和 Logo 一致，配色和现有 Riso 封面最搭。  ',
+      '本地文件：[mascot-2d-2.png](file:///workspace/assets/mascot/mascot-2d-2.png)',
+      '![Loop Now 2D-2](https://example.com/2d-2.png)',
+      '',
+      '---',
+      '',
+      '### 3D 潮玩/盲盒风',
+      '',
+      '**3D-1**：盲盒材质很好，不过右上角开口切得偏小，Logo 轮廓不如第二张明显。  ',
+      '本地文件：[mascot-3d-1.png](file:///workspace/assets/mascot/mascot-3d-1.png)',
+      '![Loop Now 3D-1](https://example.com/3d-1.png)',
+      '',
+      '**3D-2（3D 首推）**：右上角开口清楚，一眼能认出是 Loop Now Logo 变的，表情和悬浮小金块都很讨喜。  ',
+      '本地文件：[mascot-3d-2.png](file:///workspace/assets/mascot/mascot-3d-2.png)',
+      '![Loop Now 3D-2](https://example.com/3d-2.png)',
+    ].join('\n')
+    const { container } = render(<Markdown text={reply} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('[data-md-image-row]')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.getAttribute('data-count'))).toEqual(['2', '2'])
+    expect([...container.querySelectorAll('h3')].map((h) => h.textContent)).toEqual([
+      '2D 粗边印刷/贴纸风（对齐现有封面风格）',
+      '3D 潮玩/盲盒风',
+    ])
+    expect(container.querySelectorAll('hr')).toHaveLength(1)
+    expect(within(rows[0]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 2D-1', 'Loop Now 2D-2'])
+    expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 3D-1', 'Loop Now 3D-2'])
   })
 })

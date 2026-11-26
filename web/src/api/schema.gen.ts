@@ -7197,6 +7197,8 @@ export interface components {
             /** Format: uuid */
             currentNodeRunId: string | null;
             currentStepId: string | null;
+            /** @description The title of the current step (currentStepId) in the task's frozen workflow, for showing to a person; null when there is no current step. */
+            currentStepTitle: string | null;
             /** Format: uuid */
             currentAgentId: string | null;
             reason: string | null;
