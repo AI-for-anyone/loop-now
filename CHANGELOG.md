@@ -6,6 +6,18 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Sidebar Agent rows stay on one line
+
+- An Agent row in the sidebar is always one line: a long name ends with an ellipsis (the full name is in the tooltip) instead of pushing the runtime mark and the status onto a second line.
+- The status is a small symbol instead of a word: a pulsing pink dot while replying, a yellow pill with a shell glyph and the count while background work runs, a moon while sleeping, a flag for the project's Manager. The words are in the tooltip and for screen readers; without motion the dot does not pulse.
+- The other sidebar rows (projects, groups, the project switcher, the connection line) stay on one line too, with tooltips for cut text.
+
+### The page body uses the whole window
+
+- The body of every console page (an Agent's four tabs, a task, the task list, overview, settings, stats, plugins, Skills, identities, import) no longer sits on an inset sheet with a thick border, rounded corners and a drop shadow: it meets the header, the sidebar and the window edges, with a thin ink line under the header and between the sidebar and the page.
+- A conversation uses the width up to the turn ruler (24 px gutters, up to 1600 px); tables and code blocks use all of it, and the message box lines up with the messages. On a 1920 px window the space left of the ruler went from about 360 px to about 37 px. The turn ruler is 40 px wide, and there is less space above the first message and above the message box.
+- Task node conversations get the same width; phones keep their layout with 14 px gutters.
+
 ### Change notes are one file per change
 
 - A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
