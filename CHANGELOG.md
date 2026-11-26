@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### loopctl sets an Agent's folder, configuration, mode and levels
+
+- `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
+- Values with a fixed list are checked by loopctl before anything is sent; the rest (an absolute folder, a level the model supports, a service tier only for Codex models in Pi, no working folder on Pi) is checked by the server, whose message is shown as it is.
+
 ### Tasks with a workspace: a git worktree, or a copy of any folder
 
 - A task can carry a workspace: the Manager names a folder on this computer when it creates the task, and every step of the task works there instead of in a copy of the Agent's own folder. A step works like the Agent's regular conversation: with "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included. Several tasks can run on the same folder at once without touching each other or the folder itself.

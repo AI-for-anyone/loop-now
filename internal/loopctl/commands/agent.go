@@ -73,7 +73,49 @@ func agentFields(inv *cli.Invocation) (map[string]any, error) {
 		}
 		body["prompt"] = string(b)
 	}
+	for flag, field := range map[string]string{"working-dir": "workingDirectory", "permission-mode": "permissionMode", "thinking-level": "thinkingLevel", "service-tier": "serviceTier"} {
+		if inv.Has(flag) {
+			body[field] = inv.String(flag)
+		}
+		if inv.Has("clear-" + flag) {
+			body[field] = nil
+		}
+	}
+	if inv.Has("use-local-config") {
+		body["useLocalConfig"] = inv.Bool("use-local-config")
+	}
 	return body, nil
+}
+
+// The enumerations below are those of the contract (PermissionMode, ThinkingLevel, CodexServiceTier); a test keeps
+// them equal.
+var (
+	permissionModes = []string{"supervised", "accept_edits", "auto", "full"}
+	thinkingLevels  = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+	serviceTiers    = []string{"default", "priority", "ultrafast"}
+)
+
+// agentSettingFlags are the options for an Agent's folder, local configuration, permission mode and levels, shared by
+// agent create and agent update.
+var agentSettingFlags = []cli.Flag{
+	{Name: "working-dir", Type: cli.TypeString, Description: "Absolute path of the folder the Agent's CLI works in (not with a Pi model); checked by the server"},
+	{Name: "use-local-config", Type: cli.TypeEnum, Values: []string{"true", "false"}, Description: "Whether the CLI uses this computer's own configuration and login (true) or Loop Now's (false)"},
+	{Name: "permission-mode", Type: cli.TypeEnum, Values: permissionModes, Description: "How much the runtime may do without asking; a Pi model only takes full; without it, create takes the default from permission settings"},
+	{Name: "thinking-level", Type: cli.TypeEnum, Values: thinkingLevels, Description: "Thinking level; it must be one the model supports (checked by the server); without it, create uses the model's default"},
+	{Name: "service-tier", Type: cli.TypeEnum, Values: serviceTiers, Description: "Codex speed tier (default is Standard, priority is Fast); only openai-codex models take it"},
+}
+
+// agentClearFlags reset a setting on agent update, sending null.
+var agentClearFlags = []cli.Flag{
+	{Name: "clear-working-dir", Type: cli.TypeBool, Description: "Remove the working folder"},
+	{Name: "clear-thinking-level", Type: cli.TypeBool, Description: "Go back to the model's default thinking level"},
+	{Name: "clear-service-tier", Type: cli.TypeBool, Description: "Go back to Standard"},
+}
+
+var agentClearConstraints = []cli.Constraint{
+	{Kind: cli.AtMostOne, Flags: []string{"working-dir", "clear-working-dir"}},
+	{Kind: cli.AtMostOne, Flags: []string{"thinking-level", "clear-thinking-level"}},
+	{Kind: cli.AtMostOne, Flags: []string{"service-tier", "clear-service-tier"}},
 }
 
 func addAgent(r *cli.Registry) {
@@ -112,13 +154,13 @@ func addAgent(r *cli.Registry) {
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			scopeFlags[0], scopeFlags[1],
 			{Name: "name", Type: cli.TypeString, Required: true, Description: "Agent name, unique within the project (within the platform for platform Agents); cannot contain / or #, cannot start with @, and cannot be in UUID format"},
 			{Name: "provider", Type: cli.TypeString, Required: true, Description: "Model provider ID, from model providers"},
 			{Name: "model", Type: cli.TypeString, Required: true, Description: "Model ID, from model list <provider>"},
 			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "Read the Prompt from a file; - means standard input"},
-		},
+		}, agentSettingFlags...),
 		Constraints: []cli.Constraint{scopeRequired},
 		Output:      "Agent",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
@@ -135,23 +177,23 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "update"},
-		Summary:    "Change an Agent's name, model or Prompt; a change that includes the Prompt (including clearing it or the same text) must explicitly give the promptVersion from agent get, a version conflict exits with 8, and it does not read the new version and retry automatically; creating, or changing only the name/model, is not subject to this. Takes effect at the next dispatch",
+		Summary:    "Change an Agent's name, model, Prompt, working folder, local configuration, permission mode, thinking level or service tier; only the settings given are sent. A change that includes the Prompt (including clearing it or the same text) must explicitly give the promptVersion from agent get, a version conflict exits with 8, and it does not read the new version and retry automatically; creating, or a change without the Prompt, is not subject to this. Takes effect at the next dispatch",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
 		Args:       []cli.Arg{agentArg},
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			{Name: "name", Type: cli.TypeString, Description: "New name"},
 			{Name: "provider", Type: cli.TypeString, Description: "Model provider ID; give it together with --model"},
 			{Name: "model", Type: cli.TypeString, Description: "Model ID; give it together with --provider"},
 			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "Read the new Prompt from a file; - means standard input; an empty file clears it, and --expected-prompt-version is still required"},
 			{Name: "expected-prompt-version", Type: cli.TypeInt, Min: intp(1), Description: "The positive integer agent get.promptVersion the edit is based on; give it together with --prompt-file; configVersion is not used"},
-		},
-		Constraints: []cli.Constraint{
-			{Kind: cli.AtLeastOne, Flags: []string{"name", "provider", "prompt-file"}},
+		}, append(agentSettingFlags, agentClearFlags...)...),
+		Constraints: append([]cli.Constraint{
+			{Kind: cli.AtLeastOne, Flags: []string{"name", "provider", "prompt-file", "working-dir", "clear-working-dir", "use-local-config", "permission-mode", "thinking-level", "clear-thinking-level", "service-tier", "clear-service-tier"}},
 			{Kind: cli.Together, Flags: []string{"provider", "model"}},
 			{Kind: cli.Together, Flags: []string{"prompt-file", "expected-prompt-version"}, Hint: "Run agent get first to see prompt and promptVersion, check the version your edit is based on, then submit explicitly. On a conflict, nothing is overwritten automatically. Keep your local draft."},
-		},
+		}, agentClearConstraints...),
 		Output: "Agent",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
 			body, err := agentFields(inv)
