@@ -44,7 +44,15 @@ export const server = setupServer(
   ),
   // Removing a kept worktree: by default nothing is kept, as the server answers before a worktree exists; tests that remove override it.
   http.post(apiUrl('/tasks/:taskId/workspace/remove'), () => HttpResponse.json(errorBody('task_workspace_not_kept'), { status: 409 })),
-  // Folders: by default an empty root with no Git pull history.
+  // Folders: by default an empty root, a synthetic location, and no Git pull history.
+  http.get(apiUrl('/agents/:agentId/folder'), ({ params }) => {
+    const path = `/test-work/agents/${String(params.agentId)}/workspace`
+    return HttpResponse.json({ path, realPath: path })
+  }),
+  http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/folder'), ({ params }) => {
+    const path = `/test-work/tasks/${String(params.taskId)}/nodes/${String(params.nodeRunId)}/workspace`
+    return HttpResponse.json({ path, realPath: path })
+  }),
   http.get(apiUrl('/agents/:agentId/folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/projects/:projectId/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),

@@ -1,7 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { apiUrl } from '@/test/api'
+import { server } from '@/test/server'
 import { Markdown } from '@/features/chat/Markdown'
+import type { ReplyFolderContext } from '@/features/chat/local-images'
 
 // Footnotes use the UI copy instead of remark's built-in English labels. In English the copy reads the same as the built-in labels,
 // so this is checked in Chinese. Moved from src/features/chat/Markdown.test.tsx, which keeps the same scenario in English.
@@ -116,5 +120,45 @@ describe('Markdown rendering and safety', () => {
     expect(container.querySelectorAll('hr')).toHaveLength(1)
     expect(within(rows[0]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 2D-1', 'Loop Now 2D-2'])
     expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 3D-1', 'Loop Now 3D-2'])
+  })
+
+  it('renders inline-code PNG and SVG list paths from the Agent folder with Chinese folder-link tooltip and lightbox labels', async () => {
+    const root = '/Users/Shared/loop-now-desktop/default/agents/01a217ac/workspace'
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="16"/></svg>'
+    server.use(
+      http.get(apiUrl('/agents/a1/folder/content'), ({ request }) => {
+        const rel = new URL(request.url).searchParams.get('path') ?? ''
+        if (rel.endsWith('.png')) return new HttpResponse(png, { headers: { 'Content-Type': 'application/octet-stream' } })
+        if (rel.endsWith('.svg')) return new HttpResponse(svg, { headers: { 'Content-Type': 'application/octet-stream' } })
+        return new HttpResponse(null, { status: 404 })
+      }),
+    )
+    const folder: ReplyFolderContext = {
+      roots: [root],
+      contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      folderLink: (rel) => `/p/loop-now/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      maxBytes: 20 << 20,
+    }
+    const reply = [
+      `2×2 对比预览图 preview-2x2.png：\`${root}/assets/mascot/svg-concepts/preview-2x2.png\``,
+      '',
+      `- **方案 1**：\`${root}/assets/mascot/svg-concepts/concept-1.svg\``,
+      `- **方案 2**：\`${root}/assets/mascot/svg-concepts/concept-2.svg\``,
+      `- **方案 3**：\`${root}/assets/mascot/svg-concepts/concept-3.svg\``,
+      `- **方案 4**：\`${root}/assets/mascot/svg-concepts/concept-4.svg\``,
+    ].join('\n')
+
+    const user = userEvent.setup()
+    const { container } = render(<Markdown folder={folder} text={reply} />)
+
+    const link = screen.getByRole('link', { name: `${root}/assets/mascot/svg-concepts/preview-2x2.png` })
+    expect(link).toHaveAttribute('title', '在文件夹中打开')
+    expect(await screen.findByRole('button', { name: '放大图片：preview-2x2.png' })).toBeInTheDocument()
+    await waitFor(() => expect(container.querySelector('[data-md-local-images] [data-md-image-row]')).toHaveAttribute('data-count', '4'))
+
+    await user.click(screen.getByRole('button', { name: '放大图片：concept-1.svg' }))
+    const dialog = await screen.findByRole('dialog', { name: 'concept-1.svg' })
+    expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', folder.contentURL('assets/mascot/svg-concepts/concept-1.svg'))
   })
 })

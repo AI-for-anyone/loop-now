@@ -32,6 +32,8 @@ import (
 type Folder struct {
 	Dir   string // absolute path of the folder
 	Trash string // absolute path of the trash
+	// Existing: the folder is only read and never created; a missing folder is 404.
+	Existing bool
 }
 
 // Entry is one item in a folder.
@@ -72,6 +74,13 @@ func cleanPath(field, p string, allowRoot bool) (string, error) {
 }
 
 func (f Folder) open() (*os.Root, error) {
+	if f.Existing {
+		root, err := os.OpenRoot(f.Dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, notFound()
+		}
+		return root, err
+	}
 	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
 		return nil, err
 	}

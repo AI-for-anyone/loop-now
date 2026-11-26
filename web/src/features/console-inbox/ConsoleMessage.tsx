@@ -4,6 +4,7 @@ import type { Schemas } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { AgentChatReply } from '@/features/chat/ChatBubble'
+import type { ReplyFolderContext } from '@/features/chat/local-images'
 import { Markdown } from '@/features/chat/Markdown'
 import { MessageImages } from '@/features/images/MessageImages'
 import { InboxNotice } from '@/features/inbox/InboxNotice'
@@ -23,7 +24,7 @@ type Message = Schemas['InboxMessage']
 // shown; onReply puts the composer into the mode for replying to this question.
 // meta goes at the end of the name line and children below the question (task nodes use these to show the Inbox source and
 // the linked run).
-export function ConsoleMessage({ message, agent, answerable = true, onReply, meta, children }: { message: Message; agent: { id: string; name: string }; answerable?: boolean; onReply?: (message: Message) => void; meta?: ReactNode; children?: ReactNode }) {
+export function ConsoleMessage({ message, agent, folder, answerable = true, onReply, meta, children }: { message: Message; agent: { id: string; name: string }; folder?: ReplyFolderContext; answerable?: boolean; onReply?: (message: Message) => void; meta?: ReactNode; children?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   useReadOnView(ref, message)
   const unread = message.to.kind === 'console' && !message.readAt && !message.cancelledAt
@@ -42,7 +43,7 @@ export function ConsoleMessage({ message, agent, answerable = true, onReply, met
         }
       >
         <div className="min-w-0">
-          <Markdown text={message.text} />
+          <Markdown text={message.text} folder={folder} />
           <MessageImages images={message.images} />
           {message.notice && <InboxNotice notice={message.notice} />}
         </div>

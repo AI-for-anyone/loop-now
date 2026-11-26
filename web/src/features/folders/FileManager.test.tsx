@@ -215,4 +215,33 @@ describe('File manager', () => {
     expect(screen.getByText('Symlink to /etc/hosts')).toBeInTheDocument()
     expect(screen.queryByText(/The submitted content didn't pass validation/)).toBeNull()
   })
+
+  it('opens a nested file right away via initialPath, renders SVG as <img> (never inlined), and falls back to the parent folder when missing', async () => {
+    const source = createMockFolder({ key: 'init', preset: 'workspace', latency: 0 })
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><script>window.__svgRan=true</script><circle cx="20" cy="20" r="15"/></svg>'
+    await source.write('assets/mascot/concept.svg', new Blob([svg], { type: 'application/octet-stream' }), true)
+    const user = userEvent.setup()
+    const view = renderWithQuery(
+      <FileManager source={source} initialPath="assets/mascot/concept.svg" rootLabel="server's folder" limits={limits} className="h-[600px]" />,
+    )
+
+    const img = await screen.findByRole('img', { name: 'concept.svg' })
+    expect(img.tagName).toBe('IMG')
+    expect(img.getAttribute('src')).toMatch(/^(?:data:image\/svg\+xml|blob:)/)
+    expect(view.container.querySelector('svg script')).toBeNull()
+    expect(await findRow('assets/mascot/concept.svg')).toHaveAttribute('aria-selected', 'true')
+
+    // Navigating to another file overrides initialPath without snapping back.
+    await user.click(await findRow('AGENTS.md'))
+    await waitFor(() => expect(row('AGENTS.md')).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.queryByRole('img', { name: 'concept.svg' })).toBeNull()
+    view.unmount()
+
+    // Missing file under an existing directory falls back to showing that directory.
+    renderWithQuery(
+      <FileManager source={source} initialPath="assets/mascot/missing.png" rootLabel="server's folder" limits={limits} className="h-[600px]" />,
+      createTestQueryClient(),
+    )
+    expect(await screen.findByRole('heading', { name: 'mascot' })).toBeInTheDocument()
+  })
 })

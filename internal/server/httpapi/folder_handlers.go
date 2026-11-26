@@ -4,6 +4,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"path/filepath"
 	"strconv"
 
 	"loop-now/internal/server/apitypes"
@@ -20,6 +21,31 @@ func (s *Server) agentFolder(r *http.Request) (folders.Folder, error) {
 		return folders.Folder{}, err
 	}
 	return s.Folders.AgentFolder(r.Context(), id)
+}
+
+// taskNodeFolder is the folder of the task instance that runs the node in the path.
+func (s *Server) taskNodeFolder(r *http.Request) (folders.Folder, error) {
+	n, err := s.findTaskNode(r)
+	if err != nil {
+		return folders.Folder{}, err
+	}
+	return s.Folders.TaskInstanceFolder(n.RuntimeID), nil
+}
+
+// folderLocation answers where the folder is on this computer.
+func (s *Server) folderLocation(of folderOf) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		f, err := of(r)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		real, err := filepath.EvalSymlinks(f.Dir)
+		if err != nil {
+			real = f.Dir
+		}
+		writeJSON(w, http.StatusOK, apitypes.FolderLocation{Path: f.Dir, RealPath: real})
+	}
 }
 
 func (s *Server) projectContextFolder(r *http.Request) (folders.Folder, error) {

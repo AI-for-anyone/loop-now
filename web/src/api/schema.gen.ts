@@ -1062,6 +1062,29 @@ export interface paths {
         patch: operations["updateAgent"];
         trace?: never;
     };
+    "/agents/{agentId}/folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where an Agent folder is on this computer
+         * @description The absolute path of the Agent folder, the root that the other folder endpoints take relative paths from. The
+         *     console uses it to turn an absolute path the Agent wrote in a reply into a path within the folder.
+         */
+        get: operations["getAgentFolder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agentId}/folder/entries": {
         parameters: {
             query?: never;
@@ -3263,6 +3286,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{taskId}/nodes/{nodeRunId}/folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Where the folder of a node's task instance is on this computer
+         * @description The absolute path of the folder of the task instance that runs this node: the copy of its Agent's folder made
+         *     when the task started, which is reclaimed when the task ends. Every node run of the same Agent in a task has the
+         *     same folder. The path is given even when the folder is already gone; its content then answers 404.
+         */
+        get: operations["getTaskNodeFolder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/nodes/{nodeRunId}/folder/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Download a file from the folder of a node's task instance (raw bytes)
+         * @description Read only, with the same checks and Range support as getAgentFolderFileContent. 404 when the file or the folder does not exist, for example after the task ended and its folder was reclaimed.
+         */
+        get: operations["getTaskNodeFolderFileContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{taskId}/retry": {
         parameters: {
             query?: never;
@@ -4805,6 +4876,12 @@ export interface components {
          * @enum {string}
          */
         FolderSourceKind: "git" | "files";
+        FolderLocation: {
+            /** @description Absolute path of the folder on this computer, as the Agent's system prompt names it */
+            path: string;
+            /** @description The same folder with symlinks resolved, which is the form a CLI that prints its working folder gives; equal to path when nothing on the way is a symlink or the folder does not exist */
+            realPath: string;
+        };
         FolderEntry: {
             name: string;
             /** @description Relative path within the folder */
@@ -12784,6 +12861,33 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    getAgentFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The folder's location */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderLocation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listAgentFolderEntries: {
         parameters: {
             query?: {
@@ -16820,6 +16924,79 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    getTaskNodeFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The folder's location */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderLocation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTaskNodeFolderFileContent: {
+        parameters: {
+            query: {
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
+                path: components["parameters"]["FolderEntryPath"];
+            };
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File content */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The requested byte range */
+            206: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     retryTask: {

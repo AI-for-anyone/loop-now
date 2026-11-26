@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -69,6 +71,20 @@ func TestFolderEndpoints(t *testing.T) {
 		})
 	}
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/folder/entries", nil)
+
+	// Where the Agent folder is: the absolute path the files above were written under, and the same with symlinks
+	// resolved (the temporary directory may sit behind one).
+	loc := decode[apitypes.FolderLocation](t, e.expect(200, "GET", roots["agent"], nil))
+	if !filepath.IsAbs(loc.Path) || !strings.HasSuffix(loc.Path, filepath.Join("agents", agent.ID.String(), "workspace")) {
+		t.Fatalf("folder location: %+v", loc)
+	}
+	if b, err := os.ReadFile(filepath.Join(loc.Path, "AGENTS.md")); err != nil || string(b) != "# Entry\nContent" {
+		t.Fatalf("the path should be the folder the endpoints write to: %q %v", b, err)
+	}
+	if real, _ := filepath.EvalSymlinks(loc.Path); loc.RealPath != real {
+		t.Fatalf("realPath: %+v, want %q", loc, real)
+	}
+	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/folder", nil)
 	e.expect(404, "GET", "/projects/"+uuid.NewString()+"/context-folder/entries", nil)
 
 	// Git pull: validation, list and query (actual cloning is covered by the folders package tests).

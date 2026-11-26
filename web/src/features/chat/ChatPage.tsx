@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { stopAgentRun, useAgentQueue } from '@/api/agent-queue'
+import { agentFolderContentURL, folderRoots, useAgentFolderLocation } from '@/api/folders'
 import { useAgentStatus, useContextInfo, useMessages, useModels, useRunTimeline } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -8,11 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
+import { agentPath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { useAgentContext } from '@/features/agents/agent-context'
+import { useScope } from '@/features/projects/scope-context'
 import { CompactionNote } from './CompactionNote'
 import { Composer, type ComposerHandle } from './Composer'
 import { isBusy } from './live-state'
+import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from './local-images'
 import { MessageList } from './MessageList'
 import { conflictNotice, useStopReply } from './queue-actions'
 import { QueueList, QueueMessages } from './QueueList'
@@ -41,6 +45,7 @@ function runFromHash(hash: string): string | null {
 
 export function ChatPage() {
   const { agent, reportLiveStatus } = useAgentContext()
+  const scope = useScope()
   const location = useLocation()
   const navigate = useNavigate()
   const { live, recordSent, recordQueueAction } = useAgentLive(agent.id)
@@ -56,6 +61,19 @@ export function ChatPage() {
   const notFound = hashRun !== null && aroundRun === null
   const status = useAgentStatus(agent.id)
   const context = useContextInfo()
+  const folderLocation = useAgentFolderLocation(agent.id)
+  const maxImageBytes = context.data?.limits.textEdit.maxBytes ?? DEFAULT_IMAGE_PREVIEW_MAX_BYTES
+  const folderTabPath = agentPath(scope, agent.id, 'folder')
+  // Stable reference so memo(Markdown) skips completed turns while a reply streams.
+  const replyFolder = useMemo<ReplyFolderContext>(
+    () => ({
+      roots: folderRoots(folderLocation.data),
+      contentURL: (path) => agentFolderContentURL(agent.id, path),
+      folderLink: (path) => `${folderTabPath}?${new URLSearchParams({ path })}`,
+      maxBytes: maxImageBytes,
+    }),
+    [folderLocation.data, agent.id, folderTabPath, maxImageBytes],
+  )
   // While locating, the history isn't loaded up to the latest yet, so new messages are only announced, not inserted into the
   // conversation flow.
   const atLatest = !messages.data?.pages[0]?.hasMoreAfter
@@ -102,7 +120,7 @@ export function ChatPage() {
     ...toYou.map((message) => ({
       key: `console:${message.id}`,
       at: message.createdAt,
-      node: <ConsoleMessage message={message} agent={agent} onReply={(m) => setReplying({ agentId: agent.id, messageId: m.id })} />,
+      node: <ConsoleMessage message={message} agent={agent} folder={replyFolder} onReply={(m) => setReplying({ agentId: agent.id, messageId: m.id })} />,
     })),
     ...commands
       .filter((item) => item.agentId === agent.id)
@@ -198,6 +216,7 @@ export function ChatPage() {
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.
               key={aroundRun ?? 'latest'}
               agent={agent}
+              folder={replyFolder}
               turns={turns}
               hasQueued={queuedTurns.length > 0 || queueItems.length > 0}
               hasOlder={messages.hasNextPage}
