@@ -364,7 +364,7 @@ export function MessageList({
         className={cn(
           // On wide screens the left padding is a bit narrower (the number column got narrower too), moving the body left; narrow
           // screens are unchanged.
-          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
+          'relative h-full min-w-0 flex-1 overflow-y-auto pt-3.5 pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
           // With a ruler (at least two turns, wide screen) hide the native scrollbar; without ticks keep it, so you can still tell how far
           // you've scrolled through one very long reply.
           turns.length > 1 && 'nav:no-scrollbar',

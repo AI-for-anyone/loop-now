@@ -8,7 +8,17 @@ export const agents = {
   tabs: { chat: '对话', config: '配置', folder: '文件夹', inbox: '收件箱' },
   address: {
     label: '地址',
+    copy: '复制地址',
     missing: '这个 Agent 暂时没有地址：名称不满足命名规则，改名后才有地址。给它发 Inbox 消息时改用内部 ID。',
+  },
+  menu: {
+    label: '更多',
+    title: 'Agent 信息',
+    runtime: '运行时',
+    runtimeValue: (name: string, where: string) => `${name}（${where}）`,
+    model: '模型',
+    backToProject: (name: string) => `返回项目 ${name}`,
+    backToGlobal: '返回全局',
   },
   selectHint: '从左侧栏选择一个 Agent。',
   manager: 'Manager',

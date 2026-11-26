@@ -22,7 +22,7 @@ export function AgentInboxTab() {
   // narrow screens).
   return (
     <div className="flex h-full min-h-0">
-      <div className="h-full min-w-0 flex-1 overflow-y-auto pt-6 pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,34px)]">
+      <div className="h-full min-w-0 flex-1 overflow-y-auto pt-4 pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,34px)]">
         <div className="flex max-w-[1040px] flex-col gap-3.5">
           {/* The top row: filter pills, with the read-only note and the live status on the right; a solid line below. */}
           <div data-inbox-bar className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b-2 border-ink pb-3.5">
