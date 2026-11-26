@@ -29,9 +29,6 @@ jobs:
       # "check-english: zh (reason)"); see scripts/check-english for the exact rule.
       - name: English comments, strings and API contracts
         run: go run ./scripts/check-english
-      # The whole server must cross-compile to Windows (process groups, locks, permissions and no-follow opens each have a Windows implementation); real runs are in server-windows.
-      - name: go vet (windows cross)
-        run: GOOS=windows GOARCH=amd64 go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
       - name: go test
         run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/...
       # Stress tests for concurrent writes, read-your-writes, cancellation, killed processes and checkpoints, run three times on their own.
@@ -42,7 +39,7 @@ jobs:
   server-windows:
     name: server (windows, go vet + go test)
     # Disabled for now (user decision, 2026-11-11): 4 executor tests of the Claude Code runtime do not pass on Windows yet; see MAIN.md.
-    # The Windows cross-compile check stays in the server job above (go vet windows cross), and the desktop Windows packaging check is unaffected. Delete the line below to re-enable.
+    # The Windows cross-compile check was removed from the server job too (user decision, 2026-11-26); the desktop Windows packaging check is unaffected. Delete the line below to re-enable.
     if: false
     runs-on: windows-latest
     defaults:
