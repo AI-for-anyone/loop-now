@@ -119,3 +119,18 @@ func (s *Store) AgentProjectID(ctx context.Context, agentID uuid.UUID) (*uuid.UU
 	err := s.Pool.QueryRow(ctx, `SELECT project_id FROM agents WHERE id = $1`, agentID).Scan(&projectID)
 	return projectID, notFoundIfNoRows(err, "Agent")
 }
+
+// ProjectWithLocalDirectory returns a non-deleted project that has path as one of its local directories (the oldest);
+// nil when none has.
+func (s *Store) ProjectWithLocalDirectory(ctx context.Context, path string) (*uuid.UUID, error) {
+	var id uuid.UUID
+	err := s.Pool.QueryRow(ctx, `SELECT p.id FROM project_local_directories d JOIN projects p ON p.id = d.project_id, json_each(d.directories) j
+		WHERE p.deleted_at IS NULL AND json_extract(j.value, '$.path') = $1 ORDER BY p.created_at, p.id LIMIT 1`, path).Scan(&id)
+	if IsNotFound(notFoundIfNoRows(err, "Project")) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}

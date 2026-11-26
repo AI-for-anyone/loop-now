@@ -68,6 +68,13 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     expect(bridge.setBadge).toHaveBeenLastCalledWith(3)
   })
 
+  it('an approval question says the Agent asks for approval', async () => {
+    await start()
+    const message = question({ text: 'git push origin main', question: { kind: 'permission', permissionRequestId: crypto.randomUUID(), options: [], expiresAt: '2026-12-01T00:00:00Z', state: 'open', answer: null } })
+    await emitInbox('inbox.message.created', { message, unreadTotal: 1 })
+    expect(bridge.notify).toHaveBeenCalledWith({ id: message.id, title: 'Reviewer asks for approval', body: 'git push origin main', path: `/agents/${agent.id}/chat` })
+  })
+
   it('a message a task instance sends you gives a "task waiting" notification that opens the node of the task the message belongs to', async () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
     server.use(http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })))

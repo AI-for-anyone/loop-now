@@ -38,6 +38,8 @@ import { t } from '@/i18n'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 import { stopAllTaskNodeBackgroundTasks, stopTaskNodeBackgroundTask, useTaskNodeBackgroundTasks } from '@/api/background-tasks'
 import { BackgroundTasksMark, type BackgroundStopper } from '@/features/chat/BackgroundTasks'
+import { useTaskNodePermissionRequests } from '@/api/permissions'
+import { WaitingForApproval } from '@/features/permissions/WaitingForApproval'
 
 const inboxCopy = t.taskInbox
 
@@ -78,6 +80,9 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   // Background tasks the node's turns started: the turn waits for them, so the node shows them (with Stop) while they run, and its Stop
   // ends them with the turn.
   const background = useTaskNodeBackgroundTasks(detail.task.id, node.id, current)
+  // Requests the node's turn waits on: cards in the replies that asked, and a line above the message box.
+  const permission = useTaskNodePermissionRequests(detail.task.id, node.id, current)
+  const permissionRequests = current && permission.data?.nodeRunId === node.id ? permission.data.requests : []
   const backgroundTasks = current && background.data?.nodeRunId === node.id ? background.data.tasks : []
   const target = { taskId: detail.task.id, nodeRunId: node.id, agentId: node.agentId, runtimeId: node.runtimeId }
   const backgroundStopper: BackgroundStopper = {
@@ -199,7 +204,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
             </div>
             <div className="min-h-[120px] flex-1 overflow-hidden">
               <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className={cn('relative h-full min-w-0 overflow-y-auto overscroll-contain pt-5 pb-3 outline-none focus-visible:shadow-focus', pad)} data-conversation-scroll>
-                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
+                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} requests={record.id === node.id ? permissionRequests : []} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
               </div>
             </div>
             {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
@@ -214,6 +219,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
               {current && capability.data && !capability.data.canSend && <p role="status" className="text-[13px] font-bold">{capability.data.reason} · {capability.data.handlingHint}</p>}
               {!current && (draft.text || !!draft.images?.length) && <p role="status" className="text-[13px] font-bold">{t.tasks.draftChanged}</p>}
+              {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
               <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
                 queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
                 stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
@@ -303,7 +309,7 @@ function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onCo
 // A question the node raised is answerable only while the task still says so; other messages to you defer to the server.
 const answerableFor = (node: Node, message: Schemas['InboxMessage']) => node.question?.messageId === message.id ? node.question.status === 'open' && node.question.canAnswer : true
 // onReply: only the current record's questions can switch the node composer into reply mode.
-function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply }: { detail: Schemas['TaskDetail']; node: Node; onMaterials: () => void; suppressInboxError: boolean; onReply?: (message: Schemas['InboxMessage']) => void }) {
+function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply, requests }: { detail: Schemas['TaskDetail']; node: Node; onMaterials: () => void; suppressInboxError: boolean; onReply?: (message: Schemas['InboxMessage']) => void; requests: Schemas['PermissionRequest'][] }) {
   const messages = useTaskMessages(detail.task.id, node.id)
   const inbox = useTaskInboxMessages(detail.task.id, node.id, node.agentId, node.runtimeId)
   // Like normal chat, a message still waiting in the node's queue is shown only in the queue tray; it joins the flow once it starts.
@@ -314,8 +320,9 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
   // both its prompt and its empty reply are hidden. A queued turn joins the flow once it starts.
   const workRows = [...new Map(messages.data?.retainedMessages.filter(m => m.nodeRunId === node.id && !m.voidReason && m.status !== 'queued').map(m => [m.id, m])).values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
   const rows = [
-    ...workRows.map(message => ({ key: `task:${message.id}`, at: message.createdAt, body: <TaskMessageBubble message={message} agent={{ id: node.agentId, name: node.agentName }} taskId={detail.task.id} nodeRunId={node.id} runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined} /> })),
-    ...(inbox.data?.items ?? []).filter(record => !queued.has(record.message.id)).map(record => {
+    ...workRows.map(message => ({ key: `task:${message.id}`, at: message.createdAt, body: <TaskMessageBubble message={message} agent={{ id: node.agentId, name: node.agentName }} taskId={detail.task.id} nodeRunId={node.id} runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined} requests={message.role === 'assistant' ? requests.filter(request => request.runId === message.runId) : []} /> })),
+    // An approval question is the request card in the reply that asked (and the run record keeps it), so it is not shown twice.
+    ...(inbox.data?.items ?? []).filter(record => !queued.has(record.message.id) && record.message.question?.kind !== 'permission').map(record => {
       const extras = <>
         {record.notExecuted && <p role="status" className="rounded-input bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere]">{inboxCopy.notExecuted} · {inboxCopy.targetReasons[record.notExecuted.reason] ?? record.notExecuted.reason}</p>}
         {record.runLinks.length > 0 && <details className="text-xs [overflow-wrap:anywhere]"><summary>{inboxCopy.links}</summary><ul>{record.runLinks.map(link => <li key={`${link.runId}:${link.role}`}>{link.role === 'notification' ? inboxCopy.notification : link.role === 'read' ? inboxCopy.readLink : inboxCopy.replyLink} · {link.runId}</li>)}</ul></details>}

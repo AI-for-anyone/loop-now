@@ -55,6 +55,7 @@ const (
 	CodePathPickerBusy                  = "path_picker_busy"
 	CodeBackgroundTaskNotFound          = "background_task_not_found"
 	CodeBackgroundTaskEnded             = "background_task_ended"
+	CodePermissionRequestAnswered       = "permission_request_answered"
 	CodeRateLimited                     = "rate_limited"
 )
 

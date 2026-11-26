@@ -29,7 +29,7 @@ describe('Draft navigation on the global settings page', () => {
 
 // "Printed sheet" redesign, step 4: global settings sit on a sheet, with numbered sections and the section ruler in the stub.
 describe('Global settings on the sheet', () => {
-  const titles = ['Language', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
+  const titles = ['Language', 'Import conversations', 'Permissions for new Agents', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
   const region = (name: string) => screen.getByRole('region', { name })
   const open = async () => {
     server.use(...baseHandlers([]))
@@ -46,7 +46,7 @@ describe('Global settings on the sheet', () => {
     expect(note).toHaveClass('riso-tilt')
   })
 
-  it('the eight sections are numbered in order and laid out directly on the sheet; the contents ruler in the stub lists the same eight; the local mode section is still at #local-mode', async () => {
+  it('the sections are numbered in order and laid out directly on the sheet; the contents ruler in the stub lists the same ones; the local mode section is still at #local-mode', async () => {
     await open()
     await screen.findByRole('region', { name: 'Server' })
     const sheet = region('Language').closest('[data-sheet]')!

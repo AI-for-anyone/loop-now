@@ -13,7 +13,9 @@
 // The first "fake:" word of a prompt decides the reply:
 //
 //	fake:history      reply history=<earlier prompts in this session>
-//	fake:config       reply with the session's settings (JSON: cwd, MCP server names, model)
+//	fake:config       reply with the session's settings (JSON: cwd, MCP server names, model, start arguments, mode set
+//	                  with session/set_mode); a new agy session offers the modes default, accept-edits, auto and plan,
+//	                  a Grok one none
 //	fake:env          reply with the environment variables the platform cares about (JSON)
 //	fake:images       reply images=<number of images>
 //	fake:tool <cmd>   run one execute tool call, then reply ran
@@ -154,6 +156,7 @@ type session struct {
 	Prompts []string `json:"prompts"`
 	MCP     []string `json:"-"`
 	Model   string   `json:"-"`
+	Mode    string   `json:"-"`
 }
 
 func sessionPath(id string) string { return filepath.Join(home(), "sessions", id+".json") }
@@ -439,7 +442,7 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 		s.sessions[ss.ID] = ss
 		s.mu.Unlock()
 		nativeRecord(ss)
-		s.result(id, map[string]any{"sessionId": ss.ID, "models": models()})
+		s.result(id, map[string]any{"sessionId": ss.ID, "models": models(), "modes": sessionModes()})
 	case "session/load":
 		sid := str("sessionId")
 		b, err := os.ReadFile(sessionPath(sid))
@@ -463,6 +466,13 @@ func (s *server) request(id json.RawMessage, method string, p map[string]any) {
 			return
 		}
 		s.result(id, map[string]any{"models": models()})
+	case "session/set_mode":
+		s.mu.Lock()
+		if ss := s.sessions[str("sessionId")]; ss != nil {
+			ss.Mode = str("modeId")
+		}
+		s.mu.Unlock()
+		s.result(id, map[string]any{})
 	case "session/set_model":
 		s.mu.Lock()
 		if ss := s.sessions[str("sessionId")]; ss != nil {
@@ -563,7 +573,7 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 	case "fake:history":
 		reply(fmt.Sprintf("history=%d", prior))
 	case "fake:config":
-		b, _ := json.Marshal(map[string]any{"cwd": ss.Cwd, "mcp": ss.MCP, "model": ss.Model, "args": s.args})
+		b, _ := json.Marshal(map[string]any{"cwd": ss.Cwd, "mcp": ss.MCP, "model": ss.Model, "args": s.args, "mode": ss.Mode})
 		reply(string(b))
 	case "fake:env":
 		env := map[string]string{}
@@ -635,7 +645,8 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		s.xai("_x.ai/session_notification", ss.ID, s.grokTaskList(ss.ID, nil, nil))
 		reply("started")
 	case "fake:permission":
-		r := s.ask("session/request_permission", map[string]any{"sessionId": ss.ID, "toolCall": map[string]any{"toolCallId": newID()},
+		r := s.ask("session/request_permission", map[string]any{"sessionId": ss.ID, "toolCall": map[string]any{"toolCallId": newID(),
+			"title": "Run make deploy", "kind": "execute", "rawInput": map[string]any{"command": "make deploy"}},
 			"options": []any{map[string]any{"optionId": "no", "name": "Reject", "kind": "reject_once"}, map[string]any{"optionId": "yes", "name": "Allow", "kind": "allow_once"}}})
 		var out struct {
 			Outcome struct {
@@ -742,4 +753,17 @@ func nativePrompt(ss *session, p map[string]any) {
 		f.Write(append(b, '\n'))
 		f.Close()
 	}
+}
+
+// sessionModes are the session modes a new session offers, as the real agents do: agy's default, accept-edits, auto and
+// plan (agy 1.5.14); Grok lists none (1.0.92).
+func sessionModes() any {
+	if flavor() != "agy" {
+		return nil
+	}
+	var modes []any
+	for _, id := range []string{"default", "accept-edits", "auto", "plan"} {
+		modes = append(modes, map[string]any{"id": id, "name": id})
+	}
+	return map[string]any{"currentModeId": "default", "availableModes": modes}
 }

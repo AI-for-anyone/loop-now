@@ -38,7 +38,8 @@ describe('Overview page entry', () => {
     expect(main).not.toHaveTextContent('Database unavailable')
   })
 
-  it('with no Agents it shows the empty state and a way to create an Agent, without the three blocks', async () => {
+  it('with no Agents (once the import page was skipped) it shows the empty state and a way to create an Agent, without the three blocks', async () => {
+    window.localStorage.setItem('loop-now.importSkipped', '1')
     const { snapshot, user } = await renderOverview()
     await snapshot([])
     const empty = screen.getByRole('region', { name: 'No Agents yet.' })

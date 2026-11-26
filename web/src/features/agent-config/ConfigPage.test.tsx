@@ -37,9 +37,9 @@ describe('Layout', () => {
 
 // "Printed sheet" redesign, step 2: numbered sections, yellow sticky notes and the section ruler in the stub.
 describe('Redesigned layout', () => {
-  const sections = ['Basics', 'Prompt', 'Local directories', 'Model account credential', 'Skills', 'Available CLIs', 'Plugin grants', 'Delete Agent']
+  const sections = ['Basics', 'How it works', 'Prompt', 'Local directories', 'Model account credential', 'Skills', 'Available CLIs', 'Plugin grants', 'Delete Agent']
 
-  it('the eight sections are numbered 01–08 in order: the number is a hollow decoration and the title gets a yellow marker stroke; dashed lines separate the sections, with none above the first', async () => {
+  it('the nine sections are numbered 01–09 in order: the number is a hollow decoration and the title gets a yellow marker stroke; dashed lines separate the sections, with none above the first', async () => {
     await renderConfig()
     sections.forEach((name, index) => {
       const section = region(name)
@@ -120,19 +120,20 @@ describe('Section contents', () => {
   const tocLink = (name: string) => within(toc()).getByRole('link', { name })
   const highlighted = () => within(toc()).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'location')
 
-  it('lists the eight sections in order; clicking an entry jumps to its section and focuses the section title', async () => {
+  it('lists the nine sections in order; clicking an entry jumps to its section and focuses the section title', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
     try {
       const { user, router } = await renderConfig()
       expect(within(toc()).getAllByRole('link').map((link) => link.textContent)).toEqual([
         '01Basics',
-        '02Prompt',
-        '03Local directories',
-        '04Model account credential',
-        '05Skills',
-        '06Available CLIs',
-        '07Plugin grants',
-        '08Delete Agent',
+        '02How it works',
+        '03Prompt',
+        '04Local directories',
+        '05Model account credential',
+        '06Skills',
+        '07Available CLIs',
+        '08Plugin grants',
+        '09Delete Agent',
       ])
       await user.click(tocLink('Available CLIs'))
       const clis = region('Available CLIs')

@@ -167,6 +167,13 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 	for _, b := range backgroundEntries(run.BackgroundTasks) {
 		entries = append(entries, timed{at: b.at, v: b.value})
 	}
+	requests, err := s.Store.RunPermissionRequests(ctx, runID)
+	if err != nil {
+		return apitypes.RunTimeline{}, err
+	}
+	for _, p := range permissionEntries(requests) {
+		entries = append(entries, timed{at: p.at, v: p.value})
+	}
 	commands := toolCommands(events)
 	for i := range entries {
 		entries[i].v = withToolCommand(entries[i].v, commands)

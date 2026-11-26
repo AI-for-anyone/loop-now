@@ -79,6 +79,8 @@ type Model struct {
 type Session struct {
 	ID     string
 	Models []Model
+	// Modes are the ids of the session modes the agent offers (session/set_mode), when it says.
+	Modes []string
 	// Replayed is how many history updates the agent sent while loading the session (0 for a new one).
 	Replayed int
 }
@@ -92,12 +94,20 @@ type sessionResponse struct {
 			Meta    json.RawMessage `json:"_meta"`
 		} `json:"availableModels"`
 	} `json:"models"`
+	Modes struct {
+		AvailableModes []struct {
+			ID string `json:"id"`
+		} `json:"availableModes"`
+	} `json:"modes"`
 }
 
 func (r sessionResponse) session() Session {
 	s := Session{ID: r.SessionID}
 	for _, m := range r.Models.AvailableModels {
 		s.Models = append(s.Models, Model{ID: m.ModelID, Name: m.Name, Meta: m.Meta})
+	}
+	for _, m := range r.Modes.AvailableModes {
+		s.Modes = append(s.Modes, m.ID)
 	}
 	return s
 }
@@ -248,6 +258,7 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, sink runtur
 	c.turn = t
 	c.mu.Unlock()
 	defer func() {
+		c.endPermissions(executor.CancelReplyEnded)
 		c.mu.Lock()
 		if c.turn == t {
 			c.turn = nil
@@ -304,6 +315,8 @@ func (c *Client) Cancel() error {
 	t.mu.Lock()
 	t.cancelled = true
 	t.mu.Unlock()
+	// A request still waiting is answered cancelled, as the protocol asks of a client that cancels.
+	c.endPermissions(executor.CancelReplyStopped)
 	err := c.notify("session/cancel", map[string]any{"sessionId": t.sessionID})
 	c.backgroundCancelled(t.sessionID) // the cancel ends the session's background commands too
 	if t.self != "" {

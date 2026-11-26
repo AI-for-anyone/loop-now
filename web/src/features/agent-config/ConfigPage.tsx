@@ -15,6 +15,7 @@ import { ModelCredentialSection } from './ModelCredentialSection'
 import { LocalAccountSection } from './RuntimeNotes'
 import { Section } from './Section'
 import { SkillsSection } from './SkillsSection'
+import { WorkSection } from './WorkSection'
 import { AgentPromptSection } from '@/features/prompts/AgentPromptSection'
 import { AgentLocalDirectoriesSection } from '@/features/local-mode/LocalDirectories'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
@@ -48,6 +49,7 @@ export function ConfigPage() {
             {stale && <p className="font-black">{t.config.staleRunNotice}</p>}
           </StickyNote>
           <BasicSection key={agent.id} agent={agent} busy={busy} />
+          <WorkSection key={`work:${agent.id}`} agent={agent} />
           <AgentPromptSection agent={agent} />
           <AgentLocalDirectoriesSection key={`local-dirs:${agent.id}`} agent={agent} />
           {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} />

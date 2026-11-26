@@ -15,6 +15,7 @@ import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmat
 import { nameRuleError } from '@/lib/names'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { RuntimeDifferences } from './RuntimeNotes'
+import { canRunAgent } from '@/lib/permissions'
 import { Section } from './Section'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 
@@ -126,6 +127,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
             setThinkingLevel(choice.thinkingLevel)
           }}
           onThinkingChange={setThinkingLevel}
+          // An Agent with its own folder, or asking before it acts, cannot move to a runtime that cannot do that (Pi).
+          offers={(definition) => canRunAgent(agent, definition)}
         />
         <FieldError message={fieldMessages(update.error, isModelField)} />
         <FieldError message={fieldMessages(update.error, (field) => field === 'thinkingLevel')} />

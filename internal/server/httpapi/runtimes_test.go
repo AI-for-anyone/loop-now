@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"loop-now/internal/server/claudecli"
@@ -51,11 +52,18 @@ func TestListRuntimeDefinitions(t *testing.T) {
 		len(got.Runtimes[1].Providers) != 1 || got.Runtimes[1].Providers[0] != "claude-code" {
 		t.Fatalf("runtime definitions: %+v", got)
 	}
-	if caps := got.Runtimes[1].Capabilities; caps["accounts"] != "local" || caps["realHome"] != true || caps["bundled"] != false || caps["stopEndsBackgroundTasks"] != false || len(caps) != 6 {
+	if caps := got.Runtimes[1].Capabilities; caps["accounts"] != "local" || caps["realHome"] != true || caps["bundled"] != false || caps["stopEndsBackgroundTasks"] != false ||
+		caps["workingDirectory"] != true || caps["localConfig"] != true || caps["permissionAsksByOwnRules"] != false || len(caps) != 10 {
 		t.Fatalf("claude-code capabilities: %v", caps)
 	}
 	if caps := got.Runtimes[3].Capabilities; caps["stopEndsBackgroundTasks"] != true {
 		t.Fatalf("stopping a Grok reply ends its process and its background tasks: %v", caps)
+	}
+	if caps := got.Runtimes[4].Capabilities; caps["permissionAsksByOwnRules"] != true {
+		t.Fatalf("Antigravity asks by its own permission rules: %v", caps)
+	}
+	if caps := got.Runtimes[0].Capabilities; caps["workingDirectory"] != false || caps["localConfig"] != false || fmt.Sprint(caps["permissionModes"]) != "[full]" {
+		t.Fatalf("Pi works in its own folder with Full access only: %v", caps)
 	}
 }
 

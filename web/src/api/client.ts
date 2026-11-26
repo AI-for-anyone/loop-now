@@ -186,6 +186,7 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   path_picker_busy: true,
   background_task_not_found: true,
   background_task_ended: true,
+  permission_request_answered: true,
   cli_auth_in_progress: true,
   credential_selection_mode_conflict: true,
 }

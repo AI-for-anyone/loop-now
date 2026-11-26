@@ -77,14 +77,16 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
   notified.add(message.id)
   if (notified.size > notifiedLimit) notified.delete(notified.values().next().value as string)
   const text = t.consoleInbox.desktop
+  // An approval question says so: the Agent waits until someone answers.
+  const title = message.question?.kind === 'permission' ? t.permissions.desktop.title(partyName(message.from)) : text.question(partyName(message.from))
   if (!message.task) {
-    bridge.notify({ id: message.id, title: text.question(partyName(message.from)), body: message.preview, path: senderPath(message) })
+    bridge.notify({ id: message.id, title, body: message.preview, path: senderPath(message) })
     return
   }
   const task = await taskTarget(client, message.task)
   bridge.notify(
     kind === 'question'
-      ? { id: message.id, title: text.question(partyName(message.from)), body: text.inTask(task.title, message.preview), path: task.path }
+      ? { id: message.id, title, body: text.inTask(task.title, message.preview), path: task.path }
       : { id: message.id, title: text.task(task.title), body: text.from(partyName(message.from), message.preview), path: task.path },
   )
 }

@@ -51,7 +51,10 @@ type Options struct {
 	// Dialogs answers the confirm, select and input requests an extension sends during a turn (presented as console
 	// questions); when nil, every request is answered as cancelled. agentID is the Agent that runs (for a task turn,
 	// the task instance); ctx ends when this turn is no longer the process's current run or when the process exits.
-	Dialogs                   func(ctx context.Context, agentID, runID uuid.UUID, req runturn.DialogRequest) runturn.DialogResponse
+	Dialogs func(ctx context.Context, agentID, runID uuid.UUID, req runturn.DialogRequest) runturn.DialogResponse
+	// Permissions records what a runtime asks to do in a mode other than full and waits for a person's answer; when
+	// nil, every such request is rejected.
+	Permissions               executor.PermissionAsker
 	LarkFactory               func(context.Context, LarkRuntimeRequest) (LarkRuntime, error)
 	GoogleResolver            cliauth.GrantResolver
 	GoogleRuntimeEntry        string
@@ -183,6 +186,9 @@ type proc struct {
 	lastUsed            time.Time
 	idleTimer           *time.Timer
 	dirs                agentDirs
+	cwd                 string // where the CLI works (workDir)
+	mode                string // the permission mode the runtime runs in (permissionMode)
+	ownConfig           bool   // the runtime loads the person's own CLI configuration (localConfig)
 	stopOnce            sync.Once
 	exitOnce            sync.Once
 	stopping            atomic.Bool               // stopped on purpose by the platform; the exit is not unexpected
@@ -738,7 +744,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	client := st.rt
 	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
 		version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
-		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{}),
+		startedAt: begin, dirs: d, cwd: workDir(snap, d), mode: permissionMode(snap), ownConfig: localConfig(snap), lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{}),
 		task: snap.TaskID != uuid.Nil, thinking: snap.ThinkingLevel}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity

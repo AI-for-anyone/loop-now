@@ -23,6 +23,7 @@ import {
   ScopeIndexRedirect,
 } from '@/features/projects/ScopeRoute'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { ImportPage } from '@/features/importing/ImportPage'
 import { AgentFolderTab, ProjectFolderPage } from '@/features/folders/FolderSections'
 import { NewSkillSheet, SkillDetailSheet, SkillsPage } from '@/features/skills-library/SkillsPage'
 import { StatsPage } from '@/features/stats/StatsPage'
@@ -69,6 +70,8 @@ export const routes: RouteObject[] = [
         children: [{ index: true, element: <ScopeIndexRedirect /> }, agentsRoute()],
       },
       // Old URLs without a project: rewrite to the last-used project or the platform, or to where the Agent actually lives.
+      // Importing conversations from the CLIs on this computer (opens by itself on a fresh install with no Agents).
+      { path: 'import', element: <ImportPage /> },
       { path: 'agents', element: <LegacyAgentsRedirect /> },
       { path: 'tasks', element: <TasksEntry /> },
       { path: 'agents/:agentId/*', element: <LegacyAgentRedirect /> },

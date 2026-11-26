@@ -203,6 +203,8 @@ type AgentStatus struct {
 	// RestartOnNextMessage says that, while they run, the next message restarts the process (which stops them).
 	BackgroundTasks      []BackgroundTask `json:"backgroundTasks"`
 	RestartOnNextMessage bool             `json:"restartOnNextMessage"`
+	// PermissionRequests are the Agent's pending permission requests, oldest first.
+	PermissionRequests []PermissionRequest `json:"permissionRequests"`
 }
 
 // AgentBusyDetails mirrors the AgentBusyDetails schema. CurrentRunID is the run in progress, or the earliest queued run

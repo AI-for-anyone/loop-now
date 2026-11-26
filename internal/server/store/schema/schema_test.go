@@ -81,9 +81,9 @@ func TestBaselineShape(t *testing.T) {
 	}
 	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables),
 	// migration 2 adds the 3 tables for local mode, migration 13 the local ACP commands, and migration 15 who writes
-	// with AI, migration 16 background tasks.
-	if len(ts) != 96 {
-		t.Errorf("%d tables in total, want 96", len(ts))
+	// with AI, migration 16 background tasks, migration 18 permission settings and requests.
+	if len(ts) != 98 {
+		t.Errorf("%d tables in total, want 98", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
@@ -128,7 +128,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 16
+const latestVersion = 18
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.
@@ -155,20 +155,22 @@ func TestMigrateToBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "a", "anthropic", "m", "")
+	a, err := oldAgent(ctx, d, dc.Project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pull := func(path string) uuid.UUID {
 		t.Helper()
-		p, created, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: "https://example.com/r.git", Branch: "main", Path: path})
-		if err != nil || !created {
+		// Written directly: CreateFolderGitPull reads the Agent with today's columns.
+		id := uuid.Must(uuid.NewV7())
+		if _, err := d.Exec(ctx, `INSERT INTO agent_folder_git_pulls (id, agent_id, action_id, url, branch, path, status) VALUES ($1, $2, $3, 'https://example.com/r.git', 'main', $4, 'queued')`,
+			id, a.ID, uuid.New(), path); err != nil {
 			t.Fatal(err)
 		}
-		if ok, err := st.StartFolderGitPull(ctx, p.ID); err != nil || !ok {
+		if ok, err := st.StartFolderGitPull(ctx, id); err != nil || !ok {
 			t.Fatal(err)
 		}
-		return p.ID
+		return id
 	}
 	old, queued := pull("old"), pull("queued")
 	if err := st.FinishFolderGitPull(ctx, old, "clone_failed", "original failure"); err != nil {
@@ -445,7 +447,7 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	agent, err := oldAgent(ctx, d, defaults.Project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -635,7 +637,7 @@ func TestContextHandoffMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	agent, err := oldAgent(ctx, d, defaults.Project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +748,7 @@ func TestBackgroundTasksMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	agent, err := oldAgent(ctx, d, defaults.Project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -816,4 +818,15 @@ func TestBackgroundTasksMigration(t *testing.T) {
 	if rows.Next() {
 		t.Fatal("there should be no foreign key errors after the migration")
 	}
+}
+
+// oldAgent creates an Agent and its session row the way any schema version takes them (today's store reads columns an
+// older schema lacks).
+func oldAgent(ctx context.Context, d *db.DB, projectID uuid.UUID) (struct{ ID uuid.UUID }, error) {
+	a := struct{ ID uuid.UUID }{ID: uuid.Must(uuid.NewV7())}
+	if _, err := d.Exec(ctx, `INSERT INTO agents (id, project_id, name, model_provider, model_id, prompt) VALUES ($1, $2, 'a', 'anthropic', 'm', '')`, a.ID, projectID); err != nil {
+		return a, err
+	}
+	_, err := d.Exec(ctx, `INSERT INTO agent_sessions (agent_id) VALUES ($1)`, a.ID)
+	return a, err
 }

@@ -1,5 +1,5 @@
 import { choosableLevels } from '@/lib/thinking'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, useId } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Schemas } from '@/api/client'
@@ -7,6 +7,9 @@ import { keys, useModels, useUpdateAgent } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { RuntimeMark } from '@/components/runner-picker/RuntimeMark'
 import { RunnerPicker, type RunnerChoice } from '@/components/runner-picker/RunnerPicker'
+import { usePermissionSettings } from '@/api/permissions'
+import { PermissionModePicker } from '@/features/permissions/PermissionModePicker'
+import { canRunAgent } from '@/lib/permissions'
 import { t } from '@/i18n'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
@@ -22,6 +25,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
   const client = useQueryClient()
   const update = useUpdateAgent(agent.id)
   const [open, setOpen] = useState(false)
+  const modeLabel = useId()
   // The changes being saved, merged in the order they were made and shown until every save has come back (a level chosen while a model
   // change is still saving must not hide it); and why a save failed.
   const [draft, setDraft] = useState<Schemas['AgentUpdate']>({})
@@ -46,7 +50,11 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
   const levelText = shownLevel && (!model || choosableLevels(model).length > 0) ? (t.config.basic.thinking.levels[shownLevel] ?? shownLevel) : null
   const bundled = runtime?.capabilities.bundled ?? false
   const lead = bundled || !runtime ? ref.provider : runtime.name
-  const parts = [lead, ref.modelId, levelText].filter((part): part is string => Boolean(part))
+  // The permission mode shows on the chip only when it is not the default for new Agents (as T3).
+  const mode = draft.permissionMode ?? agent.permissionMode
+  const defaultMode = usePermissionSettings().data?.defaultMode
+  const modeText = defaultMode !== undefined && mode !== defaultMode ? t.permissions.modes[mode].name : null
+  const parts = [lead, ref.modelId, levelText, modeText].filter((part): part is string => Boolean(part))
   const copy = t.runtime.picker.chip
   const detail = copy.detail(runtime?.name ?? agent.runtime, bundled ? copy.bundled : copy.local, ref.provider, model ? t.config.basic.modelOption(model.name, model.id) : ref.modelId, levelText)
 
@@ -122,7 +130,16 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
                 thinkingLevel={level}
                 onChoose={choose}
                 onThinkingChange={(next) => save({ thinkingLevel: next }, false)}
+                // An Agent with its own folder, or asking before it acts, cannot move to a runtime that cannot do that (Pi).
+                offers={(definition) => canRunAgent({ workingDirectory: agent.workingDirectory, permissionMode: mode }, definition)}
               />
+            </div>
+            {/* At the bottom of the model picker (as T3): how often it asks before acting; saved at once, from the next message. */}
+            <div className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-1.5 border-t-2 border-ink bg-paper px-4 py-2.5">
+              <span id={modeLabel} className="inline-flex h-8 items-center text-[13px] font-black">
+                {t.permissions.pickerTitle}
+              </span>
+              <PermissionModePicker variant="compact" value={mode} runtime={runtime} labelledBy={modeLabel} onChange={(next) => save({ permissionMode: next }, false)} />
             </div>
             {failure !== null && (
               <div className="shrink-0 border-t-2 border-dashed border-ink/30 px-4 py-2.5">

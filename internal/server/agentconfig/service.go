@@ -50,6 +50,8 @@ type Service struct {
 	Logger                 *slog.Logger
 	// AgentChanged is called after an Agent is created or changed and AgentRemoved after it is deleted, to push the
 	// overview; both may be nil.
+	// DefaultMode is the permission mode new Agents get when none is asked for; nil is Full access.
+	DefaultMode  func(context.Context) (string, error)
 	AgentChanged func(id uuid.UUID)
 	AgentRemoved func(id uuid.UUID)
 	// LocalAccess returns what local mode hands to this Agent's Pi; when nil, local mode is not enabled.
@@ -150,29 +152,52 @@ func collect(errs ...*apperr.FieldError) error {
 
 // CreateAgent creates an Agent in a project or on the platform; where it belongs cannot change afterwards.
 func (s *Service) CreateAgent(ctx context.Context, scope store.Scope, name, provider, modelID, prompt string, modelOptions ...*string) (store.Agent, error) {
+	var level, tier *string
+	if len(modelOptions) > 0 {
+		level = modelOptions[0]
+	}
+	if len(modelOptions) > 1 {
+		tier = modelOptions[1]
+	}
+	return s.CreateAgentWithSettings(ctx, scope, name, provider, modelID, prompt, level, tier, AgentSettings{})
+}
+
+// AgentSettings are an Agent's working folder, whether it loads the person's own CLI configuration, and its permission
+// mode; nil fields keep the defaults (no working folder, not loaded, the default mode).
+type AgentSettings struct {
+	WorkingDirectory *string
+	UseLocalConfig   *bool
+	PermissionMode   *string
+}
+
+// CreateAgentWithSettings is CreateAgent with the Agent's working folder, configuration and permission mode.
+func (s *Service) CreateAgentWithSettings(ctx context.Context, scope store.Scope, name, provider, modelID, prompt string, level, tier *string, settings AgentSettings) (store.Agent, error) {
 	if err := collect(s.validateName(name), s.validateModel(provider, modelID)); err != nil {
+		return store.Agent{}, err
+	}
+	mode, err := s.modeFor(ctx, provider, settings.PermissionMode)
+	if err != nil {
+		return store.Agent{}, err
+	}
+	stored := store.AgentSettings{WorkingDirectory: settings.WorkingDirectory, PermissionMode: mode}
+	if settings.UseLocalConfig != nil {
+		stored.UseLocalConfig = *settings.UseLocalConfig
+	}
+	if err := validateSettings(provider, stored.WorkingDirectory, mode); err != nil {
 		return store.Agent{}, err
 	}
 	if err := s.validatePluginProvider(ctx, nil, provider); err != nil {
 		return store.Agent{}, err
-	}
-	var level *string
-	if len(modelOptions) > 0 {
-		level = modelOptions[0]
 	}
 	if level != nil {
 		if _, err := s.Models.ResolveThinking(provider, modelID, level); err != nil {
 			return store.Agent{}, apperr.Invalid("thinkingLevel", err.Error())
 		}
 	}
-	var tier *string
-	if len(modelOptions) > 1 {
-		tier = modelOptions[1]
-	}
 	if _, err := ResolveServiceTier(provider, tier); err != nil {
 		return store.Agent{}, err
 	}
-	a, err := s.Store.CreateAgent(ctx, scope, name, provider, modelID, prompt, level, tier)
+	a, err := s.Store.CreateAgentWithSettings(ctx, scope, name, provider, modelID, prompt, level, tier, stored)
 	if err == nil && s.AgentChanged != nil {
 		s.AgentChanged(a.ID)
 	}
@@ -191,6 +216,11 @@ type AgentPatch struct {
 	Provider              *string
 	ModelID               *string
 	Prompt                *string
+	// WorkingDirectory is changed when WorkingDirectorySet (nil clears it).
+	WorkingDirectory    *string
+	WorkingDirectorySet bool
+	UseLocalConfig      *bool
+	PermissionMode      *string
 }
 
 // UpdateAgent changes an Agent.
@@ -213,9 +243,16 @@ func (s *Service) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (
 			return store.Agent{}, err
 		}
 	}
-	patch := store.AgentPatch{Name: p.Name, ModelProvider: p.Provider, ModelID: p.ModelID, Prompt: p.Prompt, ExpectedPromptVersion: p.ExpectedPromptVersion, ThinkingLevel: p.ThinkingLevel, ThinkingLevelSet: p.ThinkingLevelSet, ServiceTier: p.ServiceTier, ServiceTierSet: p.ServiceTierSet}
-	if p.Provider != nil || p.ThinkingLevelSet || p.ServiceTierSet {
+	if p.PermissionMode != nil && !validMode(*p.PermissionMode) {
+		return store.Agent{}, apperr.Invalid("permissionMode", "Must be supervised, accept_edits, auto or full.")
+	}
+	patch := store.AgentPatch{Name: p.Name, ModelProvider: p.Provider, ModelID: p.ModelID, Prompt: p.Prompt, ExpectedPromptVersion: p.ExpectedPromptVersion, ThinkingLevel: p.ThinkingLevel, ThinkingLevelSet: p.ThinkingLevelSet, ServiceTier: p.ServiceTier, ServiceTierSet: p.ServiceTierSet,
+		WorkingDirectory: p.WorkingDirectory, WorkingDirectorySet: p.WorkingDirectorySet, UseLocalConfig: p.UseLocalConfig, PermissionMode: p.PermissionMode}
+	if p.Provider != nil || p.ThinkingLevelSet || p.ServiceTierSet || p.WorkingDirectorySet || p.PermissionMode != nil {
 		patch.Validate = func(a store.Agent) error {
+			if err := validateSettings(a.ModelProvider, a.WorkingDirectory, a.PermissionMode); err != nil {
+				return err
+			}
 			if _, err := ResolveServiceTier(a.ModelProvider, a.ServiceTier); err != nil {
 				return err
 			}

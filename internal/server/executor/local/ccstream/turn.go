@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/runturn"
 )
 
@@ -32,6 +33,7 @@ type wireLine struct {
 	// result
 	IsError        bool                      `json:"is_error"`
 	Result         *string                   `json:"result"`
+	NumTurns       *int                      `json:"num_turns"`
 	TerminalReason string                    `json:"terminal_reason"`
 	APIErrorStatus *int                      `json:"api_error_status"`
 	Errors         []string                  `json:"errors"`
@@ -104,8 +106,10 @@ type turn struct {
 	finished bool
 	detached bool // the caller no longer waits: sink is not called any more
 	// self: Claude Code began this turn by itself; end is told how it ended; activity is nudged at each line while it
-	// is open.
+	// is open. settling: it began while settling background tasks an earlier process left running, and nothing of it is
+	// recorded (it is self too, so a message waits for it).
 	self        bool
+	settling    bool
 	end         func(runturn.Result)
 	activity    chan struct{}
 	interrupted bool
@@ -165,11 +169,21 @@ func beginsTurn(m wireLine) bool {
 }
 
 // selfTurn starts a turn Claude Code began by itself, when there is a place for it and no turn is open; it returns the
-// turn now open.
+// turn now open. A turn it begins while background tasks of an earlier process are not settled yet is a settling turn,
+// which goes nowhere.
 func (c *Client) selfTurn(m wireLine) *turn {
 	c.mu.Lock()
 	t, hook := c.turn, c.selfTurns
-	start := t == nil && hook != nil && !c.exiting && !c.closed && beginsTurn(m)
+	begins := t == nil && !c.exiting && !c.closed && beginsTurn(m)
+	if begins && c.stale > 0 {
+		nt := newTurn(nopSink{})
+		nt.self, nt.settling, nt.activity = true, true, make(chan struct{}, 1)
+		c.turn = nt
+		c.mu.Unlock()
+		go c.watchSelfTurn(nt)
+		return nt
+	}
+	start := begins && hook != nil
 	c.mu.Unlock()
 	if !start {
 		return t
@@ -268,8 +282,15 @@ func (c *Client) background(m wireLine, obs Observer) {
 			delete(c.foreground, m.TaskID)
 		}
 	case "task_notification":
+		_, fg := c.foreground[m.TaskID]
 		delete(c.foreground, m.TaskID)
 		if !c.tasks[m.TaskID] || c.ended[m.TaskID] {
+			if !fg && !c.ended[m.TaskID] && m.TaskID != "" && !c.staleSeen[m.TaskID] {
+				// A task this process never started: an earlier process left it running (the session was continued
+				// with --resume), and Claude Code settles it with a turn of its own before reading the next message.
+				c.staleSeen[m.TaskID] = true
+				c.stale++
+			}
 			return
 		}
 		delete(c.tasks, m.TaskID)
@@ -316,6 +337,13 @@ func (c *Client) handleLine(line []byte) {
 		case t.activity <- struct{}{}:
 		default:
 		}
+	}
+	switch {
+	case m.Type == "system" && m.Subtype == "init":
+		c.turnOutput = false
+	case (m.Type == "stream_event" || m.Type == "assistant") && m.ParentToolUseID == nil:
+		// The turns that settle earlier tasks show nothing: once a turn shows output, settling is over.
+		c.turnOutput, c.stale = true, 0
 	}
 	c.mu.Lock()
 	active := t != nil && !t.detached
@@ -406,6 +434,15 @@ func (c *Client) handleLine(line []byte) {
 		if obs != nil && m.RateLimitInfo != nil {
 			obs.RateLimit(m.RateLimitInfo, t != nil)
 		}
+	case "control_request":
+		c.controlRequest(line)
+	case "control_cancel_request":
+		var r struct {
+			RequestID string `json:"request_id"`
+		}
+		if json.Unmarshal(line, &r) == nil {
+			c.controlCancel(r.RequestID)
+		}
 	case "control_response":
 		var r struct {
 			Subtype   string `json:"subtype"`
@@ -447,14 +484,32 @@ func (c *Client) finishTurn(t *turn, m wireLine, obs Observer) {
 			obs.Usage(out, t != nil)
 		}
 	}
+	empty := !info.IsError && info.Subtype == "success" && info.Result == "" && m.NumTurns != nil && *m.NumTurns == 0 && !c.turnOutput
 	c.mu.Lock()
-	c.last = info
+	if t != nil && c.turn == t && !t.self && empty && c.stale > 0 {
+		// The empty turn Claude Code gives to settle background tasks an earlier process left running, before it reads
+		// the message: the message's own turn follows.
+		c.stale--
+		c.mu.Unlock()
+		return
+	}
+	if t != nil && t.settling {
+		c.stale = max(c.stale-1, 0)
+	} else {
+		c.stale = 0
+		c.last = info
+	}
 	if t == nil || c.turn != t {
 		c.mu.Unlock()
 		return
 	}
 	c.turn = nil
 	interrupted := t.interrupted
+	if interrupted {
+		c.cancelAskingLocked(executor.CancelReplyStopped)
+	} else {
+		c.cancelAskingLocked(executor.CancelReplyEnded)
+	}
 	c.mu.Unlock()
 	switch {
 	case !info.IsError && info.Subtype == "success":

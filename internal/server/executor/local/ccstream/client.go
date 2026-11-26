@@ -144,11 +144,21 @@ type Client struct {
 	tasks      map[string]bool
 	foreground map[string]Task
 	ended      map[string]bool
+	// stale counts the task notifications of tasks this process never started (an earlier process left them running)
+	// that Claude Code has not settled yet: it settles them with turns of its own that show no output, before it reads
+	// the next message. staleSeen are their ids; turnOutput tells whether the turn under way has shown output. All are
+	// used by the reader goroutine only.
+	stale      int
+	staleSeen  map[string]bool
+	turnOutput bool
 	init       *Init
 	last       ResultInfo
 	controls   map[string]chan bool // request_id of an interrupt control message -> whether it succeeded
-	closed     bool                 // stdout has ended
-	exiting    bool                 // SIGINT sent or process ended: it is sure to exit, so no new messages are written
+	// permit answers can_use_tool requests; asking cancels each request still waiting for its answer, by request_id.
+	permit  PermissionFunc
+	asking  map[string]context.CancelCauseFunc
+	closed  bool // stdout has ended
+	exiting bool // SIGINT sent or process ended: it is sure to exit, so no new messages are written
 
 	done    chan struct{}
 	exitErr error
@@ -190,7 +200,7 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{o: o, stdin: stdin, process: cmd.Process, pid: cmd.Process.Pid, stderr: ring, controls: map[string]chan bool{}, done: make(chan struct{}),
-		commands: map[string]string{}, tasks: map[string]bool{}, foreground: map[string]Task{}, ended: map[string]bool{}}
+		commands: map[string]string{}, tasks: map[string]bool{}, foreground: map[string]Task{}, ended: map[string]bool{}, staleSeen: map[string]bool{}}
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
@@ -549,6 +559,7 @@ func (c *Client) shutdown(exitErr error) func() {
 	c.mu.Lock()
 	c.exitErr = exitErr
 	c.closed = true
+	c.cancelAskingLocked(executor.CancelProcessExited)
 	t := c.turn
 	c.turn = nil
 	started := c.init != nil

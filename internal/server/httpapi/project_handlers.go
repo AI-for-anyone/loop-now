@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/coord"
@@ -189,6 +190,10 @@ func (s *Server) createAgentIn(w http.ResponseWriter, r *http.Request, scope sto
 		ServiceTier   json.RawMessage `json:"serviceTier"`
 		Model         *modelInput     `json:"model"`
 		Prompt        string          `json:"prompt"`
+		// The working folder, the person's own configuration and the permission mode; omitted: none, off, the default.
+		WorkingDirectory *string `json:"workingDirectory"`
+		UseLocalConfig   *bool   `json:"useLocalConfig"`
+		PermissionMode   *string `json:"permissionMode"`
 	}
 	if err := readJSON(w, r, jsonLimit, &in); err != nil {
 		s.fail(w, r, err)
@@ -211,7 +216,8 @@ func (s *Server) createAgentIn(w http.ResponseWriter, r *http.Request, scope sto
 			return
 		}
 	}
-	a, err := s.Config.CreateAgent(r.Context(), scope, in.Name, in.Model.Provider, in.Model.ModelID, in.Prompt, thinking, tier)
+	a, err := s.Config.CreateAgentWithSettings(r.Context(), scope, in.Name, in.Model.Provider, in.Model.ModelID, in.Prompt, thinking, tier,
+		agentconfig.AgentSettings{WorkingDirectory: in.WorkingDirectory, UseLocalConfig: in.UseLocalConfig, PermissionMode: in.PermissionMode})
 	if err != nil {
 		s.fail(w, r, err)
 		return

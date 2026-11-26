@@ -8,7 +8,7 @@ const [pi, claudeCode] = runtimeDefinitions().runtimes
 // Runtimes the contract does not have: only their capabilities matter here.
 const runtime = (name: string, capabilities: Partial<Schemas['RuntimeCapabilities']>): Schemas['RuntimeDefinition'] => ({ ...claudeCode, name, capabilities: { ...claudeCode.capabilities, ...capabilities } })
 const home = 'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.'
-const commands = 'It runs commands without asking first, the same as Pi Agents.'
+const commands = "Whether it asks before running commands depends on its permission mode; on Full access it doesn't, the same as Pi Agents."
 const plugins = 'Plugins that only contain Pi extensions don\'t apply to it; plugin skills and MCP tools work.'
 const piCommands = 'There are no /pi: commands.'
 const items = (name: string) => within(screen.getByRole('region', { name: `Running on ${name}` })).getAllByRole('listitem').map((item) => item.textContent)

@@ -223,6 +223,10 @@ type Agent struct {
 	Session             SessionInfo     `json:"session"`
 	Clis                []AgentCli      `json:"clis"`
 	ModelCredential     *CredentialMeta `json:"modelCredential"`
+	WorkingDirectory    *string         `json:"workingDirectory"`
+	UseLocalConfig      bool            `json:"useLocalConfig"`
+	PermissionMode      string          `json:"permissionMode"`
+	ImportedFrom        *ImportedFrom   `json:"importedFrom"`
 	CreatedAt           time.Time       `json:"createdAt"`
 	UpdatedAt           time.Time       `json:"updatedAt"`
 }
@@ -338,7 +342,11 @@ func FromAgentDetail(d agentconfig.AgentDetail) Agent {
 	out := Agent{ID: d.Agent.ID, Scope: ScopeOf(d.Agent.ProjectID), ProjectID: d.Agent.ProjectID, IsManager: d.Agent.IsManager, Name: d.Agent.Name, Address: AgentAddress(d.Agent), Model: ModelRef{d.Agent.ModelProvider, d.Agent.ModelID}, Runtime: agentruntime.ForProvider(d.Agent.ModelProvider).ID,
 		Prompt: d.Agent.Prompt, PromptVersion: d.Agent.PromptVersion, ConfigVersion: d.Agent.ConfigVersion, Busy: d.Busy, BackgroundTaskCount: d.BackgroundTasks, ThinkingLevel: d.Agent.ThinkingLevel, ServiceTier: d.Agent.ServiceTier,
 		Session: SessionInfo{State: d.Session.State, Epoch: d.Session.Epoch}, Clis: []AgentCli{},
-		ModelCredential: FromCredential(d.ModelCredential), CreatedAt: d.Agent.CreatedAt, UpdatedAt: d.Agent.UpdatedAt}
+		ModelCredential: FromCredential(d.ModelCredential), CreatedAt: d.Agent.CreatedAt, UpdatedAt: d.Agent.UpdatedAt,
+		WorkingDirectory: d.Agent.WorkingDirectory, UseLocalConfig: d.Agent.UseLocalConfig, PermissionMode: d.Agent.PermissionMode}
+	if f := d.Agent.ImportedFrom; f != nil {
+		out.ImportedFrom = &ImportedFrom{CLI: f.CLI, SessionID: f.SessionID, Path: f.Path, ImportedAt: f.ImportedAt}
+	}
 	for _, c := range d.CLIs {
 		out.Clis = append(out.Clis, FromCLI(c))
 	}

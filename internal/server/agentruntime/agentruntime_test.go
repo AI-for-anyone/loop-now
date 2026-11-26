@@ -169,3 +169,57 @@ func TestTextWriters(t *testing.T) {
 		t.Fatal("ByID must return a copy")
 	}
 }
+
+// Every runtime but the bundled Pi can work in a folder the person picks; Claude Code and Codex can also load the
+// person's own CLI configuration. Every runtime offers Full access; Pi offers nothing else.
+func TestWorkingFolderAndLocalConfigCapabilities(t *testing.T) {
+	want := map[string][2]bool{Pi: {false, false}, ClaudeCode: {true, true}, Codex: {true, true}, Grok: {true, false}, Antigravity: {true, false}}
+	for _, r := range All() {
+		w, ok := want[r.ID]
+		if !ok {
+			continue
+		}
+		if c := r.Capabilities; c.WorkingDirectory != w[0] || c.LocalConfig != w[1] || !slices.Contains(c.PermissionModes, "full") {
+			t.Errorf("%s: %+v", r.ID, c)
+		}
+	}
+	if pi, _ := ByID(Pi); !slices.Equal(pi.Capabilities.PermissionModes, []string{"full"}) {
+		t.Errorf("Pi offers Full access only: %v", pi.Capabilities.PermissionModes)
+	}
+	cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"})
+	if c := cmd.Capabilities; !c.WorkingDirectory || c.LocalConfig || !slices.Contains(c.PermissionModes, "full") {
+		t.Errorf("a local ACP command: %+v", c)
+	}
+}
+
+// Grok, Antigravity and the local ACP commands decide by their own rules what to ask about; Claude Code and Codex ask
+// about every action the mode does not allow; Pi never asks.
+func TestPermissionAsksByOwnRules(t *testing.T) {
+	want := map[string]bool{Pi: false, ClaudeCode: false, Codex: false, Grok: true, Antigravity: true}
+	for id, own := range want {
+		r, _ := ByID(id)
+		if r.Capabilities.PermissionAsksByOwnRules != own {
+			t.Errorf("%s: permissionAsksByOwnRules %v, want %v", id, r.Capabilities.PermissionAsksByOwnRules, own)
+		}
+	}
+	if cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"}); !cmd.Capabilities.PermissionAsksByOwnRules {
+		t.Error("a local ACP command asks by its own rules")
+	}
+}
+
+// The permission modes each runtime offers: Claude Code, Codex, Grok and Antigravity all four, a local ACP command
+// Supervised and Full access, Pi Full access only.
+func TestPermissionModesPerRuntime(t *testing.T) {
+	all := []string{"supervised", "accept_edits", "auto", "full"}
+	want := map[string][]string{Pi: {"full"}, ClaudeCode: all, Codex: all, Antigravity: all, Grok: all}
+	for id, modes := range want {
+		r, _ := ByID(id)
+		if !slices.Equal(r.Capabilities.PermissionModes, modes) {
+			t.Errorf("%s: %v, want %v", id, r.Capabilities.PermissionModes, modes)
+		}
+	}
+	cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"})
+	if !slices.Equal(cmd.Capabilities.PermissionModes, []string{"supervised", "full"}) {
+		t.Errorf("a local ACP command: %v", cmd.Capabilities.PermissionModes)
+	}
+}

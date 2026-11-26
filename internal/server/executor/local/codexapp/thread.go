@@ -33,10 +33,22 @@ type ThreadOptions struct {
 	DeveloperInstructions string
 	// Config overrides single keys of the user's Codex configuration for this thread (such as mcp_servers.<name>).
 	Config map[string]any
+	// ApprovalPolicy, Sandbox and ApprovalsReviewer are the thread's approval settings; empty is never (nothing asks)
+	// and danger-full-access, with no reviewer.
+	ApprovalPolicy, Sandbox, ApprovalsReviewer string
 }
 
 func (o ThreadOptions) params() map[string]any {
 	p := map[string]any{"approvalPolicy": "never", "sandbox": "danger-full-access"}
+	if o.ApprovalPolicy != "" {
+		p["approvalPolicy"] = o.ApprovalPolicy
+	}
+	if o.Sandbox != "" {
+		p["sandbox"] = o.Sandbox
+	}
+	if o.ApprovalsReviewer != "" {
+		p["approvalsReviewer"] = o.ApprovalsReviewer
+	}
 	if o.Cwd != "" {
 		p["cwd"] = o.Cwd
 	}

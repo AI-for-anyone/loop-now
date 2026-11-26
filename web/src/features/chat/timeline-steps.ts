@@ -278,6 +278,19 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
         )
         break
       }
+      // A permission request the reply waited on: what it asked, and how it was answered (or why it was cancelled).
+      case 'permission_request':
+        steps.push(
+          step(entry, index, {
+            label: t.timeline.step.permission_request(t.permissions.request.kinds[entry.kind]),
+            field: entry.requestId,
+            detail: entry.title,
+            lines: [entry.reason ? `${t.permissions.request.states[entry.state]} · ${entry.state === 'cancelled' ? (t.permissions.request.cancelReasons[entry.reason] ?? entry.reason) : t.permissions.request.reason(entry.reason)}` : t.permissions.request.states[entry.state]],
+            duration: entry.answeredAt ? t.timeline.duration(ms(entry.at, entry.answeredAt)) : null,
+            tone: entry.state === 'approved' ? 'ok' : entry.state === 'rejected' ? 'fail' : entry.state === 'pending' ? 'hot' : 'neutral',
+          }),
+        )
+        break
       case 'background_wait_timeout':
         steps.push(step(entry, index, { label: t.timeline.step.background_wait_timeout(entry.limitMs) }))
         break

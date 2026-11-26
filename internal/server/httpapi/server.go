@@ -24,6 +24,7 @@ import (
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/conversation"
+	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/folders"
@@ -33,6 +34,7 @@ import (
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
 	"loop-now/internal/server/pathpicker"
+	"loop-now/internal/server/permissions"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/reqid"
@@ -91,8 +93,12 @@ type Server struct {
 	TextGeneration *textgen.Service
 	// PathPicker shows this computer's own dialog to choose a path (POST /path-picks); when nil there is none.
 	PathPicker *pathpicker.Picker
-	Tasks      *tasks.Service
-	Log        *slog.Logger
+	// ConvImport finds conversations of the local CLIs and imports them as Agents; nil leaves the endpoints failing.
+	ConvImport *convimport.Service
+	// Permissions answers permission requests; nil leaves answering failing.
+	Permissions *permissions.Service
+	Tasks       *tasks.Service
+	Log         *slog.Logger
 	// PiCommands returns the command list Pi reported the last time the Agent started it (nil if Pi has never been
 	// started); when PiCommands is nil the command list is always empty.
 	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
@@ -156,6 +162,15 @@ func (s *Server) Routes() []Route {
 		{"PATCH", "/acp-commands/{commandId}", "updateAcpCommand", ConsoleOnly, s.updateACPCommand},
 		{"DELETE", "/acp-commands/{commandId}", "deleteAcpCommand", ConsoleOnly, s.deleteACPCommand},
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
+		{"POST", "/conversation-scans", "startConversationScan", ConsoleOnly, s.startConversationScan},
+		{"GET", "/conversation-scans/{operationId}", "getConversationScan", ConsoleOnly, s.getConversationScan},
+		{"POST", "/conversation-imports", "startConversationImport", ConsoleOnly, s.startConversationImport},
+		{"GET", "/permission-settings", "getPermissionSettings", ConsoleOnly, s.getPermissionSettings},
+		{"PUT", "/permission-settings", "putPermissionSettings", ConsoleOnly, s.putPermissionSettings},
+		{"GET", "/agents/{agentId}/permission-requests", "listPermissionRequests", ConsoleOnly, s.listAgentPermissionRequests},
+		{"POST", "/permission-requests/{permissionRequestId}/answer", "answerPermissionRequest", ConsoleOnly, s.answerPermissionRequest},
+		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/permission-requests", "listTaskNodePermissionRequests", ConsoleOnly, s.listTaskNodePermissionRequests},
+		{"GET", "/conversation-imports/{operationId}", "getConversationImport", ConsoleOnly, s.getConversationImport},
 		{"GET", "/text-generation-settings", "getTextGenerationSettings", ConsoleOnly, s.getTextGenerationSettings},
 		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
 		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},

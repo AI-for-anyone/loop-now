@@ -337,20 +337,40 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if effort := claudeEffort(snap); effort != "" {
 		args = append(args, "--effort", effort)
 	}
-	args = append(args, "--setting-sources", "", "--settings", claudeSettings, "--strict-mcp-config")
+	own := localConfig(snap)
+	if !own {
+		// The person's settings, CLAUDE.md files and MCP servers are not read; auto memory and Claude Code's own Skills
+		// are off. With the person's own configuration Claude Code reads all of them, as in their terminal.
+		args = append(args, "--setting-sources", "", "--settings", claudeSettings, "--strict-mcp-config")
+	}
 	if _, err := os.Stat(d.claudeMCP); err == nil {
 		args = append(args, "--mcp-config", d.claudeMCP)
 	}
-	args = append(args, "--permission-mode", "bypassPermissions", "--permission-prompts", "none", "--system-prompt-snapshot", "off")
+	mode := claudeModes[permissionMode(snap)]
+	if mode == "bypassPermissions" {
+		// Nothing asks: anything that would still prompt is denied.
+		args = append(args, "--permission-mode", mode, "--permission-prompts", "none")
+	} else {
+		// Prompts come to Loop Now as can_use_tool control requests; without --permission-prompt-tool stdio claude
+		// denies what needs approval instead of asking (measured on 2.1.332).
+		args = append(args, "--permission-mode", mode, "--permission-prompts", "host", "--permission-prompt-tool", "stdio")
+	}
+	args = append(args, "--system-prompt-snapshot", "off")
 	if _, err := os.Stat(d.prompt); err == nil {
 		args = append(args, "--append-system-prompt-file", d.prompt)
 	}
-	args = append(args, "--plugin-dir", d.claudePlugin, "--tools", strings.Join(ClaudeCodeTools, ","))
+	args = append(args, "--plugin-dir", d.claudePlugin)
+	if !own {
+		args = append(args, "--tools", strings.Join(ClaudeCodeTools, ","))
+	}
 	sessionID, sessionArgs := claudeSessionArgs(spec)
 	args = append(args, sessionArgs...)
+	if err := checkWorkDir(snap, d); err != nil {
+		return started{}, err
+	}
 	cmd := exec.Command(bin, args...)
 	cmd.Env = claudeEnv(spec.env)
-	cmd.Dir = d.workspace
+	cmd.Dir = workDir(snap, d)
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		return started{}, err
@@ -402,7 +422,75 @@ func (cd claudeDriver) attach(p *proc) {
 	if cp := claudeOf(p); cp != nil {
 		cp.SetObserver(claudeObserver{e: cd.e, p: p})
 		cp.SetSelfTurns(func() runturn.SelfTurn { return cd.e.selfTurnBegan(p, "") })
+		if p.mode != executor.ModeFull {
+			cp.SetPermissions(func(ctx context.Context, t ccstream.ToolPermission) ccstream.ToolDecision {
+				kind, title, detail := claudeToolRequest(t)
+				a := cd.e.askPermission(ctx, p, kind, title, detail)
+				if a.Approved {
+					return ccstream.ToolDecision{Allow: true}
+				}
+				msg := strings.TrimSpace(a.Reason)
+				if msg == "" {
+					msg = "The person did not allow this. Do not try it another way; say what you needed it for."
+				}
+				return ccstream.ToolDecision{Message: msg}
+			})
+		}
 	}
+}
+
+// claudeModes are Claude Code's --permission-mode values for each permission mode.
+var claudeModes = map[string]string{executor.ModeSupervised: "manual", executor.ModeAcceptEdits: "acceptEdits", executor.ModeAuto: "auto",
+	executor.ModeFull: "bypassPermissions"}
+
+// claudeToolRequest is how a can_use_tool request is shown: Bash is a command (its command line), the file tools a file
+// change (the file, and the change), anything else a tool (its input).
+func claudeToolRequest(t ccstream.ToolPermission) (kind, title, detail string) {
+	var in struct {
+		Command      string `json:"command"`
+		Description  string `json:"description"`
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+		URL          string `json:"url"`
+	}
+	_ = json.Unmarshal(t.Input, &in)
+	pretty := string(t.Input)
+	if b, err := json.MarshalIndent(json.RawMessage(t.Input), "", "  "); err == nil {
+		pretty = string(b)
+	}
+	name := t.DisplayName
+	if name == "" {
+		name = t.ToolName
+	}
+	switch t.ToolName {
+	case "Bash":
+		return executor.PermissionCommand, "Run " + firstLine(in.Command), in.Command
+	case "Edit", "MultiEdit", "Write", "NotebookEdit":
+		file := in.FilePath
+		if file == "" {
+			file = in.NotebookPath
+		}
+		return executor.PermissionFileChange, t.ToolName + " " + file, pretty
+	case "WebFetch":
+		return executor.PermissionTool, "Fetch " + in.URL, pretty
+	}
+	title = name
+	switch {
+	case t.Description != "":
+		title += ": " + firstLine(t.Description)
+	case in.Description != "":
+		title += ": " + firstLine(in.Description)
+	}
+	return executor.PermissionTool, title, pretty
+}
+
+// firstLine is the first line of s, at most 200 characters.
+func firstLine(s string) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200]) + "…"
+	}
+	return s
 }
 
 // stopBackground asks Claude Code to stop each task (control request stop_task).
@@ -438,7 +526,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	defer cancel()
 	home, _ := e.o.RealHome()
 	env := e.claudeHelperEnv(ctx, home)
-	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.dirs.workspace, cp.sessionID); path != "" {
+	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.cwd, cp.sessionID); path != "" {
 		p.sessMu.Lock()
 		p.sessionFile = path
 		p.sessMu.Unlock()
@@ -446,9 +534,10 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		// The session record written by claude was not found (for example on Windows, where it encodes the working
 		// directory differently from us): the turn ends normally and this is not treated as a save failure; the
 		// conversation continues as usual in this process, and the next start opens a new session.
-		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.dirs.workspace, "version", cp.version)
+		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", cp.sessionID, "workspace", p.cwd, "version", cp.version)
 	}
-	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) {
+	// With the person's own configuration their Skills are expected: only other Agents are checked.
+	if init := cp.Init(); init != nil && !cp.initChecked.Swap(true) && !p.ownConfig {
 		checkClaudeSkills(p, init)
 	}
 	switch tr.ErrorCode {

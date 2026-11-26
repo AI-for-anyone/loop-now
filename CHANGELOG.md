@@ -6,6 +6,21 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Import your Claude Code and Codex conversations
+
+- A new Import page lists the Claude Code and Codex conversations on this computer, grouped by folder (git repositories by remote, worktrees under their main checkout), with the ones worth importing pre-checked. Each folder becomes a project, each conversation an Agent that continues it. It opens by itself on a fresh install with no Agents, and from Settings, the empty overview and a project's local folders.
+- The original conversation is never changed: the Agent continues from a copy taken at import, cut at the last finished turn. Its chat shows the imported history (the first prompt and the newest messages, 200 in all, without tool activity) under "Imported history".
+- An imported Agent works in the conversation's own folder and like the terminal: your own CLI configuration (for Claude Code: settings, CLAUDE.md, skills, plugins, MCP servers, all tools, auto memory) and your own logins. Both can be turned on for any Agent on its config page ("Work folder" and "Use my CLI configuration").
+- Loop Now's own conversations, temporary and scratch folders are not offered; conversations already in Loop Now link to their Agent.
+
+### Permission modes
+
+- Every Agent has a permission mode, as in T3 Code: Supervised, Auto-accept edits, Auto or Full access. Choose it in the message box (under who runs it), on the config page, and the default for new Agents in Settings. The default is Full access, so nothing changes until you choose otherwise.
+- A request to approve appears in the reply that asked, with Approve, Reject and a reason; also in the Inbox and as a desktop notification, since Agents also run when nobody is watching. Stop rejects pending requests. Claude Code receives the reason.
+- Claude Code and Codex ask for every action their mode does not allow. Grok, Antigravity and local ACP commands decide by their own permission rules and settings, so some commands run without asking; the page says so. Pi has Full access only.
+- A step of a multi-step task uses its Agent's mode as it was when the task started, and shows its requests in the step's chat.
+- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migration 17.
+
 ### Background tasks you can see and stop
 
 - When Claude Code, Codex, Grok or Antigravity moves a command (or a sub-agent) to the background, the reply ends as the CLI ends it, and the work stays visible: a "Background N" mark next to the Agent's state opens the list (what runs, which reply started it, for how long) with Stop and Stop all; idle Agents with running work are marked in the sidebar, the overview and the project's Agents.

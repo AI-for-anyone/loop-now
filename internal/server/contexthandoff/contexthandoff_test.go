@@ -110,7 +110,7 @@ func TestBuildLeavesOutAMessageTooLargeToFit(t *testing.T) {
 }
 
 // Failed and interrupted turns keep the text that was written, with the turn's status; tool use is summarized; images
-// are counted, never carried; platform reminders and wake-ups are named as such.
+// are counted, never carried; platform reminders, wake-ups and turns imported from the terminal are named as such.
 func TestBuildDescribesTurns(t *testing.T) {
 	failed := msg("assistant", "partial answer before the error")
 	failed.Status = "failed"
@@ -126,10 +126,12 @@ func TestBuildDescribesTurns(t *testing.T) {
 	wake.Origin = "sleep_wake"
 	ended := msg("user", "Platform notice: background task \"make test\" (completed) ended")
 	ended.Origin = "background"
-	all := []contexthandoff.Message{pictured, failed, reminder, stopped, wake, ended, tools}
+	imported := msg("assistant", "an answer given in the terminal")
+	imported.Origin = "imported"
+	all := []contexthandoff.Message{imported, pictured, failed, reminder, stopped, wake, ended, tools}
 	block := contexthandoff.Build(all, "Claude Code", "Pi", contexthandoff.DefaultBudget)
 	for _, want := range []string{"partial answer before the error", "failed", "interrupted", "bash ×3 (1 failed)", "read ×1",
-		"2 images not carried", "platform reminder", "sleep wake-up", "user, background work ended"} {
+		"2 images not carried", "platform reminder", "sleep wake-up", "user, background work ended", "assistant, imported from the terminal"} {
 		if !strings.Contains(block.Text, want) {
 			t.Fatalf("the block lacks %q:\n%s", want, block.Text)
 		}

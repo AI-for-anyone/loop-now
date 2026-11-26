@@ -220,3 +220,21 @@ func (s *Service) backgroundAction(ctx context.Context, agentID, actionID uuid.U
 	out, _, err := s.st.AgentQueueAction(ctx, agentID, action, func(*db.Tx) (any, error) { return value, nil })
 	return out, err
 }
+
+// PermissionsChanged is called after a permission request of the Agent's run was made, answered or cancelled: the
+// Agent's stream gets its pending list (permission_requests.updated) and the run its new state, and the overview the
+// Agent's status.
+func (s *Service) PermissionsChanged(agentID, runID uuid.UUID) {
+	ctx := s.ctx
+	if ctx.Err() != nil {
+		return
+	}
+	pending, err := s.st.PendingPermissionRequests(ctx, agentID)
+	if err != nil {
+		s.log.Warn("failed to read the pending permission requests", "agentId", agentID, "err", err)
+		return
+	}
+	s.emit(ctx, agentID, apitypes.EventPermissionRequestsUpdated, apitypes.SsePermissionRequestsUpdated{Requests: apitypes.FromPermissionRequests(pending)})
+	s.emitRun(ctx, agentID, runID)
+	s.EmitAgentStatus(agentID)
+}

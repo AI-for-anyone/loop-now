@@ -73,6 +73,9 @@ const OriginConsoleCompact = "console_compact"
 // nothing to the runtime: the executor records the reply the CLI is giving (or gave) as this run.
 const OriginBackground = "background"
 
+// OriginImported is a turn of a conversation imported from a CLI on this computer: shown in the chat, never run.
+const OriginImported = "imported"
+
 // OutcomeMerged is the outcome of a run of origin background whose reply went into another run (the person's message
 // that was starting when the CLI began it); the run did nothing.
 const OutcomeMerged = "merged"

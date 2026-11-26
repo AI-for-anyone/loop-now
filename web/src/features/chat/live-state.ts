@@ -31,6 +31,8 @@ export interface LiveState {
   session: Schemas['SessionInfo'] | null
   // The Agent's running background tasks, oldest first: from the snapshot's status, then replaced whole by background_tasks.updated.
   backgroundTasks: Schemas['BackgroundTask'][]
+  // Permission requests waiting for an answer, oldest first: from the snapshot's status, then replaced whole by permission_requests.updated.
+  permissionRequests: Schemas['PermissionRequest'][]
   // Messages and runs seen in events and send results, merged by ID; for runs only the latest state is kept. Anything written to the
   // cache while a history request is in flight gets overwritten by the request's result, so they are merged on top of the history again
   // when building conversation turns; snapshots don't clear them.
@@ -58,6 +60,7 @@ export const initialLiveState: LiveState = {
   queueSeq: 0,
   session: null,
   backgroundTasks: [],
+  permissionRequests: [],
   messages: {},
   runs: {},
 }
@@ -151,6 +154,7 @@ function applyEvent(state: LiveState, event: AgentEvent): LiveState {
         queueSeq: state.queueSeq + 1,
         session: status.session,
         backgroundTasks: status.backgroundTasks,
+        permissionRequests: status.permissionRequests,
         runs,
       }
     }
@@ -189,6 +193,8 @@ function applyEvent(state: LiveState, event: AgentEvent): LiveState {
       return { ...applyQueue(state, event.data.queuedRuns), queueItems: event.data.items, queueSeq: state.queueSeq + 1 }
     case 'background_tasks.updated':
       return { ...state, backgroundTasks: event.data.tasks }
+    case 'permission_requests.updated':
+      return { ...state, permissionRequests: event.data.requests }
   }
 }
 

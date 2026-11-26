@@ -44,6 +44,38 @@ export const config = {
     prompt: 'Prompt',
     promptPlaceholder: 'Text appended to the system prompt (optional)',
   },
+  work: {
+    title: 'How it works',
+    importedFrom: (cli: string, time: string) => `Imported from a ${cli} conversation (${time}). It continues from a copy; the original record is never changed:`,
+    folder: {
+      label: 'Working folder',
+      hint: 'The Agent works in this folder: paths, git, CLAUDE.md / AGENTS.md and the project’s skills mean what they mean there.',
+      empty: 'None chosen: the workspace Loop Now gives it',
+      placeholder: '/Users/me/projects/app',
+      clear: "Use Loop Now's workspace again",
+      save: 'Save folder',
+      piNote: "Pi can't work in a chosen folder; once one is set, Who runs it no longer offers Pi.",
+      unsupported: (runtime: string) => `${runtime} can't work in a chosen folder.`,
+    },
+    localConfig: {
+      label: 'Use my own CLI configuration',
+      off: "Off: Loop Now runs it with its own configuration, only the tools it needs, and none of your personal settings.",
+      onIntro: 'On, it runs as it does in your terminal:',
+      turnsOn: {
+        'claude-code': [
+          'Your Claude settings, CLAUDE.md and auto memory (the same as the terminal)',
+          'Your plugins, skills and MCP servers',
+          "All of Claude's built-in tools, including messaging, scheduling, web fetch and worktrees",
+          'This computer’s HOME and PATH, and your own git, gh and ssh logins',
+        ],
+        codex: ['Your ~/.codex configuration', 'This computer’s HOME and PATH, and your own git, gh and ssh logins'],
+      } as Record<string, string[]>,
+      generic: ['What you set up for this CLI on this computer', 'This computer’s HOME and PATH, and your own git, gh and ssh logins'],
+      alsoKept: 'Project accounts no longer apply to it; Loop Now still adds the Inbox and loopctl, so it can send and receive messages.',
+      risk: 'It can do as much as you can in the terminal; the permission mode below is what holds it back.',
+      unsupported: (runtime: string) => `${runtime} has no configuration of its own to use.`,
+    },
+  },
   modelCredential: {
     title: 'Model account credential',
     deleteTitle: 'Delete the model account credential?',

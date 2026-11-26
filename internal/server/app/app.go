@@ -34,6 +34,7 @@ import (
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/conversation"
+	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/executor/local"
@@ -49,6 +50,7 @@ import (
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
 	"loop-now/internal/server/pathpicker"
+	"loop-now/internal/server/permissions"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
@@ -301,7 +303,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	recorder := &runrecord.Recorder{Store: a.Store, Log: log}
 	text := content.TextRules{Extensions: cfg.TextEditExtensions, MaxBytes: cfg.TextEditMax}
 	a.Config = &agentconfig.Service{
-		Store: a.Store, Models: models, Templates: templates, OrgID: defaults.Organization.ID, Logger: log,
+		Store: a.Store, Models: models, Templates: templates, OrgID: defaults.Organization.ID, Logger: log, DefaultMode: a.Store.PermissionDefaultMode,
 		Limits: agentconfig.Limits{MaxUploadFile: cfg.MaxUploadFile, MaxSkillArchive: cfg.MaxSkillArchive, MaxSkillEntries: cfg.MaxSkillEntries, MaxCredential: cfg.MaxCredential, Text: text},
 	}
 	a.Config.PluginAssets = a.pluginAssets
@@ -441,7 +443,13 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if maxFolderUpload <= 0 {
 		maxFolderUpload = 1 << 30
 	}
-	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
+	// Permission requests: what a runtime asks to do outside Full access, waiting for a person. Requests a stopped server
+	// left pending are cancelled first (no runtime waits for them); the Inbox and the streams are added below.
+	permissionSvc := &permissions.Service{Store: a.Store, Log: log}
+	if err = permissionSvc.CancelLeftOver(ctx); err != nil {
+		return a, fmt.Errorf("cancel left-over permission requests: %w", err)
+	}
+	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, Permissions: permissionSvc, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
 		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
 		WorkRoot: res.WorkRoot, PiBin: res.PiBin, NodeBin: res.NodeBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
@@ -553,6 +561,25 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// The console in a browser asks the server for this computer's own dialog to choose a path (the desktop app has its
 	// own); it works on macOS in a logged-in desktop session.
 	a.API.PathPicker = &pathpicker.Picker{Log: log}
+	// Importing conversations reads only Claude Code's and Codex's conversation records on this computer.
+	a.API.ConvImport = &convimport.Service{Store: a.Store, ClaudeProjects: a.Executor.ClaudeProjectsDir, CodexHome: a.Executor.CodexHome,
+		Models: models, WorkRoot: res.WorkRoot, OrgID: defaults.Organization.ID, AgentCreated: a.Conv.EmitAgentStatus, DefaultMode: a.Store.PermissionDefaultMode,
+		Home: realHome, Excluded: append(convimport.TemporaryFolders(), res.WorkRoot)}
+	// A request is asked in the Inbox too; its changes go to the Agent's stream, or the task node's.
+	permissionSvc.Inbox = inboxSvc
+	permissionSvc.Changed = func(r store.PermissionRequest) {
+		switch {
+		case r.RunID != nil:
+			a.Conv.PermissionsChanged(r.AgentID, *r.RunID)
+		case r.TaskTurnID != nil:
+			ctx, cancel := context.WithTimeout(context.Background(), cfg.TaskRecordTimeout)
+			defer cancel()
+			if err := tasks.EmitNodePermissionRequests(ctx, a.Store, *r.TaskTurnID); err != nil {
+				log.Warn("failed to send a node's permission requests", "turnId", *r.TaskTurnID, "err", err)
+			}
+		}
+	}
+	a.API.Permissions = permissionSvc
 	// The local ACP commands people added are runtimes too, before anything runs.
 	a.API.ApplyACPCommands(ctx)
 	if err = a.assemblePlugins(cfg, res, log); err != nil {

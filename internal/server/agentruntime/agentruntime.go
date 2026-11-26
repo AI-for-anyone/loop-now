@@ -83,7 +83,29 @@ type Capabilities struct {
 	TaskFork bool `json:"-"`
 	// ReadsEntryFile: reads AGENTS.md in the working directory by itself.
 	ReadsEntryFile bool `json:"-"`
+	// PermissionModes are the permission modes the runtime offers (Agent.permissionMode values); always at least full.
+	PermissionModes []string `json:"permissionModes"`
+	// PermissionAsksByOwnRules: in the modes other than full, the runtime decides by its own permission rules and
+	// settings what to ask about, so some actions go ahead without asking (Grok, Antigravity, local ACP commands).
+	PermissionAsksByOwnRules bool `json:"permissionAsksByOwnRules"`
+	// WorkingDirectory: can work in a folder the person picks (Agent.workingDirectory).
+	WorkingDirectory bool `json:"workingDirectory"`
+	// LocalConfig: can load the person's own CLI configuration, as in their terminal (Agent.useLocalConfig).
+	LocalConfig bool `json:"localConfig"`
 }
+
+// Permission modes, from asking the most to asking nothing.
+const (
+	ModeSupervised  = "supervised"
+	ModeAcceptEdits = "accept_edits"
+	ModeAuto        = "auto"
+	ModeFull        = "full"
+)
+
+// fullOnly is the permission modes of a runtime that cannot ask before acting; allModes those of one that has all.
+func fullOnly() []string { return []string{ModeFull} }
+
+func allModes() []string { return []string{ModeSupervised, ModeAcceptEdits, ModeAuto, ModeFull} }
 
 // Setup is how a person sets a runtime up on this computer: commands for a terminal, shown by the console and never run
 // by the platform. Nil fields mean there is nothing to show.
@@ -173,7 +195,8 @@ func LocalCommandRuntimeID(id uuid.UUID) string { return LocalCommandPrefix + id
 // program's own login on this computer; it cannot copy a session for a task.
 func LocalCommandRuntime(id uuid.UUID, name string, cmd LocalCommand) Runtime {
 	rid := LocalCommandRuntimeID(id)
-	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true},
+	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, PermissionModes: []string{ModeSupervised, ModeFull},
+		PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Command: &cmd, CommandID: id, TextGeneration: &TextGeneration{Rank: localCommandWriterRank}}
 }
 
@@ -246,13 +269,14 @@ var registry = []Runtime{
 		ID:   Pi,
 		Name: "Pi",
 		Capabilities: Capabilities{Accounts: AccountsManaged, NativeCommands: true, PluginExtensions: true, Bundled: true,
-			SessionCommands: SessionCommands, TaskFork: true, ReadsEntryFile: true},
+			SessionCommands: SessionCommands, TaskFork: true, ReadsEntryFile: true, PermissionModes: fullOnly()},
 	},
 	{
-		ID:             ClaudeCode,
-		Name:           "Claude Code",
-		Providers:      []string{ClaudeCodeProvider},
-		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true},
+		ID:        ClaudeCode,
+		Name:      "Claude Code",
+		Providers: []string{ClaudeCodeProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, TaskFork: true, PermissionModes: allModes(), WorkingDirectory: true,
+			LocalConfig: true},
 		Setup:          claudeCodeSetup,
 		TextGeneration: &TextGeneration{Rank: 1, Models: []string{"haiku"}},
 	},
@@ -263,7 +287,7 @@ var registry = []Runtime{
 		Name:      "Codex",
 		Providers: []string{CodexProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, SessionCommands: []string{CommandCompact}, TaskFork: true,
-			ReadsEntryFile: true},
+			ReadsEntryFile: true, PermissionModes: allModes(), WorkingDirectory: true, LocalConfig: true},
 		Setup:          codexSetup,
 		MinVersion:     "0.167.0",
 		TextGeneration: &TextGeneration{Rank: 2, Models: []string{"luna", "-mini"}, Level: "low"},
@@ -271,10 +295,11 @@ var registry = []Runtime{
 	{
 		// Grok runs as `grok agent ... stdio`, an Agent Client Protocol agent, with this computer's login (kept under the
 		// real HOME). The model and reasoning effort are given when it starts.
-		ID:             Grok,
-		Name:           "Grok",
-		Providers:      []string{GrokProvider},
-		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true},
+		ID:        Grok,
+		Name:      "Grok",
+		Providers: []string{GrokProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true,
+			PermissionModes: allModes(), PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Setup:          grokSetup,
 		MinVersion:     "1.0.88",
 		TextGeneration: &TextGeneration{Rank: 4},
@@ -283,10 +308,11 @@ var registry = []Runtime{
 		// Antigravity runs as `agy acp`, an Agent Client Protocol agent, with this computer's login (kept under the real
 		// HOME). It lists a model once per thinking level (gemini-4-neon-high); the catalog has one model with those
 		// levels (see modelcatalog.MergeLevelModels).
-		ID:             Antigravity,
-		Name:           "Antigravity",
-		Providers:      []string{AntigravityProvider},
-		Capabilities:   Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true},
+		ID:        Antigravity,
+		Name:      "Antigravity",
+		Providers: []string{AntigravityProvider},
+		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true, PermissionModes: allModes(),
+			PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",
 		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},
@@ -343,6 +369,7 @@ func Known(id string) bool {
 func (r Runtime) clone() Runtime {
 	r.Providers = slices.Clone(r.Providers)
 	r.Capabilities.SessionCommands = slices.Clone(r.Capabilities.SessionCommands)
+	r.Capabilities.PermissionModes = slices.Clone(r.Capabilities.PermissionModes)
 	if r.TextGeneration != nil {
 		tg := *r.TextGeneration
 		tg.Models = slices.Clone(tg.Models)
@@ -354,4 +381,16 @@ func (r Runtime) clone() Runtime {
 		r.Command = &c
 	}
 	return r
+}
+
+// importedCLIs are the runtimes that continue conversations imported from a CLI on this computer, by that CLI.
+var importedCLIs = map[string]string{"claude": ClaudeCode, "codex": Codex}
+
+// ForImportedCLI returns the runtime that continues a conversation of cli (claude or codex); ok is false for any other.
+func ForImportedCLI(cli string) (Runtime, bool) {
+	id, ok := importedCLIs[cli]
+	if !ok {
+		return Runtime{}, false
+	}
+	return ByID(id)
 }

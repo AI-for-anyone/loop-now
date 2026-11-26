@@ -61,6 +61,7 @@ export const errors = {
     path_picker_busy: '已经有一个选择窗口开着，先在那里选好或取消',
     background_task_not_found: '找不到这个后台任务',
     background_task_ended: '这个后台任务已经结束了',
+    permission_request_answered: '这个请求已经有人回答了',
     internal_error: '服务端内部错误',
   } satisfies Record<S['ErrorCode'], string>,
   unknown: '未知错误',

@@ -28,6 +28,7 @@ import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { CommandLine } from '@/features/plugins/ChatLines'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { RestartNotice } from './BackgroundTasks'
+import { WaitingForApproval } from '@/features/permissions/WaitingForApproval'
 import type { Schemas } from '@/api/client'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -88,7 +89,8 @@ export function ChatPage() {
   // When replying to a question, remember the original question; once it no longer awaits an answer (answered, expired or closed),
   // the input box leaves reply mode.
   const consoleMessages = useAgentConsoleMessages(agent.id)
-  const toYou = useMemo(() => (consoleMessages.data ?? []).filter((m) => m.from.kind === 'agent' && m.to.kind === 'console'), [consoleMessages.data])
+  // An approval question (kind permission) is the request card in the reply that asked, so it is not shown a second time here.
+  const toYou = useMemo(() => (consoleMessages.data ?? []).filter((m) => m.from.kind === 'agent' && m.to.kind === 'console' && m.question?.kind !== 'permission'), [consoleMessages.data])
   const [replying, setReplying] = useState<{ agentId: string; messageId: string } | null>(null)
   const replyTarget = replying?.agentId === agent.id ? toYou.find((m) => m.id === replying.messageId && m.question?.state === 'open') : undefined
   // Slash (/) commands claimed by the platform or a plugin are placed by time only in the conversation as opened this time
@@ -126,6 +128,8 @@ export function ChatPage() {
   const runningTasks = synced ? live.backgroundTasks : (status.data?.backgroundTasks ?? [])
   const running = runningTasks.length
   const restartNotice = running > 0 && status.data?.restartOnNextMessage ? <RestartNotice runtimeName={runtimes.name(runningTasks[0]?.runtime ?? agent.runtime)} count={running} /> : null
+  // Requests waiting for an approval: as cards in the replies that asked, and one line above the message box that leads to the first.
+  const permissionRequests = (synced ? live.permissionRequests : (status.data?.permissionRequests ?? [])).filter((request) => request.taskId === null)
   const replyRuntime = (synced ? live.current?.run : status.data?.currentRun)?.selection?.runtime ?? agent.runtime
   const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
@@ -191,6 +195,7 @@ export function ChatPage() {
               onLoadOlder={() => void messages.fetchNextPage({ cancelRefetch: false })}
               targetRunId={aroundRun}
               inserts={inserts}
+              permissionRequests={permissionRequests}
               turnsBefore={turnsBefore}
               turnsTotal={turnsTotal}
               hasNewer={messages.hasPreviousPage}
@@ -225,7 +230,12 @@ export function ChatPage() {
             </>
           }
           runner={<RunnerChip agent={agent} />}
-          notice={restartNotice}
+          notice={
+            <>
+              {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} onLocate={(runId) => void navigate(`${location.pathname}#run-${encodeURIComponent(runId)}`)} />}
+              {restartNotice}
+            </>
+          }
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={

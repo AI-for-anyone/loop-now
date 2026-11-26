@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/runturn"
 )
 
@@ -173,6 +174,9 @@ type Client struct {
 	background map[string]*bgCommand
 	// lastStarted reports whether the latest turn started (the server gave it an id).
 	lastStarted bool
+	// approve answers approval requests; asking cancels each one still waiting for its answer, by request id.
+	approve ApprovalFunc
+	asking  map[string]context.CancelCauseFunc
 
 	done    chan struct{}
 	exitErr error
@@ -366,6 +370,9 @@ func (c *Client) handle(line []byte) {
 // granted (the thread already runs with full access and approval policy never; anything that still asks is allowed),
 // and questions to the user and MCP elicitations are declined; any other request gets "method not found".
 func (c *Client) answer(id json.RawMessage, method string, params json.RawMessage) {
+	if approvalMethods[method] && c.askApproval(id, method, params) {
+		return
+	}
 	var result any
 	switch method {
 	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
@@ -444,6 +451,7 @@ func (c *Client) notification(method string, params json.RawMessage) {
 
 // shutdown wraps up after the process exits: pending requests fail, a turn in progress ends as failed.
 func (c *Client) shutdown(err error) {
+	c.endApprovals(executor.CancelProcessExited)
 	c.mu.Lock()
 	c.closed = true
 	pending := c.pending

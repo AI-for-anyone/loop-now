@@ -31,6 +31,8 @@ type QuestionInput struct {
 	// marker.
 	ExpiresIn time.Duration
 	Dialog    *store.ExtensionDialog
+	// Permission is the permission request the question asks about (AskPermission).
+	Permission *uuid.UUID
 }
 type taskQuestionBridge interface {
 	CheckQuestionRunTx(context.Context, *store.TaskMutation, auth.Principal, uuid.UUID, uuid.UUID) error
@@ -230,6 +232,10 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_messages SET answers_message_id=$2,answer_option_id=$3 WHERE id=$1`, msg.ID, input.ReplyTo, input.OptionID); err != nil {
 				return err
 			}
+			// A permission question's answer answers the request (the runtime waiting on it is told).
+			if err = store.AnswerPermissionQuestionTx(ctx, scope.Tx, input.ReplyTo, input.OptionID, strings.TrimSpace(msg.Text)); err != nil {
+				return err
+			}
 			if err = store.QueueQuestionEventTx(ctx, scope.Tx, input.ReplyTo, "answered"); err != nil {
 				return err
 			}
@@ -267,6 +273,11 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			}
 			if input.Dialog != nil {
 				if err := store.InsertExtensionDialogTx(ctx, scope.Tx, msg.ID, *input.Dialog); err != nil {
+					return err
+				}
+			}
+			if input.Permission != nil {
+				if err := store.LinkPermissionQuestionTx(ctx, scope.Tx, *input.Permission, msg.ID); err != nil {
 					return err
 				}
 			}

@@ -168,3 +168,54 @@ func TestSelfTurnEndsWhenQuiet(t *testing.T) {
 		t.Fatalf("the next message runs: %+v %v", res, err)
 	}
 }
+
+// Continuing a session in which background tasks were still running, Claude Code 2.1.332 first reports them as stopped
+// and settles them in an empty turn of its own (result success, empty, num_turns 0), even when a message is already
+// waiting: that empty result is not the reply to the message, the tasks are not reported (this process never started
+// them), and no turn of its own is recorded.
+func TestStaleTasksTurnIsNotTheReply(t *testing.T) {
+	c := start(t, ccstream.Options{}, "FAKECLAUDE_STALE_TASK=bold1,bold2")
+	obs := newBgObs()
+	c.SetObserver(obs)
+	turns := withSelfTurns(c)
+	s := newSink()
+	res, err := c.Prompt(ctx(t), "hello", s)
+	if err != nil || res.Outcome != runturn.OutcomeCompleted || res.Text != "echo: hello" || s.text.String() != "echo: hello" {
+		t.Fatalf("the reply to the message: %+v %v %q", res, err, s.text.String())
+	}
+	if res, err := c.Prompt(ctx(t), "again", newSink()); err != nil || res.Text != "echo: again" {
+		t.Fatalf("the next message: %+v %v", res, err)
+	}
+	noStaleReport(t, obs, turns)
+}
+
+// The same with no message waiting: the empty turn Claude Code gives to settle earlier tasks is not recorded as a turn
+// of its own, and the message sent after it gets its reply.
+func TestStaleTasksTurnWithNoMessageMakesNoTurn(t *testing.T) {
+	c := start(t, ccstream.Options{}, "FAKECLAUDE_STALE_TASK=bold1")
+	obs := newBgObs()
+	c.SetObserver(obs)
+	turns := withSelfTurns(c)
+	deadline := time.Now().Add(10 * time.Second)
+	for c.Init() == nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if c.Init() == nil {
+		t.Fatal("the settling turn did not start")
+	}
+	if res, err := c.Prompt(ctx(t), "hello", newSink()); err != nil || res.Outcome != runturn.OutcomeCompleted || res.Text != "echo: hello" {
+		t.Fatalf("the reply to the message: %+v %v", res, err)
+	}
+	noStaleReport(t, obs, turns)
+}
+
+func noStaleReport(t *testing.T, obs *bgObs, turns chan *selfTurn) {
+	t.Helper()
+	select {
+	case s := <-turns:
+		t.Fatalf("a turn of its own was recorded: %q", s.text.String())
+	case e := <-obs.ended:
+		t.Fatalf("a task this process never started was reported: %+v", e)
+	case <-time.After(300 * time.Millisecond):
+	}
+}

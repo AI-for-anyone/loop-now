@@ -1,4 +1,4 @@
-import { ScissorsIcon, ZapIcon } from 'lucide-react'
+import { ArrowDownIcon, HistoryIcon, ScissorsIcon, ZapIcon } from 'lucide-react'
 import { CutLine } from '@/components/CutLine'
 import { MessageImages } from '@/features/images/MessageImages'
 import { UserChatBubble, AgentChatReply, SleepWakeLine } from './ChatBubble'
@@ -14,6 +14,7 @@ import { handoffBefore, modelChangeBefore, type Turn } from './turns'
 import { HandoffRow, ModelChangeLine } from './HandoffRow'
 import { Cursor, Markdown } from './Markdown'
 import { RunRecord } from './RunRecord'
+import { PermissionRequestCard } from '@/features/permissions/PermissionRequestCard'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
 import { unfinishedTool } from './tool-state'
 import { runStartedAt } from './time'
@@ -51,7 +52,7 @@ function sleptBefore(previous: Turn | undefined, turn: Turn) {
 // Agent replies have no card: a top line with the avatar, name, time (the phase while in progress) and the outcome stamp, the body
 // directly below, and the run record last.
 // A reply that didn't complete normally keeps the text it produced, shown in the secondary text color.
-function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean }) {
+function ReplyBubble({ turn, agent, located, requests = [] }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean; requests?: Schemas['PermissionRequest'][] }) {
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
@@ -85,7 +86,12 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
       {/* Tools that went on in the background are cards of their own, with how they ended; the others stay chips. */}
       <ToolList tools={run.tools} unfinished={unfinishedTool(run)} exclude={backgroundTools} />
       <BackgroundToolCards tasks={run.backgroundTasks ?? []} toolNames={toolNames} />
-      <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />
+      {/* What the reply waits for a person to approve, where it asked. */}
+      {requests.map((request) => (
+        <PermissionRequestCard key={request.id} request={request} agentName={agent.name} />
+      ))}
+      {/* An imported turn is a copy of the terminal conversation: it has no record of its own. */}
+      {!imported(turn) && <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />}
     </AgentChatReply>
   )
 }
@@ -112,6 +118,9 @@ function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated
     </div>
   )
 }
+
+// A turn copied from the conversation an Agent was imported from (origin imported).
+const imported = (turn: Turn) => (turn.user?.origin ?? turn.origin) === 'imported'
 
 // When the previous turn was interrupted and this turn is the message sent as the interrupt, draw a cut line between the two turns.
 function interruptedBy(previous: Turn, turn: Turn) {
@@ -155,6 +164,8 @@ interface MessageListProps {
   // Content that isn't part of a conversation turn and is placed into the conversation flow by time (messages and questions the
   // Agent sent you).
   inserts?: TimelineInsert[]
+  // Permission requests waiting for an answer; each shows in the reply that asked.
+  permissionRequests?: Schemas['PermissionRequest'][]
   // Turn numbering (contract MessagePage): how many turns come before the first loaded turn, taken from turnsBefore of the earliest
   // loaded page; numbering here continues from it.
   // Unknown, and not passed, while the history hasn't been fetched: then no numbers are shown, neither on the turns nor on the ruler,
@@ -217,6 +228,7 @@ export function MessageList({
   inserts = [],
   turnsBefore,
   turnsTotal,
+  permissionRequests = [],
 }: MessageListProps) {
   const container = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -362,7 +374,10 @@ export function MessageList({
             const isTarget = turn.run.id === targetRunId
             return (
               <Fragment key={turn.key}>
-                {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
+                {/* The turns copied from the terminal conversation come first, under their own divider; the Agent's own follow. */}
+                {imported(turn) && (index === 0 ? !hasOlder : !imported(turns[index - 1])) && <CutLine icon={HistoryIcon} label={t.importing.history.divider} />}
+                {index > 0 && imported(turns[index - 1]) && !imported(turn) && <CutLine icon={ArrowDownIcon} label={t.importing.history.continued} />}
+                {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && !imported(turns[index - 1]) && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
                 {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
                 <TurnChange previous={turns[index - 1]} turn={turn} />
                 {/* One conversation turn: in the blank space on the left is the turn's hollow number (matching the number on the
@@ -385,7 +400,7 @@ export function MessageList({
                     {/* The reply body follows the conversation column, up to 1100px on wide screens: no wasted space in a wide window,
                         and code blocks, tables and images widen with it. Narrow screens keep 760px. */}
                     <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
-                      <ReplyBubble turn={turn} agent={agent} located={isTarget} />
+                      <ReplyBubble turn={turn} agent={agent} located={isTarget} requests={permissionRequests.filter((request) => request.runId === turn.run.id)} />
                     </div>
                   </div>
                 </div>

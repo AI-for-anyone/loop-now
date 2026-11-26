@@ -1192,6 +1192,11 @@ func (s *Service) Status(ctx context.Context, agentID uuid.UUID) (apitypes.Agent
 		return out, err
 	}
 	out.BackgroundTasks = apitypes.FromBackgroundTasks(running)
+	pending, err := s.st.PendingPermissionRequests(ctx, agentID)
+	if err != nil {
+		return out, err
+	}
+	out.PermissionRequests = apitypes.FromPermissionRequests(pending)
 	if rc, ok := s.ex.(executor.RestartChecker); ok && len(running) > 0 {
 		// Only while tasks run: the next message's restart would stop them. Reading the settings is not free, so it is
 		// not done otherwise.

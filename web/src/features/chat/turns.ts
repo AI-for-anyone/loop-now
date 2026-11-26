@@ -10,6 +10,9 @@ type Run = Schemas['Run']
 
 export interface Turn {
   key: string
+  // Where the turn came from (Message.origin, the same on the prompt and the reply): known from either, since a page of history can
+  // start between them.
+  origin?: Message['origin']
   user: Message | null
   run: Run
   reply: { text: string; live: boolean } | null
@@ -53,7 +56,7 @@ export function buildTurns(
     const run = effectiveRun(message.run)
     let turn = byRun.get(run.id)
     if (!turn) {
-      turn = { key: run.id, user: null, run, reply: null, sessionEpoch: message.sessionEpoch }
+      turn = { key: run.id, origin: message.origin, user: null, run, reply: null, sessionEpoch: message.sessionEpoch }
       byRun.set(run.id, turn)
       order.push(turn)
     } else {

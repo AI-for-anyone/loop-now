@@ -6,6 +6,21 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### 导入 Claude Code 和 Codex 的对话
+
+- 新增“导入对话”页：列出这台电脑上的 Claude Code 和 Codex 对话，按文件夹分组（git 仓库按远程地址归在一起，工作树归到主检出下），值得导入的已预先勾选。每个文件夹成为一个项目，每段对话成为项目里接着它聊的一个 Agent。全新安装、还没有 Agent 时会自动打开；也可以从设置、空的总览页和项目的本机目录进入。
+- 原对话永远不会被改动：Agent 从导入时复制的一份接着聊，复制到最后一轮完整回复为止。对话页在“导入的历史”下显示导入的内容（第一句和最新的消息，共 200 条，不含工具过程）。
+- 导入的 Agent 在原对话的文件夹里干活，和终端里一样：用你本机的 CLI 配置（Claude Code 的设置、CLAUDE.md、技能、插件、MCP、全部工具、自动记忆）和你自己的登录。任何 Agent 都可以在配置页打开这两项（“工作文件夹”和“用我本机的 CLI 配置”）。
+- Loop Now 自己的对话、临时文件夹和草稿文件夹不会列出；已经在 Loop Now 里的对话会链接到对应的 Agent。
+
+### 权限模式
+
+- 每个 Agent 都有权限模式，和 T3 Code 一样：全部要批准、自动同意改文件、自动审查、完全放开。可以在输入框（谁来跑的下面）、配置页里选，新 Agent 的默认值在设置里改。默认是“完全放开”，你不改就什么都不会变。
+- 要批准的操作出现在发起它的那轮回复里，可以批准、拒绝并写理由；同时出现在收件箱并弹桌面通知，因为 Agent 也会在没人看着时运行。停止会拒绝还在等的请求。Claude Code 能收到拒绝理由。
+- Claude Code 和 Codex 会为模式不允许的每个操作来问。Grok、Antigravity 和自己添加的 ACP 命令按它们自己的权限规则和设置决定问什么，有些命令会直接执行，页面上会写明。Pi 只有“完全放开”。
+- 多步任务的每一步使用任务开始时 Agent 的模式，请求显示在这一步的对话里。
+- 接口：`POST /conversation-scans`、`POST /conversation-imports`，Agent 的 `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`，`/permission-settings`，权限请求及其回答接口和事件，`RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`。迁移 17。
+
 ### 能看到、能停止的后台任务
 
 - Claude Code、Codex、Grok 或 Antigravity 把命令（或子 Agent）放到后台时，回复随 CLI 结束，后台的活仍然看得到：Agent 状态旁的“后台任务 N”打开列表（在跑什么、哪轮回复启动的、跑了多久），可以单个停止或全部停止；侧边栏、总览和项目的 Agent 列表里，空闲但后台有活的 Agent 会有标记。

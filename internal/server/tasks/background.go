@@ -234,3 +234,40 @@ func (s *Service) nodeBackgroundAction(ctx context.Context, p auth.Principal, ta
 		return value, nil
 	})
 }
+
+// EventNodePermissionRequests replaces a node's pending permission requests on the task's event stream.
+const EventNodePermissionRequests = "task.node.permission_requests.updated"
+
+// NodePermissionRequests is the pending list of a node: the requests of its turns still waiting for a person.
+func NodePermissionRequests(ctx context.Context, st *store.Store, taskID, nodeRunID, runtimeID uuid.UUID) (apitypes.TaskNodePermissionRequests, error) {
+	pending, err := st.NodePendingPermissionRequests(ctx, nodeRunID)
+	if err != nil {
+		return apitypes.TaskNodePermissionRequests{}, err
+	}
+	return apitypes.TaskNodePermissionRequests{TaskID: taskID, NodeRunID: nodeRunID, RuntimeID: runtimeID, Requests: apitypes.FromPermissionRequests(pending)}, nil
+}
+
+// EmitNodePermissionRequests puts the pending list of the node of a task turn on the task's event stream.
+func EmitNodePermissionRequests(ctx context.Context, st *store.Store, turnID uuid.UUID) error {
+	turn, err := st.TaskTurn(ctx, turnID)
+	if err != nil || turn.NodeRunID == uuid.Nil {
+		return err
+	}
+	list, err := NodePermissionRequests(ctx, st, turn.TaskID, turn.NodeRunID, turn.RuntimeID)
+	if err != nil {
+		return err
+	}
+	return st.AppendTaskEvent(ctx, turn.TaskID, EventNodePermissionRequests, list)
+}
+
+// NodePermissionRequests is a node's pending permission requests, for the console.
+func (s *Service) NodePermissionRequests(ctx context.Context, p auth.Principal, task, node uuid.UUID) (apitypes.TaskNodePermissionRequests, error) {
+	if p.Kind != auth.KindConsole {
+		return apitypes.TaskNodePermissionRequests{}, apperr.Forbidden("Only the console can read a node's permission requests.")
+	}
+	target, err := s.nodeTarget(ctx, task, node)
+	if err != nil {
+		return apitypes.TaskNodePermissionRequests{}, err
+	}
+	return NodePermissionRequests(ctx, s.Store, task, node, target.RuntimeID)
+}

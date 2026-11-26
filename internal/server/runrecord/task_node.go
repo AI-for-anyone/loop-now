@@ -62,6 +62,11 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 		return out, e
 	}
 	projected = append(projected, backgroundEntries(background)...)
+	requests, e := s.Store.RunPermissionRequests(ctx, t.ID)
+	if e != nil {
+		return out, e
+	}
+	projected = append(projected, permissionEntries(requests)...)
 	commands := toolCommands(events)
 	for i := range projected {
 		projected[i].value = withToolCommand(projected[i].value, commands)
