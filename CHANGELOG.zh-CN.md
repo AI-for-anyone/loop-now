@@ -6,6 +6,11 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### loopctl 能设置 Agent 的工作文件夹、配置、批准模式和档位
+
+- `loopctl agent create` 和 `agent update` 新增 `--working-dir`、`--use-local-config true|false`、`--permission-mode supervised|accept_edits|auto|full`、`--thinking-level` 和 `--service-tier`，在命令行里就能把 Agent 设置完整，不用再去配置页一个个点。`agent update` 只发送给出的项，可以用 `--clear-working-dir`、`--clear-thinking-level`、`--clear-service-tier` 恢复默认。
+- 有固定取值的选项由 loopctl 先检查，不发请求；其余的（文件夹要是绝对路径、思考档位要是模型支持的、速度档位只用于 Pi 里的 Codex 模型、Pi 不能指定工作文件夹）由服务端检查，原样显示它的提示。
+
 ### 能在代码上干活的任务：一个任务一个工作区
 
 - 任务可以带一个工作区。Manager 建任务时指定这台电脑上的一个 git 仓库，Loop Now 就为这个任务开一个 worktree 和一个新分支：从远端默认分支的最新提交开出，名字是 `task/<编号>-<标题>`，Manager 也可以自己起名。任务的每一步都在这个 worktree 里干活，所以同一个仓库上可以同时跑好几个任务，互不影响，也不碰你自己的检出。
