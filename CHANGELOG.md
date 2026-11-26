@@ -11,20 +11,23 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
 - Values with a fixed list are checked by loopctl before anything is sent; the rest (an absolute folder, a level the model supports, a service tier only for Codex models in Pi, no working folder on Pi) is checked by the server, whose message is shown as it is.
 
-### Tasks that work on code: one worktree per task
+### Tasks with a workspace: a git worktree, or a copy of any folder
 
-- A task can carry a workspace. The Manager names a git repository on this computer when it creates the task, and Loop Now creates one worktree on one new branch for it: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. Every step of the task works in that worktree, so several tasks can run on one repository at the same time without touching each other or your own checkout.
-- A step of such a task works like the Agent's regular conversation. With "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included.
-- When the task ends or is cancelled, the worktree is removed if nothing would be lost: no uncommitted changes, and every commit merged or pushed. The local branch is deleted only when it is merged. Otherwise the worktree is kept, and the task page says why (how many files have uncommitted changes, how many commits exist only there) with a "Remove worktree" button for you; removing it loses the uncommitted changes, the commits stay on the branch.
-- The task page shows the repository, the branch, where it was started from and the folder; the task list shows the branch.
-- Loop Now only touches worktrees it created, in its own data folder. It never runs `git worktree prune`, never switches branches in or cleans your checkout, never deletes a remote branch and never closes a pull request.
-- The loopctl guide has a new part, "Tasks that change code", for Managers and the Agents in such a task: show the flow before creating the task, one Agent writes at a time, the verifier wrote none of the code, loops have limits, one pull request, how to watch it, ask before merging, clean up at the end.
+- A task can carry a workspace: the Manager names a folder on this computer when it creates the task, and every step of the task works there instead of in a copy of the Agent's own folder. A step works like the Agent's regular conversation: with "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included. Several tasks can run on the same folder at once without touching each other or the folder itself.
+- A folder inside a git repository gets a git worktree on one new branch: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. The Agents commit, push and open the pull request themselves. When the task ends or is cancelled, the worktree is removed if nothing would be lost (no uncommitted changes, every commit merged or pushed); the local branch is deleted only when it is merged.
+- Any other folder, which needs no version control at all, is copied for the task (instantly on macOS) and only read: the original is never changed and nothing is put back. Results are saved as the task's artifacts, and the copy is deleted when the task completes. Links that point outside the folder are not in the copy. The Manager can also ask for a copy of a repository it only needs to read.
+- Git is used only when a working one is on this computer. Without one (on macOS: without the developer tools, and the "install developer tools" dialog is never opened), a repository is copied too, and the task page says why.
+- A cancelled task whose worktree or copy holds work that would be lost keeps it; the task page says why (files with uncommitted changes, commits that exist only there, files added or changed in the copy) with a button for you to remove it.
+- The task page shows the workspace (worktree: repository, branch, where it started; copy: the folder it copies, how many files); the task list shows the branch or "Folder copy".
+- Loop Now only touches worktrees and copies it created, in its own data folder. It never runs `git worktree prune`, never switches branches in or cleans your checkout, never deletes a remote branch and never closes a pull request.
+- The loopctl guide has a new part, "Tasks with a workspace", for Managers and the Agents in such a task: show the flow before creating the task, one Agent writes at a time, the verifier wrote none of the code, loops have limits, one pull request, ask before merging, save results as artifacts in a copy, clean up at the end.
 - Tasks without a workspace are unchanged.
-- API: `TaskCreateInput.workspace`, `TaskWorkspace` on the task (`workspace`), `TaskSummary.branch`, `POST /tasks/{taskId}/workspace/remove`, error code `task_workspace_not_kept`.
+- API: `TaskCreateInput.workspace` (`folder`, `mode` auto / git / copy, `branch`, `baseBranch`), `TaskWorkspace` on the task (`workspace`: `mode`, `git`, `copy`, `state`, `kept`, `modeNote`), `TaskSummary.branch` and `TaskSummary.workspaceMode`, `POST /tasks/{taskId}/workspace/remove`, error code `task_workspace_not_kept`.
+
 
 ## v0.3.2
 
-Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16 and 17 once.
+Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16, 17 and 18 once.
 
 ### Import your Claude Code and Codex conversations
 
@@ -39,7 +42,7 @@ Import your Claude Code and Codex conversations and continue them in Loop Now, a
 - A request to approve appears in the reply that asked, with Approve, Reject and a reason; also in the Inbox and as a desktop notification, since Agents also run when nobody is watching. Stop rejects pending requests. Claude Code receives the reason.
 - Claude Code and Codex ask for every action their mode does not allow. Grok, Antigravity and local ACP commands decide by their own permission rules and settings, so some commands run without asking; the page says so. Pi has Full access only.
 - A step of a multi-step task uses its Agent's mode as it was when the task started, and shows its requests in the step's chat.
-- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migration 17.
+- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migrations 17 and 18.
 
 ### Background tasks you can see and stop
 

@@ -9,28 +9,36 @@ import { t } from '@/i18n'
 const copy = t.tasks.workspace
 const stateTone = { pending: 'busy', active: 'info', removed: 'neutral', kept: 'warning' } as const
 
-// The task's git worktree, between the header and the sheet: one strip with the branch and where it started, then the repository and
-// the worktree folder. A kept worktree adds a yellow notice that says in numbers what removing it would lose, with the person's Remove
-// action. A task without a worktree renders nothing, so its page looks as it always did.
+// The task's workspace, between the header and the sheet. Git mode: one strip with the branch and where it started, then the repository
+// and the worktree folder. Copy mode: the folder that was copied and how much, the copy's folder, and a line saying the original is not
+// changed. Either may carry the server's note on why the mode is not the one the folder suggests. A kept workspace adds a yellow notice
+// that says in numbers what removing it would lose, with the person's Remove action. A task without a workspace renders nothing, so its
+// page looks as it always did.
 export function TaskWorkspace({ taskId, projectId, workspace }: { taskId: string; projectId: string; workspace: Schemas['TaskWorkspace'] | null }) {
   if (!workspace) return null
-  const from = workspace.baseBranch ? copy.from(workspace.baseBranch, workspace.baseCommit?.slice(0, 7) ?? null) : null
-  return <section aria-label={copy.label} className="mb-3 grid min-w-0 gap-2 rounded-card bg-paper-raised px-4 py-3 shadow-[inset_0_0_0_1.5px_var(--ink)]">
+  const git = workspace.git
+  const isCopy = workspace.mode === 'copy'
+  const from = git?.baseBranch ? copy.from(git.baseBranch, git.baseCommit?.slice(0, 7) ?? null) : null
+  const label = isCopy ? copy.copyLabel : copy.label
+  return <section aria-label={label} className="mb-3 grid min-w-0 gap-2 rounded-card bg-paper-raised px-4 py-3 shadow-[inset_0_0_0_1.5px_var(--ink)]">
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-      <h2 className="text-[13.5px] font-black">{copy.label}</h2>
+      <h2 className="text-[13.5px] font-black">{label}</h2>
       <Badge variant="chip" tone={stateTone[workspace.state]}>{copy.states[workspace.state]}</Badge>
-      <span className="min-w-0 font-mono text-[13px] font-bold break-all text-riso-blue" title={copy.branch}>{workspace.branch}</span>
+      {git && <span className="min-w-0 font-mono text-[13px] font-bold break-all text-riso-blue" title={copy.branch}>{git.branch}</span>}
       {from && <span className="font-mono text-[12px] text-ink-500">{from}</span>}
+      {isCopy && workspace.copy && <span className="font-mono text-[12px] text-ink-500">{copy.size(workspace.copy.files, t.common.bytes(workspace.copy.bytes))}</span>}
     </div>
+    {workspace.modeNote && <p role="note" className="rounded-input bg-tint-blue px-3 py-1.5 text-[12.5px] font-bold">{workspace.modeNote}</p>}
     <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12.5px]">
-      <dt className="font-bold text-ink-700">{copy.repository}</dt>
-      <dd className="min-w-0 font-mono break-all text-ink-700">{workspace.repository}</dd>
+      <dt className="font-bold text-ink-700">{isCopy ? copy.copyOf : copy.repository}</dt>
+      <dd className="min-w-0 font-mono break-all text-ink-700">{git?.repository ?? workspace.folder}</dd>
       <dt className="font-bold text-ink-700">{copy.path}</dt>
       <dd className="flex min-w-0 items-start gap-2">
         <span className={`min-w-0 font-mono break-all ${workspace.state === 'removed' ? 'text-ink-500 line-through' : 'text-ink-700 select-all'}`} title={workspace.path}>{workspace.path}</span>
         {workspace.state !== 'removed' && <CopyPath path={workspace.path} />}
       </dd>
     </dl>
+    {isCopy && workspace.state !== 'removed' && <p className="text-[12px] text-ink-500">{copy.copyHint}</p>}
     {workspace.state === 'kept' && <Kept taskId={taskId} projectId={projectId} workspace={workspace} />}
   </section>
 }
@@ -56,8 +64,10 @@ function Kept({ taskId, projectId, workspace }: { taskId: string; projectId: str
   const [asking, setAsking] = useState(false)
   const actionId = useRef('')
   const remove = useRemoveTaskWorkspace(taskId, projectId)
+  const isCopy = workspace.mode === 'copy'
   const files = workspace.kept?.uncommittedFiles ?? 0
   const commits = workspace.kept?.unpushedCommits ?? 0
+  const changed = isCopy ? workspace.kept?.changedFiles ?? 0 : 0
   const confirm = async () => {
     try {
       await remove.mutateAsync(actionId.current)
@@ -69,15 +79,16 @@ function Kept({ taskId, projectId, workspace }: { taskId: string; projectId: str
   }
   return <div role="status" className="grid gap-2 rounded-input bg-tint-yellow px-3 py-2.5 text-[13px] sm:flex sm:items-center sm:justify-between">
     <div className="min-w-0">
-      {files || commits
-        ? <><p className="font-bold">{copy.kept}</p><ul className="mt-0.5 list-disc pl-5">{files > 0 && <li>{copy.files(files)}</li>}{commits > 0 && <li>{copy.commits(commits)}</li>}</ul></>
+      {files || commits || changed
+        ? <><p className="font-bold">{copy.kept}</p><ul className="mt-0.5 list-disc pl-5">{files > 0 && <li>{copy.files(files)}</li>}{commits > 0 && <li>{copy.commits(commits)}</li>}{changed > 0 && <li>{copy.changed(changed)}</li>}</ul></>
         : <p className="font-bold">{copy.keptUnknown}</p>}
     </div>
-    <Button variant="danger-outline" size="xs" className="shrink-0 justify-self-start px-4" disabled={remove.isPending} onClick={() => { actionId.current = crypto.randomUUID(); setAsking(true) }}>{copy.remove}</Button>
-    <ConfirmDialog open={asking} onOpenChange={setAsking} title={copy.removeTitle} body={copy.removeBody} confirmLabel={copy.remove} destructive onConfirm={confirm}>
-      {(files > 0 || commits > 0) && <ul className="grid gap-1 text-sm">
+    <Button variant="danger-outline" size="xs" className="shrink-0 justify-self-start px-4" disabled={remove.isPending} onClick={() => { actionId.current = crypto.randomUUID(); setAsking(true) }}>{isCopy ? copy.removeCopy : copy.remove}</Button>
+    <ConfirmDialog open={asking} onOpenChange={setAsking} title={isCopy ? copy.removeCopyTitle : copy.removeTitle} body={isCopy ? copy.removeCopyBody : copy.removeBody} confirmLabel={isCopy ? copy.removeCopy : copy.remove} destructive onConfirm={confirm}>
+      {(files > 0 || commits > 0 || changed > 0) && <ul className="grid gap-1 text-sm">
+        {changed > 0 && <li className="font-bold text-red-text">{copy.changedLost(changed)}</li>}
         {files > 0 && <li className="font-bold text-red-text">{copy.filesLost(files)}</li>}
-        {commits > 0 && <li>{copy.commitsStay(commits, workspace.branch)}</li>}
+        {commits > 0 && <li>{copy.commitsStay(commits, workspace.git?.branch ?? '')}</li>}
       </ul>}
     </ConfirmDialog>
   </div>

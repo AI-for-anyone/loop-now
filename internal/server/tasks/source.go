@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"loop-now/internal/server/tasks/gitbin"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/execenv"
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
@@ -35,6 +35,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/db"
 )
 
@@ -46,10 +48,12 @@ type Source struct {
 	Normal                     local.Source
 	Store                      *store.Store
 	WorkRoot, GitBin, BasePath string
-	MaxSessionBytes            int64
-	CloneTimeout               time.Duration
-	Templates                  *clitemplate.Catalog
-	Installer                  *clitemplate.Installer
+	// Git finds a working git for task workspaces; when nil, GitBin is used as is and counts as working.
+	Git             *gitbin.Finder
+	MaxSessionBytes int64
+	CloneTimeout    time.Duration
+	Templates       *clitemplate.Catalog
+	Installer       *clitemplate.Installer
 	// Installed only for schemas containing the task-switch module. Nil is an
 	// explicit legacy-fixture composition, never a missing-table fallback.
 	LarkOverlay   func(context.Context, store.TaskInstance) (*clicredential.LarkBinding, int64, error)
@@ -207,7 +211,7 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	return out, nil
 }
 
-// workspaceSnapshot points a step of a task with an active worktree at it, with the Agent's own CLI configuration when
+// workspaceSnapshot points a step of a task with an active workspace (worktree or copy) at it, with the Agent's own CLI configuration when
 // the Agent had that on at task start; as in a regular conversation, project accounts then do not apply.
 func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance, cfg taskruntime.Configuration, out *agentconfig.Snapshot) error {
 	r, err := s.Store.GetTask(ctx, inst.TaskID)
@@ -219,9 +223,12 @@ func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance,
 		return nil
 	}
 	if !within(s.WorktreeRoot(), w.Path) {
-		return errors.New("the task's worktree is not under Loop Now's worktree folder")
+		return errors.New("the task's workspace is not under Loop Now's worktree folder")
 	}
 	out.TaskWorkspace = w.Path
+	if w.Mode == taskmodel.WorkspaceModeCopy {
+		out.TaskWorkspaceCopyOf = w.Folder
+	}
 	out.UseLocalConfig = cfg.UseLocalConfig
 	if a, err := s.Store.GetAgent(ctx, inst.AgentID); err == nil && a.WorkingDirectory != nil {
 		out.RegularWorkingDirectory = *a.WorkingDirectory

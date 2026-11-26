@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 )
 
 // Start reconciles the persistent queue; on restart, turns that were running are only blocked, and tools are never
@@ -218,7 +219,11 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				return s.blockTask(ctx, id, "Could not create the task's worktree: "+e.Error())
+				what := "Could not create the task's worktree: "
+				if w := r.View.Workspace; w != nil && w.Mode == taskmodel.WorkspaceModeCopy {
+					what = "Could not copy the task's folder: "
+				}
+				return s.blockTask(ctx, id, what+e.Error())
 			}
 			_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 				if m.Record.Ended() || m.Record.View.Task.Status != "preparing" {

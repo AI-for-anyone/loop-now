@@ -7,11 +7,11 @@ import { taskKeys, useTask } from '@/api/tasks'
 import { apiUrl, errorBody } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
-import { makeTaskDetail, makeTaskWorkspace, taskId } from '@/test/tasks'
+import { makeCopyWorkspace, makeTaskDetail, makeTaskWorkspace, taskId } from '@/test/tasks'
 import { TaskWorkspace } from './TaskWorkspace'
 
 const projectId = 'p1'
-const kept = (uncommittedFiles: number, unpushedCommits: number) => makeTaskWorkspace({ state: 'kept', kept: { uncommittedFiles, unpushedCommits } })
+const kept = (uncommittedFiles: number, unpushedCommits: number) => makeTaskWorkspace({ state: 'kept', kept: { uncommittedFiles, unpushedCommits, changedFiles: 0 } })
 const show = (workspace: Schemas['TaskWorkspace'] | null) => renderWithQuery(<TaskWorkspace taskId={taskId} projectId={projectId} workspace={workspace} />)
 const removeUrl = apiUrl(`/tasks/${taskId}/workspace/remove`)
 
@@ -25,8 +25,8 @@ describe('the worktree on the task page', () => {
     show(workspace)
     const block = screen.getByRole('region', { name: 'Worktree' })
     expect(within(block).getByText('in use')).toBeVisible()
-    expect(within(block).getByText(workspace.repository)).toBeVisible()
-    expect(within(block).getByText(workspace.branch)).toBeVisible()
+    expect(within(block).getByText(workspace.git!.repository)).toBeVisible()
+    expect(within(block).getByText(workspace.git!.branch)).toBeVisible()
     expect(within(block).getByText('from main @ 4f2c9a1')).toBeVisible()
     expect(within(block).getByText(workspace.path)).toBeVisible()
     const user = userEvent.setup()
@@ -35,13 +35,13 @@ describe('the worktree on the task page', () => {
     expect(within(block).queryByRole('button', { name: 'Remove worktree' })).not.toBeInTheDocument()
   })
   it('while preparing, a base that is not known yet and a missing commit are left out', () => {
-    show(makeTaskWorkspace({ state: 'pending', baseBranch: '', baseCommit: null }))
+    show(makeTaskWorkspace({ state: 'pending', git: { baseBranch: '', baseCommit: null } }))
     const block = screen.getByRole('region', { name: 'Worktree' })
     expect(within(block).getByText('being prepared')).toBeVisible()
     expect(within(block).queryByText(/^from /)).not.toBeInTheDocument()
   })
   it('a base branch without a commit yet reads "from main"', () => {
-    show(makeTaskWorkspace({ state: 'pending', baseCommit: null }))
+    show(makeTaskWorkspace({ state: 'pending', git: { baseCommit: null } }))
     expect(screen.getByText('from main')).toBeVisible()
   })
   it('a removed worktree says so and offers no copy of a folder that is gone', () => {
@@ -133,5 +133,66 @@ describe('the worktree on the task page', () => {
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove worktree' }))
     expect(await within(dialog).findByText(/git said no/)).toBeVisible()
+  })
+})
+
+describe('a copy of a plain folder on the task page', () => {
+  const keptCopy = (changedFiles: number) => makeCopyWorkspace({ state: 'kept', kept: { uncommittedFiles: 0, unpushedCommits: 0, changedFiles } })
+  it('shows what was copied, how much, where the copy is, and that the original is not changed; no branch', async () => {
+    const workspace = makeCopyWorkspace()
+    show(workspace)
+    const block = screen.getByRole('region', { name: 'Folder copy' })
+    expect(within(block).getByText('in use')).toBeVisible()
+    expect(within(block).getByText('Copy of')).toBeVisible()
+    expect(within(block).getByText(workspace.folder)).toBeVisible()
+    expect(within(block).getByText('42 files · 1.5 MiB')).toBeVisible()
+    expect(within(block).getByText(workspace.path)).toBeVisible()
+    expect(within(block).getByText(/The original folder isn't changed/)).toBeVisible()
+    expect(within(block).queryByText('Repository')).not.toBeInTheDocument()
+    expect(within(block).queryByText(/^from /)).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(within(block).getByRole('button', { name: 'Copy' }))
+    expect(await navigator.clipboard.readText()).toBe(workspace.path)
+  })
+  it('while the copy is being made there is no size yet', () => {
+    show(makeCopyWorkspace({ state: 'pending', copy: null }))
+    const block = screen.getByRole('region', { name: 'Folder copy' })
+    expect(within(block).getByText('being prepared')).toBeVisible()
+    expect(within(block).queryByText(/files? · /)).not.toBeInTheDocument()
+  })
+  it('a note on why the mode differs is shown, in either mode', () => {
+    show(makeCopyWorkspace({ modeNote: 'No working git on this computer, so the folder was copied' }))
+    expect(screen.getByText('No working git on this computer, so the folder was copied')).toBeVisible()
+  })
+  it('a git workspace without a note shows none', () => {
+    show(makeTaskWorkspace())
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+  it('a kept copy says how many files were added or changed and offers Remove copy', () => {
+    show(keptCopy(1))
+    const block = screen.getByRole('region', { name: 'Folder copy' })
+    expect(within(block).getByText('1 file added or changed in the copy')).toBeVisible()
+    expect(within(block).queryByText(/uncommitted|exist only here/)).not.toBeInTheDocument()
+    expect(within(block).getByRole('button', { name: 'Remove copy' })).toBeEnabled()
+  })
+  it('Remove copy says the changed files are lost and the original is not touched, then removes', async () => {
+    const bodies: unknown[] = []
+    server.use(http.post(removeUrl, async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json({ ...makeTaskDetail(projectId), workspace: makeCopyWorkspace({ state: 'removed' }) }) }))
+    show(keptCopy(3))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Remove copy' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText('Remove this copy?')).toBeVisible()
+    expect(within(dialog).getByText(/The original folder is not touched/)).toBeVisible()
+    expect(within(dialog).getByText('The 3 files added or changed in the copy are lost for good.')).toBeVisible()
+    await user.click(within(dialog).getByRole('button', { name: 'Remove copy' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(bodies).toHaveLength(1)
+  })
+  it('a removed copy shows its path struck through without Copy', () => {
+    const workspace = makeCopyWorkspace({ state: 'removed' })
+    show(workspace)
+    expect(screen.getByText(workspace.path)).toHaveClass('line-through')
+    expect(screen.queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument()
   })
 })
