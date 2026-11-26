@@ -147,7 +147,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   }
   const oldDrafts = drafts.filter(d => d.nodeRunId !== draft.nodeRunId && (d.text || d.images?.length))
   const stepIndex = detail.workflow.steps.findIndex(s => s.id === node.stepId)
-  const stepTitle = detail.workflow.steps[stepIndex]?.title
+  const stepTitle = detail.workflow.steps[stepIndex]?.title || node.stepId
   const number = stepNumber(stepIndex)
   const [reasonHead, ...reasonRest] = (statusReason ?? '').split('\n')
   // Node materials: the visit being viewed comes first, the rest newest to oldest; only the ones that have been expanded (by default the
@@ -178,7 +178,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
                 below it the reason (a red sticky note when blocked) and recovery actions (fluorescent-pink “重试当前节点” (Retry current
                 node); the others are secondary buttons). */}
             <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
-              <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
+              <NodeHeading number={number} title={stepTitle} stepId={node.stepId} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
                 <TaskBadge className="ml-auto" status={node.status} />
@@ -211,7 +211,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
             <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-2.5 pb-3" data-node-draft>
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
                 <span>{t.tasks.page.sendTo}</span>
-                <span className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
+                <span title={node.stepId} className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
                 <details className="ml-1"><summary className="cursor-pointer text-ink-500 underline decoration-dotted underline-offset-3">{t.tasks.targetDetails}</summary><p className="mt-1 font-mono text-[11.5px] font-normal break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
               </div>
               {current && unsupported && <p role="status" className="text-[13px] font-bold">{t.tasks.nodeMessagesUnsupported}</p>}
@@ -231,7 +231,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
           </div>
           <div id="task-materials" role="tabpanel" aria-label={t.tasks.materials} hidden={tab !== 'materials'} ref={materials} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:shadow-focus" data-materials-scroll>
             <div className={cn('border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)}>
-              <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
+              <NodeHeading number={number} title={stepTitle} stepId={node.stepId} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.visits(records.length)} · {t.tasks.page.artifactCount(artifactCount)}</span>
               </NodeHeading>
             </div>
@@ -251,10 +251,10 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
 
 // The first line of the node header: hollow step number, step name (ZCOOL 30px with a yellow highlighter mark), Agent, followed by the
 // details the caller supplies (which visit, status...).
-function NodeHeading({ number, title, agentId, agentName, children }: { number: string; title: string | undefined; agentId: string; agentName: string; children?: ReactNode }) {
+function NodeHeading({ number, title, stepId, agentId, agentName, children }: { number: string; title: string | undefined; stepId: string; agentId: string; agentName: string; children?: ReactNode }) {
   return <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
     <HollowNumber className="w-auto">{number}</HollowNumber>
-    <h2 className="riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal [overflow-wrap:anywhere] max-nav:text-[26px]">{title}</h2>
+    <h2 title={stepId} className="riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal [overflow-wrap:anywhere] max-nav:text-[26px]">{title || stepId}</h2>
     <span className="flex items-center gap-1.5 text-[13.5px] font-black"><AgentAvatar size="sm" id={agentId} />{agentName}</span>
     {children}
   </div>

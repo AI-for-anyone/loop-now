@@ -339,7 +339,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 		}
 		n := freshNode(id, start, inst, 1, 1)
 		r.View.Nodes = append(r.View.Nodes, n)
-		setCurrent(&r, r.View.Nodes[0])
+		r.SetCurrent(r.View.Nodes[0])
 		return r, instances, nil
 	})
 	if err == nil {
@@ -350,11 +350,6 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 
 func freshNode(taskID uuid.UUID, step workflow.Step, inst store.TaskInstance, visit, attempt int) taskmodel.NodeRun {
 	return taskmodel.NodeRun{ID: uuid.Must(uuid.NewV7()), TaskID: taskID, StepID: step.ID, Visit: visit, Attempt: attempt, AgentID: step.AgentID, AgentName: inst.AgentName, RuntimeID: inst.ID, Status: "queued", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
-}
-func setCurrent(r *taskmodel.Record, n taskmodel.NodeRun) {
-	r.View.Task.CurrentNodeRunID = &n.ID
-	r.View.Task.CurrentStepID = &n.StepID
-	r.View.Task.CurrentAgentID = &n.AgentID
 }
 func successful(r *taskmodel.Record) []workflow.SuccessfulResult {
 	out := []workflow.SuccessfulResult{}
@@ -552,7 +547,7 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 		inst := store.TaskInstance{ID: old.RuntimeID, AgentID: old.AgentID, AgentName: old.AgentName}
 		node := freshNode(id, step, inst, old.Visit, old.Attempt+1)
 		m.Record.View.Nodes = append(m.Record.View.Nodes, node)
-		setCurrent(m.Record, node)
+		m.Record.SetCurrent(node)
 		m.Record.View.Task.Reason = nil
 		m.Record.View.Task.Status = "running"
 		var prepared bool

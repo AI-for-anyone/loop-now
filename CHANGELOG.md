@@ -6,6 +6,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### A compact task list that names the step
+
+- The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
+- "Current node" shows the step's title as the Manager wrote it ("检查结果", "Second pass") instead of its id; the id is in the tooltip. The task page shows step ids only in tooltips too.
+- The responsible Agent column is wider, so names such as loop-now-main are no longer cut.
+- API: `TaskSummary.currentStepTitle`.
+
 ### Files up to 20 MiB can be previewed
 
 - The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.

@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { tasksPath } from '@/api/tasks'
-import { apiUrl, defaultProject, projectsUrl } from '@/test/api'
+import { apiUrl, defaultProject, makeAgent, projectsUrl } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -11,42 +11,118 @@ import { makeTaskDetail } from '@/test/tasks'
 import { branchParts } from './branch-name'
 
 const long = 'task/15-truncate-long-branch-names-in-the-middle-so-both-ends'
+const longTitle = 'A very long task title that truncates with an ellipsis on one line while the full text stays in the tooltip'
+const longAgentId = '00000000-0000-7000-8000-000000000199'
+const longAgentName = 'platform-release-verification-specialist'
 
 function list() {
   const base = makeTaskDetail(defaultProject.id, defaultProject.name).task
   const tasks = [
-    { ...base, id: '00000000-0000-7000-8000-000000000301', number: 13, title: 'With a branch', branch: long, workspaceMode: 'git' as const },
-    { ...base, id: '00000000-0000-7000-8000-000000000302', number: 14, title: 'Without a branch', branch: null },
-    { ...base, id: '00000000-0000-7000-8000-000000000303', number: 15, title: 'On a folder copy', branch: null, workspaceMode: 'copy' as const },
+    { ...base, id: '00000000-0000-7000-8000-000000000301', number: 13, title: 'With a branch', reason: null, branch: long, workspaceMode: 'git' as const, currentStepId: 'implement', currentStepTitle: 'Implement' },
+    { ...base, id: '00000000-0000-7000-8000-000000000302', number: 14, title: 'Without a branch', reason: null, branch: null, currentStepId: 'verify', currentStepTitle: null },
+    { ...base, id: '00000000-0000-7000-8000-000000000303', number: 15, title: 'On a folder copy', reason: null, branch: null, workspaceMode: 'copy' as const, currentStepId: null, currentStepTitle: null },
+    { ...base, id: '00000000-0000-7000-8000-000000000304', number: 16, title: longTitle, reason: null, branch: long, workspaceMode: 'git' as const, currentAgentId: longAgentId, currentStepId: 'pr', currentStepTitle: 'Pull request' },
   ]
-  server.use(...baseHandlers([]), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
-    http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor: null })))
+  const agents = [
+    makeAgent({ id: base.currentAgentId!, name: 'loop-now-main' }),
+    makeAgent({ id: longAgentId, name: longAgentName }),
+  ]
+  server.use(
+    ...baseHandlers(agents),
+    http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
+    http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor: null })),
+  )
   renderRoutes(routes, tasksPath(defaultProject.name))
 }
 const row = async (title: string) => (await screen.findByRole('link', { name: title })).closest('li')!
 
-describe('the branch in the task list', () => {
-  it('a task with a branch shows it in its row, whole for screen readers and on hover', async () => {
+describe('compact task list rows', () => {
+  it('one-line rows: the title truncates with the full title in the tooltip, and the branch sits inline in muted monospace', async () => {
     list()
-    const branch = within(await row('With a branch')).getByTestId('task-branch')
+    const item = await row('With a branch')
+    const link = within(item).getByRole('link', { name: 'With a branch' })
+    expect(link).toHaveAttribute('title', 'With a branch')
+    expect(link).toHaveClass('truncate')
+    const branch = within(item).getByTestId('task-branch')
     expect(branch).toHaveAttribute('title', long)
-    expect(branch).toHaveClass('font-mono')
+    expect(branch).toHaveClass('font-mono', 'text-ink-500')
     expect(within(branch).getByText(`Branch ${long}`)).toHaveClass('sr-only')
+    // Title and branch share the same single-line grid container (title gets minmax(0,max-content) first; branch takes the leftover 1fr).
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+    expect(branch.parentElement).toBe(cell)
   })
-  it('a row without a workspace stays as it was', async () => {
+
+  it('a row without a workspace has neither branch nor Folder copy label', async () => {
     list()
     const plain = await row('Without a branch')
     expect(within(plain).queryByTestId('task-branch')).not.toBeInTheDocument()
     expect(within(plain).queryByText('Folder copy')).not.toBeInTheDocument()
   })
-  it('a task on a folder copy shows a small Folder copy label where a branch would be', async () => {
+
+  it('a task on a folder copy shows a small Folder copy label in the trailing space after the title so the title wins first', async () => {
     list()
     const copied = await row('On a folder copy')
-    expect(within(copied).getByText('Folder copy')).toBeVisible()
+    const link = within(copied).getByRole('link', { name: 'On a folder copy' })
+    const label = within(copied).getByText('Folder copy')
+    expect(label).toBeVisible()
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+    expect(label.parentElement).toHaveClass('@container', 'min-w-0', 'overflow-hidden')
+    expect(label.parentElement!.parentElement).toBe(cell)
+    expect(label).toHaveClass('@max-[84px]:hidden')
     expect(within(copied).queryByTestId('task-branch')).not.toBeInTheDocument()
     expect(within(await row('With a branch')).queryByText('Folder copy')).not.toBeInTheDocument()
   })
-  it('long names keep their end: the start gives way first', () => {
+
+  it('the current step shows its title with the id in the tooltip, falls back to the id when title is null, and shows a dash when empty', async () => {
+    list()
+    const titled = await row('With a branch')
+    const chip = within(titled).getByText('Implement')
+    expect(chip).toHaveAttribute('title', 'implement')
+    expect(chip).toHaveClass('truncate', 'bg-tint-blue')
+    expect(chip).not.toHaveClass('font-mono')
+    expect(within(titled).queryByText('implement')).not.toBeInTheDocument()
+
+    const fallback = await row('Without a branch')
+    const fallbackChip = within(fallback).getByText('verify')
+    expect(fallbackChip).toHaveAttribute('title', 'verify')
+    expect(fallbackChip).toHaveClass('font-mono')
+
+    const none = await row('On a folder copy')
+    expect(within(none).getByText('—')).toBeVisible()
+  })
+
+  it('with a long title and a long branch, the title wins the space first while the branch shrinks into the leftover track and hides when too narrow', async () => {
+    list()
+    const item = await row(longTitle)
+    const link = within(item).getByRole('link', { name: longTitle })
+    expect(link).toHaveAttribute('title', longTitle)
+    expect(link).toHaveClass('truncate')
+
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+
+    const branch = within(item).getByTestId('task-branch')
+    expect(branch.parentElement).toBe(cell)
+    expect(branch).toHaveAttribute('title', long)
+    expect(branch).toHaveClass('@container', 'min-w-0', 'overflow-hidden')
+    expect(branch).not.toHaveClass('shrink-0')
+    expect(within(branch).getByText(`Branch ${long}`)).toHaveClass('sr-only')
+    const visual = branch.querySelector('[aria-hidden="true"]')!
+    expect(visual).toHaveClass('@max-[108px]:hidden')
+
+    const agent = await within(item).findByText(longAgentName)
+    expect(agent).toHaveAttribute('title', longAgentName)
+    expect(agent).toHaveClass('truncate')
+    expect(agent.parentElement).toHaveClass('flex-[0_0_160px]')
+
+    // Header columns align with row columns.
+    const header = item.closest('ul')!.previousElementSibling!
+    expect(header.children[4]).toHaveClass('flex-[0_0_160px]')
+  })
+
+  it('long branch names keep their end: the start gives way first', () => {
     expect(branchParts(long)).toEqual({ head: 'task/15-truncate-long-branch-names-in-the-middle-', tail: 'so-both-ends' })
     expect(branchParts('task/12-x')).toEqual({ head: '', tail: 'task/12-x' })
     expect(branchParts(long).head + branchParts(long).tail).toBe(long)
