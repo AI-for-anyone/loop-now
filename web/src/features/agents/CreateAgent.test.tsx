@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, context, defaultAgentsPath, defaultProject, errorBody, makeAgent, makeStatus, toListItem } from '@/test/api'
-import { pluginProvider, providers, catalogHandlers, withClaudeCode } from '@/test/config'
+import { claudeCodeProvider, pluginProvider, providers, catalogHandlers, withClaudeCode } from '@/test/config'
+import { acpDefaultModel, acpStatus, runtimeList, withAllRuntimes } from '@/test/runtimes'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { textGenerationBackend } from '@/test/text-generation'
@@ -77,6 +78,20 @@ describe('Creating an Agent', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(created).not.toBeNull())
     expect(created).not.toHaveProperty('permissionMode')
+  })
+
+  it('when new Agents ask before acting, a Grok Agent is said to ask by its own rules', async () => {
+    const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
+    server.use(
+      http.get(apiUrl('/permission-settings'), () => HttpResponse.json({ defaultMode: 'supervised' })),
+      http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes())),
+      http.get(apiUrl('/runtimes'), () => HttpResponse.json({ runtimes: [...runtimeList().runtimes, acpStatus('grok')] })),
+      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { ...claudeCodeProvider, id: 'grok-cli', name: 'Grok', runtime: 'grok', modelCount: 1 }] })),
+      http.get(apiUrl('/model-providers/grok-cli/models'), () => HttpResponse.json({ providerId: 'grok-cli', models: [{ ...acpDefaultModel, id: 'grok-4', name: 'Grok 4' }] })),
+    )
+    const dialog = await fill(user, 'Notes', false)
+    await chooseModel(user, dialog, 'grok-4', { runtime: 'Grok' })
+    expect(await within(dialog).findByText('Grok decides by its own permission rules what to ask about, so some commands run without asking; to be asked about each one, use Claude Code or Codex')).toBeInTheDocument()
   })
 
   it('with new Agents on Full access nothing more is said', async () => {
@@ -172,7 +187,7 @@ describe('Creating an Agent', () => {
     const differences = within(dialog).getByRole('region', { name: 'Running on Claude Code' })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
-      'It runs commands without asking first, the same as Pi Agents.',
+      "Whether it asks before running commands depends on its permission mode; on Full access it doesn't, the same as Pi Agents.",
     ])
     expect(within(dialog).queryByLabelText('Codex speed')).toBeNull()
     await chooseThinking(user, dialog, 'Max')

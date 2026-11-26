@@ -576,6 +576,10 @@ export interface paths {
          *     (~/.codex/sessions), and nothing else: never login, token or credential files. Runs asynchronously: returns 202
          *     with the scan; read its progress and result with GET. Conversations are grouped by folder: a git repository
          *     (its worktrees and checkouts with the same remote folded into it) or, for others, the conversation's own folder.
+         *     A conversation Loop Now ran a turn in (one of its prompts starts with the run line, as in an Agent's own
+         *     session or the fork an imported Agent continues in) is that Agent's: it is listed with its agentId, or left out
+         *     when that Agent is gone. Also left out: conversations in Loop Now's Agent workspaces, and in folders that are
+         *     not projects (~/Downloads, ~/Documents/Codex, ~/Library and the temporary folders).
          */
         post: operations["startConversationScan"];
         delete?: never;
@@ -4373,11 +4377,18 @@ export interface components {
              */
             stopEndsBackgroundTasks: boolean;
             /**
-             * @description The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Pi has only full;
-             *     Grok has no accept_edits; Antigravity lists auto only when its account offers it. An Agent set to a mode its
-             *     runtime lacks runs as supervised.
+             * @description The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Claude Code, Codex,
+             *     Grok and Antigravity have all four; a local ACP command has supervised and full; Pi has only full. An Agent
+             *     set to a mode its runtime lacks runs as supervised.
              */
             permissionModes: components["schemas"]["PermissionMode"][];
+            /**
+             * @description In supervised, accept_edits and auto, the runtime decides by its own permission rules and settings what to
+             *     ask about, so some commands and file changes go ahead without a PermissionRequest (the console says so).
+             *     True for Grok, Antigravity and the local ACP commands; false for Claude Code and Codex, which ask about
+             *     every action the mode does not allow, and for Pi, which has only full.
+             */
+            permissionAsksByOwnRules: boolean;
             /** @description It can work in an Agent's own folder on this computer (Agent.workingDirectory); Pi cannot, so an Agent with a working folder cannot use Pi. */
             workingDirectory: boolean;
             /** @description It can run with the person's own CLI configuration (Agent.useLocalConfig), as Claude Code and Codex can. */
@@ -5062,6 +5073,9 @@ export interface components {
          *     request to approve is a PermissionRequest; the reply waits until someone answers it in the chat or the Inbox.
          *     Not every runtime has every mode (RuntimeCapabilities.permissionModes): a mode a runtime lacks runs as
          *     supervised, never as full.
+         *     Grok, Antigravity and the local ACP commands decide by their own permission rules and settings what to ask
+         *     about (RuntimeCapabilities.permissionAsksByOwnRules), so in their supervised, accept_edits and auto some actions
+         *     go ahead without asking.
          * @enum {string}
          */
         PermissionMode: "supervised" | "accept_edits" | "auto" | "full";
@@ -5267,7 +5281,8 @@ export interface components {
             model: string | null;
             /**
              * Format: uuid
-             * @description The Agent it was already imported as; such a conversation is not imported again
+             * @description The Agent it was already imported as, or the Agent whose own session it is (Loop Now ran a turn in it);
+             *     such a conversation is not imported again: importing it gives that Agent
              */
             agentId: string | null;
             /**

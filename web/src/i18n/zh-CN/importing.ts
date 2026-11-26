@@ -30,7 +30,8 @@ export const importing = {
     byCli: (claude: number, codex: number) => `Claude Code ${claude} · Codex ${codex}`,
     folders: '个文件夹',
     suggested: (count: number) => `建议导入 ${count} 个`,
-    imported: '段已导入过',
+    // Imported before, or a conversation Loop Now itself ran (an imported Agent's fork, an Agent's own session in its folder).
+    imported: '段已在 Loop Now 里',
     importedNote: '不会重复导入',
   },
   groups: { git: 'Git 仓库', other: '其他文件夹' },
@@ -57,7 +58,7 @@ export const importing = {
     lastActive: (time: string) => formatDayClock(time),
     messages: (count: number) => `${count} 条消息`,
     size: (bytes: number) => formatBytes(bytes),
-    imported: '已导入',
+    imported: '已在 Loop Now 里',
     openAgent: '打开 Agent',
     skipped: (reason: string) => `不能导入：${reason}`,
     untitled: '（没有标题）',

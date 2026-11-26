@@ -11,6 +11,8 @@ export const permissions = {
   // A runtime without the chosen mode runs it as Supervised, never as Full access.
   fallback: (runtime: string, mode: string) => `${runtime} 没有「${mode}」，会按「逐项批准」运行`,
   onlyFull: (runtime: string) => `${runtime} 不会请求批准，只能完全放开`,
+  // A runtime that asks by its own rules (RuntimeCapabilities.permissionAsksByOwnRules), in any mode but Full access.
+  ownRules: (runtime: string) => `${runtime} 按它自己的权限规则决定问什么，有些命令会直接执行；要每条都问，请用 Claude Code 或 Codex`,
   // The New Agent dialog, when the default mode is not Full access.
   newAgentOnlyFull: (runtime: string) => `${runtime} 不支持批准，这个 Agent 会完全放开`,
   nextMessage: '从下一条消息开始生效',

@@ -4,7 +4,7 @@ import type { Schemas } from '@/api/client'
 import { RadioCard, RadioCards } from '@/components/ui/radio-cards'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { t } from '@/i18n'
-import { effectiveMode, PERMISSION_MODES } from '@/lib/permissions'
+import { asksByOwnRules, effectiveMode, PERMISSION_MODES } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 type Mode = Schemas['PermissionMode']
@@ -17,12 +17,20 @@ export function PermissionModeIcon({ mode, className }: { mode: Mode; className?
   return <Icon aria-hidden="true" className={className} strokeWidth={2.6} />
 }
 
-// What the chosen mode means on this runtime: Pi runs only on Full access; a runtime without the mode runs it as Supervised.
+// What the chosen mode means on this runtime: Pi runs only on Full access; a runtime without the mode runs it as Supervised; one that
+// asks by its own rules lets some actions through without asking.
 function RuntimeNote({ mode, runtime, className }: { mode: Mode; runtime?: Pick<Schemas['RuntimeDefinition'], 'name' | 'capabilities'>; className?: string }) {
   if (!runtime) return null
   const modes = runtime.capabilities.permissionModes
-  const text = !modes.includes('supervised') ? t.permissions.onlyFull(runtime.name) : effectiveMode(mode, runtime) !== mode ? t.permissions.fallback(runtime.name, t.permissions.modes[mode].name) : null
-  return text ? <p role="note" className={cn('text-[12.5px] font-bold text-ink-700', className)}>{text}</p> : null
+  const lines = [
+    !modes.includes('supervised') ? t.permissions.onlyFull(runtime.name) : effectiveMode(mode, runtime) !== mode ? t.permissions.fallback(runtime.name, t.permissions.modes[mode].name) : null,
+    asksByOwnRules(mode, runtime) ? t.permissions.ownRules(runtime.name) : null,
+  ].filter((line) => line !== null)
+  return lines.map((line) => (
+    <p key={line} role="note" className={cn('text-[12.5px] font-bold text-ink-700', className)}>
+      {line}
+    </p>
+  ))
 }
 
 // The four modes (as T3), most careful first. cards: on the config page and in Settings, each with what it means; compact: a row of

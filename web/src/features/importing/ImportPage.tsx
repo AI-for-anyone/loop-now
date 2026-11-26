@@ -193,7 +193,7 @@ function Group({ group, ...rest }: { group: FolderGroup; selection: Selection; o
   )
 }
 
-// What the scan found, as three printed tiles: conversations (by CLI), folders (how many suggested), and those already imported.
+// What the scan found, as three printed tiles: conversations (by CLI), folders (how many suggested), and those already in Loop Now.
 function FoundTiles({ folders }: { folders: Folder[] }) {
   const all = folders.flatMap((folder) => folder.conversations)
   const byCli = (cli: Conversation['cli']) => all.filter((c) => c.cli === cli).length

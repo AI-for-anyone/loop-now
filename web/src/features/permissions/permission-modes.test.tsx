@@ -10,6 +10,7 @@ import { catalogHandlers } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
+import { withAllRuntimes } from '@/test/runtimes'
 
 const claude = (overrides: Partial<Schemas['Agent']> = {}) => makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', ...overrides })
 
@@ -40,6 +41,13 @@ describe('The permission mode in the message box', () => {
     await waitFor(() => expect(api.bodies).toEqual([{ permissionMode: 'supervised' }]))
     expect(within(picker).getByText('Asks before running commands and changing files')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /^Runs on: / })).toHaveAccessibleName(/Supervised/))
+  })
+
+  it('on a runtime that asks by its own rules, the mode row says some commands run without asking', async () => {
+    const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' }, runtime: 'grok', permissionMode: 'supervised' })
+    const { user } = await renderChat({ agent, handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes())), ...catalogHandlers] })
+    const picker = await openRunner(user)
+    expect(await within(picker).findByText('Grok decides by its own permission rules what to ask about, so some commands run without asking; to be asked about each one, use Claude Code or Codex')).toBeInTheDocument()
   })
 
   it('an Agent with its own folder is not offered Pi as who runs it', async () => {
