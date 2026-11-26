@@ -1,11 +1,19 @@
+import { useRef, useState, type CSSProperties } from 'react'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme/store'
 
-// Bold metallic silver ("Loop") + champagne gold ("Now") brand wordmark in the default skin,
-// echoing the obsidian/silver/gold desktop app icon; preserves classic Risograph display styling in Plate skin.
+type SweepPhase = 'intro' | 'a' | 'b'
+
+// Minimum interval between hover re-triggers so rapid pointer jitter does not restart the beam mid-flight.
+const HOVER_RETRIGGER_MS = 450
+
+// Understated platinum-ink ("Loop") + pale satin-champagne ("Now") brand wordmark in the default skin,
+// with a diagonal specular light sweep on initial window open and on hover; preserves classic Risograph styling in Plate skin.
 export function BrandWordmark({ className }: { className?: string }) {
   const { skin, resolvedTheme } = useTheme()
+  const [sweep, setSweep] = useState<SweepPhase>('intro')
+  const lastTriggerRef = useRef(0)
   const brand = t.app.brand
 
   if (skin === 'plate') {
@@ -26,17 +34,43 @@ export function BrandWordmark({ className }: { className?: string }) {
   const first = space > 0 ? brand.slice(0, space) : brand
   const rest = space > 0 ? brand.slice(space + 1) : ''
 
+  const triggerSweep = () => {
+    const now = Date.now()
+    if (now - lastTriggerRef.current < HOVER_RETRIGGER_MS) return
+    lastTriggerRef.current = now
+    setSweep((prev) => (prev === 'a' ? 'b' : 'a'))
+  }
+
+  const sheenVars = (
+    dark
+      ? {
+          '--brand-sheen-core': 'rgba(255, 253, 246, 0.96)',
+          '--brand-sheen-edge': 'rgba(255, 255, 255, 0.24)',
+        }
+      : {
+          '--brand-sheen-core': 'rgba(255, 255, 255, 0.98)',
+          '--brand-sheen-edge': 'rgba(226, 206, 168, 0.42)',
+        }
+  ) as CSSProperties
+
   return (
     <span
       data-brand-wordmark
-      className={cn('inline-flex items-baseline gap-[0.26em] whitespace-pre font-sans text-[15px] leading-none font-extrabold tracking-[-0.03em] select-none', className)}
+      data-sheen={brand}
+      data-sweep={sweep}
+      style={sheenVars}
+      onMouseEnter={triggerSweep}
+      className={cn(
+        'brand-wordmark whitespace-pre font-sans text-[15px] leading-none font-extrabold tracking-[-0.03em] select-none',
+        className,
+      )}
     >
       <span
         className={cn(
-          'bg-gradient-to-b bg-clip-text text-transparent',
+          'bg-gradient-to-br bg-clip-text text-transparent',
           dark
-            ? 'from-[#FFFFFF] via-[#D4D4D8] to-[#7E8594]'
-            : 'from-[#8A94A6] via-[#475569] to-[#0F172A]',
+            ? 'from-[#F8FAFC] via-[#E5E7EB] to-[#9CA3AF]'
+            : 'from-[#111318] via-[#374151] to-[#7C8494]',
         )}
       >
         {first}
@@ -45,10 +79,10 @@ export function BrandWordmark({ className }: { className?: string }) {
       {rest && (
         <span
           className={cn(
-            'bg-gradient-to-b bg-clip-text text-transparent',
+            'bg-gradient-to-br bg-clip-text text-transparent',
             dark
-              ? 'from-[#FFF3B0] via-[#F5C542] to-[#C2851A]'
-              : 'from-[#F59E0B] via-[#D4820A] to-[#8C4A08]',
+              ? 'from-[#F8F5EE] via-[#E6D7B9] to-[#BCA474]'
+              : 'from-[#3D3426] via-[#7D6843] to-[#B59B6B]',
           )}
         >
           {rest}
