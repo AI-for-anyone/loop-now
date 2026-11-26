@@ -99,10 +99,21 @@ merge_pr() {
 	fi
 	commit "work on $2"
 	g checkout -q main
+	merge_branch "$1" "$2"
+}
+
+# merge_branch N BRANCH: merges the existing BRANCH into main as pull request #N.
+merge_branch() {
+	g checkout -q main
 	now=$((now + 100))
 	GIT_AUTHOR_DATE="@$now +0000" GIT_COMMITTER_DATE="@$now +0000" g merge -q --no-ff -m "Merge pull request #$1 from owner/$2
 
 $2" "$2"
+}
+
+# titles FILE HEADING: the "### " titles of the section HEADING of FILE, one per line.
+titles() {
+	section "$1" "$2" | grep '^### ' || true
 }
 
 # new_repo NAME: a scratch repository on main with the CHANGELOG files and MAIN.md, tagged v0.1.0, without the release
@@ -247,8 +258,7 @@ out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" || fail "second
 [ "$(sums "$repo")" = "$before" ] || fail "second collect changed the files:
 $(cat "$repo/CHANGELOG.md")"
 
-# A pull request merged after the first run (main merged into the release branch) is added on top, once; the version
-# may be given without the v.
+# A pull request merged after the first run is added on top, once; the version may be given without the v.
 (cd "$repo" && merge_pr 6 task/later)
 describe 6 "Later" "$(notes_body Later)"
 out="$("$repo/scripts/release/collect-pr-notes.sh" 0.2.0 2>&1)" || fail "collect after a later merge failed: $out"
@@ -269,6 +279,67 @@ The summary.
 ### Summary7 (#7)'
 [ "$(section "$repo/CHANGELOG.md" "## v0.2.0" | head -n 5)" = "$expected" ] || fail "the summary did not stay on top:
 $(cat "$repo/CHANGELOG.md")"
+
+# The release flow on GitHub: the release branch is cut from main and collected, #3 merges into main meanwhile, the
+# release branch merges as pull request #4 and v0.2.0 is tagged on that merge. #3 shipped in v0.2.0 without notes, so
+# the next release has it (once), together with #5 merged after the tag; #2 stays in v0.2.0 only.
+repo="$(new_repo release-flow)"
+for n in 2 3 5; do describe "$n" "PR $n" "$(notes_body "Pr$n")"; done
+(
+	cd "$repo"
+	merge_pr 2 task/the-scripts scripts
+	g checkout -q -b release-v0.2.0
+	scripts/release/collect-pr-notes.sh v0.2.0 >/dev/null 2>&1
+	commit "release v0.2.0"
+	g checkout -q main
+	merge_pr 3 task/during-release
+	merge_branch 4 release-v0.2.0
+	g tag v0.2.0
+	merge_pr 5 task/after-release
+	g checkout -q -b release-v0.3.0
+)
+out="$("$repo/scripts/release/collect-pr-notes.sh" v0.3.0 2>&1)" || fail "collect of the next release failed: $out"
+expected='### Pr5 (#5)
+### Pr3 (#3)'
+[ "$(titles "$repo/CHANGELOG.md" "## v0.3.0")" = "$expected" ] || fail "the next release after a PR merged during the release has:
+$(titles "$repo/CHANGELOG.md" "## v0.3.0")"
+[ "$(titles "$repo/CHANGELOG.zh-CN.md" "## v0.3.0" | wc -l | tr -d ' ')" = 2 ] || fail "CHANGELOG.zh-CN.md v0.3.0 has:
+$(titles "$repo/CHANGELOG.zh-CN.md" "## v0.3.0")"
+[ "$(grep -c '(#2)$' "$repo/CHANGELOG.md")" = 1 ] || fail "#2 is not in CHANGELOG.md exactly once"
+[ "$(grep -c '(#3)$' "$repo/CHANGELOG.md")" = 1 ] || fail "#3 is not in CHANGELOG.md exactly once"
+
+# A release branch that merges main after collecting and collects again gets #3 (behind the merge's second parent);
+# the next release then does not repeat it.
+repo="$(new_repo release-merges-main)"
+(
+	cd "$repo"
+	merge_pr 2 task/the-scripts scripts
+	g checkout -q -b release-v0.2.0
+	scripts/release/collect-pr-notes.sh v0.2.0 >/dev/null 2>&1
+	commit "release v0.2.0"
+	g checkout -q main
+	merge_pr 3 task/during-release
+	g checkout -q release-v0.2.0
+	now=$((now + 100))
+	GIT_AUTHOR_DATE="@$now +0000" GIT_COMMITTER_DATE="@$now +0000" g merge -q --no-ff -m "Merge branch 'main' into release-v0.2.0" main
+)
+out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" || fail "collect after merging main failed: $out"
+expected='### Pr3 (#3)
+### Pr2 (#2)
+### Old entry'
+[ "$(titles "$repo/CHANGELOG.md" "## v0.2.0")" = "$expected" ] || fail "after merging main into the release branch v0.2.0 has:
+$(titles "$repo/CHANGELOG.md" "## v0.2.0")"
+(
+	cd "$repo"
+	commit "release v0.2.0 again"
+	merge_branch 4 release-v0.2.0
+	g tag v0.2.0
+	merge_pr 5 task/after-release
+	g checkout -q -b release-v0.3.0
+)
+"$repo/scripts/release/collect-pr-notes.sh" v0.3.0 >/dev/null 2>&1 || fail "the next collect failed"
+[ "$(titles "$repo/CHANGELOG.md" "## v0.3.0")" = "### Pr5 (#5)" ] || fail "the next release repeats a PR:
+$(titles "$repo/CHANGELOG.md" "## v0.3.0")"
 
 # A description with "## English" and no "## 中文" is refused by number, and nothing is written.
 repo="$(new_repo refuse)"
@@ -375,6 +446,13 @@ $out"
 describe 2 "Bad" "$(printf '## English\n\n### Bad\n\n- b\n')"
 out="$("$repo/scripts/release/notes.sh" Unreleased 2>&1)" && fail "notes.sh Unreleased passed with a bad description: $out"
 case "$out" in *"#2"*) ;; *) fail "notes.sh Unreleased does not name the bad pull request: $out" ;; esac
+# The list of pull requests without notes is printed once, not once per language.
+describe 2 "Pending" "$(notes_body Pending)"
+(cd "$repo" && merge_pr 3 task/no-notes)
+describe 3 "No notes here" "$(printf '## Summary\n\nDid things.\n')"
+out="$("$repo/scripts/release/notes.sh" Unreleased 2>&1)" || fail "notes.sh Unreleased with a PR without notes failed: $out"
+[ "$(printf '%s\n' "$out" | grep -c 'No notes here')" = 1 ] || fail "the PR without notes is not listed exactly once:
+$out"
 
 # ---- check-pr-notes.sh ----
 
@@ -418,6 +496,10 @@ out="$(check release-v0.2.0)" || fail "a release branch adding a MAIN.md entry f
 reset
 (cd "$repo" && awk '{print} /^  - Its detail\.$/ && !done {print "  - Another detail."; done=1}' MAIN.md >x && mv x MAIN.md && sed 's/^Text\.$/Other text./' MAIN.md >x && mv x MAIN.md && commit main-detail)
 out="$(check task/main-detail)" || fail "a PR adding a detail to a MAIN.md entry failed: $out"
+reset
+# A new bullet above the marker (a design direction, not a change entry) passes.
+(cd "$repo" && awk '/^- An old decision\.$/{print "- A new decision."} {print}' MAIN.md >x && mv x MAIN.md && commit main-decision)
+out="$(check task/main-decision)" || fail "a PR adding a bullet above the marker failed: $out"
 reset
 
 # Before the base has collect-pr-notes.sh, the check does not apply (the change that adds it folds the old notes into

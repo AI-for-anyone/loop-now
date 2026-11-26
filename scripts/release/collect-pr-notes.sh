@@ -7,12 +7,16 @@
 #   scripts/release/collect-pr-notes.sh <version>               write the "## v<version>" sections of both files
 #   scripts/release/collect-pr-notes.sh --print English|中文    print the notes that are not released yet, write nothing
 #
-# It reads the pull requests merged into main since the previous release tag: the first-parent "Merge pull request #N"
-# commits in <previous tag>..HEAD (main merges through the merge queue with merge commits), each description read with
-# "gh pr view N" (gh is used here, in the release process only, never by the product). Each pull request's notes get its
-# number after their titles ("### Title (#N)") and go newest first into the version section, above the entries already
-# there (a "## Unreleased" / "## 未发布" section becomes the version section) and below a summary paragraph written
-# under the heading. Running it again adds only the pull requests whose number is not in the section yet.
+# It reads the pull requests merged since the previous release: the "Merge pull request #N" commits reachable from HEAD
+# (main merges through the merge queue with merge commits; a release branch that merged main sees those behind the
+# merge too), each description read with "gh pr view N" (gh is used here, in the release process only, never by the
+# product). The previous release is the newest v* tag reachable from HEAD; when that tag is on the merge of a release-*
+# pull request, the range starts where that release branch left main, so a pull request merged into main while the
+# release was being prepared (it is not on the release branch) comes into the next release. Each pull request's notes
+# get its number after their titles ("### Title (#N)"); a number already in a title anywhere in the file is not copied
+# again, so running it twice, or a range that reaches back into the previous release, adds nothing twice. The notes go
+# newest first into the version section, above the entries already there (a "## Unreleased" / "## 未发布" section
+# becomes the version section) and below a summary paragraph written under the heading.
 # Not copied, and listed with number and title so the release session can decide: pull requests whose description has
 # neither section, and pull requests merged before this script was on main (their notes reached the CHANGELOG through
 # the old changes/ files or by hand). "None" / "无" in both sections means nobody using Loop Now can see the change: it
@@ -60,6 +64,16 @@ exclude=()
 if ! previous="$(git -C "$root" describe --tags --abbrev=0 --match 'v[0-9]*' ${exclude[@]+"${exclude[@]}"} HEAD 2>/dev/null)"; then
 	echo "No previous release tag (v*) is reachable from HEAD; fetch the tags (git fetch --tags) and run again." >&2
 	exit 1
+fi
+
+# The range starts at the previous tag, or, when the tag is on the merge of a release branch, where that branch left
+# main: the pull requests merged into main while it was prepared are not in that release's notes.
+lower="$previous"
+subject="$(git -C "$root" log -1 --format=%s "$previous")"
+if [[ "$subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ ([^ ]+) ]] &&
+	case "${BASH_REMATCH[1]#*/}" in release-*) true ;; *) false ;; esac &&
+	git -C "$root" rev-parse -q --verify "$previous^2" >/dev/null; then
+	lower="$(git -C "$root" merge-base "$previous^1" "$previous^2")"
 fi
 
 tmp="$(mktemp -d)"
@@ -122,7 +136,7 @@ while IFS= read -r line; do
 	branch="${BASH_REMATCH[2]}"
 	case "${branch#*/}" in release-*) continue ;; esac
 	prs+=("$number	$commit")
-done < <(git -C "$root" log --first-parent --format='%H %s' "$previous..HEAD")
+done < <(git -C "$root" log --merges --date-order --format='%H %s' "$lower..HEAD")
 
 errors=""
 listed=""
@@ -214,12 +228,12 @@ report() {
 	fi
 }
 
-# joined LANG [FILE HEADING]: the notes of the kept pull requests in LANG (en or zh), newest first, a blank line between
-# them; with FILE and HEADING, only those whose number is not yet in that section of FILE.
+# joined LANG FILE: the notes of the kept pull requests in LANG (en or zh), newest first, a blank line between them,
+# leaving out those whose number is already in a title of FILE.
 joined() {
 	local number sep=""
 	for number in ${kept[@]+"${kept[@]}"}; do
-		if [ $# -eq 3 ] && in_section "$2" "$3" "$number"; then
+		if in_file "$2" "$number"; then
 			continue
 		fi
 		printf '%s' "$sep"
@@ -228,19 +242,21 @@ joined() {
 	done
 }
 
-# in_section FILE HEADING N: true when a "### ... (#N)" title is in the section HEADING of FILE.
-in_section() {
-	awk -v h="$2" -v t="(#$3)" '
-		$0 == h { on = 1; next }
-		on && /^## / { exit }
-		on && /^### / && substr($0, length($0) - length(t) + 1) == t { found = 1; exit }
+# in_file FILE N: true when a "### ... (#N)" title is in FILE.
+in_file() {
+	awk -v t="(#$2)" '
+		/^### / && substr($0, length($0) - length(t) + 1) == t { found = 1; exit }
 		END { exit !found }
 	' "$1"
 }
 
 if [ "$mode" = print ]; then
 	report
-	joined "$([ "$print_part" = English ] && echo en || echo zh)"
+	if [ "$print_part" = English ]; then
+		joined en "$root/CHANGELOG.md"
+	else
+		joined zh "$root/CHANGELOG.zh-CN.md"
+	fi
 	exit 0
 fi
 
@@ -279,8 +295,8 @@ into_version() {
 }
 
 report
-joined en "$root/CHANGELOG.md" "## $version" >"$tmp/english"
-joined zh "$root/CHANGELOG.zh-CN.md" "## $version" >"$tmp/chinese"
+joined en "$root/CHANGELOG.md" >"$tmp/english"
+joined zh "$root/CHANGELOG.zh-CN.md" >"$tmp/chinese"
 for pair in "CHANGELOG.md|## Unreleased|english" "CHANGELOG.zh-CN.md|## 未发布|chinese"; do
 	file="${pair%%|*}"
 	rest="${pair#*|}"
@@ -294,5 +310,5 @@ added="$(grep -c '^### ' "$tmp/english" || true)"
 cat "$tmp/out-CHANGELOG.md" >"$root/CHANGELOG.md"
 cat "$tmp/out-CHANGELOG.zh-CN.md" >"$root/CHANGELOG.zh-CN.md"
 
-echo "Pull requests since $previous: ${#prs[@]}; notes of ${#kept[@]} in \"## $version\" ($added new entr$([ "$added" = 1 ] && echo y || echo ies) this run)."
+echo "Pull requests since $previous$([ "$lower" = "$previous" ] || echo " (from where its release branch left main)"): ${#prs[@]}; notes of ${#kept[@]} in \"## $version\" ($added new entr$([ "$added" = 1 ] && echo y || echo ies) this run)."
 echo "Next: write the summary paragraph under \"## $version\" in CHANGELOG.md and CHANGELOG.zh-CN.md, check with scripts/release/notes.sh $version, and commit."

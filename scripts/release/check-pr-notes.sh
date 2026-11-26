@@ -5,8 +5,9 @@
 # the change from BASE to HEAD
 #   - changes CHANGELOG.md or CHANGELOG.zh-CN.md (the release writes them with scripts/release/collect-pr-notes.sh),
 #   - adds a file under changes/ (the old note files), or
-#   - adds a top-level entry ("- " at the start of a line) to MAIN.md's change list, the level-2 section that holds the
-#     change-history marker line (new details under an existing entry, edits and removals are fine).
+#   - adds a top-level entry ("- " at the start of a line) to MAIN.md's change list, the entries below the
+#     change-history marker line up to the next level-2 heading (bullets above the marker, new details under an
+#     existing entry, edits and removals are fine).
 # Passes on a release branch (release-*), where the CHANGELOG files are written, and when BASE has no
 # collect-pr-notes.sh yet (the change that adds it folds the last note files into the CHANGELOG files).
 #
@@ -16,7 +17,7 @@
 set -euo pipefail
 
 if [ $# -ne 3 ]; then
-	sed -n '2,15p' "$0" >&2
+	sed -n '2,16p' "$0" >&2
 	exit 2
 fi
 base="$1"
@@ -50,13 +51,13 @@ while IFS= read -r file; do
 	problems=$((problems + 1))
 done < <(git diff --no-ext-diff --name-only --diff-filter=A "$base" "$head" -- changes/)
 
-# entries REV: the number of top-level entries in the section of MAIN.md that holds the marker, at REV.
+# entries REV: the number of top-level entries below the marker in MAIN.md, up to the next level-2 heading, at REV.
 entries() {
 	git show "$1:MAIN.md" 2>/dev/null | awk -v m="$marker" '
-		/^## / { if (in_list) exit; count = 0 }
-		$0 == m { in_list = 1 }
-		/^- / { count++ }
-		END { if (in_list) print count }
+		in_list && /^## / { exit }
+		$0 == m { in_list = 1; next }
+		in_list && /^- / { count++ }
+		END { if (in_list) print count + 0 }
 	'
 }
 before="$(entries "$base")"

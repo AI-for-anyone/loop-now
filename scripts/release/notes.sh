@@ -25,6 +25,10 @@ tag="$1"
 version="${tag#v}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 collect="$(cd "$(dirname "$0")" && pwd)/collect-pr-notes.sh"
+if [ "$tag" = Unreleased ]; then
+	errors="$(mktemp)"
+	trap 'rm -f "$errors"' EXIT
+fi
 
 # blank TEXT: true when TEXT has nothing but whitespace. Uses tr rather than ${TEXT//[[:space:]]/}: in bash 3.2 (macOS)
 # that substitution takes time roughly cubic in the length, minutes for a 16 KB section.
@@ -54,7 +58,12 @@ with_pending() {
 		printf '%s' "$2"
 		return
 	fi
-	pending="$("$collect" --print "$1")" || exit 1
+	# Both calls print the same list of pull requests without notes on stderr; show it once, and any failure in full.
+	pending="$("$collect" --print "$1" 2>"$errors")" || {
+		cat "$errors" >&2
+		exit 1
+	}
+	[ "$1" = 中文 ] || cat "$errors" >&2
 	if blank "$pending"; then
 		printf '%s' "$2"
 	elif blank "$2"; then
