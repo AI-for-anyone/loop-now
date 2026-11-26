@@ -4,6 +4,15 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
+## Unreleased
+
+### A compact task list that names the step
+
+- The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
+- "Current node" shows the step's title as the Manager wrote it ("检查结果", "Second pass") instead of its id; the id is in the tooltip. The task page shows step ids only in tooltips too.
+- The responsible Agent column is wider, so names such as loop-now-main are no longer cut.
+- API: `TaskSummary.currentStepTitle`.
+
 ## v0.3.3
 
 Tasks can work on a folder of yours: a folder in a git repository gets its own worktree and branch, and any other folder is copied and only read, so several tasks can run on one project at once and leave nothing behind. A reply cut off by a quit or crash is remembered, the bar under the message box shows background work, each runtime shows its own logo, and loopctl can set an Agent's folder, configuration, permission mode and levels.
