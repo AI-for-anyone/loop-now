@@ -60,6 +60,12 @@ type Snapshot struct {
 	// WorkingDirectory is the folder a regular Agent works in (its CLI's working directory); empty: its own folder. A
 	// task step never works there: it keeps its own copy of the Agent's folder.
 	WorkingDirectory string
+	// TaskWorkspace is the git worktree of the task a task step belongs to, set only while that worktree is active:
+	// the step's CLI works there (every runtime), and UseLocalConfig applies to the step as to a regular Agent.
+	TaskWorkspace string
+	// RegularWorkingDirectory is, for a step of a task with a worktree, the base Agent's working folder in its regular
+	// conversation (empty: its own folder); Claude Code keys its auto memory by it, so the step shares that memory.
+	RegularWorkingDirectory string
 	// UseLocalConfig: the runtime loads the person's own CLI configuration, as in their terminal (runtimes with the
 	// localConfig capability).
 	UseLocalConfig bool

@@ -10,7 +10,7 @@ import { agentsUrl, apiUrl, defaultProject, errorBody, makeAgent, projectsUrl, t
 import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
-import { makeTaskDetail, makeTaskMessage, nodeId, oldNodeId, taskId } from '@/test/tasks'
+import { makeTaskDetail, makeTaskMessage, makeTaskWorkspace, nodeId, oldNodeId, taskId } from '@/test/tasks'
 import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
 import type { Schemas } from '@/api/client'
@@ -150,6 +150,18 @@ describe('node records and updates', () => {
     expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
     expect(screen.getByText('Records archived; copies reclaimed')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); await userEvent.click(screen.getByText('Visit 1 · attempt 1')); expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
+  })
+  it('a task without a worktree has no worktree block; one with a worktree shows it under the header', async () => {
+    setup(); const first = renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
+    expect(screen.queryByRole('region', { name: 'Worktree' })).not.toBeInTheDocument()
+    first.unmount()
+    const workspace = makeTaskWorkspace()
+    const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+    setup({ ...detail, task: { ...detail.task, branch: workspace.branch }, workspace }); renderRoutes(routes, detailPath())
+    const block = await screen.findByRole('region', { name: 'Worktree' })
+    expect(within(block).getByText(workspace.branch)).toBeVisible()
+    expect(block.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
   })
   it('an invalid selected record is stated plainly instead of silently switching to another one', async () => {
     setup(); renderRoutes(routes, detailPath() + '?record=missing')

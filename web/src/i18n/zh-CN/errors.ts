@@ -62,6 +62,7 @@ export const errors = {
     background_task_not_found: '找不到这个后台任务',
     background_task_ended: '这个后台任务已经结束了',
     permission_request_answered: '这个请求已经有人回答了',
+    task_workspace_not_kept: '这个工作区已经不在保留状态，或者任务还没结束',
     internal_error: '服务端内部错误',
   } satisfies Record<S['ErrorCode'], string>,
   unknown: '未知错误',

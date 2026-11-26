@@ -74,6 +74,9 @@ type Source struct {
 	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (a retired instance's
 	// Claude Code session is archived from there); when nil, this is not supported.
 	ClaudeProjects func(context.Context) string
+	// PurgeClaudeFolder removes what the local Claude Code keeps for a task's worktree (its session records), once
+	// every step of the task has been released; when nil, nothing is removed.
+	PurgeClaudeFolder func(ctx context.Context, worktree string) error
 	// HandoffBudget is the size limit of the conversation a task instance of a runtime that cannot fork the regular
 	// session starts with (contexthandoff.ClampBudget; 0 means the default).
 	HandoffBudget int
@@ -197,8 +200,40 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	if out.ProviderState, err = agentconfig.ResolveProviderState(ctx, s.ProviderState, out); err != nil {
 		return agentconfig.Snapshot{}, err
 	}
+	// Last: with the Agent's own configuration in a worktree, the project accounts filled in above do not apply.
+	if err := s.workspaceSnapshot(ctx, inst, cfg, &out); err != nil {
+		return agentconfig.Snapshot{}, err
+	}
 	return out, nil
 }
+
+// workspaceSnapshot points a step of a task with an active worktree at it, with the Agent's own CLI configuration when
+// the Agent had that on at task start; as in a regular conversation, project accounts then do not apply.
+func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance, cfg taskruntime.Configuration, out *agentconfig.Snapshot) error {
+	r, err := s.Store.GetTask(ctx, inst.TaskID)
+	if err != nil {
+		return err
+	}
+	w := r.View.Workspace
+	if w == nil || w.State != taskmodel.WorkspaceStateActive {
+		return nil
+	}
+	if !within(s.WorktreeRoot(), w.Path) {
+		return errors.New("the task's worktree is not under Loop Now's worktree folder")
+	}
+	out.TaskWorkspace = w.Path
+	out.UseLocalConfig = cfg.UseLocalConfig
+	if a, err := s.Store.GetAgent(ctx, inst.AgentID); err == nil && a.WorkingDirectory != nil {
+		out.RegularWorkingDirectory = *a.WorkingDirectory
+	} else if err != nil && !store.IsNotFound(err) {
+		return err
+	}
+	if cfg.UseLocalConfig && agentruntime.ForProvider(cfg.Provider).Capabilities.LocalConfig {
+		out.CLIs, out.CLIPayloads, out.LarkBinding, out.GoogleBinding = nil, map[string]clitemplate.Payload{}, nil, nil
+	}
+	return nil
+}
+
 func (s *Source) ReadBlob(ctx context.Context, sha string) ([]byte, error) {
 	return s.Normal.ReadBlob(ctx, sha)
 }
@@ -318,6 +353,10 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 				return err
 			}
 			base = &path
+		} else if capture, err := s.importedCapture(ctx, inst, session, rt); err != nil {
+			return err
+		} else if capture != "" {
+			base = &capture
 		}
 		// From snapshot v9 on: copy the base Agent's whole folder within the same window (at that point its Pi has
 		// stopped and new dispatches are paused), so the folder and the session fork are taken at the same moment.
@@ -344,6 +383,34 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 		return err
 	}
 	return s.commitTaskPreparation(ctx, inst, revision, base, sources)
+}
+
+// importedCapture is the copy taken when the Agent was imported, for a step of a task with a worktree whose Agent has
+// not had a regular turn yet: the step continues the imported conversation, as the Agent's first regular turn would.
+// The fork reads the capture by path (it is neither copied nor size-capped); "" when this does not apply.
+func (s *Source) importedCapture(ctx context.Context, inst store.TaskInstance, session store.AgentSession, rt agentruntime.Runtime) (string, error) {
+	if session.State != "none" || session.Epoch != 1 {
+		return "", nil
+	}
+	r, err := s.Store.GetTask(ctx, inst.TaskID)
+	if err != nil || r.View.Workspace == nil {
+		return "", err
+	}
+	a, err := s.Store.GetAgent(ctx, inst.AgentID)
+	if err != nil {
+		return "", err
+	}
+	f := a.ImportedFrom
+	if f == nil || f.Capture == "" {
+		return "", nil
+	}
+	if src, ok := agentruntime.ForImportedCLI(f.CLI); !ok || src.ID != rt.ID {
+		return "", nil
+	}
+	if info, err := os.Stat(f.Capture); err != nil || !info.Mode().IsRegular() {
+		return "", errors.New("the conversation copy taken at import is missing; cannot carry it into the task")
+	}
+	return f.Capture, nil
 }
 
 // copyWorkspace copies the base Agent's folder as the task instance's workspace. The instance is not prepared yet, so a

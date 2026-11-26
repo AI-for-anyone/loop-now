@@ -149,7 +149,14 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 		cmd.ExtraFiles = bridge.ChildFiles()
 	}
 	cmd.Env = env
-	cmd.Dir = d.workspace
+	// Pi works in the Agent's own folder, or in the task's worktree for a step of a task that has one (workDir); a
+	// worktree lives under Loop Now's own data, so the entry files Pi loads from it and its parents are the
+	// repository's.
+	if err := checkWorkDir(snap, d); err != nil {
+		closeBridge()
+		return started{}, err
+	}
+	cmd.Dir = workDir(snap, d)
 	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		closeBridge()

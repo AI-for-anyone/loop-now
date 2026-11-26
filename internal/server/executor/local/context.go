@@ -34,7 +34,9 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
 	runtime := agentruntime.ForProvider(snap.Provider)
 	cwd := workDir(snap, d)
-	if cwd != d.workspace {
+	if cwd != d.workspace && cwd == snap.TaskWorkspace {
+		local = fmt.Sprintf("- Your working directory: %s, this task's git worktree. Every step of the task works in it; its own CLAUDE.md or AGENTS.md belongs to the repository.\n", cwd) + local
+	} else if cwd != d.workspace {
 		local = fmt.Sprintf("- Your working directory: %s, a folder on this computer the person picked. You work there as they do in their terminal; its own CLAUDE.md or AGENTS.md belongs to that folder.\n", cwd) + local
 	}
 	// A runtime that reads AGENTS.md by itself reads it in its working directory: with a working folder, the Agent's
@@ -68,7 +70,9 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 	if cwd != d.workspace {
 		own = "Your own folder (your own context; the person sees it as your folder)"
 	}
-	if snap.TaskID != uuid.Nil {
+	if snap.TaskID != uuid.Nil && cwd != d.workspace {
+		own = "Your folder in this task (your own context; copied from your regular folder when the task started and reclaimed when the task ends)"
+	} else if snap.TaskID != uuid.Nil {
 		own = "Your folder in this task (your working directory; copied from your regular folder when the task started and reclaimed when the task ends)"
 	}
 	entry := filepath.Join(layer, "AGENTS.md")

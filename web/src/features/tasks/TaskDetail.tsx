@@ -17,6 +17,7 @@ import { isNotFound } from '@/lib/errors'
 import { useTaskLive } from './useTaskLive'
 import { NodeRecordPanel, type NodeDraft } from './NodeRecordPanel'
 import { TaskActions } from './TaskActions'
+import { TaskWorkspace } from './TaskWorkspace'
 import { TaskInstanceSleeps } from '@/features/sleep/TaskInstanceSleeps'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
@@ -79,6 +80,7 @@ export function TaskDetail() {
       <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.meta(detail.task.createdAt, detail.task.updatedAt)}</span>
     </PageHeader>
     <ErrorAlert error={task.error} />
+    <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} />
     {currentSleep?.state === 'sleeping' && currentSleep.wakeAt && <div className="mb-3 rounded-card bg-tint-blue p-4"><SleepUntil at={currentSleep.wakeAt} reason={currentSleep.reason} /></div>}
     <TaskInstanceSleeps detail={detail} />
     {detail.task.currentNodeRunId && node?.id !== detail.task.currentNodeRunId && <div className="mb-2.5 flex flex-wrap items-center gap-3 text-[13px] font-bold"><span>{t.tasks.history}</span><Button variant="secondary" size="sm" onClick={() => viewRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>{t.tasks.currentChanged}</Button></div>}

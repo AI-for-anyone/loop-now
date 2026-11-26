@@ -27,6 +27,8 @@ type Summary struct {
 	EndedAt          *time.Time `json:"endedAt"`
 	Link             string     `json:"link"`
 	Version          int64      `json:"version"`
+	// Branch is the branch of the task's workspace; nil for a task without one.
+	Branch *string `json:"branch"`
 }
 
 type Question struct {
@@ -81,6 +83,40 @@ type Detail struct {
 	Nodes             []NodeRun           `json:"nodes"`
 	Artifacts         []Artifact          `json:"artifacts"`
 	Cleanup           string              `json:"cleanup"`
+	// Workspace is the task's git worktree; nil for a task without one (and for records written before workspaces).
+	Workspace *Workspace `json:"workspace"`
+}
+
+// Workspace states (TaskWorkspace.state in api/openapi.yaml).
+const (
+	WorkspaceStatePending = "pending"
+	WorkspaceStateActive  = "active"
+	WorkspaceStateRemoved = "removed"
+	WorkspaceStateKept    = "kept"
+)
+
+// Workspace is the task's git worktree (TaskWorkspace). Kept is non-nil exactly when State is WorkspaceStateKept.
+type Workspace struct {
+	Repository string         `json:"repository"`
+	Path       string         `json:"path"`
+	Branch     string         `json:"branch"`
+	BaseBranch string         `json:"baseBranch"`
+	BaseCommit *string        `json:"baseCommit"`
+	State      string         `json:"state"`
+	Kept       *WorkspaceKept `json:"kept"`
+}
+
+// WorkspaceKept says what removing a kept worktree would lose (TaskWorkspaceKept).
+type WorkspaceKept struct {
+	UncommittedFiles int `json:"uncommittedFiles"`
+	UnpushedCommits  int `json:"unpushedCommits"`
+}
+
+// WorkspaceInput asks for a workspace when a task is created (TaskWorkspaceInput).
+type WorkspaceInput struct {
+	Repository string  `json:"repository"`
+	BaseBranch *string `json:"baseBranch,omitempty"`
+	Branch     *string `json:"branch,omitempty"`
 }
 
 // Record is the aggregate saved atomically in the database; internal fields such as counts do not go into the API.
@@ -89,6 +125,8 @@ type Record struct {
 	SourceInboxMessageID *uuid.UUID     `json:"sourceInboxMessageId,omitempty"`
 	View                 Detail         `json:"view"`
 	EdgeCounts           map[string]int `json:"edgeCounts"`
+	// WorkspaceBranchGiven is internal: the Manager named the workspace branch, so it may exist already.
+	WorkspaceBranchGiven bool `json:"workspaceBranchGiven,omitempty"`
 	// NodeQueueDigests is internal: the last emitted node queue per node, so a
 	// task.node.queue.updated event is written only when the queue changes.
 	NodeQueueDigests map[uuid.UUID]string `json:"nodeQueueDigests,omitempty"`
@@ -150,6 +188,7 @@ type CreateInput struct {
 	Request              map[string]any      `json:"request"`
 	Workflow             workflow.Definition `json:"workflow"`
 	SourceInboxMessageID *uuid.UUID          `json:"sourceInboxMessageId,omitempty"`
+	Workspace            *WorkspaceInput     `json:"workspace,omitempty"`
 }
 type SubmitInput struct {
 	ActionID uuid.UUID      `json:"actionId"`
@@ -168,6 +207,11 @@ type RetryInput struct {
 	Note              string    `json:"note,omitempty"`
 }
 type CancelInput struct {
+	ActionID uuid.UUID `json:"actionId"`
+}
+
+// RemoveWorkspaceInput is the body of removeTaskWorkspace.
+type RemoveWorkspaceInput struct {
 	ActionID uuid.UUID `json:"actionId"`
 }
 

@@ -248,6 +248,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/tasks/{taskId}/lark-account-switches", "switchTaskLarkAccount", ConsoleOnly, s.switchTaskLarkAccount},
 		{"GET", "/tasks/{taskId}/lark-account-switches/{actionId}", "getTaskLarkAccountSwitch", ConsoleOnly, s.getTaskLarkAccountSwitch},
 		{"POST", "/tasks/{taskId}/cancel", "cancelTask", ConsoleOnly, s.cancelTask},
+		{"POST", "/tasks/{taskId}/workspace/remove", "removeTaskWorkspace", ConsoleOnly, s.removeTaskWorkspace},
 		{"GET", "/tasks/{taskId}/artifacts/{artifactId}", "downloadTaskArtifact", ConsoleOnly, s.downloadTaskArtifact},
 
 		{"GET", "/projects/{projectId}/tasks", "listProjectTasks", ConsoleOnly, s.listProjectTasks},

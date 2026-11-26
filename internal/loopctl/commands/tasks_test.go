@@ -38,8 +38,8 @@ func taskArtifact() map[string]any {
 }
 func taskDetail() map[string]any {
 	d := map[string]any{
-		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "number": 12, "title": "General task", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/Default project/tasks/" + taskUUID, "version": 1},
-		"request": map[string]any{}, "workflow": taskWorkflow(), "nodes": []any{map[string]any{"id": nodeUUID, "taskId": taskUUID, "stepId": "work", "visit": 1, "attempt": 1, "agentId": agentUUID, "agentName": "dev", "runtimeId": agentUUID, "status": "submitted", "inputs": map[string]any{}, "inputVersions": []any{}, "output": map[string]any{}, "edgeId": nil, "reason": nil, "question": nil, "runIds": []any{}, "startedAt": now, "endedAt": nil}}, "artifacts": []any{taskArtifact()}, "cleanup": "none",
+		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "number": 12, "title": "General task", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/Default project/tasks/" + taskUUID, "version": 1, "branch": nil},
+		"request": map[string]any{}, "workflow": taskWorkflow(), "nodes": []any{map[string]any{"id": nodeUUID, "taskId": taskUUID, "stepId": "work", "visit": 1, "attempt": 1, "agentId": agentUUID, "agentName": "dev", "runtimeId": agentUUID, "status": "submitted", "inputs": map[string]any{}, "inputVersions": []any{}, "output": map[string]any{}, "edgeId": nil, "reason": nil, "question": nil, "runIds": []any{}, "startedAt": now, "endedAt": nil}}, "artifacts": []any{taskArtifact()}, "cleanup": "none", "workspace": nil,
 	}
 	d["sleepingInstances"] = []any{}
 	for _, n := range d["nodes"].([]any) {
@@ -111,7 +111,21 @@ func TestTaskQueriesAndCreate(t *testing.T) {
 	if !bytes.Equal(lastReq(t, s).Body, b) {
 		t.Fatal("JSON was rewritten")
 	}
+	// A workspace goes to the server as written; task get shows the task's workspace as the server returns it.
+	withWorkspace := taskCreateInput()
+	withWorkspace["workspace"] = map[string]any{"repository": "/code/app", "baseBranch": "main", "branch": nil}
+	b, _ = json.Marshal(withWorkspace)
+	e.stdin = string(b)
+	e.run("task", "create", "--from-file", "-").ok(t)
+	if !bytes.Equal(lastReq(t, s).Body, b) {
+		t.Fatal("the workspace was rewritten")
+	}
+	if d := e.run("task", "get", taskUUID).ok(t); !hasKey(d, "workspace") || !hasKey(d["task"].(map[string]any), "branch") {
+		t.Fatalf("task get shows workspace and task.branch: %v", d)
+	}
 }
+
+func hasKey(m map[string]any, k string) bool { _, ok := m[k]; return ok }
 
 func TestTaskActionsPreserveContextAndReceipts(t *testing.T) {
 	s, e := withTaskSamples(t)

@@ -16,6 +16,7 @@ import { indexTabClass } from '@/lib/index-tab'
 import { overviewPath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { TaskBadge } from './TaskBadge'
+import { branchParts } from './branch-name'
 import { useTaskLive } from './useTaskLive'
 
 type Task = Schemas['TaskSummary']
@@ -155,6 +156,7 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
             </Link>
             <PendingBadge counts={pending} />
           </span>
+          {task.branch && <Branch name={task.branch} />}
           {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
         </span>
       </span>
@@ -187,5 +189,18 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
         {t.tasks.updatedAt(task.updatedAt)}
       </time>
     </li>
+  )
+}
+
+// The branch of a task with a worktree, under its title: monospace, cut in the middle when the row is too narrow (the whole name is in
+// the hover title and for screen readers).
+function Branch({ name }: { name: string }) {
+  const { head, tail } = branchParts(name)
+  return (
+    <span data-testid="task-branch" title={name} className="flex max-w-full min-w-0 font-mono text-[12px] leading-[1.6] text-riso-blue">
+      <span className="sr-only">{t.tasks.branchLabel(name)}</span>
+      <span aria-hidden="true" className="min-w-0 truncate">{head}</span>
+      <span aria-hidden="true" className="shrink-0 whitespace-pre">{tail}</span>
+    </span>
   )
 }

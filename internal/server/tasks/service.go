@@ -168,6 +168,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 	if a.ProjectID == nil || !a.IsManager {
 		return nil, apperr.Forbidden("Only the project's current Manager can create tasks.")
 	}
+	var workspace workspacePlan
+	if in.Workspace != nil {
+		if workspace, err = s.checkWorkspace(ctx, *a.ProjectID, *in.Workspace, in.Workflow); err != nil {
+			return nil, err
+		}
+	}
 	action := bodyAction(p, in.ActionID, "createTask", in)
 	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx *db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 
@@ -310,6 +316,16 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 			requestID = &id
 		}
 		r := taskmodel.Record{CreationRequestID: requestID, SourceInboxMessageID: in.SourceInboxMessageID, View: view, EdgeCounts: map[string]int{}}
+		if in.Workspace != nil {
+			// The generated branch carries the task's number. Write transactions are serialized, so the next number
+			// read here is the one the store assigns; the store checks that it is.
+			if e := tx.QueryRow(ctx, `SELECT last_task_number+1 FROM projects WHERE id=$1`, *a.ProjectID).Scan(&r.View.Task.Number); e != nil {
+				return taskmodel.Record{}, nil, e
+			}
+			r.View.Workspace = s.newWorkspace(workspace, id, r.View.Task.Number, in.Title)
+			r.View.Task.Branch = &r.View.Workspace.Branch
+			r.WorkspaceBranchGiven = workspace.branch != ""
+		}
 		start, _ := in.Workflow.Step(in.Workflow.StartStepID)
 		var inst store.TaskInstance
 		for _, i := range instances {
@@ -539,7 +555,7 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 		if e := m.Tx.QueryRow(ctx, `SELECT prepared FROM task_instances WHERE id=$1`, node.RuntimeID).Scan(&prepared); e != nil {
 			return nil, e
 		}
-		if !prepared {
+		if !prepared || m.Record.View.Workspace != nil && m.Record.View.Workspace.State == taskmodel.WorkspaceStatePending {
 			m.Record.View.Task.Status = "preparing"
 			return m.Record.View, nil
 		}
@@ -617,7 +633,11 @@ func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note s
 	}
 	n.Inputs, n.InputVersions = inputs, versions
 	data, _ := json.Marshal(inputs)
-	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\nThe current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder. Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data))
+	where := "The current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder."
+	if w := m.Record.View.Workspace; w != nil && w.State == taskmodel.WorkspaceStateActive {
+		where = workspaceBlock(*w)
+	}
+	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\n%s Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data), where)
 	if note != "" {
 		text += "Retry note: " + note
 	}

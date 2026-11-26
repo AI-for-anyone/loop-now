@@ -4,6 +4,19 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
+## 未发布
+
+### 能在代码上干活的任务：一个任务一个工作区
+
+- 任务可以带一个工作区。Manager 建任务时指定这台电脑上的一个 git 仓库，Loop Now 就为这个任务开一个 worktree 和一个新分支：从远端默认分支的最新提交开出，名字是 `task/<编号>-<标题>`，Manager 也可以自己起名。任务的每一步都在这个 worktree 里干活，所以同一个仓库上可以同时跑好几个任务，互不影响，也不碰你自己的检出。
+- 这种任务里的每一步，和 Agent 平时的对话一样干活。打开了“用我本机的 CLI 配置”时，它有你的设置、技能、插件、MCP 和登录，Claude Code 还用同一份记忆。所有运行时都能参加，包括内置的 Pi。
+- 任务结束或取消时，不会丢东西才删除 worktree：没有未提交的改动，并且每个提交都已合入或已推送。本地分支只在已合入时删除。否则 worktree 会保留，任务页写明原因（几个文件有未提交的改动、几个提交只在这里有），并给你一个“删除工作区”按钮；删除会丢掉未提交的改动，提交仍留在分支上。
+- 任务页显示仓库、分支、从哪里开出和所在文件夹；任务列表显示分支。
+- Loop Now 只动它自己开的 worktree（在它自己的数据文件夹里）。它不会运行 `git worktree prune`，不会在你的检出里切换分支或清理文件，不会删除远端分支，也不会关闭 PR。
+- loopctl 指南新增“改代码的任务”一节，写给 Manager 和任务里的 Agent：建任务前先把流程给人看、同一时间只有一个 Agent 写代码、验证的 Agent 不能是写代码的、打回重做有次数上限、一个任务一个 PR、怎么盯 PR、合并前先问、收尾时清理。
+- 不带工作区的任务和以前一样。
+- 接口：`TaskCreateInput.workspace`、任务上的 `TaskWorkspace`（`workspace`）、`TaskSummary.branch`、`POST /tasks/{taskId}/workspace/remove`、错误码 `task_workspace_not_kept`。
+
 ## v0.3.2
 
 可以把这台电脑上 Claude Code 和 Codex 的对话导入进来接着聊；每个 Agent 都有了和 T3 Code 一样的权限模式（全部要批准、自动同意改文件、自动审查、完全放开；默认仍是完全放开）。CLI 放到后台的活现在看得到、能停止。Antigravity、Grok 和自己添加的 ACP 命令也计入用量；在 Mac 上用浏览器打开控制台，也能点「选择…」。升级时会自动执行一次迁移 16 和 17。
