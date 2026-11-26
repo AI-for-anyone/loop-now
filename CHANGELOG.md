@@ -2,9 +2,14 @@
 
 中文：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)
 
-User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
+User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: it adds a note in `changes/` (see `changes/README.md`), and `scripts/release/collect-changes.sh` moves the notes into "## Unreleased" when a release is cut.
 
 ## Unreleased
+
+### Change notes are one file per change
+
+- A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
+- The loopctl guide tells a step in a task with a git workspace to write its notes as such a file when the repository keeps one per change.
 
 ### The run record says what each tool did
 
