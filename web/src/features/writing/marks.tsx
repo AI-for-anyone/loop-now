@@ -13,7 +13,7 @@ export function Spark({ className }: { className?: string }) {
   )
 }
 
-// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): not a window (a CLI) or a disc (the bundled runtime) but a
+// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): not a product's logo but a
 // yellow tag with an ink rim, its pink plate printed a little off register behind it, and the spark in ink.
 export function AutomaticMark({ className }: { className?: string }) {
   return (

@@ -101,16 +101,10 @@ export function railOrder(definitions: readonly RuntimeDefinition[], readiness: 
   return definitions.map((definition, index) => ({ definition, index, rank: rank(definition) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(({ definition }) => definition)
 }
 
-// The glyph inside a runtime's mark (components/runner-picker/RuntimeMark.tsx), as strokes on its 32×32 grid: a terminal prompt for Claude
-// Code, a pair of braces for Codex, a lowercase g for Grok, rising chevrons for Antigravity, π for Pi. The mark's shape and the glyph's
-// color follow the runtime's capabilities; every built-in runtime has a glyph, and any other (one a person added) is marked with its
-// initial.
-const glyphs: Record<BuiltInRuntime, readonly string[]> = {
-  'claude-code': ['M9.5 14.5l4.2 3.6-4.2 3.6', 'M16.4 22.4h6.4'],
-  grok: ['M19.4 16.5a3.4 3.4 0 1 1-6.8 0a3.4 3.4 0 1 1 6.8 0', 'M19.4 13.6v7c0 2-1.3 3-3.3 3-1.3 0-2.3-.4-3-1.2'],
-  antigravity: ['M11 21.6l5-4.4 5 4.4', 'M11 16.8l5-4.4 5 4.4'],
-  codex: ['M12.8 12.6c-1.5 0-2.2.7-2.2 2v1.5c0 .9-.5 1.5-1.5 1.6 1 .1 1.5.7 1.5 1.6v1.5c0 1.3.7 2 2.2 2', 'M17.4 12.6c1.5 0 2.2.7 2.2 2v1.5c0 .9.5 1.5 1.5 1.6-1 .1-1.5.7-1.5 1.6v1.5c0 1.3-.7 2-2.2 2'],
-  pi: ['M9.6 12.2c1.3-.9 2.6-1.2 4.2-1.2h8.8', 'M13.6 11.4c-.2 4-.9 7.4-2.4 10.4', 'M19.4 11.4c-.4 3.4-.3 6.3.4 8.2.5 1.3 1.6 1.9 2.8 1.3'],
-}
+// The product mark each built-in runtime shows: the product's own logo (Claude for Claude Code, OpenAI's for Codex, Grok's, Google
+// Antigravity's, Pi's own pixel mark), drawn by components/runner-picker/RuntimeMark.tsx from the official files in
+// src/assets/runtime-logos. Any other runtime (a local ACP command a person added) has no product logo of its own and gets a neutral mark.
+export type RuntimeLogo = 'claude' | 'openai' | 'grok' | 'antigravity' | 'pi'
+const logos: Record<BuiltInRuntime, RuntimeLogo> = { 'claude-code': 'claude', codex: 'openai', grok: 'grok', antigravity: 'antigravity', pi: 'pi' }
 
-export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => (Object.hasOwn(glyphs, id) ? glyphs[id as BuiltInRuntime] : null)
+export const runtimeLogo = (id: AgentRuntime): RuntimeLogo | null => (Object.hasOwn(logos, id) ? logos[id as BuiltInRuntime] : null)
