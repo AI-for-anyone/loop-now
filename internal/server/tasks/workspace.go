@@ -25,10 +25,22 @@ type workspacePlan struct {
 }
 
 func (s *Source) git() string {
+	if s.Git != nil {
+		return s.Git.Path()
+	}
 	if s.GitBin != "" {
 		return s.GitBin
 	}
 	return "git"
+}
+
+// workingGit returns a git that runs on this computer, without ever opening the macOS developer tools dialog; ok is
+// false when there is none.
+func (s *Source) workingGit(ctx context.Context) (string, bool) {
+	if s.Git != nil {
+		return s.Git.Available(ctx)
+	}
+	return s.git(), true
 }
 
 // WorktreeRoot is the folder under Loop Now's own data that holds every task worktree; nothing outside it is ever

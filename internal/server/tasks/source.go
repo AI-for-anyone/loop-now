@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"loop-now/internal/server/tasks/gitbin"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/execenv"
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
@@ -35,6 +35,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/db"
 )
 
@@ -46,10 +48,12 @@ type Source struct {
 	Normal                     local.Source
 	Store                      *store.Store
 	WorkRoot, GitBin, BasePath string
-	MaxSessionBytes            int64
-	CloneTimeout               time.Duration
-	Templates                  *clitemplate.Catalog
-	Installer                  *clitemplate.Installer
+	// Git finds a working git for task workspaces; when nil, GitBin is used as is and counts as working.
+	Git             *gitbin.Finder
+	MaxSessionBytes int64
+	CloneTimeout    time.Duration
+	Templates       *clitemplate.Catalog
+	Installer       *clitemplate.Installer
 	// Installed only for schemas containing the task-switch module. Nil is an
 	// explicit legacy-fixture composition, never a missing-table fallback.
 	LarkOverlay   func(context.Context, store.TaskInstance) (*clicredential.LarkBinding, int64, error)

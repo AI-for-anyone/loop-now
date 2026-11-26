@@ -60,6 +60,7 @@ import (
 	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/server/tasks/gitbin"
 	"loop-now/internal/server/textgen"
 	"loop-now/internal/server/webui"
 )
@@ -426,7 +427,10 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if u, err := user.Current(); err == nil {
 		username = u.Username
 	}
-	taskSource := &tasks.Source{ModelAuth: authCoordinator, Normal: a.Config, Store: a.Store, WorkRoot: res.WorkRoot, GitBin: res.GitBin, BasePath: res.ExecBasePath, MaxSessionBytes: cfg.TaskMaxSession, CloneTimeout: cfg.GitCloneTimeout, Templates: templates, Installer: installer}
+	taskSource := &tasks.Source{ModelAuth: authCoordinator, Normal: a.Config, Store: a.Store, WorkRoot: res.WorkRoot, GitBin: res.GitBin, Git: gitbin.New(res.GitBin, func(ctx context.Context) []string {
+		// The user's own PATH first, as their terminal sees it, then the server's.
+		return append(a.UserPath.Dirs(ctx), filepath.SplitList(os.Getenv("PATH"))...)
+	}), BasePath: res.ExecBasePath, MaxSessionBytes: cfg.TaskMaxSession, CloneTimeout: cfg.GitCloneTimeout, Templates: templates, Installer: installer}
 	taskSource.EnableLarkOverlay()
 	taskSource.Log = log
 	taskSource.PluginAssets = a.pluginAssets
