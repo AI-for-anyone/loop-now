@@ -49,7 +49,7 @@ export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
     <section
       aria-label={t.chat.queueList.region}
       className={cn(
-        '-mb-0.5 flex min-w-0 flex-col border-[1.5px] border-b-0 border-ink/28 bg-paper-raised',
+        '-mb-0.5 flex min-w-0 flex-col border border-b-0 border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:border-ink/28 [[data-skin=plate]_&]:bg-paper-raised',
         node ? cn('mx-[18px] rounded-t-[12px] pt-0.5', collapsed ? 'pr-1 pb-[3px] pl-2.5' : 'px-1 pb-[5px]') : 'mx-[26px] rounded-t-[14px] px-1.5 pt-[3px] pb-1.5',
       )}
     >
@@ -81,7 +81,7 @@ export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
             aria-expanded={collapse.expanded}
             aria-controls={listId}
             onClick={collapse.onToggle}
-            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-bold text-riso-blue hover:bg-tint-blue focus-visible:shadow-focus"
+            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-bold text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:hover:bg-tint-blue"
           >
             {collapse.expanded ? t.chat.queueList.collapse : t.chat.queueList.expand}
             {collapse.expanded ? <ChevronDownIcon aria-hidden="true" className="size-3" strokeWidth={2.6} /> : <ChevronUpIcon aria-hidden="true" className="size-3" strokeWidth={2.6} />}
@@ -172,7 +172,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
       title={t.chat.queueList.promoteTitle}
       disabled={pending || disabled}
       onClick={onClick}
-      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-ink/35 bg-white px-2 text-xs font-bold whitespace-nowrap text-ink hover:bg-tint-pink-2 focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50"
+      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-hairline-strong bg-surface-control px-2 text-xs font-semibold whitespace-nowrap text-ink hover:bg-surface-hover focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50 [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-pink-2"
     >
       <ZapIcon aria-hidden="true" className="size-3 text-pink-text" strokeWidth={2.6} />
       {pending ? t.chat.queueList.promoting : label}
@@ -180,7 +180,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
   )
 }
 
-const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-tint-blue hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50'
+const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50 [[data-skin=plate]_&]:hover:bg-tint-blue'
 
 // Edit (✎, only for your own messages) and cancel (×) at the end of a row: edit withdraws this message and puts its text and images back
 // into the input box.

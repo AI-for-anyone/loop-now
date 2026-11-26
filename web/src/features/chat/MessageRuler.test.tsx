@@ -9,6 +9,7 @@ import { makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { FakeIntersectionObserver } from '@/test/intersection-observer'
 import { createTestQueryClient } from '@/test/render'
 import { initialLiveState } from './live-state'
+import { resetChatDraftsForTest } from './draft-store'
 import { MessageList } from './MessageList'
 import { turnPreview } from './ruler'
 import { buildTurns, type Turn } from './turns'
@@ -60,6 +61,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetChatDraftsForTest()
   vi.unstubAllGlobals()
   for (const name of ['scrollHeight', 'clientHeight', 'scrollTop', 'offsetTop', 'offsetHeight']) Reflect.deleteProperty(HTMLElement.prototype, name)
 })
@@ -81,7 +83,7 @@ function List({ pages, ...rest }: Omit<ComponentProps<typeof MessageList>, 'agen
 }
 
 const nav = () => screen.getByRole('navigation', { name: 'Conversation turns' })
-const ticks = () => within(nav()).getAllByRole('button')
+const ticks = () => within(nav().querySelector('ol')!).getAllByRole('button')
 const turnBlock = (text: string) => screen.getByText(text).closest<HTMLElement>('[data-run-id]')!
 const mark = () => nav().querySelector<HTMLElement>('[data-ruler-mark]')
 const longTicks = () => ticks().filter((tick) => tick.querySelector('[data-ruler-long]'))
@@ -240,7 +242,7 @@ describe('ruler on the right of the conversation area', () => {
 describe('ruler in the stub', () => {
   it('is the stub on the right of the sheet: the navigation name is unchanged, and screen readers do not repeat the small “TURNS” heading at the top', () => {
     render(<List pages={pagesOf(['One', 'Two'])} />)
-    expect(nav()).toHaveClass('border-l-2', 'border-dashed')
+    expect(nav()).toHaveClass('border-l', 'border-hairline', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
     expect(within(nav()).getByText('TURNS')).toHaveAttribute('aria-hidden', 'true')
   })
 
@@ -289,8 +291,8 @@ describe('ruler in the stub', () => {
     expect(mark()).toHaveAttribute('aria-hidden', 'true')
     // The height is computed from the tick spacing: it covers 3 ticks, with a little extra above and below.
     expect(mark()!.style.height).toBe('calc(200% + 19px)')
-    expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
-    expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
+    expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('bg-ink', '[[data-skin=plate]_&]:border-l-riso-pink')
     act(() => {
       for (const text of ['Question 6', 'Question 7', 'Question 8']) FakeIntersectionObserver.trigger(turnBlock(text), false)
     })
@@ -316,11 +318,32 @@ describe('ruler in the stub', () => {
     expect(document.querySelector('[data-turn-stub]')).toBe(nav())
   })
 
-  it('on wide screens the conversation area hides its native scrollbar in favor of the ruler; narrow screens have no stub and keep it; the scroll area still scrolls', () => {
+  it('keeps a usable thin scrollbar alongside the ruler on desktop so long replies can be scrolled directly', () => {
     render(<List pages={pagesOf(['One', 'Two'])} />)
     const log = screen.getByRole('log')
-    expect(log).toHaveClass('nav:no-scrollbar', 'overflow-y-auto')
+    expect(log).toHaveClass('riso-scrollbar', 'overflow-y-auto')
+    expect(log).not.toHaveClass('nav:no-scrollbar')
     expect(log).not.toHaveClass('no-scrollbar')
+  })
+
+  it('clicking the ruler bottom/latest control jumps to the true bottom and re-enables auto-follow', async () => {
+    const pages = pagesOf(['One', 'Two', 'Three'])
+    const { rerender } = render(<List pages={pages} turnsBefore={0} turnsTotal={3} />)
+    const el = screen.getByRole('log')
+    el.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100, width: 600, height: 500 })
+    turnBlock('One').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100 - 1420, width: 600, height: 300 })
+
+    const user = userEvent.setup()
+    await user.click(within(nav()).getByRole('button', { name: 'One' }))
+    expect(el.scrollTop).toBe(56)
+
+    await user.click(within(nav()).getByRole('button', { name: 'Jump to bottom' }))
+    expect(el.scrollTop).toBe(1500)
+    // Auto-follow is re-enabled: growing content now pulls to the new bottom.
+    log.scrollHeight = 2400
+    const messages = pages.pages[0].messages
+    rerender(<List pages={{ ...pages, pages: [{ ...pages.pages[0], messages: [...messages.slice(0, -1), { ...messages.at(-1)!, text: 'Answer to Three, grown' }] }] }} turnsBefore={0} turnsTotal={3} />)
+    expect(el.scrollTop).toBe(1900)
   })
 
   it('with only one turn or no conversation the stub has no ticks and the native scrollbar stays (so a very long reply still shows the scroll position)', () => {

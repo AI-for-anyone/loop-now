@@ -121,14 +121,14 @@ function tiles(report: Report): Tile[] {
 }
 
 const TILE_SHADOW = {
-  ink: 'shadow-[4px_4px_0_var(--ink)]',
-  pink: 'shadow-[4px_4px_0_var(--riso-pink)]',
-  yellow: 'shadow-[4px_4px_0_var(--riso-yellow)]',
-  blue: 'shadow-[4px_4px_0_var(--riso-blue)]',
+  ink: '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+  pink: '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-pink)]',
+  yellow: '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-yellow)]',
+  blue: '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-blue)]',
 } as const
 
-// Key metrics: the first numbered section on the sheet. White cards with a 2px navy outline, where the shadow color tells the
-// meaning apart; the numbers are large Bricolage type.
+// Key metrics: the first numbered section on the sheet. Crisp surface-control cards with hairline borders; Plate keeps its 2px navy
+// outline and solid colored offset shadows.
 function Kpis({ report }: { report: Report }) {
   return (
     <div className="flex min-w-0 flex-col gap-[18px]">
@@ -138,8 +138,8 @@ function Kpis({ report }: { report: Report }) {
       </div>
       <section aria-label={text.kpis.label} className="grid grid-cols-1 gap-x-3.5 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
         {tiles(report).map((tile) => (
-          <div key={tile.label} className={cn('mr-1 mb-1 flex min-w-0 flex-col gap-1 rounded-card border-2 border-ink bg-white px-4 pt-3.5 pb-3', TILE_SHADOW[tile.tone])}>
-            <span className="text-[12.5px] font-black text-ink">{tile.label}</span>
+          <div key={tile.label} className={cn('mr-1 mb-1 flex min-w-0 flex-col gap-1 rounded-card border border-hairline bg-surface-control px-4 pt-3.5 pb-3 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink', TILE_SHADOW[tile.tone])}>
+            <span className="text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-black">{tile.label}</span>
             <span className="font-display-latin text-[30px] leading-[1.1] font-extrabold [overflow-wrap:anywhere]">{tile.value}</span>
             <span className={cn('text-[12px] leading-[1.4]', tile.bad ? 'font-bold text-red-text' : 'text-ink-700')}>{tile.delta}</span>
             <Spark values={tile.spark} className="mt-auto" />
@@ -159,7 +159,7 @@ function ScopeSelect({ overview }: { overview: ReturnType<typeof useOverviewFilt
   // Redesign: the same dashed box as the overview, reading “范围” (Scope) followed by the current scope, with a small arrow on
   // the right; still a native select.
   return (
-    <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus">
+    <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border border-hairline-strong bg-surface-control pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/45 [[data-skin=plate]_&]:bg-transparent">
       <label htmlFor={id} aria-hidden="true" className="shrink-0 text-ink-500">
         {text.scopeLabel}
       </label>
@@ -254,7 +254,7 @@ function StatsBody({ range, query, projects }: { range: StatsRange; query: Scope
   const report = stats.data
   if (isEmpty(report))
     return (
-      <p role="status" className="rounded-panel border-2 border-dashed border-ink/25 px-5 py-8 text-center text-[14px] font-bold text-ink-700">
+      <p role="status" className="rounded-panel border border-dashed border-hairline-strong px-5 py-8 text-center text-[14px] font-bold text-ink-700 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink/25">
         {text.empty}
       </p>
     )
@@ -277,8 +277,8 @@ function StatsBody({ range, query, projects }: { range: StatsRange; query: Scope
         {n(7, <OutcomesCard report={report} axis={axis} />)}
         {n(8, <ReasonsCard report={report} />)}
       </div>
-      {/* Below the dashed line are the details to look at when troubleshooting. */}
-      <p className="mt-2 self-start rounded-full bg-ink px-3 text-[12.5px] leading-6 font-black text-white">{text.more}</p>
+      {/* Below the divider are the details to look at when troubleshooting. */}
+      <p className="mt-2 self-start rounded-full bg-cta-bg px-3 text-[12.5px] leading-6 font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{text.more}</p>
       {n(9, <HealthCard report={report} />)}
       <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
         {n(10, <ToolsCard report={report} />)}

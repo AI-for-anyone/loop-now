@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Markdown } from './Markdown'
 
 describe('Markdown rendering and safety', () => {
@@ -120,6 +120,15 @@ describe('Markdown rendering and safety', () => {
     expect(container.querySelector('code.hljs')).not.toBeNull()
     await user.click(screen.getByRole('button', { name: 'Copy code' }))
     await expect(navigator.clipboard.readText()).resolves.toBe('echo "hello" && ls -la\n')
+  })
+
+  it('handles clipboard failure cleanly without throwing or falsely showing Copied', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('denied'))
+    render(<Markdown text={'```ts\nconst x = 1\n```'} />)
+    const button = screen.getByRole('button', { name: 'Copy code' })
+    await user.click(button)
+    expect(button).toHaveTextContent('Copy code')
   })
 
   it('while streaming, an unclosed code block is shown as a code block', () => {

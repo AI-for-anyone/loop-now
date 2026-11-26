@@ -29,7 +29,7 @@ describe('Draft navigation on the global settings page', () => {
 
 // "Printed sheet" redesign, step 4: global settings sit on a sheet, with numbered sections and the section ruler in the stub.
 describe('Global settings on the sheet', () => {
-  const titles = ['Language', 'Import conversations', 'Permissions for new Agents', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
+  const titles = ['Language', 'Appearance', 'Import conversations', 'Permissions for new Agents', 'Local mode', 'Agent runtimes', 'Writing with AI', 'Model settings', 'Global folder', 'Server', 'CLI templates']
   const region = (name: string) => screen.getByRole('region', { name })
   const open = async () => {
     server.use(...baseHandlers([]))
@@ -61,37 +61,56 @@ describe('Global settings on the sheet', () => {
     expect(within(toc).getByRole('link', { name: 'Local mode' })).toHaveAttribute('href', '#local-mode')
   })
 
-  it('the UI language is a segmented button, with the current language in yellow', async () => {
+  it('the UI language is a segmented button, using hairline active styling in mono skin and yellow in Plate skin', async () => {
     await open()
     const group = within(region('Language')).getByRole('radiogroup', { name: 'Language' })
-    expect(group).toHaveClass('border-2', 'border-ink', 'rounded-full')
+    expect(group).toHaveClass('border', 'border-hairline-strong', 'rounded-ticket', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
     expect(within(group).getByRole('radio', { name: 'English' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-riso-yellow')
+    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-surface-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
   })
 
-  it('the four local mode switches sit one per row with dashed lines between rows; a switch that is on is yellow with a navy knob, and “On” or “Off” is written next to it', async () => {
+  it('switching theme between Risograph (Classic) and Minimal updates document.documentElement.dataset.skin', async () => {
+    const user = userEvent.setup()
+    await open()
+    const appearance = region('Appearance')
+    await user.click(within(appearance).getByRole('radio', { name: /Risograph \(Classic\)/ }))
+    expect(document.documentElement.dataset.skin).toBe('plate')
+    await user.click(within(appearance).getByRole('radio', { name: /Minimal/ }))
+    expect(document.documentElement.dataset.skin).toBe('mono')
+  })
+
+  it('the four local mode switches sit one per row with dashed lines between rows; switches use monochrome tokens in mono skin and yellow/navy in Plate skin', async () => {
     await open()
     const local = region('Local mode')
     const switches = await within(local).findAllByRole('switch')
     expect(switches).toHaveLength(4)
     for (const item of switches) {
-      expect(item).toHaveClass('data-[state=checked]:bg-riso-yellow', 'border-2', 'border-ink')
+      expect(item).toHaveClass('border', 'border-hairline-strong', 'data-[state=checked]:bg-cta-bg', '[[data-skin=plate]_&]:data-[state=checked]:bg-riso-yellow', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
       expect(item.closest('li')).toHaveClass('border-b-[1.5px]', 'border-dashed')
       expect(item.nextElementSibling).toHaveTextContent(item.getAttribute('aria-checked') === 'true' ? 'On' : 'Off')
     }
   })
 
-  it('each Agent runtime is a card: 2px navy border, solid navy shadow, name in the display font', async () => {
+  it('each Agent runtime is a crisp bordered card in mono skin and preserves the 2px navy border and shadow in Plate skin', async () => {
     await open()
     const card = await within(region('Agent runtimes')).findByRole('region', { name: 'Claude Code' })
-    expect(card).toHaveClass('border-2', 'border-ink', 'bg-white', 'shadow-[5px_5px_0_var(--ink)]')
+    expect(card).toHaveClass(
+      'border',
+      'border-hairline-strong',
+      'bg-surface-control',
+      'shadow-surface',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:bg-white',
+      '[[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]',
+    )
     expect(within(card).getByText('Claude Code')).toHaveClass('font-display-cn')
   })
 
-  it('the global folder section is a description plus a file manager with a 2px navy border, no longer a card', async () => {
+  it('the global folder section is a description plus a bordered file manager (2px navy border in Plate skin), no longer a card', async () => {
     await open()
     const folder = region('Global folder')
-    expect(folder.querySelector('[data-file-manager]')).toHaveClass('border-2', 'border-ink')
+    expect(folder.querySelector('[data-file-manager]')).toHaveClass('border', 'border-hairline-strong', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
     expect(folder).not.toHaveClass('shadow-print-rest')
   })
 

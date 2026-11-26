@@ -1,9 +1,11 @@
 import { fieldClass, selectClass } from '@/lib/field'
+import { toastStore } from '@/lib/toast'
 import { Textarea } from './textarea'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Toasts } from '../Toasts'
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from './alert-dialog'
 import { Badge } from './badge'
 import { Button } from './button'
@@ -258,10 +260,70 @@ describe('Table', () => {
   })
 })
 
-// Redesign: inputs, textareas and selects all have a white background, a 2px navy
-// border and 12px rounded corners (as do all form controls in the design mockups).
-it('form controls have a 2px navy border and 12px rounded corners', () => {
+// Form controls use semantic surface and hairline borders in mono skin and preserve the 2px ink inner border in Plate skin.
+it('form controls use semantic control tokens and preserve Plate inner ink borders', () => {
   render(<><input aria-label="x" className={fieldClass} /><Input aria-label="Name" /><Textarea aria-label="About" /></>)
-  for (const name of ['Name', 'About']) expect(screen.getByLabelText(name)).toHaveClass('rounded-input', 'bg-white', 'shadow-[inset_0_0_0_2px_var(--ink)]')
-  expect(selectClass).toContain('shadow-[inset_0_0_0_2px_var(--ink)]')
+  for (const name of ['Name', 'About']) {
+    expect(screen.getByLabelText(name)).toHaveClass(
+      'rounded-input',
+      'border',
+      'border-hairline-strong',
+      'bg-surface-control',
+      '[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]',
+    )
+  }
+  expect(selectClass).toContain('bg-surface-control')
+  expect(selectClass).toContain('[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]')
+})
+
+describe('Toasts', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    toastStore.reset()
+  })
+
+  it('positions the stack at the top right, pauses auto-dismiss on hover, resumes on leave, and caps visible toasts at 5', () => {
+    vi.useFakeTimers()
+    render(<Toasts />)
+    const container = document.querySelector('[data-toasts]')!
+    expect(container).toHaveClass('top-4', 'right-4')
+    expect(container).not.toHaveClass('bottom-4')
+
+    act(() => {
+      toastStore.show('Saved configuration')
+    })
+    const toast = screen.getByText('Saved configuration').closest('[data-toast]')!
+    expect(toast).toHaveClass('bg-surface-elevated', 'border-hairline-strong', 'shadow-floating', 'text-ink')
+
+    // Advance halfway through the 6s lifetime, then hover to pause.
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    fireEvent.mouseEnter(toast)
+    act(() => {
+      vi.advanceTimersByTime(10000)
+    })
+    expect(screen.getByText('Saved configuration')).toBeInTheDocument()
+
+    // Leaving resumes only the remaining ~3s.
+    fireEvent.mouseLeave(toast)
+    act(() => {
+      vi.advanceTimersByTime(2500)
+    })
+    expect(screen.getByText('Saved configuration')).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    expect(screen.queryByText('Saved configuration')).toBeNull()
+
+    // Stack cap: showing 7 toasts keeps only the newest 5 visible.
+    act(() => {
+      for (let i = 1; i <= 7; i++) toastStore.show(`Notice ${i}`)
+    })
+    expect(document.querySelectorAll('[data-toast]')).toHaveLength(5)
+    expect(screen.queryByText('Notice 1')).toBeNull()
+    expect(screen.queryByText('Notice 2')).toBeNull()
+    expect(screen.getByText('Notice 3')).toBeInTheDocument()
+    expect(screen.getByText('Notice 7')).toBeInTheDocument()
+  })
 })

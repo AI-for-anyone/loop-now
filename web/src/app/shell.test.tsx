@@ -6,14 +6,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { keys } from '@/api/queries'
 import { config } from '@/config'
 import { localeStorageKey, page as browserPage } from '@/i18n/locale'
-import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, makeProject, platformAgentsUrl, toListItem } from '@/test/api'
+import { projectBackend } from '@/test/projects'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers, currentSidebarLinks, scopeSwitcher, sidebar, sidebarLinks } from '@/test/shell'
 import { routes } from './routes'
 import { chooseModel } from '@/test/model-picker'
 import { openInboxStream } from '@/test/inbox'
-import { AppLayout } from './AppLayout'
+import { AppLayout, SIDEBAR_COLLAPSED_KEY } from './AppLayout'
 import { FakeEventSource } from '@/test/fake-event-source'
 
 // Global connection notice: told apart from the error messages inside each page by the server address in its description.
@@ -217,13 +218,114 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Main navigation' })).toBeNull())
   })
 
-  it('⌘K focuses the sidebar search', async () => {
-    server.use(...baseHandlers([makeAgent()]))
+  it('⌘K opens the command palette, supports searching projects, Agents and pages with keyboard navigation, and closes on Esc', async () => {
+    const other = makeProject({ name: 'design-lab' })
+    const helper = makeAgent({ name: 'dev-helper' })
+    const writer = makeAgent({ name: 'docs-writer' })
+    server.use(...overviewHandlers(), ...projectBackend({ projects: [defaultProject, other], agents: [helper, writer] }).handlers)
+    const user = userEvent.setup()
+    const { router } = renderRoutes(routes, defaultAgentPath(helper.id, 'chat'))
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
+
+    // Open with ⌘K and filter to an Agent in the current scope
+    await user.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input = within(dialog).getByRole('combobox')
+    expect(input).toHaveFocus()
+
+    await user.type(input, 'docs-writer')
+    expect(within(dialog).getByRole('option', { name: /docs-writer/ })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull())
+    expect(router.state.location.pathname).toBe(defaultAgentPath(writer.id, 'chat'))
+
+    // Open with Ctrl+K and switch to another project via Enter (updates lastScope)
+    await user.keyboard('{Control>}k{/Control}')
+    const dialog2 = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input2 = within(dialog2).getByRole('combobox')
+    await user.type(input2, 'design-lab')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'design-lab' })}`))
+    expect(router.state.location.pathname).toBe('/')
+    expect(window.localStorage.getItem('loop-now.lastScope')).toBe(other.id)
+
+    // Open via sidebar shortcut button, navigate pages with ArrowDown/ArrowUp, test empty state, and close with Esc
+    await user.click(within(sidebar()).getByRole('button', { name: 'Open command palette' }))
+    const dialog3 = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input3 = within(dialog3).getByRole('combobox')
+    await user.type(input3, 'no-such-match-xyz')
+    expect(within(dialog3).getByRole('status')).toHaveTextContent('No matching results')
+
+    await user.clear(input3)
+    await user.type(input3, 'settings')
+    const options = within(dialog3).getAllByRole('option')
+    expect(options.length).toBeGreaterThanOrEqual(2)
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowDown}')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowUp}')
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull())
+  })
+
+  it('desktop sidebar collapses and expands via button and ⌘B, persists to localStorage, and ignores ⌘B while editing text', async () => {
+    window.localStorage.removeItem(SIDEBAR_COLLAPSED_KEY)
+    server.use(...baseHandlers([makeAgent({ name: 'dev-helper' })]))
     const user = userEvent.setup()
     renderRoutes(routes, defaultAgentsPath)
-    const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
-    await user.keyboard('{Meta>}k{/Meta}')
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
+
+    // Collapse via header button
+    await user.click(within(sidebar()).getByRole('button', { name: 'Collapse navigation' }))
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('true')
+
+    // Expand via top-left expand button
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }))
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+
+    // Skip ⌘B while typing in an input
+    const search = within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })
+    await user.click(search)
     expect(search).toHaveFocus()
+    await user.keyboard('{Meta>}b{/Meta}')
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+
+    // Toggle with ⌘B when not focused in an editable element
+    search.blur()
+    await user.keyboard('{Meta>}b{/Meta}')
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('true')
+
+    // Toggle back with Ctrl+B
+    await user.keyboard('{Control>}b{/Control}')
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+  })
+
+  it('ScopeSwitcher selects the first matching project on Enter when filtering instead of jumping to Global', async () => {
+    const writing = makeProject({ name: 'Writing team' })
+    server.use(...overviewHandlers(), ...projectBackend({ projects: [defaultProject, makeProject({ name: 'model-access' }), writing] }).handlers)
+    const user = userEvent.setup()
+    const { router } = renderRoutes(routes, defaultAgentsPath)
+    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: test-project' }))
+    const filter = await screen.findByRole('searchbox', { name: 'Filter projects by name' })
+
+    // Typing a query with no matching project or Global match does not jump to Global on Enter
+    await user.type(filter, 'zzz-no-match')
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('listbox', { name: 'Scopes' })).toBeInTheDocument()
+
+    // Filtering to a matching project selects that project on Enter
+    await user.clear(filter)
+    await user.type(filter, 'Writ')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'Writing team' })}`))
+    expect(router.state.location.pathname).toBe('/')
+    expect(window.localStorage.getItem('loop-now.lastScope')).toBe(writing.id)
   })
 })
 

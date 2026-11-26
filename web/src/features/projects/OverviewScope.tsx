@@ -66,8 +66,10 @@ export function ScopeTag({ scope, projectId }: { scope: Schemas['AgentScope']; p
   return (
     <span
       className={cn(
-        'inline-flex max-w-[220px] shrink-0 items-center gap-1 rounded-[6px] bg-white px-1.5 text-[12.5px] leading-[22px] font-bold',
-        label.kind === 'deleted' ? 'border-[1.5px] border-dashed border-ink/30 text-ink-500' : 'text-ink-700 shadow-[inset_0_0_0_1.5px_rgb(24_38_94/.3)]',
+        'inline-flex max-w-[220px] shrink-0 items-center gap-1 rounded-[6px] bg-surface-control px-1.5 text-[12.5px] leading-[22px] font-bold [[data-skin=plate]_&]:bg-white',
+        label.kind === 'deleted'
+          ? 'border-[1.5px] border-dashed border-ink/30 text-ink-500'
+          : 'border border-hairline-strong text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_rgb(24_38_94/.3)]',
       )}
     >
       {label.kind !== 'deleted' && <ScopeIcon kind={label.kind} className="size-3 shrink-0" />}

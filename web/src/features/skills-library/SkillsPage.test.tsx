@@ -271,7 +271,7 @@ describe('Skills library on the sheet', () => {
     expect(await within(header).findByText('0 templates')).toBeInTheDocument()
   })
 
-  it('the empty state is on the sheet: an overprinted card illustration and a yellow-marker title; of the three buttons only “Create online” is fluorescent pink', async () => {
+  it('the empty state is on the sheet: an overprinted card illustration and a yellow-marker title; secondary upload actions use control surface in mono skin and only “Create online” uses Plate fluorescent pink', async () => {
     setup('/skills')
     const title = await screen.findByText('No templates in the Skills library yet.')
     expect(title).toHaveClass('riso-marker', 'font-display-cn')
@@ -280,20 +280,29 @@ describe('Skills library on the sheet', () => {
     expect(empty.querySelector('[data-empty-art]')).toHaveAttribute('aria-hidden', 'true')
     for (const name of ['Upload folder', 'Upload zip']) {
       const button = within(empty as HTMLElement).getByRole('button', { name })
-      expect(button).toHaveClass('border-2', 'border-ink', 'bg-white')
-      expect(button).not.toHaveClass('bg-riso-pink')
+      expect(button).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:bg-white')
+      expect(button).not.toHaveClass('[[data-skin=plate]_&]:bg-riso-pink')
     }
-    expect(within(empty as HTMLElement).getByRole('link', { name: 'Create online' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    expect(within(empty as HTMLElement).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
   })
 
-  it('with templates: the entries sit in the header meta; templates are white cards with a navy outline and a shadow, and the open one is yellow', async () => {
+  it('with templates: the entries sit in the header meta; templates are crisp control cards in mono skin and preserve white/yellow Plate cards with shadow', async () => {
     setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('sk-2', 'csv-tools', 'Work with CSV files')])
     const list = await screen.findByRole('list', { name: 'Skills library', hidden: true })
     const header = screen.getByRole('heading', { level: 1, name: 'Skills library', hidden: true }).closest('header')!
-    expect(within(header).getByRole('link', { name: 'Create online', hidden: true })).toHaveClass('bg-riso-pink')
+    expect(within(header).getByRole('link', { name: 'Create online', hidden: true })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink')
     const [open, other] = within(list).getAllByRole('link', { hidden: true })
     expect(open).toHaveAttribute('aria-current', 'true')
-    expect(open).toHaveClass('aria-[current=true]:bg-riso-yellow', 'border-2', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(open).toHaveClass(
+      'border',
+      'border-hairline-strong',
+      'bg-surface-control',
+      'aria-[current=true]:bg-surface-active',
+      '[[data-skin=plate]_&]:aria-[current=true]:bg-riso-yellow',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+    )
     expect(other.closest('[data-sheet]')).not.toBeNull()
   })
 })

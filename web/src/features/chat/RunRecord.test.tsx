@@ -233,8 +233,8 @@ describe('run log toggle bar', () => {
     const [name, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
     for (const part of [name, duration, tokens]) expect(part).toHaveAttribute('aria-hidden', 'true')
     expect(name).not.toHaveClass('font-mono')
-    expect(duration).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
-    expect(tokens).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
+    expect(duration).toHaveClass('font-mono', 'border-l', 'border-hairline', '[[data-skin=plate]_&]:border-l-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+    expect(tokens).toHaveClass('font-mono', 'border-l', 'border-hairline', '[[data-skin=plate]_&]:border-l-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
     // When it doesn't fit on a narrow screen, the segments wrap instead of extending past the background.
     expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
   })

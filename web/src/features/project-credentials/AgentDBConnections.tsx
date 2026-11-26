@@ -71,7 +71,7 @@ function ConnectionForm({ data, synchronized, onDirty, onSaved }: { data: Schema
       {ids.length === 0 && accounts.data && <p>{t.credentials.dbConnections.noCandidates}</p>}
       {ids.map(id => {
         const candidate = candidates.find(item => item.id === id), connection = data.connections.find(item => item.accountId === id)
-        return <label key={id} className={`flex min-w-0 items-start gap-3 rounded-input p-3 ${connection && connection.status !== 'resolved' ? 'bg-tint-red' : 'bg-white'}`}>
+        return <label key={id} className={`flex min-w-0 items-start gap-3 rounded-input p-3 ${connection && connection.status !== 'resolved' ? 'bg-tint-red' : 'border border-hairline bg-surface-control [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'}`}>
           <input type="checkbox" className="mt-1 size-4 shrink-0" checked={form.draft.ids.includes(id)} onChange={event => form.setDraft({ action: 'set', ids: (event.target.checked ? [...form.draft.ids, id] : form.draft.ids.filter(item => item !== id)).sort() })} />
           <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-bold">{candidate?.name ?? connection?.name ?? t.credentials.dbConnections.selectedUnavailable}</span><span className="block text-xs">{id}</span><span className="block">{connection ? statusText[connection.status] : candidate ? t.credentials.dbConnections.candidateNotGranted(accountStatus[candidate.status]) : t.credentials.dbConnections.missingAccount}</span></span>
         </label>

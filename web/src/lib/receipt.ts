@@ -1,6 +1,8 @@
-// Receipt: one line split into segments with a 1.5px dashed line between them, on a light blue background. Used by the toggle strip of the
-// run log and the header of command results.
-export const receiptClass = 'inline-flex max-w-full flex-wrap items-stretch rounded-[6px] bg-tint-blue text-[12px] leading-7 text-ink'
+// Receipt: one line split into hairline segments on a subtle surface in mono skin; light blue with 1.5px dashed dividers in Plate skin.
+// Used by the toggle strip of the run log and the header of command results.
+export const receiptClass =
+  'inline-flex max-w-full flex-wrap items-stretch rounded-ticket border border-hairline bg-surface-subtle text-[12px] leading-7 text-ink [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue'
 
-// Every segment after the first: a dashed line on the left.
-export const receiptPartClass = 'border-l-[1.5px] border-dashed border-ink/40 px-[11px] whitespace-nowrap'
+// Every segment after the first: a hairline divider on the left (dashed in Plate skin).
+export const receiptPartClass =
+  'border-l border-hairline px-[11px] whitespace-nowrap [[data-skin=plate]_&]:border-l-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/40'

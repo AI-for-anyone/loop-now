@@ -178,7 +178,7 @@ function DirectoryRows({ label, entries, actions }: { label: string; entries: Di
 function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNode }) {
   const problem = entry.status === 'ok' ? null : entry.status
   return (
-    <li aria-label={entry.path} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card bg-white px-4 py-3">
+    <li aria-label={entry.path} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card border border-hairline bg-surface-control px-4 py-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
       <div className="grid min-w-0 flex-[1_1_260px] gap-1">
         <span className="font-mono text-[13.5px] font-bold break-all">{entry.path}</span>
         {entry.note && <span className="text-[13.5px] text-ink-700 [overflow-wrap:anywhere]">{entry.note}</span>}

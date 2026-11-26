@@ -93,7 +93,7 @@ function EntryMissing({ onCreate }: { onCreate: () => void }) {
   return (
     // Redesign: a card with a light-pink background, a 2px navy outline and a fluorescent-pink solid offset shadow, with the create
     // button on the right.
-    <div role="note" className="mx-1 mt-4 mr-2 flex flex-wrap items-center justify-between gap-x-[18px] gap-y-2.5 rounded-card border-2 border-ink bg-tint-pink-2 px-[18px] py-3.5 shadow-print-pink">
+    <div role="note" className="mx-1 mt-4 mr-2 flex flex-wrap items-center justify-between gap-x-[18px] gap-y-2.5 rounded-card border border-hairline-strong bg-surface-subtle px-[18px] py-3.5 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink">
       <div className="min-w-0 flex-[1_1_240px]">
         <p className="text-[15px] font-black">{t.folders.entry.missingTitle}</p>
         <p className="text-[13px] leading-snug text-ink-700">{t.folders.entry.missingBody}</p>
@@ -107,7 +107,7 @@ function EntryMissing({ onCreate }: { onCreate: () => void }) {
 function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: FolderEntry; onEdit: () => void }) {
   const file = useFolderFile(source, entry.path)
   return (
-    <section aria-label={ENTRY_FILE} className="mx-4 mt-5 mb-4 rounded-card border border-ink/12 bg-white">
+    <section aria-label={ENTRY_FILE} className="mx-4 mt-5 mb-4 rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-ink/12 [[data-skin=plate]_&]:bg-white">
       <header className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border-b border-ink/10 px-4 py-1.5">
         <BookOpenTextIcon aria-hidden="true" className="size-4 text-pink-text" strokeWidth={2} />
         <span className="text-[13.5px] font-black">{ENTRY_FILE}</span>
@@ -195,7 +195,7 @@ export function FileView({ source, entry, limits, actions, edit, mode, onMode, o
           {editing ? (
             <>
               <Button size="xs" variant="ghost" className="h-7 no-underline" onClick={onCancel} disabled={editing.saving}>{t.folders.file.cancel}</Button>
-              <Button size="xs" className="h-7 px-3 shadow-[2px_2px_0_var(--riso-pink)]" onClick={onSave} disabled={editing.saving || !dirty} title={t.folders.file.saveKey}>{editing.saving ? t.folders.file.saving : t.folders.file.save}</Button>
+              <Button size="xs" className="h-7 px-3 [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]" onClick={onSave} disabled={editing.saving || !dirty} title={t.folders.file.saveKey}>{editing.saving ? t.folders.file.saving : t.folders.file.save}</Button>
             </>
           ) : (
             <>
@@ -233,7 +233,7 @@ function CodeView({ path, text }: { path: string; text: string }) {
   const html = useMemo(() => highlightCode(text, languageOf(path)), [text, path])
   const count = Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0))
   return (
-    <div className="code-view flex min-h-0 flex-1 overflow-auto bg-white font-mono text-[12.5px] leading-5">
+    <div className="code-view flex min-h-0 flex-1 overflow-auto bg-surface-control font-mono text-[12.5px] leading-5 [[data-skin=plate]_&]:bg-white">
       <div aria-hidden="true" className="sticky left-0 shrink-0 border-r border-ink/10 bg-paper-raised py-3 pr-3 pl-4 text-right text-ink-500/70 tabular-nums select-none">
         {Array.from({ length: count }, (_, index) => <div key={index}>{index + 1}</div>)}
       </div>
@@ -261,7 +261,7 @@ function Editor({ value, onChange, onSave, label }: { value: string; onChange: (
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={onKeyDown}
-      className="min-h-0 flex-1 resize-none border-0 bg-white px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none"
+      className="min-h-0 flex-1 resize-none border-0 bg-surface-control px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none [[data-skin=plate]_&]:bg-white"
     />
   )
 }

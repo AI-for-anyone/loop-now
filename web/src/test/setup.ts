@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
 import { reachability, serverVersionStore } from '@/api/client'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
 import { useOwnEventStreams } from '@/api/events'
+import { resetThemeForTest } from '@/theme/store'
 import { FakeEventSource } from './fake-event-source'
 import { FakeIntersectionObserver } from './intersection-observer'
 import { server } from './server'
@@ -45,6 +46,7 @@ afterEach(() => {
   // The recently used project or platform is remembered in browser storage and must not carry over to the next test.
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetThemeForTest()
 })
 afterAll(() => server.close())
 

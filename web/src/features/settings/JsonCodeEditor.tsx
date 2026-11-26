@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { basicSetup } from 'codemirror'
 import { json, jsonParseLinter } from '@codemirror/lang-json'
-import { Compartment, EditorState } from '@codemirror/state'
+import { defaultHighlightStyle, HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/utils'
 import { t } from '@/i18n'
+import { useTheme } from '@/theme/store'
 
 export interface JsonDiagnostic {
   from: number
@@ -24,17 +27,56 @@ interface JsonCodeEditorProps {
   diagnostics: JsonDiagnostic[]
 }
 
+const darkHighlightStyle = HighlightStyle.define([
+  { tag: tags.propertyName, color: '#FFFFFF', fontWeight: '600' },
+  { tag: tags.string, color: '#D4D4D8' },
+  { tag: tags.number, color: '#4ADE80' },
+  { tag: [tags.bool, tags.null, tags.keyword], color: '#93C5FD', fontWeight: '600' },
+  { tag: [tags.punctuation, tags.bracket, tags.brace, tags.squareBracket], color: '#A3A3A3' },
+  { tag: tags.comment, color: '#8F8F8F', fontStyle: 'italic' },
+  { tag: tags.invalid, color: '#F87171' },
+])
+
+function buildEditorTheme(dark: boolean): Extension {
+  return [
+    EditorView.theme(
+      {
+        '&': { height: '100%', fontSize: '13px', backgroundColor: 'transparent', color: 'var(--ink)' },
+        '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65', overflow: 'auto' },
+        '.cm-content': { padding: '14px 0', caretColor: 'var(--ink)' },
+        '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--ink)' },
+        '.cm-line': { padding: '0 14px 0 8px' },
+        '.cm-gutters': { backgroundColor: 'var(--surface-subtle)', color: 'var(--ink-500)', border: 'none', borderRight: '1px solid var(--hairline)', paddingLeft: '4px' },
+        '.cm-activeLine': { backgroundColor: 'var(--surface-hover)' },
+        '.cm-activeLineGutter': { backgroundColor: 'var(--surface-hover)' },
+        '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+          backgroundColor: dark ? 'rgb(255 255 255 / 0.16)' : 'rgb(0 0 0 / 0.10)',
+        },
+        '.cm-foldGutter span': { padding: '0 4px', cursor: 'pointer' },
+        '&.cm-focused': { outline: 'none' },
+      },
+      { dark },
+    ),
+    syntaxHighlighting(dark ? darkHighlightStyle : defaultHighlightStyle),
+  ]
+}
+
 export function JsonCodeEditor({ id, label, value, disabled = false, onChange, onDiagnosticsChange, diagnostics }: JsonCodeEditorProps) {
+  const { resolvedTheme } = useTheme()
+  const dark = resolvedTheme === 'dark'
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const callbacksRef = useRef({ onChange, onDiagnosticsChange })
   const valueRef = useRef(value)
+  const darkRef = useRef(dark)
   const editableRef = useRef(new Compartment())
+  const themeRef = useRef(new Compartment())
 
   useEffect(() => {
     callbacksRef.current = { onChange, onDiagnosticsChange }
     valueRef.current = value
-  }, [onChange, onDiagnosticsChange, value])
+    darkRef.current = dark
+  }, [onChange, onDiagnosticsChange, value, dark])
 
   useEffect(() => {
     const host = hostRef.current
@@ -56,17 +98,7 @@ export function JsonCodeEditor({ id, label, value, disabled = false, onChange, o
           json(),
           EditorView.lineWrapping,
           editableRef.current.of(EditorView.editable.of(true)),
-          EditorView.theme({
-            '&': { height: '100%', fontSize: '13px', backgroundColor: 'transparent' },
-            '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65', overflow: 'auto' },
-            '.cm-content': { padding: '14px 0', caretColor: 'var(--ink)' },
-            '.cm-line': { padding: '0 14px 0 8px' },
-            '.cm-gutters': { backgroundColor: 'var(--paper-raised)', color: 'var(--ink-500)', border: 'none', paddingLeft: '4px' },
-            '.cm-activeLine': { backgroundColor: 'var(--tint-blue)' },
-            '.cm-activeLineGutter': { backgroundColor: 'var(--tint-blue)' },
-            '.cm-foldGutter span': { padding: '0 4px', cursor: 'pointer' },
-            '&.cm-focused': { outline: 'none' },
-          }),
+          themeRef.current.of(buildEditorTheme(darkRef.current)),
           EditorView.updateListener.of(update => {
             if (update.docChanged) {
               const next = update.state.doc.toString()
@@ -91,6 +123,12 @@ export function JsonCodeEditor({ id, label, value, disabled = false, onChange, o
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
+    view.dispatch({ effects: themeRef.current.reconfigure(buildEditorTheme(dark)) })
+  }, [dark])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
     view.dispatch({ effects: editableRef.current.reconfigure(EditorView.editable.of(!disabled)) })
     view.contentDOM.setAttribute('aria-disabled', disabled ? 'true' : 'false')
   }, [disabled])
@@ -110,7 +148,7 @@ export function JsonCodeEditor({ id, label, value, disabled = false, onChange, o
   }
 
   return <div className="grid min-w-0 gap-2">
-    <div ref={hostRef} className={cn('h-[clamp(360px,55vh,680px)] min-w-0 overflow-hidden rounded-card border border-ink/15 bg-white shadow-inner focus-within:border-riso-blue focus-within:shadow-focus', disabled && 'opacity-60')} />
+    <div ref={hostRef} className={cn('h-[clamp(360px,55vh,680px)] min-w-0 overflow-hidden rounded-card border border-hairline-strong bg-surface-control focus-within:border-ink focus-within:shadow-focus [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-inner [[data-skin=plate]_&]:focus-within:border-riso-blue', disabled && 'opacity-60')} />
     {diagnostics.length > 0 && <div className="grid gap-1.5 rounded-card bg-tint-red/45 px-3 py-2.5" role="alert" aria-label={t.settings.models.syntaxErrors}>
       <p className="text-[13px] font-black text-red-text">{t.settings.models.syntaxErrors}</p>
       {diagnostics.map((diagnostic, index) => <button key={`${diagnostic.from}-${index}`} type="button" className="w-fit rounded text-left text-[13px] font-bold text-red-text underline decoration-red/40 underline-offset-2 outline-none hover:decoration-red focus-visible:shadow-focus" onClick={() => locate(diagnostic)}>

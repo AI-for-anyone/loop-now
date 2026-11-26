@@ -19,28 +19,54 @@ function setup(preset: 'workspace' | 'project' = 'workspace') {
 const content = () => screen.getByRole('region', { name: 'Files' })
 
 describe('Folder on the sheet', () => {
-  it('sits directly on the sheet without a card around it; the toolbar is at the top: New, Upload and Pull from Git are labeled pills with a navy outline', async () => {
+  it('sits directly on the sheet without a card around it; the toolbar is at the top: New, Upload and Pull from Git use control styling in mono skin and navy-outlined pills in Plate skin', async () => {
     const { container } = setup()
     const manager = container.querySelector('[data-file-manager]')!
     expect(manager).not.toHaveClass('rounded-card')
     expect(manager).not.toHaveClass('bg-white')
     for (const name of ['New file', 'New folder', 'Upload', 'Pull from Git']) {
       const button = await screen.findByRole('button', { name })
-      expect(button).toHaveClass('h-[34px]', 'rounded-full', 'border-2', 'border-ink', 'bg-paper-raised')
+      expect(button).toHaveClass(
+        'h-[34px]',
+        'rounded-ticket',
+        'border',
+        'border-hairline-strong',
+        'bg-surface-control',
+        '[[data-skin=plate]_&]:rounded-full',
+        '[[data-skin=plate]_&]:border-2',
+        '[[data-skin=plate]_&]:border-ink',
+        '[[data-skin=plate]_&]:bg-paper-raised',
+      )
       expect(button).toHaveTextContent(name)
     }
-    // The root folder's name is preceded by a yellow folder block.
-    expect(screen.getByRole('navigation', { name: 'Location' }).querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow', 'border-2', 'border-ink')
+    // The root folder's name is preceded by a folder block (yellow in Plate skin).
+    expect(screen.getByRole('navigation', { name: 'Location' }).querySelector('[data-folder-icon]')).toHaveClass(
+      'bg-surface-active',
+      'border',
+      'border-hairline-strong',
+      '[[data-skin=plate]_&]:bg-riso-yellow',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+    )
   })
 
-  it('no AGENTS.md yet: a card with a pink shadow', async () => {
+  it('no AGENTS.md yet: a subtle bordered callout in mono skin and a pink-shadowed card in Plate skin', async () => {
     setup('project')
     const note = await screen.findByRole('note')
     expect(note).toHaveTextContent('No AGENTS.md yet')
-    expect(note).toHaveClass('bg-tint-pink-2', 'border-2', 'border-ink', 'shadow-print-pink')
+    expect(note).toHaveClass(
+      'border',
+      'border-hairline-strong',
+      'bg-surface-subtle',
+      'shadow-surface',
+      '[[data-skin=plate]_&]:bg-tint-pink-2',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:shadow-print-pink',
+    )
   })
 
-  it('file list: a solid line under the header, dashed lines between rows; folders are yellow folder blocks, files are white paper; size and time are monospaced', async () => {
+  it('file list: a solid line under the header, dashed lines between rows; folder and file icons adapt to mono and Plate skins; size and time are monospaced', async () => {
     setup()
     const table = await within(content()).findByRole('table')
     expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
@@ -49,8 +75,8 @@ describe('Folder on the sheet', () => {
     for (const row of rows) expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
     const dir = rows.find((row) => row.querySelector('[data-folder-icon]'))!
     const file = rows.find((row) => row.querySelector('[data-file-icon]'))!
-    expect(dir.querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow')
-    expect(file.querySelector('[data-file-icon]')).toHaveClass('bg-white', 'border-2', 'border-ink')
+    expect(dir.querySelector('[data-folder-icon]')).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(file.querySelector('[data-file-icon]')).toHaveClass('bg-surface-control', 'border', 'border-hairline-strong', '[[data-skin=plate]_&]:bg-white', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
     const cells = file.querySelectorAll('td')
     expect(cells[1]).toHaveClass('font-mono')
     expect(cells[2]).toHaveClass('font-mono')
@@ -87,7 +113,7 @@ describe('Folder on the sheet', () => {
     const files = entries.filter((entry) => entry.type === 'file')
     const bytes = files.reduce((sum, entry) => sum + (entry.size ?? 0), 0)
     const stub = await screen.findByRole('complementary', { name: 'Overview' })
-    expect(stub).toHaveClass('max-nav:hidden', 'border-dashed')
+    expect(stub).toHaveClass('max-nav:hidden', 'border-l', 'border-hairline', '[[data-skin=plate]_&]:border-dashed')
     await waitFor(() => expect(within(stub).getByText('folders')).toBeInTheDocument())
     await waitFor(() => expect(within(stub).getByText('folders').previousElementSibling).toHaveTextContent(String(dirs)))
     expect(within(stub).getByText('files').previousElementSibling).toHaveTextContent(String(files.length))

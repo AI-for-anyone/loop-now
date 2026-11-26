@@ -112,7 +112,7 @@ function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
           title: t.plugins.readme.title,
           meta: copy.readmeHint,
           body: (
-            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border-2 border-ink bg-white px-[22px] py-[18px]">
+            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-[22px] py-[18px] shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white">
               {readme.data?.file && <span className="self-start rounded-[4px] bg-tint-blue px-2 font-mono text-[12px] leading-[22px]">{readme.data.file}</span>}
               <ErrorAlert error={readme.error} />
               {readme.data && <ReadmeMarkdown readme={readme.data} />}
@@ -302,7 +302,7 @@ export function PluginDetailPage() {
           current={plugin.id}
           title={name}
           lead={
-            <span aria-hidden="true" className="flex size-[46px] shrink-0 items-center justify-center self-center rounded-[12px] border-2 border-ink bg-riso-yellow font-display-latin text-[24px] leading-none font-extrabold text-ink shadow-[3px_3px_0_var(--riso-pink)] max-nav:size-10 max-nav:text-[20px]">
+            <span aria-hidden="true" className="flex size-[46px] shrink-0 items-center justify-center self-center rounded-[12px] border border-hairline-strong bg-surface-subtle font-display-latin text-[24px] leading-none font-bold text-ink max-nav:size-10 max-nav:text-[20px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]">
               {name.slice(0, 1).toUpperCase()}
             </span>
           }

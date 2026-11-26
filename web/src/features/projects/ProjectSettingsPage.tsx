@@ -68,7 +68,7 @@ export function ProjectSettingsPage() {
     <DraftNavigationGuard key={project.id} projectName={project.name}>
       <PageFrame>
         <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.projects.settings.title}>
-          {project.isDefault && <span className="shrink-0 rounded-full bg-ink px-2.5 text-[12px] leading-[22px] font-black text-white">{t.projects.settings.defaultBadge}</span>}
+          {project.isDefault && <span className="shrink-0 rounded-full bg-cta-bg px-2.5 text-[12px] leading-[22px] font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{t.projects.settings.defaultBadge}</span>}
           <span className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{project.id}</span>
         </PageHeader>
         <Sheet className="mt-2 flex-1">
@@ -214,7 +214,7 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
     <Part id="manager">
       <p className="text-[14px] text-ink-700">{t.projects.settings.manager.intro}</p>
       {manager ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card bg-white px-4 py-3.5 shadow-print-rest">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-hairline bg-surface-control px-4 py-3.5 shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-print-rest">
           <AgentAvatar id={manager.id} />
           <span className="flex min-w-0 flex-[1_1_220px] flex-col">
             <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -312,12 +312,12 @@ function DangerCard({ project }: { project: Schemas['Project'] }) {
           {t.projects.settings.danger.action}
         </Button>
       </div>
-      {activeTasks && <div role="alert" className="grid gap-2 rounded-card bg-white p-4 text-[14px]">
+      {activeTasks && <div role="alert" className="grid gap-2 rounded-card border border-hairline bg-surface-control p-4 text-[14px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
         <p className="font-black text-red-text">{t.credentials.projectSettings.deleteBlocked}</p>
         <ul className="grid gap-2">{activeTasks.map(task => <li key={task.id}><Link className="inline-flex min-h-9 items-center font-bold underline [overflow-wrap:anywhere]" to={`${tasksPath(project.name)}/${task.id}`}>{t.credentials.projectSettings.viewTaskPrefix}{task.id} · {task.status}</Link></li>)}</ul>
       </div>}
       {busy && (
-        <div role="alert" className="flex flex-col gap-2.5 rounded-card bg-white px-[18px] py-4 shadow-[inset_0_0_0_2px_var(--red)]">
+        <div role="alert" className="flex flex-col gap-2.5 rounded-card bg-surface-control px-[18px] py-4 shadow-[inset_0_0_0_2px_var(--red)] [[data-skin=plate]_&]:bg-white">
           <span className="text-[15px] font-black text-red-text">{t.projects.settings.danger.notIdleTitle}</span>
           <span className="text-[14px] text-ink-700">{t.projects.settings.danger.notIdleBody}</span>
           <ul aria-label={t.projects.settings.danger.busyList} className="flex flex-col gap-2">

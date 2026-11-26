@@ -1,11 +1,12 @@
 // Loop Now desktop shell: launches and supervises loop-server, the window loads the console it serves on the same port, and the menu bar
 // icon shows the state.
 // The shell is only a shell; it contains no business logic.
-import { app, clipboard, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, dialog, ipcMain, nativeTheme, powerMonitor, session, shell, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Badge } from './badge'
+import { parseAppearance } from './bridge'
 import { handlePathPicker } from './dialogs'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
@@ -92,10 +93,13 @@ function run(): void {
     // userData/tls and is maintained by the server.
     external: { tlsDir: externalTLSDir, choosePort: () => choosePort(settings.read().externalPort ?? 0) },
   })
+  const savedAppearance = settings.read().appearance
+  if (savedAppearance) nativeTheme.themeSource = savedAppearance.mode
   const window = new MainWindow({
     // The window title for the default profile carries no name.
     profile: profile?.label === defaultProfile ? undefined : profile?.label,
     background,
+    backgroundColor: savedAppearance?.backgroundColor ?? (nativeTheme.shouldUseDarkColors ? '#000000' : '#FFFFFF'),
     onFirstShow: (win) => void checkGit(win),
     quitting: () => quitting,
     note,
@@ -295,6 +299,14 @@ function run(): void {
     setAppMenu(() => void quit(true))
     handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path), badge: (count) => badge.set(count) })
     handlePathPicker({ trusted: (event) => window.trusts(event), window: () => window.browserWindow, platform })
+    ipcMain.on('loop-now:appearance', (event, raw) => {
+      if (!window.trusts(event)) return
+      const appearance = parseAppearance(raw)
+      if (!appearance) return
+      nativeTheme.themeSource = appearance.mode
+      window.setBackgroundColor(appearance.backgroundColor)
+      settings.update({ appearance })
+    })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )

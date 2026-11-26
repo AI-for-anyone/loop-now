@@ -17,6 +17,10 @@ export const chat = {
   queueSend: '排队发送',
   queueSendTitle: '排队发送（Enter）',
   interruptSend: '打断并发送',
+  interruptAction: '打断',
+  interruptSendTitle: (mac: boolean) => `打断并发送（${mac ? '⌘ 回车' : 'Ctrl 回车'}）`,
+  backToLatest: '回到底部',
+  newOutput: '有新输出',
   emptyMessage: '消息不能为空',
   tooLong: (limit: number) => `消息超过上限（${formatBytes(limit)}）`,
   busyBar: (phase: string) => `Agent 正忙（${phase}）`,
@@ -184,6 +188,7 @@ export const chat = {
     // Small heading at the top of the stub and the total number of turns at the bottom.
     title: '轮次',
     total: (count: number) => `共 ${count} 轮`,
+    latest: '跳到底部',
     // Turns from a platform reminder or a sleep wake-up: say which kind of reminder, then the text.
     labeled: (kind: string, text: string) => `${kind}：${text}`,
     noText: '没有文字的一轮',

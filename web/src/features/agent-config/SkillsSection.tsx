@@ -104,7 +104,7 @@ function AddSkillDialog({ agentId, onClose }: { agentId: string; onClose: () => 
   const add = useAddAgentSkill(agentId)
   const duplicate = add.error instanceof ApiError && add.error.code === 'name_conflict'
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => { if (!open && !add.isPending) onClose() }}>
       <DialogContent kind="create" className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{t.config.skills.addTitle}</DialogTitle>

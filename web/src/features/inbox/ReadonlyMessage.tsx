@@ -100,7 +100,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   }
 
   return (
-    <li className="rounded-card bg-white shadow-[3px_3px_0_rgb(24_38_94/.12)]">
+    <li className="rounded-card border border-hairline bg-surface-control shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.12)]">
       <button
         type="button"
         aria-expanded={open}

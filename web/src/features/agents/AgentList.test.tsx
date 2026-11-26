@@ -169,26 +169,42 @@ describe('Sidebar styling', () => {
   const manager = makeAgent({ name: 'manager', isManager: true })
   const other = makeAgent({ name: 'Researcher', isManager: true })
 
-  it('the project card and the selected Agent row both have a 2px navy border and a 4px solid navy shadow', async () => {
+  it('the project card and the selected Agent row use semantic monochrome chrome in mono skin and preserve the 2px navy border and 4px shadow in Plate skin', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(row).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(row).toHaveClass(
+      'bg-sidebar-active-bg',
+      'font-semibold',
+      'text-sidebar-active-fg',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+    )
     const card = within(sidebar()).getByRole('button', { name: /^Switch scope/ })
-    expect(card).toHaveClass('border-2', 'border-ink', 'bg-paper-raised', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(card).toHaveClass(
+      'border',
+      'border-hairline-strong',
+      'bg-surface-control',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:bg-paper-raised',
+      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+    )
     const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
-    expect(unselected).not.toHaveClass('bg-riso-yellow')
-    expect(unselected).not.toHaveClass('shadow-[4px_4px_0_var(--ink)]')
+    expect(unselected).not.toHaveClass('bg-sidebar-active-bg')
+    expect(unselected).not.toHaveClass('[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]')
   })
 
-  it('the Manager badge in the selected row is white on solid navy; unselected rows keep the semi-transparent navy', async () => {
+  it('the Manager badge uses CTA contrast in the selected row and muted chrome in unselected rows, preserving solid and semi-transparent navy in Plate skin', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(within(row).getByText('Manager')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(within(row).getByText('Manager')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
     const tag = within(within(sidebar()).getByRole('link', { name: /Researcher/ })).getByText('Manager')
-    expect(tag).toHaveClass('bg-ink/45', 'text-white')
-    expect(tag).not.toHaveClass('bg-ink')
+    expect(tag).toHaveClass('bg-sidebar-hover', 'text-sidebar-muted', '[[data-skin=plate]_&]:bg-ink/45', '[[data-skin=plate]_&]:text-white')
+    expect(tag).not.toHaveClass('bg-cta-bg')
+    expect(tag).not.toHaveClass('[[data-skin=plate]_&]:bg-ink')
   })
 
   // Redesign step 3: the selected Manager row used to leave only 66px for the name
@@ -213,18 +229,25 @@ describe('Sidebar styling', () => {
     expect(within(unselected).getByText('Researcher')).toHaveAttribute('title', 'Researcher')
   })
 
-  it('the sidebar scroll area uses a thin semi-transparent white scrollbar on the blue background', async () => {
+  it('the sidebar scroll area uses a thin hairline scrollbar in mono skin and preserves the semi-transparent white scrollbar in Plate skin', async () => {
     setup([manager])
     const list = await within(sidebar()).findByRole('list', { name: 'Agents' })
     const scroller = list.closest('.overflow-y-auto')!
-    expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:rgb(255_255_255/.45)_transparent]')
+    expect(scroller).toHaveClass(
+      '[scrollbar-width:thin]',
+      '[scrollbar-color:var(--hairline-strong)_transparent]',
+      '[[data-skin=plate]_&]:[scrollbar-color:rgb(255_255_255/.45)_transparent]',
+    )
   })
 
   it('the search box is 34px tall; the shortcut hint has a thin border', async () => {
     setup([manager])
     const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
-    expect(search.closest('label')).toHaveClass('h-[34px]', 'bg-ink/[0.42]')
-    expect(search.closest('label')!.querySelector('kbd')).toHaveClass('border', 'border-white/45')
+    const box = search.parentElement!
+    expect(box).toHaveClass('h-[34px]', 'border-sidebar-border', 'bg-surface-control', '[[data-skin=plate]_&]:bg-ink/[0.42]')
+    const kbd = box.querySelector('kbd')!
+    const shortcut = kbd.closest('button') ?? kbd
+    expect(shortcut).toHaveClass('border', 'border-sidebar-border', '[[data-skin=plate]_&]:border-white/45')
   })
 
   it('the halftone circle and the two color dots in the lower middle are decoration: hidden from screen readers, not blocking clicks, placed in a slot shown depending on the height', async () => {

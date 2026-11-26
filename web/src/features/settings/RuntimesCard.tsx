@@ -33,7 +33,7 @@ export function RuntimesCard() {
         <Button
           size="sm"
           variant="secondary"
-          className="h-[34px] rounded-full border-2 border-ink bg-paper-raised px-5 text-[13.5px] font-black"
+          className="h-[34px] px-5 text-[13.5px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black"
           disabled={refresh.isPending || runtimes.isPending}
           onClick={() => refresh.mutate()}
         >
@@ -66,7 +66,7 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
   return (
     // Redesign: a white card with a 2px navy outline and a solid navy offset shadow; the name is in display type, followed by
     // a status pill and the version number in monospace.
-    <section aria-label={name} className="mr-[5px] mb-[5px] flex min-w-0 flex-col gap-2.5 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-[5px_5px_0_var(--ink)]">
+    <section aria-label={name} className="flex min-w-0 flex-col gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface [[data-skin=plate]_&]:mr-[5px] [[data-skin=plate]_&]:mb-[5px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]">
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
         <span className="font-display-cn text-[26px] leading-[1.1]">{name}</span>
         {runtime.version && (

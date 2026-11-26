@@ -184,8 +184,10 @@ export function InstallSourceDialog({
                   <label
                     key={value}
                     className={cn(
-                      'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border-2 px-3.5 text-[13.5px] font-bold has-[:focus-visible]:shadow-focus',
-                      kind === value ? 'border-ink bg-riso-yellow' : 'border-ink/20 bg-white',
+                      'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-[13.5px] font-semibold has-[:focus-visible]:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:font-bold',
+                      kind === value
+                        ? 'border-ink bg-surface-active text-ink [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow'
+                        : 'border-hairline-strong bg-surface-control text-ink-700 hover:bg-surface-hover [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:text-ink',
                     )}
                   >
                     <input
@@ -215,7 +217,7 @@ export function InstallSourceDialog({
                     const done = installed.includes(source.id)
                     return (
                       <li key={source.id}>
-                        <label className={cn('flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input bg-white px-3 py-2.5 shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)] has-[:checked]:shadow-[inset_0_0_0_2px_var(--ink)]', done && 'cursor-default opacity-60')}>
+                        <label className={cn('flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input border border-hairline-strong bg-surface-control px-3 py-2.5 has-[:checked]:border-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)] [[data-skin=plate]_&]:has-[:checked]:shadow-[inset_0_0_0_2px_var(--ink)]', done && 'cursor-default opacity-60')}>
                           <input type="radio" name={`${id}-builtin`} value={source.id} disabled={done} checked={builtinId === source.id} onChange={() => setBuiltinId(source.id)} className="mt-1 accent-riso-blue" />
                           <span className="grid min-w-0 gap-0.5">
                             <span className="text-[14px] font-black">

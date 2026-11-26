@@ -117,7 +117,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
       <AlertTitle>{message}</AlertTitle>
       {error instanceof ApiError && error.code === 'name_conflict' && <AlertDescription>{t.skills.nameConflictHint}</AlertDescription>}
       <AlertAction>
-        <Button size="icon-sm" variant="secondary" className="bg-white text-red-text hover:bg-white/80" onClick={dismiss}>
+        <Button size="icon-sm" variant="secondary" className="bg-surface-control text-red-text hover:bg-surface-hover [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white/80" onClick={dismiss}>
           <XIcon />
           <span className="sr-only">{t.common.close}</span>
         </Button>

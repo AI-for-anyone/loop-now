@@ -41,13 +41,13 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-ticket bg-ink px-3 py-1.5 text-[12.5px] font-bold text-white",
+          "z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-ticket bg-tooltip-bg px-3 py-1.5 text-[12px] font-medium text-tooltip-fg shadow-floating [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:shadow-none",
           className
         )}
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="z-50 fill-ink" />
+        <TooltipPrimitive.Arrow className="z-50 fill-tooltip-bg" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )

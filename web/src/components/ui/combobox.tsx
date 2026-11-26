@@ -95,7 +95,10 @@ export function Combobox({
         aria-controls={open ? listId : undefined}
         aria-invalid={invalid || undefined}
         disabled={disabled}
-        className={cn(fieldClass, "flex h-11 items-center gap-2 text-left aria-expanded:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]")}
+        className={cn(
+          fieldClass,
+          "flex h-11 items-center gap-2 text-left aria-expanded:border-ink aria-expanded:shadow-focus [[data-skin=plate]_&]:aria-expanded:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
+        )}
         {...aria}
       >
         <span className={cn("min-w-0 flex-1 truncate", !selected && "text-ink-500")}>
@@ -107,7 +110,7 @@ export function Combobox({
         <PopoverPrimitive.Content
           align="start"
           sideOffset={8}
-          className="z-50 flex w-(--radix-popover-trigger-width) min-w-64 flex-col gap-1.5 rounded-card bg-paper-raised p-2 text-ink shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)] outline-none"
+          className="z-50 flex w-(--radix-popover-trigger-width) min-w-64 flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-elevated p-2 text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]"
           onOpenAutoFocus={(event) => {
             event.preventDefault()
             ;(event.currentTarget as HTMLElement).querySelector("input")?.focus()
@@ -125,13 +128,13 @@ export function Combobox({
               setActive(0)
             }}
             onKeyDown={onKeyDown}
-            className="h-[38px] w-full rounded-full border-0 bg-tint-blue px-3.5 text-[13.5px] text-ink outline-none placeholder:text-ink-500 focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]"
+            className="h-[36px] w-full rounded-input border border-hairline bg-surface-subtle px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-500 focus-visible:border-ink [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]"
           />
           <ul id={listId} role="listbox" aria-label={filterLabel} className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
             {visible.length === 0 && <li className="px-3 py-2 text-[13.5px] text-ink-500">{emptyText}</li>}
             {visible.map((option, index) => [
               option.group && option.group !== visible[index - 1]?.group && (
-                <li key={`group:${option.group}`} role="presentation" className="px-3 pt-1.5 text-[12px] font-black text-ink-500">
+                <li key={`group:${option.group}`} role="presentation" className="px-3 pt-1.5 text-[11.5px] font-semibold text-ink-500 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black">
                   {option.group}
                 </li>
               ),
@@ -146,11 +149,11 @@ export function Combobox({
                 onClick={() => choose(option)}
                 className={cn(
                   "flex min-h-[38px] cursor-pointer flex-wrap items-baseline gap-x-2.5 rounded-ticket px-3 py-1.5 text-[13.5px]",
-                  option.value === value && "bg-riso-yellow font-bold",
-                  index === active && option.value !== value && "bg-tint-blue"
+                  option.value === value && "bg-surface-active font-semibold [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-bold",
+                  index === active && option.value !== value && "bg-surface-hover [[data-skin=plate]_&]:bg-tint-blue"
                 )}
               >
-                <span className="font-bold">{option.label}</span>
+                <span className="font-medium [[data-skin=plate]_&]:font-bold">{option.label}</span>
                 {option.hint && <span className="font-mono text-[12px] text-ink-500">{option.hint}</span>}
               </li>,
             ])}

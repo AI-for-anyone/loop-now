@@ -193,10 +193,20 @@ describe('Header and tab layout', () => {
     return { user, title, header: title.closest('header')! }
   }
 
-  it('the title uses the display font (up to 60px on narrow screens as before, 40px on wide screens, offset shadow kept), with the Manager badge and the status label next to it', async () => {
+  it('the title uses crisp mono typography by default and keeps the display font and offset shadow in Plate skin, with the Manager badge and the status label next to it', async () => {
     const { title, header } = await open(makeAgent({ name: 'manager', isManager: true }))
-    expect(title).toHaveClass('font-display-cn', 'text-[clamp(38px,6vw,60px)]', 'text-riso-blue', '[text-shadow:4px_4px_0_var(--riso-pink)]')
-    expect(title).toHaveClass('nav:text-[40px]', 'nav:leading-none', 'nav:[text-shadow:3px_3px_0_var(--riso-pink)]')
+    expect(title).toHaveClass('font-sans', 'text-[22px]', 'font-semibold', 'text-ink')
+    expect(title).toHaveClass(
+      '[[data-skin=plate]_&]:font-display-cn',
+      '[[data-skin=plate]_&]:text-[clamp(38px,6vw,60px)]',
+      '[[data-skin=plate]_&]:text-riso-blue',
+      '[[data-skin=plate]_&]:[text-shadow:4px_4px_0_var(--riso-pink)]',
+    )
+    expect(title).toHaveClass(
+      '[[data-skin=plate]_&]:nav:text-[40px]',
+      '[[data-skin=plate]_&]:nav:leading-none',
+      '[[data-skin=plate]_&]:nav:[text-shadow:3px_3px_0_var(--riso-pink)]',
+    )
     expect(within(header).getByTitle('Project Manager')).toHaveTextContent('Manager')
     await waitFor(() => expect(header.querySelector('[data-agent-status]')).toHaveTextContent('Idle'))
   })
@@ -205,14 +215,14 @@ describe('Header and tab layout', () => {
     server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...runtimeDefinitions().runtimes, acpCommandDefinition()] })))
     const { header } = await open(makeAgent({ name: 'Agent H', model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId }))
     const tag = await within(header).findByText('Hermes', { selector: '.font-mono' })
-    expect(tag).toHaveClass('bg-tint-blue')
+    expect(tag).toHaveClass('border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
     expect(header).not.toHaveTextContent(acpRuntimeId)
     expect(header).not.toHaveTextContent('default')
   })
 
-  it('the model sits in a monospace light-blue tag; the address sits in a dashed box, and the button next to it copies the address and says it was copied', async () => {
+  it('the model sits in a monospace subtle tag (light-blue in Plate); the address sits in a dashed box, and the button next to it copies the address and says it was copied', async () => {
     const { user, header } = await open(makeAgent({ name: 'Agent A', address: 'test-org/test-project/Agent A' }))
-    expect(within(header).getByText('anthropic · claude-sonnet-5-5')).toHaveClass('font-mono', 'bg-tint-blue')
+    expect(within(header).getByText('anthropic · claude-sonnet-5-5')).toHaveClass('font-mono', 'border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
     const address = within(header).getByText('test-org/test-project/Agent A')
     expect(address).toHaveClass('font-mono')
     expect(address.parentElement).toHaveClass('border-dashed')
@@ -230,7 +240,7 @@ describe('Header and tab layout', () => {
     expect(within(header).queryByRole('button', { name: 'CopyAddress' })).toBeNull()
   })
 
-  it('the overprint decoration in the top-right corner is hidden from screen readers; it shows only when the header is wide enough, and then the text makes room for it instead of running under it', async () => {
+  it('the overprint decoration in the top-right corner is hidden from screen readers; it shows only when the header is wide enough, and then the text makes room for it in Plate skin instead of running under it', async () => {
     const { header, title } = await open(makeAgent({ name: 'Agent A' }))
     const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
@@ -240,14 +250,14 @@ describe('Header and tab layout', () => {
     expect(deco).toHaveClass('nav:top-2', 'nav:scale-[0.6]', 'origin-top-right')
     // The header is a container: the layout follows its own width, not the window width.
     expect(header).toHaveClass('@container')
-    // The block holding the title, badges, model and address leaves room for the decoration: 316px
+    // In Plate skin, the block holding the title, badges, model and address leaves room for the decoration: 316px
     // on narrow screens as before, and 196px on wide screens once the decoration has shrunk.
     const row = title.closest('[data-agent-title-row]')!
-    expect(row).toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
+    expect(row).toHaveClass('[[data-skin=plate]_&]:@[820px]:pr-[316px]', '[[data-skin=plate]_&]:nav:@[820px]:pr-[196px]')
     expect(row).toContainElement(within(header).getByText('anthropic · claude-sonnet-5-5'))
   })
 
-  it('on wide screens the header is compact: right of the title, one row holds identity, status, runtime, model and address and wraps when it does not fit; the breadcrumb is tighter; the sheet\'s top edge is closer to the top of the window', async () => {
+  it('on wide screens the header is compact: right of the title, one row holds identity, status, runtime, model and address and wraps when it doesn\'t fit; the breadcrumb is tighter; the sheet\'s top edge is closer to the top of the window', async () => {
     const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: 'test-org/test-project/manager' }))
     expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
     const row = title.closest('[data-agent-title-row]')!
@@ -262,16 +272,18 @@ describe('Header and tab layout', () => {
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
   })
 
-  it('the four tabs are index tabs stuck to the top edge of the sheet: the current one is yellow, the others beige', async () => {
+  it('the four tabs use hairline underline tabs in mono skin and preserve yellow/beige index tabs in Plate skin', async () => {
     const agent = makeAgent({ name: 'Agent A' })
     await open(agent)
     const tabs = screen.getByRole('navigation', { name: 'Agent A' })
     expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config', 'Folder', 'Inbox'])
     const current = within(tabs).getByRole('link', { name: 'Config' })
     expect(current).toHaveAttribute('aria-current', 'page')
-    expect(current).toHaveClass('h-10', 'bg-riso-yellow', 'border-b-0')
-    expect(within(tabs).getByRole('link', { name: 'Chat' })).toHaveClass('h-[34px]', 'bg-paper-tab')
-    expect(within(tabs).getByRole('link', { name: 'Chat' })).toHaveAttribute('href', defaultAgentPath(agent.id, 'chat'))
+    expect(current).toHaveClass('border-b-2', 'border-ink', 'font-semibold', 'text-ink')
+    expect(current).toHaveClass('[[data-skin=plate]_&]:h-10', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:border-b-0')
+    const chat = within(tabs).getByRole('link', { name: 'Chat' })
+    expect(chat).toHaveClass('border-transparent', 'text-ink-500', '[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab')
+    expect(chat).toHaveAttribute('href', defaultAgentPath(agent.id, 'chat'))
   })
 
   it('the tab content sits on a sheet; the header and the tabs are outside the sheet', async () => {

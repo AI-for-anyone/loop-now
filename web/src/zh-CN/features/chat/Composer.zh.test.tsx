@@ -1,15 +1,18 @@
 import { screen } from '@testing-library/react'
-import { expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { afterEach, expect, it } from 'vitest'
 import { Composer, KeyHint } from '@/features/chat/Composer'
+import { resetChatDraftsForTest } from '@/features/chat/draft-store'
 import { renderWithQuery } from '@/test/render'
 
 // The Chinese UI writes the Enter key as “回车” (Enter) in the chat page's input area, but keeps “Enter” in the key hints used
 // elsewhere (the task node input). Moved from src/features/chat/Composer.test.tsx, which checks the same layout in English.
 
-// "Printed sheet" redesign: the input area merges into the bottom of the sheet.
+afterEach(() => resetChatDraftsForTest())
+
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('when busy, the key hints switch to queue and interrupt, and with an empty input the send button becomes a navy stop button', () => {
+it('when busy, the key hints switch to queue and interrupt, Stop stays available even with a draft, and an explicit Interrupt button appears', async () => {
   mountBar(true)
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
   // The Chinese UI always writes the Enter key as “回车” (Enter); modifier keys are written as before.
@@ -20,15 +23,20 @@ it('when busy, the key hints switch to queue and interrupt, and with an empty in
   expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
   expect(screen.queryByText('换行')).toBeNull()
   const stop = screen.getByRole('button', { name: '停止当前回复' })
-  expect(stop).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-ink', 'text-white')
+  expect(stop).toHaveClass('size-10', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
+
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '新的指示')
+  expect(screen.getByRole('button', { name: '停止当前回复' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '打断并发送' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '排队发送' })).toBeEnabled()
 })
 
-it('the key hints used elsewhere (the task node input) stay as they were: centered, secondary text color, keys on white with a thin border', () => {
+it('the key hints used elsewhere (the task node input) stay centered with secondary text and semantic surface-control keys', () => {
   renderWithQuery(<KeyHint />)
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
-  expect(hint.querySelector('kbd')).toHaveClass('bg-white', 'border-ink/25', 'font-mono')
+  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono', '[[data-skin=plate]_&]:bg-white', '[[data-skin=plate]_&]:border-ink/25')
   // The key names are also written as before.
   expect(hint).toHaveTextContent('Enter排队·Ctrl Enter立即打断')
   expect(hint).not.toHaveTextContent('回车')

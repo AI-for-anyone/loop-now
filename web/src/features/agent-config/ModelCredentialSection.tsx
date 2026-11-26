@@ -197,13 +197,13 @@ function ApiKeyDialog({ agent, onClose, onSaved }: { agent: Schemas['Agent']; on
       setKey(''); await onSaved(); onClose()
     }
   }
-  return <Dialog open onOpenChange={open => { if (!open) { setKey(''); onClose() } }}><DialogContent kind="edit">
+  return <Dialog open onOpenChange={open => { if (!open && !pending) { setKey(''); onClose() } }}><DialogContent kind="edit">
     <DialogHeader><DialogTitle>{t.config.modelLogin.setKey}</DialogTitle></DialogHeader>
     <form className="grid gap-4" onSubmit={event => void save(event)} autoComplete="off">
       <p className="text-[14px] break-words">{t.common.labelledValue(t.config.modelLogin.provider, agent.model.provider)}</p>
       <Input type="password" autoComplete="new-password" aria-label="API Key" value={key} onChange={event => { setKey(event.target.value); setInvalid(false) }} aria-invalid={invalid || undefined} />
       <FieldError message={invalid ? t.config.modelLogin.keyRequired : fieldMessages(error, field => field === 'key')} /><ErrorAlert error={unmatchedFieldError(error, field => field === 'key')} />
-      <DialogFooter><Button type="button" variant="secondary" onClick={() => { setKey(''); onClose() }}>{t.common.cancel}</Button><Button type="submit" disabled={pending}>{t.common.save}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="secondary" disabled={pending} onClick={() => { setKey(''); onClose() }}>{t.common.cancel}</Button><Button type="submit" disabled={pending}>{t.common.save}</Button></DialogFooter>
     </form>
   </DialogContent></Dialog>
 }

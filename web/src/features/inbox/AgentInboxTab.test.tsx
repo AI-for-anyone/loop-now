@@ -149,7 +149,7 @@ describe('The inbox on the sheet', () => {
     await renderAgentInbox(received())
     const all = screen.getByRole('radio', { name: 'All' })
     const unread = screen.getByRole('radio', { name: 'Unread only' })
-    for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-full', 'border-2')
+    for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-ticket', 'border-2', '[[data-skin=plate]_&]:rounded-full')
     expect(all).toHaveAttribute('aria-checked', 'true')
     expect(all).toHaveClass('data-[state=on]:bg-riso-yellow', 'data-[state=on]:border-ink', 'data-[state=on]:shadow-[3px_3px_0_var(--ink)]')
     const bar = all.closest('[data-inbox-bar]')!

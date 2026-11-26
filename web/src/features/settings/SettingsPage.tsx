@@ -18,6 +18,7 @@ import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/
 import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { ContextFolderBody } from '@/features/folders/FolderSections'
+import { AppearanceCard } from '@/features/settings/AppearanceCard'
 import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
 import { RuntimesCard } from '@/features/settings/RuntimesCard'
 import { WritingSettings } from '@/features/writing/WritingSettings'
@@ -35,12 +36,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 // The numbered sections of global settings; their order is the order of the section ruler. The local mode section keeps
 // LOCAL_MODE_ANCHOR as its id, so links from other pages (#local-mode) keep working.
-const KEYS = ['language', 'import', 'permissions', 'local-mode', 'runtimes', 'writing', 'models', 'folder', 'server', 'cli-templates'] as const
+const KEYS = ['language', 'appearance', 'import', 'permissions', 'local-mode', 'runtimes', 'writing', 'models', 'folder', 'server', 'cli-templates'] as const
 type Key = (typeof KEYS)[number]
 const partId = (key: Key) => (key === 'local-mode' ? LOCAL_MODE_ANCHOR : `settings-${key}`)
 const partTitleId = (key: Key) => `${partId(key)}-title`
 const titles: Record<Key, string> = {
   language: t.settings.language.title,
+  appearance: t.settings.appearance.title,
   import: t.importing.entry.settingsTitle,
   permissions: t.permissions.defaultTitle,
   'local-mode': t.localMode.settings.title,
@@ -119,6 +121,9 @@ export function SettingsPage() {
                 <StickyNote>{t.settings.readonlyHint}</StickyNote>
                 <Part id="language">
                   <LanguagePicker />
+                </Part>
+                <Part id="appearance">
+                  <AppearanceCard labelledBy={partTitleId('appearance')} />
                 </Part>
                 <Part id="import">
                   {/* The import page opens by itself only on a fresh install; here it opens any time. */}

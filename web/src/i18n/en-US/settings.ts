@@ -3,6 +3,28 @@ import type { Messages } from '..'
 export const settings = {
   title: 'Global settings',
   language: { title: 'Language', hint: 'Applies to this browser only. The page reloads when you switch.' },
+  appearance: {
+    title: 'Appearance',
+    hint: 'Saved in this browser only. Changes apply immediately without reloading.',
+    skinLabel: 'Theme',
+    modeLabel: 'Color mode',
+    lightOnlyHint: 'This theme supports light mode only.',
+    skins: {
+      mono: {
+        name: 'Minimal',
+        description: 'High-contrast neutral monochrome workspace with light, dark, and system modes.',
+      },
+      plate: {
+        name: 'Risograph (Classic)',
+        description: 'Original warm paper, navy ink, and fluorescent overprint style (light only).',
+      },
+    },
+    modes: {
+      system: 'System',
+      light: 'Light',
+      dark: 'Dark',
+    },
+  },
   product: (version: string) => `Loop Now ${version}`,
   serverStatus: { ok: 'Server connected', degraded: 'Server database unavailable' },
   readonlyHint: 'Model settings, local mode and folders can be edited here; server environment configuration remains read-only.',

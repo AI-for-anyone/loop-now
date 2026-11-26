@@ -174,7 +174,7 @@ function SecretInput({
   const action = 'shrink-0 cursor-pointer text-[13px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40'
   if (wasSet && secret.mode !== 'set')
     return (
-      <div id={inputId} aria-describedby={hintId} className={cn('flex h-11 min-w-0 items-center gap-3 rounded-input bg-white px-3.5 shadow-[inset_0_0_0_2px_rgb(24_38_94/.18)]', secret.mode === 'clear' && 'bg-tint-yellow')}>
+      <div id={inputId} aria-describedby={hintId} className={cn('flex h-11 min-w-0 items-center gap-3 rounded-input border border-hairline-strong bg-surface-control px-3.5 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.18)]', secret.mode === 'clear' && 'bg-tint-yellow [[data-skin=plate]_&]:bg-tint-yellow')}>
         <span className="min-w-0 flex-1 truncate text-[14px] text-ink-700">
           {secret.mode === 'clear' ? text.secretCleared : <><span aria-hidden="true" className="tracking-[3px]">{'••••••••'}</span> {text.secretSet}</>}
         </span>

@@ -42,7 +42,7 @@ export function Card({ title, unit, aside, children, className }: { title: strin
   const number = useContext(CardNumber)
   if (number !== null)
     return (
-      <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5', className)}>
+      <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-3.5 border-t border-hairline pt-5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22]', className)}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <HollowNumber data-section-number className="w-auto text-[28px]">
             {String(number).padStart(2, '0')}
@@ -57,7 +57,7 @@ export function Card({ title, unit, aside, children, className }: { title: strin
       </section>
     )
   return (
-    <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-2.5 rounded-panel border-2 border-ink bg-white px-4 py-3.5', className)}>
+    <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-2.5 rounded-panel border border-hairline bg-surface-control px-4 py-3.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink', className)}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
         <h2 id={titleId} className="font-display-cn text-[22px] leading-tight font-normal">
           {title}
@@ -130,7 +130,7 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
         <>
           <ul className="flex flex-col gap-2">
             {wakes.slice(0, 5).map((wake, i) => (
-              <li key={wake.agentId} className={cn('flex flex-col gap-1 rounded-ticket px-2.5 py-2', i === 0 ? 'bg-tint-pink-2' : 'bg-paper/60')}>
+              <li key={wake.agentId} className={cn('flex flex-col gap-1 rounded-ticket px-2.5 py-2', i === 0 ? 'bg-tint-pink-2' : 'bg-surface-subtle [[data-skin=plate]_&]:bg-paper/60')}>
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate font-black">{wake.name}</span>
                   <span className="min-w-0 truncate text-[12px] text-ink-700">{text.wakes.row(cadence(wake), text.wan(wake.avgTokens))}</span>
@@ -141,7 +141,7 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
             ))}
           </ul>
           <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-700">
-            <span aria-hidden="true" className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-black text-ink">
+            <span aria-hidden="true" className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-black text-[#111111] [[data-skin=plate]_&]:text-ink">
               !
             </span>
             <span className="min-w-0 flex-1">{text.wakes.note(top.name, text.wan(top.avgTokens), times !== null && times >= 2 ? times : null)}</span>
@@ -178,7 +178,7 @@ export function ContextCard({ report }: { report: Report }) {
               <span className="col-span-3 flex items-center gap-1.5 text-[12px] whitespace-nowrap text-ink-700 sm:col-span-1">
                 {text.context.compactions(agent.compactions)}
                 {agent.avgInputPerCall > REOPEN_CONTEXT && (
-                  <span title={text.context.reopenTitle} className="rounded-[6px] bg-[var(--status-interrupt)] px-1.5 text-[11px] font-black text-ink">
+                  <span title={text.context.reopenTitle} className="rounded-[6px] bg-[var(--status-interrupt)] px-1.5 text-[11px] font-black text-[#111111] [[data-skin=plate]_&]:text-ink">
                     {text.context.reopen}
                   </span>
                 )}
@@ -208,7 +208,7 @@ export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis:
     <Card title={text.questions.title} unit={text.questions.unit}>
       <dl className="grid grid-cols-3 gap-2">
         {stats.map((stat) => (
-          <div key={stat.label} className="flex min-w-0 flex-col gap-0.5 rounded-ticket bg-paper/60 px-2.5 py-2">
+          <div key={stat.label} className="flex min-w-0 flex-col gap-0.5 rounded-ticket bg-surface-subtle px-2.5 py-2 [[data-skin=plate]_&]:bg-paper/60">
             <dt className="text-[11.5px] leading-snug text-ink-700">{stat.label}</dt>
             <dd className="text-[18px] leading-[1.1] font-bold">{stat.value}</dd>
           </div>
@@ -221,18 +221,18 @@ export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis:
             const scope = scopeOf(question.projectId)
             const body = (
               <>
-                <span className="rounded-[6px] bg-riso-pink px-1.5 text-[11px] font-black text-ink">{question.name}</span>
+                <span className="rounded-[6px] bg-surface-active px-1.5 text-[11px] font-bold text-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:font-black">{question.name}</span>
                 <span className="truncate">{question.text}</span>
                 <span className="text-[11.5px] font-bold whitespace-nowrap text-red-text">
                   {text.questions.waited(text.minutes(Math.max(0, (now - Date.parse(question.askedAt)) / 1000)))}
                 </span>
               </>
             )
-            const row = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border-2 border-ink bg-white px-2.5 py-[7px] shadow-[2px_2px_0_var(--ink)]'
+            const row = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline-strong bg-surface-control px-2.5 py-[7px] shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'
             return (
               <li key={question.messageId}>
                 {scope ? (
-                  <Link to={agentPath(scope, question.agentId, 'chat')} className={cn(row, 'outline-none hover:bg-tint-yellow focus-visible:shadow-focus')}>
+                  <Link to={agentPath(scope, question.agentId, 'chat')} className={cn(row, 'outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:hover:bg-tint-yellow')}>
                     {body}
                   </Link>
                 ) : (
@@ -326,7 +326,7 @@ export function ReasonsCard({ report }: { report: Report }) {
       {reasons.length ? (
         <ul className="flex flex-col gap-1.5">
           {reasons.slice(0, 6).map((reason) => (
-            <li key={`${reason.kind}:${reason.code}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket bg-paper/60 px-2.5 py-1.5">
+            <li key={`${reason.kind}:${reason.code}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket bg-surface-subtle px-2.5 py-1.5 [[data-skin=plate]_&]:bg-paper/60">
               <span className="flex min-w-0 items-center gap-[7px]">
                 <span
                   className={cn(
@@ -378,7 +378,7 @@ export function HealthCard({ report }: { report: Report }) {
             </thead>
             <tbody>
               {report.agents.map((agent) => (
-                <tr key={agent.agentId} className="border-t border-ink/10">
+                <tr key={agent.agentId} className="border-t border-hairline [[data-skin=plate]_&]:border-ink/10">
                   <th scope="row" className="max-w-[160px] truncate px-2 py-2 text-left font-bold">
                     {agent.name}
                   </th>
@@ -476,7 +476,7 @@ export function ProcessCard({ report }: { report: Report }) {
     <Card title={text.process.title}>
       <dl className="flex flex-col">
         {rows.map((row) => (
-          <div key={row.label} className="flex flex-wrap items-baseline gap-x-2 border-b border-ink/10 py-[7px] last:border-b-0">
+          <div key={row.label} className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-[7px] last:border-b-0 [[data-skin=plate]_&]:border-ink/10">
             <dt className="text-[12.5px] text-ink-700">{row.label}</dt>
             <dd className="ml-auto text-[17px] font-bold">{row.value}</dd>
             {row.note && <dd className="text-[11.5px] text-ink-500">{row.note}</dd>}

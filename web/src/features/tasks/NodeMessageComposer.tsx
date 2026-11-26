@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpIcon } from 'lucide-react'
+import { ArrowUpIcon, ZapIcon } from 'lucide-react'
 import { api, ApiError, call, type Schemas } from '@/api/client'
 import { taskKeys } from '@/api/tasks'
 import { taskInboxKeys, readTaskInboxAction, validateTaskInboxReceipt } from '@/api/task-inbox'
@@ -100,24 +100,28 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   }
   const editor = <Textarea aria-label={t.tasks.draft} placeholder={reply ? t.consoleInbox.replyPlaceholder : t.tasks.draftPlaceholder(draft.agentName)} value={text} readOnly={!current} onChange={event => onChange(event.target.value)} onKeyDown={keyDown} rows={1} className={inputClass} />
   const sendLabel = pending || answering ? t.tasks.sending : t.chat.send
-  const showStop = current && stop !== undefined && !reply && !unknown && !text.trim() && !draft.images?.length
+  const hasDraft = Boolean(text.trim() || draft.images?.length)
+  const showStop = current && stop !== undefined
+  const showInterrupt = current && stop !== undefined && canSend && hasDraft && !reply && !unknown
+  const showSend = current && (!showStop || hasDraft || reply !== undefined || unknown)
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
   // Draft images sit inside the same border, above the text row; the corners tighten when they show.
-  // Redesign step 5 (same as the chat page's input area): a round add-image button on the left, a pill input with a navy outline in the
-  // middle, and a fluorescent-pink round stamp for sending on the right (it can stop while busy).
-  // Images waiting to be sent sit inside the pill, above the text row, and the corners tighten a little then.
-  const field = (addButton?: ReactNode, strip?: ReactNode) => <div className="flex min-w-0 items-end gap-2.5">
+  // While busy, Stop stays available even when a draft is present, and an explicit Interrupt button appears beside Send.
+  const field = (addButton?: ReactNode, strip?: ReactNode) => <div className="flex min-w-0 items-end gap-2">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
-    <div data-node-composer className={cn('flex min-h-11 min-w-0 flex-1 flex-col border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25', strip || reply ? 'rounded-[18px] pt-1.5' : 'rounded-[22px]')}>
+    <div data-node-composer className={cn('flex min-h-11 min-w-0 flex-1 flex-col rounded-panel border border-hairline-strong bg-surface-control px-4 shadow-surface focus-within:border-ink focus-within:ring-2 focus-within:ring-ink/15 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:focus-within:border-riso-blue [[data-skin=plate]_&]:focus-within:ring-riso-blue/25', strip || reply ? 'pt-1.5 [[data-skin=plate]_&]:rounded-[18px]' : '[[data-skin=plate]_&]:rounded-[22px]')}>
       {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
       {strip}
       {editor}
     </div>
-    {showStop ? <Button type="button" size="icon" className="mr-[3px] size-11 border-2 border-ink bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
-      : current && <Button type="button" variant="interrupt" size="icon" className="mr-[3px] size-11 border-2 border-ink" aria-label={sendLabel} title={sendLabel} disabled={reply ? answering : !canSend || pending || unknown} onClick={() => void (reply ? answerQuestion(reply, 'queue') : submit())}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>}
+    <div className="flex shrink-0 items-center gap-1.5">
+      {showStop && <Button type="button" size="icon" className="size-10 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>}
+      {showInterrupt && <Button type="button" variant="secondary" className="h-10 shrink-0 gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-3 text-[13px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink" aria-label={t.chat.interruptSend} title={t.chat.interruptSendTitle(mac)} disabled={!canSend || pending} onClick={() => void submit('interrupt')}><ZapIcon aria-hidden="true" className="size-3.5 shrink-0 text-pink-text" strokeWidth={2.5} /><span className="hidden sm:inline">{t.chat.interruptAction}</span></Button>}
+      {showSend && <Button type="button" variant="interrupt" size="icon" className="size-10 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink" aria-label={sendLabel} title={sendLabel} disabled={reply ? answering : !canSend || pending || unknown} onClick={() => void (reply ? answerQuestion(reply, 'queue') : submit())}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>}
+    </div>
   </div>
   return <div className="grid gap-2">
-    <div className="flex min-w-0 flex-col">{queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[50px]')}>{queue}</div>}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{field}</ImagePicker> : field()}</div>
+    <div className="flex min-w-0 flex-col">{queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[50px]')}>{queue}</div>}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white">{field}</ImagePicker> : field()}</div>
     {current && <div className={cn('flex flex-wrap items-center gap-x-3.5 gap-y-1.5', imageLimits && onImages && 'sm:pl-[52px]')}>
       <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-[12px] text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} />
       {stop !== undefined && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}

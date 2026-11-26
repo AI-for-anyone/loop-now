@@ -36,7 +36,7 @@ export function DeliveriesList({ pluginId, compact, projectId }: { pluginId: str
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {!compact && (
-        <ToggleGroup aria-label={text.filter} value={status} onValueChange={(value) => value && setStatus(value as DeliveryStatus | 'all')} className="self-start border-2 border-ink bg-white p-[3px]">
+        <ToggleGroup aria-label={text.filter} value={status} onValueChange={(value) => value && setStatus(value as DeliveryStatus | 'all')} className="self-start border border-hairline-strong bg-surface-control p-[3px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white">
           {(['all', 'pending', 'delivered', 'failed'] as const).map((value) => (
             <ToggleGroupItem key={value} value={value} className="min-h-7 px-3 text-[13px] data-[state=on]:shadow-none">
               {value === 'all' ? text.all : text.status[value]}
@@ -148,7 +148,12 @@ export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?
   )
 }
 
-const levelTone: Record<Schemas['PluginLogEntry']['level'], string> = { debug: 'text-white/55', info: 'text-white/85', warn: 'text-riso-yellow', error: 'text-[#FF8A80]' }
+const levelTone: Record<Schemas['PluginLogEntry']['level'], string> = {
+  debug: 'text-code-muted [[data-skin=plate]_&]:text-white/55',
+  info: 'text-code-fg [[data-skin=plate]_&]:text-white/85',
+  warn: 'text-pink-text [[data-skin=plate]_&]:text-riso-yellow',
+  error: 'text-red-text [[data-skin=plate]_&]:text-[#FF8A80]',
+}
 
 // The plugin's host logs: newest first, kept for 7 days; earlier ones can be loaded further down.
 export function LogsView({ pluginId, compact }: { pluginId: string; compact?: number }) {
@@ -163,10 +168,10 @@ export function LogsView({ pluginId, compact }: { pluginId: string; compact?: nu
       ) : entries.length === 0 ? (
         <Quiet>{text.empty}</Quiet>
       ) : (
-        <ol aria-label={t.plugins.detail.logs} className="min-w-0 overflow-x-auto rounded-input bg-ink px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-white">
+        <ol aria-label={t.plugins.detail.logs} className="min-w-0 overflow-x-auto rounded-input border border-code-border bg-code-bg px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-code-fg [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white">
           {entries.map((entry) => (
             <li key={entry.id} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-              <time dateTime={entry.at} className="text-white/60">
+              <time dateTime={entry.at} className="text-code-muted [[data-skin=plate]_&]:text-white/60">
                 {text.clock(entry.at)}
               </time>{' '}
               <span className={cn('font-bold', levelTone[entry.level])}>{entry.level}</span> {entry.line}

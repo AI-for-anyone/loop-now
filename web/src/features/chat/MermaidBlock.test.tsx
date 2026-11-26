@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { setSkin, setThemeMode } from '@/theme/store'
 import { Markdown } from './Markdown'
 import { renderMermaid } from './mermaid-renderer'
 vi.mock('./mermaid-renderer', () => ({ renderMermaid: vi.fn() }))
@@ -65,4 +66,18 @@ it('a changed source hides the old diagram at once, results after unmount do not
   rerender(<Markdown text={fence('flowchart LR\n C-->D\n')} />)
   expect(container.querySelector('svg')).toBeNull(); await settle(); unmount()
   await act(async () => resolveLater(svg)); expect(container).toBeEmptyDOMElement()
+})
+it('re-renders live when theme mode or skin switches', async () => {
+  draw.mockResolvedValue(svg)
+  render(<Markdown text={fence()} />)
+  await settle()
+  expect(draw).toHaveBeenLastCalledWith(source, { skin: 'mono', resolvedTheme: 'light' })
+
+  act(() => setThemeMode('dark'))
+  await settle()
+  expect(draw).toHaveBeenLastCalledWith(source, { skin: 'mono', resolvedTheme: 'dark' })
+
+  act(() => setSkin('plate'))
+  await settle()
+  expect(draw).toHaveBeenLastCalledWith(source, { skin: 'plate', resolvedTheme: 'light' })
 })

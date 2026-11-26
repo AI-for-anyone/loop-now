@@ -21,7 +21,7 @@ import { PluginActionButtons } from './PluginActions'
 type AgentPlugin = Schemas['AgentPlugin']
 const text = t.plugins.agent
 
-const listClass = 'grid min-w-0 divide-y divide-ink/10 overflow-hidden rounded-card bg-white @container'
+const listClass = 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control @container [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
 // When wide, the name takes a fixed column and the summaries line up in one column; when narrow, the name and the expand marker are on
 // top and the summary fills the next row. Row height stays within 48–52px either way.
 const rowGrid = 'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-1.5 text-left @min-[36rem]:h-12 @min-[36rem]:grid-cols-[11rem_minmax(0,1fr)_auto] @min-[36rem]:py-0'
@@ -96,7 +96,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
               {accounts.isSuccess && mine.length === 0 && <Quiet>{text.noAccounts}</Quiet>}
               <div className="flex flex-wrap gap-2">
                 {mine.map((account) => (
-                  <label key={account.id} className="inline-flex min-h-9 items-center gap-2 rounded-full border-[1.5px] border-ink/30 bg-white px-3.5 text-[13.5px] font-bold has-[:checked]:border-riso-blue has-[:checked]:bg-tint-blue has-[:disabled]:opacity-50">
+                  <label key={account.id} className="inline-flex min-h-9 items-center gap-2 rounded-full border border-hairline-strong bg-surface-control px-3.5 text-[13.5px] font-semibold has-[:checked]:border-riso-blue has-[:checked]:bg-tint-blue has-[:disabled]:opacity-50 [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink/30 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold">
                     <input
                       type={kind.multiple ? 'checkbox' : 'radio'}
                       name={`${id}-${kind.kind}`}

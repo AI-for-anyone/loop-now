@@ -59,14 +59,14 @@ it('a command result header is a segmented receipt (command | source | time) wit
   const parts = [...line.querySelectorAll('[data-receipt-part]')]
   expect(parts.map(part => part.textContent)).toEqual(['/compact keep the decisions', 'Platform command', expect.stringMatching(/\d{2}:\d{2}$/)])
   expect(parts[0].querySelector('code')).toHaveClass('font-mono', 'font-bold')
-  expect(parts[1]).toHaveClass('border-l-[1.5px]', 'border-dashed')
-  expect(parts[2]).toHaveClass('border-l-[1.5px]', 'border-dashed', 'font-mono')
-  expect(parts[0].parentElement).toHaveClass('bg-tint-blue', 'rounded-[6px]')
+  expect(parts[1]).toHaveClass('border-l', 'border-hairline', '[[data-skin=plate]_&]:border-l-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+  expect(parts[2]).toHaveClass('border-l', 'border-hairline', 'font-mono', '[[data-skin=plate]_&]:border-l-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+  expect(parts[0].parentElement).toHaveClass('bg-surface-subtle', 'rounded-ticket', '[[data-skin=plate]_&]:bg-tint-blue', '[[data-skin=plate]_&]:rounded-[6px]')
   const reply = screen.getByText('Context compacted: 4200 → about 350 tokens')
   expect(reply).toHaveClass('border-l-2', 'border-dashed')
 })
 
-it('the /resume session list: a solid line on top and dashed lines between rows; the current session is a yellow tag; ID and time in monospace; Resume is a white button with a navy outline', () => {
+it('the /resume session list: a solid line on top and dashed lines between rows; the current session is a yellow tag; ID and time in monospace; Resume uses secondary surface tokens in mono skin and paper/navy in Plate skin', () => {
   render(<CommandLine command="/resume" at="2026-10-31T01:00:00Z" onResume={() => {}} result={{ ...base, command: 'resume', resumeSessions: [
     { id: '12345678-1234-1234-1234-123456789abc', title: 'Fix the resume list', preview: 'Latest discussion', updatedAt: '2026-10-31T01:00:00Z', current: false },
     { id: 'current-full-session-id', title: 'The current session', preview: '', updatedAt: '2026-10-30T01:00:00Z', current: true },
@@ -79,7 +79,14 @@ it('the /resume session list: a solid line on top and dashed lines between rows;
   expect(screen.getByText('Current')).toHaveClass('bg-riso-yellow', 'text-ink', 'font-black')
   expect(screen.getByTitle('12345678-1234-1234-1234-123456789abc')).toHaveClass('font-mono')
   expect(rows[0].querySelector('time')).toHaveClass('font-mono')
-  expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass('border-2', 'border-ink', 'bg-paper-raised')
+  expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass(
+    'border',
+    'border-hairline-strong',
+    'bg-surface-control',
+    '[[data-skin=plate]_&]:border-2',
+    '[[data-skin=plate]_&]:border-ink',
+    '[[data-skin=plate]_&]:bg-paper-raised',
+  )
 })
 
 // The /compact result reads compactRun.compaction from the response: when it compacted, show the

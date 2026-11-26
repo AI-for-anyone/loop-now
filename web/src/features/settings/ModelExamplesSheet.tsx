@@ -64,12 +64,12 @@ export function ModelExamplesSheet({ open, draft, onOpenChange, onInsert }: Mode
         {message && <Alert variant="warning" role="alert"><AlertDescription>{message}</AlertDescription></Alert>}
         {MODEL_EXAMPLES.map(example => {
           const meta = copy.items[example.id]
-          return <section key={example.id} className="grid gap-3 rounded-card bg-white p-4 shadow-print-rest" aria-label={meta.title}>
+          return <section key={example.id} className="grid gap-3 rounded-card border border-hairline bg-surface-control p-4 shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-print-rest" aria-label={meta.title}>
             <div className="grid gap-1">
               <h3 className="text-[16px] font-black">{meta.title}</h3>
               <p className="text-[13px] leading-[1.7] text-ink-500">{meta.description}</p>
             </div>
-            <pre className="max-h-[420px] overflow-auto rounded-card bg-ink p-3 font-mono text-[12px] leading-[1.65] text-white"><code>{exampleJSON(example)}</code></pre>
+            <pre className="max-h-[420px] overflow-auto rounded-card border border-code-border bg-code-bg p-3 font-mono text-[12px] leading-[1.65] text-code-fg [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white"><code>{exampleJSON(example)}</code></pre>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" onClick={() => void copyExample(example)}>{copied === example.id ? <CheckIcon /> : <CopyIcon />}{copied === example.id ? copy.copied : copy.copy}</Button>
               <Button size="sm" onClick={() => insert(example)}>{copy.insert}</Button>

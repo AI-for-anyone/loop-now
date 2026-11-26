@@ -48,7 +48,7 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
 }
 
 const rowClass =
-  'grid min-h-14 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 border-t-[1.5px] border-dashed border-ink/25 px-1 py-2.5 text-ink hover:bg-white/60 sm:grid-cols-[96px_minmax(0,1fr)_max-content]'
+  'grid min-h-14 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 border-t-[1.5px] border-dashed border-ink/25 px-1 py-2.5 text-ink hover:bg-surface-hover sm:grid-cols-[96px_minmax(0,1fr)_max-content] [[data-skin=plate]_&]:hover:bg-white/60'
 
 function PendingRow({ item }: { item: Item }) {
   const { message } = item

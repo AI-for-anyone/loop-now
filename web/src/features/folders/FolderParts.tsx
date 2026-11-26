@@ -27,12 +27,12 @@ export function EntryIcon({ path, type, open = false, className }: { path: strin
 // Icons in the file list and the path bar (redesign): a folder is a yellow folder block with a navy outline and an offset shadow, a file is
 // a white sheet of paper; symlinks and other entries keep the line icons.
 export function FolderBlock({ className }: { className?: string }) {
-  return <span aria-hidden="true" data-folder-icon className={cn('block h-[22px] w-[26px] shrink-0 rounded-[3px_6px_6px_6px] border-2 border-ink bg-riso-yellow shadow-[2px_2px_0_var(--ink)]', className)} />
+  return <span aria-hidden="true" data-folder-icon className={cn('block h-[22px] w-[26px] shrink-0 rounded-[3px_6px_6px_6px] border border-hairline-strong bg-surface-active [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]', className)} />
 }
 
 export function ListIcon({ path, type }: { path: string; type: FolderEntry['type'] }) {
   if (type === 'dir') return <FolderBlock />
-  if (type === 'file') return <span aria-hidden="true" data-file-icon className="mx-[3px] block h-6 w-5 shrink-0 rounded-[3px_8px_3px_3px] border-2 border-ink bg-white" />
+  if (type === 'file') return <span aria-hidden="true" data-file-icon className="mx-[3px] block h-6 w-5 shrink-0 rounded-[3px_8px_3px_3px] border border-hairline-strong bg-surface-control [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white" />
   return <EntryIcon path={path} type={type} className="mx-[5px] size-4" />
 }
 
@@ -79,13 +79,13 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
           aria-label={t.folders.actions(nameOf(path))}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
-          className={cn('inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-white hover:text-ink focus-visible:shadow-focus data-[state=open]:bg-white data-[state=open]:text-ink', className)}
+          className={cn('inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus data-[state=open]:bg-surface-hover data-[state=open]:text-ink [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:data-[state=open]:bg-white', className)}
         >
           <EllipsisIcon aria-hidden="true" className="size-4" strokeWidth={2.2} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={4} onClick={(event) => event.stopPropagation()} className="z-50 min-w-44 rounded-ticket border border-ink/15 bg-paper-raised p-1 shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+        <DropdownMenu.Content align="end" sideOffset={4} onClick={(event) => event.stopPropagation()} className="z-50 min-w-44 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
           {entry.type === 'dir' && (
             <>
               <Item icon={<FilePlusIcon className={icon} />} onSelect={() => actions.create(path, 'file')}>{t.folders.newFile}</Item>
@@ -105,8 +105,8 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
   )
 }
 
-// Buttons on the toolbar at the top of the sheet (redesign): pills with a light paper background and a 2px navy outline, 34 high.
-const pillClass = 'h-[34px] rounded-full border-2 border-ink bg-paper-raised text-[13px] font-black hover:bg-white disabled:hover:bg-paper-raised'
+// Buttons on the toolbar at the top of the sheet: crisp controls in mono skin; pills with paper background and 2px navy outline in Plate skin.
+const pillClass = 'h-[34px] rounded-ticket border border-hairline-strong bg-surface-control text-[13px] font-semibold hover:bg-surface-hover disabled:hover:bg-surface-control [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:disabled:hover:bg-paper-raised'
 
 // Small buttons for the toolbar and title bar: 28 high, an icon plus optional text; with only the icon, the text serves as the accessible
 // name and the hover tooltip.
@@ -139,13 +139,13 @@ export function UploadMenu({ onFiles, onFolder, pill = false, className }: { onF
   return (
     <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
-        <button type="button" title={t.folders.upload} className={cn('inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-ink/20 bg-white px-2.5 text-[12.5px] font-bold text-ink hover:bg-tint-blue focus-visible:shadow-focus data-[state=open]:bg-tint-blue [&_svg]:size-[15px]', pill && cn(pillClass, 'px-3.5'), className)}>
+        <button type="button" title={t.folders.upload} className={cn('inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-2.5 text-[12.5px] font-semibold text-ink hover:bg-surface-hover focus-visible:shadow-focus data-[state=open]:bg-surface-hover [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-blue [[data-skin=plate]_&]:data-[state=open]:bg-tint-blue [&_svg]:size-[15px]', pill && cn(pillClass, 'px-3.5'), className)}>
           <UploadIcon aria-hidden="true" />
           <span>{t.folders.upload}</span>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={4} className="z-50 min-w-40 rounded-ticket border border-ink/15 bg-paper-raised p-1 shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+        <DropdownMenu.Content align="end" sideOffset={4} className="z-50 min-w-40 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
           <Item icon={<FilePlusIcon className="size-3.5" />} onSelect={onFiles}>{t.folders.uploadFiles}</Item>
           <Item icon={<FolderPlusIcon className="size-3.5" />} onSelect={onFolder}>{t.folders.uploadFolder}</Item>
         </DropdownMenu.Content>

@@ -165,12 +165,23 @@ describe('Stats page', () => {
 // "Printed sheet" redesign, step 4: stats sit on a sheet, numbered 01, 02, ...;
 // key metrics are white cards whose shadow color tells their meanings apart.
 describe('Stats on a sheet', () => {
-  it('the header is the page title: breadcrumb “Global›Stats”, next to it the segmented time range and the scope select in a dashed box', async () => {
+  it('the header is the page title: breadcrumb “Global›Stats”, next to it the segmented time range and the scope select', async () => {
     renderStats()
     const header = (await screen.findByRole('heading', { level: 1, name: 'Stats' })).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Stats')
-    expect(within(header).getByRole('radiogroup', { name: 'Time range' })).toHaveClass('border-2', 'border-ink', 'rounded-full')
-    expect(within(header).getByRole('combobox', { name: 'Scope' }).parentElement).toHaveClass('border-dashed')
+    expect(within(header).getByRole('radiogroup', { name: 'Time range' })).toHaveClass(
+      'rounded-ticket',
+      'border',
+      'border-hairline-strong',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:rounded-full',
+    )
+    expect(within(header).getByRole('combobox', { name: 'Scope' }).parentElement).toHaveClass(
+      'border-hairline-strong',
+      'bg-surface-control',
+      '[[data-skin=plate]_&]:border-dashed',
+    )
   })
 
   it('key metrics are 01, and each chart below is a numbered section placed directly on the sheet, no longer a white card', async () => {
@@ -182,35 +193,45 @@ describe('Stats on a sheet', () => {
     expect(sheet).toContainElement(origins)
     expect(origins.querySelector('[data-section-number]')).toHaveTextContent('02')
     expect(origins).not.toHaveClass('bg-white')
-    expect(origins).toHaveClass('border-t-2', 'border-dashed')
+    expect(origins).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed')
     expect(within(origins).getByRole('heading', { name: 'Daily usage by trigger' })).toHaveClass('riso-marker', 'font-display-cn')
     const numbers = [...sheet.querySelectorAll('[data-section-number]')].map((node) => node.textContent)
     expect(numbers).toEqual(numbers.map((_, index) => String(index + 1).padStart(2, '0')))
   })
 
-  it('key metric cards: white background, navy border; the shadow color tells meanings apart (neutral navy, failed and interrupted pink, waiting for your answer yellow, total blue); the number is in large Bricolage', async () => {
+  it('key metric cards: crisp surface-control cards in mono skin and colored shadow cards in Plate skin; the number is in large Bricolage', async () => {
     renderStats()
     const kpis = await screen.findByRole('region', { name: 'Key metrics' })
     const tile = (label: string) => within(kpis).getByText(label).parentElement!
-    for (const label of ['Spend nobody asked for', 'Avg context per reply', 'Time to first reply, p50']) expect(tile(label)).toHaveClass('bg-white', 'border-2', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
-    expect(tile('Failed + interrupted')).toHaveClass('shadow-[4px_4px_0_var(--riso-pink)]')
-    expect(tile('Waiting for your answer')).toHaveClass('shadow-[4px_4px_0_var(--riso-yellow)]')
-    expect(tile('Total tokens')).toHaveClass('shadow-[4px_4px_0_var(--riso-blue)]')
+    for (const label of ['Spend nobody asked for', 'Avg context per reply', 'Time to first reply, p50']) {
+      expect(tile(label)).toHaveClass(
+        'border',
+        'border-hairline',
+        'bg-surface-control',
+        'shadow-surface',
+        '[[data-skin=plate]_&]:border-2',
+        '[[data-skin=plate]_&]:border-ink',
+        '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+      )
+    }
+    expect(tile('Failed + interrupted')).toHaveClass('[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-pink)]')
+    expect(tile('Waiting for your answer')).toHaveClass('[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-yellow)]')
+    expect(tile('Total tokens')).toHaveClass('[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-blue)]')
     expect(tile('Total tokens').children[1]).toHaveClass('font-display-latin')
   })
 
-  it('each bar in the bar chart has a 2px navy outline with a navy baseline below; series colors use the chart variables', async () => {
+  it('each bar in the bar chart uses the chart bar stroke token with a hairline baseline below; series colors use the chart variables', async () => {
     renderStats()
     const origins = await screen.findByRole('region', { name: 'Daily usage by trigger' })
     const svg = origins.querySelector('svg[width]')!
     const outlines = svg.querySelectorAll('rect[data-column-outline]')
     expect(outlines.length).toBeGreaterThan(0)
     for (const outline of outlines) {
-      expect(outline).toHaveAttribute('stroke', 'var(--ink)')
+      expect(outline).toHaveAttribute('stroke', 'var(--chart-bar-stroke)')
       expect(outline).toHaveAttribute('stroke-width', '2')
       expect(outline).toHaveAttribute('fill', 'none')
     }
-    expect(svg.querySelector('line[data-baseline]')).toHaveAttribute('stroke', 'var(--ink)')
+    expect(svg.querySelector('line[data-baseline]')).toHaveAttribute('stroke', 'var(--hairline-strong)')
     expect([...svg.querySelectorAll('rect:not([data-column-outline])')].every((rect) => rect.getAttribute('fill')?.startsWith('var(--chart-'))).toBe(true)
   })
 })

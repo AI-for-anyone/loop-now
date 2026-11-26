@@ -54,7 +54,7 @@ it('upload failure keeps original file and text and never posts an Inbox action'
   expect(screen.getByRole('textbox')).toHaveValue('please keep'); expect(screen.getByRole('button', { name: 'Remove image 1' })).toBeInTheDocument(); expect(posts).toBe(0)
   const border = screen.getByRole('textbox').closest('[data-node-composer]') as HTMLElement
   expect(border.firstElementChild).toContainElement(screen.getByRole('list', { name: 'Images to send' }))
-  expect(border).toHaveClass('rounded-[18px]')
+  expect(border).toHaveClass('rounded-panel', '[[data-skin=plate]_&]:rounded-[18px]')
   expect(within(border).getByText('Upload failed')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Read the original send result' })).not.toBeInTheDocument()
 })

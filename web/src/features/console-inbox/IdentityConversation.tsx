@@ -79,7 +79,7 @@ function ConversationItem({ message }: { message: Message }) {
         {unread && <UnreadDot />}
         {message.cancelledAt && <Badge className="shadow-none">{t.inbox.cancelled}</Badge>}
       </span>
-      <div className="min-w-0 rounded-[4px_20px_20px_20px] bg-white px-5 py-3.5 text-[15.5px] leading-[1.8] shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+      <div className="min-w-0 rounded-[4px_20px_20px_20px] border border-hairline bg-surface-control px-5 py-3.5 text-[15.5px] leading-[1.8] shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
         <Markdown text={message.text} />
         <MessageImages images={message.images} />
         {message.notice && <InboxNotice notice={message.notice} />}
@@ -136,7 +136,7 @@ function NewMessageBox({ identity, onClose }: { identity: Schemas['ExternalIdent
     if (message) onClose()
   }
   return (
-    <div className="flex flex-col gap-2 rounded-card bg-white p-4">
+    <div className="flex flex-col gap-2 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
       <label htmlFor={id} className="text-[13px] font-bold">{text.newMessageLabel(identity.name)}</label>
       <p className="text-xs text-ink-500">{text.newMessageHint}</p>
       <Textarea id={id} rows={3} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={localError ? true : undefined} />

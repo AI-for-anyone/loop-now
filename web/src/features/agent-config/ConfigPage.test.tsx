@@ -39,17 +39,17 @@ describe('Layout', () => {
 describe('Redesigned layout', () => {
   const sections = ['Basics', 'How it works', 'Prompt', 'Local directories', 'Model account credential', 'Skills', 'Available CLIs', 'Plugin grants', 'Delete Agent']
 
-  it('the nine sections are numbered 01–09 in order: the number is a hollow decoration and the title gets a yellow marker stroke; dashed lines separate the sections, with none above the first', async () => {
+  it('the nine sections are numbered 01–09 in order: compact mono index and hairline dividers by default, preserving hollow numbers, display titles, and dashed dividers in Plate skin', async () => {
     await renderConfig()
     sections.forEach((name, index) => {
       const section = region(name)
       const number = section.querySelector('[data-section-number]')!
       expect(number).toHaveTextContent(String(index + 1).padStart(2, '0'))
       expect(number).toHaveAttribute('aria-hidden', 'true')
-      expect(number).toHaveClass('max-nav:hidden', 'text-transparent')
-      expect(within(section).getByRole('heading', { level: 2, name })).toHaveClass('riso-marker', 'font-display-cn')
-      if (index === 0) expect(section).not.toHaveClass('border-t-2')
-      else expect(section).toHaveClass('border-t-2', 'border-dashed')
+      expect(number).toHaveClass('max-nav:hidden', 'font-mono', '[[data-skin=plate]_&]:text-transparent')
+      expect(within(section).getByRole('heading', { level: 2, name })).toHaveClass('riso-marker', 'font-semibold', '[[data-skin=plate]_&]:font-display-cn')
+      if (index === 0) expect(section).not.toHaveClass('border-t', '[[data-skin=plate]_&]:border-t-2')
+      else expect(section).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed')
     })
   })
 
@@ -59,7 +59,7 @@ describe('Redesigned layout', () => {
     expect(region('Basics')).not.toHaveClass('bg-paper-raised')
     const danger = region('Delete Agent')
     expect(within(danger).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveClass('text-red-text')
-    expect(danger.querySelector('[data-section-number]')).toHaveClass('[-webkit-text-stroke:1.6px_var(--red-text)]')
+    expect(danger.querySelector('[data-section-number]')).toHaveClass('text-red-text', '[[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--red-text)]')
     expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
   })
 
@@ -91,20 +91,20 @@ describe('Redesigned layout', () => {
     }
   })
 
-  it('the "takes effect from the next message" notice is a yellow sticky note', async () => {
+  it('the "takes effect from the next message" notice is a subtle callout in mono skin and a yellow sticky note in Plate skin', async () => {
     await renderConfig()
     const note = screen.getByText('Changes take effect from the next dispatched message; a reply in progress is not affected.').closest('[role="note"]')!
-    expect(note).toHaveClass('riso-tilt', '[--tilt-bg:var(--riso-yellow)]')
+    expect(note).toHaveClass('riso-tilt', 'border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:[--tilt-bg:var(--riso-yellow)]')
     expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('the contents sit in the stub on the right of the paper: a row of ticks along the right edge, each entry is "name number short tick", and the current entry is marked with a yellow marker and a pink arrow', async () => {
+  it('the contents sit in the stub on the right of the paper: a row of ticks along the right edge, each entry is "name number short tick", and the current entry is marked with the ruler indicator', async () => {
     await renderConfig()
     const toc = screen.getByRole('navigation', { name: 'Contents' })
-    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
+    expect(toc).toHaveClass('border-l', 'border-hairline', 'max-nav:hidden', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
     expect(within(toc).getByText('Contents')).toHaveAttribute('aria-hidden', 'true')
     // A row of ticks along the right edge (decoration).
-    expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-3')
+    expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-2.5', '[[data-skin=plate]_&]:w-3')
     expect(toc.querySelector('[data-ruler-mark]')).toBeNull()
     act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
     const current = within(toc).getByRole('link', { name: 'Skills' })

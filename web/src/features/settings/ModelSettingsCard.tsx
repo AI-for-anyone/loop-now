@@ -94,7 +94,7 @@ function ModelSettingsEditor({ initial }: { initial: PromptText }) {
       <p className="font-black text-red-text">{copy.saveFailed}</p>
       <details className="grid gap-2">
         <summary className="flex w-fit cursor-pointer items-center gap-1.5 font-bold">{copy.errorDetails}<ChevronDownIcon className="size-4" /></summary>
-        <pre className="max-h-56 overflow-auto rounded-card bg-white/70 p-3 font-mono text-[12.5px] whitespace-pre-wrap">{[describeError(error), ...(error instanceof ApiError ? error.fields.map(field => t.errors.field(field.field, field.message)) : [])].join('\n')}</pre>
+        <pre className="max-h-56 overflow-auto rounded-card bg-surface-subtle/70 p-3 font-mono text-[12.5px] whitespace-pre-wrap [[data-skin=plate]_&]:bg-white/70">{[describeError(error), ...(error instanceof ApiError ? error.fields.map(field => t.errors.field(field.field, field.message)) : [])].join('\n')}</pre>
       </details>
     </AlertDescription></Alert>}
     <div className="flex flex-wrap items-center justify-end gap-3">

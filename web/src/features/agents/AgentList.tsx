@@ -28,18 +28,24 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
   return keyword === '' || searchableText(agent).some((text) => text.toLowerCase().includes(keyword))
 }
 
-// At most one status tag on the right of each row, by priority: replying, background tasks still running (“后台 N”, Bg N, in yellow), sleep,
-// Manager. Nothing is shown when idle. On the selected row (itself yellow) the background tag turns into yellow text on navy.
-// On the blue background, sleep and Manager use a semi-transparent navy background; when their row is selected (yellow
-// background) they become a pill with white text on solid navy, because the semi-transparent one is hard to read on yellow.
+// At most one status tag on the right of each row, by priority: replying, background tasks still running (“后台 N”, Bg N), sleep,
+// Manager. Nothing is shown when idle. Uses semantic monochrome surfaces in mono and preserves high-contrast Plate accents.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
-  const quiet = current ? 'rounded-full bg-ink px-2 text-white' : 'bg-ink/45 text-white'
+  const quiet = current
+    ? 'rounded-full bg-cta-bg px-2 text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white'
+    : 'border border-sidebar-border bg-sidebar-hover text-sidebar-muted [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/45 [[data-skin=plate]_&]:text-white'
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
   const [label, tone, title] =
     agent.busy
-      ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
+      ? [text.chips.busy, 'border border-hairline bg-riso-pink text-ink [[data-skin=plate]_&]:border-0', undefined]
       : agent.backgroundTaskCount > 0
-        ? [t.background.listTag(agent.backgroundTaskCount), current ? 'rounded-full bg-ink px-2 text-riso-yellow' : 'bg-riso-yellow text-ink', t.background.listTitle(agent.backgroundTaskCount)]
+        ? [
+            t.background.listTag(agent.backgroundTaskCount),
+            current
+              ? 'rounded-full bg-cta-bg px-2 text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-riso-yellow'
+              : 'border border-hairline bg-riso-yellow text-ink [[data-skin=plate]_&]:border-0',
+            t.background.listTitle(agent.backgroundTaskCount),
+          ]
         : sleeping
           ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
           : agent.isManager
@@ -47,13 +53,13 @@ function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; curren
             : [null, '', undefined]
   if (!label) return null
   return (
-    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-black whitespace-nowrap', tone)}>
+    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black', tone)}>
       {label}
     </span>
   )
 }
 
-// When the server can't be reached, show a halftone skeleton as a placeholder; the explanatory text is the same as when the
+// When the server can't be reached, show a skeleton as a placeholder; the explanatory text is the same as when the
 // list request fails.
 function Skeleton() {
   return (
@@ -61,7 +67,7 @@ function Skeleton() {
       <span aria-hidden="true" className="riso-skeleton h-8 rounded-ticket opacity-35" />
       <span aria-hidden="true" className="riso-skeleton h-8 rounded-ticket opacity-25" />
       <span aria-hidden="true" className="riso-skeleton h-8 rounded-ticket opacity-15" />
-      <p role="status" className="px-1.5 text-[12.5px] font-black text-white">
+      <p role="status" className="px-1.5 text-[12.5px] font-semibold text-sidebar-fg [[data-skin=plate]_&]:font-black">
         {t.errors.unreachable}
       </p>
     </div>
@@ -116,11 +122,11 @@ export function AgentNavGroup({
         <Skeleton />
       ) : (
         <>
-          {loading && <p className="px-2.5 text-[12.5px] text-white/75">{t.common.loading}</p>}
+          {loading && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.common.loading}</p>}
           {agents.isError && <ErrorAlert error={agents.error} className="text-[12.5px]" />}
-          {agents.isSuccess && list.length === 0 && <p className="px-2.5 text-[12.5px] text-white/75">{t.agents.empty}</p>}
+          {agents.isSuccess && list.length === 0 && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.agents.empty}</p>}
           {list.length > 0 && shown.length === 0 && (
-            <p role="status" className="px-2.5 text-[12.5px] text-white/75">
+            <p role="status" className="px-2.5 text-[12.5px] text-sidebar-muted">
               {t.agents.search.noMatch}
             </p>
           )}

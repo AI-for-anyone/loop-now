@@ -28,6 +28,7 @@ import { AgentFolderTab, ProjectFolderPage } from '@/features/folders/FolderSect
 import { NewSkillSheet, SkillDetailSheet, SkillsPage } from '@/features/skills-library/SkillsPage'
 import { StatsPage } from '@/features/stats/StatsPage'
 import { AppLayout } from './AppLayout'
+import { RouteErrorBoundary } from './RouteErrorBoundary'
 
 // The Agent page shared by projects and the platform: the selected Agent's conversation, config, folder and inbox (the Agent list is in
 // the sidebar).
@@ -54,6 +55,7 @@ export const routes: RouteObject[] = [
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       // The root URL is the overview page: global without parameters, that project with ?project=<project name>.
       { index: true, element: <OverviewPage /> },

@@ -192,7 +192,7 @@ function CliCredentialDialog({ agentId, cli, template, onClose }: { agentId: str
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose() }}>
       <DialogContent kind="edit" className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle>{t.config.clis.credentialTitle(cli.name)}</DialogTitle>
@@ -232,7 +232,7 @@ function CliCredentialDialog({ agentId, cli, template, onClose }: { agentId: str
           })}
           <ErrorAlert error={unmatchedFieldError(error, (f) => template.fields.some((field) => f === `fields.${field.name}`))} />
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
               {t.common.cancel}
             </Button>
             <Button type="submit" disabled={pending}>

@@ -94,8 +94,8 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
   return (
     // Redesign: a card with a white background, a 2px navy outline and a fluorescent-pink solid offset shadow; on the left, the initial
     // letter on a yellow block (decorative), and the name in the display font.
-    <li className="mr-1 mb-1 grid min-w-0 gap-x-5 gap-y-3 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-print-pink md:grid-cols-[auto_minmax(0,1fr)_200px_auto] md:items-center">
-      <span aria-hidden="true" className="hidden size-12 items-center justify-center rounded-[10px] border-2 border-ink bg-riso-yellow font-display-latin text-[20px] font-extrabold md:flex">
+    <li className="grid min-w-0 gap-x-5 gap-y-3 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface md:grid-cols-[auto_minmax(0,1fr)_200px_auto] md:items-center [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-print-pink">
+      <span aria-hidden="true" className="hidden size-12 items-center justify-center rounded-[10px] border border-hairline-strong bg-surface-subtle font-display-latin text-[20px] font-bold md:flex [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-extrabold">
         {localizedText(plugin.displayName).slice(0, 1).toUpperCase()}
       </span>
       <div className="grid min-w-0 gap-2">
@@ -192,7 +192,7 @@ export function PluginsPage() {
     <PageFrame>
       <PageHeader crumbs={[{ label: t.shell.global }]} title={text.title}>
         <HostStrip />
-        <Button variant="interrupt" size="xs" className="border-2 border-ink" onClick={() => setInstalling(true)}>
+        <Button variant="interrupt" size="xs" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" onClick={() => setInstalling(true)}>
           {text.installEntry.open}
         </Button>
       </PageHeader>

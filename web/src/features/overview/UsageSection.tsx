@@ -24,22 +24,20 @@ import {
 
 const fmt = (count: number) => t.overview.tokens(count)
 
-// Swatches for the four breakdown items: riso blue for input, fluorescent pink for output, light blue with a blue outline for
-// cache read, light pink with a pink outline for cache write.
+// Swatches for the four breakdown items: monochrome chart scale in Mono; riso blue, fluorescent pink and outlined tints in Plate.
 const SWATCH = {
-  input: 'bg-riso-blue',
-  output: 'bg-riso-pink',
-  cacheRead: 'bg-tint-blue shadow-[inset_0_0_0_2px_var(--riso-blue)]',
-  cacheWrite: 'bg-tint-pink-2 shadow-[inset_0_0_0_2px_var(--pink-text)]',
+  input: 'bg-[var(--chart-blue)] [[data-skin=plate]_&]:bg-riso-blue',
+  output: 'bg-[var(--chart-pink)] [[data-skin=plate]_&]:bg-riso-pink',
+  cacheRead: 'bg-[var(--chart-ochre)] [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--riso-blue)]',
+  cacheWrite: 'bg-[var(--chart-other)] [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--pink-text)]',
 } as const
 
 const PARTS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const
 
-// Halftone fill of the bars (redesign): white halftone dots on riso blue for input, navy halftone dots on fluorescent pink
-// for output.
+// Fill of the bars: flat chart tokens in Mono; halftone dots in Plate.
 const FILL = {
-  input: 'bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.28)_1px,transparent_1.3px)] bg-size-[5px_5px]',
-  output: 'bg-riso-pink bg-[radial-gradient(rgb(24_38_94/.22)_1px,transparent_1.3px)] bg-size-[5px_5px]',
+  input: 'bg-[var(--chart-blue)] [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.28)_1px,transparent_1.3px)] [[data-skin=plate]_&]:bg-size-[5px_5px]',
+  output: 'bg-[var(--chart-pink)] [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:bg-[radial-gradient(rgb(24_38_94/.22)_1px,transparent_1.3px)] [[data-skin=plate]_&]:bg-size-[5px_5px]',
 } as const
 
 // The total line: the total for the selected period (in large figures), with the four breakdown items to the right.
@@ -95,18 +93,18 @@ function UsageBar({ line, dimension, max, most }: { line: UsageLine; dimension: 
       className="group relative grid min-h-[34px] grid-cols-[minmax(76px,160px)_minmax(0,1fr)_minmax(120px,max-content)] items-center gap-x-3.5 gap-y-1.5 rounded-ticket outline-none focus-visible:shadow-focus"
     >
       <LineName line={line} dimension={dimension} />
-      <span aria-hidden="true" data-usage-track className="flex h-[18px] min-w-0 overflow-hidden rounded-[4px] border-2 border-ink bg-paper">
+      <span aria-hidden="true" data-usage-track className="flex h-[18px] min-w-0 overflow-hidden rounded-[4px] border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper">
         <span data-usage-part="input" className={cn('h-full shrink-0', FILL.input)} style={{ width: width(line.input) }} />
         <span data-usage-part="output" className={cn('h-full shrink-0', FILL.output)} style={{ width: width(line.output) }} />
       </span>
       <span className="flex items-center gap-2 font-mono text-[12.5px] font-bold">
         {fmt(line.total)}
-        {most && <span className="rounded-[4px] bg-riso-yellow px-2 font-sans text-[11.5px] leading-5 font-black">{t.overview.usage.most}</span>}
+        {most && <span className="rounded-[4px] bg-surface-active px-2 font-sans text-[11.5px] leading-5 font-semibold text-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black">{t.overview.usage.most}</span>}
       </span>
       <span
         id={detailId}
         role="tooltip"
-        className="invisible absolute right-0 bottom-full z-10 mb-2 max-w-[min(100%,420px)] rounded-input bg-ink px-3 py-2 text-[12.5px] leading-[1.6] text-white shadow-[3px_3px_0_var(--riso-pink)] group-hover:visible group-focus-visible:visible"
+        className="invisible absolute right-0 bottom-full z-10 mb-2 max-w-[min(100%,420px)] rounded-input bg-tooltip-bg px-3 py-2 text-[12.5px] leading-[1.6] text-tooltip-fg shadow-floating group-hover:visible group-focus-visible:visible [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
       >
         {t.overview.usage.detail(fmt(line.input), fmt(line.output), fmt(line.cacheRead), fmt(line.cacheWrite), fmt(line.total))}
       </span>
@@ -126,11 +124,11 @@ function Bars({ lines, dimension }: { lines: UsageLine[]; dimension: UsageDimens
       </ul>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-ink-500">
         <span aria-hidden="true" className="inline-flex items-center gap-1.5 font-bold text-ink-700">
-          <span className={cn('h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-ink', FILL.input)} />
+          <span className={cn('h-2.5 w-3.5 rounded-[3px] border border-hairline-strong [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink', FILL.input)} />
           {t.overview.usage.parts.input}
         </span>
         <span aria-hidden="true" className="inline-flex items-center gap-1.5 font-bold text-ink-700">
-          <span className={cn('h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-ink', FILL.output)} />
+          <span className={cn('h-2.5 w-3.5 rounded-[3px] border border-hairline-strong [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink', FILL.output)} />
           {t.overview.usage.parts.output}
         </span>
         <span>{t.overview.usage.barNote}</span>
@@ -142,7 +140,7 @@ function Bars({ lines, dimension }: { lines: UsageLine[]; dimension: UsageDimens
 function Empty({ rangeLabel }: { rangeLabel: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
-      <span aria-hidden="true" className="font-display-latin text-[80px] leading-[0.9] font-extrabold text-tint-blue [text-shadow:4px_3px_0_var(--riso-blue)]">
+      <span aria-hidden="true" className="font-display-latin text-[80px] leading-[0.9] font-extrabold text-surface-active [[data-skin=plate]_&]:text-tint-blue [[data-skin=plate]_&]:[text-shadow:4px_3px_0_var(--riso-blue)]">
         0
       </span>
       <span className="text-[15px] font-bold">{t.overview.usage.empty(rangeLabel)}</span>

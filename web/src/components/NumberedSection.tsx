@@ -1,14 +1,14 @@
 import { useId, type ComponentProps, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-// Outlined number: Bricolage 800, riso-blue outline, no fill. Used for the 01, 02 of sections and for the number of each turn in the
-// conversation. Purely decorative, hidden on narrow screens.
+// Section index: compact muted tabular mono number in mono skin; Bricolage 800 riso-blue stroked outline in Plate skin.
+// Purely decorative, hidden on narrow screens.
 export function HollowNumber({ className, ...props }: ComponentProps<'span'>) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'block w-[46px] shrink-0 font-display-latin text-[34px] leading-none font-extrabold tracking-[-0.02em] text-transparent [-webkit-text-stroke:1.6px_var(--riso-blue)] max-nav:hidden',
+        'block shrink-0 font-mono text-[12px] leading-none font-medium tracking-wide text-ink-500 tabular-nums max-nav:hidden [[data-skin=plate]_&]:w-[46px] [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[34px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.02em] [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--riso-blue)]',
         className,
       )}
       {...props}
@@ -16,11 +16,8 @@ export function HollowNumber({ className, ...props }: ComponentProps<'span'>) {
   )
 }
 
-// Numbered section: long pages are split into sections 01, 02… (rule 4 of the redesign's general rules). The title line: an outlined
-// number on the left, and a ZCOOL 30px title with a stroke of yellow highlighter mark
-// (a yellow bar over the lower half), which can be followed by a note (meta) and right-aligned actions (actions); the content sits below
-// and fills the width.
-// From the second section on, there is a 2px dashed line above.
+// Numbered section: long pages are split into sections 01, 02... Clean typographic heading with hairline top rule in mono skin;
+// outlined hollow number, ZCOOL display title with yellow highlighter mark and 2px dashed divider in Plate skin.
 export function NumberedSection({
   number,
   title,
@@ -32,10 +29,21 @@ export function NumberedSection({
 }: { number: number; title: ReactNode; meta?: ReactNode; actions?: ReactNode } & Omit<ComponentProps<'section'>, 'title'>) {
   const titleId = useId()
   return (
-    <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-[18px]', number > 1 && 'border-t-2 border-dashed border-ink/[0.22] pt-6', className)} {...props}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+    <section
+      aria-labelledby={titleId}
+      className={cn(
+        'flex min-w-0 flex-col gap-4 [[data-skin=plate]_&]:gap-[18px]',
+        number > 1 && 'border-t border-hairline pt-6 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22]',
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-2 [[data-skin=plate]_&]:items-center [[data-skin=plate]_&]:gap-x-4 [[data-skin=plate]_&]:gap-y-2.5">
         <HollowNumber data-section-number>{String(number).padStart(2, '0')}</HollowNumber>
-        <h2 id={titleId} className="riso-marker px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal">
+        <h2
+          id={titleId}
+          className="riso-marker text-[16px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.25] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal"
+        >
           {title}
         </h2>
         {meta}

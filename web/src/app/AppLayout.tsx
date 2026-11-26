@@ -1,19 +1,46 @@
-import { useEffect, useRef, useState } from 'react'
-import { Outlet, useLocation } from 'react-router'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
+import { PanelLeftOpen } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { useProjects } from '@/api/queries'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
-import { inDesktopWindow, useDesktopNavigation } from '@/features/desktop/desktop'
+import { hasInsetTitleBar, useDesktopNavigation } from '@/features/desktop/desktop'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+import { CommandPalette } from './CommandPalette'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
 
 const text = t.shell
+
+export const SIDEBAR_COLLAPSED_KEY = 'loop-now.sidebar-collapsed'
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed))
+  } catch {
+    // When browser storage is unavailable, collapse state still works for the current session.
+  }
+}
+
+function isEditableElement(el: Element | null): boolean {
+  if (!el) return false
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true
+  if (el instanceof HTMLElement && el.isContentEditable) return true
+  return el.closest('[contenteditable="true"], [contenteditable=""], [role="textbox"]') !== null
+}
 
 // The scope the sidebar keeps. For a project, the resolved ID is recorded: if the project is renamed while you are on it, the same project
 // is still found by ID.
@@ -47,6 +74,7 @@ const wide = '(min-width: 56.3125rem)'
 // right of the system's traffic-light buttons.
 export function AppLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const projects = useProjects()
   const list = projects.data?.projects
   const fromUrl = urlScope(location)
@@ -64,24 +92,42 @@ export function AppLayout() {
   // The drawer stays open only at the URL where it was opened: clicking any entry changes the URL and closes it automatically.
   const [drawerAt, setDrawerAt] = useState<string | null>(null)
   const drawerOpen = drawerAt === location.key
-  const searchOnOpen = useRef(false)
-  const searchRef = useRef<HTMLInputElement>(null)
-  const drawerSearchRef = useRef<HTMLInputElement>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const desktop = hasInsetTitleBar()
 
-  // ⌘K (or Ctrl+K) focuses the sidebar search; on narrow screens it opens the drawer first.
+  const setCollapsed = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    setSidebarCollapsed((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next
+      writeSidebarCollapsed(resolved)
+      return resolved
+    })
+  }, [])
+
+  // Global keyboard shortcuts: ⌘K / Ctrl+K toggles the command palette; ⌘B / Ctrl+B toggles the desktop sidebar
+  // (skipped while editing text).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return
-      event.preventDefault()
-      const input = drawerSearchRef.current ?? searchRef.current
-      input?.focus()
-      if (input && document.activeElement === input) return
-      searchOnOpen.current = true
-      setDrawerAt(location.key)
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'k') {
+        event.preventDefault()
+        setDrawerAt(null)
+        setPaletteOpen((open) => !open)
+      } else if (key === 'b') {
+        if (isEditableElement(document.activeElement) || (event.target instanceof Element && isEditableElement(event.target))) return
+        event.preventDefault()
+        setCollapsed((prev) => !prev)
+      } else if (key === ',') {
+        event.preventDefault()
+        setDrawerAt(null)
+        setPaletteOpen(false)
+        void navigate('/settings')
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [location.key])
+  }, [navigate, setCollapsed])
 
   // Close the drawer when the window becomes wide enough for the permanent sidebar, so no invisible overlay is left behind.
   useEffect(() => {
@@ -99,32 +145,43 @@ export function AppLayout() {
   useDesktopNavigation()
   return (
     <div className="riso-paper flex min-h-screen text-ink lg:h-screen">
-      <div className="sticky top-0 h-screen w-[248px] shrink-0 self-start max-nav:hidden">
-        <Sidebar scope={scope} projects={list} projectsError={projects.error} searchRef={searchRef} />
-      </div>
+      {!sidebarCollapsed && (
+        <div className="sticky top-0 h-screen w-[248px] shrink-0 self-start max-nav:hidden">
+          <Sidebar
+            scope={scope}
+            projects={list}
+            projectsError={projects.error}
+            onCollapse={() => setCollapsed(true)}
+            onOpenPalette={() => setPaletteOpen(true)}
+          />
+        </div>
+      )}
       <DialogPrimitive.Root open={drawerOpen} onOpenChange={(open) => setDrawerAt(open ? location.key : null)}>
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/30 nav:hidden" />
+          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 nav:hidden [[data-skin=plate]_&]:bg-ink/30" />
           <DialogPrimitive.Content
             aria-describedby={undefined}
-            className="fixed inset-y-0 left-0 z-50 w-[min(248px,86vw)] shadow-[6px_0_0_var(--riso-pink)] outline-none nav:hidden"
-            onOpenAutoFocus={(event) => {
-              if (!searchOnOpen.current) return
-              searchOnOpen.current = false
-              event.preventDefault()
-              drawerSearchRef.current?.focus()
-            }}
+            className="fixed inset-y-0 left-0 z-50 w-[min(248px,86vw)] shadow-dialog outline-none nav:hidden [[data-skin=plate]_&]:shadow-[6px_0_0_var(--riso-pink)]"
           >
             <DialogPrimitive.Title className="sr-only">{text.nav}</DialogPrimitive.Title>
-            <Sidebar scope={scope} projects={list} projectsError={projects.error} searchRef={drawerSearchRef} onClose={() => setDrawerAt(null)} />
+            <Sidebar
+              scope={scope}
+              projects={list}
+              projectsError={projects.error}
+              onClose={() => setDrawerAt(null)}
+              onOpenPalette={() => {
+                setDrawerAt(null)
+                setPaletteOpen(true)
+              }}
+            />
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
       <div className="riso-grain flex min-w-0 flex-1 flex-col lg:min-h-0">
         <header
           className={cn(
-            'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 bg-riso-blue px-4 text-white nav:hidden',
-            inDesktopWindow() && 'window-drag pl-[84px]',
+            'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden [[data-skin=plate]_&]:border-b-0',
+            desktop && 'window-drag pl-[84px]',
           )}
         >
           <button
@@ -132,17 +189,54 @@ export function AppLayout() {
             aria-label={text.menu}
             aria-expanded={drawerOpen}
             onClick={() => setDrawerAt(location.key)}
-            className="inline-flex size-9 items-center justify-center rounded-ticket border-[1.5px] border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)] outline-none focus-visible:shadow-focus"
+            className="inline-flex size-9 items-center justify-center rounded-ticket border border-hairline-strong bg-surface-control text-sidebar-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]"
           >
             <NavIcon name="menu" className="[stroke-width:2.6]" />
           </button>
-          <span className="font-display-latin text-[19px] leading-none font-extrabold tracking-[-0.5px] [text-shadow:2px_2px_0_var(--riso-pink)]">{t.app.brand}</span>
+          <span className="font-display-latin text-[17px] leading-none font-semibold tracking-tight text-sidebar-fg [[data-skin=plate]_&]:text-[19px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.5px] [[data-skin=plate]_&]:[text-shadow:2px_2px_0_var(--riso-pink)]">
+            {t.app.brand}
+          </span>
+          <Link
+            to="/settings"
+            aria-label={text.items.settings}
+            title={`${text.items.settings} (${text.settingsShortcut})`}
+            className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/35 [[data-skin=plate]_&]:bg-white/15 [[data-skin=plate]_&]:text-white"
+          >
+            <NavIcon name="settings" />
+          </Link>
         </header>
+        {sidebarCollapsed && (
+          <div
+            className={cn(
+              'flex shrink-0 items-center gap-2 border-b border-hairline bg-surface-canvas px-3 py-1.5 max-nav:hidden',
+              desktop && 'window-drag h-12 py-0 pl-[84px]',
+            )}
+          >
+            <button
+              type="button"
+              aria-label={text.expandNav}
+              title={`${text.expandNav} (⌘B)`}
+              onClick={() => setCollapsed(false)}
+              className="inline-flex size-8 items-center justify-center rounded-ticket border border-hairline bg-surface-control text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]"
+            >
+              <PanelLeftOpen className="size-4" strokeWidth={1.8} />
+            </button>
+            <Link
+              to="/settings"
+              aria-label={text.items.settings}
+              title={`${text.items.settings} (${text.settingsShortcut})`}
+              className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-hairline bg-surface-control text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:text-ink"
+            >
+              <NavIcon name="settings" />
+            </Link>
+          </div>
+        )}
         <ConnectionBanner />
         <main className="min-h-0 flex-1">
           <Outlet />
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} scope={scope} projects={list} />
       <Toasts />
     </div>
   )

@@ -257,7 +257,7 @@ describe('queue tray above the input box', () => {
     expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
   })
 
-  it('stop: when busy with an empty input the send button becomes stop and stops only this reply; a light one-line notice when it has already ended', async () => {
+  it('stop: when busy Stop stays available even with draft text, while Interrupt and Queue appear alongside it; a light one-line notice when it has already ended', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const bodies: { runId: string; body: Schemas['AgentQueueActionInput'] }[] = []
     const { agent, user, emit } = await renderChat({
@@ -273,11 +273,11 @@ describe('queue tray above the input box', () => {
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }))
     await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
     await waitFor(() => expect(bodies).toEqual([{ runId: current.id, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/) } }]))
-    // With text in the input, the button queues the message.
+    // With text in the input, Stop remains available alongside Interrupt and Queue.
     await user.type(screen.getByLabelText('Message'), 'New message')
-    expect(screen.queryByRole('button', { name: 'Stop the current reply' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Stop the current reply' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Interrupt and send' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Queue' })).toBeEnabled()
-    await user.clear(screen.getByLabelText('Message'))
     await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
     expect(await screen.findByText('This reply has already ended')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).toBeNull()

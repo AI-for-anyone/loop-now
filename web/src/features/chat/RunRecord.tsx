@@ -62,7 +62,7 @@ function Timeline({ timeline }: { timeline: Schemas['RunTimeline'] }) {
   ].join(` ${t.chat.metaSeparator} `)
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 bg-tint-blue px-4 py-2.5 text-[12.5px]">
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-b border-hairline bg-surface-subtle px-4 py-2.5 text-[12.5px] [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-tint-blue">
         <span className="font-black">{t.timeline.title}</span>
         <span className="font-mono text-[11.5px] [overflow-wrap:anywhere]">{run.id}</span>
         <span className="text-ink-700">{meta}</span>
@@ -107,7 +107,7 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className={cn(receiptClass, 'mt-0.5 self-start outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus')}
+        className={cn(receiptClass, 'mt-0.5 self-start outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:hover:bg-[#d6ddf4]')}
       >
         <span className="sr-only">{label}</span>
         <span aria-hidden="true" data-receipt-part className="px-[11px] font-black whitespace-nowrap">
@@ -128,7 +128,7 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         </span>
       </button>
       {open && (
-        <div id={panelId} className="flex flex-col overflow-hidden rounded-[16px] bg-white shadow-[3px_3px_0_rgb(24_38_94/.12)]">
+        <div id={panelId} className="flex flex-col overflow-hidden rounded-card border border-hairline bg-surface-control shadow-surface [[data-skin=plate]_&]:rounded-[16px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.12)]">
           {timeline.isError ? (
             <div role="alert" className="flex flex-col gap-1.5 bg-tint-red px-4 py-3 text-[13.5px] text-red-text">
               <span>{describeError(timeline.error)}</span>

@@ -9,23 +9,22 @@ import { cn } from '@/lib/utils'
 
 const text = t.plugins
 
-export const cardClass = 'rounded-panel border-2 border-ink bg-white'
+export const cardClass = 'rounded-panel border border-hairline-strong bg-surface-control shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white'
 
-// Plugin card (redesign): a card with a white background, a 2px navy outline and a navy solid offset shadow, with a color band with
-// halftone dots across the top, cycling blue, pink, yellow (the nth card takes the nth color).
+// Plugin card (redesign): a crisp bordered card in mono skin; white background, 2px navy outline and solid offset shadow with a halftone color band in Plate skin.
 const BANDS = ['blue', 'pink', 'yellow'] as const
 const bandFill: Record<(typeof BANDS)[number], string> = {
-  blue: 'bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
-  pink: 'bg-riso-pink bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
-  yellow: 'bg-riso-yellow bg-[radial-gradient(rgb(24_38_94/.28)_1.2px,transparent_1.5px)]',
+  blue: 'bg-surface-subtle [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
+  pink: 'bg-surface-subtle [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
+  yellow: 'bg-surface-subtle [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:bg-[radial-gradient(rgb(24_38_94/.28)_1.2px,transparent_1.5px)]',
 }
-export const bandCardClass = 'mr-[5px] mb-[5px] flex min-w-0 flex-col overflow-hidden rounded-card border-2 border-ink bg-white shadow-[5px_5px_0_var(--ink)]'
+export const bandCardClass = 'flex min-w-0 flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-control shadow-surface [[data-skin=plate]_&]:mr-[5px] [[data-skin=plate]_&]:mb-[5px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]'
 export function CardBand({ index }: { index: number }) {
   const band = BANDS[index % BANDS.length]
-  return <span aria-hidden="true" data-band={band} className={cn('block h-11 shrink-0 border-b-2 border-ink bg-size-[8px_8px]', bandFill[band])} />
+  return <span aria-hidden="true" data-band={band} className={cn('block h-2 shrink-0 border-b border-hairline bg-size-[8px_8px] [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink', bandFill[band])} />
 }
-// Install and update buttons on cards: pills with a white background, a navy outline and a navy offset shadow.
-export const cardButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
+// Install and update buttons on cards: secondary buttons in mono skin; white pills with navy outline and offset shadow in Plate skin.
+export const cardButtonClass = '[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-paper-raised'
 
 export function IdVersion({ id, version }: { id: string; version: string }) {
   return <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12px] leading-[18px] font-bold text-ink">{text.idVersion(id, version)}</code>
@@ -38,7 +37,7 @@ export function IdVersion({ id, version }: { id: string; version: string }) {
 export function SourceBadge({ source, trust = source.kind === 'builtin' ? 'official' : null }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'>; trust?: 'official' | 'verified' | null }) {
   // Redesign: “官方” (Official) is a pill with white text on navy (identity markers are always white on navy).
   if (trust === 'official')
-    return <span className="rounded-full bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{text.sources.builtin}</span>
+    return <span className="rounded-full bg-cta-bg px-2 text-[11.5px] leading-5 font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{text.sources.builtin}</span>
   if (trust === 'verified') return <span className="rounded-[6px] bg-tint-green px-1.5 py-px text-[11.5px] leading-4 font-black text-green-text">{text.verifiedSource(text.sources[source.kind])}</span>
   return <span className="rounded-[6px] bg-tint-yellow px-1.5 py-px text-[11.5px] leading-4 font-black text-ink">{text.unverified(text.sources[source.kind])}</span>
 }

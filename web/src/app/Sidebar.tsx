@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode, type Ref } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
+import { Moon, PanelLeftClose, Sun } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { useInboxPending, type PendingCounts } from '@/api/console-inbox'
 import { tasksPath, useProjectTaskCounts } from '@/api/tasks'
@@ -8,12 +9,13 @@ import { NavIcon, type NavIconName } from '@/components/NavIcon'
 import { AgentNavGroup } from '@/features/agents/AgentList'
 import { CreateAgentDialog } from '@/features/agents/CreateAgentDialog'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
-import { inDesktopWindow } from '@/features/desktop/desktop'
+import { hasInsetTitleBar } from '@/features/desktop/desktop'
 import { ScopeSwitcher } from '@/features/projects/ScopeSwitcher'
 import { t } from '@/i18n'
 import { navGroupClass, navRowClass } from '@/lib/nav-row'
 import { lastScope, overviewPath, projectBase, type ResolvedShellScope, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/theme/store'
 import { ConnectionStatus } from './ConnectionStatus'
 
 const text = t.shell
@@ -51,10 +53,10 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
       <h2 id={headingId} className={navGroupClass}>
         {text.groups.projects}
       </h2>
-      {!projects && <p className="px-2.5 text-[12.5px] text-white/75">{t.common.loading}</p>}
-      {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-white/75">{text.noProjects}</p>}
+      {!projects && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.common.loading}</p>}
+      {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{text.noProjects}</p>}
       {projects && projects.length > 0 && shown.length === 0 && (
-        <p role="status" className="px-2.5 text-[12.5px] text-white/75">
+        <p role="status" className="px-2.5 text-[12.5px] text-sidebar-muted">
           {text.scope.noMatch}
         </p>
       )}
@@ -96,25 +98,31 @@ function SidebarDeco() {
   )
 }
 
-// The sidebar: brand-blue halftone background, white text. At the top: the logo, the scope switcher and search; in the middle: the current
-// scope's entries and Agents; at the bottom (below the dashed line): the global entries reachable from any scope, and the connection
-// status. Always visible on wide screens, in a drawer on narrow ones (onClose is the drawer's close button).
-// In a desktop shell window there is an extra strip at the very top for dragging the window, and the system's traffic-light buttons sit in
-// that strip (for their position see desktop/src/window.ts).
+// The sidebar: semantic chrome tokens in mono, brand-blue halftone in Plate. At the top: the logo, collapse/close control, the scope
+// switcher and search; in the middle: the current scope's entries and Agents; at the bottom: the global entries reachable from any scope,
+// and the connection status. Always visible on wide screens (unless collapsed), in a drawer on narrow ones (onClose is the drawer's close
+// button). In a desktop shell window with an inset title bar, there is an extra strip at the very top for dragging the window where the
+// system's traffic-light buttons sit (see desktop/src/window.ts).
 export function Sidebar({
   scope,
   projects,
   projectsError,
   searchRef,
   onClose,
+  onCollapse,
+  onOpenPalette,
 }: {
   scope: ResolvedShellScope
   projects: Schemas['Project'][] | undefined
   projectsError?: unknown
   searchRef?: Ref<HTMLInputElement>
   onClose?: () => void
+  onCollapse?: () => void
+  onOpenPalette?: () => void
 }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const { resolvedTheme, supportsDark, setThemeMode } = useTheme()
   const here = place(pathname)
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState<Scope | null>(null)
@@ -127,33 +135,47 @@ export function Sidebar({
   // The running task count only counts running; read only in project scope.
   const running = useProjectTaskCounts(project?.id).data?.running
   const searchLabel = scope.kind === 'project' ? text.search.project : text.search.global
-  const desktop = inDesktopWindow()
+  const desktop = hasInsetTitleBar()
 
   return (
-    <nav aria-label={text.nav} className="riso-halftone flex h-full w-full flex-col bg-riso-blue text-white">
+    <nav
+      aria-label={text.nav}
+      className="riso-halftone flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar-bg text-sidebar-fg [[data-skin=plate]_&]:border-r-0"
+    >
       {desktop && <div aria-hidden="true" className="window-drag h-12 shrink-0" />}
-      <div className={cn('flex shrink-0 flex-col gap-4 px-3.5 pb-3', desktop ? 'pt-1' : 'pt-5')}>
+      <div className={cn('flex shrink-0 flex-col gap-3.5 px-3.5 pb-3 [[data-skin=plate]_&]:gap-4', desktop ? 'pt-1' : 'pt-5')}>
         <div className="flex items-center justify-between gap-2 px-1.5">
           <Link
             to="/"
-            className="rounded-sm font-display-latin text-[26px] leading-none font-extrabold tracking-[-0.5px] text-white outline-none [text-shadow:2.5px_2.5px_0_var(--riso-pink)] focus-visible:shadow-focus"
+            className="rounded-sm font-display-latin text-[20px] leading-none font-semibold tracking-tight text-sidebar-fg outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:text-[26px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.5px] [[data-skin=plate]_&]:[text-shadow:2.5px_2.5px_0_var(--riso-pink)]"
           >
             {t.app.brand}
           </Link>
+          {onCollapse && (
+            <button
+              type="button"
+              aria-label={text.collapseNav}
+              title={`${text.collapseNav} (⌘B)`}
+              onClick={onCollapse}
+              className="inline-flex size-7 items-center justify-center rounded-ticket text-sidebar-muted transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus [[data-skin=plate]_&]:text-white/85 [[data-skin=plate]_&]:hover:bg-white/15 [[data-skin=plate]_&]:hover:text-white"
+            >
+              <PanelLeftClose className="size-4" strokeWidth={1.8} />
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
               aria-label={text.closeMenu}
               onClick={onClose}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-riso-yellow text-ink outline-none focus-visible:shadow-focus"
+              className="inline-flex size-8 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink"
             >
               <NavIcon name="close" className="size-4 [stroke-width:2.8]" />
             </button>
           )}
         </div>
         <ScopeSwitcher scope={scope} projects={projects} />
-        <label className="flex h-[34px] items-center gap-2 rounded-ticket bg-ink/[0.42] px-2.5 text-white focus-within:shadow-focus">
-          <NavIcon name="search" className="size-3.5" />
+        <div className="flex h-[34px] items-center gap-2 rounded-ticket border border-sidebar-border bg-surface-control px-2.5 text-sidebar-fg focus-within:border-hairline-strong focus-within:shadow-focus [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.42] [[data-skin=plate]_&]:text-white">
+          <NavIcon name="search" className="size-3.5 text-sidebar-muted [[data-skin=plate]_&]:text-white" />
           <input
             ref={searchRef}
             type="search"
@@ -161,19 +183,32 @@ export function Sidebar({
             placeholder={text.search.placeholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/80"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-fg outline-none placeholder:text-sidebar-muted [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:placeholder:text-white/80"
           />
-          <kbd aria-hidden="true" className="rounded-stamp border border-white/45 px-[5px] font-sans text-[11px] leading-4">
-            {text.search.shortcut}
-          </kbd>
-        </label>
+          {onOpenPalette ? (
+            <button
+              type="button"
+              aria-label={text.palette.open}
+              title={`${text.palette.title} (${text.search.shortcut})`}
+              onClick={onOpenPalette}
+              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted transition-colors outline-none hover:text-sidebar-fg focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/45 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:text-white"
+            >
+              <kbd className="font-sans">{text.search.shortcut}</kbd>
+            </button>
+          ) : (
+            <kbd
+              aria-hidden="true"
+              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted [[data-skin=plate]_&]:border-white/45 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:text-white"
+            >
+              {text.search.shortcut}
+            </kbd>
+          )}
+        </div>
       </div>
 
       {/* The scroll area itself is the positioning container: the sr-only description in the "needs you" badge scrolls with the list and is
           clipped, instead of stretching the whole page from its unscrolled position. */}
-      {/* The scrollbar that appears when the window is short: a thin translucent white scrollbar on the blue background, visible without being
-          glaring. */}
-      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-color:rgb(255_255_255/.45)_transparent] [scrollbar-width:thin]">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-color:var(--hairline-strong)_transparent] [scrollbar-width:thin] [[data-skin=plate]_&]:[scrollbar-color:rgb(255_255_255/.45)_transparent]">
         <NavItem
           to={overviewPath(scope)}
           icon="overview"
@@ -232,13 +267,45 @@ export function Sidebar({
         <SidebarDeco />
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5 border-t-2 border-dashed border-white/35 px-3.5 pt-2.5 pb-3.5">
+      <div className="flex shrink-0 flex-col gap-0.5 border-t border-sidebar-border px-3.5 pt-2.5 pb-3.5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-white/35">
         <NavItem compact to="/plugins" icon="plugins" label={text.items.plugins} current={here.global === 'plugins'} />
         <NavItem compact to="/skills" icon="skills" label={text.items.skills} current={here.global === 'skills'} />
         <NavItem compact to="/stats" icon="stats" label={text.items.stats} current={here.global === 'stats'} />
         <NavItem compact to="/identities" icon="identities" label={text.items.identities} current={here.global === 'identities'} />
-        <NavItem compact to="/settings" icon="settings" label={text.items.settings} current={here.global === 'settings'} />
-        <ConnectionStatus className="mt-1.5 ml-2.5 self-start text-[11.5px]" />
+        <div className="mt-2 flex items-center gap-1.5 border-t border-sidebar-border pt-2.5 [[data-skin=plate]_&]:border-white/25">
+          <Link
+            to="/settings"
+            aria-current={here.global === 'settings' ? 'page' : undefined}
+            title={`${text.items.settings} (${text.settingsShortcut})`}
+            className={cn(
+              'flex h-9 min-w-0 flex-1 items-center gap-2 rounded-ticket border px-2.5 text-[13.5px] font-medium transition-colors outline-none focus-visible:shadow-focus',
+              here.global === 'settings'
+                ? 'border-hairline-strong bg-sidebar-active-bg font-semibold text-sidebar-active-fg [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]'
+                : 'border-sidebar-border bg-surface-control text-sidebar-fg hover:bg-sidebar-hover [[data-skin=plate]_&]:border-white/30 [[data-skin=plate]_&]:bg-white/10 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:bg-white/18',
+            )}
+          >
+            <NavIcon name="settings" />
+            <span className="min-w-0 flex-1 truncate">{text.items.settings}</span>
+            <span
+              aria-hidden="true"
+              data-shortcut={text.settingsShortcut}
+              className="shrink-0 rounded-stamp border border-sidebar-border px-1 font-sans text-[10.5px] leading-4 text-sidebar-muted after:content-[attr(data-shortcut)] [[data-skin=plate]_&]:border-current/35 [[data-skin=plate]_&]:text-current/80"
+            />
+          </Link>
+          <button
+            type="button"
+            aria-label={resolvedTheme === 'dark' ? text.switchToLight : text.switchToDark}
+            title={supportsDark ? (resolvedTheme === 'dark' ? text.switchToLight : text.switchToDark) : t.settings.appearance.title}
+            onClick={() => {
+              if (!supportsDark) void navigate('/settings#settings-appearance')
+              else setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark')
+            }}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/30 [[data-skin=plate]_&]:bg-white/10 [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:bg-white/18"
+          >
+            {resolvedTheme === 'dark' ? <Sun className="size-4" strokeWidth={1.8} /> : <Moon className="size-4" strokeWidth={1.8} />}
+          </button>
+        </div>
+        <ConnectionStatus className="mt-2 ml-1 self-start text-[11.5px] font-medium [&.text-white]:text-sidebar-muted [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:[&.text-white]:text-white" />
       </div>
       {creating && <CreateAgentDialog scope={creating} onClose={() => setCreating(null)} />}
     </nav>

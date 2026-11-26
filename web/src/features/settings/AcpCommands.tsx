@@ -61,7 +61,7 @@ function AcpCommandCard({ command, onEdit, onDelete }: { command: Command; onEdi
   const definition = lookup.get(command.runtime)
   const status = useRuntimes().data?.runtimes.find((runtime) => runtime.id === command.runtime)
   return (
-    <section aria-label={command.name} className="mr-[5px] mb-[5px] flex min-w-0 flex-col gap-3 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-[5px_5px_0_var(--ink)]">
+    <section aria-label={command.name} className="flex min-w-0 flex-col gap-3 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface [[data-skin=plate]_&]:mr-[5px] [[data-skin=plate]_&]:mb-[5px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {definition && <RuntimeMark runtime={definition} className="size-9" />}
         <span className="min-w-0 font-display-cn text-[26px] leading-[1.1] break-words">{command.name}</span>

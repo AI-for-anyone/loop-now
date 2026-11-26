@@ -17,9 +17,8 @@ import { useSkillMdEditor } from './use-skill-md-editor'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet as PaperSheet } from '@/components/Sheet'
 
-// Upload folder and Upload zip: white pills with a navy outline and a navy shadow; creating online is the only fluorescent
-// pink primary button on this page (redesign general rule 7).
-const uploadButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
+// Upload folder and Upload zip: crisp secondary controls in mono skin; white pills with a navy outline and shadow in Plate skin.
+const uploadButtonClass = '[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-paper-raised'
 
 // The URL decides whether a drawer is open: /skills/:skillId opens the detail drawer, /skills/new opens the create-online
 // drawer, and closing goes back to /skills.
@@ -34,7 +33,7 @@ export function SkillsPage() {
   const list = skills.data?.skills ?? []
   const empty = skills.isSuccess && list.length === 0
   const newLink = (
-    <Button size={empty ? 'lg' : 'xs'} variant="interrupt" className="border-2 border-ink" asChild>
+    <Button size={empty ? 'lg' : 'xs'} variant="interrupt" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" asChild>
       <Link to="/skills/new">
         <PlusIcon aria-hidden="true" />
         {t.skills.create}
@@ -100,7 +99,7 @@ function TemplateCard({ skill, selected }: { skill: Schemas['SkillTemplateSummar
     <Link
       to={`/skills/${skill.id}`}
       aria-current={selected ? 'true' : undefined}
-      className="mr-1 mb-1 flex w-full flex-col gap-3 rounded-card border-2 border-ink bg-white p-5 text-ink no-underline shadow-[4px_4px_0_var(--ink)] outline-none hover:bg-tint-yellow focus-visible:shadow-focus aria-[current=true]:bg-riso-yellow aria-[current=true]:shadow-print-pink"
+      className="flex w-full flex-col gap-3 rounded-card border border-hairline-strong bg-surface-control p-5 text-ink no-underline shadow-surface outline-none hover:bg-surface-hover focus-visible:shadow-focus aria-[current=true]:border-ink aria-[current=true]:bg-surface-active [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-tint-yellow [[data-skin=plate]_&]:aria-[current=true]:bg-riso-yellow [[data-skin=plate]_&]:aria-[current=true]:shadow-print-pink"
     >
       <span className="flex w-full items-center gap-3">
         <span className="min-w-0 flex-1 truncate font-mono text-[15.5px] font-bold">{skill.name}</span>
@@ -230,7 +229,7 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
           </h3>
           <ul className="flex flex-col gap-1.5" aria-label={t.skills.fileList}>
             {data.files.map((file) => (
-              <li key={file.path} className="grid grid-cols-[minmax(0,1fr)_max-content] overflow-hidden rounded-ticket bg-white">
+              <li key={file.path} className="grid grid-cols-[minmax(0,1fr)_max-content] overflow-hidden rounded-ticket border border-hairline bg-surface-control [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
                 <span className="px-3.5 py-[9px] font-mono text-[13px] [overflow-wrap:anywhere]">{file.path}</span>
                 <span className="flex items-center border-l-2 border-dashed border-ink/20 px-3.5 text-[12.5px] font-bold text-ink-500">{t.common.bytes(file.size)}</span>
               </li>
@@ -246,7 +245,7 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
         </section>
         <section className="flex flex-col gap-2.5 rounded-card bg-tint-blue px-[18px] py-4">
           <h3 className={sectionTitleClass}>{t.skills.replace}</h3>
-          <SkillUpload buttonClassName="bg-white hover:bg-white/80" onArchive={async (archive) => setReplacement(archive)} />
+          <SkillUpload buttonClassName="[[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white/80" onArchive={async (archive) => setReplacement(archive)} />
         </section>
       </SheetBody>
       <SheetFooter>

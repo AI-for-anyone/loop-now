@@ -1,6 +1,6 @@
-import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowUpIcon, TriangleAlertIcon } from 'lucide-react'
+import { ArrowUpIcon, TriangleAlertIcon, ZapIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -14,6 +14,7 @@ import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } fr
 import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
 import { barKbdClass, mac } from './composer-style'
+import { clearChatDraft, getChatDraft, setChatDraftImages, setChatDraftText } from './draft-store'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import { copyText } from '@/lib/clipboard'
@@ -97,8 +98,31 @@ const inputClass =
 export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
-  const [text, setText] = useState('')
-  const [images, setImages] = useState<ImageDraft[]>([]), [submitting, setSubmitting] = useState(false), [uploads, setUploads] = useState<ImageUploads>({}), [imageError, setImageError] = useState<unknown>(null)
+  const [draftState, setDraftState] = useState(() => {
+    const initial = getChatDraft(agentId)
+    return { agentId, text: initial.text, images: initial.images }
+  })
+  if (draftState.agentId !== agentId) {
+    const next = getChatDraft(agentId)
+    setDraftState({ agentId, text: next.text, images: next.images })
+  }
+  const text = draftState.text
+  const images = draftState.images
+  const setText = useCallback((next: string | ((current: string) => string)) => {
+    setDraftState((prev) => {
+      const value = typeof next === 'function' ? next(prev.text) : next
+      setChatDraftText(prev.agentId, value)
+      return value === prev.text ? prev : { ...prev, text: value }
+    })
+  }, [])
+  const setImages = useCallback((next: ImageDraft[] | ((current: ImageDraft[]) => ImageDraft[])) => {
+    setDraftState((prev) => {
+      const value = typeof next === 'function' ? next(prev.images) : next
+      setChatDraftImages(prev.agentId, value)
+      return value === prev.images ? prev : { ...prev, images: value }
+    })
+  }, [])
+  const [submitting, setSubmitting] = useState(false), [uploads, setUploads] = useState<ImageUploads>({}), [imageError, setImageError] = useState<unknown>(null)
   const busyRequest = useRef(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const pending = send.isPending || submitting
@@ -191,7 +215,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       setCaret(Number.MAX_SAFE_INTEGER)
       setConfirmResume(true)
     },
-  }), [replyId, text])
+  }), [replyId, setImages, setText, text])
 
   // After completing a command, put the caret after the whitespace following the command.
   useLayoutEffect(() => {
@@ -296,9 +320,21 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       } else {
         // Remove the part that was sent and keep only text typed during the send; if the sent part was changed during the send, keep
         // everything.
-        setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+        setDraftState((prev) => {
+          const nextText = prev.text.startsWith(sent) ? prev.text.slice(sent.length) : prev.text
+          const nextImages = prev.images.filter((image) => !sentImages.some((sentImage) => sentImage.id === image.id))
+          if (nextText === '' && nextImages.length === 0) {
+            clearChatDraft(prev.agentId)
+          } else {
+            setChatDraftText(prev.agentId, nextText)
+            setChatDraftImages(prev.agentId, nextImages)
+          }
+          return { ...prev, text: nextText, images: nextImages }
+        })
       }
-      setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
+      if (confirmedResume) {
+        setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
+      }
     } catch (error) {
       setImageError(error)
     } finally { busyRequest.current = false; setSubmitting(false) }
@@ -352,32 +388,41 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   }
 
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
-  const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
+  const hasDraft = text.trim() !== '' || images.length > 0
+  const showStop = busy && stop !== undefined
+  const showInterrupt = busy && !submitDisabled && hasDraft && !reply
+  const showSend = !showStop || hasDraft || reply !== undefined
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
-  // Three things in a row: the round add-image button on the left, the input box in the middle, and the fluorescent pink round send
-  // stamp on the right (it turns into a navy stop button when busy and the input box is empty).
-  // The input box has a light paper fill and a navy border, and is a pill when it has one line; the reply bar and images waiting to be
-  // sent sit inside the same border, above the text line.
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu runtimeName={listRuntime?.name} open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
+  // Row: add-image button on the left, elevated input box in the middle, and action controls on the right.
+  // While busy, the dedicated Stop button stays available even with a draft, and an explicit Interrupt button appears alongside Queue Send.
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu runtimeName={listRuntime?.name} open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
-    <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
+    <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-panel border border-hairline-strong bg-surface-control px-4 shadow-surface focus-within:border-ink focus-within:ring-2 focus-within:ring-ink/15 [[data-skin=plate]_&]:rounded-[22px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:focus-within:border-riso-blue [[data-skin=plate]_&]:focus-within:ring-riso-blue/25">
       {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
       {strip}
       {editor}
     </div>
-    {showStop ? (
-      <Button type="button" size="icon" className="mr-[3px] size-11 border-2 border-ink bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
-    ) : (
-      <Button type="button" variant="interrupt" size="icon" className="mr-[3px] size-11 border-2 border-ink" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>
-    )}
+    <div className="flex shrink-0 items-center gap-1.5">
+      {showStop && (
+        <Button type="button" size="icon" className="size-10 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
+      )}
+      {showInterrupt && (
+        <Button type="button" variant="secondary" className="h-10 shrink-0 gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-3 text-[13px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink" aria-label={t.chat.interruptSend} title={t.chat.interruptSendTitle(mac)} disabled={submitDisabled || pending} onClick={() => void submit('interrupt')}>
+          <ZapIcon aria-hidden="true" className="size-3.5 shrink-0 text-pink-text" strokeWidth={2.5} />
+          <span className="hidden sm:inline">{t.chat.interruptAction}</span>
+        </Button>
+      )}
+      {showSend && (
+        <Button type="button" variant="interrupt" size="icon" className="size-10 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>
+      )}
+    </div>
   </div></SlashCommandMenu>
   return (
-    // The input area is a light yellow bar at the bottom of the sheet, with a navy line along its top edge. On wide screens the top and
-    // bottom padding is tighter, leaving a few more lines for the conversation.
-    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2">
+    // Clean composer bar on surface-canvas with hairline border; Plate skin keeps its yellow bar and 2px navy edge.
+    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t border-hairline bg-surface-canvas px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow">
       {localError && (
         <p role="alert" className="text-[13px] font-black text-red-text">
           {localError}
@@ -390,7 +435,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
       <div className="flex min-w-0 flex-col">
         {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
-        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
+        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white">{input}</ImagePicker> : input()}
       </div>
       {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
           right the live connection status. On wide screens it lines up with the left edge of the input box. */}
@@ -432,7 +477,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   )
 }
 
-const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
+const kbdClass = 'rounded-stamp border border-hairline-strong bg-surface-control px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700 [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-white'
 // Key hints below the input box when idle: Enter sends, Shift + Enter starts a new line.
 function IdleHint() {
   return (

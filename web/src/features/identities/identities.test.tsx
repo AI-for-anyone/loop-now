@@ -313,13 +313,13 @@ describe('Read-only inbox of an external identity', () => {
 
 // "Printed sheet" redesign, step 4: external identities sit on a sheet, with the list on the left and the selected identity on the right.
 describe('External identities on the sheet', () => {
-  it('the header is the page title: breadcrumb “Global›External identities”, next to it the number of identities; the fluorescent pink “New” sits at the top of the list', async () => {
+  it('the header is the page title: breadcrumb “Global›External identities”, next to it the number of identities; “New” sits at the top of the list (fluorescent pink in Plate skin)', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
     const header = screen.getByRole('heading', { level: 1, name: 'External identities' }).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›External identities')
     expect(await within(header).findByText('1 identity')).toBeInTheDocument()
-    expect(list().getByRole('button', { name: 'New' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    expect(list().getByRole('button', { name: 'New' })).toHaveClass('bg-surface-hover', 'border-2', 'border-ink', '[[data-skin=plate]_&]:bg-riso-pink')
   })
 
   it('list and details are on one sheet; the selected identity is a yellow block with a navy outline and a shadow', async () => {

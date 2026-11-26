@@ -205,8 +205,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
         variant === 'sheet'
           ? 'min-w-0 flex-1 gap-5 pt-6 pr-[clamp(14px,3vw,40px)] pb-[22px] pl-[clamp(12px,2vw,34px)]'
           : variant === 'panel'
-            ? cn('gap-4 rounded-card border-2 border-ink bg-paper-raised px-4 pt-4 pb-3', className)
-            : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),
+            ? cn('gap-4 rounded-card border border-hairline-strong bg-surface-subtle px-4 pt-4 pb-3 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised', className)
+            : cn('rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-white', className),
       )}
       onDragOver={(event) => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(INTERNAL)) { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDraggingFiles(true) } }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) { setDraggingFiles(false); setDropTarget(null) } }}
@@ -296,7 +296,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       {uploads.rows.length > 0 && <UploadPanel rows={uploads.rows} onClose={uploads.clear} />}
       {draggingFiles && (
         <div aria-hidden="true" className="pointer-events-none absolute inset-1.5 z-30 flex items-center justify-center rounded-[12px] border-2 border-dashed border-riso-blue bg-tint-blue/70">
-          <span className="rounded-full bg-white px-4 py-2 text-[13.5px] font-black text-riso-blue shadow-print-rest">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
+          <span className="rounded-full bg-surface-elevated px-4 py-2 text-[13.5px] font-semibold text-ink shadow-floating [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:shadow-print-rest">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
         </div>
       )}
 

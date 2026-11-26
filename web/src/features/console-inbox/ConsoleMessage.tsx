@@ -68,8 +68,8 @@ export function UnreadDot() {
 
 const optionBase = 'inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-left text-[13.5px] leading-5 font-bold [overflow-wrap:anywhere] outline-none focus-visible:shadow-focus'
 const optionStyle = {
-  open: 'cursor-pointer border-ink/35 bg-white text-ink shadow-[2px_2px_0_rgb(36_67_181/.18)] hover:border-riso-blue hover:bg-tint-blue disabled:cursor-default disabled:opacity-60',
-  chosen: 'border-riso-blue bg-riso-blue text-white',
+  open: 'cursor-pointer border-hairline-strong bg-surface-control text-ink hover:border-ink hover:bg-surface-hover disabled:cursor-default disabled:opacity-60 [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[2px_2px_0_rgb(36_67_181/.18)] [[data-skin=plate]_&]:hover:border-riso-blue [[data-skin=plate]_&]:hover:bg-tint-blue',
+  chosen: 'border-cta-bg bg-cta-bg text-cta-fg [[data-skin=plate]_&]:border-riso-blue [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:text-white',
   faded: 'border-dashed border-ink/20 bg-transparent text-ink-500',
 }
 

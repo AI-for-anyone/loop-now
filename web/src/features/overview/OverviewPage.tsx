@@ -25,15 +25,15 @@ function EmptyOverview({ onCreate }: { onCreate: () => void }) {
   return (
     <section aria-labelledby={titleId} className="flex flex-col items-center gap-[18px] px-6 py-14 text-center">
       <span aria-hidden="true" className="relative h-[140px] w-[200px] shrink-0">
-        <span className="riso-halftone absolute top-2.5 left-2.5 size-[120px] rounded-full bg-riso-blue" />
-        <span className="absolute top-0 left-[70px] size-[120px] rounded-full bg-riso-pink mix-blend-multiply" />
+        <span className="riso-halftone absolute top-2.5 left-2.5 size-[120px] rounded-full bg-surface-active [[data-skin=plate]_&]:bg-riso-blue" />
+        <span className="absolute top-0 left-[70px] size-[120px] rounded-full border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:mix-blend-multiply" />
       </span>
-      <h2 id={titleId} className="font-display-cn text-[40px] leading-[1.2] font-normal text-riso-blue">
+      <h2 id={titleId} className="font-display-cn text-[40px] leading-[1.2] font-semibold text-ink [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
         {t.overview.empty.title}
       </h2>
       <p className="text-[14.5px] text-ink-700">{t.overview.empty.body}</p>
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button size="lg" className="h-12 px-[26px] text-base shadow-print-pink" disabled={!reachable} onClick={onCreate}>
+        <Button size="lg" className="h-12 px-[26px] text-base [[data-skin=plate]_&]:shadow-print-pink" disabled={!reachable} onClick={onCreate}>
           <PlusIcon strokeWidth={3} />
           {t.agents.create}
         </Button>

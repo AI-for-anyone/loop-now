@@ -2,7 +2,7 @@ import { ArrowDownIcon, HistoryIcon, ScissorsIcon, ZapIcon } from 'lucide-react'
 import { CutLine } from '@/components/CutLine'
 import { MessageImages } from '@/features/images/MessageImages'
 import { UserChatBubble, AgentChatReply, SleepWakeLine } from './ChatBubble'
-import { Fragment, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
 import { HollowNumber } from '@/components/NumberedSection'
 import { Stub } from '@/components/Sheet'
@@ -24,6 +24,7 @@ import { BackgroundToolCards } from './BackgroundToolCard'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { MessageRuler } from './MessageRuler'
 import { turnPreview, useVisibleTurns } from './ruler'
+import { getChatScrollTop, setChatScrollTop } from './draft-store'
 
 function UserBubble({ message, run }: { message: Schemas['Message']; run: Schemas['Run'] }) {
   return <UserChatBubble wide images={<MessageImages images={message.images} />} text={message.text} time={t.chat.time(message.createdAt)} interrupted={run.whenBusy === 'interrupt'} wakeSleepId={run.wakeSleepId} />
@@ -242,8 +243,22 @@ export function MessageList({
   const olderFrom = useRef<number | null>(null)
   // While locating, start viewing from the target reply and don't stick to the bottom; sticking to the bottom resumes only once
   // everything up to the latest is loaded and the person has scrolled to the bottom.
-  const stickToBottom = useRef(targetRunId === null)
+  // When returning to an Agent whose user had scrolled up, restore that scroll position instead of jumping to the bottom.
+  const [initialScroll] = useState(() => (targetRunId === null ? getChatScrollTop(agent.id) : null))
+  const [scrolledUp, setScrolledUp] = useState(initialScroll !== null)
+  const pendingRestore = useRef<number | null>(initialScroll)
+  const stickToBottom = useRef(targetRunId === null && initialScroll === null)
   const located = useRef(false)
+  // Track when new turns or streaming output arrive while the user is scrolled up, so the floating button can announce "New output".
+  const latestSig = lastKey === undefined ? '' : `${lastKey}:${lastText ?? ''}`
+  const [seenLatest, setSeenLatest] = useState(latestSig)
+  const [hasNewBelow, setHasNewBelow] = useState(false)
+  if (latestSig !== seenLatest) {
+    setSeenLatest(latestSig)
+    if (seenLatest !== '' && scrolledUp) {
+      setHasNewBelow(true)
+    }
+  }
   // The position after the most recent scroll. Positions set by code are recorded too, to tell a person scrolling up apart from a late
   // scroll event after a programmatic scroll.
   const lastScrollTop = useRef(0)
@@ -256,7 +271,12 @@ export function MessageList({
   useLayoutEffect(() => {
     const el = container.current
     if (!el) return
-    if (olderFrom.current !== null && wasLoadingOlder.current && !loadingOlder) {
+    if (pendingRestore.current !== null) {
+      if (turns.length > 0) {
+        scrollTo(el, pendingRestore.current, lastScrollTop)
+        pendingRestore.current = null
+      }
+    } else if (olderFrom.current !== null && wasLoadingOlder.current && !loadingOlder) {
       // Loading finished: the earlier messages were inserted at the top, so compensate by the added height.
       scrollTo(el, el.scrollTop + el.scrollHeight - olderFrom.current, lastScrollTop)
       olderFrom.current = null
@@ -264,7 +284,7 @@ export function MessageList({
       scrollTo(el, el.scrollHeight, lastScrollTop)
     }
     wasLoadingOlder.current = loadingOlder
-  }, [firstKey, lastKey, lastText, loadingOlder])
+  }, [firstKey, lastKey, lastText, loadingOlder, turns.length])
 
   // Locating: when the target reply first appears, scroll to it so it shows in the upper part of the conversation area. The target can
   // also be content placed into the conversation flow (a located manual compaction), which appears a bit later.
@@ -319,8 +339,18 @@ export function MessageList({
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     if (nearBottom && hasNewer) {
       if (!jumped) loadNewer()
-    } else if (nearBottom) stickToBottom.current = true
-    else if (el.scrollTop < lastScrollTop.current) stickToBottom.current = false
+    } else if (nearBottom) {
+      stickToBottom.current = true
+      setScrolledUp(false)
+      setHasNewBelow(false)
+      if (targetRunId === null) setChatScrollTop(agent.id, null)
+    } else if (el.scrollTop < lastScrollTop.current) {
+      stickToBottom.current = false
+      setScrolledUp(true)
+      if (targetRunId === null) setChatScrollTop(agent.id, el.scrollTop)
+    } else if (!stickToBottom.current && targetRunId === null) {
+      setChatScrollTop(agent.id, el.scrollTop)
+    }
     lastScrollTop.current = el.scrollTop
     if (el.scrollTop < 80 && !jumped) loadOlder()
   }
@@ -332,34 +362,41 @@ export function MessageList({
     const el = container.current
     const target = Array.from(content.current?.children ?? []).find((child) => child instanceof HTMLElement && child.dataset.runId === runId)
     if (!el || !target) return
+    pendingRestore.current = null
     stickToBottom.current = false
     scrollTo(el, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24, lastScrollTop)
     rulerJump.current = lastScrollTop.current
+    setScrolledUp(true)
+    if (targetRunId === null) setChatScrollTop(agent.id, lastScrollTop.current)
+  }
+
+  // Return to the true bottom of the conversation and resume auto-following new content.
+  const jumpToBottom = () => {
+    const el = container.current
+    if (!el) return
+    pendingRestore.current = null
+    stickToBottom.current = true
+    scrollTo(el, el.scrollHeight, lastScrollTop)
+    setScrolledUp(false)
+    setHasNewBelow(false)
+    if (targetRunId === null) setChatScrollTop(agent.id, null)
   }
 
   return (
-    // To the right of the conversation area is the ruler in the stub; it doesn't scroll with the messages and replaces the native
-    // scrollbar (scrolling by wheel, trackpad and keyboard is unchanged);
-    // with only one turn or no conversation the stub has no ticks, and on narrow screens where the sidebar folds into a drawer the stub
-    // isn't shown: both cases keep the native scrollbar.
+    // To the right of the conversation area is the ruler in the stub; the scroll area keeps a thin usable scrollbar so long replies
+    // can be dragged directly.
     <div className="flex h-full min-h-0">
-      {/* The scroll area itself is the positioning container: absolutely positioned elements inside it (unread dots, the sr-only
-          caption of the footnote heading, etc.) scroll with the content and get clipped; otherwise they'd be laid out in the whole
-          page at their unscrolled positions, making the page taller, so a large blank area could be dragged out below the input box. */}
-      <div
-        ref={container}
-        onScroll={onScroll}
-        className={cn(
-          // On wide screens the left padding is a bit narrower (the number column got narrower too), moving the body left; narrow
-          // screens are unchanged.
-          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
-          // With a ruler (at least two turns, wide screen) hide the native scrollbar; without ticks keep it, so you can still tell how far
-          // you've scrolled through one very long reply.
-          turns.length > 1 && 'nav:no-scrollbar',
-        )}
-        role="log"
-        aria-label={t.chat.messagesLabel}
-      >
+      <div className="relative h-full min-h-0 min-w-0 flex-1">
+        {/* The scroll area itself is the positioning container: absolutely positioned elements inside it (unread dots, the sr-only
+            caption of the footnote heading, etc.) scroll with the content and get clipped; otherwise they'd be laid out in the whole
+            page at their unscrolled positions, making the page taller, so a large blank area could be dragged out below the input box. */}
+        <div
+          ref={container}
+          onScroll={onScroll}
+          className="riso-scrollbar relative h-full min-w-0 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]"
+          role="log"
+          aria-label={t.chat.messagesLabel}
+        >
         {/* The right padding also leaves room for the print shadows of bubbles and code blocks, so the scroll area doesn't clip them. */}
         <div ref={content} className="flex min-w-0 w-full flex-col gap-7">
           {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
@@ -416,11 +453,31 @@ export function MessageList({
           )}
         </div>
       </div>
+        {scrolledUp && turns.length > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-4">
+            <button
+              type="button"
+              data-jump-bottom
+              onClick={jumpToBottom}
+              className={cn(
+                'pointer-events-auto inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold shadow-floating outline-none focus-visible:shadow-focus',
+                hasNewBelow
+                  ? 'border-transparent bg-cta-bg text-cta-fg hover:bg-cta-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-print-ink'
+                  : 'border-hairline-strong bg-surface-elevated text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-print-ink',
+              )}
+            >
+              <ArrowDownIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.5} />
+              <span>{hasNewBelow ? t.chat.newOutput : t.chat.backToLatest}</span>
+            </button>
+          </div>
+        )}
+      </div>
       {turns.length > 1 ? (
         <MessageRuler
           turns={turns.map((turn) => ({ key: turn.run.id, label: turnPreview(turn) }))}
           visible={visibleTurns}
           onJump={jumpTo}
+          onJumpBottom={jumpToBottom}
           firstNumber={firstNumber}
           total={firstNumber === null ? null : (turnsTotal ?? null)}
         />

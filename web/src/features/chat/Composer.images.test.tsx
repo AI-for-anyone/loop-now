@@ -1,12 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { Composer } from './Composer'
+import { resetChatDraftsForTest } from './draft-store'
 import { apiUrl, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
+afterEach(() => resetChatDraftsForTest())
 const agentId = 'image-agent', limits = { maxCount: 4, maxImageBytes: 5242880, maxTotalBytes: 20971520 }
 const refs = new Map<string, Schemas['MessageImage']>()
 const file = (name: string) => new File(['synthetic-png'], name, { type: 'image/png' })
@@ -40,20 +42,20 @@ it('keeps the image plus, one-line editor and send arrow in the same composer ro
   expect([...row.children].map((child) => child.contains(editor))).toEqual([false, true, false])
   await userEvent.type(editor, 'Line one{Shift>}{Enter}{/Shift}Line two')
   expect(editor).toHaveValue('Line one\nLine two')
-  expect(border).toHaveClass('rounded-[22px]')
+  expect(border).toHaveClass('rounded-panel', '[[data-skin=plate]_&]:rounded-[22px]')
 })
 it('puts attached thumbnails inside the input border, above the text row', async () => {
   mount(); await userEvent.upload(screen.getByLabelText('Choose an image file'), [file('one.png'), file('two.png')])
   const border = screen.getByRole('textbox').closest('[data-chat-input]') as HTMLElement, list = within(border).getByRole('list', { name: 'Images to send' })
   expect(border.firstElementChild).toContainElement(list)
   expect(border.lastElementChild).toBe(screen.getByRole('textbox'))
-  expect(border).toHaveClass('rounded-[22px]')
+  expect(border).toHaveClass('rounded-panel', '[[data-skin=plate]_&]:rounded-[22px]')
   expect(await within(list).findByAltText('two.png')).toBeInTheDocument()
   await userEvent.click(within(list).getByRole('button', { name: 'Remove image 1' }))
   expect(within(list).queryByAltText('one.png')).not.toBeInTheDocument()
   await userEvent.click(within(border).getByRole('button', { name: 'Remove image 1' }))
   expect(screen.queryByRole('list', { name: 'Images to send' })).not.toBeInTheDocument()
-  expect(border).toHaveClass('rounded-[22px]')
+  expect(border).toHaveClass('rounded-panel', '[[data-skin=plate]_&]:rounded-[22px]')
 })
 it('shows upload progress and the failed image on its own thumbnail', async () => {
   let release!: () => void, uploads = 0; const gate = new Promise<void>(resolve => { release = resolve })
@@ -148,5 +150,22 @@ it("doesn't take images for a model that takes none: the plus is disabled and sa
   editor.focus()
   await userEvent.paste({ files: [file('shot.png')] } as unknown as DataTransfer)
   expect(await screen.findByRole('alert')).toHaveTextContent("This model doesn't take images")
+  expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull()
+})
+it('preserves pending images per Agent across unmount and remount, and clears them after sending', async () => {
+  uploadFixture()
+  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => accepted(await request.json() as Schemas['SendMessageInput'])))
+  const first = renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
+  await userEvent.upload(screen.getByLabelText('Choose an image file'), file('persisted.png'))
+  expect(await screen.findByAltText('persisted.png')).toBeInTheDocument()
+  first.unmount()
+
+  const second = renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
+  expect(await screen.findByAltText('persisted.png')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull())
+  second.unmount()
+
+  renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
   expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull()
 })

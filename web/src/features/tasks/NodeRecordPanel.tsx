@@ -10,6 +10,7 @@ import { HollowNumber } from '@/components/NumberedSection'
 import { Sheet } from '@/components/Sheet'
 import { StickyNote } from '@/components/StickyNote'
 import { indexTabClass, indexTabsClass } from '@/lib/index-tab'
+import { copyText } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 import { stepNumber } from './workflow-steps'
 import { NodeMessageComposer } from './NodeMessageComposer'
@@ -180,7 +181,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
             <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
               <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
-                {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
+                {current ? <span className="rounded-[4px] bg-cta-bg px-2 text-[11.5px] leading-5 font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
                 <BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />
                 <TaskBadge className="ml-auto" status={node.status} />
               </NodeHeading>
@@ -208,11 +209,11 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               </div>
             </div>
             {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
-            {/* Input area: a light-yellow bar at the bottom of the sheet (same as the chat page), with a line above it saying who it goes to. */}
-            <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-2.5 pb-3" data-node-draft>
+            {/* Input area: clean composer bar on surface-canvas; Plate keeps its light-yellow bar and navy border. */}
+            <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t border-hairline bg-surface-canvas px-[clamp(12px,2vw,22px)] pt-2.5 pb-3 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow" data-node-draft>
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
                 <span>{t.tasks.page.sendTo}</span>
-                <span className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
+                <span className="rounded-[4px] border border-hairline-strong bg-surface-control px-[7px] leading-[18px] font-semibold text-ink [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
                 <details className="ml-1"><summary className="cursor-pointer text-ink-500 underline decoration-dotted underline-offset-3">{t.tasks.targetDetails}</summary><p className="mt-1 font-mono text-[11.5px] font-normal break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
               </div>
               {current && unsupported && <p role="status" className="text-[13px] font-bold">{t.tasks.nodeMessagesUnsupported}</p>}
@@ -225,8 +226,8 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
                 stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
                 stopAlso={backgroundTasks.length}
                 reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
-              {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
-              {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
+              {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void copyText(draft.text)}>{t.tasks.copyDraft}</Button>}
+              {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void copyText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
             </div>
           </div>
           <div id="task-materials" role="tabpanel" aria-label={t.tasks.materials} hidden={tab !== 'materials'} ref={materials} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:shadow-focus" data-materials-scroll>
@@ -271,7 +272,7 @@ function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onCo
   const source = (id: string) => { const from = detail.nodes.find(n => n.id === id), index = detail.workflow.steps.findIndex(s => s.id === from?.stepId); return { from, index } }
   return <details data-material-record={record.id} open={open} onToggle={event => onToggle(event.currentTarget.open)} className={cn('group min-w-0', divided && 'border-t-2 border-dashed border-ink/40 pt-4')}>
     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 [&::-webkit-details-marker]:hidden">
-      <span className={cn('rounded-[4px] px-2 font-mono text-[11.5px] leading-[22px] font-bold', viewing ? 'bg-ink text-white' : 'bg-paper-tab text-ink-700')}>{t.tasks.page.version(record.visit, record.attempt)}</span>
+      <span className={cn('rounded-[4px] px-2 font-mono text-[11.5px] leading-[22px] font-bold', viewing ? 'bg-cta-bg text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white' : 'bg-surface-subtle text-ink-700 [[data-skin=plate]_&]:bg-paper-tab')}>{t.tasks.page.version(record.visit, record.attempt)}</span>
       <span className="text-[15px] font-black">{t.tasks.visit(record.visit, record.attempt)}</span>
       <TaskBadge status={record.status} />
       {record.startedAt && <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.ran(record.startedAt, record.endedAt)}</span>}
@@ -351,10 +352,10 @@ export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] 
   return <section className="min-w-0">
     <h3 className="riso-marker mb-3 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.artifacts}</h3>
     {artifacts.length === 0 && <p className="text-[13.5px] text-ink-500">{t.tasks.noArtifacts}</p>}
-    <ul className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">{artifacts.map((a) => <li key={a.id} className="mr-1 flex min-w-0 items-center gap-3 rounded-card border-2 border-ink bg-paper-raised px-3.5 py-3 shadow-[4px_4px_0_var(--ink)]">
-      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border-2 border-ink bg-riso-yellow"><FileTextIcon className="size-4" strokeWidth={2.4} /></span>
+    <ul className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">{artifacts.map((a) => <li key={a.id} className="mr-1 flex min-w-0 items-center gap-3 rounded-card border border-hairline bg-surface-control px-3.5 py-3 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]">
+      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow"><FileTextIcon className="size-4" strokeWidth={2.4} /></span>
       <span className="flex min-w-0 flex-1 flex-col leading-[1.4]"><span id={`artifact-${a.id}`} className="font-mono text-[13.5px] font-bold break-all">{a.name}</span><span className="text-[12px] text-ink-500">{a.contentType} · {t.common.bytes(a.size)}</span></span>
-      <a href={config.apiBase + artifactUrl(a)} aria-label={t.tasks.download} aria-describedby={`artifact-${a.id}`} title={t.tasks.download} className="flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-paper-raised text-ink outline-none hover:bg-riso-yellow focus-visible:shadow-focus"><DownloadIcon aria-hidden="true" className="size-4" strokeWidth={2.4} /></a>
+      <a href={config.apiBase + artifactUrl(a)} aria-label={t.tasks.download} aria-describedby={`artifact-${a.id}`} title={t.tasks.download} className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline-strong bg-surface-control text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-riso-yellow"><DownloadIcon aria-hidden="true" className="size-4" strokeWidth={2.4} /></a>
     </li>)}</ul>
   </section>
 }

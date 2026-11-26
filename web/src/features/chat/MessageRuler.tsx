@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDownIcon } from 'lucide-react'
 import { RulerMark, Stub } from '@/components/Sheet'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,8 @@ interface MessageRulerProps {
   turns: RulerTurn[]
   visible: ReadonlySet<string>
   onJump: (key: string) => void
+  // Jump to the true bottom of the conversation and re-enable auto-follow.
+  onJumpBottom?: () => void
   // The turn number of the first tick. null when unknown (earlier history isn't fully loaded and no count of the preceding turns was
   // given): only ticks are drawn, without numbers.
   firstNumber: number | null
@@ -38,7 +41,7 @@ interface MessageRulerProps {
 // Tick spacing follows the stub's height, at most 23px and at least 8px; when they still don't fit, the ruler scrolls on its own and
 // follows the visible turns.
 // No transitions or smooth scrolling: the console keeps only three animations, so reduced motion needs no special handling either.
-export function MessageRuler({ turns, visible, onJump, firstNumber, total, className }: MessageRulerProps) {
+export function MessageRuler({ turns, visible, onJump, onJumpBottom, firstNumber, total, className }: MessageRulerProps) {
   const nav = useRef<HTMLElement>(null)
   const list = useRef<HTMLOListElement>(null)
   // Hover and focus are tracked separately; when both are set, show the hovered one.
@@ -131,7 +134,7 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
                   aria-hidden="true"
                   data-ruler-long={long || undefined}
                   className={cn(
-                    'h-0.5 shrink-0 bg-ink group-hover:bg-riso-pink group-focus-visible:bg-riso-pink group-focus-visible:shadow-focus',
+                    'h-0.5 shrink-0 bg-ink/35 group-hover:bg-ink group-focus-visible:bg-ink group-focus-visible:shadow-focus [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:group-hover:bg-riso-pink [[data-skin=plate]_&]:group-focus-visible:bg-riso-pink',
                     long ? 'w-6 group-hover:w-[30px] group-focus-visible:w-[30px]' : 'w-3 group-hover:w-[18px] group-focus-visible:w-[18px]',
                   )}
                 />
@@ -140,18 +143,43 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
           )
         })}
       </ol>
+      {onJumpBottom && (
+        <button
+          type="button"
+          data-ruler-latest
+          aria-label={t.chat.ruler.latest}
+          title={t.chat.ruler.latest}
+          onClick={onJumpBottom}
+          className="mx-auto inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-hairline-strong bg-surface-control text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink/40 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-riso-yellow"
+        >
+          <ArrowDownIcon aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+        </button>
+      )}
       {total !== null && (
-        <div data-ruler-total className="shrink-0 text-center font-display-latin text-[22px] leading-none font-extrabold text-riso-blue">
-          <span aria-hidden="true">{total}</span>
-          <span className="sr-only">{t.chat.ruler.total(total)}</span>
-        </div>
+        onJumpBottom ? (
+          <button
+            type="button"
+            data-ruler-total
+            title={t.chat.ruler.latest}
+            onClick={onJumpBottom}
+            className="shrink-0 cursor-pointer rounded-stamp text-center font-display-latin text-[22px] leading-none font-extrabold text-riso-blue outline-none hover:text-ink focus-visible:shadow-focus"
+          >
+            <span aria-hidden="true">{total}</span>
+            <span className="sr-only">{t.chat.ruler.total(total)}</span>
+          </button>
+        ) : (
+          <div data-ruler-total className="shrink-0 text-center font-display-latin text-[22px] leading-none font-extrabold text-riso-blue">
+            <span aria-hidden="true">{total}</span>
+            <span className="sr-only">{t.chat.ruler.total(total)}</span>
+          </div>
+        )
       )}
       {hint && hintLabel && (
         <div
           aria-hidden="true"
           data-ruler-preview
           style={{ top: hint.top }}
-          className="pointer-events-none absolute right-full z-10 mr-1.5 w-max max-w-[min(360px,60vw)] -translate-y-1/2 truncate rounded-ticket bg-ink px-3 py-1.5 text-[12.5px] leading-5 font-bold text-white"
+          className="pointer-events-none absolute right-full z-10 mr-1.5 w-max max-w-[min(360px,60vw)] -translate-y-1/2 truncate rounded-ticket bg-tooltip-bg px-3 py-1.5 text-[12.5px] leading-5 font-semibold text-tooltip-fg shadow-floating [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:shadow-none"
         >
           {hintLabel}
         </div>

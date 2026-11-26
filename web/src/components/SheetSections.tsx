@@ -31,26 +31,38 @@ interface SheetSectionProps {
   children: ReactNode
 }
 
-// Numbered section (rule 4 of the redesign's general rules): an outlined number on the left, and a ZCOOL 30px title with a stroke of yellow
-// highlighter mark; sections sit directly on the sheet, separated by a 2px dashed line (none above the first one). The title can take
-// focus, so focus can move to it after a jump from the ruler.
+// Numbered section on settings pages: clean typographic heading with tabular index and hairline divider in mono skin;
+// outlined hollow number, ZCOOL title with yellow marker and 2px dashed divider in Plate skin. The title can take focus after jumping.
 export function SheetSection({ id, titleId, index, title, count, actions, meta, tone = 'default', children }: SheetSectionProps) {
   const danger = tone === 'danger'
   return (
-    <section id={id} aria-label={title} className={cn('flex scroll-mt-6 gap-[18px] text-ink', index > 0 && 'border-t-2 border-dashed border-ink/[0.22] pt-6')}>
-      <HollowNumber data-section-number className={cn('pt-0.5', danger && '[-webkit-text-stroke:1.6px_var(--red-text)]')}>
+    <section
+      id={id}
+      aria-label={title}
+      className={cn(
+        'flex scroll-mt-6 gap-3.5 text-ink [[data-skin=plate]_&]:gap-[18px]',
+        index > 0 && 'border-t border-hairline pt-6 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22]',
+      )}
+    >
+      <HollowNumber
+        data-section-number
+        className={cn('pt-1 [[data-skin=plate]_&]:pt-0.5', danger && 'text-red-text [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--red-text)]')}
+      >
         {String(index + 1).padStart(2, '0')}
       </HollowNumber>
-      <div className="flex min-w-0 flex-1 flex-col gap-[18px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 [[data-skin=plate]_&]:gap-[18px]">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2
             id={titleId}
             tabIndex={-1}
-            className={cn('riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal outline-none focus-visible:shadow-focus', danger && 'text-red-text')}
+            className={cn(
+              'riso-marker self-start text-[16px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.25] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal',
+              danger && 'text-red-text',
+            )}
           >
             {title}
             {count !== undefined && (
-              <span aria-hidden="true" className="ml-2 font-display-latin text-[20px] font-extrabold text-ink-500">
+              <span aria-hidden="true" className="ml-2 font-mono text-[13px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:font-extrabold">
                 {count}
               </span>
             )}
@@ -58,7 +70,13 @@ export function SheetSection({ id, titleId, index, title, count, actions, meta, 
           {meta && <span className="text-[12.5px] text-ink-500">{meta}</span>}
           {actions && <div className="ml-auto flex flex-wrap gap-1.5">{actions}</div>}
         </div>
-        <div data-section-body className={cn('flex min-w-0 flex-col gap-3.5', danger && 'riso-stripes-red rounded-panel bg-error-field px-5 py-[18px]')}>
+        <div
+          data-section-body
+          className={cn(
+            'flex min-w-0 flex-col gap-3.5',
+            danger && 'riso-stripes-red rounded-panel border border-red-text/25 bg-error-field px-5 py-[18px] [[data-skin=plate]_&]:border-0',
+          )}
+        >
           {children}
         </div>
       </div>
@@ -128,8 +146,8 @@ export function SectionToc({ label, items, className, footer }: { label: string;
 
   return (
     <Stub as="nav" aria-label={label} label={label} className={cn('w-[196px] overflow-x-hidden overflow-y-auto', className)}>
-      <ol className="relative flex flex-col text-[13.5px] font-bold">
-        <RulerTicks className="bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_10px,var(--ink)_10px,var(--ink)_12px,transparent_12px,transparent_23px)]" />
+      <ol className="relative flex flex-col text-[13px] font-medium [[data-skin=plate]_&]:text-[13.5px] [[data-skin=plate]_&]:font-bold">
+        <RulerTicks className="bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_10px,var(--hairline-strong)_10px,var(--hairline-strong)_11px,transparent_11px,transparent_23px)] [[data-skin=plate]_&]:bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_10px,var(--ink)_10px,var(--ink)_12px,transparent_12px,transparent_23px)]" />
         {items.map((item, index) => {
           const current = item.id === active
           return (
@@ -144,7 +162,7 @@ export function SectionToc({ label, items, className, footer }: { label: string;
                 }}
                 className={cn(
                   'relative flex h-[46px] items-center justify-end gap-2.5 pl-[18px] no-underline outline-none focus-visible:shadow-focus',
-                  current ? 'font-black text-ink' : 'text-ink-700 hover:text-ink',
+                  current ? 'font-semibold text-ink [[data-skin=plate]_&]:font-black' : 'text-ink-500 hover:text-ink [[data-skin=plate]_&]:text-ink-700',
                   item.danger && 'text-red-text hover:text-red-text',
                 )}
               >
@@ -152,13 +170,19 @@ export function SectionToc({ label, items, className, footer }: { label: string;
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <span className="order-1 min-w-0 truncate">{item.title}</span>
-                <span aria-hidden="true" className={cn('order-3 h-0.5 w-6 shrink-0', item.danger ? 'bg-red-text' : 'bg-ink')} />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'order-3 h-px w-4 shrink-0 [[data-skin=plate]_&]:h-0.5 [[data-skin=plate]_&]:w-6',
+                    item.danger ? 'bg-red-text' : 'bg-hairline-strong [[data-skin=plate]_&]:bg-ink',
+                  )}
+                />
               </a>
             </li>
           )
         })}
       </ol>
-      {footer && <div className="mt-auto flex shrink-0 flex-col items-end gap-0.5 pr-[22px] pt-4">{footer}</div>}
+      {footer && <div className="mt-auto flex shrink-0 flex-col items-end gap-0.5 pt-4 pr-[22px]">{footer}</div>}
     </Stub>
   )
 }

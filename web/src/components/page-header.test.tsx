@@ -14,30 +14,45 @@ describe('Page title', () => {
       </MemoryRouter>,
     )
 
-  it('breadcrumb: the earlier levels are links, the last item is the current page, marked in riso blue', () => {
+  it('breadcrumb: the earlier levels are links, the last item is the current page in primary ink (riso blue in Plate skin)', () => {
     renderHeader()
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(crumbs).getByRole('link', { name: 'Demo' })).toHaveAttribute('href', '/?project=Demo')
     const current = within(crumbs).getByText('Tasks')
     expect(current).toHaveAttribute('aria-current', 'page')
-    expect(current).toHaveClass('text-riso-blue')
+    expect(current).toHaveClass('text-ink', '[[data-skin=plate]_&]:text-riso-blue')
   })
 
-  it('the title is the ZCOOL display face in riso blue with a misregistered fluorescent pink copy; compact on wide screens (40px, same as the Agent page header), up to 60px on narrow screens as before', () => {
+  it('the title uses compact semibold mono typography by default and preserves ZCOOL display styling with pink misregistration in Plate skin', () => {
     renderHeader()
     const title = screen.getByRole('heading', { level: 1, name: 'Tasks' })
-    expect(title).toHaveClass('font-display-cn', 'text-riso-blue', 'text-[clamp(38px,6vw,60px)]', '[text-shadow:4px_4px_0_var(--riso-pink)]')
-    expect(title).toHaveClass('nav:text-[40px]', 'nav:leading-none', 'nav:[text-shadow:3px_3px_0_var(--riso-pink)]')
+    expect(title).toHaveClass('text-[22px]', 'font-semibold', 'tracking-tight', 'text-ink')
+    expect(title).toHaveClass(
+      '[[data-skin=plate]_&]:font-display-cn',
+      '[[data-skin=plate]_&]:text-riso-blue',
+      '[[data-skin=plate]_&]:text-[clamp(38px,6vw,60px)]',
+      '[[data-skin=plate]_&]:[text-shadow:4px_4px_0_var(--riso-pink)]',
+      '[[data-skin=plate]_&]:nav:text-[40px]',
+      '[[data-skin=plate]_&]:nav:[text-shadow:3px_3px_0_var(--riso-pink)]',
+    )
   })
 
-  it('compact header on wide screens: the meta line joins the title row on its right and wraps when it does not fit; tighter breadcrumb; the decoration shrinks to the header height', () => {
+  it('compact header on wide screens: meta joins the title row; right padding for OverprintDeco is scoped to Plate skin only', () => {
     renderHeader(<span>Tasks in this project</span>)
     const header = screen.getByRole('banner')
-    expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
+    expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3.5', 'nav:pb-3')
     const row = header.querySelector('[data-page-title-row]')!
     expect(row).toContainElement(screen.getByRole('heading', { level: 1 }))
     expect(row).toContainElement(screen.getByText('Tasks in this project'))
-    expect(row).toHaveClass('flex-col', 'nav:flex-row', 'nav:flex-wrap', 'nav:items-center', '@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
+    expect(row).toHaveClass(
+      'flex-col',
+      'nav:flex-row',
+      'nav:flex-wrap',
+      'nav:items-center',
+      '[[data-skin=plate]_&]:@[820px]:pr-[316px]',
+      '[[data-skin=plate]_&]:nav:@[820px]:pr-[196px]',
+    )
+    expect(row).not.toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
     expect(header.querySelector('[data-overprint-deco]')).toHaveClass('nav:scale-[0.6]')
   })
@@ -57,9 +72,17 @@ describe('Page title', () => {
     expect(document.querySelector('[data-page-meta]')).toBeNull()
   })
 
-  it('page frame: the side and bottom padding follows the window width, same as the Agent page', () => {
+  it('page frame: side padding follows the window width, with extra bottom padding reserved for Plate skin shadow', () => {
     render(<PageFrame data-testid="frame">Body</PageFrame>)
-    expect(screen.getByTestId('frame')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col', 'px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]')
+    expect(screen.getByTestId('frame')).toHaveClass(
+      'flex',
+      'h-full',
+      'min-h-0',
+      'flex-col',
+      'px-[clamp(14px,2.4vw,34px)]',
+      'pb-4',
+      '[[data-skin=plate]_&]:pb-[26px]',
+    )
   })
 })
 

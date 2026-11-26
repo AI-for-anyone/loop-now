@@ -185,11 +185,11 @@ describe('Project settings on a sheet', () => {
     const header = title.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Project settings`)
     const meta = header.querySelector<HTMLElement>('[data-page-meta]')!
-    expect(within(meta).getByText('Default project')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(within(meta).getByText('Default project')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
     expect(within(meta).getByText(defaultProject.id)).toHaveClass('font-mono')
   })
 
-  it('the eight sections are numbered 01–08 in order and sit directly on the sheet with dashed lines between them; the Delete project section stays red', async () => {
+  it('the eight sections are numbered 01–08 in order and sit directly on the sheet with hairline dividers in mono skin (dashed in Plate skin); the Delete project section stays red', async () => {
     setup()
     renderRoutes(routes, `${base('model-access')}/settings`)
     await screen.findByRole('region', { name: 'Project name' })
@@ -198,9 +198,9 @@ describe('Project settings on a sheet', () => {
       const section = region(name)
       expect(sheet).toContainElement(section)
       expect(section.querySelector('[data-section-number]')).toHaveTextContent(String(index + 1).padStart(2, '0'))
-      expect(within(section).getAllByRole('heading', { level: 2 })[0]).toHaveClass('riso-marker', 'font-display-cn')
+      expect(within(section).getAllByRole('heading', { level: 2 })[0]).toHaveClass('riso-marker', 'font-semibold', '[[data-skin=plate]_&]:font-display-cn')
       expect(section).not.toHaveClass('shadow-print-rest')
-      if (index > 0) expect(section).toHaveClass('border-t-2', 'border-dashed')
+      if (index > 0) expect(section).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed')
     })
     const danger = region('Delete project')
     expect(within(danger).getByRole('heading', { level: 2, name: 'Delete project' })).toHaveClass('text-red-text')
@@ -213,20 +213,20 @@ describe('Project settings on a sheet', () => {
     renderRoutes(routes, `${base('model-access')}/settings`)
     await screen.findByRole('region', { name: 'Project name' })
     const toc = screen.getByRole('navigation', { name: 'Contents' })
-    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
+    expect(toc).toHaveClass('border-l', 'border-hairline', 'max-nav:hidden', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
     expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(titles.map((name, index) => `${String(index + 1).padStart(2, '0')}${name}`))
     expect(within(toc).getByRole('link', { name: 'Delete project' })).toHaveClass('text-red-text')
     await user.click(within(toc).getByRole('link', { name: 'Local directories' }))
     expect(within(region('Local directories')).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveFocus()
   })
 
-  it('the Project folder section: an intro plus a file manager with a 2px navy border, with labeled pill buttons; no overview stub', async () => {
+  it('the Project folder section: an intro plus a bordered file manager (2px navy border in Plate skin), with labeled action buttons; no overview stub', async () => {
     setup()
     renderRoutes(routes, `${base('model-access')}/settings`)
     const folder = await screen.findByRole('region', { name: 'Project folder' })
     const manager = folder.querySelector('[data-file-manager]')!
-    expect(manager).toHaveClass('border-2', 'border-ink', 'rounded-card')
-    expect(within(folder).getByRole('button', { name: 'New file' })).toHaveClass('rounded-full', 'border-2')
+    expect(manager).toHaveClass('border', 'border-hairline-strong', 'rounded-card', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(within(folder).getByRole('button', { name: 'New file' })).toHaveClass('rounded-ticket', 'border', '[[data-skin=plate]_&]:rounded-full', '[[data-skin=plate]_&]:border-2')
     expect(within(folder).queryByRole('complementary', { name: 'Overview' })).toBeNull()
   })
 

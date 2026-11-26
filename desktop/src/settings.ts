@@ -1,12 +1,16 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
+import type { DesktopAppearance } from './bridge'
+
 // The shell's own settings (userData/settings.json). Only shell concerns; all business settings live in the server.
 export type Settings = {
   // The port the server actually listened on last time.
   port?: number
   // The port the external TLS port (for external identities and loopctl) actually listened on last time.
   externalPort?: number
+  // Last appearance reported by the console, used to initialize the window background without flashing.
+  appearance?: DesktopAppearance
 }
 
 export class SettingsFile {

@@ -166,7 +166,7 @@ export function ChatPage() {
             </Alert>
           )}
           {aroundRun !== null && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13.5px] font-bold [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
               <span>{t.timeline.locate.viewing}</span>
               <span role="status" aria-live="polite">
                 {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
@@ -183,7 +183,7 @@ export function ChatPage() {
           ) : (
             <MessageList
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.
-              key={aroundRun ?? 'latest'}
+              key={`${agent.id}:${aroundRun ?? 'latest'}`}
               agent={agent}
               turns={turns}
               hasQueued={queuedTurns.length > 0 || queueItems.length > 0}
@@ -239,10 +239,10 @@ export function ChatPage() {
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
-            // Busy hint: a fluorescent pink dot with a navy outline, no background fill.
+            // Busy hint: solid indicator dot next to the current phase text (Plate keeps its fluorescent pink dot with a navy outline).
             busy && (
-              <span role="status" className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink">
-                <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
+              <span role="status" className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">
+                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-ink [[data-skin=plate]_&]:size-2.5 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]" />
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
             )

@@ -81,7 +81,11 @@ describe('project tasks', () => {
     expect(within(header).getByRole('link', { name: 'Tasks' })).toHaveAttribute('href', tasksPath(defaultProject.name))
     expect(within(header).getByText('Blocked')).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(header).getByText('Not archived yet')).toBeInTheDocument()
-    expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass('border-red-text')
+    expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass(
+      'border-red-text/40',
+      'text-red-text',
+      '[[data-skin=plate]_&]:border-red-text',
+    )
   })
   it('a task of another project does not show its details', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
@@ -270,7 +274,7 @@ it('node materials: the visit being viewed is an expanded ticket and the others 
   expect(viewing.open).toBe(true)
   expect(older.open).toBe(false)
   expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-ink')
+  expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:bg-ink')
   // The yellow highlighter marks on the three subheadings Input, Output and Artifacts cover only the text.
   for (const name of ['Inputs', 'Output', 'Artifacts']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
   expect(within(viewing).getByRole('note')).toHaveTextContent('for inspection only and is not passed downstream as a success')
@@ -278,7 +282,7 @@ it('node materials: the visit being viewed is an expanded ticket and the others 
   await user.click(within(older).getByText('Visit 1 · attempt 1'))
   const download = within(older).getByRole('link', { name: 'Download' })
   expect(download).toHaveAccessibleDescription('saved-report.txt')
-  expect(download.closest('li')).toHaveClass('border-2', 'border-ink')
+  expect(download.closest('li')).toHaveClass('border', 'border-hairline', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
   await user.click(within(viewing).getByRole('button', { name: 'Back to this conversation' }))
   expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
 })
@@ -529,14 +533,14 @@ describe('task list on the sheet', () => {
     expect(await within(header).findByText('Live')).toBeInTheDocument()
   })
 
-  it('status filters are index tabs along the top edge of the sheet with counts; the selected one is yellow; they filter only the tasks read so far', async () => {
+  it('status filters use underline tabs in mono skin and yellow/beige index tabs in Plate skin with counts; they filter only the tasks read so far', async () => {
     const { list, user } = await renderList()
     const buttons = within(tabs()).getAllByRole('button')
     // In progress and Blocked use the server's counts (unfinished tasks); Completed and All count the tasks read so far.
     expect(buttons.map((button) => button.textContent)).toEqual(['All5', 'In progress2', 'Blocked1', 'Completed1'])
     expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
-    expect(buttons[0]).toHaveClass('bg-riso-yellow', 'h-10')
-    expect(buttons[1]).toHaveClass('bg-paper-tab')
+    expect(buttons[0]).toHaveClass('border-b-2', 'border-ink', 'font-semibold', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:h-10')
+    expect(buttons[1]).toHaveClass('border-transparent', 'text-ink-500', '[[data-skin=plate]_&]:bg-paper-tab')
     expect(within(list).getAllByRole('listitem')).toHaveLength(5)
     await user.click(buttons[1])
     expect(buttons[1]).toHaveAttribute('aria-pressed', 'true')

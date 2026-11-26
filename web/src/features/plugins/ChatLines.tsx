@@ -66,7 +66,7 @@ function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleR
               </div>
             </div>
             {!session.current && onResume && (
-              <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => onResume(session.id)}>
+              <Button type="button" size="xs" variant="secondary" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white" onClick={() => onResume(session.id)}>
                 {text.resumeAction}
               </Button>
             )}
@@ -104,9 +104,9 @@ function ManualCopy({ text: content }: { text: string }) {
           value={content}
           rows={Math.min(6, content.split('\n').length + 1)}
           onFocus={(event) => event.currentTarget.setSelectionRange(0, content.length)}
-          className="min-w-0 flex-1 resize-y rounded-ticket border-2 border-ink bg-paper-raised px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus"
+          className="min-w-0 flex-1 resize-y rounded-ticket border border-hairline-strong bg-surface-control px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised"
         />
-        <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => void copy()}>
+        <Button type="button" size="xs" variant="secondary" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white" onClick={() => void copy()}>
           {copied ? t.common.copied : t.common.copy}
         </Button>
       </div>

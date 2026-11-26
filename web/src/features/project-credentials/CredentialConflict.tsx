@@ -14,8 +14,8 @@ export function CredentialConflict({ base, latest, reading, error, onRefresh, on
     <p className="font-black">{t.credentials.conflict.title}</p>
     <p>{t.credentials.conflict.body}</p>
     <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-      <div className="min-w-0 rounded-input bg-white p-3"><p className="font-black">{t.credentials.conflict.whenStarted}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{base}</p></div>
-      <div className="min-w-0 rounded-input bg-white p-3"><p className="font-black">{t.credentials.conflict.latest}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{latest?.summary ?? (reading ? t.credentials.conflict.reading : t.credentials.conflict.latestMissing)}</p></div>
+      <div className="min-w-0 rounded-input border border-hairline bg-surface-control p-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white"><p className="font-black">{t.credentials.conflict.whenStarted}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{base}</p></div>
+      <div className="min-w-0 rounded-input border border-hairline bg-surface-control p-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white"><p className="font-black">{t.credentials.conflict.latest}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{latest?.summary ?? (reading ? t.credentials.conflict.reading : t.credentials.conflict.latestMissing)}</p></div>
     </div>
     {latest?.deleted && <p className="font-black">{t.credentials.conflict.accountDeleted}</p>}
     <ErrorAlert error={error} />

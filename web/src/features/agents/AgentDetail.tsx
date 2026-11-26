@@ -54,7 +54,7 @@ function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStick
         data-agent-status
         data-tone={tone}
         className={cn(
-          'riso-tilt inline-flex min-h-[26px] max-w-full flex-wrap items-center gap-x-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-black [--tilt-shadow:inset_0_0_0_2px_var(--ink)] [--tilt:-3deg]',
+          'riso-tilt inline-flex min-h-[26px] max-w-full flex-wrap items-center gap-x-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-semibold [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:[--tilt-shadow:inset_0_0_0_2px_var(--ink)] [[data-skin=plate]_&]:[--tilt:-3deg]',
           chipTone[tone],
         )}
       >
@@ -82,8 +82,8 @@ const backgroundStopper = (agentId: string): BackgroundStopper => ({
   stopAll: (actionId) => stopAllBackgroundTasks(agentId, actionId),
 })
 
-const chipTone = { success: 'text-green-text [--tilt-bg:var(--tint-green)]', busy: 'text-ink [--tilt-bg:var(--tint-pink)]', danger: 'text-red-text [--tilt-bg:var(--tint-red)]' }
-const chipDot = { success: 'bg-green', busy: 'bg-riso-pink', danger: 'bg-red' }
+const chipTone = { success: 'text-green-text [--tilt-bg:var(--tint-green)]', busy: 'text-ink [--tilt-bg:var(--surface-active)] [[data-skin=plate]_&]:[--tilt-bg:var(--tint-pink)]', danger: 'text-red-text [--tilt-bg:var(--tint-red)]' }
+const chipDot = { success: 'bg-green', busy: 'bg-ink [[data-skin=plate]_&]:bg-riso-pink', danger: 'bg-red' }
 
 export function AgentDetail() {
   const { agentId = '' } = useParams()
@@ -142,18 +142,25 @@ export function AgentDetail() {
         </nav>
         <div
           data-agent-title-row
-          className="relative flex min-w-0 flex-col gap-3 @[820px]:pr-[316px] nav:flex-row nav:flex-wrap nav:items-center nav:gap-x-3 nav:gap-y-1.5 nav:@[820px]:pr-[196px]"
+          className="relative flex min-w-0 flex-col gap-3 [[data-skin=plate]_&]:@[820px]:pr-[316px] nav:flex-row nav:flex-wrap nav:items-center nav:gap-x-3 nav:gap-y-1.5 [[data-skin=plate]_&]:nav:@[820px]:pr-[196px]"
         >
           <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 nav:contents">
-            <h1 className={cn(sheetTitleClass, 'mr-1.5 nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]')}>{agent.data.name}</h1>
+            <h1
+              className={cn(
+                sheetTitleClass,
+                'mr-1.5 font-sans text-[22px] leading-tight font-semibold tracking-tight text-ink [text-shadow:none] [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[clamp(38px,6vw,60px)] [[data-skin=plate]_&]:leading-[0.95] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:[text-shadow:4px_4px_0_var(--riso-pink)] [[data-skin=plate]_&]:nav:text-[40px] [[data-skin=plate]_&]:nav:leading-none [[data-skin=plate]_&]:nav:[text-shadow:3px_3px_0_var(--riso-pink)]',
+              )}
+            >
+              {agent.data.name}
+            </h1>
             {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
             <RuntimeBadge runtime={agent.data.runtime} />
             <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
           </div>
-          {/* Model and address: the model is a monospace tag on a light blue background, the address is in a dashed box.
+          {/* Model and address: the model is a monospace tag, the address is in a subtle box (dashed in Plate).
               On narrow screens they get a row of their own. */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] nav:contents">
-            <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{modelTag(agent.data.model, runtimes)}</span>
+            <span className="min-w-0 rounded-stamp border border-hairline bg-surface-subtle px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">{modelTag(agent.data.model, runtimes)}</span>
             <AgentAddress address={agent.data.address} />
           </div>
         </div>

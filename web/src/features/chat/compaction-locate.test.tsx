@@ -68,7 +68,7 @@ describe('Locating a manual compaction', () => {
     expect(note.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // It takes no number and no tick: there are still two turns, numbered on from 3.
     expect([...document.querySelectorAll('[data-turn-number]')].map((n) => n.textContent)).toEqual(['4', '5'])
-    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' })).getAllByRole('button')).toHaveLength(2)
+    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' }).querySelector('ol')!).getAllByRole('button')).toHaveLength(2)
   })
 
   it('when the compaction did not fail, says what happened: tokens before and after if it compacted, the reason if it did not', async () => {

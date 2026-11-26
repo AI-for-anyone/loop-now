@@ -26,6 +26,7 @@ type Options = {
   onAction: (action: StatusAction) => void
   note: (text: string) => void
   platform?: PlatformId
+  backgroundColor?: string
 }
 
 const statusPage = join(__dirname, '..', 'static', 'status.html')
@@ -37,9 +38,16 @@ export class MainWindow {
   private consoleURL: string | undefined
   // Whether the user has opened the window yet (false before the first show in a background start).
   private opened: boolean
+  private bgColor: string
 
   constructor(private readonly o: Options) {
     this.opened = !o.background
+    this.bgColor = o.backgroundColor ?? '#FFFFFF'
+  }
+
+  setBackgroundColor(color: string): void {
+    this.bgColor = color
+    if (this.win && !this.win.isDestroyed()) this.win.setBackgroundColor(color)
   }
 
   get showingConsole(): boolean {
@@ -118,7 +126,7 @@ export class MainWindow {
       // In development, the Windows window icon comes from the exe (Electron's); once packaged, the exe carries the app's icon. It is given
       // again here so the taskbar and the title bar both use it.
       icon: join(__dirname, '..', 'assets', 'icon.png'),
-      backgroundColor: '#FBF9F4',
+      backgroundColor: this.bgColor,
       webPreferences: {
         contextIsolation: true,
         sandbox: true,

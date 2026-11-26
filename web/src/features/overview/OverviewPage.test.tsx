@@ -361,7 +361,7 @@ describe('Overview on a sheet', () => {
     expect(select.parentElement).toHaveClass('border-dashed', 'border-[1.5px]', 'h-[26px]')
   })
 
-  it('run status, usage, and issues and failures sit on one sheet, numbered 01, 02, 03, with a dashed line between blocks', async () => {
+  it('run status, usage, and issues and failures sit on one sheet, numbered 01, 02, 03, with hairline dividers in mono skin and dashed dividers in Plate skin', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
     const sheet = section('Run status').closest('[data-sheet]')!
@@ -370,40 +370,49 @@ describe('Overview on a sheet', () => {
     expect(sectionNumber('Run status')).toHaveTextContent('01')
     expect(sectionNumber('Usage')).toHaveTextContent('02')
     expect(sectionNumber('Issues and failures')).toHaveTextContent('03')
-    expect(within(section('Run status')).getByRole('heading', { level: 2, name: 'Run status' })).toHaveClass('riso-marker', 'font-display-cn')
-    expect(section('Run status')).not.toHaveClass('border-t-2')
-    expect(section('Usage')).toHaveClass('border-t-2', 'border-dashed')
+    expect(within(section('Run status')).getByRole('heading', { level: 2, name: 'Run status' })).toHaveClass('riso-marker', 'font-semibold', '[[data-skin=plate]_&]:font-display-cn')
+    expect(section('Run status')).not.toHaveClass('border-t', '[[data-skin=plate]_&]:border-t-2')
+    expect(section('Usage')).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed')
   })
 
-  it('status tiles: tinted background, 2px navy border, solid navy shadow, the number in large Bricolage, no longer tilted', async () => {
+  it('status tiles: crisp surface-control cards in mono skin and tinted cards with 2px navy border and solid shadow in Plate skin, large Bricolage number, no longer tilted', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
     const tiles = within(screen.getByRole('list', { name: 'Run status summary' })).getAllByRole('listitem')
     expect(tiles).toHaveLength(3)
     for (const tile of tiles) {
-      expect(tile).toHaveClass('border-2', 'border-ink', 'rounded-card', 'shadow-[4px_4px_0_var(--ink)]')
+      expect(tile).toHaveClass(
+        'rounded-card',
+        'border',
+        'border-hairline',
+        'bg-surface-control',
+        'shadow-surface',
+        '[[data-skin=plate]_&]:border-2',
+        '[[data-skin=plate]_&]:border-ink',
+        '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+      )
       expect(tile).not.toHaveClass('riso-tilt')
     }
     expect(tiles.map((tile) => tile.className.match(/bg-tint-[a-z0-9-]+/)?.[0])).toEqual(['bg-tint-pink-2', 'bg-tint-green', 'bg-tint-blue'])
     expect(within(tiles[1]).getByText('1')).toHaveClass('font-display-latin', 'text-[46px]')
   })
 
-  it('Agent table: a solid line under the header, dashed lines between rows; model names monospace; idle is a light green pill', async () => {
+  it('Agent table: hairline borders in mono skin and solid header / dashed row lines in Plate skin; model names monospace; idle is a light green pill', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     const table = screen.getByRole('table')
     // Placed directly on the sheet, not wrapped in a white card.
     expect(table.parentElement).not.toHaveClass('bg-white', 'shadow-print-rest')
-    expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
+    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong', '[[data-skin=plate]_&]:border-b-2', '[[data-skin=plate]_&]:border-ink')
     const row = within(table).getByText('dev-helper').closest('tr')!
-    expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
+    expect(row).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
     expect(within(row).getByText(/ \/ /)).toHaveClass('font-mono')
     const pill = within(row).getByText('Idle').closest('[data-state-pill]')!
     expect(pill).toHaveAttribute('data-state-pill', 'idle')
-    expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green', 'rotate-[-3deg]')
+    expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green', '[[data-skin=plate]_&]:rotate-[-3deg]')
   })
 
-  it('usage: bars have a halftone fill, the largest row has a small yellow “Most” tag; period and grouping are segmented buttons, the chosen one yellow', async () => {
+  it('usage: bars use chart tokens in mono skin and halftone fills in Plate skin; largest row has a “Most” tag; period and grouping are segmented buttons', async () => {
     const { snapshot } = await renderOverview({
       usage: usagePage([makeUsageRow({ agentName: 'dev-helper', input: 9000, output: 1000 }), makeUsageRow({ agentName: 'Test helper', input: 2000, output: 500 })]),
     })
@@ -411,13 +420,13 @@ describe('Overview on a sheet', () => {
     const usage = section('Usage')
     const lines = await within(usage).findAllByRole('listitem')
     expect(lines[0]).toHaveTextContent('dev-helper')
-    expect(within(lines[0]).getByText('Most')).toHaveClass('bg-riso-yellow')
+    expect(within(lines[0]).getByText('Most')).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
     expect(within(lines[1]).queryByText('Most')).toBeNull()
     const track = lines[0].querySelector('[data-usage-track]')!
-    expect(track).toHaveClass('border-2', 'border-ink')
-    expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-riso-blue', 'bg-size-[5px_5px]')
+    expect(track).toHaveClass('border', 'border-hairline-strong', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-[var(--chart-blue)]', '[[data-skin=plate]_&]:bg-riso-blue', '[[data-skin=plate]_&]:bg-size-[5px_5px]')
     const range = within(usage).getByRole('radiogroup', { name: 'Period' })
-    expect(range).toHaveClass('border-2', 'border-ink', 'rounded-full')
-    expect(within(range).getByRole('radio', { name: 'Today' })).toHaveClass('data-[state=on]:bg-riso-yellow')
+    expect(range).toHaveClass('rounded-ticket', 'border', 'border-hairline-strong', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
+    expect(within(range).getByRole('radio', { name: 'Today' })).toHaveClass('data-[state=on]:bg-surface-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
   })
 })

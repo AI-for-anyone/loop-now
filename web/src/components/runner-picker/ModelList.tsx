@@ -199,7 +199,7 @@ export function ModelList(props: ModelListProps) {
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={onKeyDown}
-          className="h-10 w-full min-w-0 rounded-full border-0 bg-white pr-4 pl-10 text-[14px] text-ink shadow-[inset_0_0_0_2px_var(--ink)] outline-none placeholder:text-ink-500 focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
+          className="h-10 w-full min-w-0 rounded-full border border-hairline-strong bg-surface-control pr-4 pl-10 text-[14px] text-ink outline-none placeholder:text-ink-500 focus-visible:shadow-focus [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)] [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
         />
       </div>
       <ul ref={listRef} id={treeId} role="tree" aria-label={copy.models} className="riso-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">

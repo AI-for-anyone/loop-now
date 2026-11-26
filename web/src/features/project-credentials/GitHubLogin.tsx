@@ -132,7 +132,7 @@ function Login({ projectId, account, id, locate }: { projectId: string; account?
     {unavailable && <p role="status">{copy.unsupported}</p>}
     {op && !mismatch && <><p className="text-[13px] [overflow-wrap:anywhere]">{copy.deadline}{op.expiresAt}</p>{active && <p role="status" className="text-[13px]">{expiredLocally ? copy.deadlineReached : copy.remaining(Math.max(0, Math.ceil((Date.parse(op.expiresAt) - now) / 1000)))}</p>}</>}
     {rejected && <p role="alert">{copy.rejected}</p>}
-    {canAuthorize && op?.cli === 'gh' && op.status === 'awaiting_authorization' && <div className="grid min-w-0 gap-3 rounded-card bg-white p-4">
+    {canAuthorize && op?.cli === 'gh' && op.status === 'awaiting_authorization' && <div className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
       <p className="text-[13px]">{copy.steps}</p><p className="text-sm font-bold">{copy.code}</p><code tabIndex={0} className="select-all font-mono text-[24px] tracking-widest [overflow-wrap:anywhere]">{op.userCode}</code>
       <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => void copyCode()}>{copy.copy}</Button><Button asChild size="sm"><a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">{copy.open}</a></Button></div>
       {copiedFor === op.id && <p role="status" className="text-[13px]">{copy.copied}</p>}{copyError && <p role="alert" className="text-[13px]">{copy.copyFailed}</p>}

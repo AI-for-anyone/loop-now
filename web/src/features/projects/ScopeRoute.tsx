@@ -55,9 +55,9 @@ function RenamedNote({ from, to, onDismiss }: { from: string; to: string; onDism
       className="riso-tilt mx-4 mt-4 flex max-w-[820px] shrink-0 flex-wrap items-center gap-x-[18px] gap-y-2.5 py-3.5 pr-[18px] pl-5 [--tilt-bg:var(--riso-yellow)] [--tilt-shadow:3px_3px_0_rgb(24_38_94/.18)] [--tilt:-0.5deg] sm:mx-[30px]"
     >
       {/* Tape: decoration only. */}
-      <span aria-hidden="true" className="absolute -top-[9px] left-7 h-[18px] w-16 -rotate-4 bg-white/60" />
+      <span aria-hidden="true" className="hidden [[data-skin=plate]_&]:block absolute -top-[9px] left-7 h-[18px] w-16 -rotate-4 bg-white/60" />
       <span className="flex-[1_1_420px] text-[15px] font-bold">{t.projects.renamed(from, to)}</span>
-      <Button variant="ink" size="sm" className="text-white" onClick={onDismiss}>
+      <Button variant="ink" size="sm" className="[[data-skin=plate]_&]:text-white" onClick={onDismiss}>
         {t.projects.renamedDismiss}
       </Button>
     </div>

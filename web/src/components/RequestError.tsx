@@ -23,12 +23,12 @@ export function RequestId({ id }: { id: string }) {
       <span id={labelId} className="font-black">
         {t.overview.requestId}
       </span>
-      <code className="rounded-[6px] bg-white px-2.5 py-px font-mono text-[13px] [overflow-wrap:anywhere] select-all">{id}</code>
+      <code className="rounded-[6px] border border-hairline bg-surface-control px-2.5 py-px font-mono text-[13px] [overflow-wrap:anywhere] select-all [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">{id}</code>
       <Button
         type="button"
         size="xs"
         variant="secondary"
-        className="h-[30px] bg-white px-3 text-[12.5px] hover:bg-white"
+        className="h-[30px] px-3 text-[12.5px] [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white"
         aria-describedby={labelId}
         onClick={() => void copy()}
       >

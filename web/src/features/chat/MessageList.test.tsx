@@ -7,6 +7,7 @@ import type { MessagePages } from '@/api/queries'
 import { makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { createTestQueryClient } from '@/test/render'
 import { initialLiveState, liveReducer, type LiveState } from './live-state'
+import { resetChatDraftsForTest } from './draft-store'
 import { MessageList } from './MessageList'
 import { buildTurns } from './turns'
 
@@ -64,6 +65,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetChatDraftsForTest()
   vi.unstubAllGlobals()
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight')
   Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight')
@@ -188,6 +190,50 @@ describe('conversation area scrolling', () => {
     fireEvent.scroll(log)
     fireEvent.click(screen.getByRole('button', { name: 'Load earlier messages' }))
     expect(onLoadOlder).not.toHaveBeenCalled()
+  })
+
+  it('shows a floating Back to latest button when scrolled up, switches to New output when streaming grows, and clicking it jumps to bottom and resumes auto-follow', () => {
+    clampScrollTop()
+    const run = makeRun({ status: 'running', endedAt: null })
+    const pages: MessagePages = { pages: [makeMessagePage([makeMessage({ text: 'Question', run })])], pageParams: [null] }
+    const { rerender } = render(<List {...props} live={{ ...initialLiveState, current: { run, text: 'Part 1' } }} pages={pages} onLoadOlder={() => {}} />)
+    const log = screen.getByRole('log')
+    expect(screen.queryByRole('button', { name: 'Back to latest' })).toBeNull()
+    expect(log).toHaveClass('riso-scrollbar')
+    expect(log).not.toHaveClass('nav:no-scrollbar')
+
+    log.scrollTop = 180
+    fireEvent.scroll(log)
+    expect(screen.getByRole('button', { name: 'Back to latest' })).toBeInTheDocument()
+
+    // New streaming output arrives while scrolled up: the floating button switches to "New output".
+    metrics.scrollHeight = 1400
+    rerender(<List {...props} live={{ ...initialLiveState, current: { run, text: 'Part 1 and Part 2' } }} pages={pages} onLoadOlder={() => {}} />)
+    const newOutput = screen.getByRole('button', { name: 'New output' })
+    expect(newOutput).toBeInTheDocument()
+    expect(log.scrollTop).toBe(180)
+
+    // Clicking the floating button jumps to bottom, clears the button, and resumes auto-follow.
+    fireEvent.click(newOutput)
+    expect(log.scrollTop).toBe(900)
+    expect(screen.queryByRole('button', { name: 'New output' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back to latest' })).toBeNull()
+    metrics.scrollHeight = 1700
+    act(() => FakeResizeObserver.resize(log.firstElementChild!))
+    expect(log.scrollTop).toBe(1200)
+  })
+
+  it('restores a saved non-bottom scroll position when remounting the same Agent', () => {
+    clampScrollTop()
+    const first = render(<List {...props} pages={pagesOf('First', 'Second')} onLoadOlder={() => {}} />)
+    const log = screen.getByRole('log')
+    log.scrollTop = 220
+    fireEvent.scroll(log)
+    first.unmount()
+
+    render(<List {...props} pages={pagesOf('First', 'Second')} onLoadOlder={() => {}} />)
+    expect(screen.getByRole('log').scrollTop).toBe(220)
+    expect(screen.getByRole('button', { name: 'Back to latest' })).toBeInTheDocument()
   })
 })
 
@@ -323,8 +369,8 @@ describe('how replies show', () => {
     expect(dividers).toHaveLength(1)
     const bubble = screen.getByText('Run lint first')
     expect(dividers[0].compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(bubble).toHaveClass('border-riso-pink', 'bg-tint-pink-2')
-    expect(screen.getByText('Run the tests')).toHaveClass('bg-tint-pink')
+    expect(bubble).toHaveClass('bg-tint-pink-2', '[[data-skin=plate]_&]:border-riso-pink')
+    expect(screen.getByText('Run the tests')).toHaveClass('bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-pink')
   })
 
   // A runtime may never report a tool's end (Antigravity moves a long command to the background and its end arrives after the turn). The
@@ -386,7 +432,7 @@ describe('how replies show', () => {
     for (const divider of [session, interrupted]) {
       const lines = divider.querySelectorAll('[data-cut-line]')
       expect(lines).toHaveLength(2)
-      for (const line of lines) expect(line).toHaveClass('border-t-2', 'border-dashed', 'border-riso-pink')
+      for (const line of lines) expect(line).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed', '[[data-skin=plate]_&]:border-riso-pink')
       expect(divider.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     }
     // The cut line has a pair of scissors at its left end; the interrupt divider's icon is still a lightning bolt.

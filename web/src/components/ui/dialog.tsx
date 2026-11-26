@@ -4,7 +4,17 @@ import { t } from "@/i18n"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
-import { closeStampClass, dialogContentClass, dialogFooterClass, dialogPaperClass, dialogTabClass, overlayClass, type DialogKind } from "@/components/ui/dialog-style"
+import {
+  closeStampClass,
+  dialogBodyClass,
+  dialogContentClass,
+  dialogFooterClass,
+  dialogPaperClass,
+  dialogTabClass,
+  dialogTopbarClass,
+  overlayClass,
+  type DialogKind,
+} from "@/components/ui/dialog-style"
 import { useReturnFocus } from "@/lib/return-focus"
 import { CircleAlertIcon, PlusIcon, XIcon } from "lucide-react"
 
@@ -45,22 +55,19 @@ function DialogOverlay({
   )
 }
 
-// The index tab on the top edge: names the dialog's kind (create with a plus sign, danger with an exclamation mark).
+// Kind badge (mono skin) / protruding top index tab (Plate skin).
 function DialogTab({ kind }: { kind: DialogKind }) {
   const Icon = kind === "create" ? PlusIcon : kind === "danger" ? CircleAlertIcon : null
   return (
-    <div className="relative z-[1] flex shrink-0 pl-6">
-      <span data-dialog-tab={kind} className={dialogTabClass(kind)}>
-        {Icon && <Icon aria-hidden="true" className="size-[13px]" strokeWidth={2.8} />}
-        {t.common.dialogKinds[kind]}
-      </span>
-    </div>
+    <span data-dialog-tab={kind} className={dialogTabClass(kind)}>
+      {Icon && <Icon aria-hidden="true" className="size-[13px]" strokeWidth={2.4} />}
+      {t.common.dialogKinds[kind]}
+    </span>
   )
 }
 
-// Dialog (redesign step 5, the same across the whole site): a small sheet with an index tab naming its kind stuck to the top edge; a yellow
-// round stamp in the top right closes it;
-// a dashed line above the button area (DialogFooter). kind sets the tab's text and color (danger gives the sheet a red shadow).
+// Dialog: elevated card with a non-scrolling top bar holding the kind label and close button above the scrolling body, so scrolled
+// content never slides underneath the close button. Plate skin restores the protruding folder tab, yellow round stamp and offset shadow.
 function DialogContent({
   className,
   paperClassName,
@@ -87,16 +94,20 @@ function DialogContent({
         {...focusHandlers}
         {...props}
       >
-        <DialogTab kind={kind} />
-        <div data-dialog-paper className={cn(dialogPaperClass(kind), paperClassName)}>
-          {children}
+        <div data-dialog-paper className={dialogPaperClass(kind)}>
+          <div data-dialog-topbar className={dialogTopbarClass}>
+            <DialogTab kind={kind} />
+            {showCloseButton && (
+              <DialogPrimitive.Close data-slot="dialog-close" className={closeStampClass}>
+                <XIcon className="size-[15px]" strokeWidth={2.4} />
+                <span className="sr-only">{t.common.close}</span>
+              </DialogPrimitive.Close>
+            )}
+          </div>
+          <div data-dialog-body className={cn(dialogBodyClass, paperClassName)}>
+            {children}
+          </div>
         </div>
-        {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" className={cn(closeStampClass, "absolute top-[52px] right-[26px] max-sm:right-[18px]")}>
-            <XIcon className="size-[15px]" strokeWidth={2.8} />
-            <span className="sr-only">{t.common.close}</span>
-          </DialogPrimitive.Close>
-        )}
       </DialogPrimitive.Content>
     </DialogPortal>
   )
@@ -106,7 +117,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1.5 pr-12", className)}
+      className={cn("flex flex-col gap-1.5", className)}
       {...props}
     />
   )
@@ -143,7 +154,10 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-display-cn text-[30px] leading-[1.15] font-normal text-riso-blue [text-shadow:2.5px_2.5px_0_var(--riso-pink)]", className)}
+      className={cn(
+        "text-[19px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:[text-shadow:2.5px_2.5px_0_var(--riso-pink)]",
+        className
+      )}
       {...props}
     />
   )

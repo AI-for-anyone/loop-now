@@ -90,7 +90,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
               <span id={secretLabelId} className="text-[13.5px] font-black">
                 {t.identities.secret}
               </span>
-              <div className="flex items-center gap-2.5 rounded-input border-2 border-dashed border-ink bg-white py-2 pr-2 pl-4">
+              <div className="flex items-center gap-2.5 rounded-input border-2 border-dashed border-ink bg-surface-control py-2 pr-2 pl-4 [[data-skin=plate]_&]:bg-white">
                 <code aria-labelledby={secretLabelId} className="min-w-0 flex-1 font-mono text-[13.5px] break-all text-ink select-all">
                   {issued.secret}
                 </code>

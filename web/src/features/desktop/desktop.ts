@@ -12,13 +12,22 @@ import { t } from '@/i18n'
 export type DesktopNotification = { id: string; title: string; body: string; path: string }
 export type PathKind = 'directory' | 'file'
 export type PickPathRequest = { kind: PathKind; defaultPath?: string }
+export type DesktopAppearance = {
+  skin: string
+  mode: 'system' | 'light' | 'dark'
+  resolvedTheme: 'light' | 'dark'
+  backgroundColor: string
+}
 export type DesktopBridge = {
+  platform?: string
   notify: (notification: DesktopNotification) => void
   setBadge: (count: number) => void
   onNavigate: (listener: (path: string) => void) => () => void
   // Shows the system's own dialog for a folder or file and resolves to its full path, or null when cancelled. The shell starts the dialog
   // at defaultPath only when it is an absolute path. Absent in shells older than this call.
   pickPath?: (request: PickPathRequest) => Promise<string | null>
+  // Synchronizes the console's skin and color mode with the Electron shell (nativeTheme + window background). Absent in older shells.
+  setAppearance?: (appearance: DesktopAppearance) => void
 }
 
 declare global {
@@ -91,10 +100,15 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
   )
 }
 
-// In a desktop shell window: the window has no system title bar (macOS hiddenInset), the page extends to the top of the window
-// with the system traffic-light buttons in the top-left corner, and the top of the page must leave a strip for dragging the
-// window (window-drag in index.css). Not affected when the console is opened in a browser.
+// In a desktop shell window: true whenever the console is hosted by the Electron shell.
 export const inDesktopWindow = () => window.loopNowDesktop !== undefined
+
+// Only macOS hides the system title bar (hiddenInset), placing traffic lights inside the top-left of the page.
+// Windows and Linux keep their native OS title bar, so they must not reserve an empty drag strip or left traffic-light offset.
+export const hasInsetTitleBar = () => {
+  const bridge = window.loopNowDesktop
+  return bridge !== undefined && (bridge.platform === undefined || bridge.platform === 'darwin')
+}
 
 // The shell's system dialog for a folder or file; undefined in a browser (a browser never gives a page a full path, so paths are typed
 // there) and in shells older than the call. The server always runs on the same computer as the desktop shell, so the path is valid for it.

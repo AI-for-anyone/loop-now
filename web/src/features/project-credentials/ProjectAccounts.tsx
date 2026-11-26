@@ -146,7 +146,7 @@ function AccountRow({ account, template, provider, missing, onEditing }: { accou
     else await replaceProjectAccount(account.projectId, account.id, account.purpose === 'model' ? { type: 'api_key', key: input.key } : { type: 'cli', fields: input.fields }, revision)
     await invalidateProjectCredentials(client, account.projectId)
   }
-  return <li className="grid min-w-0 gap-3 rounded-card bg-white p-4">
+  return <li className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
     {missing && <p role="status" className="text-[13px] font-bold text-red-text">{t.credentials.accounts.missingFromList}</p>}
     <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 flex-[1_1_160px] font-black [overflow-wrap:anywhere]">{account.name}</h3><Badge tone={account.status === 'saved' || account.status === 'logged_in' ? 'success' : 'danger'}>{accountStatus[account.status]}</Badge></div>
     {account.purpose === 'model'

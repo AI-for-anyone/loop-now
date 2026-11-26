@@ -160,7 +160,7 @@ it('cancels a message from someone else; editing your own message withdraws it a
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
-it('with a reply in progress on the node and an empty draft, the turn can be stopped; if the turn has already ended, a light one-line notice', async () => {
+it('with a reply in progress on the node, Stop stays available even with draft text while Interrupt and Send appear alongside it; if the turn has already ended, a light one-line notice', async () => {
   const running: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000010', nodeRunId: nodeId, runId: runQ, role: 'assistant', origin: 'task_node', text: 'Adjusting', status: 'running', createdAt: taskTime }
   const stops: { runId: string; body: Body }[] = []
   server.use(http.post(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/runs/:runId/stop`), async ({ params, request }) => {
@@ -171,11 +171,13 @@ it('with a reply in progress on the node and an empty draft, the turn can be sto
   const user = userEvent.setup()
   setup({ queue: () => queueOf(), messages: [running] })
   await user.click(await screen.findByRole('button', { name: 'Stop the current reply' }))
+  act(() => stream().open())
   await waitFor(() => expect(stops).toEqual([{ runId: runQ, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/), expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId } }]))
   expect(screen.getByText('Stop the current reply only')).toBeInTheDocument()
   await user.type(screen.getByLabelText('Message draft'), 'do not stop yet')
-  expect(screen.queryByRole('button', { name: 'Stop the current reply' })).toBeNull()
-  await user.clear(screen.getByLabelText('Message draft'))
+  expect(screen.getByRole('button', { name: 'Stop the current reply' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Interrupt and send' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
   await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
   expect(await screen.findByText('This reply has already ended')).toHaveAttribute('role', 'status')
   expect(screen.queryByRole('alert')).toBeNull()

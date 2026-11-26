@@ -180,7 +180,7 @@ function NameRow({ ctx, depth, type, initial }: { ctx: TreeContext; depth: numbe
             if (event.key === 'Escape') { event.preventDefault(); ctx.onNameCancel() }
           }}
           onBlur={commit}
-          className="h-6 min-w-0 flex-1 rounded-[5px] border border-riso-blue bg-white px-1.5 text-[13px] text-ink shadow-[0_0_0_3px_rgb(36_67_181/.15)] outline-none aria-invalid:border-red aria-invalid:shadow-[0_0_0_3px_rgb(217_56_30/.15)]"
+          className="h-6 min-w-0 flex-1 rounded-[5px] border border-hairline-strong bg-surface-control px-1.5 text-[13px] text-ink outline-none focus-visible:shadow-focus aria-invalid:border-red aria-invalid:shadow-[0_0_0_3px_rgb(217_56_30/.15)] [[data-skin=plate]_&]:border-riso-blue [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[0_0_0_3px_rgb(36_67_181/.15)]"
         />
       </div>
       {touched && problem && <p role="alert" className="py-0.5 pl-9 text-[11.5px] font-bold text-red-text">{t.folders.name.problems[problem]}</p>}

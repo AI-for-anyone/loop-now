@@ -4,12 +4,12 @@ import { cn } from '@/lib/utils'
 import type { StepTone, TimelineStep } from './timeline-steps'
 
 const DOT: Record<StepTone, string> = {
-  neutral: 'bg-tint-blue shadow-[inset_0_0_0_2px_var(--riso-blue)]',
-  run: 'bg-riso-blue shadow-[0_0_0_2px_var(--ink)]',
-  ok: 'bg-green shadow-[0_0_0_2px_var(--ink)]',
-  fail: 'bg-red shadow-[0_0_0_2px_var(--ink)]',
-  warn: 'bg-riso-yellow shadow-[0_0_0_2px_var(--ink)]',
-  hot: 'bg-riso-pink shadow-[0_0_0_2px_var(--ink)]',
+  neutral: 'bg-surface-control ring-2 ring-inset ring-ink-500 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:ring-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--riso-blue)]',
+  run: 'bg-ink [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]',
+  ok: 'bg-green [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]',
+  fail: 'bg-red [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]',
+  warn: 'bg-[var(--status-interrupt)] [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]',
+  hot: 'bg-pink-text [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]',
 }
 
 // Jump to that question in the conversation (messages sent to you carry data-console-message-id); do nothing when the question isn't
@@ -32,7 +32,7 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
       <span className="pt-px font-mono text-[11.5px] text-ink-500">{t.timeline.clock(step.at)}</span>
       <span aria-hidden="true" className="flex flex-col items-center">
         <span className={cn('mt-[3px] shrink-0 rounded-full', step.sub ? 'size-2' : 'size-3', DOT[step.tone])} />
-        <span className={cn('my-[3px] w-0 flex-1 border-l-2 border-dashed', last ? 'border-transparent' : 'border-ink/25')} />
+        <span className={cn('my-[3px] w-0 flex-1 border-l border-dashed [[data-skin=plate]_&]:border-l-2', last ? 'border-transparent' : 'border-hairline-strong [[data-skin=plate]_&]:border-ink/25')} />
       </span>
       <span className={cn('flex min-w-0 flex-col pb-3', step.sub && 'pl-2')}>
         <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -50,7 +50,7 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
         )}
         {step.questionId && <QuestionLink id={step.questionId} />}
         {step.output && (
-          <pre className="mt-1 max-h-40 overflow-auto rounded-stamp bg-tint-blue px-2 py-1 font-mono text-[11.5px] whitespace-pre-wrap [overflow-wrap:anywhere]">
+          <pre className="mt-1 max-h-40 overflow-auto rounded-stamp border border-hairline bg-surface-subtle px-2 py-1 font-mono text-[11.5px] whitespace-pre-wrap [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
             {step.output}
           </pre>
         )}
@@ -63,10 +63,10 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
 }
 
 const USAGE_PARTS = [
-  { key: 'input', bar: 'rounded-l-[4px] bg-riso-blue' },
-  { key: 'output', bar: 'bg-riso-pink' },
-  { key: 'cacheRead', bar: 'bg-tint-blue shadow-[inset_0_0_0_2px_var(--riso-blue)]' },
-  { key: 'cacheWrite', bar: 'rounded-r-[4px] bg-tint-pink-2 shadow-[inset_0_0_0_2px_var(--pink-text)]' },
+  { key: 'input', bar: 'rounded-l-[4px] bg-[var(--chart-blue)] [[data-skin=plate]_&]:bg-riso-blue' },
+  { key: 'output', bar: 'bg-[var(--chart-pink)] [[data-skin=plate]_&]:bg-riso-pink' },
+  { key: 'cacheRead', bar: 'bg-[var(--chart-ochre)] [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--riso-blue)]' },
+  { key: 'cacheWrite', bar: 'rounded-r-[4px] bg-[var(--chart-other)] [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--pink-text)]' },
 ] as const
 
 // reported: whether the runtime reported usage for this turn (Run.usageReported); when it didn't, its zeros mean "not known" and only that
@@ -74,7 +74,7 @@ const USAGE_PARTS = [
 export function UsageBlock({ usage, reported = true }: { usage: Schemas['UsageTotals']; reported?: boolean }) {
   if (!reported) {
     return (
-      <div className="flex flex-col gap-1 border-t-2 border-dashed border-ink/15 px-4 py-3">
+      <div className="flex flex-col gap-1 border-t border-hairline px-4 py-3 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/15">
         <span className="flex items-baseline gap-2.5">
           <span className="text-[13.5px] font-black">{t.timeline.usage.title}</span>
           <span className="font-mono text-[11px] text-ink-500">{t.timeline.usage.field}</span>
@@ -85,7 +85,7 @@ export function UsageBlock({ usage, reported = true }: { usage: Schemas['UsageTo
     )
   }
   return (
-    <div className="flex flex-col gap-2 border-t-2 border-dashed border-ink/15 px-4 py-3">
+    <div className="flex flex-col gap-2 border-t border-hairline px-4 py-3 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/15">
       <span className="flex items-baseline gap-2.5">
         <span className="text-[13.5px] font-black">{t.timeline.usage.title}</span>
         <span className="font-mono text-[11px] text-ink-500">{t.timeline.usage.field}</span>

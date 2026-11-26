@@ -93,32 +93,32 @@ describe('Plugin market', () => {
 describe('Plugin market on the sheet', () => {
   const builtin = (id: string, name: string): import('@/api/client').Schemas['BuiltinPluginSource'] => ({ id, displayName: name, description: `Description of ${name}`, version: '1.0.0' })
 
-  it('the header is the page title: breadcrumb "Global›Plugin market", next to it the host status in a dashed box and a fluorescent pink "Install plugin"', async () => {
+  it('the header is the page title: breadcrumb "Global›Plugin market", next to it the host status in a dashed box and "Install plugin" with Plate fluorescent pink accent', async () => {
     renderMarket()
     const title = await screen.findByRole('heading', { level: 1, name: 'Plugin market' })
     const header = title.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Plugin market')
     expect(within(header).getByRole('region', { name: 'Plugin host' })).toHaveClass('border-dashed')
-    expect(within(header).getByRole('button', { name: 'Install plugin' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    expect(within(header).getByRole('button', { name: 'Install plugin' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
   })
 
-  it('the three categories are index tabs on the top edge of the sheet: the current one is yellow and taller; installed plugins sit on the sheet as cards with a pink shadow', async () => {
+  it('the three categories are underline index tabs in mono skin (yellow/beige folder tabs in Plate skin); installed plugins sit on the sheet as crisp cards with Plate pink shadow', async () => {
     renderMarket()
     const tabs = await screen.findByRole('navigation', { name: 'Plugin market' })
-    expect(within(tabs).getByRole('link', { name: /Installed/ })).toHaveClass('h-10', 'bg-riso-yellow')
-    expect(within(tabs).getByRole('link', { name: 'Official market' })).toHaveClass('h-[34px]', 'bg-paper-tab')
+    expect(within(tabs).getByRole('link', { name: /Installed/ })).toHaveClass('border-b-2', 'border-ink', '[[data-skin=plate]_&]:h-10', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(within(tabs).getByRole('link', { name: 'Official market' })).toHaveClass('border-b-2', 'border-transparent', '[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab')
     const card = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
     expect(card.closest('[data-sheet]')).not.toBeNull()
-    expect(card).toHaveClass('border-2', 'border-ink', 'shadow-print-pink')
+    expect(card).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', 'shadow-surface', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:shadow-print-pink')
   })
 
-  it('plugins that ship with the platform: a halftone color band on top of each card, cycling blue, pink, yellow; the name uses the display font and "Official" is a navy tag', async () => {
+  it('plugins that ship with the platform: a halftone color band on top of each card, cycling blue, pink, yellow; the name uses the display font and "Official" uses inverted CTA tokens (navy in Plate skin)', async () => {
     renderMarket({ builtin: [builtin('hello', 'Hello example'), builtin('browser', 'Browser'), builtin('hook', 'Webhook inbox'), builtin('extra', 'Fourth one')] })
     const heading = await screen.findByRole('heading', { name: 'Official plugins that ship with the platform' })
     expect(heading).toHaveClass('riso-marker', 'font-display-cn')
     const cards = ['Hello example', 'Browser', 'Webhook inbox', 'Fourth one'].map((name) => screen.getByRole('heading', { name }).closest('li')!)
     expect(cards.map((card) => card.querySelector('[data-band]')!.getAttribute('data-band'))).toEqual(['blue', 'pink', 'yellow', 'blue'])
     expect(within(cards[0]).getByRole('heading', { name: 'Hello example' })).toHaveClass('font-display-cn')
-    expect(within(cards[0]).getByText('Official')).toHaveClass('bg-ink', 'text-white')
+    expect(within(cards[0]).getByText('Official')).toHaveClass('bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   })
 })
