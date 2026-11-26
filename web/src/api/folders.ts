@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { api, ApiError, call, rawBody, REQUEST_ID_HEADER, toApiError, type Schemas } from './client'
 import { config } from '@/config'
 import type { FolderSource, UploadItem } from '@/features/folders/folder-source'
@@ -13,6 +14,34 @@ const prefixOf = (scope: FolderScope) =>
   scope.kind === 'agent' ? `/agents/${encodeURIComponent(scope.agentId)}/folder` : scope.kind === 'project' ? `/projects/${encodeURIComponent(scope.projectId)}/context-folder` : '/context-folder'
 const contentURL = (scope: FolderScope, path: string, create?: boolean) =>
   `${config.apiBase}${prefixOf(scope)}/content?${new URLSearchParams({ path, ...(create === undefined ? {} : { create: String(create) }) })}`
+
+export const agentFolderContentURL = (agentId: string, path: string) =>
+  contentURL({ kind: 'agent', agentId }, path)
+
+export const taskNodeFolderContentURL = (taskId: string, nodeRunId: string, path: string) =>
+  `${config.apiBase}/tasks/${encodeURIComponent(taskId)}/nodes/${encodeURIComponent(nodeRunId)}/folder/content?${new URLSearchParams({ path })}`
+
+// Both forms the Agent or its CLI may write: the path from the system prompt, and its symlink-resolved realPath.
+export const folderRoots = (location: Schemas['FolderLocation'] | undefined): string[] =>
+  location ? [...new Set([location.path, location.realPath].filter(Boolean))] : []
+
+export function useAgentFolderLocation(agentId: string | undefined) {
+  return useQuery({
+    queryKey: ['folder-location', 'agent', agentId] as const,
+    queryFn: () => call(api.GET('/agents/{agentId}/folder', { params: { path: { agentId: agentId! } } })),
+    enabled: Boolean(agentId),
+    staleTime: Infinity,
+  })
+}
+
+export function useTaskNodeFolderLocation(taskId: string | undefined, nodeRunId: string | undefined) {
+  return useQuery({
+    queryKey: ['folder-location', 'task-node', taskId, nodeRunId] as const,
+    queryFn: () => call(api.GET('/tasks/{taskId}/nodes/{nodeRunId}/folder', { params: { path: { taskId: taskId!, nodeRunId: nodeRunId! } } })),
+    enabled: Boolean(taskId && nodeRunId),
+    staleTime: Infinity,
+  })
+}
 
 // Write files: PUT the raw bytes for each path one by one; the server creates parent folders automatically. XHR is used to get upload
 // progress.
