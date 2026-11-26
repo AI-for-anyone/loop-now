@@ -4,7 +4,9 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
-## 未发布
+## v0.3.2
+
+可以把这台电脑上 Claude Code 和 Codex 的对话导入进来接着聊；每个 Agent 都有了和 T3 Code 一样的权限模式（全部要批准、自动同意改文件、自动审查、完全放开；默认仍是完全放开）。CLI 放到后台的活现在看得到、能停止。Antigravity、Grok 和自己添加的 ACP 命令也计入用量；在 Mac 上用浏览器打开控制台，也能点「选择…」。升级时会自动执行一次迁移 16 和 17。
 
 ### 导入 Claude Code 和 Codex 的对话
 
