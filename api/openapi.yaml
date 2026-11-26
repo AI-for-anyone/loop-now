@@ -11314,7 +11314,7 @@ components:
     RuntimeCapabilities:
       description: What a runtime can do. Thinking levels and image input are per model, in the model catalog.
       type: object
-      required: [accounts, realHome, nativeCommands, pluginExtensions, bundled, stopEndsBackgroundTasks, permissionModes, workingDirectory, localConfig]
+      required: [accounts, realHome, nativeCommands, pluginExtensions, bundled, stopEndsBackgroundTasks, permissionModes, permissionAsksByOwnRules, workingDirectory, localConfig]
       additionalProperties: false
       properties:
         accounts:
@@ -11350,9 +11350,16 @@ components:
           type: array
           items: { $ref: "#/components/schemas/PermissionMode" }
           description: |
-            The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Pi has only full;
-            Grok has no accept_edits; Antigravity lists auto only when its account offers it. An Agent set to a mode its
-            runtime lacks runs as supervised.
+            The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Claude Code, Codex,
+            Grok and Antigravity have all four; a local ACP command has supervised and full; Pi has only full. An Agent
+            set to a mode its runtime lacks runs as supervised.
+        permissionAsksByOwnRules:
+          type: boolean
+          description: |
+            In supervised, accept_edits and auto, the runtime decides by its own permission rules and settings what to
+            ask about, so some commands and file changes go ahead without a PermissionRequest (the console says so).
+            True for Grok, Antigravity and the local ACP commands; false for Claude Code and Codex, which ask about
+            every action the mode does not allow, and for Pi, which has only full.
         workingDirectory:
           type: boolean
           description: It can work in an Agent's own folder on this computer (Agent.workingDirectory); Pi cannot, so an Agent with a working folder cannot use Pi.
@@ -11807,13 +11814,18 @@ components:
         prompt: { type: string }
         workingDirectory:
           type: [string, "null"]
-          description: See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422).
+          description: See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one.
         useLocalConfig:
           type: boolean
           description: See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value.
         permissionMode:
           $ref: "#/components/schemas/PermissionMode"
-          description: Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message.
+          description: >-
+            Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that
+            mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets
+            full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than
+            full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an
+            Agent whose mode is not full. A change applies from the next message.
 
     ProjectPrompt:
       type: object
@@ -11868,13 +11880,18 @@ components:
           description: Required when prompt is present (including empty text and unchanged text); independent of configVersion, and a stale value returns 412.
         workingDirectory:
           type: [string, "null"]
-          description: See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422).
+          description: See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one.
         useLocalConfig:
           type: boolean
           description: See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value.
         permissionMode:
           $ref: "#/components/schemas/PermissionMode"
-          description: Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message.
+          description: >-
+            Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that
+            mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets
+            full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than
+            full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an
+            Agent whose mode is not full. A change applies from the next message.
 
     Agent:
       type: object
@@ -12399,6 +12416,9 @@ components:
         request to approve is a PermissionRequest; the reply waits until someone answers it in the chat or the Inbox.
         Not every runtime has every mode (RuntimeCapabilities.permissionModes): a mode a runtime lacks runs as
         supervised, never as full.
+        Grok, Antigravity and the local ACP commands decide by their own permission rules and settings what to ask
+        about (RuntimeCapabilities.permissionAsksByOwnRules), so in their supervised, accept_edits and auto some actions
+        go ahead without asking.
       type: string
       enum: [supervised, accept_edits, auto, full]
 

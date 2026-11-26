@@ -4373,11 +4373,18 @@ export interface components {
              */
             stopEndsBackgroundTasks: boolean;
             /**
-             * @description The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Pi has only full;
-             *     Grok has no accept_edits; Antigravity lists auto only when its account offers it. An Agent set to a mode its
-             *     runtime lacks runs as supervised.
+             * @description The permission modes the runtime has, in the order supervised, accept_edits, auto, full. Claude Code, Codex,
+             *     Grok and Antigravity have all four; a local ACP command has supervised and full; Pi has only full. An Agent
+             *     set to a mode its runtime lacks runs as supervised.
              */
             permissionModes: components["schemas"]["PermissionMode"][];
+            /**
+             * @description In supervised, accept_edits and auto, the runtime decides by its own permission rules and settings what to
+             *     ask about, so some commands and file changes go ahead without a PermissionRequest (the console says so).
+             *     True for Grok, Antigravity and the local ACP commands; false for Claude Code and Codex, which ask about
+             *     every action the mode does not allow, and for Pi, which has only full.
+             */
+            permissionAsksByOwnRules: boolean;
             /** @description It can work in an Agent's own folder on this computer (Agent.workingDirectory); Pi cannot, so an Agent with a working folder cannot use Pi. */
             workingDirectory: boolean;
             /** @description It can run with the person's own CLI configuration (Agent.useLocalConfig), as Claude Code and Codex can. */
@@ -4654,11 +4661,11 @@ export interface components {
             /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt?: string;
-            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one. */
             workingDirectory?: string | null;
             /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
             useLocalConfig?: boolean;
-            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            /** @description Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an Agent whose mode is not full. A change applies from the next message. */
             permissionMode?: components["schemas"]["PermissionMode"];
         };
         ProjectPrompt: {
@@ -4696,11 +4703,11 @@ export interface components {
              * @description Required when prompt is present (including empty text and unchanged text); independent of configVersion, and a stale value returns 412.
              */
             expectedPromptVersion?: number;
-            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422). */
+            /** @description See Agent.workingDirectory. Omitting it on create is the same as null; omitting it on update keeps the current value. Not allowed with a Pi model (422), including a switch to Pi of an Agent that has one. */
             workingDirectory?: string | null;
             /** @description See Agent.useLocalConfig. Omitting it on create is the same as false; omitting it on update keeps the current value. */
             useLocalConfig?: boolean;
-            /** @description Omitting it on create takes the default (GET /permission-settings); omitting it on update keeps the current value. A Pi model takes only full (422 otherwise). A change applies from the next message. */
+            /** @description Omitting it on create takes the default (GET /permission-settings) where the model's runtime offers that mode, else supervised where the runtime can ask, else full; so an Agent created on Pi without a mode gets full whatever the default is. Omitting it on update keeps the current value. An explicit mode other than full with a Pi model is 422 (on create, on update, and with a switch to Pi), and so is a switch to Pi of an Agent whose mode is not full. A change applies from the next message. */
             permissionMode?: components["schemas"]["PermissionMode"];
         };
         Agent: {
@@ -5062,6 +5069,9 @@ export interface components {
          *     request to approve is a PermissionRequest; the reply waits until someone answers it in the chat or the Inbox.
          *     Not every runtime has every mode (RuntimeCapabilities.permissionModes): a mode a runtime lacks runs as
          *     supervised, never as full.
+         *     Grok, Antigravity and the local ACP commands decide by their own permission rules and settings what to ask
+         *     about (RuntimeCapabilities.permissionAsksByOwnRules), so in their supervised, accept_edits and auto some actions
+         *     go ahead without asking.
          * @enum {string}
          */
         PermissionMode: "supervised" | "accept_edits" | "auto" | "full";

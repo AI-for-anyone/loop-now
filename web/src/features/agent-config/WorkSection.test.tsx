@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, makeAgent } from '@/test/api'
 import { renderConfig } from '@/test/config'
-import { grokDefinition, withAllRuntimes } from '@/test/runtimes'
+import { acpCommandDefinition, acpRuntimeId, grokDefinition, withAllRuntimes } from '@/test/runtimes'
 import { canRunAgent, effectiveMode } from '@/lib/permissions'
 
 const claude = (overrides: Partial<Schemas['Agent']> = {}) => makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', ...overrides })
@@ -85,9 +85,9 @@ describe('How an Agent works (config page)', () => {
   })
 
   it('a runtime without the chosen mode says it runs as Supervised', async () => {
-    const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' }, runtime: 'grok', permissionMode: 'accept_edits' })
-    await renderConfig({ agent, handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes()))] })
-    expect(await within(work()).findByText('Grok has no “Auto-accept edits”; it runs as Supervised')).toBeInTheDocument()
+    const agent = makeAgent({ model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId, permissionMode: 'accept_edits' })
+    await renderConfig({ agent, handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...withAllRuntimes().runtimes, acpCommandDefinition()] }))] })
+    expect(await within(work()).findByText('Hermes has no “Auto-accept edits”; it runs as Supervised')).toBeInTheDocument()
   })
 
   it('on Pi the folder and the local configuration are not offered, and only Full access is', async () => {
@@ -105,8 +105,9 @@ describe('How an Agent works (config page)', () => {
 
 describe('The permission rules', () => {
   it('a runtime without a mode runs it as Supervised, never Full access', () => {
-    expect(effectiveMode('accept_edits', grokDefinition)).toBe('supervised')
-    expect(effectiveMode('auto', grokDefinition)).toBe('auto')
+    expect(effectiveMode('accept_edits', acpCommandDefinition())).toBe('supervised')
+    expect(effectiveMode('auto', acpCommandDefinition())).toBe('supervised')
+    expect(effectiveMode('accept_edits', grokDefinition)).toBe('accept_edits')
     expect(effectiveMode('full', undefined)).toBe('full')
   })
 
