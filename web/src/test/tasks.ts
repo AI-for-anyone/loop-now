@@ -34,7 +34,7 @@ export function makeTaskWorkspace({ git, ...overrides }: WorkspaceOverrides = {}
     git: { repository: '/Users/someone/projects/demo', branch: 'task/12-general-task-acceptance', baseBranch: 'main', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a', ...git },
   }
 }
-// A task's copy-mode workspace: a copy of a plain folder; by default active, 42 files and 1.5 MB.
+// A task's copy-mode workspace: a copy of a plain folder; by default active, 42 files and 1.5 MiB.
 export function makeCopyWorkspace(overrides: Partial<Omit<Schemas['TaskWorkspace'], 'git'>> = {}): Schemas['TaskWorkspace'] {
   return {
     mode: 'copy', folder: '/Users/someone/Documents/reports', path: `/Users/someone/Library/Application Support/Loop Now/default/worktrees/${taskId}/reports`,
