@@ -6,6 +6,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### The run record says what each tool did
+
+- A tool in a reply's run record now shows what it did, on the line under its name: the command a shell tool ran on every runtime (Claude Code Bash, Codex shell, Antigravity and local ACP commands, Pi bash), the file a read, write or edit tool worked on (relative to the working folder when inside it), and the pattern or query of a search tool. Before, only Pi's commands were shown and every other tool showed just its name. Long text is one line with "…"; a click shows it all.
+- Commands and searches that contain credentials stay hidden. No file contents and no other arguments are recorded.
+- Commands Claude Code and Pi ran before this version show up too; Codex's and Antigravity's older commands were not recorded, so their rows stay as they were.
+- API: `TimelineTool.command` is no longer limited to bash, and `TimelineTool.target` is new.
+
 ### Runtime marks: one color, one frame
 
 - Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.

@@ -73,6 +73,12 @@ func (s *sink) ToolEnded(id, name string, isError bool) {
 func (s *sink) ToolCommand(id, name, command string) {
 	s.add("command " + id + " " + name + " " + command)
 }
+func (s *sink) ToolFiles(id, name string, paths []string) {
+	s.add("files " + id + " " + strings.Join(paths, "+"))
+}
+func (s *sink) ToolQuery(id, name, query string) {
+	s.add("query " + id + " " + query)
+}
 func (s *sink) add(e string) {
 	s.mu.Lock()
 	s.events = append(s.events, e)
@@ -312,6 +318,26 @@ func TestToolUseOnlyInAssistantMessage(t *testing.T) {
 	}
 	if got := s.String(); got != "ran2 | start toolu_fake_2 Bash; command toolu_fake_2 bash ls -la; end-error toolu_fake_2 Bash" {
 		t.Fatalf("sink: %s", got)
+	}
+}
+
+// Claude Code's file tools report their file and its search tools their pattern or query; nothing else of the input
+// or the results.
+func TestToolTargets(t *testing.T) {
+	c := start(t, ccstream.Options{})
+	s := newSink()
+	res, err := c.Prompt(ctx(t), "fake:files", s)
+	if err != nil || res.Text != "files" {
+		t.Fatalf("result: %+v %v", res, err)
+	}
+	got := s.String()
+	for _, want := range []string{"files toolu_read /w/a.go", "files toolu_edit /w/b.go", "files toolu_nb /w/n.ipynb", "query toolu_grep func main", "query toolu_glob **/*.go", "query toolu_web go 1.27 release"} {
+		if !strings.Contains(got, want+";") {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	if strings.Contains(got, "PRIVATE") {
+		t.Fatalf("private input escaped: %s", got)
 	}
 }
 

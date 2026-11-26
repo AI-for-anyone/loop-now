@@ -78,6 +78,22 @@ func (f *followUp) ToolCommand(id, name, command string) {
 		}
 	})
 }
+func (f *followUp) ToolFiles(id, name string, paths []string) {
+	f.do(func(k runturn.Sink) {
+		if c, ok := k.(interface {
+			ToolFiles(id, name string, paths []string)
+		}); ok {
+			c.ToolFiles(id, name, paths)
+		}
+	})
+}
+func (f *followUp) ToolQuery(id, name, query string) {
+	f.do(func(k runturn.Sink) {
+		if c, ok := k.(interface{ ToolQuery(id, name, query string) }); ok {
+			c.ToolQuery(id, name, query)
+		}
+	})
+}
 func (f *followUp) ToolNoResult(id, name string) {
 	f.do(func(k runturn.Sink) {
 		if c, ok := k.(interface{ ToolNoResult(id, name string) }); ok {
@@ -272,7 +288,11 @@ func (e *Executor) executeFollowUp(ctx context.Context, r *run, req executor.Req
 		p.curRun.Store(&runID)
 	}
 	sink.Running(f.version, f.sel)
-	f.take(req.RunID, sinkAdapter{s: sink, command: func(id, name, command string) {
+	cwd := ""
+	if p != nil {
+		cwd = p.cwd
+	}
+	f.take(req.RunID, sinkAdapter{s: sink, cwd: cwd, command: func(id, name, command string) {
 		e.toolCommand(req.AgentID, req.RunID, id, name, command)
 	}, event: func(typ string, data map[string]any) { e.event(req.AgentID, &req.RunID, typ, data) }})
 	select {

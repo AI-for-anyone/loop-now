@@ -217,6 +217,36 @@ describe('run log timeline', () => {
     expect(panel).toHaveTextContent('endReason=user_interrupt')
     expect(within(panel).queryByRole('alert')).toBeNull()
   })
+
+  it('shows commands for non-Pi shell tools and targets for file and search tools in the expanded run log', async () => {
+    const agent = makeAgent({ runtime: 'claude-code' })
+    const run = makeRun({ queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(5), usage: usage(500, 20) })
+    const entries: Entry[] = [
+      { type: 'running', at: at(1) },
+      { type: 'tool', at: at(1.5), toolCallId: 'c1', toolName: 'Bash', command: 'go test ./internal/server/runrecord/...', state: 'succeeded', endedAt: at(2.368), durationMs: 868 },
+      { type: 'tool', at: at(2.5), toolCallId: 'f1', toolName: 'Read', target: 'internal/server/runrecord/tool_command.go', state: 'succeeded', endedAt: at(2.52), durationMs: 20 },
+      { type: 'tool', at: at(3), toolCallId: 's1', toolName: 'Grep', target: 'withToolCommand', state: 'succeeded', endedAt: at(3.04), durationMs: 40 },
+      { type: 'tool', at: at(3.5), toolCallId: 'o1', toolName: 'Edit', state: 'succeeded', endedAt: at(3.55), durationMs: 50 },
+      { type: 'ended', at: at(5), status: 'completed', endReason: null, errorCode: null },
+    ]
+    const timeline = timelineHandler(agent.id, () => ({ run, entries, usage: run.usage }))
+    const { user } = await renderChat({
+      agent,
+      messages: [makeMessage({ text: 'Check the record', run }), makeMessage({ role: 'assistant', text: 'Done', run })],
+      handlers: [timeline.handler],
+    })
+    await user.click(await waitFor(recordToggle))
+    const panel = document.getElementById(recordToggle().getAttribute('aria-controls')!)!
+    const bashRow = (await within(panel).findByText('Tool Bash')).closest('li')!
+    expect(bashRow.querySelector('code')?.textContent).toBe('go test ./internal/server/runrecord/...')
+    const readRow = within(panel).getByText('Tool Read').closest('li')!
+    expect(readRow.querySelector('code')?.textContent).toBe('internal/server/runrecord/tool_command.go')
+    const grepRow = within(panel).getByText('Tool Grep').closest('li')!
+    expect(grepRow.querySelector('code')?.textContent).toBe('withToolCommand')
+    const editRow = within(panel).getByText('Tool Edit').closest('li')!
+    expect(editRow.querySelector('code')).toBeNull()
+    expect(within(editRow).queryByText(/Command not recorded/)).toBeNull()
+  })
 })
 
 // "Printed sheet" redesign: the toggle bar is styled as a segmented receipt.
