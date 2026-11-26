@@ -24,6 +24,7 @@ export const folders = {
   refresh: 'Refresh',
   actions: (name: string) => `More actions for ${name}`,
   open: 'Open',
+  openInFolder: 'Open in folder',
   rename: 'Rename',
   move: 'Move to…',
   download: 'Download',

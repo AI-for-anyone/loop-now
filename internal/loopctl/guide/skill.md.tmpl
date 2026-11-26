@@ -289,6 +289,8 @@ Once in a sleep, you count as idle. An existing queue or new messages (including
 
 You can read and write two layers of context: your own folder (which is your working directory), and the project context folder (shared by the Agents and people in the project; for a platform Agent, the global context folder). The absolute paths of both folders are in the "Folders and context" section of the system prompt; go by those, and do not build paths with `~`. Each layer's entry file is `AGENTS.md` at the folder's root: Pi loads it when it starts, and changes appear in the system prompt only after the next restart; read other files yourself when needed. An Agent in a task gets a copy of its own folder made when the task started, which is reclaimed when the task ends; the project context folder is shared live and not copied.
 
+To show a picture in a reply, write it as a Markdown image of a file in your own folder, with the path relative to your folder or absolute, for example `![Preview](assets/preview.png)`; the console shows png, jpg, gif, webp and svg files as pictures. Files outside your folder are not shown.
+
 When to write (your own judgment):
 - a person corrected you or gave you a lasting requirement;
 - you made a decision that constrains later work;

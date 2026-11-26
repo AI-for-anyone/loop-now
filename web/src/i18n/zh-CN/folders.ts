@@ -24,6 +24,7 @@ export const folders = {
   refresh: '刷新',
   actions: (name: string) => `${name} 的更多操作`,
   open: '打开',
+  openInFolder: '在文件夹中打开',
   rename: '重命名',
   move: '移动到…',
   download: '下载',

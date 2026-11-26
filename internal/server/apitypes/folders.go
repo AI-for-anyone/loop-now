@@ -31,6 +31,12 @@ type FolderEntryPage struct {
 	NextCursor *string       `json:"nextCursor"`
 }
 
+// FolderLocation mirrors the FolderLocation schema.
+type FolderLocation struct {
+	Path     string `json:"path"`
+	RealPath string `json:"realPath"`
+}
+
 // FromFolderPage converts one listed level.
 func FromFolderPage(p folders.Page) FolderEntryPage {
 	out := FolderEntryPage{Path: p.Path, Entries: make([]FolderEntry, 0, len(p.Entries)), NextCursor: p.NextCursor}
