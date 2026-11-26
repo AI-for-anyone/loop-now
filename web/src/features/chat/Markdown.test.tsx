@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { Markdown } from './Markdown'
@@ -293,4 +293,103 @@ it('a leading bold word in documents (plugin READMEs, Markdown files in folders)
   const file = render(<Markdown leadLabels={false} text={text} />)
   expect(file.container.querySelector('.md-lead')).toBeNull()
   expect(file.container.querySelector('strong')).toHaveTextContent('Export')
+})
+
+describe('Markdown images in a reply', () => {
+  it('caps a reply image as a rounded thumbnail with its alt text as tooltip', () => {
+    render(<Markdown text="![Architecture diagram](https://example.com/big.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image: Architecture diagram' })
+    expect(trigger).toHaveAttribute('title', 'Architecture diagram')
+    expect(trigger.className).toContain('rounded-input')
+    expect(trigger.className).toContain('max-w-[min(100%,360px)]')
+    const img = within(trigger).getByRole('img', { name: 'Architecture diagram' })
+    expect(img).toHaveAttribute('src', 'https://example.com/big.png')
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer')
+    expect(img).toHaveAttribute('title', 'Architecture diagram')
+    expect(img.className).toContain('max-h-[240px]')
+    expect(img.className).toContain('h-auto')
+    expect(img.className).toContain('w-auto')
+  })
+
+  it('opens the preview dialog on click and Enter, shows a link to the original in a new tab, and closes on Escape', async () => {
+    const user = userEvent.setup()
+    render(<Markdown text="![Hero shot](https://example.com/hero.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image: Hero shot' })
+
+    await user.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: 'Hero shot' })
+    const large = within(dialog).getByRole('img', { name: 'Hero shot' })
+    expect(large).toHaveAttribute('src', 'https://example.com/hero.png')
+    expect(large).toHaveAttribute('referrerpolicy', 'no-referrer')
+    const link = within(dialog).getByRole('link', { name: 'Open original in new tab' })
+    expect(link).toHaveAttribute('href', 'https://example.com/hero.png')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    trigger.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Hero shot' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('uses fallback accessible labels when an image has no alt text', async () => {
+    const user = userEvent.setup()
+    render(<Markdown text="![](https://example.com/plain.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image' })
+    expect(trigger).not.toHaveAttribute('title')
+    await user.click(trigger)
+    expect(await screen.findByRole('dialog', { name: 'Image' })).toBeInTheDocument()
+  })
+
+  it('keeps an image between two text paragraphs inline as a thumbnail', () => {
+    const { container } = render(<Markdown text={'Before the chart.\n\n![Latency chart](https://example.com/chart.png)\n\nAfter the chart.'} />)
+    expect(container.querySelector('[data-md-image-row]')).toBeNull()
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs).toHaveLength(3)
+    expect(paragraphs[0]).toHaveTextContent('Before the chart.')
+    expect(within(paragraphs[1]).getByRole('button', { name: 'Enlarge image: Latency chart' })).toBeInTheDocument()
+    expect(paragraphs[2]).toHaveTextContent('After the chart.')
+  })
+
+  it('renders an image inside a link as a capped thumbnail without nesting a button', () => {
+    const { container } = render(<Markdown text="[![Build status](https://example.com/badge.png)](https://example.com/ci)" />)
+    const link = screen.getByRole('link', { name: 'Build status' })
+    expect(link).toHaveAttribute('href', 'https://example.com/ci')
+    expect(within(link).queryByRole('button')).toBeNull()
+    const img = within(link).getByRole('img', { name: 'Build status' })
+    expect(img.className).toContain('max-h-[240px]')
+    expect(container.querySelector('a button')).toBeNull()
+  })
+
+  it('shows the alt text in a small box when an image fails to load or has a blocked URL', () => {
+    const { rerender } = render(<Markdown text="![Broken chart](https://example.com/missing.png)" />)
+    const img = screen.getByRole('img', { name: 'Broken chart' })
+    fireEvent.error(img)
+    expect(screen.queryByRole('button', { name: /Enlarge image/ })).toBeNull()
+    const box = screen.getByRole('img', { name: 'Broken chart' })
+    expect(box.tagName).not.toBe('IMG')
+    expect(box).toHaveTextContent('Broken chart')
+
+    rerender(<Markdown text="![Blocked image](javascript:alert(1))" />)
+    const blocked = screen.getByRole('img', { name: 'Blocked image' })
+    expect(blocked.tagName).not.toBe('IMG')
+    expect(blocked).toHaveTextContent('Blocked image')
+
+    rerender(<Markdown text="![](https://example.com/missing-no-alt.png)" />)
+    fireEvent.error(document.querySelector('img')!)
+    expect(screen.getByRole('img', { name: 'Image failed to load' })).toHaveTextContent('Image failed to load')
+  })
+
+  it('keeps README images as alt text only', () => {
+    const { container } = render(<Markdown readme text={'![Architecture](https://example.com/a.png)\n\n![Details](https://example.com/b.png)'} />)
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(container).toHaveTextContent('Architecture')
+    expect(container).toHaveTextContent('Details')
+  })
 })

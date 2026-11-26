@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it } from 'vitest'
 import { config } from '@/config'
@@ -8,7 +8,12 @@ it('history uses only the durable API image ID, with a keyboard-accessible enlar
   render(<MessageImages images={[{ id, mimeType: 'image/png', size: 32, width: 2, height: 2 }]} />)
   expect(screen.getByRole('img')).toHaveAttribute('src', `${config.apiBase}/message-images/${id}`)
   await userEvent.click(screen.getByRole('button', { name: 'Enlarge image: Image 1 · 2×2' }))
-  expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  const dialog = await screen.findByRole('dialog')
+  expect(dialog).toBeInTheDocument()
+  const original = within(dialog).getByRole('link', { name: 'Open original in new tab' })
+  expect(original).toHaveAttribute('href', `${config.apiBase}/message-images/${id}`)
+  expect(original).toHaveAttribute('target', '_blank')
+  expect(original).toHaveAttribute('rel', 'noopener noreferrer')
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })

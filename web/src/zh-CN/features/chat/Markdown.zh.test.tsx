@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { Markdown } from '@/features/chat/Markdown'
 
@@ -33,5 +34,18 @@ describe('Markdown rendering and safety', () => {
       expect(back).not.toHaveAttribute('target')
       expect(container.querySelector(`[id="${back.getAttribute('href')!.slice(1)}"]`)).toBe(ref)
     }
+  })
+
+  it('reply image preview and fallback copy use Chinese UI text', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Markdown text="![候选图](https://example.com/a.png)" />)
+    await user.click(screen.getByRole('button', { name: '放大图片：候选图' }))
+    const dialog = await screen.findByRole('dialog', { name: '候选图' })
+    expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', 'https://example.com/a.png')
+    await user.keyboard('{Escape}')
+
+    rerender(<Markdown text="![](https://example.com/broken.png)" />)
+    fireEvent.error(document.querySelector('img')!)
+    expect(screen.getByRole('img', { name: '图片加载失败' })).toHaveTextContent('图片加载失败')
   })
 })
