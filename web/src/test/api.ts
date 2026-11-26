@@ -179,7 +179,7 @@ export const limits: Schemas['Limits'] = {
   maxSkillArchive: 20 * 1024 * 1024,
   maxSkillEntries: 500,
   maxCredential: 64 * 1024,
-  textEdit: { maxBytes: 1024 * 1024, extensions: ['.md', '.txt'] },
+  textEdit: { maxBytes: 20 << 20, extensions: ['.md', '.txt'] },
 }
 
 export const context: Schemas['Context'] = {

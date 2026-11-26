@@ -16,6 +16,7 @@
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本地 Pi 进程数量 |
 | `LOOP_NOW_PI_IDLE_TIMEOUT` | Pi 进程空闲回收超时；`10m` |
 | `LOOP_NOW_CONSOLE_ORIGINS` | 允许跨源调用 API 的浏览器来源（Vite 开发服务器）；默认本地 5173 端口，`none` 表示一个都不允许。服务端自己提供的控制台是同源，不需要列出 |
+| `LOOP_NOW_TEXT_EDIT_MAX` | 控制台在 Agent 文件夹和上下文文件夹里能预览（包括图片）或在线编辑的最大文件；默认 `20MiB`。不能大于 `LOOP_NOW_MAX_FOLDER_UPLOAD`（默认 `1GiB`，写入这些文件夹的单个文件上限） |
 | `LOOP_NOW_LARK_USER_BUNDLE_DIR` | 可选的已验证飞书用户 CLI 包 |
 
 ## 数据目录与备份

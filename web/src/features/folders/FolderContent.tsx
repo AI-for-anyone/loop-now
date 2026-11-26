@@ -150,7 +150,7 @@ interface FileViewProps {
 
 export function FileView({ source, entry, limits, actions, edit, mode, onMode, onEdit, onDraft, onSave, onCancel }: FileViewProps) {
   const path = entry.path
-  const maxBytes = limits?.maxBytes ?? 1 << 20
+  const maxBytes = limits?.maxBytes ?? 20 << 20 // the server default (LOOP_NOW_TEXT_EDIT_MAX) until the limits load
   const tooLarge = entry.size !== null && entry.size > maxBytes
   const readable = entry.type === 'file' && !tooLarge && !isImage(path)
   const file = useFolderFile(source, path, readable || (entry.type === 'symlink' && !!entry.symlinkTarget))

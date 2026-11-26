@@ -13,6 +13,12 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - “负责 Agent”一栏更宽，loop-now-main 这类名字不再被截断。
 - 接口：`TaskSummary.currentStepTitle`。
 
+### 20 MiB 以内的文件都能预览
+
+- 文件夹页面（Agent 的文件夹、项目和全局的上下文文件夹）里，20 MiB 以内的文件都能预览和在线编辑，以前只有 1 MiB，图片也一样：3.5 MiB、15 MiB 的图片能直接看，5 MiB 的文本能打开、编辑和保存。更大的文件照旧显示提示和“下载”，提示里写着上限。
+- 上限仍可用 `LOOP_NOW_TEXT_EDIT_MAX` 修改；现在它和 `LOOP_NOW_MAX_FOLDER_UPLOAD`（默认 1 GiB，写进这些文件夹的单个文件上限）比较，不再和 `LOOP_NOW_MAX_UPLOAD_FILE` 比较。把 `LOOP_NOW_MAX_FOLDER_UPLOAD` 设得小于 20 MiB 的服务端，也要同时设置 `LOOP_NOW_TEXT_EDIT_MAX`。
+- 一整个超长列表（几千条以上）的 Markdown 文件，在这个大小下预览可能很慢。
+
 ### 左边栏可以拖动改宽度
 
 - 拖左边栏的右边缘就能调宽窄：200 到 420 像素之间，并且不超过窗口宽度的 40%。宽度会记在这个浏览器里（桌面版也一样），刷新后还在；窗口变窄时左边栏暂时跟着变窄，窗口再变宽就恢复记住的宽度。双击边缘恢复默认宽度（248）。用键盘时，选中边缘后按左右方向键（每次 16 像素）、Home 和 End。
