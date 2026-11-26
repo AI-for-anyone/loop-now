@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Runtime marks: one color, one frame
+
+- Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
+- The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
+
 ### The Agent page header is one thin bar
 
 - The top of an Agent page (breadcrumb, large title, runtime and model tags, address box and the four folder tabs, about 200 px) is now one bar of 48 px shared by Chat, Config, Folder and Inbox, as in ChatGPT: the runtime mark, the Agent's name, the Manager chip and the status on the left, the four tabs as small text tabs, and a "⋯" menu on the right. The conversation starts right under it.
