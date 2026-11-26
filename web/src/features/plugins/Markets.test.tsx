@@ -32,14 +32,23 @@ function renderMarket(path: string, initial: Parameters<typeof fakePlugins>[0] =
 }
 
 describe('Plugin market tabs', () => {
-  it('the three tabs are kept in the URL: installed, official market, other markets', async () => {
+  it('collapses into two tabs (Installed, Discover) and aliases ?tab=official and ?tab=other to Discover with preselected source filters', async () => {
     const user = userEvent.setup()
     const { router } = renderMarket('/plugins')
     const tabs = await screen.findByRole('navigation', { name: 'Plugin market' })
-    await waitFor(() => expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Installed 2', 'Official market', 'Other markets']))
-    await user.click(within(tabs).getByRole('link', { name: 'Official market' }))
-    expect(router.state.location.search).toBe('?tab=official')
-    expect(within(tabs).getByRole('link', { name: 'Official market' })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Installed2', 'Discover']))
+    await user.click(within(tabs).getByRole('link', { name: 'Discover' }))
+    expect(router.state.location.search).toBe('?tab=discover')
+    expect(within(tabs).getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('radio', { name: 'All' })).toHaveAttribute('aria-checked', 'true')
+
+    await router.navigate('/plugins?tab=official')
+    expect(within(tabs).getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Official' })).toHaveAttribute('aria-checked', 'true'))
+
+    await router.navigate('/plugins?tab=other')
+    expect(within(tabs).getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Community' })).toHaveAttribute('aria-checked', 'true'))
   })
 
   it('official market: ones not installed can be installed (previewed from the market source); ones with a new version can be updated; up-to-date ones say so', async () => {
@@ -82,21 +91,24 @@ describe('Plugin market tabs', () => {
     expect(within(card('npm source')).queryByRole('link', { name: 'Repository' })).toBeNull()
   })
 
-  it('other markets: lists verified and unverified ones; a market that failed to load shows the reason; market URLs can be added and removed', async () => {
+  it('other markets: lists verified and unverified ones; a market that failed to load shows the reason; Manage markets dialog adds and removes URLs', async () => {
     const user = userEvent.setup()
     const { fake } = renderMarket('/plugins?tab=other')
     const community = await screen.findByRole('region', { name: 'Community market' })
     expect(within(community).getByText('Unverified')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read Unnamed market: 404 Not Found")
-    const manage = screen.getByRole('region', { name: 'Market URLs' })
-    await user.type(within(manage).getByLabelText('Market URL'), 'http://insecure.example.com/m.json')
-    await user.click(within(manage).getByRole('button', { name: 'Add' }))
-    expect(within(manage).getByText('Enter a URL starting with https://')).toBeInTheDocument()
-    await user.clear(within(manage).getByLabelText('Market URL'))
-    await user.type(within(manage).getByLabelText('Market URL'), 'https://more.example.com/m.json')
-    await user.click(within(manage).getByRole('button', { name: 'Add' }))
-    await waitFor(() => expect(within(manage).getByText('https://more.example.com/m.json')).toBeInTheDocument())
-    await user.click(within(manage).getByRole('button', { name: 'Remove market https://broken.example.com/market.json' }))
+    expect(screen.queryByRole('dialog', { name: 'Market URLs' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /Manage markets/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Market URLs' })
+    await user.type(within(dialog).getByLabelText('Market URL'), 'http://insecure.example.com/m.json')
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+    expect(within(dialog).getByText('Enter a URL starting with https://')).toBeInTheDocument()
+    await user.clear(within(dialog).getByLabelText('Market URL'))
+    await user.type(within(dialog).getByLabelText('Market URL'), 'https://more.example.com/m.json')
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(within(dialog).getByText('https://more.example.com/m.json')).toBeInTheDocument())
+    await user.click(within(dialog).getByRole('button', { name: 'Remove market https://broken.example.com/market.json' }))
     await waitFor(() =>
       expect(fake.writes().map((r) => r.body)).toEqual([
         { disabled: false, markets: ['https://plugins.example.com/market.json', 'https://broken.example.com/market.json', 'https://more.example.com/m.json'] },

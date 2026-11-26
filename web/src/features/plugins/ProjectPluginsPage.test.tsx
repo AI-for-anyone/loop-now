@@ -1,12 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { defaultProject } from '@/test/api'
 import { fakePlugins, larkAccountKind, makeAccount, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
-import { renderRoutes } from '@/test/render'
+import { renderRoutes, renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
+import { ProjectPluginsPanel } from './ProjectPluginsPage'
 
 const path = `/p/${encodeURIComponent(defaultProject.name)}/plugins`
 const lark = makeDetail(
@@ -35,31 +37,45 @@ function renderProject() {
   return { ...renderRoutes(routes, path), fake }
 }
 
-const card = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!
+const rowOf = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!
 
 describe('Project plugins page', () => {
-  it('one card per installed plugin with an enable switch; a plugin with only an Agent side says to grant it in the Agent config', async () => {
-    renderProject()
-    const webhook = await card('Webhook notifications')
+  it('wraps in PageHeader + Sheet + PageBody, renders collapsed accordion rows with zero N+1 detail/deliveries fetches, and lazy-loads details when expanded', async () => {
+    const user = userEvent.setup()
+    const { fake } = renderProject()
+    const title = await screen.findByRole('heading', { level: 1, name: 'Plugins' })
+    const header = title.closest('header')!
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Project settings›Plugins`)
+    expect(within(header).getByRole('link', { name: 'Plugin market' })).toHaveAttribute('href', '/plugins')
+
+    const webhook = await rowOf('Webhook notifications')
+    expect(webhook.closest('[data-sheet]')).not.toBeNull()
+    expect(webhook.closest('[data-page-body]')).not.toBeNull()
     expect(within(webhook).getByRole('switch', { name: 'Enable Webhook notifications in this project' })).toHaveAttribute('aria-checked', 'true')
-    const playwright = await card('Dedicated browser')
+    const playwright = await rowOf('Dedicated browser')
     expect(within(playwright).getByRole('switch', { name: 'Enable Dedicated browser in this project' })).toHaveAttribute('aria-checked', 'false')
+
+    // Zero N+1 detail / config / deliveries fetches while all rows stay collapsed.
+    expect(fake.requests.filter((r) => r.path.startsWith('/plugins/'))).toEqual([])
+
+    await user.click(within(playwright).getByRole('button', { name: 'Configure Dedicated browser' }))
     await waitFor(() => expect(playwright).toHaveTextContent('Agent side only. After enabling, grant it in an Agent\'s config.'))
   })
 
   it('enabling sends an empty project config and revision 0', async () => {
     const user = userEvent.setup()
     const { fake } = renderProject()
-    const playwright = await card('Dedicated browser')
+    const playwright = await rowOf('Dedicated browser')
     await user.click(within(playwright).getByRole('switch', { name: 'Enable Dedicated browser in this project' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/projects/${defaultProject.id}/plugins/playwright`, query: {}, body: { enabled: true, values: {}, expectedRevision: 0 } }]))
     await waitFor(() => expect(within(playwright).getByRole('switch', { name: 'Enable Dedicated browser in this project' })).toHaveAttribute('aria-checked', 'true'))
   })
 
-  it('project config has only x-scope: project fields and shows the global value; saving keeps it enabled and sends the revision', async () => {
+  it('project config has only x-scope: project fields and shows the global value once expanded; saving keeps it enabled and sends the revision', async () => {
     const user = userEvent.setup()
     const { fake } = renderProject()
-    const webhook = await card('Webhook notifications')
+    const webhook = await rowOf('Webhook notifications')
+    await user.click(within(webhook).getByRole('button', { name: 'Configure Webhook notifications' }))
     const url = await within(webhook).findByLabelText('Callback URL')
     expect(within(webhook).queryByLabelText('Retry limit')).toBeNull()
     expect(webhook).toHaveTextContent('Global value: https://hooks.example.com/loop-now')
@@ -70,18 +86,21 @@ describe('Project plugins page', () => {
     )
   })
 
-  it('lists only the events of this project', async () => {
+  it('lists only the events of this project once expanded', async () => {
+    const user = userEvent.setup()
     const { fake } = renderProject()
-    const webhook = await card('Webhook notifications')
+    const webhook = await rowOf('Webhook notifications')
+    await user.click(within(webhook).getByRole('button', { name: 'Configure Webhook notifications' }))
     await waitFor(() => expect(within(webhook).getAllByText('inbox.received')).toHaveLength(1))
     expect(within(webhook).queryByText('run.ended')).toBeNull()
     expect(fake.requests.find((r) => r.path === '/plugins/webhook/deliveries')?.query).toEqual({ limit: '3', projectId: defaultProject.id })
   })
 
-  it('accounts: lists the name and the start of the App ID; secrets are write-only when adding; edits send the revision; deleting asks first', async () => {
+  it('accounts: lists the name and the start of the App ID once expanded; secrets are write-only when adding; edits send the revision; deleting asks first', async () => {
     const user = userEvent.setup()
     const { fake } = renderProject()
-    const larkCard = await card('Lark notifications')
+    const larkCard = await rowOf('Lark notifications')
+    await user.click(within(larkCard).getByRole('button', { name: 'Configure Lark notifications' }))
     const accounts = await within(larkCard).findByRole('region', { name: 'Accounts · Lark app' })
     await waitFor(() => expect(within(accounts).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Dev group botcli_a1b2EditDelete', 'Personal testcli_9f8e7d…EditDelete']))
 
@@ -109,5 +128,18 @@ describe('Project plugins page', () => {
       ['PUT', `${base}/72000000-0000-7000-8000-000000000002`, { name: 'Personal test 2', values: { appId: 'cli_9f8e7d6c5b4a' }, expectedRevision: 1 }],
       ['DELETE', `${base}/72000000-0000-7000-8000-000000000001`, undefined],
     ])
+  })
+
+  it('ProjectPluginsPanel embeds the accordion list directly without PageHeader or Sheet chrome', async () => {
+    const fake = fakePlugins({ details: [makeDetail()] })
+    server.use(...fake.handlers)
+    renderWithQuery(
+      <MemoryRouter>
+        <ProjectPluginsPanel project={defaultProject} />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('link', { name: 'Webhook notifications' })).toBeInTheDocument()
+    expect(document.querySelector('[data-page-header]')).toBeNull()
+    expect(document.querySelector('[data-sheet]')).toBeNull()
   })
 })

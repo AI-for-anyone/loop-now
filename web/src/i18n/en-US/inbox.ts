@@ -62,6 +62,7 @@ export const agentInbox = {
   all: 'All',
   unreadOnly: 'Unread only',
   readonly: "Read-only view: opening a message doesn't mark it read",
+  readonlyBadge: 'Read-only',
   stub: { title: 'Mail', unread: 'unread', all: 'in total' },
   list: (name: string) => `Messages received by ${name}`,
   unread: 'Unread',

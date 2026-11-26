@@ -11,11 +11,15 @@ import { useAddAgentSkill, useAgentSkill, useAgentSkills, useRecopyAgentSkill, u
 import { t } from '@/i18n'
 import { Section } from './Section'
 
+const listClass =
+  'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+
 export function SkillsSection({ agentId }: { agentId: string }) {
   const skills = useAgentSkills(agentId)
   const library = useSkills()
   const [adding, setAdding] = useState(false)
   const templateName = (id: string | null) => (id ? library.data?.skills.find((s) => s.id === id)?.name : undefined)
+  const items = skills.data?.skills ?? []
 
   return (
     <Section
@@ -30,12 +34,14 @@ export function SkillsSection({ agentId }: { agentId: string }) {
       }
     >
       {skills.isError && <ErrorAlert error={skills.error} />}
-      {skills.data?.skills.length === 0 && <p className="text-[13.5px] text-ink-500">{t.config.skills.empty}</p>}
-      <ul className="grid gap-2.5">
-        {skills.data?.skills.map((skill) => (
-          <SkillItem key={skill.id} agentId={agentId} skill={skill} sourceName={templateName(skill.sourceTemplateId)} />
-        ))}
-      </ul>
+      {skills.data?.skills.length === 0 && <p className="text-[13px] text-ink-500">{t.config.skills.empty}</p>}
+      {items.length > 0 && (
+        <ul className={listClass}>
+          {items.map((skill) => (
+            <SkillItem key={skill.id} agentId={agentId} skill={skill} sourceName={templateName(skill.sourceTemplateId)} />
+          ))}
+        </ul>
+      )}
       {adding && <AddSkillDialog agentId={agentId} onClose={() => setAdding(false)} />}
     </Section>
   )
@@ -50,29 +56,31 @@ function SkillItem({ agentId, skill, sourceName }: { agentId: string; skill: Sch
   const sourceDeleted = skill.sourceTemplateId === null
 
   return (
-    <li className="flex flex-wrap items-start gap-x-4 gap-y-2.5 rounded-card bg-white px-4 py-3.5" aria-label={skill.name}>
-      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-          <span className="font-mono text-[14.5px] font-bold">{skill.name}</span>
+    <li className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5" aria-label={skill.name}>
+      <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-mono text-[13.5px] font-semibold [[data-skin=plate]_&]:font-bold">{skill.name}</span>
           {sourceDeleted ? (
             <Badge tone="neutral" className="bg-tint-yellow">
               {t.config.skills.sourceDeleted}
             </Badge>
           ) : (
-            <span className="text-[12.5px] text-ink-500">{t.config.skills.source(sourceName ?? skill.name)}</span>
+            <span className="text-[12px] text-ink-500">{t.config.skills.source(sourceName ?? skill.name)}</span>
           )}
         </div>
-        <p className="text-[13.5px] text-ink-700">{skill.description}</p>
-        {sourceDeleted && <p className="text-[12.5px] text-ink-500">{t.config.skills.recopyDisabled}</p>}
+        <p className="truncate text-[12.5px] text-ink-700" title={skill.description}>
+          {skill.description}
+        </p>
+        {sourceDeleted && <p className="text-[12px] text-ink-500">{t.config.skills.recopyDisabled}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Button size="xs" variant="secondary" className="h-9" onClick={() => setEditing(true)}>
+      <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
+        <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
           {t.config.skills.editSkillMd}
         </Button>
-        <Button size="sm" variant="ghost" disabled={sourceDeleted} title={sourceDeleted ? t.config.skills.recopyDisabled : undefined} onClick={() => setRecopying(true)}>
+        <Button size="xs" variant="ghost" disabled={sourceDeleted} title={sourceDeleted ? t.config.skills.recopyDisabled : undefined} onClick={() => setRecopying(true)}>
           {t.config.skills.recopy}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setRemoving(true)}>
+        <Button size="xs" variant="ghost" onClick={() => setRemoving(true)}>
           {t.common.remove}
         </Button>
       </div>
@@ -112,14 +120,14 @@ function AddSkillDialog({ agentId, onClose }: { agentId: string; onClose: () => 
         {library.isPending && <p className="text-[13.5px] text-ink-500">{t.common.loading}</p>}
         {library.isError && <ErrorAlert error={library.error} />}
         {library.data?.skills.length === 0 && <p className="text-[13.5px] text-ink-500">{t.config.skills.libraryEmpty}</p>}
-        <ul className="grid max-h-80 gap-2 overflow-y-auto">
+        <ul className="grid max-h-80 divide-y divide-hairline overflow-y-auto rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
           {library.data?.skills.map((template) => (
-            <li key={template.id} className="flex items-center gap-3 rounded-card bg-white px-3.5 py-3" aria-label={template.name}>
+            <li key={template.id} className="flex items-center gap-3 px-3.5 py-2.5" aria-label={template.name}>
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="font-mono text-[14px] font-bold">{template.name}</span>
-                <span className="text-[13px] text-ink-700">{template.description}</span>
+                <span className="font-mono text-[13.5px] font-semibold [[data-skin=plate]_&]:font-bold">{template.name}</span>
+                <span className="text-[12.5px] text-ink-700">{template.description}</span>
               </div>
-              <Button size="xs" className="h-9 shadow-[2px_2px_0_var(--riso-pink)]" disabled={add.isPending} onClick={() => void add.mutateAsync(template.id).then(onClose, () => {})}>
+              <Button size="xs" className="[[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]" disabled={add.isPending} onClick={() => void add.mutateAsync(template.id).then(onClose, () => {})}>
                 {t.common.add}
               </Button>
             </li>

@@ -12,6 +12,23 @@ export const overview = {
   sectionFailed: (section: string) => `Couldn't load ${section.toLowerCase()}`,
   sectionFailedBody: (reason: string) => `${reason}. The rest of the page is unaffected.`,
   requestId: 'Request ID',
+  pendingMore: (count: number) => `Show ${count} more`,
+  pendingLess: 'Show fewer',
+  actions: {
+    import: 'Import',
+  },
+  tabs: {
+    label: 'Overview sections',
+    agents: 'Agents',
+    issues: 'Issues 24h',
+    usage: 'Usage',
+  },
+  kpi: {
+    issues: 'Issues 24h',
+    issuesZero: 'All clear',
+    todayTokens: "Today's tokens",
+    statsLink: 'Stats',
+  },
   empty: {
     title: 'No Agents yet.',
     body: 'Once you create an Agent, its run status, usage, and issues show up here.',
@@ -73,7 +90,8 @@ export const overview = {
     dimensions: { agent: 'By Agent', model: 'By model' },
     total: (range: string) => `Total · ${range}`,
     parts: { input: 'Input', output: 'Output', cacheRead: 'Cache read', cacheWrite: 'Cache write' },
-    barNote: 'Bar length is input plus output; the total also counts cache reads and writes. Hover over a row or Tab to it for details.',
+    barNote: 'Bar length reflects total tokens across input, output, and cache. Hover over a row or Tab to it for details.',
+    fullAnalytics: 'Full analytics in Stats',
     detail: (input: string, output: string, cacheRead: string, cacheWrite: string, total: string) =>
       `Input ${input} · Output ${output} · Cache read ${cacheRead} · Cache write ${cacheWrite} · Total ${total}`,
     unknownModel: 'Unknown model',

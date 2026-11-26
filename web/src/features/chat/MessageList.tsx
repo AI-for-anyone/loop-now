@@ -4,8 +4,6 @@ import { MessageImages } from '@/features/images/MessageImages'
 import { UserChatBubble, AgentChatReply, SleepWakeLine } from './ChatBubble'
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
-import { HollowNumber } from '@/components/NumberedSection'
-import { Stub } from '@/components/Sheet'
 import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
@@ -50,32 +48,48 @@ function sleptBefore(previous: Turn | undefined, turn: Turn) {
   return Number.isFinite(ms) && ms >= 0 ? ms : undefined
 }
 
-// Agent replies have no card: a top line with the avatar, name, time (the phase while in progress) and the outcome stamp, the body
-// directly below, and the run record last.
+// Agent replies have no card: a top line with the avatar, name, time (the phase while in progress), outcome stamp and inline turn tag,
+// the body directly below, and the run record last.
 // A reply that didn't complete normally keeps the text it produced, shown in the secondary text color.
-function ReplyBubble({ turn, agent, located, requests = [] }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean; requests?: Schemas['PermissionRequest'][] }) {
+function ReplyBubble({
+  turn,
+  agent,
+  located,
+  turnNumber,
+  requests = [],
+}: {
+  turn: Turn
+  agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>
+  located: boolean
+  turnNumber: number | null
+  requests?: Schemas['PermissionRequest'][]
+}) {
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
   // /pi: an extension command handled directly by Pi and never passed to the model: the turn ends normally with no assistant reply.
   // The command's output is the messages the extension sent via notify, shown in order where the reply would be; only when there
-  // are no messages (including old runs that finished before the upgrade) is a single line
-  // "命令已执行，没有回复" (Command ran; no reply) shown.
+  // are no messages (including old runs that finished before the upgrade) is a single line "Command ran; no reply" shown.
   const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
   const backgroundTools = new Set((run.backgroundTasks ?? []).flatMap((task) => (task.toolCallId ? [task.toolCallId] : [])))
   const toolNames = new Map(run.tools.map((tool) => [tool.toolCallId, tool.toolName]))
   return (
-    <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
+    <AgentChatReply
+      agent={agent}
+      turnNumber={turnNumber}
+      showTurnNumber
+      metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}
+    >
       <FailureNote run={run} runtime={agent.runtime} />
       {reply && reply.text !== '' ? (
-        <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
+        <div className={cn('max-w-none', ended && run.status !== 'completed' && 'text-ink-500')}>
           <Markdown text={reply.text} cursor={streaming} />
         </div>
       ) : command ? (
         (command.notices ?? []).length > 0 ? (
           <PiCommandNotices notices={command.notices} truncated={command.truncated} />
         ) : (
-          <p data-pi-command-handled className="text-[14.5px] text-ink-500">{t.chat.piCommandHandled}</p>
+          <p data-pi-command-handled className="text-[14px] text-ink-500">{t.chat.piCommandHandled}</p>
         )
       ) : (
         streaming && (
@@ -176,17 +190,9 @@ interface MessageListProps {
   turnsTotal?: number
 }
 
-// The number column is 36px wide: two digits at 26px, shrinking step by step from three digits on, so even five digits fit in the
-// column without pushing into the body on the right.
-const numberSize = (number: number) => (number >= 10000 ? 'text-[12px]' : number >= 1000 ? 'text-[15px]' : number >= 100 ? 'text-[20px]' : 'text-[26px]')
-
-// The hollow number to the left of each turn: one size smaller than section numbers (26px, 1.3px stroke), in a 36px column, 12px from
-// the body.
-const turnNumberClass = 'w-9 pt-[22px] tracking-[-0.03em] [-webkit-text-stroke:1.3px_var(--riso-blue)]'
-
-// Content placed into the conversation flow lines up with the body of the turns: on wide screens it leaves room for the number column.
+// Content placed into the conversation flow lines up directly with the centered conversation column.
 function Insert({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-col nav:pl-12">{children}</div>
+  return <div className="flex min-w-0 flex-col">{children}</div>
 }
 
 export interface TimelineInsert {
@@ -383,32 +389,30 @@ export function MessageList({
   }
 
   return (
-    // To the right of the conversation area is the ruler in the stub; the scroll area keeps a thin usable scrollbar so long replies
-    // can be dragged directly.
-    <div className="flex h-full min-h-0">
-      <div className="relative h-full min-h-0 min-w-0 flex-1">
-        {/* The scroll area itself is the positioning container: absolutely positioned elements inside it (unread dots, the sr-only
-            caption of the footnote heading, etc.) scroll with the content and get clipped; otherwise they'd be laid out in the whole
-            page at their unscrolled positions, making the page taller, so a large blank area could be dragged out below the input box. */}
-        <div
-          ref={container}
-          onScroll={onScroll}
-          className="riso-scrollbar relative h-full min-w-0 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]"
-          role="log"
-          aria-label={t.chat.messagesLabel}
-        >
-        {/* The right padding also leaves room for the print shadows of bubbles and code blocks, so the scroll area doesn't clip them. */}
-        <div ref={content} className="flex min-w-0 w-full flex-col gap-7">
+    // Centered conversation stream with a zero-width-tax floating PrecisionRuler overlay on the right edge.
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
+      {/* The scroll area itself is the positioning container: absolutely positioned elements inside it (unread dots, the sr-only
+          caption of the footnote heading, etc.) scroll with the content and get clipped; otherwise they'd be laid out in the whole
+          page at their unscrolled positions, making the page taller, so a large blank area could be dragged out below the input box. */}
+      <div
+        ref={container}
+        onScroll={onScroll}
+        className="relative h-full min-w-0 flex-1 overflow-y-auto"
+        role="log"
+        aria-label={t.chat.messagesLabel}
+      >
+        <div ref={content} className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-5 px-4 pt-4 pb-6 sm:px-6">
           {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
           {hasOlder && !loadingOlder && (
             <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
               {t.chat.loadOlder}
             </Button>
           )}
-          {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[15px] text-ink-500">{t.chat.noMessages}</p>}
+          {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[14px] text-ink-500">{t.chat.noMessages}</p>}
           {placed.get(-1)?.map((item) => <Insert key={item.key}>{item.node}</Insert>)}
           {turns.map((turn, index) => {
             const isTarget = turn.run.id === targetRunId
+            const turnNumber = firstNumber === null ? null : firstNumber + index
             return (
               <Fragment key={turn.key}>
                 {/* The turns copied from the terminal conversation come first, under their own divider; the Agent's own follow. */}
@@ -417,28 +421,26 @@ export function MessageList({
                 {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && !imported(turns[index - 1]) && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
                 {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
                 <TurnChange previous={turns[index - 1]} turn={turn} />
-                {/* One conversation turn: in the blank space on the left is the turn's hollow number (matching the number on the
-                    ruler; left empty when the number is unknown), and on the right the user message and the reply.
+                {/* One conversation turn: user message and agent reply stacked cleanly inside the centered 800px column.
                     The located turn is highlighted with a light yellow fill. */}
-                <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-3', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
-                  <HollowNumber data-turn-number className={cn(turnNumberClass, numberSize(firstNumber === null ? 0 : firstNumber + index))}>
-                    {firstNumber === null ? '' : firstNumber + index}
-                  </HollowNumber>
-                  <div className="flex min-w-0 flex-1 flex-col gap-[22px]">
-                    {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
-                    {turn.user &&
-                      (turn.user.origin === 'background' ? (
-                        <BackgroundFollowUp message={turn.user} run={turn.run} agent={agent} />
-                      ) : (turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
-                        <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
-                      ) : (
-                        <UserBubble message={turn.user} run={turn.run} />
-                      ))}
-                    {/* The reply body follows the conversation column, up to 1100px on wide screens: no wasted space in a wide window,
-                        and code blocks, tables and images widen with it. Narrow screens keep 760px. */}
-                    <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
-                      <ReplyBubble turn={turn} agent={agent} located={isTarget} requests={permissionRequests.filter((request) => request.runId === turn.run.id)} />
-                    </div>
+                <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex min-w-0 flex-col gap-3.5', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
+                  {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
+                  {turn.user &&
+                    (turn.user.origin === 'background' ? (
+                      <BackgroundFollowUp message={turn.user} run={turn.run} agent={agent} />
+                    ) : (turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
+                      <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
+                    ) : (
+                      <UserBubble message={turn.user} run={turn.run} />
+                    ))}
+                  <div className="min-w-0 w-full">
+                    <ReplyBubble
+                      turn={turn}
+                      agent={agent}
+                      located={isTarget}
+                      turnNumber={turnNumber}
+                      requests={permissionRequests.filter((request) => request.runId === turn.run.id)}
+                    />
                   </div>
                 </div>
                 {placed.get(index)?.map((item) => <Insert key={item.key}>{item.node}</Insert>)}
@@ -453,37 +455,32 @@ export function MessageList({
           )}
         </div>
       </div>
-        {scrolledUp && turns.length > 0 && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-4">
-            <button
-              type="button"
-              data-jump-bottom
-              onClick={jumpToBottom}
-              className={cn(
-                'pointer-events-auto inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold shadow-floating outline-none focus-visible:shadow-focus',
-                hasNewBelow
-                  ? 'border-transparent bg-cta-bg text-cta-fg hover:bg-cta-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-print-ink'
-                  : 'border-hairline-strong bg-surface-elevated text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-print-ink',
-              )}
-            >
-              <ArrowDownIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.5} />
-              <span>{hasNewBelow ? t.chat.newOutput : t.chat.backToLatest}</span>
-            </button>
-          </div>
-        )}
-      </div>
-      {turns.length > 1 ? (
-        <MessageRuler
-          turns={turns.map((turn) => ({ key: turn.run.id, label: turnPreview(turn) }))}
-          visible={visibleTurns}
-          onJump={jumpTo}
-          onJumpBottom={jumpToBottom}
-          firstNumber={firstNumber}
-          total={firstNumber === null ? null : (turnsTotal ?? null)}
-        />
-      ) : (
-        <Stub data-turn-stub aria-hidden="true" label={t.chat.ruler.title} className="w-[74px]" />
+      {scrolledUp && turns.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-4">
+          <button
+            type="button"
+            data-jump-bottom
+            onClick={jumpToBottom}
+            className={cn(
+              'pointer-events-auto inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold shadow-floating outline-none focus-visible:shadow-focus',
+              hasNewBelow
+                ? 'border-transparent bg-cta-bg text-cta-fg hover:bg-cta-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-print-ink'
+                : 'border-hairline-strong bg-surface-elevated text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-print-ink',
+            )}
+          >
+            <ArrowDownIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.5} />
+            <span>{hasNewBelow ? t.chat.newOutput : t.chat.backToLatest}</span>
+          </button>
+        </div>
       )}
+      <MessageRuler
+        turns={turns.map((turn) => ({ key: turn.run.id, label: turnPreview(turn) }))}
+        visible={visibleTurns}
+        onJump={jumpTo}
+        onJumpBottom={jumpToBottom}
+        firstNumber={firstNumber}
+        total={firstNumber === null ? null : (turnsTotal ?? null)}
+      />
     </div>
   )
 }

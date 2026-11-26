@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
+import { narrowQuery } from '@/lib/use-media-query'
 import { apiUrl, defaultProject, errorBody, makeProject, projectsUrl } from '@/test/api'
 import { makeImport, makeImportConversation, makeImportFolder, makeScan } from '@/test/importing'
 import { renderRoutes } from '@/test/render'
@@ -67,7 +68,7 @@ afterEach(() => {
 })
 
 describe('The import page', () => {
-  it('looks for the last 30 days, shows progress, then the suggested folders checked and the rest on asking', async () => {
+  it('looks for the last 30 days, shows progress, then renders the 2-pane master-detail split with inline filters and suggested/all toggle', async () => {
     const { scanBodies } = backend({ scans: [running, running, found] })
     const user = userEvent.setup()
     renderRoutes(routes, '/import')
@@ -79,34 +80,70 @@ describe('The import page', () => {
 
     const repo = await screen.findByRole('region', { name: 'pingdotgg/t3code' })
     expect(within(repo).getByRole('checkbox', { name: '/code/t3code' })).toBeChecked()
-    // The suggested folder is open: what Import takes is in view, the empty conversation can't be picked, a worktree says where it is.
-    expect(within(repo).getByRole('checkbox', { name: 'Welcome page' })).toBeChecked()
-    expect(within(repo).getByRole('checkbox', { name: 'Empty one' })).toBeDisabled()
-    expect(within(repo).getByText("Can't import: no conversation in it")).toBeInTheDocument()
-    expect(within(repo).getByText('in /code/t3code/.worktrees/modes')).toBeInTheDocument()
+    expect(within(repo).getByText('2/3')).toBeInTheDocument()
+    // Right detail pane shows the active folder's conversations immediately.
+    const detailList = screen.getByRole('list', { name: '/code/t3code' })
+    expect(within(detailList).getByRole('checkbox', { name: 'Welcome page' })).toBeChecked()
+    expect(within(detailList).getByRole('checkbox', { name: 'Empty one' })).toBeDisabled()
+    expect(within(detailList).getByText("Can't import: no conversation in it")).toBeInTheDocument()
+    expect(within(detailList).getByText('in /code/t3code/.worktrees/modes')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /^Other folders/ })).toBeNull()
     expect(screen.getByText('1 folder · 2 conversations selected')).toBeInTheDocument()
+    // Select all / Select none are always accessible in the toolbar.
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Select none' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Review all 2 folders' }))
+    // Switch to All folders and inspect the second folder in the right pane.
+    await user.click(screen.getByRole('radio', { name: 'All (2)' }))
     const other = screen.getByRole('region', { name: /^Other folders/ })
     const folder = within(other).getByRole('checkbox', { name: '/code/loop-now' })
     expect(folder).not.toBeChecked()
     expect(within(other).getByText('Joins project “loop-now”')).toBeInTheDocument()
-    await user.click(within(other).getByRole('button', { name: 'Show the conversations in /code/loop-now' }))
-    // Already in Loop Now (imported before, or an Agent's own conversation): no check, a link to its Agent; never called imported.
-    expect(within(other).getByRole('checkbox', { name: 'Release' })).toBeDisabled()
-    expect(within(other).getByText('Already in Loop Now')).toBeInTheDocument()
-    expect(within(other).getByRole('link', { name: 'Open Agent' })).toHaveAttribute('href', '/agents/00000000-0000-7000-8000-00000000aaaa/chat')
+    await user.click(within(other).getByRole('button', { name: /\/code\/loop-now/ }))
+    const notesList = screen.getByRole('list', { name: '/code/loop-now' })
+    expect(within(notesList).getByRole('checkbox', { name: 'Release' })).toBeDisabled()
+    expect(within(notesList).getByText('Already in Loop Now')).toBeInTheDocument()
+    expect(within(notesList).getByRole('link', { name: 'Open Agent' })).toHaveAttribute('href', '/agents/00000000-0000-7000-8000-00000000aaaa/chat')
   })
 
-  it('Import sends the picked conversations by folder, shows progress until it is done, then links each project', async () => {
+  it('supports inline search and CLI filtering across folders and conversations', async () => {
+    backend({ scans: [found] })
+    const user = userEvent.setup()
+    renderRoutes(routes, '/import')
+    await screen.findByRole('region', { name: 'pingdotgg/t3code' })
+    await user.click(screen.getByRole('radio', { name: 'All (2)' }))
+
+    const cliGroup = screen.getByRole('radiogroup', { name: 'Filter by CLI' })
+    await user.click(within(cliGroup).getByRole('radio', { name: 'Codex' }))
+    expect(screen.queryByRole('region', { name: /^Other folders/ })).toBeNull()
+    const detail = screen.getByRole('list', { name: '/code/t3code' })
+    expect(within(detail).getByText('Permission modes')).toBeInTheDocument()
+    expect(within(detail).queryByText('Welcome page')).toBeNull()
+
+    await user.click(within(cliGroup).getByRole('radio', { name: 'All' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Filter folders or conversations' }), 'Release')
+    expect(screen.queryByRole('region', { name: 'pingdotgg/t3code' })).toBeNull()
+    expect(screen.getByRole('region', { name: /^Other folders/ })).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: '/code/loop-now' })).getByText('Release')).toBeInTheDocument()
+  })
+
+  it('Import sends the picked conversations by folder, hides the info bar during result, and offers Back to selection on partial errors', async () => {
     const importing = makeImport({ state: 'running', done: 1, total: 3 })
-    const done = makeImport({ state: 'done', done: 3, total: 3, projects: [{ path: '/code/loop-now', projectId: existing.id }], agents: [{ sessionId: 'a', agentId: 'x' }, { sessionId: 'd', agentId: 'y' }], errors: [{ sessionId: 'b', message: 'Not enough disk space' }] })
+    const done = makeImport({
+      state: 'done',
+      done: 3,
+      total: 3,
+      projects: [{ path: '/code/loop-now', projectId: existing.id }],
+      agents: [{ sessionId: 'a', agentId: 'x' }, { sessionId: 'd', agentId: 'y' }],
+      errors: [{ sessionId: 'b', message: 'Not enough disk space' }],
+    })
     const api = backend({ scans: [found], imports: [importing, importing, done] })
     const user = userEvent.setup()
     renderRoutes(routes, '/import')
     await screen.findByRole('region', { name: 'pingdotgg/t3code' })
-    await user.click(screen.getByRole('button', { name: 'Review all 2 folders' }))
+    expect(screen.getByText(/Importing copies terminal sessions/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'All (2)' }))
     await user.click(screen.getByRole('checkbox', { name: '/code/loop-now' }))
     // Unpicking one conversation leaves its folder half checked.
     await user.click(screen.getByRole('checkbox', { name: 'Permission modes' }))
@@ -122,6 +159,8 @@ describe('The import page', () => {
       ],
     })
     expect(await screen.findByText('Importing 1 of 3')).toBeInTheDocument()
+    // Info bar is hidden during ImportResult.
+    expect(screen.queryByText(/Importing copies terminal sessions/)).toBeNull()
     expect(await screen.findByText('Import done')).toBeInTheDocument()
     expect(screen.getByText('2 Agents created')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open project “loop-now”' })).toHaveAttribute('href', '/p/loop-now/agents')
@@ -131,9 +170,15 @@ describe('The import page', () => {
     const reads = api.importReads()
     await new Promise((resolve) => setTimeout(resolve, 900))
     expect(api.importReads()).toBe(reads)
+
+    // Back to selection recovers the selection view without re-scanning.
+    await user.click(screen.getByRole('button', { name: 'Back to selection' }))
+    expect(await screen.findByRole('region', { name: 'pingdotgg/t3code' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '/code/t3code' })).toHaveProperty('indeterminate', true)
+    expect(api.scanBodies).toHaveLength(1)
   })
 
-  it('a failed scan says why and looks again on asking; All reads the whole history', async () => {
+  it('a failed scan says why and looks again on asking; All in PageHeader actions reads the whole history', async () => {
     const failed = makeScan({ state: 'failed', error: '~/.codex/sessions could not be read' })
     const api = backend({ scans: [failed] })
     const user = userEvent.setup()
@@ -141,35 +186,65 @@ describe('The import page', () => {
     expect(await screen.findByText('~/.codex/sessions could not be read')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Look again' }))
     await waitFor(() => expect(api.scanBodies).toHaveLength(2))
-    await user.click(screen.getByRole('radio', { name: 'All' }))
+    const header = screen.getByRole('heading', { level: 1, name: 'Import conversations' }).closest('header')!
+    await user.click(within(header).getByRole('radio', { name: 'All' }))
     await waitFor(() => expect(api.scanBodies).toHaveLength(3))
     expect(api.scanBodies[2].since).toBeNull()
   })
 
-  it('from a project: only its folder, everything shown, and the import goes into that project', async () => {
+  it('from a project: breadcrumb resolves the project name, shows its folder, and imports into that project', async () => {
     const api = backend({ scans: [makeScan({ folders: [notes] })], imports: [makeImport({ state: 'done' })] })
     const user = userEvent.setup()
     renderRoutes(routes, `/import?${new URLSearchParams({ path: '/code/loop-now', project: existing.id })}`)
     await waitFor(() => expect(api.scanBodies).toHaveLength(1))
     expect(api.scanBodies[0].path).toBe('/code/loop-now')
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('loop-now›Import conversations'))
     expect(await screen.findByRole('checkbox', { name: 'loop-now-main' })).toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Import' }))
     await waitFor(() => expect(api.importBodies[0]?.folders).toEqual([{ path: '/code/loop-now', projectId: existing.id, sessionIds: ['d'] }]))
+  })
+
+  it('on narrow viewports falls back to the collapsible folder accordion', async () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: query === narrowQuery,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+    try {
+      backend({ scans: [found] })
+      const user = userEvent.setup()
+      renderRoutes(routes, '/import')
+      const repo = await screen.findByRole('region', { name: 'pingdotgg/t3code' })
+      expect(within(repo).getByRole('button', { name: 'Hide the conversations in /code/t3code' })).toBeInTheDocument()
+      await user.click(screen.getByRole('radio', { name: 'All (2)' }))
+      const other = screen.getByRole('region', { name: /^Other folders/ })
+      await user.click(within(other).getByRole('button', { name: 'Show the conversations in /code/loop-now' }))
+      expect(within(other).getByText('Already in Loop Now')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = original
+    }
   })
 })
 
 describe('The import page when things go wrong', () => {
   it('Import is sent once, however often it is clicked while it starts', async () => {
     backend({ scans: [found], imports: [makeImport({ state: 'done' })] })
-    // The import takes a moment to start.
     let posts = 0
     let release = () => {}
     const gate = new Promise<void>((resolve) => (release = resolve))
-    server.use(http.post(apiUrl('/conversation-imports'), async () => {
-      posts += 1
-      await gate
-      return HttpResponse.json(makeImport({ state: 'done' }), { status: 202 })
-    }))
+    server.use(
+      http.post(apiUrl('/conversation-imports'), async () => {
+        posts += 1
+        await gate
+        return HttpResponse.json(makeImport({ state: 'done' }), { status: 202 })
+      }),
+    )
     const user = userEvent.setup()
     renderRoutes(routes, '/import')
     const start = await screen.findByRole('button', { name: 'Import' })
@@ -185,10 +260,14 @@ describe('The import page when things go wrong', () => {
     let fail = true
     const reads: number[] = []
     backend({ scans: [found], imports: [makeImport({ state: 'running', done: 1, total: 2 })] })
-    server.use(http.get(apiUrl('/conversation-imports/:id'), () => {
-      reads.push(Date.now())
-      return fail ? HttpResponse.json(errorBody('not_found', 'No such import.'), { status: 404 }) : HttpResponse.json(makeImport({ state: 'done', done: 2, total: 2 }))
-    }))
+    server.use(
+      http.get(apiUrl('/conversation-imports/:id'), () => {
+        reads.push(Date.now())
+        return fail
+          ? HttpResponse.json(errorBody('not_found', 'No such import.'), { status: 404 })
+          : HttpResponse.json(makeImport({ state: 'done', done: 2, total: 2 }))
+      }),
+    )
     const user = userEvent.setup()
     renderRoutes(routes, '/import')
     await user.click(await screen.findByRole('button', { name: 'Import' }))
@@ -225,7 +304,6 @@ describe('Where the import page opens from', () => {
     expect(screen.getByText(/This is the first time Loop Now is open/)).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }))
     expect(window.localStorage.getItem('loop-now.importSkipped')).toBe('1')
-    // Back on the overview (its stream starts again): still no Agents, and now the empty overview offers both ways in.
     await snapshot([])
     expect(await screen.findByRole('link', { name: 'Import conversations' })).toHaveAttribute('href', '/import')
   })
@@ -268,7 +346,7 @@ describe('Where the import page opens from', () => {
     const { localModeBackend, dir } = await import('@/test/local-mode')
     const local = localModeBackend({ projects: { [defaultProject.id]: { revision: 1, directories: [dir('/Users/me/code/app', 'Main repo')] } } })
     server.use(...baseHandlers([]), ...local.handlers)
-    renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/settings`)
+    renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/settings/context`)
     const link = await screen.findByRole('link', { name: 'Import the conversations in /Users/me/code/app' })
     expect(link).toHaveAttribute('href', `/import?${new URLSearchParams({ path: '/Users/me/code/app', project: defaultProject.id })}`)
   })

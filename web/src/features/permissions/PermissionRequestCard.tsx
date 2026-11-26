@@ -32,6 +32,8 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
   const [elsewhere, setElsewhere] = useState<Request | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [reason, setReason] = useState('')
+  const [showReason, setShowReason] = useState(false)
+  const reasonInput = useRef<HTMLInputElement>(null)
   const ids = { title: useId(), reason: useId() }
   const done = answered ?? elsewhere
   // The buttons go once it is answered: focus moves to how it was answered, so it is not lost and the outcome is read out.
@@ -62,39 +64,39 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
       aria-labelledby={ids.title}
       data-permission-request={request.id}
       data-state={done?.state ?? 'pending'}
-      className="flex min-w-0 flex-col overflow-hidden rounded-card bg-paper-raised shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--riso-pink)]"
+      className="flex min-w-0 flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated shadow-floating [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--riso-pink)]"
     >
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b-2 border-ink bg-tint-pink-2 px-4 py-2">
-        {/* The stamp: waiting in pink; once answered, how, in the outcome's color. */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-hairline bg-tint-yellow px-4 py-2 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2">
+        {/* The status badge: subtle amber chip in mono skin, tilted pink stamp in Plate skin; once answered, uses the outcome's color. */}
         <span
           className={cn(
-            'riso-tilt inline-flex items-center gap-1 rounded-stamp px-2 text-[12px] leading-[22px] font-black [--tilt-shadow:inset_0_0_0_1.5px_currentColor] [--tilt:-3deg]',
-            !done ? 'text-ink [--tilt-bg:var(--riso-pink)]' : done.state === 'approved' ? 'text-green-text [--tilt-bg:var(--tint-green)]' : done.state === 'rejected' ? 'text-red-text [--tilt-bg:var(--tint-red)]' : 'text-ink-700 [--tilt-bg:var(--paper-raised)]',
+            'riso-tilt inline-flex items-center gap-1 rounded-stamp px-2 text-[12px] leading-[22px] font-semibold [--tilt-shadow:inset_0_0_0_1px_var(--hairline-strong)] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:[--tilt-shadow:inset_0_0_0_1.5px_currentColor] [[data-skin=plate]_&]:[--tilt:-3deg]',
+            !done ? 'text-pink-text [--tilt-bg:var(--surface-elevated)] [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:[--tilt-bg:var(--riso-pink)]' : done.state === 'approved' ? 'text-green-text [--tilt-bg:var(--tint-green)]' : done.state === 'rejected' ? 'text-red-text [--tilt-bg:var(--tint-red)]' : 'text-ink-700 [--tilt-bg:var(--surface-elevated)] [[data-skin=plate]_&]:[--tilt-bg:var(--paper-raised)]',
           )}
         >
           <PermissionModeIcon mode="supervised" className="size-3.5" />
           {done ? copy.states[done.state] : copy.label}
         </span>
-        <h3 id={ids.title} className="min-w-0 text-[14px] font-black [overflow-wrap:anywhere]">
+        <h3 id={ids.title} className="min-w-0 text-[14px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">
           {copy.asks(agentName, copy.kinds[request.kind])}
         </h3>
-        <time dateTime={request.createdAt} className="ml-auto shrink-0 text-[12px] font-bold text-ink-500">
+        <time dateTime={request.createdAt} className="ml-auto shrink-0 text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">
           {t.chat.time(request.createdAt)}
         </time>
       </div>
-      <div className="flex min-w-0 flex-col gap-3 px-4 py-3">
-        <p className="text-[14.5px] leading-snug font-bold [overflow-wrap:anywhere]">{request.title}</p>
+      <div className="flex min-w-0 flex-col gap-2.5 px-4 py-2.5">
+        <p className="text-[14px] leading-snug font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[14.5px] [[data-skin=plate]_&]:font-bold">{request.title}</p>
         {request.detail && request.detail !== request.title && (
-          <pre className="max-h-60 min-w-0 overflow-auto rounded-input bg-ink px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-[#f3efe4] [overflow-wrap:anywhere]">{request.detail}</pre>
+          <pre className="max-h-60 min-w-0 overflow-auto rounded-input border border-code-border bg-code-bg px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-[#f3efe4]">{request.detail}</pre>
         )}
         {done ? (
-          <p ref={outcome} tabIndex={-1} role="status" className={cn('inline-flex items-center gap-1.5 self-start rounded-full px-3 text-[13px] leading-7 font-black outline-none focus-visible:shadow-focus', done.state === 'approved' ? 'bg-tint-green text-green-text' : done.state === 'rejected' ? 'bg-tint-red text-red-text' : 'bg-ink/[0.07] text-ink-700')}>
-            {done.state === 'approved' ? <CheckIcon aria-hidden="true" className="size-4" strokeWidth={3} /> : <XIcon aria-hidden="true" className="size-4" strokeWidth={3} />}
+          <p ref={outcome} tabIndex={-1} role="status" className={cn('inline-flex items-center gap-1.5 self-start rounded-full px-3 text-[13px] leading-7 font-semibold outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-black', done.state === 'approved' ? 'bg-tint-green text-green-text' : done.state === 'rejected' ? 'bg-tint-red text-red-text' : 'bg-surface-active text-ink-700 [[data-skin=plate]_&]:bg-ink/[0.07]')}>
+            {done.state === 'approved' ? <CheckIcon aria-hidden="true" className="size-4" strokeWidth={2.8} /> : <XIcon aria-hidden="true" className="size-4" strokeWidth={2.8} />}
             {elsewhere ? copy.answeredElsewhere(outcomeOf(elsewhere)) : outcomeOf(done)}
           </p>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" disabled={sending !== null} onClick={() => answer('approve')}>
                 {sending === 'approve' ? <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} /> : <CheckIcon aria-hidden="true" strokeWidth={3} />}
                 {sending === 'approve' ? copy.approving : copy.approve}
@@ -104,18 +106,48 @@ export function PermissionRequestCard({ request, agentName }: { request: Request
                 {sending === 'reject' ? <LoaderCircleIcon aria-hidden="true" className="riso-spin motion-reduce:animate-none" strokeWidth={3} /> : <XIcon aria-hidden="true" strokeWidth={3} />}
                 {sending === 'reject' ? copy.rejecting : copy.reject}
               </Button>
+              {!showReason && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={sending !== null}
+                  onClick={() => {
+                    setShowReason(true)
+                    queueMicrotask(() => reasonInput.current?.focus())
+                  }}
+                  className="text-ink-500 hover:text-ink"
+                >
+                  {`${copy.rejectWithReason}…`}
+                </Button>
+              )}
+              <span className="ml-auto text-[11.5px] text-ink-500">{copy.alsoInInbox}</span>
             </div>
-            <form onSubmit={submitReason} className="flex min-w-0 flex-wrap items-center gap-2">
-              <label htmlFor={ids.reason} className="sr-only">
-                {copy.reasonLabel}
-              </label>
-              <Input id={ids.reason} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={copy.reasonTold[request.runtime] ?? copy.reasonPlaceholder} maxLength={4000} disabled={sending !== null} className="h-9 min-w-0 flex-[1_1_260px] text-[13.5px]" />
-              <Button type="submit" size="sm" variant="secondary" disabled={sending !== null || !reason.trim()}>
-                {copy.rejectWithReason}
-              </Button>
-            </form>
-            {copy.reasonTold[request.runtime] === undefined && <p className="text-[12px] font-bold text-ink-700">{copy.reasonNotTold(runtimes.name(request.runtime))}</p>}
-            <p className="text-[12px] text-ink-500">{copy.alsoInInbox}</p>
+            {showReason && (
+              <>
+                <form onSubmit={submitReason} className="flex min-w-0 flex-wrap items-center gap-2">
+                  <label htmlFor={ids.reason} className="sr-only">
+                    {copy.reasonLabel}
+                  </label>
+                  <Input
+                    ref={reasonInput}
+                    id={ids.reason}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder={copy.reasonTold[request.runtime] ?? copy.reasonPlaceholder}
+                    maxLength={4000}
+                    disabled={sending !== null}
+                    className="h-8 min-w-0 flex-[1_1_240px] text-[13px]"
+                  />
+                  <Button type="submit" size="sm" variant="secondary" disabled={sending !== null || !reason.trim()}>
+                    {copy.rejectWithReason}
+                  </Button>
+                </form>
+                {copy.reasonTold[request.runtime] === undefined && (
+                  <p className="text-[12px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{copy.reasonNotTold(runtimes.name(request.runtime))}</p>
+                )}
+              </>
+            )}
           </>
         )}
         <ErrorAlert error={error} />

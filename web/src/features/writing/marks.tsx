@@ -13,14 +13,19 @@ export function Spark({ className }: { className?: string }) {
   )
 }
 
-// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): not a window (a CLI) or a disc (the bundled runtime) but a
-// yellow tag with an ink rim, its pink plate printed a little off register behind it, and the spark in ink.
+// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): a crisp monochrome badge in mono skin,
+// and a yellow tag with an ink rim and off-register pink plate behind it in Plate skin.
 export function AutomaticMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0 overflow-visible', className)}>
-      <rect x="4.6" y="5.6" width="24.4" height="22.4" rx="7" fill="var(--riso-pink)" transform="rotate(-6 16.8 16.8)" />
-      <rect x="2.8" y="4" width="24.4" height="22.4" rx="7" fill="var(--riso-yellow)" stroke="var(--ink)" strokeWidth="2" />
-      <g transform="translate(5.4 5.6) scale(0.82)">
+      <rect x="3.8" y="4.8" width="24.4" height="22.4" rx="7" fill="var(--surface-control)" stroke="var(--hairline-strong)" strokeWidth="1.25" className="[[data-skin=plate]_&]:hidden" />
+      <g transform="translate(6.2 6.2) scale(0.82)" className="[[data-skin=plate]_&]:hidden">
+        <path d={SPARK} fill="var(--ink)" />
+        <path d={SMALL} fill="var(--ink)" />
+      </g>
+      <rect x="4.6" y="5.6" width="24.4" height="22.4" rx="7" fill="var(--riso-pink)" transform="rotate(-6 16.8 16.8)" className="hidden [[data-skin=plate]_&]:block" />
+      <rect x="2.8" y="4" width="24.4" height="22.4" rx="7" fill="var(--riso-yellow)" stroke="var(--ink)" strokeWidth="2" className="hidden [[data-skin=plate]_&]:block" />
+      <g transform="translate(5.4 5.6) scale(0.82)" className="hidden [[data-skin=plate]_&]:block">
         <path d={SPARK} fill="var(--ink)" />
         <path d={SMALL} fill="var(--ink)" />
       </g>

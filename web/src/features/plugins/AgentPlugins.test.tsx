@@ -34,7 +34,7 @@ describe('Plugin section of the Agent config page', () => {
     await waitFor(() => expect(lark).toHaveTextContent('Lark notificationsGranted· Accounts: Dev group bot'))
     expect(within(plugins).getByRole('button', { name: /Dedicated browser/ })).toHaveTextContent('Dedicated browserNot granted')
     const group = within(plugins).getByRole('button', { name: 'Not enabled in project (1)' })
-    expect(within(plugins).getByRole('link', { name: 'Enable on the project\'s plugin page' })).toHaveAttribute('href', `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
+    expect(within(plugins).getByRole('link', { name: 'Enable on the project\'s plugin page' })).toHaveAttribute('href', `/p/${encodeURIComponent(defaultProject.name)}/settings/plugins`)
     await userEvent.setup().click(group)
     expect(within(plugins).getByRole('listitem', { name: 'Git auto-commit' })).toHaveTextContent('Not enabled in project')
   })

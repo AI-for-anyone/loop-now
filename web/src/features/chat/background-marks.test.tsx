@@ -96,7 +96,6 @@ describe('What the message box says first', () => {
     const { emit } = await renderChat({ agent: claude, handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes()))] })
     await emit('snapshot', snapshot(claude.id, { busy: true, currentRun: running, backgroundTasks: [makeBackgroundTask()] }))
     expect(await screen.findByRole('button', { name: 'Stop the current reply' })).toBeInTheDocument()
-    expect(screen.getByText('Stop the current reply only')).toBeInTheDocument()
     expect(screen.queryByText(/also stops/)).toBeNull()
   })
 })

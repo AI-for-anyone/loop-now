@@ -5,7 +5,29 @@ import { t } from '@/i18n'
 // thumb: a square thumbnail in the composer, cropped to fill; by default it is the full preview in message history.
 export function ImagePreview({ src, name, thumb }: { src: string; name: string; thumb?: boolean }) {
   const [open, setOpen] = useState(false), [failed, setFailed] = useState(false)
-  return <><button type="button" aria-label={t.images.enlarge(name)} onClick={() => setOpen(true)} className={thumb ? 'block size-full cursor-zoom-in overflow-hidden rounded-ticket border border-ink/15 bg-paper outline-none focus-visible:shadow-focus' : 'overflow-hidden rounded-input border border-hairline-strong bg-surface-control p-1 [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white'}><img src={src} alt={name} onError={() => setFailed(true)} loading="lazy" className={thumb ? 'size-full object-cover' : 'h-20 w-28 object-contain'} />{failed && <span className={thumb ? 'sr-only' : 'block max-w-28 text-xs'}>{t.images.failed}</span>}</button><Dialog open={open} onOpenChange={setOpen}><DialogContent kind="view" className="max-h-[90dvh] sm:max-w-[min(90vw,1200px)]" aria-describedby={undefined}><DialogTitle className="pr-10 break-words">{name}</DialogTitle><img src={src} alt={name} className="max-h-[70dvh] w-full object-contain" /></DialogContent></Dialog></>
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={t.images.enlarge(name)}
+        onClick={() => setOpen(true)}
+        className={
+          thumb
+            ? 'block size-full cursor-zoom-in overflow-hidden rounded-ticket border border-hairline-strong bg-surface-subtle transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper'
+            : 'cursor-zoom-in overflow-hidden rounded-input border border-hairline-strong bg-surface-subtle p-1 transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white'
+        }
+      >
+        <img src={src} alt={name} onError={() => setFailed(true)} loading="lazy" className={thumb ? 'size-full object-cover' : 'h-20 w-28 object-contain'} />
+        {failed && <span className={thumb ? 'sr-only' : 'block max-w-28 text-xs'}>{t.images.failed}</span>}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent kind="view" className="max-h-[90dvh] sm:max-w-[min(90vw,1200px)]" aria-describedby={undefined}>
+          <DialogTitle className="pr-10 break-words">{name}</DialogTitle>
+          <img src={src} alt={name} className="max-h-[70dvh] w-full object-contain" />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 export function DraftImagePreview({ file, thumb }: { file: File; thumb?: boolean }) {
   const [src, setSrc] = useState(''), [failed, setFailed] = useState(false)
@@ -17,6 +39,19 @@ export function DraftImagePreview({ file, thumb }: { file: File; thumb?: boolean
     reader.readAsDataURL(file)
     return () => { reader.onload = null; reader.onerror = null; if (reader.readyState === FileReader.LOADING) reader.abort() }
   }, [file])
-  if (failed) return thumb ? <p role="alert" title={t.images.failed} className="grid size-full place-items-center rounded-ticket border border-ink/15 bg-tint-red text-red-text"><ImageOffIcon aria-hidden="true" className="size-5" /><span className="sr-only">{t.images.failed}</span></p> : <p role="alert" className="text-xs">{t.images.failed}</p>
-  return src ? <ImagePreview key={src} src={src} name={file.name} thumb={thumb} /> : thumb ? <span aria-hidden="true" className="block size-full rounded-ticket border border-ink/15 bg-paper" /> : null
+  if (failed) {
+    return thumb ? (
+      <p role="alert" title={t.images.failed} className="grid size-full place-items-center rounded-ticket border border-red-text/25 bg-tint-red text-red-text [[data-skin=plate]_&]:border-ink/15">
+        <ImageOffIcon aria-hidden="true" className="size-5" />
+        <span className="sr-only">{t.images.failed}</span>
+      </p>
+    ) : (
+      <p role="alert" className="text-xs text-red-text">{t.images.failed}</p>
+    )
+  }
+  return src ? (
+    <ImagePreview key={src} src={src} name={file.name} thumb={thumb} />
+  ) : thumb ? (
+    <span aria-hidden="true" className="block size-full rounded-ticket border border-hairline bg-surface-subtle [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper" />
+  ) : null
 }

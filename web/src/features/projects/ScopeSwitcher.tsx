@@ -5,8 +5,10 @@ import { CheckIcon, PlusIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { NavIcon } from '@/components/NavIcon'
 import { t } from '@/i18n'
+import { projectAvatarPalette, projectMonogram } from '@/lib/avatar'
 import { GLOBAL, lastScope, overviewPath, PLATFORM, type ResolvedShellScope, type ShellScope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/theme/store'
 import { CreateProjectDialog } from './CreateProjectDialog'
 
 const text = t.shell
@@ -22,29 +24,82 @@ const rowClass = (current: boolean, active: boolean) =>
       : 'font-medium hover:bg-surface-hover [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-blue',
     active &&
       (current
-        ? 'ring-1 ring-ink/50 ring-inset [[data-skin=plate]_&]:ring-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
-        : 'bg-surface-hover ring-1 ring-ink/50 ring-inset [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:ring-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'),
+        ? '[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
+        : 'bg-surface-hover [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'),
   )
 
-// The small badge on the left of the trigger button: the first character of the name for a project, a globe icon for Global
-// (NavIcon "settings", which draws a globe).
-function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
+// Colored monogram badge for a project: each project gets a stable distinct hue derived from its id/name.
+export function ProjectAvatar({
+  id,
+  name,
+  size = 'sm',
+  className,
+}: {
+  id?: string
+  name: string
+  size?: 'xs' | 'sm'
+  className?: string
+}) {
+  const { skin, resolvedTheme } = useTheme()
+  const monogram = projectMonogram(name)
+  const palette = projectAvatarPalette(id ?? name)
+  const colors = palette[resolvedTheme]
+  const sizeClass =
+    size === 'xs'
+      ? 'size-[18px] rounded-[5px] text-[9.5px]'
+      : 'size-[22px] rounded-[6px] text-[10.5px] [[data-skin=plate]_&]:size-[24px] [[data-skin=plate]_&]:rounded-[7px] [[data-skin=plate]_&]:text-[12px]'
+
+  const glyph = skin === 'plate' ? (Array.from(name)[0] ?? '?') : monogram
+
   return (
     <span
       aria-hidden="true"
-      className="inline-flex size-[24px] shrink-0 items-center justify-center rounded-stamp border border-hairline-strong bg-surface-subtle font-display-latin text-[12px] leading-none font-semibold text-ink uppercase [[data-skin=plate]_&]:size-[26px] [[data-skin=plate]_&]:rounded-[8px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:font-extrabold"
+      data-project-avatar={palette.name}
+      data-monogram={glyph}
+      style={skin !== 'plate' ? { backgroundColor: colors.bg, color: colors.fg } : undefined}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center font-sans leading-none font-bold tracking-[-0.02em] select-none before:content-[attr(data-monogram)] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-ink',
+        sizeClass,
+        className,
+      )}
+    />
+  )
+}
+
+// The small badge on the left of the trigger button: a unique colored monogram avatar for a project, or a subtle globe badge for Global.
+function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
+  if (scope.kind === 'project') {
+    return <ProjectAvatar id={scope.project?.id ?? scope.name} name={scope.name} size="sm" />
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] bg-surface-hover text-ink-700 [[data-skin=plate]_&]:size-[24px] [[data-skin=plate]_&]:rounded-[7px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink"
     >
-      {scope.kind === 'project' ? Array.from(scope.name)[0] : <NavIcon name="settings" className="size-3.5" />}
+      <NavIcon name="settings" className="size-3.5" />
     </span>
   )
 }
 
-// The scope switcher at the top of the sidebar: collapsed, it is a trigger showing the current scope; expanded, it lists
-// “全局” (Global), each project (with its Agent count) and “新建项目” (New project), in that order.
-// Focus stays in the filter box; the up and down arrow keys move between options and Enter opens one; “新建项目” (New project)
-// is reached with Tab; Esc closes the list and returns focus to the trigger button.
-// Choosing a scope opens its overview and remembers it (legacy URLs without a project redirect based on it).
-export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; projects: Schemas['Project'][] | undefined }) {
+// The scope switcher docked in the sidebar footer: collapsed, it is a borderless trigger showing the current scope's colored avatar and name;
+// expanded, it lists Global, each project (with its colored monogram avatar and Agent count), New project, and the server connection status.
+// Focus stays in the filter box; the up and down arrow keys move between options and Enter opens one; New project is reached with Tab;
+// Esc closes the list and returns focus to the trigger button.
+export function ScopeSwitcher({
+  scope,
+  projects,
+  side = 'top',
+  className,
+  statusDotClass,
+  statusTitle,
+}: {
+  scope: ResolvedShellScope
+  projects: Schemas['Project'][] | undefined
+  side?: 'top' | 'bottom'
+  className?: string
+  statusDotClass?: string
+  statusTitle?: string
+}) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
@@ -126,6 +181,13 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
           {isCurrent && <CheckIcon className="size-4" strokeWidth={2.5} />}
         </span>
         <span className="flex min-w-0 items-center gap-2">
+          {item.kind === 'project' ? (
+            <ProjectAvatar id={item.project.id} name={item.project.name} size="xs" />
+          ) : (
+            <span aria-hidden="true" className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[5px] bg-surface-subtle text-ink-500">
+              <NavIcon name="settings" className="size-3" />
+            </span>
+          )}
           <span className="truncate">{item.kind === 'global' ? text.global : item.project.name}</span>
           {item.kind === 'project' && item.project.isDefault && (
             <span className="shrink-0 rounded-stamp border border-hairline-strong bg-surface-subtle px-1.5 text-[11px] leading-5 font-semibold text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:px-[7px] [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
@@ -156,16 +218,18 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
           aria-label={text.scope.label(name)}
           title={name}
           className={cn(
-            'flex min-h-10 items-center gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-2.5 text-[14px] text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:min-h-12 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:text-[14.5px] [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
-            open && 'border-ink bg-surface-hover [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
+            'flex h-8 min-w-0 items-center gap-2 rounded-ticket border-0 bg-transparent px-1.5 text-[13px] text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:h-10 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:px-2 [[data-skin=plate]_&]:text-[13.5px] [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]',
+            open && 'bg-sidebar-hover [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
+            className,
           )}
         >
           <ScopeMark scope={scope} />
           <span className="min-w-0 truncate font-semibold [[data-skin=plate]_&]:font-black">{name}</span>
-          <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 text-ink-500 [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:[stroke-width:2.8]" />
+          <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 text-sidebar-muted [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:[stroke-width:2.8]" />
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
           <PopoverPrimitive.Content
+            side={side}
             align="start"
             sideOffset={8}
             collisionPadding={16}
@@ -185,7 +249,7 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
               value={filter}
               onChange={(event) => onFilterChange(event.target.value)}
               onKeyDown={onKeyDown}
-              className="h-[36px] w-full rounded-input border border-hairline-strong bg-surface-control px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-500 focus-visible:border-ink [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]"
+              className="h-[36px] w-full rounded-input border border-hairline-strong bg-surface-control px-3 text-[13.5px] text-ink outline-none transition-colors placeholder:text-ink-500 focus-visible:border-ink/35 [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]"
             />
             <div id={listId} role="listbox" aria-label={text.scope.list} className="flex flex-col gap-0.5">
               <ul role="none" className="flex flex-col">
@@ -217,6 +281,15 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
               <PlusIcon className="size-4" strokeWidth={2.5} />
               {text.scope.create}
             </button>
+            {statusDotClass && statusTitle && (
+              <div
+                data-scope-connection-status
+                className="flex items-center gap-2 border-t border-hairline px-3 pt-2 pb-0.5 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/18"
+              >
+                <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', statusDotClass)} />
+                <span className="min-w-0 truncate">{statusTitle}</span>
+              </div>
+            )}
           </PopoverPrimitive.Content>
         </PopoverPrimitive.Portal>
       </PopoverPrimitive.Root>

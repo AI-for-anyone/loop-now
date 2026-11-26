@@ -17,11 +17,15 @@ export const agentsPath = (scope: Scope) => `${scopeBase(scope)}/agents`
 export type AgentTab = 'chat' | 'config' | 'folder' | 'inbox'
 export const agentPath = (scope: Scope, agentId: string, tab?: AgentTab) =>
   `${agentsPath(scope)}/${agentId}${tab ? `/${tab}` : ''}`
-export const projectSettingsPath = (project: Pick<Schemas['Project'], 'name'>) => `${projectBase(project.name)}/settings`
+export type ProjectSettingsTab = 'general' | 'context' | 'credentials' | 'plugins' | 'danger'
+export const projectSettingsPath = (project: string | Pick<Schemas['Project'], 'name'>, tab?: ProjectSettingsTab) => {
+  const name = typeof project === 'string' ? project : project.name
+  return `${projectBase(name)}/settings${tab && tab !== 'general' ? `/${tab}` : ''}`
+}
 // The Agent runtimes section of global settings (its id is settings-runtimes, SettingsPage), where local ACP commands are edited.
-export const runtimeSettingsPath = '/settings#settings-runtimes'
+export const runtimeSettingsPath = '/settings/runtimes#settings-runtimes'
 // Who writes with AI, in global settings (its id is settings-writing, SettingsPage).
-export const writingSettingsPath = '/settings#settings-writing'
+export const writingSettingsPath = '/settings/runtimes#settings-writing'
 
 // The sidebar's scope: global (all projects, plus the Agents owned by the platform), or one project. The platform is no longer a scope
 // of its own.

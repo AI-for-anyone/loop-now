@@ -10,7 +10,9 @@ import { renderWithQuery } from '@/test/render'
 import { acpCommand, acpCommandDefinition, acpCommandStatus, acpDefaultModel, acpRuntimeId, codexStatus, runtimeDefinitions, runtimeList, withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
+import { resetThemeForTest, setSkin } from '@/theme/store'
 import { RunnerPicker, type RunnerChoice, type RunnerLead } from './RunnerPicker'
+import { RuntimeMark } from './RuntimeMark'
 
 type Provider = Schemas['ModelProvider']
 type Model = Schemas['Model']
@@ -206,7 +208,7 @@ describe('runner picker', () => {
     expect(screen.getAllByText('1 of 2 models')).toHaveLength(2)
   })
 
-  it('works from the keyboard: arrows through the list, Enter chooses, left goes back to the runtimes, up and down move between them', async () => {
+  it('works from the keyboard: arrows through the list, Enter chooses, left goes back to the runtimes, left and right move between them, down returns to the list', async () => {
     useCatalog()
     const user = userEvent.setup()
     renderWithQuery(<Picker initial={{ provider: 'claude-code', modelId: 'opus' }} />)
@@ -216,11 +218,11 @@ describe('runner picker', () => {
     expect(shown()).toBe('claude-code/haiku default')
     await user.keyboard('{ArrowLeft}')
     expect(await runnerTab(document.body, 'Claude Code')).toHaveFocus()
-    await user.keyboard('{ArrowDown}')
+    await user.keyboard('{ArrowRight}')
     expect(await runnerTab(document.body, 'Pi')).toHaveFocus()
     expect(await runnerTab(document.body, 'Pi')).toHaveAttribute('aria-selected', 'true')
-    // Right goes on to the models' search box.
-    await user.keyboard('{ArrowRight}')
+    // Down goes on to the models' search box.
+    await user.keyboard('{ArrowDown}')
     expect(modelSearch(document.body)).toHaveFocus()
   })
 
@@ -316,7 +318,7 @@ describe('runner picker', () => {
     expect(await runnerTab(document.body, 'Hermes')).toHaveTextContent('Not found')
     await chooseRunner(user, document.body, 'Hermes')
     expect(await screen.findByText("hermes wasn't found on this computer: check the command is spelled right and runs in a terminal, or give its absolute path.")).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Edit this command in Global settings' })).toHaveAttribute('href', '/settings#settings-runtimes')
+    expect(screen.getByRole('link', { name: 'Edit this command in Global settings' })).toHaveAttribute('href', '/settings/runtimes#settings-runtimes')
     await chooseRunner(user, document.body, 'Athena')
     expect(await screen.findByText('Athena is an ACP command you added in Global settings; it uses its own settings and login on this computer.')).toBeInTheDocument()
   })
@@ -364,13 +366,13 @@ describe('runner picker', () => {
       renderWithQuery(<Picker offers={local} lead={automatic} />)
       const first = await runnerTab(document.body, 'Automatic')
       first.focus()
-      await user.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowRight}')
       expect(await runnerTab(document.body, 'Claude Code')).toHaveFocus()
       await chooseModel(user, document.body, 'haiku')
       expect(shown()).toBe('claude-code/haiku default')
       expect(await runnerTab(document.body, 'Automatic')).toHaveAccessibleName('Automatic, Claude Code now')
       expect(await runnerTab(document.body, 'Claude Code')).toHaveAccessibleName('Claude Code, Ready, Current')
-      await user.keyboard('{ArrowUp}')
+      await user.keyboard('{ArrowLeft}')
       expect(await runnerTab(document.body, 'Automatic')).toHaveFocus()
       await user.click(screen.getByRole('button', { name: 'Use automatic' }))
       expect(shown()).toBe('none')
@@ -378,14 +380,14 @@ describe('runner picker', () => {
       expect(await runnerTab(document.body, 'Automatic')).toHaveAttribute('aria-selected', 'true')
     })
 
-    it('Right arrow on the first entry goes into its panel', async () => {
+    it('Down arrow on the first entry goes into its panel', async () => {
       useCatalog()
       const user = userEvent.setup()
       renderWithQuery(<Picker offers={local} lead={automatic} initial={{ provider: 'claude-code', modelId: 'opus' }} />)
       await vi.waitFor(async () => expect(await runnerTab(document.body, 'Claude Code')).toHaveAttribute('aria-selected', 'true'))
       const first = await runnerTab(document.body, 'Automatic')
       await user.click(first)
-      await user.keyboard('{ArrowRight}')
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByRole('button', { name: 'Use automatic' })).toHaveFocus()
     })
 
@@ -395,6 +397,39 @@ describe('runner picker', () => {
       // The first entry is there before the runtimes have been read.
       await vi.waitFor(async () => expect(await runnerTab(document.body, 'Claude Code')).toHaveAttribute('aria-selected', 'true'))
       expect(await screen.findByRole('tree')).toBeInTheDocument()
+    })
+  })
+
+  describe('runtime mark skin rendering', () => {
+    it('renders crisp monochrome marks without multiply blend in mono skin, and preserves Risograph overprint in plate skin', () => {
+      const definitions = runtimeDefinitions().runtimes
+      const bundled = definitions.find((item) => item.capabilities.bundled)!
+      const localCli = definitions.find((item) => !item.capabilities.bundled)!
+      try {
+        setSkin('mono')
+        const mono = renderWithQuery(
+          <>
+            <RuntimeMark runtime={bundled} />
+            <RuntimeMark runtime={localCli} />
+          </>,
+        )
+        expect(mono.container.innerHTML).not.toContain('mix-blend-mode: multiply')
+        expect(mono.container.innerHTML).toContain('var(--cta-bg)')
+        mono.unmount()
+
+        setSkin('plate')
+        const plate = renderWithQuery(
+          <>
+            <RuntimeMark runtime={bundled} />
+            <RuntimeMark runtime={localCli} />
+          </>,
+        )
+        expect(plate.container.innerHTML).toContain('mix-blend-mode: multiply')
+        expect(plate.container.innerHTML).toContain('var(--riso-pink)')
+      } finally {
+        window.localStorage.clear()
+        resetThemeForTest()
+      }
     })
   })
 })

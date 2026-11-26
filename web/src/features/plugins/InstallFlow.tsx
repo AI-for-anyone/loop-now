@@ -64,17 +64,17 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pr-12">
             <span>{update ? confirmText.update(localizedText(manifest.displayName)) : confirmText.install(localizedText(manifest.displayName))}</span>
-            <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12.5px] font-bold">
+            <code className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[12.5px] font-medium [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.06] [[data-skin=plate]_&]:font-bold">
               {update && !same ? `${manifest.id} · ${confirmText.versionChange(preview.installedVersion!, manifest.version)}` : t.plugins.idVersion(manifest.id, manifest.version)}
             </code>
           </DialogTitle>
           <DialogDescription>{localizedText(manifest.description)}</DialogDescription>
         </DialogHeader>
         {untrusted && (
-          <div role="note" className="flex gap-3 rounded-card bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal">
+          <div role="note" className="flex gap-3 rounded-card border border-hairline bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal [[data-skin=plate]_&]:border-0">
             <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink" />
             <div className="min-w-0 [overflow-wrap:anywhere]">
-              <p className="font-black">{confirmText.unverifiedTitle(t.plugins.from[preview.source.kind])}</p>
+              <p className="font-semibold [[data-skin=plate]_&]:font-black">{confirmText.unverifiedTitle(t.plugins.from[preview.source.kind])}</p>
               <p>
                 {sourceLine(preview.source)} · {confirmText.unverifiedBody}
               </p>
@@ -126,28 +126,85 @@ function InstallError({ error, update }: { error: ApiError | null; update: boole
 
 const isAbsolutePath = (value: string) => value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value)
 
-// The install entry point: three sources (official plugins that ship with the platform, a git repository, a local folder on the server
-// machine); after the manifest is read, it moves on to confirmation.
+// Builtin picker mounted only when the user chooses the official built-in source inside the custom install dialog.
+function BuiltinSourceList({
+  id,
+  installed,
+  builtinId,
+  onSelect,
+}: {
+  id: string
+  installed: string[]
+  builtinId: string
+  onSelect: (value: string) => void
+}) {
+  const builtin = useBuiltinPluginSources()
+  const sources = builtin.data?.sources ?? []
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="mb-1 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.builtin}</legend>
+      <ErrorAlert error={builtin.error} />
+      {builtin.isPending && <p role="status">{t.plugins.loading}</p>}
+      {builtin.isSuccess && sources.length === 0 && <p className="text-[13.5px] text-ink-700">{t.plugins.builtinEmpty}</p>}
+      <ul className="grid gap-1.5">
+        {sources.map((source) => {
+          const done = installed.includes(source.id)
+          return (
+            <li key={source.id}>
+              <label
+                className={cn(
+                  'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input border border-hairline-strong bg-surface-control px-3 py-2.5 has-[:checked]:border-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)] [[data-skin=plate]_&]:has-[:checked]:shadow-[inset_0_0_0_2px_var(--ink)]',
+                  done && 'cursor-default opacity-60',
+                )}
+              >
+                <input
+                  type="radio"
+                  name={`${id}-builtin`}
+                  value={source.id}
+                  disabled={done}
+                  checked={builtinId === source.id}
+                  onChange={() => onSelect(source.id)}
+                  className="mt-1 accent-ink [[data-skin=plate]_&]:accent-riso-blue"
+                />
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="text-[14px] font-semibold [[data-skin=plate]_&]:font-black">
+                    {localizedText(source.displayName)}{' '}
+                    <span className="font-mono text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.plugins.idVersion(source.id, source.version)}</span>
+                    {done && <span className="ml-2 text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.plugins.installedBadge}</span>}
+                  </span>
+                  <span className="text-[13px] text-ink-700">{localizedText(source.description)}</span>
+                </span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </fieldset>
+  )
+}
+
+// The install entry point: focuses on custom git repository and local folder sources (official built-in plugins are also available directly
+// in the Discover tab and kept accessible here as a fallback); after reading the manifest, it moves on to confirmation.
 export function InstallSourceDialog({
   open,
   onOpenChange,
   installed,
   onInstalled,
+  defaultKind = 'git',
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   installed: string[]
   onInstalled?: (plugin: Schemas['Plugin']) => void
+  defaultKind?: SourceKind
 }) {
   const installer = usePluginInstaller(onInstalled)
-  const builtin = useBuiltinPluginSources()
   const id = useId()
-  const [kind, setKind] = useState<SourceKind>('builtin')
+  const [kind, setKind] = useState<SourceKind>(defaultKind)
   const [location, setLocation] = useState('')
   const [ref, setRef] = useState('')
   const [builtinId, setBuiltinId] = useState('')
   const [invalid, setInvalid] = useState<string | null>(null)
-  const sources = builtin.data?.sources ?? []
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const target = kind === 'builtin' ? builtinId : location.trim()
@@ -178,9 +235,9 @@ export function InstallSourceDialog({
           </DialogHeader>
           <form className="grid min-w-0 gap-4" onSubmit={(event) => void submit(event)} noValidate>
             <fieldset className="grid gap-2">
-              <legend className="mb-2 text-[13.5px] font-black">{text.source}</legend>
+              <legend className="mb-2 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.source}</legend>
               <div role="radiogroup" className="flex flex-wrap gap-2">
-                {(['builtin', 'git', 'local'] as const).map((value) => (
+                {(['git', 'local', 'builtin'] as const).map((value) => (
                   <label
                     key={value}
                     className={cn(
@@ -207,31 +264,7 @@ export function InstallSourceDialog({
               </div>
             </fieldset>
             {kind === 'builtin' ? (
-              <fieldset className="grid gap-2">
-                <legend className="mb-1 text-[13.5px] font-black">{text.builtin}</legend>
-                <ErrorAlert error={builtin.error} />
-                {builtin.isPending && <p role="status">{t.plugins.loading}</p>}
-                {builtin.isSuccess && sources.length === 0 && <p className="text-[13.5px] text-ink-700">{t.plugins.builtinEmpty}</p>}
-                <ul className="grid gap-1.5">
-                  {sources.map((source) => {
-                    const done = installed.includes(source.id)
-                    return (
-                      <li key={source.id}>
-                        <label className={cn('flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input border border-hairline-strong bg-surface-control px-3 py-2.5 has-[:checked]:border-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)] [[data-skin=plate]_&]:has-[:checked]:shadow-[inset_0_0_0_2px_var(--ink)]', done && 'cursor-default opacity-60')}>
-                          <input type="radio" name={`${id}-builtin`} value={source.id} disabled={done} checked={builtinId === source.id} onChange={() => setBuiltinId(source.id)} className="mt-1 accent-riso-blue" />
-                          <span className="grid min-w-0 gap-0.5">
-                            <span className="text-[14px] font-black">
-                              {localizedText(source.displayName)} <span className="font-mono text-[12px] font-bold text-ink-500">{t.plugins.idVersion(source.id, source.version)}</span>
-                              {done && <span className="ml-2 text-[12px] font-bold text-ink-500">{t.plugins.installedBadge}</span>}
-                            </span>
-                            <span className="text-[13px] text-ink-700">{localizedText(source.description)}</span>
-                          </span>
-                        </label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </fieldset>
+              <BuiltinSourceList id={id} installed={installed} builtinId={builtinId} onSelect={setBuiltinId} />
             ) : (
               <div className="grid gap-1.5">
                 <Label htmlFor={`${id}-location`}>{kind === 'git' ? text.gitUrl : text.localPath}</Label>

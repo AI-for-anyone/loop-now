@@ -40,7 +40,7 @@ describe('Model provider picker', () => {
     await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
     await screen.findByRole('option', { name: /^Anthropic/ })
     const search = screen.getByRole('searchbox', { name: '搜索提供方' })
-    const results = async (query: string) => { await user.clear(search); if (query) await user.type(search, query); return screen.queryAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent) }
+    const results = async (query: string) => { await user.clear(search); if (query) await user.type(search, query); return screen.queryAllByRole('option').map(item => item.querySelector('.font-semibold')?.textContent) }
     expect(await results('智谱')).toEqual(['智谱 Z.ai'])
     expect(await results('zhipu')).toEqual(['智谱 Z.ai'])
     expect(await results('kimi')).toEqual(['Moonshot Kimi'])

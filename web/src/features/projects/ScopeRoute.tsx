@@ -20,25 +20,25 @@ function ScopeNotice({ kind, name, defaultScope }: { kind: 'missing' | 'deleted'
   return (
     <div role="alert" className="flex h-full min-h-80 flex-col items-center justify-center gap-3.5 overflow-y-auto p-6 text-center">
       {kind === 'missing' ? (
-        // A halftone blue circle plus an empty pink dashed circle: the project you are looking for is gone.
-        <span aria-hidden="true" className="relative h-[130px] w-[200px] shrink-0">
+        // A halftone blue circle plus an empty pink dashed circle (Plate skin only): the project you are looking for is gone.
+        <span aria-hidden="true" className="relative hidden h-[130px] w-[200px] shrink-0 [[data-skin=plate]_&]:inline-block">
           <span className="riso-halftone absolute top-[5px] left-2.5 size-[120px] rounded-full bg-riso-blue" />
           <span className="absolute top-[5px] left-[76px] size-[116px] rounded-full border-[3px] border-dashed border-pink-text" />
         </span>
       ) : (
         <span
           aria-hidden="true"
-          className="riso-tilt rounded-stamp px-[18px] py-1 font-display-cn text-[34px] leading-[1.2] text-red-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_3px_var(--red-text)] [--tilt:-3deg]"
+          className="riso-tilt rounded-stamp border border-red/35 bg-tint-red px-3.5 py-1 text-[14px] font-semibold text-red-text before:hidden [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:px-[18px] [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[34px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:[--tilt-bg:transparent] [[data-skin=plate]_&]:[--tilt-shadow:inset_0_0_0_3px_var(--red-text)] [[data-skin=plate]_&]:[--tilt:-3deg] [[data-skin=plate]_&]:before:block"
         >
           {t.projects.deleted.stamp}
         </span>
       )}
-      <p className="riso-misreg font-display-cn text-[48px] leading-[1.15] text-riso-blue">
+      <p className="riso-misreg font-display-cn text-[28px] leading-[1.2] font-semibold text-ink [[data-skin=plate]_&]:text-[48px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
         {kind === 'missing' ? t.projects.notFound.title(name) : t.projects.deleted.title(name)}
       </p>
       <p className="text-[15px] text-ink-700">{kind === 'missing' ? t.projects.notFound.body : t.projects.deleted.body}</p>
       {defaultScope && (
-        <Button asChild size="lg" className="h-12 px-[26px] text-base shadow-print-pink">
+        <Button asChild size="lg" className="h-11 px-6 text-[15px] [[data-skin=plate]_&]:h-12 [[data-skin=plate]_&]:px-[26px] [[data-skin=plate]_&]:text-base [[data-skin=plate]_&]:shadow-print-pink">
           <Link to={agentsPath(defaultScope)}>{t.projects.toDefault}</Link>
         </Button>
       )}
@@ -46,17 +46,17 @@ function ScopeNotice({ kind, name, defaultScope }: { kind: 'missing' | 'deleted'
   )
 }
 
-// The yellow sticky note shown when the project is renamed elsewhere while you are on it; it stays until you click
+// The banner shown when the project is renamed elsewhere while you are on it; it stays until you click
 // “知道了” (Got it) or leave this project.
 function RenamedNote({ from, to, onDismiss }: { from: string; to: string; onDismiss: () => void }) {
   return (
     <div
       role="status"
-      className="riso-tilt mx-4 mt-4 flex max-w-[820px] shrink-0 flex-wrap items-center gap-x-[18px] gap-y-2.5 py-3.5 pr-[18px] pl-5 [--tilt-bg:var(--riso-yellow)] [--tilt-shadow:3px_3px_0_rgb(24_38_94/.18)] [--tilt:-0.5deg] sm:mx-[30px]"
+      className="riso-tilt mx-4 mt-4 flex max-w-[820px] shrink-0 flex-wrap items-center gap-x-[18px] gap-y-2.5 rounded-card border border-hairline-strong bg-surface-subtle py-3 pr-4 pl-4 before:hidden sm:mx-[30px] [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:py-3.5 [[data-skin=plate]_&]:pr-[18px] [[data-skin=plate]_&]:pl-5 [[data-skin=plate]_&]:[--tilt-bg:var(--riso-yellow)] [[data-skin=plate]_&]:[--tilt-shadow:3px_3px_0_rgb(24_38_94/.18)] [[data-skin=plate]_&]:[--tilt:-0.5deg] [[data-skin=plate]_&]:before:block"
     >
-      {/* Tape: decoration only. */}
+      {/* Tape: decoration only (Plate skin). */}
       <span aria-hidden="true" className="hidden [[data-skin=plate]_&]:block absolute -top-[9px] left-7 h-[18px] w-16 -rotate-4 bg-white/60" />
-      <span className="flex-[1_1_420px] text-[15px] font-bold">{t.projects.renamed(from, to)}</span>
+      <span className="flex-[1_1_420px] text-[15px] font-medium [[data-skin=plate]_&]:font-bold">{t.projects.renamed(from, to)}</span>
       <Button variant="ink" size="sm" className="[[data-skin=plate]_&]:text-white" onClick={onDismiss}>
         {t.projects.renamedDismiss}
       </Button>

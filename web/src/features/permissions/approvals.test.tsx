@@ -55,6 +55,8 @@ describe('Approving in the chat', () => {
     expect(await within(card('git push origin main')).findByRole('status')).toHaveTextContent('Approved')
 
     const editCard = card('Edit MAIN.md')
+    expect(within(editCard).queryByRole('textbox', { name: 'Reason to reject' })).toBeNull()
+    await user.click(within(editCard).getByRole('button', { name: 'Reject with reason…' }))
     await user.type(within(editCard).getByRole('textbox', { name: 'Reason to reject' }), 'Wait until I read the diff')
     await user.click(within(editCard).getByRole('button', { name: 'Reject with reason' }))
     await waitFor(() => expect(api.calls[1]).toEqual({ id: edit.id, body: { decision: 'reject', reason: 'Wait until I read the diff' } }))
@@ -66,6 +68,7 @@ describe('Approving in the chat', () => {
     const { user, emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [api.handler] })
     await emit('snapshot', snapshot([push]))
     const pushCard = card('git push origin main')
+    await user.click(within(pushCard).getByRole('button', { name: 'Reject with reason…' }))
     await user.type(within(pushCard).getByRole('textbox', { name: 'Reason to reject' }), 'Not on main')
     await user.click(within(pushCard).getByRole('button', { name: 'Reject' }))
     await waitFor(() => expect(api.calls).toEqual([{ id: push.id, body: { decision: 'reject', reason: 'Not on main' } }]))
@@ -74,10 +77,12 @@ describe('Approving in the chat', () => {
 
   it('a runtime that is not told the reason says so under the field; Claude Code is told it', async () => {
     const codex = makePermissionRequest({ agentId: agent.id, runId: running.id, runtime: 'codex', title: 'npm publish' })
-    const { emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex()))] })
+    const { user, emit } = await renderChat({ agent, messages: [makeMessage({ text: 'Go', run: running })], handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex()))] })
     await emit('snapshot', snapshot([push, codex]))
+    await user.click(within(card('git push origin main')).getByRole('button', { name: 'Reject with reason…' }))
     expect(within(card('git push origin main')).getByRole('textbox', { name: 'Reason to reject' })).toHaveAttribute('placeholder', 'A reason rejects the request and tells the Agent why')
     expect(within(card('git push origin main')).queryByText(/isn't told the reason/)).toBeNull()
+    await user.click(within(card('npm publish')).getByRole('button', { name: 'Reject with reason…' }))
     expect(within(card('npm publish')).getByRole('textbox', { name: 'Reason to reject' })).toHaveAttribute('placeholder', 'A typed reason rejects the request')
     expect(within(card('npm publish')).getByText("Codex isn't told the reason; it is kept with the request here")).toBeInTheDocument()
   })

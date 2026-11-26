@@ -71,7 +71,7 @@ describe('Who writes with AI, in global settings', () => {
   it('when no CLI is ready, says so and links to the runtimes section', async () => {
     setup({ settings: automaticSettings(null) })
     expect(await screen.findByText('No CLI on this computer can write yet. Install one and log in under Agent runtimes first.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Go to Agent runtimes' })).toHaveAttribute('href', '/settings#settings-runtimes')
+    expect(screen.getByRole('link', { name: 'Go to Agent runtimes' })).toHaveAttribute('href', '/settings/runtimes#settings-runtimes')
     expect(await runnerTab(document.body, 'Automatic')).toHaveAccessibleName('Automatic, None ready yet, Current')
   })
 

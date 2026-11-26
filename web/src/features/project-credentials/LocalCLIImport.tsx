@@ -33,7 +33,7 @@ function ImportEntry({ projectId, projectName, recoveredId = null, locate }: { p
   const available = useProjectCredentialsAvailable()
   const [localId, setLocalId] = useState<string | null>(null), [open, setOpen] = useState(!!recoveredId)
   const operationId = locate ? recoveredId : localId
-  return <div className="grid min-w-0 gap-3 border-t border-ink/10 pt-4">
+  return <div className="grid min-w-0 gap-3 border-t border-hairline pt-4 [[data-skin=plate]_&]:border-ink/10">
     <Button type="button" variant="secondary" className="justify-self-start" disabled={!available} onClick={() => setOpen(value => !value)}>{open ? copy.close : copy.entry}</Button>
     {open && <ImportForm projectId={projectId} projectName={projectName} operationId={operationId} locate={id => { setLocalId(id); locate?.(id) }} />}
   </div>
@@ -108,9 +108,9 @@ function ImportForm({ projectId, projectName, operationId, locate }: { projectId
     else if (selected.length >= 20) setLocalError(copy.max)
     else setSelected(old => [...old, id])
   }
-  return <section aria-label={copy.title} className="grid min-w-0 gap-4 rounded-card bg-tint-blue p-4">
-    <h3 className="font-bold">{copy.title}</h3><p className="text-sm">{copy.intro}</p>
-    <ol className="flex flex-wrap gap-2 text-sm font-bold">{copy.steps.map(label => <li key={label} className="rounded-input border border-hairline bg-surface-control px-3 py-2 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">{label}</li>)}</ol>
+  return <section aria-label={copy.title} className="grid min-w-0 gap-4 rounded-card border border-hairline bg-surface-subtle p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+    <h3 className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.title}</h3><p className="text-sm">{copy.intro}</p>
+    <ol className="flex flex-wrap gap-2 text-sm font-medium [[data-skin=plate]_&]:font-bold">{copy.steps.map(label => <li key={label} className="rounded-input border border-hairline bg-surface-control px-3 py-2 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">{label}</li>)}</ol>
     <p className="text-sm">{copy.scanHelp}</p>
     <Button type="button" variant="secondary" className="justify-self-start" disabled={!canChoose || scanning} onClick={() => void discover()}>{scanning ? copy.scanning : scan || op ? copy.rescan : copy.scan}</Button>
     {operationId && !validId && <div className="grid gap-2"><p role="alert">{copy.invalidId}</p><Button type="button" variant="secondary" className="justify-self-start" disabled={!available} onClick={() => { locate(null); setError(null); setLocalError('') }}>{copy.clearInvalidId}</Button></div>}
@@ -126,11 +126,11 @@ function ImportForm({ projectId, projectName, operationId, locate }: { projectId
       {step === 'select' ? <><ul className="grid min-w-0 gap-3">{scan.candidates.map(candidate => {
         const draft = drafts[candidate.candidateId] ?? {}, issue = supplementProblem(candidate, draft), checked = selected.includes(candidate.candidateId), id = `${prefix}-${candidate.candidateId}`
         return <li key={candidate.candidateId} className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
-          <label className="flex min-w-0 items-start gap-3"><input type="checkbox" checked={checked} disabled={!canChoose || scanExpired || !!issue && !checked} onChange={() => toggle(candidate.candidateId)} className="mt-1 size-4 shrink-0 accent-riso-blue" /><span className="min-w-0 [overflow-wrap:anywhere]"><strong>{candidate.cli} · {candidate.label}</strong><span className="block text-sm">{copy.candidate[candidate.status]}</span></span></label>
+          <label className="flex min-w-0 items-start gap-3"><input type="checkbox" checked={checked} disabled={!canChoose || scanExpired || !!issue && !checked} onChange={() => toggle(candidate.candidateId)} className="mt-1 size-4 shrink-0 accent-ink [[data-skin=plate]_&]:accent-riso-blue" /><span className="min-w-0 [overflow-wrap:anywhere]"><strong>{candidate.cli} · {candidate.label}</strong><span className="block text-sm">{copy.candidate[candidate.status]}</span></span></label>
           <p className="text-sm [overflow-wrap:anywhere]">{copy.source}{candidate.sourceKind}</p>
           {candidate.reasonCode && <p className="text-sm">{copy.reason[candidate.reasonCode]}</p>}
           {candidate.status === 'requires_platform_login' && <p className="text-sm">{copy.google}</p>}
-          {candidate.previouslyImported && <p className="text-sm font-bold">{copy.previous}</p>}
+          {candidate.previouslyImported && <p className="text-sm font-medium [[data-skin=plate]_&]:font-bold">{copy.previous}</p>}
           {candidate.missingFields.length > 0 && <p className="text-sm">{copy.missing}{candidate.missingFields.join(' · ')}</p>}
           {candidate.supplementableFields.length > 0 && <p className="text-sm">{copy.fieldsHelp}</p>}
           {candidate.supplementableFields.map(field => <div key={field} className="grid min-w-0 gap-1.5">

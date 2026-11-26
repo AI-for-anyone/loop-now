@@ -1,231 +1,349 @@
-import { useState, type ReactNode } from 'react'
-import { Link, NavLink, useNavigate, useParams } from 'react-router'
-import type { Schemas } from '@/api/client'
-import { marketEntryOf, marketSource, usePlugin, usePluginConfig, usePluginDeliveries, usePluginLogs, usePluginMarkets, usePluginReadme, usePluginState, useProjectPlugin, useSavePluginConfig, useUninstallPlugin } from '@/api/plugins'
-import { RECORD_PREFIX, recordRows } from './records'
+import { useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { useQueries } from '@tanstack/react-query'
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { api, call, type Schemas } from '@/api/client'
+import {
+  marketEntryOf,
+  marketSource,
+  pluginKeys,
+  usePlugin,
+  usePluginConfig,
+  usePluginMarkets,
+  usePluginReadme,
+  useSavePluginConfig,
+  useSaveProjectPlugin,
+  useUninstallPlugin,
+} from '@/api/plugins'
 import { useProjects } from '@/api/queries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { SectionError } from '@/components/RequestError'
 import { IndexTabs } from '@/components/IndexTabs'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
-import { Sheet } from '@/components/Sheet'
-import { SectionToc, SheetSection } from '@/components/SheetSections'
+import { SectionError } from '@/components/RequestError'
+import { PageBody, Sheet } from '@/components/Sheet'
 import { Button } from '@/components/ui/button'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
-import { localizedText } from '@/lib/localized-text'
 import { indexTabClass } from '@/lib/index-tab'
+import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
-import { DeliveriesList, LogsView, RecordsTable } from './Activity'
-import { ManifestSummary } from './ManifestSummary'
-import { cardClass, IdVersion, InstalledSourceBadge, PanelTitle, Quiet, RepositoryLink, StatusLabel } from './parts'
+import { ActivityPanel, type ActivityView } from './Activity'
+import { Chips, ManifestSummary } from './ManifestSummary'
+import { componentChips } from './manifest'
+import { cardClass, IdVersion, InstalledSourceBadge, PanelTitle, Quiet, RepositoryLink, StatusLabel, surfaceListClass } from './parts'
 import { pluginPath } from './paths'
+import { PluginActionButtons } from './PluginActions'
+import { PluginProviders } from './PluginProviders'
 import { ProjectEnableList } from './ProjectEnable'
 import { ReadmeMarkdown, TruncatedNote } from './Readme'
 import { repositoryUrl } from './repository'
 import { ConfigForm } from './SchemaForm'
 import { describeValue, fieldsOf } from './schema-form'
 import { usePluginInstaller } from './usePluginInstaller'
-import { PluginActionButtons } from './PluginActions'
-import { PluginProviders } from './PluginProviders'
 
 const text = t.plugins
-
-type Detail = Schemas['PluginDetail']
-type Tab = 'overview' | 'config' | 'accounts' | 'events' | 'records' | 'logs'
-const TABS: Tab[] = ['overview', 'config', 'accounts', 'events', 'records', 'logs']
 const copy = text.detail
 
-function Panel({ title, hint, children, footer, className }: { title: string; hint?: ReactNode; children: ReactNode; footer?: ReactNode; className?: string }) {
-  return (
-    <section aria-label={title} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 px-4 py-3.5', className)}>
-      <PanelTitle title={title} hint={hint} />
-      {children}
-      {footer}
-    </section>
-  )
+type Detail = Schemas['PluginDetail']
+type DetailTab = 'overview' | 'config' | 'activity'
+
+function parseActivityView(value: string | null): ActivityView {
+  if (value === 'records' || value === 'logs') return value
+  return 'events'
 }
 
-const more = (to: string, label: string) => (
-  <Link to={to} className="self-start text-[13px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus">
-    {label}
-  </Link>
-)
+// Resolve canonical tab + sub-view while preserving backward-compatible route aliases:
+// /accounts → config (expanding per-project rows), /events | /records | /logs → activity with matching sub-view.
+function resolveRoute(tabParam: string | undefined, viewParam: string | null): {
+  tab: DetailTab
+  activityView: ActivityView
+  expandProjects: boolean
+} {
+  if (tabParam === 'config') return { tab: 'config', activityView: 'events', expandProjects: false }
+  if (tabParam === 'accounts') return { tab: 'config', activityView: 'events', expandProjects: true }
+  if (tabParam === 'activity') return { tab: 'activity', activityView: parseActivityView(viewParam), expandProjects: false }
+  if (tabParam === 'events') return { tab: 'activity', activityView: 'events', expandProjects: false }
+  if (tabParam === 'records') return { tab: 'activity', activityView: 'records', expandProjects: false }
+  if (tabParam === 'logs') return { tab: 'activity', activityView: 'logs', expandProjects: false }
+  return { tab: 'overview', activityView: 'events', expandProjects: false }
+}
 
 // Whether there is anything to say about model providers: it has Pi extensions, or providers were read, or errors occurred.
 const hasProviderInfo = (detail: Detail) =>
   detail.manifest.components.agentExtensions > 0 || detail.providers.length > 0 || detail.providerErrors.length > 0 || detail.providersError !== null
 
-// Count only the items read so far, adding "+" if there are more (the API gives no total; same as the folder page).
-const loaded = (count: number, more: boolean) => `${count}${more ? '+' : ''}`
-
-// Section 04 of the overview, “最近动静” (Recent activity): events, deliveries and logs, formerly separate, combined into three columns,
-// each with a big number, one line of explanation and a “看全部” (All ...) link.
-function RecentActivity({ pluginId }: { pluginId: string }) {
-  const deliveries = usePluginDeliveries(pluginId)
-  const records = usePluginState(pluginId, RECORD_PREFIX)
-  const logs = usePluginLogs(pluginId)
-  const events = (deliveries.data?.pages ?? []).flatMap((page) => page.deliveries)
-  const lines = (logs.data?.pages ?? []).flatMap((page) => page.entries)
-  const columns = [
-    { key: 'events', title: copy.tabs.events, error: deliveries.error, value: deliveries.data && loaded(events.length, deliveries.hasNextPage), note: events.length ? copy.latest(t.chat.time(events[0].at)) : text.events.empty, link: copy.allEvents },
-    { key: 'records', title: copy.records, error: records.error, value: records.data && String(recordRows(records.data.entries).length), note: copy.recordsHint, link: copy.allRecords },
-    { key: 'logs', title: copy.logs, error: logs.error, value: logs.data && loaded(lines.length, logs.hasNextPage), note: `${copy.logsHint} · ${lines.length ? copy.latest(t.chat.time(lines[0].at)) : text.logs.empty}`, link: copy.allLogs },
-  ] as const
-  return (
-    <div className="-ml-[18px] flex flex-wrap gap-y-3.5">
-      {columns.map((column) => (
-        <div key={column.key} data-activity={column.key} className="flex min-w-0 flex-[1_1_200px] flex-col gap-2 border-l-2 border-dashed border-ink/30 px-[18px] pt-0.5 pb-1">
-          <div className="flex items-baseline justify-between gap-2.5">
-            <h3 className="text-[14px] font-black">{column.title}</h3>
-            <span className="font-display-latin text-[34px] leading-none font-extrabold text-riso-blue">{column.value || '—'}</span>
-          </div>
-          {column.error ? <ErrorAlert error={column.error} /> : <p className="text-[12.5px] text-ink-500 [overflow-wrap:anywhere]">{column.note}</p>}
-          <Link to={pluginPath(pluginId, column.key)} className="mt-auto self-start text-[13px] font-black text-riso-blue underline underline-offset-3 outline-none focus-visible:shadow-focus">
-            {column.link} ›
-          </Link>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Overview (redesign step 5): laid out on the sheet as numbered sections 01–05: what it contains, model providers (only if any), which
-// projects enable it, recent activity,
-// and About (only if there is a README); the stub on the right is the section ruler, with the current version and update status at the
-// bottom.
-function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
+// Tab 1: Overview — compact 2-column top summary grid (Enabled in projects | Capabilities & security) plus README prose below.
+function OverviewTab({ detail }: { detail: Detail }) {
   const id = detail.plugin.id
+  const { manifest } = detail
   const readme = usePluginReadme(id)
   const showReadme = !readme.isPending && readme.data?.file !== null
-  const parts: { key: string; title: string; meta?: string; body: ReactNode }[] = [
-    { key: 'contains', title: copy.contains, meta: copy.containsHint, body: <ManifestSummary manifest={detail.manifest} columns={false} layout="table" /> },
-    ...(hasProviderInfo(detail) ? [{ key: 'providers', title: text.providers.title, meta: text.providers.hint, body: <PluginProviders detail={detail} /> }] : []),
-    { key: 'projects', title: copy.enabledIn, meta: copy.enabledInHint, body: <ProjectEnableList pluginId={id} schema={detail.manifest.configSchema} /> },
-    { key: 'activity', title: copy.activity, body: <RecentActivity pluginId={id} /> },
-    ...(showReadme
-      ? [{
-          key: 'readme',
-          title: t.plugins.readme.title,
-          meta: copy.readmeHint,
-          body: (
-            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-[22px] py-[18px] shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white">
-              {readme.data?.file && <span className="self-start rounded-[4px] bg-tint-blue px-2 font-mono text-[12px] leading-[22px]">{readme.data.file}</span>}
-              <ErrorAlert error={readme.error} />
-              {readme.data && <ReadmeMarkdown readme={readme.data} />}
-              {readme.data?.truncated && <TruncatedNote />}
-            </div>
-          ),
-        }]
-      : []),
-  ]
-  const partId = (key: string) => `plugin-${key}`
+  const showProviders = hasProviderInfo(detail)
+  const hasProviderErrors = detail.providersError !== null || detail.providerErrors.length > 0
+  const chips = componentChips(manifest)
+
   return (
-    <div className="flex min-h-0 flex-1">
-      {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
-          content instead of stretching the whole page based on their unscrolled position. */}
-      <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[1000px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
-          {parts.map((part, index) => (
-            <SheetSection key={part.key} id={partId(part.key)} titleId={`${partId(part.key)}-title`} index={index} title={part.title} meta={part.meta}>
-              {part.body}
-            </SheetSection>
-          ))}
-        </div>
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start">
+        <section aria-label={copy.enabledIn} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 rounded-card px-4 py-3.5')}>
+          <PanelTitle title={copy.enabledIn} hint={copy.enabledInHint} />
+          <ProjectEnableList pluginId={id} schema={manifest.configSchema} />
+        </section>
+
+        <section aria-label={copy.capabilities} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 rounded-card px-4 py-3.5')}>
+          <PanelTitle title={copy.capabilities} />
+          {chips.length > 0 ? (
+            <Chips items={chips} />
+          ) : (
+            <Quiet>{text.confirm.none}</Quiet>
+          )}
+          {showProviders && (
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-700">
+              <span className="font-medium text-ink [[data-skin=plate]_&]:font-bold">{text.providers.title}:</span>
+              {detail.providersError !== null ? (
+                <span className="font-medium text-red-text">{text.providers.failed(detail.providersError)}</span>
+              ) : detail.providers.length > 0 ? (
+                <span>{detail.providers.map((p) => p.name || p.id).join(', ')}</span>
+              ) : (
+                <span className="text-ink-500">{text.providers.none}</span>
+              )}
+            </div>
+          )}
+          {manifest.failClosed && (
+            <p className="text-[12.5px] font-semibold text-red-text [[data-skin=plate]_&]:font-bold">{text.confirm.failClosed}</p>
+          )}
+          <details open={hasProviderErrors || undefined} className="group border-t border-hairline pt-2.5 [[data-skin=plate]_&]:border-ink/20">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black">
+              <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+              <span>{copy.inspectManifest}</span>
+            </summary>
+            <div className="mt-3 flex min-w-0 flex-col gap-4">
+              <ManifestSummary manifest={manifest} columns={false} layout="table" />
+              {showProviders && (
+                <section aria-label={text.providers.title} className="flex min-w-0 flex-col gap-2 border-t border-hairline pt-3.5 [[data-skin=plate]_&]:border-ink/20">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <h3 className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.providers.title}</h3>
+                    <span className="text-[12px] text-ink-500">{text.providers.hint}</span>
+                  </div>
+                  <PluginProviders detail={detail} />
+                </section>
+              )}
+            </div>
+          </details>
+        </section>
       </div>
-      <SectionToc label={t.config.toc.title} items={parts.map((part) => ({ id: partId(part.key), titleId: `${partId(part.key)}-title`, title: part.title }))} footer={footer} />
+
+      {showReadme && (
+        <section aria-label={t.plugins.readme.title} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 rounded-card px-5 py-4')}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[15px] font-semibold tracking-tight [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[22px] [[data-skin=plate]_&]:font-normal">
+              {t.plugins.readme.title}
+            </h2>
+            {readme.data?.file && (
+              <span className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[11.5px] text-ink-700 [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+                {readme.data.file}
+              </span>
+            )}
+          </div>
+          <ErrorAlert error={readme.error} />
+          {readme.data && <ReadmeMarkdown readme={readme.data} />}
+          {readme.data?.truncated && <TruncatedNote />}
+        </section>
+      )}
     </div>
   )
 }
 
-// One project's overrides of x-scope: project fields: overridden ones list the field and value; without overrides it says “用全局值”
-// (Use global value).
-function OverrideRow({ project, detail }: { project: Schemas['Project']; detail: Detail }) {
-  const { item } = useProjectPlugin(project.id, detail.plugin.id)
-  if (!item?.enabled) return null
+// Expandable per-project overrides & accounts row inside the Configuration tab, allowing in-place editing of both x-scope: project
+// fields and project-scoped plugin accounts.
+function ProjectConfigRow({
+  project,
+  item,
+  detail,
+  globalConfig,
+  hasProjectFields,
+  hasAccounts,
+  defaultExpanded,
+  onReloadProject,
+}: {
+  project: Schemas['Project']
+  item: Schemas['ProjectPlugin']
+  detail: Detail
+  globalConfig: Schemas['PluginConfig'] | undefined
+  hasProjectFields: boolean
+  hasAccounts: boolean
+  defaultExpanded: boolean
+  onReloadProject: () => Promise<Schemas['PluginConfig'] | undefined>
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const save = useSaveProjectPlugin(project.id, detail.plugin.id)
   const values = item.config.values as Record<string, unknown>
-  const fields = fieldsOf(detail.manifest.configSchema, 'project').filter((field) => values[field.name] !== undefined || item.config.secretsSet.includes(field.name))
+  const projectFields = fieldsOf(detail.manifest.configSchema, 'project')
+  const overriddenFields = projectFields.filter((field) => values[field.name] !== undefined || item.config.secretsSet.includes(field.name))
+
   return (
-    <li className="grid min-w-0 gap-0.5 rounded-input bg-ink/[0.04] px-3 py-2 text-[13px]">
-      <span className="flex items-center gap-2">
-        <span className="min-w-0 truncate font-black">{project.name}</span>
-        <span className="ml-auto shrink-0 text-ink-700">{fields.length ? text.config.overridden(fields.length) : text.config.useGlobal}</span>
-      </span>
-      {fields.map((field) => (
-        <span key={field.name} className="truncate text-ink-700">
-          {field.label} → {field.secret ? t.plugins.form.secretSet : describeValue(field, values[field.name])}
-        </span>
-      ))}
+    <li className="min-w-0">
+      <div className="flex min-h-[48px] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 py-2.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="truncate text-[13.5px] font-semibold text-ink [[data-skin=plate]_&]:font-black">{project.name}</span>
+            {hasProjectFields && (
+              <span className="text-[12px] text-ink-500">
+                {overriddenFields.length ? text.config.overridden(overriddenFields.length) : text.config.useGlobal}
+              </span>
+            )}
+          </div>
+          {!expanded && overriddenFields.length > 0 && (
+            <p className="truncate text-[12px] text-ink-500">
+              {overriddenFields
+                .map((field) => `${field.label} → ${field.secret ? t.plugins.form.secretSet : describeValue(field, values[field.name])}`)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <span>{expanded ? t.plugins.project.collapse : copy.configure}</span>
+          <ChevronDownIcon aria-hidden="true" className={cn('size-3.5 transition-transform', expanded && 'rotate-180')} />
+        </Button>
+      </div>
+      {expanded && (
+        <div className="flex min-w-0 flex-col gap-5 border-t border-hairline bg-surface-subtle/35 px-4 py-4 [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-transparent">
+          {hasProjectFields && globalConfig && (
+            <section aria-label={t.plugins.project.config} className="grid min-w-0 gap-2.5">
+              <h3 className="text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{t.plugins.project.config}</h3>
+              <ConfigForm
+                formId={`plugin-detail-project:${project.id}:${detail.plugin.id}`}
+                schema={detail.manifest.configSchema}
+                mode="project"
+                config={item.config}
+                globalConfig={globalConfig}
+                onSave={async (payload) => (await save.mutateAsync({ enabled: true, ...payload } as Schemas['ProjectPluginUpdate'])).config}
+                reload={onReloadProject}
+              />
+            </section>
+          )}
+          {hasAccounts && (
+            <AccountsManager projectId={project.id} pluginId={detail.plugin.id} kinds={detail.manifest.accounts} />
+          )}
+          <ErrorAlert error={save.error} />
+        </div>
+      )}
     </li>
   )
 }
 
-function ConfigTab({ detail }: { detail: Detail }) {
+// Tab 2: Configuration — Global config + Per-project overrides & accounts (editable in place, with notEnabledProjects empty state) +
+// collapsible Runtime environment details.
+function ConfigTab({ detail, expandProjects }: { detail: Detail; expandProjects: boolean }) {
   const id = detail.plugin.id
   const config = usePluginConfig(id)
   const save = useSavePluginConfig(id)
   const projects = useProjects()
+  const projectList = projects.data?.projects ?? []
+  const allFields = fieldsOf(detail.manifest.configSchema)
   const hasProjectFields = fieldsOf(detail.manifest.configSchema, 'project').length > 0
+  const hasAccounts = detail.manifest.accounts.length > 0
+  const showProjectSection = hasProjectFields || hasAccounts
   const scopes = detail.manifest.permissions
+
+  const projectQueries = useQueries({
+    queries: showProjectSection
+      ? projectList.map((project) => ({
+          queryKey: pluginKeys.project(project.id),
+          queryFn: () => call(api.GET('/projects/{projectId}/plugins', { params: { path: { projectId: project.id } } })),
+        }))
+      : [],
+  })
+
+  const enabledEntries = projectList
+    .map((project, index) => {
+      const query = projectQueries[index]
+      const item = query?.data?.plugins.find((plugin) => plugin.pluginId === id)
+      return item?.enabled ? { project, item, refetch: query.refetch } : null
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  const projectsStillLoading = projects.isPending || projectQueries.some((query) => query.isPending)
+
   return (
-    <div className="grid min-w-0 gap-3.5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-      <Panel title={text.config.global} hint={text.config.globalHint}>
-        <ErrorAlert error={config.error} />
-        {config.data && (
-          <ConfigForm
-            formId={`plugin-config:${id}`}
-            schema={detail.manifest.configSchema}
-            config={config.data}
-            onSave={(payload) => save.mutateAsync(payload as Schemas['PluginConfigUpdate'])}
-            reload={async () => (await config.refetch()).data}
-            footer={text.config.savedNotice}
-          />
+    <div className="flex min-w-0 flex-col gap-6">
+      <section aria-label={text.config.global} className="flex min-w-0 flex-col gap-3">
+        {allFields.length === 0 ? (
+          <div className="rounded-card border border-hairline bg-surface-subtle/50 px-4 py-3 text-[13px] text-ink-500">
+            {text.config.none}
+          </div>
+        ) : (
+          <div className={cn(cardClass, 'flex min-w-0 flex-col gap-3 rounded-card px-4 py-4')}>
+            <PanelTitle title={text.config.global} hint={text.config.globalHint} />
+            <ErrorAlert error={config.error} />
+            {config.data && (
+              <ConfigForm
+                formId={`plugin-config:${id}`}
+                schema={detail.manifest.configSchema}
+                config={config.data}
+                onSave={(payload) => save.mutateAsync(payload as Schemas['PluginConfigUpdate'])}
+                reload={async () => (await config.refetch()).data}
+                footer={text.config.savedNotice}
+              />
+            )}
+          </div>
         )}
-      </Panel>
-      <div className="grid min-w-0 gap-3.5">
-        {hasProjectFields && (
-          <Panel title={text.config.projectOverrides} hint={text.config.projectOverridesHint} footer={<p className="text-[12.5px] text-ink-700">{text.config.editInProject}</p>}>
-            <ul className="grid min-w-0 gap-1.5">
-              {(projects.data?.projects ?? []).map((project) => (
-                <OverrideRow key={project.id} project={project} detail={detail} />
+      </section>
+
+      {showProjectSection && (
+        <section aria-label={copy.projectSettings} className="flex min-w-0 flex-col gap-3">
+          <PanelTitle title={copy.projectSettings} hint={copy.projectSettingsHint} />
+          <ErrorAlert error={projects.error} />
+          {projectsStillLoading ? (
+            <Quiet>{t.common.loading}</Quiet>
+          ) : enabledEntries.length === 0 ? (
+            <div className="rounded-card border border-hairline bg-surface-subtle/50 px-4 py-3.5 text-[13px] text-ink-500">
+              {text.accounts.notEnabledProjects}
+            </div>
+          ) : (
+            <ul className={surfaceListClass}>
+              {enabledEntries.map(({ project, item, refetch }) => (
+                <ProjectConfigRow
+                  key={project.id}
+                  project={project}
+                  item={item}
+                  detail={detail}
+                  globalConfig={config.data}
+                  hasProjectFields={hasProjectFields}
+                  hasAccounts={hasAccounts}
+                  defaultExpanded={expandProjects}
+                  onReloadProject={async () => (await refetch()).data?.plugins.find((plugin) => plugin.pluginId === id)?.config}
+                />
               ))}
             </ul>
-          </Panel>
-        )}
-        <Panel title={text.config.env}>
-          <pre className="overflow-x-auto rounded-input bg-ink/[0.04] px-3 py-2.5 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {[`LOOP_NOW_PLUGIN_ROOT=${detail.installDir}`, `LOOP_NOW_PLUGIN_DATA=${detail.dataDir}`, `lnp_… ${scopes.length ? text.config.tokenScopes(text.confirm.list(scopes)) : text.config.noScopes}`].join('\n')}
+          )}
+        </section>
+      )}
+
+      <details className="group rounded-card border border-hairline bg-surface-subtle/50 px-4 py-2.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-transparent">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black">
+          <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+          <span>{text.config.env}</span>
+        </summary>
+        <section aria-label={text.config.env} className="mt-2.5">
+          <pre className="overflow-x-auto no-scrollbar rounded-input border border-code-border bg-code-bg px-3 py-2.5 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04] [[data-skin=plate]_&]:text-ink">
+            {[
+              `LOOP_NOW_PLUGIN_ROOT=${detail.installDir}`,
+              `LOOP_NOW_PLUGIN_DATA=${detail.dataDir}`,
+              `lnp_… ${scopes.length ? text.config.tokenScopes(text.confirm.list(scopes)) : text.config.noScopes}`,
+            ].join('\n')}
           </pre>
-        </Panel>
-      </div>
+        </section>
+      </details>
     </div>
-  )
-}
-
-// Accounts are per project: list the projects that enable this plugin, and manage its accounts in each project.
-function AccountsTab({ detail }: { detail: Detail }) {
-  const projects = useProjects()
-  if (!detail.manifest.accounts.length) return <Quiet>{text.accounts.none}</Quiet>
-  return (
-    <div className="grid min-w-0 gap-3.5">
-      {(projects.data?.projects ?? []).map((project) => (
-        <ProjectAccounts key={project.id} project={project} detail={detail} />
-      ))}
-      <p className="text-[12.5px] text-ink-700">{text.accounts.byProject}</p>
-    </div>
-  )
-}
-
-function ProjectAccounts({ project, detail }: { project: Schemas['Project']; detail: Detail }) {
-  const { item } = useProjectPlugin(project.id, detail.plugin.id)
-  if (!item?.enabled) return null
-  return (
-    <Panel title={project.name}>
-      <AccountsManager projectId={project.id} pluginId={detail.plugin.id} kinds={detail.manifest.accounts} />
-    </Panel>
   )
 }
 
@@ -254,55 +372,62 @@ function UpdateButton({ plugin, installer }: { plugin: Schemas['Plugin']; instal
   )
 }
 
-// Plugin details: the page header (name, source, version, status, check for updates and uninstall) and six tabs; the tab is part of the
-// URL (/plugins/<id>/<tab>).
+const DETAIL_TABS: readonly DetailTab[] = ['overview', 'config', 'activity']
+
+// Plugin details: compact PageHeader, 3 unified SubNav tabs (Overview, Configuration, Activity & Logs), and PageBody with floating
+// ScrollRuler (no 196px right-hand SectionToc stub).
 export function PluginDetailPage() {
   const { pluginId = '', tab: tabParam } = useParams()
+  const [search] = useSearchParams()
   const navigate = useNavigate()
-  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'overview'
+  const { tab, activityView, expandProjects } = resolveRoute(tabParam, search.get('view'))
   const query = usePlugin(pluginId)
+  usePluginMarkets()
   const uninstall = useUninstallPlugin(pluginId)
   const installer = usePluginInstaller()
-  const markets = usePluginMarkets()
   const [removing, setRemoving] = useState(false)
   const [deleteData, setDeleteData] = useState(false)
   const detail = query.data
 
   if (query.isError)
     return (
-      <div className="mx-auto flex max-w-[1180px] flex-col gap-3 px-4 pt-[22px] sm:px-8">
-        {isNotFound(query.error) ? <p role="status" className="text-[15px] font-bold">{copy.notFound}</p> : <SectionError title={copy.crumb} error={query.error} onRetry={() => void query.refetch()} />}
-        {more('/plugins', copy.back)}
-      </div>
+      <PageFrame>
+        <PageHeader crumbs={[{ label: t.shell.global }, { label: copy.crumb, to: '/plugins' }]} title={pluginId || copy.crumb} />
+        <Sheet className="flex-1">
+          <PageBody width="default" innerClassName="flex flex-col gap-3">
+            {isNotFound(query.error) ? (
+              <p role="status" className="text-[14.5px] font-semibold">
+                {copy.notFound}
+              </p>
+            ) : (
+              <SectionError title={copy.crumb} error={query.error} onRetry={() => void query.refetch()} />
+            )}
+            <Link to="/plugins" className="self-start text-[13px] font-medium text-riso-blue underline outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold">
+              {copy.back}
+            </Link>
+          </PageBody>
+        </Sheet>
+      </PageFrame>
     )
+
   if (!detail) return <Quiet>{text.loading}</Quiet>
+
   const { plugin, manifest } = detail
-  // The repository of a git source: linked when it has a web page; the SSH form has no web page, so only the address is shown.
   const repository = plugin.source.kind === 'git' ? { location: plugin.source.location, href: repositoryUrl(plugin.source.location, plugin.source.ref) } : null
-  const tabs = TABS.filter((value) => value !== 'accounts' || manifest.accounts.length > 0)
   const name = localizedText(plugin.displayName)
-  const entry = plugin.source.market ? marketEntryOf(markets.data?.markets, plugin) : undefined
-  // Bottom of the stub: the current version number, with the update status below it (only a plugin installed from a market knows whether
-  // there is a new version).
-  const versionFooter = (
-    <>
-      <span className="font-display-latin text-[30px] leading-none font-extrabold text-riso-blue [overflow-wrap:anywhere]">v{plugin.version}</span>
-      {entry && <span className="text-[12.5px] font-black text-ink-700">{entry.updateAvailable && entry.version ? copy.updateAvailable(entry.version) : text.markets.upToDate}</span>}
-    </>
-  )
+
   return (
     <DraftNavigationGuard>
-      {/* Plugin details (redesign step 5): a compact page header (yellow initial-letter square, name, source and version, status, and on
-          the right the update status and a red-outlined “卸载” (Uninstall),
-          with a one-sentence description and the source on the next line); the tabs sit on the sheet's top edge, and along the sheet's top
-          edge runs a riso-blue halftone-dot color band (same as the plugin market cards). */}
       <PageFrame>
         <PageHeader
           crumbs={[{ label: t.shell.global }, { label: copy.crumb, to: '/plugins' }]}
           current={plugin.id}
           title={name}
           lead={
-            <span aria-hidden="true" className="flex size-[46px] shrink-0 items-center justify-center self-center rounded-[12px] border border-hairline-strong bg-surface-subtle font-display-latin text-[24px] leading-none font-bold text-ink max-nav:size-10 max-nav:text-[20px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]">
+            <span
+              aria-hidden="true"
+              className="hidden shrink-0 items-center justify-center self-center font-display-latin leading-none text-ink [[data-skin=plate]_&]:flex [[data-skin=plate]_&]:size-[46px] [[data-skin=plate]_&]:rounded-[12px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
+            >
               {name.slice(0, 1).toUpperCase()}
             </span>
           }
@@ -331,47 +456,38 @@ export function PluginDetailPage() {
           <IdVersion id={plugin.id} version={plugin.version} />
           <StatusLabel status={plugin.status} />
         </PageHeader>
-        <ErrorAlert error={installer.errorFor('update')} />
-        {plugin.status === 'error' && plugin.lastError && (
-          <p role="alert" className="mb-2.5 rounded-input bg-tint-red px-3.5 py-2.5 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
-            {plugin.lastError}
-          </p>
-        )}
+
         <IndexTabs aria-label={name}>
-          {tabs.map((value) => (
-            <NavLink key={value} to={pluginPath(plugin.id, value === 'overview' ? undefined : value)} end className={cn(indexTabClass(value === tab), 'max-sm:px-3')} aria-current={value === tab ? 'page' : undefined}>
+          {DETAIL_TABS.map((value) => (
+            <Link
+              key={value}
+              to={pluginPath(plugin.id, value === 'overview' ? undefined : value)}
+              aria-current={value === tab ? 'page' : undefined}
+              className={cn(indexTabClass(value === tab), 'max-sm:px-3')}
+            >
               {copy.tabs[value]}
-            </NavLink>
+            </Link>
           ))}
         </IndexTabs>
+
         <Sheet className="flex-1">
-          <span aria-hidden="true" data-sheet-band className="block h-3.5 shrink-0 border-b-2 border-ink bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)] bg-size-[8px_8px]" />
-          {tab === 'overview' ? (
-            <Overview detail={detail} footer={versionFooter} />
-          ) : (
-            <div className="relative min-h-0 flex-1 overflow-y-auto">
-              <div className="flex max-w-[1180px] flex-col gap-4 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
-                {tab === 'config' && <ConfigTab detail={detail} />}
-                {tab === 'accounts' && <AccountsTab detail={detail} />}
-                {tab === 'events' && (
-                  <Panel title={copy.tabs.events}>
-                    <DeliveriesList pluginId={plugin.id} />
-                  </Panel>
-                )}
-                {tab === 'records' && (
-                  <Panel title={copy.records} hint={copy.recordsHint}>
-                    <RecordsTable pluginId={plugin.id} />
-                  </Panel>
-                )}
-                {tab === 'logs' && (
-                  <Panel title={copy.logs} hint={copy.logsHint}>
-                    <LogsView pluginId={plugin.id} />
-                  </Panel>
-                )}
-                {detail.versions.length > 1 && <p className="text-[12.5px] text-ink-500">{copy.versionsLine(detail.versions)}</p>}
-              </div>
-            </div>
-          )}
+          <span
+            aria-hidden="true"
+            data-sheet-band
+            className="hidden h-3.5 shrink-0 bg-size-[8px_8px] [[data-skin=plate]_&]:block [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]"
+          />
+          <PageBody width="default" innerClassName="flex flex-col gap-5 pb-12">
+            <ErrorAlert error={installer.errorFor('update')} />
+            {plugin.status === 'error' && plugin.lastError && (
+              <p role="alert" className="rounded-input border border-red/20 bg-tint-red px-3.5 py-2.5 text-[13.5px] font-medium text-red-text [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">
+                {plugin.lastError}
+              </p>
+            )}
+            {tab === 'overview' && <OverviewTab detail={detail} />}
+            {tab === 'config' && <ConfigTab detail={detail} expandProjects={expandProjects} />}
+            {tab === 'activity' && <ActivityPanel pluginId={plugin.id} hasPlatform={plugin.hasPlatform} initialView={activityView} />}
+            {detail.versions.length > 1 && <p className="text-[12.5px] text-ink-500">{copy.versionsLine(detail.versions)}</p>}
+          </PageBody>
         </Sheet>
       </PageFrame>
       {installer.dialog}

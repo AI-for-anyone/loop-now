@@ -97,11 +97,12 @@ describe('Plugin action buttons', () => {
     expect(await within(dialog).findByText('This plugin isn\'t enabled here yet. Enable it in the project first.')).toBeInTheDocument()
   })
 
-  it('project actions sit on the project plugin card with this project as where; an action without fields only asks for confirmation', async () => {
+  it('project actions sit in the project plugin row (once expanded) with this project as where; an action without fields only asks for confirmation', async () => {
     const user = userEvent.setup()
     const { fake } = setup()
     renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
     const card = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
+    await user.click(within(card).getByRole('button', { name: 'Configure Webhook notifications' }))
     await user.click(await within(card).findByRole('button', { name: 'Test push' }))
     const dialog = await screen.findByRole('dialog', { name: 'Test push' })
     expect(dialog).toHaveTextContent('Run "Test push"?')

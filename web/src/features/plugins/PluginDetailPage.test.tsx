@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { apiUrl, defaultProject, makeProject } from '@/test/api'
-import { fakePlugins, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makeMarket, makeMarketEntry, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
+import { fakePlugins, larkAccountKind, makeAccount, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makeMarket, makeMarketEntry, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -17,9 +17,9 @@ function renderDetail(path = '/plugins/webhook', initial: Parameters<typeof fake
     projects: { [defaultProject.id]: { webhook: makeProjectPlugin({ enabled: true, config: makeConfig({ values: { url: 'https://hooks.example.com/propanda' } as never, revision: 3 }) }) } },
     deliveries: {
       webhook: [
-        makeDelivery({ eventId: 'e4', at: '2026-10-27T04:41:00Z', durationMs: 120 }),
-        makeDelivery({ eventId: 'e3', at: '2026-10-27T04:12:00Z', status: 'failed', attempts: 3, lastError: 'timeout after 15000ms', durationMs: null, ackedAt: null }),
-        ...Array.from({ length: 60 }, (_, i) => makeDelivery({ eventId: `old-${i}`, at: '2026-10-26T01:00:00Z' })),
+        makeDelivery({ eventId: 'e4', at: '2026-10-27T04:41:00Z', projectId: defaultProject.id, durationMs: 120 }),
+        makeDelivery({ eventId: 'e3', at: '2026-10-27T04:12:00Z', projectId: other.id, status: 'failed', attempts: 3, lastError: 'timeout after 15000ms', durationMs: null, ackedAt: null }),
+        ...Array.from({ length: 60 }, (_, i) => makeDelivery({ eventId: `old-${i}`, at: '2026-10-26T01:00:00Z', projectId: defaultProject.id })),
       ],
     },
     state: {
@@ -38,36 +38,32 @@ function renderDetail(path = '/plugins/webhook', initial: Parameters<typeof fake
 }
 
 describe('Plugin details', () => {
-  it('header: name, official source, version and status; tabs sit on the top edge of the sheet and are kept in the URL; the overview has numbered sections: what it contains, enabled projects, recent activity (three numbers for events, deliveries and logs), with the section ruler in the stub', async () => {
+  it('uses 3 crisp tabs (Overview, Configuration, Activity & Logs), drops SectionToc and RecentActivity KPIs, and shows a 2-column Overview grid with expandable manifest details', async () => {
+    const user = userEvent.setup()
     renderDetail()
     expect(await screen.findByRole('heading', { level: 1, name: 'Webhook notifications' })).toBeInTheDocument()
     const tabs = screen.getByRole('navigation', { name: 'Webhook notifications' })
     expect(within(tabs).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('aria-current')])).toEqual([
       ['Overview', 'page'],
-      ['Config', null],
-      ['Events', null],
-      ['Deliveries', null],
-      ['Logs', null],
+      ['Configuration', null],
+      ['Activity & Logs', null],
     ])
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Plugin market›webhook')
-    const contains = screen.getByRole('region', { name: 'What it contains' })
-    expect(within(contains).getByText('inbox.read').parentElement).toHaveTextContent('Read Inbox message bodies')
+    expect(screen.queryByRole('navigation', { name: 'Contents' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Recent activity' })).toBeNull()
+
     const enabled = screen.getByRole('region', { name: 'Enabled in projects' })
     await waitFor(() => expect(within(enabled).getByRole('switch', { name: `Enable Webhook notifications in ${defaultProject.name}` })).toHaveAttribute('aria-checked', 'true'))
-    expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('Callback URL → https://hooks.example.com/propanda')
-    // Recent activity: the API gives no total, so count only the entries read
-    // so far and add "+" when there are more; each column links to its tab.
-    const activity = screen.getByRole('region', { name: 'Recent activity' })
-    const figure = (name: string) => within(activity).getByRole('heading', { name }).nextElementSibling
-    await waitFor(() => expect(figure('Events')).toHaveTextContent(/^50\+$/))
-    await waitFor(() => expect(figure('Deliveries')).toHaveTextContent(/^4$/))
-    await waitFor(() => expect(figure('Logs')).toHaveTextContent(/^100\+$/))
-    expect(within(activity).getByRole('link', { name: 'All events ›' })).toHaveAttribute('href', '/plugins/webhook/events')
-    expect(within(activity).getByRole('link', { name: 'All logs ›' })).toHaveAttribute('href', '/plugins/webhook/logs')
-    expect(screen.queryByRole('region', { name: 'Recent events' })).not.toBeInTheDocument()
-    const toc = screen.getByRole('navigation', { name: 'Contents' })
-    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(['01What it contains', '02Enabled in projects', '03Recent activity'])
-    expect(within(toc).getByText('v1.2.0')).toBeInTheDocument()
+    const defaultRow = within(enabled).getByText(defaultProject.name).closest('li')!
+    expect(defaultRow).toHaveTextContent('Callback URL → https://hooks.example.com/propanda')
+    expect(within(defaultRow).getByRole('link', { name: 'Configure ›' })).toHaveAttribute('href', '/plugins/webhook/config')
+
+    const capabilities = screen.getByRole('region', { name: 'Capabilities & security' })
+    expect(capabilities).toHaveTextContent('Platform side')
+    expect(capabilities).toHaveTextContent('1 event subscribed')
+    expect(capabilities).toHaveTextContent('2 permissions')
+    await user.click(within(capabilities).getByText('Inspect manifest & permissions'))
+    expect(within(capabilities).getByText('inbox.read').parentElement).toHaveTextContent('Read Inbox message bodies')
   })
 
   it('enabling in another project sends its existing project config and revision', async () => {
@@ -79,7 +75,7 @@ describe('Plugin details', () => {
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/projects/${other.id}/plugins/webhook`, query: {}, body: { enabled: true, values: {}, expectedRevision: 0 } }]))
   })
 
-  it('config tab: the global form generated from the manifest with the secret set; saving sends the revision; project overrides and the environment for the plugin process', async () => {
+  it('configuration tab: edits global config, expands per-project overrides in place, and collapses runtime environment details', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail('/plugins/webhook/config')
     expect(await screen.findByLabelText('Callback URL')).toHaveValue('https://hooks.example.com/loop-now')
@@ -88,28 +84,72 @@ describe('Plugin details', () => {
     await user.type(screen.getByLabelText('Retry limit'), '3')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: '/plugins/webhook/config', query: {}, body: { values: { url: 'https://hooks.example.com/loop-now', retries: 3 }, expectedRevision: 2 } }]))
-    const overrides = screen.getByRole('region', { name: 'Project overrides' })
+
+    const overrides = screen.getByRole('region', { name: 'Project overrides & accounts' })
     await waitFor(() => expect(overrides).toHaveTextContent(`${defaultProject.name}1 overrideCallback URL → https://hooks.example.com/propanda`))
-    expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('LOOP_NOW_PLUGIN_DATA=/work/platform/plugins/webhook/data')
-    expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('Only inbox.read, state')
+    await user.click(within(overrides).getByRole('button', { name: 'Configure' }))
+    const projectUrl = await within(overrides).findByLabelText('Callback URL')
+    expect(projectUrl).toHaveValue('https://hooks.example.com/propanda')
+    await user.clear(projectUrl)
+    await user.type(projectUrl, 'https://hooks.example.com/updated')
+    await user.click(within(overrides).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(fake.writes().at(-1)).toEqual({
+        method: 'PUT',
+        path: `/projects/${defaultProject.id}/plugins/webhook`,
+        query: {},
+        body: { enabled: true, values: { url: 'https://hooks.example.com/updated' }, expectedRevision: 3 },
+      }),
+    )
+
+    await user.click(screen.getByText('Environment for the plugin process'))
+    const env = screen.getByRole('region', { name: 'Environment for the plugin process' })
+    expect(env).toHaveTextContent('LOOP_NOW_PLUGIN_DATA=/work/platform/plugins/webhook/data')
+    expect(env).toHaveTextContent('Only inbox.read, state')
   })
 
-  it('events tab: filters by status and loads earlier ones below', async () => {
+  it('configuration tab: shows notEnabledProjects empty state when no project enables the plugin, and aliases /accounts to expanded project accounts', async () => {
+    const lark = makeDetail(
+      makePlugin({ id: 'lark-notify', displayName: 'Lark notifications' }),
+      makeManifest({ id: 'lark-notify', displayName: 'Lark notifications', configSchema: {} as never, accounts: [larkAccountKind] }),
+    )
+    const first = renderDetail('/plugins/lark-notify/config', { details: [lark], projects: {} })
+    expect(await screen.findByText('This plugin has no config.')).toBeInTheDocument()
+    expect(await screen.findByText('No project has enabled this plugin yet.')).toBeInTheDocument()
+    first.unmount()
+
+    renderDetail('/plugins/lark-notify/accounts', {
+      details: [lark],
+      projects: { [defaultProject.id]: { 'lark-notify': makeProjectPlugin({ pluginId: 'lark-notify', displayName: 'Lark notifications', enabled: true }) } },
+      accounts: [makeAccount({ projectId: defaultProject.id })],
+    })
+    const tabs = await screen.findByRole('navigation', { name: 'Lark notifications' })
+    expect(within(tabs).getByRole('link', { name: 'Configuration' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByText('Dev group bot')).toBeInTheDocument()
+  })
+
+  it('activity & logs tab (and /events alias): filters events by status and project dropdown, and loads earlier entries', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail('/plugins/webhook/events')
-    const panel = await screen.findByRole('region', { name: 'Events' })
-    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(50))
-    await user.click(within(panel).getByRole('button', { name: 'Load earlier' }))
-    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(62))
-    await user.click(within(panel).getByRole('radio', { name: 'Failed' }))
-    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(1))
-    expect(fake.requests.filter((r) => r.path === '/plugins/webhook/deliveries').map((r) => r.query)).toEqual([{ limit: '50' }, { limit: '50', before: 'old-47' }, { limit: '50', status: 'failed' }])
+    const tabs = await screen.findByRole('navigation', { name: 'Webhook notifications' })
+    expect(within(tabs).getByRole('link', { name: 'Activity & Logs' })).toHaveAttribute('aria-current', 'page')
+    const eventRows = () => within(screen.getByRole('list', { name: 'Events' })).getAllByRole('listitem')
+    await waitFor(() => expect(eventRows()).toHaveLength(50))
+    await user.click(screen.getByRole('button', { name: 'Load earlier' }))
+    await waitFor(() => expect(eventRows()).toHaveLength(62))
+    await user.click(screen.getByRole('radio', { name: 'Failed' }))
+    await waitFor(() => expect(eventRows()).toHaveLength(1))
+    await user.click(screen.getByRole('radio', { name: 'All' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by project' }), other.id)
+    await waitFor(() => expect(eventRows()).toHaveLength(1))
+    expect(fake.requests.filter((r) => r.path === '/plugins/webhook/deliveries').map((r) => r.query)).toContainEqual({ limit: '50', projectId: other.id })
   })
 
-  it('deliveries tab: lists records of the agreed shape, newest first; retrying ones show the next time and abandoned ones the status code; unrecognized ones show raw JSON', async () => {
+  it('activity & logs tab (/records alias): lists outbound delivery records newest first and renders raw JSON for unknown shapes', async () => {
     renderDetail('/plugins/webhook/records')
-    const panel = await screen.findByRole('region', { name: 'Deliveries' })
-    const rows = await within(panel).findAllByRole('row')
+    const tabs = await screen.findByRole('navigation', { name: 'Webhook notifications' })
+    expect(within(tabs).getByRole('link', { name: 'Activity & Logs' })).toHaveAttribute('aria-current', 'page')
+    const rows = await screen.findAllByRole('row')
     expect(rows.slice(1).map((row) => row.textContent)).toEqual([
       expect.stringMatching(/hooks\.example\.com\/loop-now2001$/),
       expect.stringMatching(/hooks\.example\.com\/loop-nowRetryingNext .*3$/),
@@ -119,15 +159,17 @@ describe('Plugin details', () => {
     expect(within(rows[4]).getByLabelText('Raw record')).toHaveTextContent('"note": "written by an older version"')
   })
 
-  it('logs tab: 100 per page, paging back with nextBefore', async () => {
+  it('activity & logs tab (/logs alias): pages host logs 100 at a time with nextBefore', async () => {
     const user = userEvent.setup()
     renderDetail('/plugins/webhook/logs')
-    const panel = await screen.findByRole('region', { name: 'Logs' })
-    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(100))
-    expect(within(panel).getAllByRole('listitem')[0]).toHaveTextContent('info delivered evt_01JB → hooks.example.com 200 in 118ms')
-    await user.click(within(panel).getByRole('button', { name: 'Load earlier logs' }))
-    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(120))
-    expect(within(panel).queryByRole('button', { name: 'Load earlier logs' })).toBeNull()
+    const tabs = await screen.findByRole('navigation', { name: 'Webhook notifications' })
+    expect(within(tabs).getByRole('link', { name: 'Activity & Logs' })).toHaveAttribute('aria-current', 'page')
+    const logList = await screen.findByRole('list', { name: 'Logs' })
+    await waitFor(() => expect(within(logList).getAllByRole('listitem')).toHaveLength(100))
+    expect(within(logList).getAllByRole('listitem')[0]).toHaveTextContent('info delivered evt_01JB → hooks.example.com 200 in 118ms')
+    await user.click(screen.getByRole('button', { name: 'Load earlier logs' }))
+    await waitFor(() => expect(within(logList).getAllByRole('listitem')).toHaveLength(120))
+    expect(screen.queryByRole('button', { name: 'Load earlier logs' })).toBeNull()
   })
 
   it('check for updates: previews from the installed source and updates to the new version after confirming', async () => {
@@ -212,7 +254,7 @@ describe('Plugin details: README and repository', () => {
 
   it('no About card without a README', async () => {
     const { client } = renderDetail()
-    await screen.findByRole('region', { name: 'What it contains' })
+    await screen.findByRole('region', { name: 'Capabilities & security' })
     await waitFor(() => expect(client.getQueryState(['plugins', 'readme', 'webhook'])?.status).toBe('success'))
     expect(screen.queryByRole('region', { name: 'About' })).toBeNull()
   })
@@ -248,7 +290,7 @@ describe('Plugin details: model providers', () => {
     id, name: id, extension: 'extensions/grok.ts', oauth: true, overridesBuiltin: false, inCatalog: false, error: null, modelCount: 2, ...overrides,
   })
 
-  it('lists the providers registered by Pi extensions: those in the catalog are marked and the others say why; names and errors come from the extension and show as plain text; extensions that failed to load are listed separately', async () => {
+  it('lists the providers registered by Pi extensions inside the manifest details (auto-opened when extension errors exist)', async () => {
     renderDetail('/plugins/grok', {
       details: [
         withProviders({
@@ -302,18 +344,20 @@ describe('Plugin details: model providers', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Uninstall Webhook notifications?' })).not.toHaveTextContent('subscription accounts')
   })
 
-  it('Pi extensions without registered providers: says none were found; a plugin with no extensions and nothing read does not show this section', async () => {
+  it('Pi extensions without registered providers: says none were found when expanded; a plugin with no extensions and nothing read omits the providers section', async () => {
+    const user = userEvent.setup()
     const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({})] })
+    await user.click(await screen.findByText('Inspect manifest & permissions'))
     const panel = await screen.findByRole('region', { name: 'Model providers' })
     expect(panel).toHaveTextContent('No model providers were found.')
     unmount()
     renderDetail()
-    await screen.findByRole('region', { name: 'What it contains' })
+    await user.click(await screen.findByText('Inspect manifest & permissions'))
     expect(screen.queryByRole('region', { name: 'Model providers' })).toBeNull()
   })
 })
 
-describe('Plugin details: source label', () => {
+describe('Plugin details: source label and market update button', () => {
   const official = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0' })] })
   const other = makeMarket({ url: 'https://example.com/market.json', name: 'Community market', official: false, plugins: [makeMarketEntry({ id: 'grok', verified: true, installedVersion: '1.0.0' }), makeMarketEntry({ id: 'raw', verified: false, installedVersion: '1.0.0' })] })
   const fromMarket = (id: string, market: string | null, kind: 'npm' | 'git' = 'npm') =>
@@ -322,8 +366,7 @@ describe('Plugin details: source label', () => {
     const { unmount } = renderDetail(`/plugins/${id}`, { details: [detail], markets: [official, other] })
     const heading = await screen.findByRole('heading', { level: 1, name: id })
     const text = await waitFor(() => {
-      // The source label is the first item in the header's meta info (the title is preceded by an initial-letter block).
-      const found = heading.closest('header')!.querySelector('[data-page-meta] > span')?.textContent
+      const found = heading.closest('header')!.querySelector('[data-page-meta] [data-source-badge]')?.textContent
       if (!found) throw new Error('The source label is not shown yet')
       return found
     })
@@ -331,17 +374,13 @@ describe('Plugin details: source label', () => {
     return text
   }
 
-  it('the stub footer shows the current version and update status: with a newer version in the market it says one is available and the header has an update button; when up to date the header has a disabled "Up to date"', async () => {
+  it('header update button reflects market status: enabled Update button when newer exists, disabled Up to date otherwise', async () => {
     const newer = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0', version: '1.1.0', updateAvailable: true })] })
     const first = renderDetail('/plugins/grok', { details: [fromMarket('grok', newer.url)], markets: [newer] })
-    let toc = await screen.findByRole('navigation', { name: 'Contents' })
-    expect(await within(toc).findByText('v1.1.0 available')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Update to v1.1.0' })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: 'Update to v1.1.0' })).toBeEnabled()
     first.unmount()
     renderDetail('/plugins/grok', { details: [fromMarket('grok', official.url)], markets: [official] })
-    toc = await screen.findByRole('navigation', { name: 'Contents' })
-    expect(await within(toc).findByText('Up to date')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Up to date' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Up to date' })).toBeDisabled()
   })
 
   it('follows the install rules: installed from the official market counts as official; verified entries in other markets say verified; unverified ones and ones not installed from a market say unreviewed', async () => {

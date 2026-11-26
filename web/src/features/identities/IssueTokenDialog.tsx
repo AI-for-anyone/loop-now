@@ -83,27 +83,27 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
               <DialogTitle>{t.identities.issued}</DialogTitle>
             </DialogHeader>
             <StickyNote role="alert" className="items-start text-[13.5px] leading-[1.7] font-normal [&>svg]:mt-[5px]">
-              <span className="font-black text-red-text">{t.identities.onceStrong}</span>
+              <span className="font-semibold text-red-text [[data-skin=plate]_&]:font-black">{t.identities.onceStrong}</span>
               {t.identities.onceBody}
             </StickyNote>
             <div className="grid gap-1.5">
-              <span id={secretLabelId} className="text-[13.5px] font-black">
+              <span id={secretLabelId} className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
                 {t.identities.secret}
               </span>
-              <div className="flex items-center gap-2.5 rounded-input border-2 border-dashed border-ink bg-surface-control py-2 pr-2 pl-4 [[data-skin=plate]_&]:bg-white">
-                <code aria-labelledby={secretLabelId} className="min-w-0 flex-1 font-mono text-[13.5px] break-all text-ink select-all">
+              <div className="flex items-center gap-2.5 rounded-input border border-code-border bg-code-bg py-2 pr-2 pl-4 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white">
+                <code aria-labelledby={secretLabelId} className="min-w-0 flex-1 font-mono text-[13.5px] break-all text-code-fg select-all [[data-skin=plate]_&]:text-ink">
                   {issued.secret}
                 </code>
-                <Button type="button" size="xs" className="mr-0.5 h-8 border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)]" onClick={() => void copy()}>
+                <Button type="button" size="xs" variant="secondary" className="mr-0.5 h-8 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]" onClick={() => void copy()}>
                   <CopyIcon aria-hidden="true" />
                   {copied ? t.common.copied : t.common.copy}
                 </Button>
               </div>
             </div>
             <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[14px]">
-              <dt className="font-black text-ink-500">{t.identities.columns.prefix}</dt>
+              <dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{t.identities.columns.prefix}</dt>
               <dd className="font-mono">{issued.token.prefix}</dd>
-              <dt className="font-black text-ink-500">{t.identities.columns.expiresAt}</dt>
+              <dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{t.identities.columns.expiresAt}</dt>
               <dd>{issued.token.expiresAt ? t.common.time(issued.token.expiresAt) : t.identities.never}</dd>
             </dl>
             <p className="text-[13px] leading-[1.7] text-ink-700">{t.identities.riskShort}</p>
@@ -136,7 +136,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
         </DialogHeader>
         <form className="grid gap-4" onSubmit={(e) => void submit(e)} noValidate>
           <div className="grid gap-2">
-            <span id={expiryLabelId} className="text-[13.5px] font-black">
+            <span id={expiryLabelId} className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
               {t.identities.expiry}
             </span>
             <RadioCards
@@ -154,7 +154,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
             </RadioCards>
             {choice === 'date' && (
               <div className="grid gap-1.5 pt-1">
-                <Label htmlFor="token-expiry-date" className="text-[13px] font-bold text-ink-700">
+                <Label htmlFor="token-expiry-date" className="text-[13px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
                   {t.identities.expiryDate}
                 </Label>
                 <Input
@@ -170,13 +170,13 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
                   className="h-[42px] w-[220px]"
                 />
                 {dateError && (
-                  <p role="alert" className="text-[12.5px] font-bold text-red-text">
+                  <p role="alert" className="text-[12.5px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">
                     {dateError}
                   </p>
                 )}
               </div>
             )}
-            <span className="text-[13px] font-bold text-ink-700">
+            <span className="text-[13px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
               {choice === 'never' ? t.identities.neverHint : preview ? t.identities.expiresAt(preview) : null}
             </span>
           </div>

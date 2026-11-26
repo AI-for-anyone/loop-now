@@ -72,4 +72,11 @@ export const identities = {
   read: 'Read',
   unread: 'Unread',
   inboxEmpty: 'No matching messages.',
+  tabs: { messages: 'Messages', tokens: 'Tokens & Access', settings: 'Settings' },
+  messageModes: { label: 'Message view', direct: 'Direct chat', all: 'All activity' },
+  tokenFilter: { label: 'Token status', active: 'Active', all: 'All', emptyActive: 'No active tokens.' },
+  managedByPill: (label: string) => `Managed by ${label}`,
+  metadata: { title: 'Identity details', address: 'Address', createdAt: 'Created' },
+  dangerZone: 'Danger zone',
+  dangerHint: 'Deleting an external identity immediately revokes all its tokens and frees its name.',
 } satisfies Messages['identities']

@@ -26,17 +26,17 @@ interface TreeContext {
   onDropOn: (dir: string, event: DragEvent) => void
 }
 
-const INDENT = 14
-const pad = (depth: number) => ({ paddingLeft: 8 + depth * INDENT })
+const INDENT = 12
+const pad = (depth: number) => ({ paddingLeft: 6 + depth * INDENT })
 // Indent guides: one vertical line per level, so the hierarchy stays readable in deep folders.
 function Guides({ depth }: { depth: number }) {
-  return Array.from({ length: depth }, (_, level) => <span key={level} aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-ink/10" style={{ left: 8 + level * INDENT + 7 }} />)
+  return Array.from({ length: depth }, (_, level) => <span key={level} aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-hairline [[data-skin=plate]_&]:border-ink/10" style={{ left: 6 + level * INDENT + 6 }} />)
 }
 
-const rowClass = 'group relative flex h-7 cursor-pointer items-center gap-1.5 rounded-[6px] pr-1 text-ink outline-none select-none hover:bg-ink/[0.045] focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]'
-// The selected item is yellow (the selected state is always yellow).
-const selectedClass = 'bg-riso-yellow font-black hover:bg-riso-yellow'
-const dropClass = 'bg-tint-yellow shadow-[inset_0_0_0_1.5px_var(--ink)] hover:bg-tint-yellow'
+const rowClass = 'group relative flex h-7 cursor-pointer items-center gap-1.5 rounded-[6px] pr-1 text-ink outline-none select-none hover:bg-surface-hover focus-visible:shadow-[inset_0_0_0_1.5px_var(--ink)] [[data-skin=plate]_&]:hover:bg-ink/[0.045] [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]'
+// The selected item uses surface-active in mono and riso-yellow in Plate.
+const selectedClass = 'bg-surface-active font-semibold hover:bg-surface-active [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-riso-yellow'
+const dropClass = 'bg-surface-active shadow-[inset_0_0_0_1px_var(--hairline-strong)] hover:bg-surface-active [[data-skin=plate]_&]:bg-tint-yellow [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)] [[data-skin=plate]_&]:hover:bg-tint-yellow'
 
 // File tree: one row for the root, expanded level by level below it; only expanded folders are read. Rows are laid out flat in DOM
 // order, and the up/down keys move in display order.
@@ -57,7 +57,7 @@ export function FileTree({ rootLabel, ...ctx }: TreeContext & { rootLabel: strin
   }
   const rootSelected = ctx.selected === ''
   return (
-    <div role="tree" aria-label={t.folders.tree} onKeyDown={onKeyDown} className="flex min-w-0 flex-col py-1.5 text-[13px]">
+    <div role="tree" aria-label={t.folders.tree} onKeyDown={onKeyDown} className="flex min-w-0 flex-col py-1.5 text-[12.5px]">
       <div
         role="treeitem"
         aria-level={1}
@@ -68,9 +68,9 @@ export function FileTree({ rootLabel, ...ctx }: TreeContext & { rootLabel: strin
         onKeyDown={(event) => { if (event.key === 'Enter') ctx.actions.open(null) }}
         onDragOver={(event) => { event.preventDefault(); ctx.onDragTarget('') }}
         onDrop={(event) => ctx.onDropOn('', event)}
-        className={cn(rowClass, 'mx-1.5 gap-2 pl-2 font-black', rootSelected && selectedClass, ctx.dropTarget === '' && dropClass)}
+        className={cn(rowClass, 'mx-1.5 gap-1.5 pl-2 font-semibold [[data-skin=plate]_&]:font-black', rootSelected && selectedClass, ctx.dropTarget === '' && dropClass)}
       >
-        <HardDriveIcon aria-hidden="true" className="size-4 shrink-0 text-ink-700" strokeWidth={2} />
+        <HardDriveIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-700" strokeWidth={2} />
         <span className="min-w-0 flex-1 truncate">{rootLabel}</span>
       </div>
       <TreeLevel ctx={ctx} path="" depth={1} />
@@ -91,7 +91,7 @@ function TreeLevel({ ctx, path, depth }: { ctx: TreeContext; path: string; depth
       {creating && <NameRow ctx={ctx} depth={depth} type={creating.type} initial="" />}
       {ordered.map((entry) => <TreeNode key={entry.path} ctx={ctx} entry={entry} depth={depth} />)}
       {list.hasNextPage && (
-        <div role="treeitem" aria-level={depth + 1} tabIndex={-1} onClick={() => void list.fetchNextPage()} onKeyDown={(event) => { if (event.key === 'Enter') void list.fetchNextPage() }} className={cn(rowClass, 'mx-1.5 text-[12.5px] font-bold text-riso-blue')} style={pad(depth)}>
+        <div role="treeitem" aria-level={depth + 1} tabIndex={-1} onClick={() => void list.fetchNextPage()} onKeyDown={(event) => { if (event.key === 'Enter') void list.fetchNextPage() }} className={cn(rowClass, 'mx-1.5 text-[12.5px] font-medium text-ink [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue')} style={pad(depth)}>
           <Guides depth={depth} />
           <span className="w-3.5 shrink-0" />
           {list.isFetchingNextPage ? t.folders.loading : t.folders.showMore}
@@ -146,7 +146,7 @@ function TreeNode({ ctx, entry, depth }: { ctx: TreeContext; entry: FolderEntry;
         <Guides depth={depth} />
         {isDir ? <ChevronRightIcon aria-hidden="true" className={cn('size-3.5 shrink-0 text-ink-500 transition-transform duration-100 motion-reduce:transition-none', open && 'rotate-90')} strokeWidth={2.4} /> : <span className="w-3.5 shrink-0" />}
         <EntryIcon path={path} type={entry.type} open={open} />
-        <span className={cn('min-w-0 flex-1 truncate', isEntryFile(path) && 'font-bold')} title={entry.symlinkTarget ? `${entry.name} → ${entry.symlinkTarget}` : entry.name}>{entry.name}</span>
+        <span className={cn('min-w-0 flex-1 truncate', isEntryFile(path) && 'font-semibold [[data-skin=plate]_&]:font-bold')} title={entry.symlinkTarget ? `${entry.name} → ${entry.symlinkTarget}` : entry.name}>{entry.name}</span>
         {isEntryFile(path) && <EntryBadge />}
         <EntryMenu entry={entry} actions={ctx.actions} onOpenChange={setMenuOpen} className={cn('opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 focus-visible:opacity-100', menuOpen && 'opacity-100')} />
       </div>
@@ -183,7 +183,7 @@ function NameRow({ ctx, depth, type, initial }: { ctx: TreeContext; depth: numbe
           className="h-6 min-w-0 flex-1 rounded-[5px] border border-hairline-strong bg-surface-control px-1.5 text-[13px] text-ink outline-none focus-visible:shadow-focus aria-invalid:border-red aria-invalid:shadow-[0_0_0_3px_rgb(217_56_30/.15)] [[data-skin=plate]_&]:border-riso-blue [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[0_0_0_3px_rgb(36_67_181/.15)]"
         />
       </div>
-      {touched && problem && <p role="alert" className="py-0.5 pl-9 text-[11.5px] font-bold text-red-text">{t.folders.name.problems[problem]}</p>}
+      {touched && problem && <p role="alert" className="py-0.5 pl-9 text-[11.5px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{t.folders.name.problems[problem]}</p>}
     </div>
   )
 }

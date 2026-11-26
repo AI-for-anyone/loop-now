@@ -43,7 +43,10 @@ describe('queue tray above the input box', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [interrupt, own, inbox]))
+    // Multiple queued messages auto-collapse to a 1-line summary tray showing the count and first message.
     expect(within(queueList()).getByRole('heading', { name: 'Queued · 3' })).toBeInTheDocument()
+    expect(queueList().querySelector('[data-queue-summary]')).toHaveTextContent('Cut in line')
+    await user.click(within(queueList()).getByRole('button', { name: 'Expand' }))
     expect(within(queueList()).getByText('Handled in order after the current reply')).toBeInTheDocument()
     expect(rows().map((item) => item.getAttribute('data-kind'))).toEqual(['interrupt', 'queue', 'queue'])
     expect(texts()).toEqual(['Cut in line', 'Run lint while you are at it', 'The fixture is updated; pull server-main first'])
@@ -60,7 +63,7 @@ describe('queue tray above the input box', () => {
     for (const row of rows()) expect(within(row).getByRole('button', { name: 'Cancel this queued message' })).toBeEnabled()
     expect(within(log()).queryByText(/^(Cut in line|Run lint while you are at it)$/)).toBeNull()
 
-    // When busy, a message is queued directly without asking for a choice; the tray updates with queue.updated.
+    // When busy, a message is queued directly without asking for a choice; the tray updates with queue.updated and stays expanded.
     expect(screen.getByLabelText('Message')).toHaveAttribute('placeholder', 'dev-helper is replying; new messages will queue')
     await user.type(screen.getByLabelText('Message'), 'One more thing{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: 'One more thing', whenBusy: 'queue' }]))
@@ -68,10 +71,10 @@ describe('queue tray above the input box', () => {
     await emit('queue.updated', { queuedRuns: [], items: [interrupt, own, inbox, makeQueueItem({ text: 'One more thing' })] })
     await waitFor(() => expect(within(queueList()).getByRole('heading', { name: 'Queued · 4' })).toBeInTheDocument())
     expect(texts().at(-1)).toBe('One more thing')
-    // The tray sits right above the input; the key hints are below the input, and the busy status does not repeat the queue count.
+    // The tray sits right above the input, and the busy status does not repeat the queue count.
     expect(queueList().compareDocumentPosition(screen.getByLabelText('Message')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('Agent is busy (Replying)')).toBeInTheDocument()
-    expect(screen.getByText('Stop the current reply only')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop the current reply' })).toBeEnabled()
   })
 
   it('the text is cut to one line, the full text shows on hover, a click expands it; images show as thumbnails', async () => {
@@ -129,6 +132,7 @@ describe('queue tray above the input box', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [runA], [a, b]))
+    await user.click(within(queueList()).getByRole('button', { name: 'Expand' }))
     expect(texts()).toEqual(['Normal one', 'From test'])
     const row = rows()[1]
     await user.click(within(row).getByRole('button', { name: 'Interrupt' }))
@@ -161,6 +165,7 @@ describe('queue tray above the input box', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [a, b]))
+    await user.click(within(queueList()).getByRole('button', { name: 'Expand' }))
     await user.click(within(rows()[1]).getByRole('button', { name: 'Interrupt' }))
     // Before the receipt arrives: “Normal one” has started and the server has pushed a new list.
     await emit('queue.updated', { queuedRuns: [], items: [{ ...b, whenBusy: 'interrupt' }] })
@@ -190,6 +195,7 @@ describe('queue tray above the input box', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [own, inbox]))
+    await user.click(within(queueList()).getByRole('button', { name: 'Expand' }))
     const before = statusReads
     await user.click(within(rows()[0]).getByRole('button', { name: 'Interrupt' }))
     expect(await screen.findByText('Already started; can\'t promote to interrupt')).toHaveAttribute('role', 'status')
@@ -219,6 +225,7 @@ describe('queue tray above the input box', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [runA], [a, b]))
+    await user.click(within(queueList()).getByRole('button', { name: 'Expand' }))
     await user.click(within(rows()[0]).getByRole('button', { name: 'Cancel this queued message' }))
     await user.click(await within(rows()[0]).findByRole('button', { name: 'Retry cancelling this queued message' }))
     await waitFor(() => expect(texts()).toEqual(['Keep this']))

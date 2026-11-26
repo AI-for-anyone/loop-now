@@ -128,7 +128,7 @@ export function Combobox({
               setActive(0)
             }}
             onKeyDown={onKeyDown}
-            className="h-[36px] w-full rounded-input border border-hairline bg-surface-subtle px-3 text-[13.5px] text-ink outline-none placeholder:text-ink-500 focus-visible:border-ink [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]"
+            className="h-[36px] w-full rounded-input border border-hairline bg-surface-subtle px-3 text-[13.5px] text-ink outline-none transition-colors placeholder:text-ink-500 focus-visible:border-ink/35 [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]"
           />
           <ul id={listId} role="listbox" aria-label={filterLabel} className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
             {visible.length === 0 && <li className="px-3 py-2 text-[13.5px] text-ink-500">{emptyText}</li>}

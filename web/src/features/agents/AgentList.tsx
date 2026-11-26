@@ -37,13 +37,13 @@ function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; curren
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
   const [label, tone, title] =
     agent.busy
-      ? [text.chips.busy, 'border border-hairline bg-riso-pink text-ink [[data-skin=plate]_&]:border-0', undefined]
+      ? [text.chips.busy, 'border border-hairline-strong bg-surface-active text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink', undefined]
       : agent.backgroundTaskCount > 0
         ? [
             t.background.listTag(agent.backgroundTaskCount),
             current
               ? 'rounded-full bg-cta-bg px-2 text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-riso-yellow'
-              : 'border border-hairline bg-riso-yellow text-ink [[data-skin=plate]_&]:border-0',
+              : 'border border-hairline-strong bg-tint-yellow text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow',
             t.background.listTitle(agent.backgroundTaskCount),
           ]
         : sleeping
@@ -136,7 +136,7 @@ export function AgentNavGroup({
               return (
                 <li key={agent.id} className="min-w-0">
                   <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, 'agent')}>
-                    <AgentAvatar size="sm" id={agent.id} />
+                    <AgentAvatar size="sm" id={agent.id} busy={agent.busy} sleeping={!agent.busy && agent.sleep?.state === 'sleeping'} />
                     {/* The name fills the space first: names of usual length are shown in full (also when selected), and the
                         runtime, status and Manager marks on the right wrap to the next line, right-aligned, when they don't fit.
                         Only a name longer than the whole row is truncated; hovering shows the full name. */}

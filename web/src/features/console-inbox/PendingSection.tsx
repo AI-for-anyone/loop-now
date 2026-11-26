@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { PluginSenderChip } from '@/features/plugins/ChatLines'
 import { Link } from 'react-router'
 import { ArrowRightIcon } from 'lucide-react'
@@ -14,17 +14,15 @@ import { t } from '@/i18n'
 import type { ScopeQuery } from '@/lib/scope'
 
 const text = t.consoleInbox
+const DEFAULT_VISIBLE = 3
 
 type Item = Schemas['InboxPendingItem'] & { kind: 'question' | 'unread' }
 
-// Needs you: open questions sent to you first, then other unread messages, each group newest first; each item links to the
-// chat or task node where the message lives.
-// Filtered by the overview's scope: a project shows only that project's items, the platform only those of platform Agents.
-// When nothing is pending, the whole block is hidden.
-// Redesign: placed at the very top of the overview sheet, unnumbered; a light pink card with a 2px navy outline and a solid
-// fluorescent pink offset shadow, with dashed lines between items.
+// Needs you: compact attention strip placed above the overview KPIs. Shows open questions first, then unread messages, capped at
+// three rows by default with an inline expand toggle so pending items never push the dashboard below the fold.
 export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
   const titleId = useId()
+  const [expanded, setExpanded] = useState(false)
   const pending = useInboxPending()
   if (!pending.data) return null
   const inScope = (item: Schemas['InboxPendingItem']) =>
@@ -34,50 +32,98 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
     ...pending.data.unread.filter(inScope).map((item) => ({ ...item, kind: 'unread' as const })),
   ]
   if (items.length === 0) return null
+  const visible = expanded ? items : items.slice(0, DEFAULT_VISIBLE)
+  const hiddenCount = items.length - visible.length
+
   return (
-    <section aria-labelledby={titleId} data-pending className="mr-1 mb-1 flex flex-col gap-2 rounded-card border-2 border-ink bg-tint-pink-2 px-[18px] pt-3.5 pb-2 shadow-print-pink">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-        <h2 id={titleId} className="font-display-cn text-[24px] leading-[1.2] font-normal">{text.pendingTitle}</h2>
-        <span className="text-[12px] font-bold text-ink-500">{text.pendingCount(items.length)}</span>
+    <section
+      aria-labelledby={titleId}
+      data-pending
+      className="flex flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3.5 py-2.5 [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink"
+    >
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <h2
+          id={titleId}
+          className="text-[13.5px] leading-snug font-semibold text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal"
+        >
+          {text.pendingTitle}
+        </h2>
+        <span className="font-mono text-[11.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-bold">
+          {text.pendingCount(items.length)}
+        </span>
+        {items.length > DEFAULT_VISIBLE && (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="ml-auto cursor-pointer rounded-stamp px-2 py-0.5 text-[12px] font-medium text-ink-700 outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue"
+          >
+            {expanded ? t.overview.pendingLess : t.overview.pendingMore(hiddenCount)}
+          </button>
+        )}
       </div>
       <ul className="flex flex-col">
-        {items.map((item) => <PendingRow key={item.message.id} item={item} />)}
+        {visible.map((item) => (
+          <PendingRow key={item.message.id} item={item} />
+        ))}
       </ul>
     </section>
   )
 }
 
 const rowClass =
-  'grid min-h-14 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 border-t-[1.5px] border-dashed border-ink/25 px-1 py-2.5 text-ink hover:bg-surface-hover sm:grid-cols-[96px_minmax(0,1fr)_max-content] [[data-skin=plate]_&]:hover:bg-white/60'
+  'grid min-h-9 grid-cols-[minmax(52px,76px)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-hairline px-1 py-1.5 text-ink hover:bg-surface-hover sm:grid-cols-[76px_minmax(0,1fr)_max-content] [[data-skin=plate]_&]:border-t-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-white/60'
 
 function PendingRow({ item }: { item: Item }) {
   const { message } = item
   const body = (target: string | null, field?: string) => (
     <>
-      <span className="flex flex-col">
-        <span className="font-mono text-[13px] font-bold">{t.overview.anomalies.time(message.createdAt)}</span>
-        <span className="text-[12px] text-ink-500">{dayLabel(message.createdAt)}</span>
-      </span>
-      <span className="flex min-w-0 flex-col gap-[3px]">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <Badge variant="stamp" tone={item.kind === 'question' ? 'busy' : 'info'} className="[--stamp-tilt:0deg]">{text.pendingKind[item.kind]}</Badge>
-          {message.from.kind === 'plugin' ? <PluginSenderChip participant={message.from} /> : <span className="text-[14.5px] font-black [overflow-wrap:anywhere]">{partyName(message.from)}</span>}
-          {message.from.kind === 'agent' && <ScopeTag scope={item.projectId ? 'project' : 'platform'} projectId={item.projectId} />}
-          {field && <span className="text-[12px] [overflow-wrap:anywhere] text-ink-500">{field}</span>}
+      <span className="flex items-baseline gap-1.5 sm:flex-col sm:gap-0">
+        <span className="font-mono text-[12px] leading-tight font-semibold tabular-nums [[data-skin=plate]_&]:font-bold">
+          {t.overview.anomalies.time(message.createdAt)}
         </span>
-        <span className="line-clamp-2 text-[13.5px] [overflow-wrap:anywhere] text-ink-700">{message.preview}</span>
+        <span className="text-[11px] leading-tight text-ink-500">{dayLabel(message.createdAt)}</span>
+      </span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <Badge variant="stamp" tone={item.kind === 'question' ? 'busy' : 'info'} className="[--stamp-tilt:0deg]">
+          {text.pendingKind[item.kind]}
+        </Badge>
+        {message.from.kind === 'plugin' ? (
+          <PluginSenderChip participant={message.from} />
+        ) : (
+          <span className="shrink-0 text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">
+            {partyName(message.from)}
+          </span>
+        )}
+        {message.from.kind === 'agent' && <ScopeTag scope={item.projectId ? 'project' : 'platform'} projectId={item.projectId} />}
+        {field && <span className="shrink-0 text-[11.5px] [overflow-wrap:anywhere] text-ink-500">{field}</span>}
+        <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">{message.preview}</span>
       </span>
       {target && (
-        <span className="col-start-2 inline-flex items-center gap-1.5 text-[13.5px] font-black whitespace-nowrap sm:col-start-auto">
+        <span className="col-start-2 inline-flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap sm:col-start-auto [[data-skin=plate]_&]:font-black">
           {item.kind === 'question' ? text.answer : text.view}
-          <ArrowRightIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
+          <ArrowRightIcon aria-hidden="true" className="size-3" strokeWidth={2.4} />
         </span>
       )}
     </>
   )
   if (message.task) return <TaskRow item={item} task={message.task} render={body} />
-  const target = message.from.kind === 'agent' && message.from.id ? `/agents/${message.from.id}/chat` : message.from.kind === 'external' && message.from.id ? `/identities/${message.from.id}` : null
-  return <li>{target ? <Link to={target} className={`${rowClass} hover:bg-tint-pink-2`}>{body(target)}</Link> : <div className={rowClass}>{body(null)}</div>}</li>
+  const target =
+    message.from.kind === 'agent' && message.from.id
+      ? `/agents/${message.from.id}/chat`
+      : message.from.kind === 'external' && message.from.id
+        ? `/identities/${message.from.id}`
+        : null
+  return (
+    <li>
+      {target ? (
+        <Link to={target} className={rowClass}>
+          {body(target)}
+        </Link>
+      ) : (
+        <div className={rowClass}>{body(null)}</div>
+      )}
+    </li>
+  )
 }
 
 // From a task instance: link to the node in the task that this message belongs to, and show the task name.
@@ -87,5 +133,15 @@ function TaskRow({ item, task, render }: { item: Item; task: Schemas['InboxTaskR
   const project = projects.data?.projects.find((p) => p.id === (item.projectId ?? detail.data?.task.projectId))
   const target = project ? `${tasksPath(project.name)}/${task.taskId}${task.nodeRunId ? `?${new URLSearchParams({ record: task.nodeRunId })}` : ''}` : null
   const field = text.inTask(detail.data?.task.title ?? text.taskFallback)
-  return <li>{target ? <Link to={target} className={`${rowClass} hover:bg-tint-pink-2`}>{render(target, field)}</Link> : <div className={rowClass}>{render(null, field)}</div>}</li>
+  return (
+    <li>
+      {target ? (
+        <Link to={target} className={rowClass}>
+          {render(target, field)}
+        </Link>
+      ) : (
+        <div className={rowClass}>{render(null, field)}</div>
+      )}
+    </li>
+  )
 }

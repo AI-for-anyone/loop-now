@@ -2,6 +2,23 @@ import type { Messages } from '..'
 
 export const settings = {
   title: 'Global settings',
+  tabs: {
+    nav: 'Global settings sections',
+    general: 'General & Appearance',
+    runtimes: 'Runtimes & Models',
+    workspace: 'Workspace & Local Mode',
+    server: 'Server & Diagnostics',
+  },
+  runtimesViews: {
+    label: 'Runtimes & Models view',
+    runtimes: 'Runtimes & Writing',
+    models: 'models.json',
+  },
+  workspaceViews: {
+    label: 'Workspace & Local Mode view',
+    localMode: 'Local Mode',
+    folder: 'Global Folder',
+  },
   language: { title: 'Language', hint: 'Applies to this browser only. The page reloads when you switch.' },
   appearance: {
     title: 'Appearance',

@@ -25,4 +25,12 @@ export const skills = {
   notFound: '这个模板不存在或已删除。',
   updated: (time: string) => `更新于 ${formatTime(time)}`,
   submitCreate: '创建',
+  searchLabel: '筛选 Skill',
+  searchPlaceholder: '筛选 Skill…',
+  noMatch: '没有匹配的模板。',
+  selectHint: '从左侧选择一个模板查看或编辑 SKILL.md，或新建一个模板。',
+  backToList: '返回列表',
+  unsaved: '有未保存修改',
+  replaceHint: '上传目录或 zip 压缩包以整体替换此模板的全部文件。',
+  columns: { path: '路径', size: '大小' },
 } as const

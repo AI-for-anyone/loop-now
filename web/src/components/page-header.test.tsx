@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { SidebarContext } from '@/app/sidebar-context'
 import { LiveDot, PageFrame, PageHeader } from './PageHeader'
 
 // "Printed sheet" redesign, step 3: the page title shared by project and global pages (not the Agent page header).
@@ -23,10 +24,10 @@ describe('Page title', () => {
     expect(current).toHaveClass('text-ink', '[[data-skin=plate]_&]:text-riso-blue')
   })
 
-  it('the title uses compact semibold mono typography by default and preserves ZCOOL display styling with pink misregistration in Plate skin', () => {
+  it('the title uses compact 14px bar typography by default and preserves ZCOOL display styling with pink misregistration in Plate skin', () => {
     renderHeader()
     const title = screen.getByRole('heading', { level: 1, name: 'Tasks' })
-    expect(title).toHaveClass('text-[22px]', 'font-semibold', 'tracking-tight', 'text-ink')
+    expect(title).toHaveClass('text-[14px]', 'font-semibold', 'tracking-[-0.01em]', 'text-ink', 'truncate')
     expect(title).toHaveClass(
       '[[data-skin=plate]_&]:font-display-cn',
       '[[data-skin=plate]_&]:text-riso-blue',
@@ -37,27 +38,41 @@ describe('Page title', () => {
     )
   })
 
-  it('compact header on wide screens: meta joins the title row; right padding for OverprintDeco is scoped to Plate skin only', () => {
-    renderHeader(<span>Tasks in this project</span>)
+  it('single-row 48px bar in mono skin: meta and actions sit inline with title; right padding for OverprintDeco is scoped to Plate skin only', () => {
+    render(
+      <MemoryRouter>
+        <PageHeader
+          crumbs={[{ label: 'Demo', to: '/?project=Demo' }]}
+          title="Tasks"
+          actions={<button type="button">New task</button>}
+          note="Running tasks update live."
+        >
+          <span>Tasks in this project</span>
+        </PageHeader>
+      </MemoryRouter>,
+    )
     const header = screen.getByRole('banner')
-    expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3.5', 'nav:pb-3')
+    const bar = header.querySelector('[data-page-bar]')!
+    expect(bar).toHaveClass('min-h-12', 'border-b', 'border-hairline', 'bg-surface-canvas', 'px-4', 'sm:px-6')
     const row = header.querySelector('[data-page-title-row]')!
     expect(row).toContainElement(screen.getByRole('heading', { level: 1 }))
     expect(row).toContainElement(screen.getByText('Tasks in this project'))
+    expect(row).toContainElement(screen.getByRole('button', { name: 'New task' }))
     expect(row).toHaveClass(
-      'flex-col',
-      'nav:flex-row',
-      'nav:flex-wrap',
-      'nav:items-center',
+      'flex',
+      'flex-wrap',
+      'items-center',
       '[[data-skin=plate]_&]:@[820px]:pr-[316px]',
       '[[data-skin=plate]_&]:nav:@[820px]:pr-[196px]',
     )
     expect(row).not.toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
+    expect(header.querySelector('[data-page-actions]')).toHaveClass('ml-auto')
+    expect(header.querySelector('[data-page-note]')).toHaveClass('border-b', 'border-hairline', 'bg-surface-subtle/50')
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
     expect(header.querySelector('[data-overprint-deco]')).toHaveClass('nav:scale-[0.6]')
   })
 
-  it('the meta line sits below the title; the overprint decoration at the top right is hidden from screen readers and not shown when the header is narrow', () => {
+  it('the meta container renders inline when provided; the overprint decoration at the top right is hidden from screen readers and not shown when narrow', () => {
     renderHeader(<span>Tasks in this project</span>)
     const header = screen.getByRole('banner')
     expect(header).toHaveClass('@container', 'relative')
@@ -72,17 +87,37 @@ describe('Page title', () => {
     expect(document.querySelector('[data-page-meta]')).toBeNull()
   })
 
-  it('page frame: side padding follows the window width, with extra bottom padding reserved for Plate skin shadow', () => {
+  it('page frame: full-bleed p-0 in mono skin, preserving fluid side padding and extra bottom room in Plate skin', () => {
     render(<PageFrame data-testid="frame">Body</PageFrame>)
     expect(screen.getByTestId('frame')).toHaveClass(
       'flex',
       'h-full',
       'min-h-0',
       'flex-col',
-      'px-[clamp(14px,2.4vw,34px)]',
-      'pb-4',
+      'p-0',
+      '[[data-skin=plate]_&]:px-[clamp(14px,2.4vw,34px)]',
       '[[data-skin=plate]_&]:pb-[26px]',
     )
+  })
+
+  it('keeps SidebarExpandButton clickable inside the window-drag bar with macOS traffic-light offset when collapsed in desktop mode', () => {
+    const prev = window.loopNowDesktop
+    window.loopNowDesktop = { platform: 'darwin', notify: vi.fn(), setBadge: vi.fn(), onNavigate: () => () => {} }
+    try {
+      render(
+        <MemoryRouter>
+          <SidebarContext.Provider value={{ collapsed: true, expand: vi.fn() }}>
+            <PageHeader crumbs={[{ label: 'Demo', to: '/?project=Demo' }]} title="Tasks" />
+          </SidebarContext.Provider>
+        </MemoryRouter>,
+      )
+      const bar = screen.getByRole('banner').querySelector('[data-page-bar]')!
+      expect(bar).toHaveClass('window-drag', 'nav:pl-[84px]')
+      const expand = within(bar as HTMLElement).getByRole('button', { name: 'Expand navigation' })
+      expect(expand).toHaveClass('window-no-drag')
+    } finally {
+      window.loopNowDesktop = prev
+    }
   })
 })
 

@@ -155,7 +155,7 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
       {credential && <Button size="sm" variant="ghost" disabled={unavailable} onClick={() => setDeleting(true)}>{t.common.delete}</Button>}
     </>}>
       <div className="grid min-w-0 gap-2 text-[14px] break-words">
-        <h3 className="font-black">{copy.currentAccount}</h3>
+        <h3 className="font-semibold [[data-skin=plate]_&]:font-black">{copy.currentAccount}</h3>
         <div><Badge tone={credential?.status === 'set' ? 'success' : credential ? 'danger' : 'neutral'}>{credential?.status === 'set' && credential.authMethod === 'oauth' ? copy.loggedIn : credential ? t.config.credentialStatus[credential.status] : t.config.credentialStatus.unset}</Badge></div>
         <p>{t.common.labelledValue(copy.provider, credential?.provider ?? agent.model.provider)}</p>
         {credential?.authMethod && <p>{t.common.labelledValue(copy.method, copy.methods[credential.authMethod])}</p>}
@@ -168,7 +168,7 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
       {!providers.isPending && !providers.error && !oauth && !apiKey && <p className="text-[13px]">{copy.unsupported}</p>}
       <ErrorAlert error={auth.error ?? providers.error ?? (notGranted ? null : error)} />
       {(auth.error || providers.error) && <Button size="sm" variant="secondary" className="self-start" onClick={() => { void auth.refetch(); void providers.refetch() }}>{t.common.retry}</Button>}
-      {view && <div className="grid min-w-0 gap-2"><h3 className="text-[14px] font-black">{copy.operation}</h3>
+      {view && <div className="grid min-w-0 gap-2"><h3 className="text-[14px] font-semibold [[data-skin=plate]_&]:font-black">{copy.operation}</h3>
         <LoginFeedback view={view} title={prompt ? steps.prompt.title : undefined} hasAccount={!!credential} blocked={blocked} cancelling={cancelling}
           detail={detail}
           authorizationHref={authorizationHref} openLabel={authorizationHref ? steps.openHost(hostOf(authorizationHref)) : undefined}

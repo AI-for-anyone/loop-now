@@ -17,16 +17,25 @@ export function OverviewScopeSelect({
   filter,
   projects,
   onSelect,
+  allLabel = t.projects.overview.all,
+  className,
 }: {
   filter: OverviewFilter
   projects: Schemas['Project'][] | undefined
   onSelect: (value: string) => void
+  allLabel?: string
+  className?: string
 }) {
   const id = useId()
   const value = filter.kind === 'all' ? '' : filter.kind === 'platform' ? PLATFORM : `project:${filter.name}`
   const missing = filter.kind === 'project' && !filter.project
   return (
-    <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus">
+    <span
+      className={cn(
+        'relative inline-flex h-8 max-w-full min-w-0 items-center gap-2 rounded-ticket border border-hairline-strong bg-surface-control pr-1.5 pl-2.5 text-[12.5px] font-medium text-ink focus-within:shadow-focus [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/45 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:font-bold',
+        className,
+      )}
+    >
       <label htmlFor={id} className="shrink-0 text-ink-500">
         {t.projects.overview.range}
       </label>
@@ -34,9 +43,9 @@ export function OverviewScopeSelect({
         id={id}
         value={value}
         onChange={(event) => onSelect(event.target.value)}
-        className="min-w-0 cursor-pointer appearance-none truncate bg-transparent pr-[18px] font-bold text-ink outline-none"
+        className="max-w-[200px] min-w-0 cursor-pointer appearance-none truncate bg-transparent pr-[18px] font-medium text-ink outline-none [[data-skin=plate]_&]:font-bold"
       >
-        <option value="">{t.projects.overview.all}</option>
+        <option value="">{allLabel}</option>
         {missing && (
           <option value={value} disabled>
             {filter.project === null ? t.projects.overview.missingOption(filter.name) : filter.name}
@@ -66,9 +75,9 @@ export function ScopeTag({ scope, projectId }: { scope: Schemas['AgentScope']; p
   return (
     <span
       className={cn(
-        'inline-flex max-w-[220px] shrink-0 items-center gap-1 rounded-[6px] bg-surface-control px-1.5 text-[12.5px] leading-[22px] font-bold [[data-skin=plate]_&]:bg-white',
+        'inline-flex max-w-[220px] shrink-0 items-center gap-1 rounded-[6px] bg-surface-control px-1.5 text-[12.5px] leading-[22px] font-medium [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold',
         label.kind === 'deleted'
-          ? 'border-[1.5px] border-dashed border-ink/30 text-ink-500'
+          ? 'border border-hairline text-ink-500 [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/30'
           : 'border border-hairline-strong text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_rgb(24_38_94/.3)]',
       )}
     >
@@ -88,15 +97,15 @@ export function OverviewScopeNotFound({ name, onBack }: { name: string; onBack: 
   const titleId = useId()
   return (
     <section role="alert" aria-labelledby={titleId} className={panel}>
-      <span aria-hidden="true" className="relative h-[130px] w-[200px] shrink-0">
+      <span aria-hidden="true" className="relative hidden h-[130px] w-[200px] shrink-0 [[data-skin=plate]_&]:inline-block">
         <span className="riso-halftone absolute top-[5px] left-2.5 size-[120px] rounded-full bg-riso-blue" />
         <span className="absolute top-[5px] left-[76px] size-[116px] rounded-full border-[3px] border-dashed border-pink-text" />
       </span>
-      <h2 id={titleId} className="font-display-cn text-[40px] leading-[1.2] font-normal text-riso-blue">
+      <h2 id={titleId} className="font-display-cn text-[28px] leading-[1.2] font-semibold text-ink [[data-skin=plate]_&]:text-[40px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
         {t.projects.overview.notFoundTitle(name)}
       </h2>
       <p className="text-[14.5px] text-ink-700">{t.projects.overview.notFoundBody}</p>
-      <Button size="lg" className="h-12 px-[26px] text-base shadow-print-pink" onClick={onBack}>
+      <Button size="lg" className="h-11 px-6 text-[15px] [[data-skin=plate]_&]:h-12 [[data-skin=plate]_&]:px-[26px] [[data-skin=plate]_&]:text-base [[data-skin=plate]_&]:shadow-print-pink" onClick={onBack}>
         {t.projects.overview.backToAll}
       </Button>
     </section>
@@ -112,11 +121,11 @@ export function OverviewScopeEmpty({ project }: { project: Schemas['Project'] | 
     : t.projects.overview.emptyPlatform
   return (
     <section aria-labelledby={titleId} className={panel}>
-      <h2 id={titleId} className="font-display-cn text-[40px] leading-[1.2] font-normal text-riso-blue">
+      <h2 id={titleId} className="font-display-cn text-[28px] leading-[1.2] font-semibold text-ink [[data-skin=plate]_&]:text-[40px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
         {text.title}
       </h2>
       <p className="text-[14.5px] text-ink-700">{text.body}</p>
-      <Button asChild size="lg" className="h-12 px-[26px] text-base shadow-print-pink">
+      <Button asChild size="lg" className="h-11 px-6 text-[15px] [[data-skin=plate]_&]:h-12 [[data-skin=plate]_&]:px-[26px] [[data-skin=plate]_&]:text-base [[data-skin=plate]_&]:shadow-print-pink">
         <Link to={agentsPath(project ? { kind: 'project', project } : { kind: 'platform' })}>{text.action}</Link>
       </Button>
     </section>

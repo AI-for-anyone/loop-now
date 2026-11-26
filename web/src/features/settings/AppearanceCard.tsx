@@ -45,21 +45,21 @@ function SkinThumbnail({ skinId, resolvedTheme }: { skinId: SkinId; resolvedThem
       <span
         className={cn(
           'flex w-7 shrink-0 flex-col gap-1 border-r p-1.5',
-          dark ? 'border-white/10 bg-[#0A0A0A]' : 'border-black/8 bg-[#FAFAFA]',
+          dark ? 'border-white/10 bg-[#08090B]' : 'border-black/8 bg-[#FAFAFA]',
         )}
       >
-        <span className={cn('h-1.5 w-3.5 rounded-xs', dark ? 'bg-[#EDEDED]' : 'bg-[#111111]')} />
+        <span className={cn('h-1.5 w-3.5 rounded-xs', dark ? 'bg-[#3291FF]' : 'bg-[#0066DB]')} />
         <span className={cn('h-1 w-4 rounded-xs', dark ? 'bg-white/30' : 'bg-black/20')} />
         <span className={cn('h-1 w-3 rounded-xs', dark ? 'bg-white/20' : 'bg-black/15')} />
       </span>
-      <span className="flex flex-1 flex-col justify-between p-2">
+      <span className={cn('flex flex-1 flex-col justify-between p-2', dark ? 'bg-[#0B0C0F]' : 'bg-[#FAFAFA]')}>
         <span className="flex items-center gap-1.5">
-          <span className={cn('h-2 w-10 rounded-xs', dark ? 'bg-[#EDEDED]' : 'bg-[#111111]')} />
-          <span className="size-2 rounded-full bg-[#16A34A]" />
+          <span className={cn('h-2 w-10 rounded-xs', dark ? 'bg-[#EDEDED]' : 'bg-[#171717]')} />
+          <span className={cn('size-2 rounded-full', dark ? 'bg-[#2DD4BF]' : 'bg-[#0D9488]')} />
         </span>
         <span className="flex items-center gap-1">
-          <span className={cn('h-2 w-12 rounded-xs', dark ? 'bg-[#1A1A1A]' : 'bg-[#F4F4F4]')} />
-          <span className={cn('h-2 w-5 rounded-full', dark ? 'bg-[#FFFFFF]' : 'bg-[#111111]')} />
+          <span className={cn('h-2 w-12 rounded-xs border', dark ? 'border-white/10 bg-[#191B21]' : 'border-black/8 bg-[#FFFFFF]')} />
+          <span className={cn('h-2 w-5 rounded-full', dark ? 'bg-[#3291FF]' : 'bg-[#0066DB]')} />
         </span>
       </span>
     </span>

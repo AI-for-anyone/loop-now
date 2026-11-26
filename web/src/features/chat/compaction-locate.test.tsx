@@ -51,7 +51,7 @@ describe('Locating a manual compaction', () => {
     const note = card()!
     expect(note).toHaveAttribute('data-run-id', run.id)
     expect(note).toHaveAttribute('data-located')
-    expect(note).toHaveClass('bg-tint-yellow')
+    expect(note).toHaveClass('border', 'border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-yellow')
     expect(within(note).getByText('The located manual compaction')).toHaveClass('sr-only')
     expect(note).toHaveTextContent('/compact Keep the key decisions')
     expect(note).toHaveTextContent('Manual compaction')

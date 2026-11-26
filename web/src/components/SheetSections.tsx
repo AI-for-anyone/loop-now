@@ -31,7 +31,7 @@ interface SheetSectionProps {
   children: ReactNode
 }
 
-// Numbered section on settings pages: clean typographic heading with tabular index and hairline divider in mono skin;
+// Numbered section on settings pages: clean left-aligned heading with hairline divider in mono skin (number hidden for crisp edge alignment);
 // outlined hollow number, ZCOOL title with yellow marker and 2px dashed divider in Plate skin. The title can take focus after jumping.
 export function SheetSection({ id, titleId, index, title, count, actions, meta, tone = 'default', children }: SheetSectionProps) {
   const danger = tone === 'danger'
@@ -40,29 +40,32 @@ export function SheetSection({ id, titleId, index, title, count, actions, meta, 
       id={id}
       aria-label={title}
       className={cn(
-        'flex scroll-mt-6 gap-3.5 text-ink [[data-skin=plate]_&]:gap-[18px]',
-        index > 0 && 'border-t border-hairline pt-6 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22]',
+        'flex scroll-mt-6 gap-3 text-ink [[data-skin=plate]_&]:gap-[18px]',
+        index > 0 && 'border-t border-hairline pt-5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22] [[data-skin=plate]_&]:pt-6',
       )}
     >
       <HollowNumber
         data-section-number
-        className={cn('pt-1 [[data-skin=plate]_&]:pt-0.5', danger && 'text-red-text [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--red-text)]')}
+        className={cn(
+          'hidden pt-1 [[data-skin=plate]_&]:block [[data-skin=plate]_&]:max-nav:hidden [[data-skin=plate]_&]:pt-0.5',
+          danger && 'text-red-text [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--red-text)]',
+        )}
       >
         {String(index + 1).padStart(2, '0')}
       </HollowNumber>
-      <div className="flex min-w-0 flex-1 flex-col gap-4 [[data-skin=plate]_&]:gap-[18px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 [[data-skin=plate]_&]:gap-[18px]">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2
             id={titleId}
             tabIndex={-1}
             className={cn(
-              'riso-marker self-start text-[16px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.25] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal',
+              'riso-marker self-start text-[14.5px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.25] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal',
               danger && 'text-red-text',
             )}
           >
             {title}
             {count !== undefined && (
-              <span aria-hidden="true" className="ml-2 font-mono text-[13px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:font-extrabold">
+              <span aria-hidden="true" className="ml-2 font-mono text-[12.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:font-extrabold">
                 {count}
               </span>
             )}
@@ -73,7 +76,7 @@ export function SheetSection({ id, titleId, index, title, count, actions, meta, 
         <div
           data-section-body
           className={cn(
-            'flex min-w-0 flex-col gap-3.5',
+            'flex min-w-0 flex-col gap-3 [[data-skin=plate]_&]:gap-3.5',
             danger && 'riso-stripes-red rounded-panel border border-red-text/25 bg-error-field px-5 py-[18px] [[data-skin=plate]_&]:border-0',
           )}
         >

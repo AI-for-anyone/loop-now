@@ -27,7 +27,7 @@ function RuntimeNote({ mode, runtime, className }: { mode: Mode; runtime?: Pick<
     asksByOwnRules(mode, runtime) ? t.permissions.ownRules(runtime.name) : null,
   ].filter((line) => line !== null)
   return lines.map((line) => (
-    <p key={line} role="note" className={cn('text-[12.5px] font-bold text-ink-700', className)}>
+    <p key={line} role="note" className={cn('text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold', className)}>
       {line}
     </p>
   ))
@@ -55,12 +55,12 @@ export function PermissionModePicker({
   const onlyFull = runtime !== undefined && !runtime.capabilities.permissionModes.includes('supervised')
   if (variant === 'compact') {
     return (
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1">
         <ToggleGroup
           aria-labelledby={labelledBy}
           aria-describedby={hintId}
-          // Separate pills that wrap (a phone's popover is narrower than the four together).
-          className="flex max-w-full flex-wrap justify-start gap-1.5"
+          // Compact segmented pill track that wraps cleanly on narrow screens.
+          className="inline-flex w-fit max-w-full flex-wrap items-center justify-start gap-0.5 rounded-input border border-hairline bg-surface-hover/70 p-0.5 [[data-skin=plate]_&]:rounded-input [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised"
           value={value}
           disabled={disabled}
           onValueChange={(next) => next && onChange(next as Mode)}
@@ -70,17 +70,17 @@ export function PermissionModePicker({
               key={mode}
               value={mode}
               disabled={onlyFull && mode !== 'full'}
-              className="h-8 gap-1 rounded-full border-2 border-ink bg-paper-raised px-2.5 text-[12.5px] font-black text-ink-700 focus-visible:shadow-focus data-[state=on]:bg-riso-yellow data-[state=on]:text-ink"
+              className="h-7 min-h-0 gap-1 rounded-ticket px-2 text-[11.5px] font-medium text-ink-500 shadow-none hover:text-ink data-[state=on]:bg-surface-elevated data-[state=on]:font-semibold data-[state=on]:text-ink data-[state=on]:shadow-xs [[data-skin=plate]_&]:min-h-0 [[data-skin=plate]_&]:rounded-ticket [[data-skin=plate]_&]:px-2.5 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:font-black [[data-skin=plate]_&]:data-[state=on]:text-ink [[data-skin=plate]_&]:data-[state=on]:shadow-[inset_0_0_0_1.5px_var(--ink)]"
             >
-              <PermissionModeIcon mode={mode} className="size-3.5" />
+              <PermissionModeIcon mode={mode} className="size-3" />
               {t.permissions.modes[mode].name}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <p id={hintId} className="text-[12px] text-ink-700">
+        <p id={hintId} className="text-[11.5px] leading-snug text-ink-500">
           {t.permissions.modes[value].hint}
         </p>
-        <RuntimeNote mode={value} runtime={runtime} className="text-[12px]" />
+        <RuntimeNote mode={value} runtime={runtime} className="text-[11.5px] leading-snug text-ink-500" />
       </div>
     )
   }

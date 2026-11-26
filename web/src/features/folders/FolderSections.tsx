@@ -9,10 +9,9 @@ import { overviewPath } from '@/lib/scope'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
-// The Agent's “文件夹” (Folder) tab: its one and only folder, both its working directory and its own context. Laid directly on the tab's
-// sheet (with the overview in the stub on the right),
-// with the note at the bottom. On narrow screens it gets a fixed height and scrolls with the whole page; on wide screens it fills the
-// tab's remaining height (same as the Chat tab).
+// The Agent's Folder tab: its one and only folder, both its working directory and its own context. Rendered as a full-bleed
+// 2-pane explorer on the tab's sheet. On narrow screens it uses a bounded height and scrolls with the page; from the nav breakpoint
+// upward it fills the tab's remaining height (same as the Chat tab).
 export function AgentFolderTab() {
   const { agent } = useAgentContext()
   const context = useContextInfo()
@@ -25,16 +24,13 @@ export function AgentFolderTab() {
       note={t.folders.agent.intro(agent.name)}
       limits={context.data?.limits.textEdit}
       maxUpload={context.data?.limits.maxFolderUpload}
-      className="h-[clamp(28rem,80dvh,56rem)] lg:h-full"
+      className="h-[clamp(28rem,80dvh,56rem)] nav:h-full"
     />
   )
 }
 
-// The shared folder in project settings and global settings: fills the main column's width, height follows the viewport; no
-// “从 Git 拉取” (Pull from Git).
-// The content of the “项目文件夹” (Project folder) section in project settings and the “全局文件夹” (Global folder) section in global
-// settings: one sentence of explanation plus a file manager
-// (redesign: a block with a 2px navy outline inside a section of the sheet, with the same toolbar and list as the folder page, and no stub).
+// Shared folder embedded inside project settings and global settings: one sentence of explanation plus a compact 2-pane file manager
+// (no Pull from Git).
 export function ContextFolderBody({ scope }: { scope: { kind: 'project'; projectId: string } | { kind: 'global' } }) {
   const context = useContextInfo()
   const source = useMemo(() => folderSource(scope), [scope.kind === 'project' ? scope.projectId : 'global']) // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,9 +50,8 @@ export function ContextFolderBody({ scope }: { scope: { kind: 'project'; project
   )
 }
 
-// The page opened by “项目文件夹” (Project folder) in the sidebar: the folder shared by the Agents in the project. The header is the
-// shared page title (breadcrumbs, title and description);
-// the folder sits on a sheet, in the same layout as the Agent's Folder tab (with the overview in the stub on the right).
+// The page opened by Project folder in the sidebar: the folder shared by the Agents in the project. The header is the shared page
+// title (breadcrumbs, title and description); the folder fills the sheet below in the same 2-pane explorer layout.
 export function ProjectFolderPage() {
   const scope = useScope()
   const context = useContextInfo()
@@ -65,11 +60,11 @@ export function ProjectFolderPage() {
   const source = useMemo(() => (projectId ? folderSource({ kind: 'project', projectId }) : null), [projectId])
   if (!source || !project) return null
   return (
-    <PageFrame className="lg:overflow-hidden">
+    <PageFrame className="nav:overflow-hidden">
       <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.folders.project.title}>
         <span>{t.folders.project.intro}</span>
       </PageHeader>
-      <Sheet className="mt-2 h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
+      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink [[data-skin=plate]_&]:mt-2">
         <FileManager
           key={projectId}
           variant="sheet"

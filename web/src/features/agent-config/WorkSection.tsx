@@ -9,26 +9,28 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PathPicker } from '@/features/desktop/PathPicker'
 import { PermissionModePicker } from '@/features/permissions/PermissionModePicker'
+import { useDirtyForm } from '@/features/prompts/draft-navigation'
 import { t } from '@/i18n'
 import { fieldMessages } from '@/lib/errors'
 import { useRuntimeLookup, type RuntimeDefinition } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { Section } from './Section'
+import { sectionTitleId } from './sections'
 
 const copy = t.config.work
 
 function Saved({ show }: { show: boolean }) {
   if (!show) return null
   return (
-    <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-black text-green-text">
+    <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-green-text [[data-skin=plate]_&]:font-black">
       <CheckIcon aria-hidden="true" className="size-3.5" strokeWidth={3} />
-      {t.permissions.saved} · {t.permissions.nextMessage}
+      {t.permissions.saved}
     </span>
   )
 }
 
 // The folder the Agent works in: empty is the workspace Loop Now gives it. Saved with its own button (a path is typed or chosen in the
-// system dialog); a runtime that cannot work in a folder of its own (Pi) says so instead.
+// system dialog); registers dirty state so switching tabs or leaving the page does not silently lose an unsaved path.
 function FolderField({ agent, runtime }: { agent: Schemas['Agent']; runtime: RuntimeDefinition | undefined }) {
   const update = useUpdateAgent(agent.id)
   const ids = { input: useId(), hint: useId() }
@@ -42,6 +44,8 @@ function FolderField({ agent, runtime }: { agent: Schemas['Agent']; runtime: Run
   }
   const unsupported = runtime !== undefined && !runtime.capabilities.workingDirectory
   const changed = path.trim() !== (agent.workingDirectory ?? '')
+  useDirtyForm('work-folder', changed)
+
   const save = (next: string | null) => {
     setSaved(false)
     update.mutate({ workingDirectory: next }, { onSuccess: () => { setSaved(true); setPath(next ?? '') } })
@@ -53,11 +57,11 @@ function FolderField({ agent, runtime }: { agent: Schemas['Agent']; runtime: Run
   const error = fieldMessages(update.error, (field) => field === 'workingDirectory')
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
-      <Label htmlFor={ids.input} className="inline-flex items-center gap-1.5 text-[14.5px] font-black">
-        <FolderOpenIcon aria-hidden="true" className="size-4 text-riso-blue" strokeWidth={2.6} />
+      <Label htmlFor={ids.input} className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
+        <FolderOpenIcon aria-hidden="true" className="size-4 text-ink-700 [[data-skin=plate]_&]:text-riso-blue" strokeWidth={2.2} />
         {copy.folder.label}
       </Label>
-      <p id={ids.hint} className="text-[13px] text-ink-700">{copy.folder.hint}</p>
+      <p id={ids.hint} className="text-[12.5px] text-ink-700">{copy.folder.hint}</p>
       <PathPicker kind="directory" value={path} onPick={setPath} disabled={unsupported || update.isPending}>
         <Input
           id={ids.input}
@@ -91,7 +95,7 @@ function FolderField({ agent, runtime }: { agent: Schemas['Agent']; runtime: Run
   )
 }
 
-// “用我本机的 CLI 配置” (Use my own CLI configuration): it runs as it does in the terminal. Saved as soon as it is switched; what it turns on
+// "Use my own CLI configuration": it runs as it does in the terminal. Saved as soon as it is switched; what it turns on
 // is said in plain words, for the runtime the Agent is on.
 function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime: RuntimeDefinition | undefined }) {
   const update = useUpdateAgent(agent.id)
@@ -101,7 +105,7 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
   const items = (runtime && copy.localConfig.turnsOn[runtime.id]) ?? copy.localConfig.generic
   const on = agent.useLocalConfig
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
         <Switch
           id={id}
@@ -113,30 +117,38 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
             update.mutate({ useLocalConfig: next }, { onSuccess: () => setSaved(true) })
           }}
         />
-        <Label htmlFor={id} className="text-[14.5px] font-black">
+        <Label htmlFor={id} className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
           {copy.localConfig.label}
         </Label>
         <Saved show={saved} />
       </div>
-      <div id={`${id}-state`} className={cn('flex flex-col gap-2 rounded-ticket px-4 py-3', on ? 'bg-tint-yellow shadow-[inset_0_0_0_2px_var(--ink)]' : 'bg-ink/[0.04]')}>
+      <div
+        id={`${id}-state`}
+        className={cn(
+          'flex flex-col gap-1.5 rounded-ticket border px-3.5 py-2.5 [[data-skin=plate]_&]:border-0',
+          on
+            ? 'border-hairline-strong bg-tint-yellow [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
+            : 'border-hairline bg-surface-subtle [[data-skin=plate]_&]:bg-ink/[0.04]',
+        )}
+      >
         {unsupported && runtime ? (
-          <p className="text-[13px] font-bold text-ink-700">{copy.localConfig.unsupported(runtime.name)}</p>
+          <p className="text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{copy.localConfig.unsupported(runtime.name)}</p>
         ) : on ? (
           <>
-            <p className="text-[13.5px] font-black">{copy.localConfig.onIntro}</p>
+            <p className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{copy.localConfig.onIntro}</p>
             <ul className="flex flex-col gap-1 pl-1">
               {items.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-[13.5px]">
+                <li key={item} className="flex items-start gap-2 text-[13px]">
                   <CheckIcon aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-green-text" strokeWidth={3.4} />
                   {item}
                 </li>
               ))}
             </ul>
             <p className="text-[12.5px] text-ink-700">{copy.localConfig.alsoKept}</p>
-            <p className="text-[12.5px] font-black text-pink-text">{copy.localConfig.risk}</p>
+            <p className="text-[12.5px] font-semibold text-pink-text [[data-skin=plate]_&]:font-black">{copy.localConfig.risk}</p>
           </>
         ) : (
-          <p className="text-[13px] text-ink-700">{copy.localConfig.off}</p>
+          <p className="text-[12.5px] text-ink-700">{copy.localConfig.off}</p>
         )}
       </div>
       <ErrorAlert error={update.error} />
@@ -144,22 +156,18 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
   )
 }
 
-function ModeField({ agent, runtime }: { agent: Schemas['Agent']; runtime: RuntimeDefinition | undefined }) {
+// Compact permission mode section placed in the General & Model tab, saving immediately on selection.
+export function PermissionsSection({ agent }: { agent: Schemas['Agent'] }) {
+  const runtime = useRuntimeLookup().get(agent.runtime)
   const update = useUpdateAgent(agent.id)
-  const labelId = useId()
   const [saved, setSaved] = useState(false)
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 id={labelId} className="text-[14.5px] font-black">
-          {t.permissions.title}
-        </h3>
-        <Saved show={saved} />
-      </div>
+    <Section id="permissions" title={t.permissions.title} meta={<Saved show={saved} />}>
       <PermissionModePicker
+        variant="compact"
         value={agent.permissionMode}
         runtime={runtime}
-        labelledBy={labelId}
+        labelledBy={sectionTitleId('permissions')}
         disabled={update.isPending}
         onChange={(mode) => {
           setSaved(false)
@@ -167,26 +175,24 @@ function ModeField({ agent, runtime }: { agent: Schemas['Agent']; runtime: Runti
         }}
       />
       <ErrorAlert error={update.error} />
-    </div>
+    </Section>
   )
 }
 
-// “工作方式” (How it works): the Agent's own folder, whether it uses the person's CLI configuration (as the terminal), and how often it
-// asks before acting. Each saves on its own and applies from the next message.
+// Workspace runtime behavior in the Prompt & Workspace tab: working folder and personal CLI configuration.
 export function WorkSection({ agent }: { agent: Schemas['Agent'] }) {
   const runtime = useRuntimeLookup().get(agent.runtime)
   return (
     <Section id="work" title={copy.title}>
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-5">
         {agent.importedFrom && (
-          <p className="flex flex-col gap-1 rounded-ticket bg-tint-blue px-4 py-2.5 text-[13px]">
-            <span className="font-bold">{copy.importedFrom(t.importing.cli[agent.importedFrom.cli], t.chat.time(agent.importedFrom.importedAt))}</span>
+          <p className="flex flex-col gap-1 rounded-ticket border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+            <span className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.importedFrom(t.importing.cli[agent.importedFrom.cli], t.chat.time(agent.importedFrom.importedAt))}</span>
             <span className="font-mono text-[12.5px] [overflow-wrap:anywhere] text-ink-700">{agent.importedFrom.path}</span>
           </p>
         )}
         <FolderField agent={agent} runtime={runtime} />
         <LocalConfigField agent={agent} runtime={runtime} />
-        <ModeField agent={agent} runtime={runtime} />
       </div>
     </Section>
   )

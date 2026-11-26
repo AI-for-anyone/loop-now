@@ -199,8 +199,8 @@ describe('conversation area scrolling', () => {
     const { rerender } = render(<List {...props} live={{ ...initialLiveState, current: { run, text: 'Part 1' } }} pages={pages} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     expect(screen.queryByRole('button', { name: 'Back to latest' })).toBeNull()
-    expect(log).toHaveClass('riso-scrollbar')
-    expect(log).not.toHaveClass('nav:no-scrollbar')
+    expect(log).toHaveClass('overflow-y-auto')
+    expect(log).not.toHaveClass('riso-scrollbar')
 
     log.scrollTop = 180
     fireEvent.scroll(log)
@@ -370,7 +370,7 @@ describe('how replies show', () => {
     const bubble = screen.getByText('Run lint first')
     expect(dividers[0].compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(bubble).toHaveClass('bg-tint-pink-2', '[[data-skin=plate]_&]:border-riso-pink')
-    expect(screen.getByText('Run the tests')).toHaveClass('bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-pink')
+    expect(screen.getByText('Run the tests')).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-tint-pink')
   })
 
   // A runtime may never report a tool's end (Antigravity moves a long command to the background and its end arrives after the turn). The

@@ -2,50 +2,77 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import type { Schemas } from '@/api/client'
 import { useIdentityTokens, useRevokeToken } from '@/api/inbox'
 import { t } from '@/i18n'
-import { tokenState } from './identity-rules'
+import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
-
-const headClass = 'py-2 pl-1 text-[12px] font-black text-ink-500'
+import { tokenState } from './identity-rules'
 import { IssueTokenDialog } from './IssueTokenDialog'
 
-// The tokens block: a table lists all tokens (including revoked and expired ones, newest first); active ones can be revoked
-// individually; issuing happens in a dialog.
-// Redesign: laid out directly on the sheet with a title one size smaller; a solid line under the table header and dashed lines
-// between rows (general rule 9); the status is a pill and “吊销” (Revoke) is red text.
+type TokenFilter = 'active' | 'all'
+
+const headClass = 'py-2 px-2 first:pl-1 last:pr-1 text-[12px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black'
+
+// Tokens table: lists active or all tokens (newest first) with an inline Active | All status filter; active tokens can be revoked
+// individually; issuing happens in a dialog. Fits comfortably at 1280px without horizontal overflow.
 export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity'] }) {
   const tokens = useIdentityTokens(identity.id, true)
   const revoke = useRevokeToken(identity.id)
+  const [filter, setFilter] = useState<TokenFilter>('all')
   const [issuing, setIssuing] = useState(false)
   const [revoking, setRevoking] = useState<Schemas['ExternalToken'] | null>(null)
   const list = tokens.data?.tokens ?? []
+  const activeCount = list.filter((token) => tokenState(token) === 'active').length
+  const visible = filter === 'active' ? list.filter((token) => tokenState(token) === 'active') : list
 
   return (
     <section aria-labelledby="identity-tokens" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <h3 id="identity-tokens" className="text-[17px] leading-[1.3] font-black">
+        <h3 id="identity-tokens" className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">
           {t.identities.tokens}
           {tokens.data && (
-            <span aria-hidden="true" className="ml-2 font-display-latin text-[15px] font-extrabold text-ink-500">
+            <span aria-hidden="true" className="ml-2 font-mono text-[12.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-extrabold">
               {list.length}
             </span>
           )}
         </h3>
-        <Button size="sm" className="ml-auto border-2 border-ink shadow-[3px_3px_0_var(--ink)]" onClick={() => setIssuing(true)}>
+        {list.length > 0 && (
+          <ToggleGroup
+            aria-label={t.identities.tokenFilter.label}
+            className={cn(segmentedClass, 'h-7')}
+            value={filter}
+            onValueChange={(value) => {
+              if (value === 'active' || value === 'all') setFilter(value)
+            }}
+          >
+            <ToggleGroupItem value="active" className={cn(segmentedItemClass, 'px-2.5 text-[12px]')}>
+              {t.identities.tokenFilter.active}
+              <span className="ml-1 font-mono text-[11px] text-ink-500 tabular-nums">{activeCount}</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="all" className={cn(segmentedItemClass, 'px-2.5 text-[12px]')}>
+              {t.identities.tokenFilter.all}
+              <span className="ml-1 font-mono text-[11px] text-ink-500 tabular-nums">{list.length}</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
+        <Button size="xs" className="ml-auto [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]" onClick={() => setIssuing(true)}>
           {t.identities.issue}
         </Button>
       </div>
       {tokens.isPending && <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
       {tokens.isError && <ErrorAlert error={tokens.error} />}
       {tokens.isSuccess && list.length === 0 && <p className="text-[14px] text-ink-500">{t.identities.noTokens}</p>}
-      {list.length > 0 && (
-        <Table className="min-w-[700px] text-[13.5px]" card={false}>
+      {tokens.isSuccess && list.length > 0 && visible.length === 0 && (
+        <p className="text-[14px] text-ink-500">{t.identities.tokenFilter.emptyActive}</p>
+      )}
+      {visible.length > 0 && (
+        <Table className="w-full text-[13px]" card={false}>
           <TableHeader className="bg-transparent">
-            <TableRow className="border-b-2 border-solid border-ink last:border-b-2">
+            <TableRow className="border-b border-hairline-strong last:border-b [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-solid [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:last:border-b-2">
               <TableHead scope="col" className={headClass}>{t.identities.columns.prefix}</TableHead>
               <TableHead scope="col" className={headClass}>{t.identities.columns.createdAt}</TableHead>
               <TableHead scope="col" className={headClass}>{t.identities.columns.expiresAt}</TableHead>
@@ -57,23 +84,29 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.map((token) => {
+            {visible.map((token) => {
               const state = tokenState(token)
               return (
-                <TableRow key={token.id} className={cn('border-b-[1.5px] border-ink/25 last:border-b-[1.5px]', state !== 'active' && 'text-ink-500')}>
-                  <TableCell className="py-3 pl-1 font-mono text-[12.5px] whitespace-nowrap">{token.prefix}</TableCell>
-                  <TableCell className="py-3 font-mono text-[12px] whitespace-nowrap">{t.common.time(token.createdAt)}</TableCell>
-                  <TableCell className="py-3 whitespace-nowrap">{token.expiresAt ? t.common.time(token.expiresAt) : t.identities.never}</TableCell>
-                  <TableCell className="py-3 whitespace-nowrap">{token.lastUsedAt ? t.common.time(token.lastUsedAt) : t.identities.neverUsed}</TableCell>
-                  <TableCell className="py-3">
+                <TableRow
+                  key={token.id}
+                  className={cn(
+                    'border-b border-hairline last:border-b [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:last:border-b-[1.5px]',
+                    state !== 'active' && 'text-ink-500',
+                  )}
+                >
+                  <TableCell className="py-2.5 pr-2 pl-1 font-mono text-[12px] whitespace-nowrap">{token.prefix}</TableCell>
+                  <TableCell className="px-2 py-2.5 font-mono text-[12px] whitespace-nowrap">{t.common.time(token.createdAt)}</TableCell>
+                  <TableCell className="px-2 py-2.5 text-[12.5px] whitespace-nowrap">{token.expiresAt ? t.common.time(token.expiresAt) : t.identities.never}</TableCell>
+                  <TableCell className="px-2 py-2.5 text-[12.5px] whitespace-nowrap">{token.lastUsedAt ? t.common.time(token.lastUsedAt) : t.identities.neverUsed}</TableCell>
+                  <TableCell className="px-2 py-2.5">
                     <Badge tone={state === 'active' ? 'success' : 'neutral'}>{t.identities.status[state]}</Badge>
                   </TableCell>
-                  <TableCell className="py-3 pr-1 text-right">
+                  <TableCell className="py-2.5 pr-1 pl-2 text-right">
                     {state === 'active' && (
                       <Button
                         variant="ghost"
                         size="xs"
-                        className="h-7 px-1.5 text-[13px] text-red-text underline decoration-red-text decoration-2 underline-offset-4 hover:bg-tint-red"
+                        className="h-7 px-1.5 text-[12.5px] text-red-text underline decoration-red-text decoration-1 underline-offset-4 hover:bg-tint-red [[data-skin=plate]_&]:decoration-2"
                         aria-label={`${t.identities.revoke} ${token.prefix}`}
                         onClick={() => setRevoking(token)}
                       >

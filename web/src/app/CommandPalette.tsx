@@ -106,7 +106,7 @@ function CommandPaletteBody({
     }
 
     // Navigation pages
-    const pages: { id: string; label: string; to: string; icon: NavIconName }[] = [
+    const pages: { id: string; label: string; to: string; icon: NavIconName; keywords?: string[] }[] = [
       { id: 'page:overview', label: text.items.overview, to: overviewPath(scope), icon: 'overview' },
       ...(scope.kind === 'project'
         ? [
@@ -115,6 +115,7 @@ function CommandPaletteBody({
             { id: 'page:project-settings', label: text.items.projectSettings, to: `${projectBase(scope.name)}/settings`, icon: 'projectSettings' as const },
           ]
         : []),
+      { id: 'page:import', label: t.importing.title, to: '/import', icon: 'folder', keywords: [t.importing.cli.claude, t.importing.cli.codex, t.importing.entry.open] },
       { id: 'page:plugins', label: text.items.plugins, to: '/plugins', icon: 'plugins' },
       { id: 'page:skills', label: text.items.skills, to: '/skills', icon: 'skills' },
       { id: 'page:stats', label: text.items.stats, to: '/stats', icon: 'stats' },
@@ -126,7 +127,7 @@ function CommandPaletteBody({
         id: page.id,
         group: 'pages',
         label: page.label,
-        keywords: [],
+        keywords: page.keywords ?? [],
         icon: page.icon,
         select: () => go(page.to),
       })

@@ -49,21 +49,32 @@ function withPath(content: string, relativePath: string) {
   return file
 }
 
-describe('Template list', () => {
-  it('lists the templates with their name, description and update time', async () => {
-    setup('/skills', [], [summary('a', 'pdf-tools', 'Work with PDF files'), summary('b', 'git-helper', 'Help with git operations')])
+describe('Template list and search rail', () => {
+  it('lists templates in the master rail with name, file count and description, and filters by search', async () => {
+    const { user } = setup('/skills', [], [summary('a', 'pdf-tools', 'Work with PDF files'), summary('b', 'git-helper', 'Help with git operations')])
     const list = await screen.findByRole('list', { name: 'Skills library' })
     await waitFor(() => expect(within(list).getAllByRole('link')).toHaveLength(2))
     expect(within(list).getByText('Help with git operations')).toBeInTheDocument()
-    expect(within(list).getAllByText(/Updated/)).toHaveLength(2)
+    expect(within(list).getAllByText('2 files')).toHaveLength(2)
+
+    await user.type(screen.getByRole('searchbox', { name: 'Filter skills' }), 'git')
+    expect(within(list).getAllByRole('link')).toHaveLength(1)
+    expect(within(list).getByText('git-helper')).toBeInTheDocument()
+    expect(screen.getByText('1/2')).toBeInTheDocument()
   })
 
-  it('shows the empty state with the upload and create entries when the library is empty', async () => {
+  it('shows the empty state and keeps header actions mounted when the library is empty', async () => {
     setup('/skills')
-    expect(await screen.findByText('No templates in the Skills library yet.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Upload folder' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Upload zip' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Create online' })).toBeInTheDocument()
+    const emptyTitle = await screen.findByText('No templates in the Skills library yet.')
+    const empty = emptyTitle.closest('[data-empty-library]') as HTMLElement
+    expect(within(empty).getByRole('button', { name: 'Upload folder' })).toBeInTheDocument()
+    expect(within(empty).getByRole('button', { name: 'Upload zip' })).toBeInTheDocument()
+    expect(within(empty).getByRole('link', { name: 'Create online' })).toBeInTheDocument()
+
+    const header = screen.getByRole('heading', { level: 1, name: 'Skills library' }).closest('header')!
+    expect(within(header).getByRole('button', { name: 'Upload folder' })).toBeInTheDocument()
+    expect(within(header).getByRole('button', { name: 'Upload zip' })).toBeInTheDocument()
+    expect(within(header).getByRole('link', { name: 'Create online' })).toBeInTheDocument()
   })
 })
 
@@ -102,7 +113,7 @@ describe('Upload Skill', () => {
 })
 
 describe('Create Skill online', () => {
-  it('the editor is prefilled with a skeleton; saving creates the template', async () => {
+  it('renders inline with a prefilled skeleton; saving creates the template', async () => {
     let body: unknown = null
     const { user, router } = setup('/skills/new', [
       http.post(apiUrl('/skills'), async ({ request }) => {
@@ -110,10 +121,11 @@ describe('Create Skill online', () => {
         return HttpResponse.json(detail(), { status: 201 })
       }),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
-    const editor = within(sheet).getByLabelText('SKILL.md')
+    const pane = await screen.findByRole('region', { name: 'New Skill' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    const editor = within(pane).getByLabelText('SKILL.md')
     expect((editor as HTMLTextAreaElement).value).toMatch(/^---\nname: .+\ndescription: .+\n---/)
-    await user.click(within(sheet).getByRole('button', { name: 'Create' }))
+    await user.click(within(pane).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(body).toEqual({ skillMd: (editor as HTMLTextAreaElement).value }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills/sk-1'))
   })
@@ -122,32 +134,40 @@ describe('Create Skill online', () => {
     const { user } = setup('/skills/new', [
       http.post(apiUrl('/skills'), () => HttpResponse.json(errorBody('validation_failed', 'The frontmatter is missing description'), { status: 422 })),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
-    const editor = within(sheet).getByLabelText('SKILL.md')
+    const pane = await screen.findByRole('region', { name: 'New Skill' })
+    const editor = within(pane).getByLabelText('SKILL.md')
     await user.clear(editor)
     await user.type(editor, '---{Enter}name: x{Enter}---')
-    await user.click(within(sheet).getByRole('button', { name: 'Create' }))
-    expect(await within(sheet).findByText(/missing description/)).toBeInTheDocument()
+    await user.click(within(pane).getByRole('button', { name: 'Create' }))
+    expect(await within(pane).findByText(/missing description/)).toBeInTheDocument()
     expect(editor).toHaveValue('---\nname: x\n---')
   })
 })
 
-describe('View and edit a template\'s SKILL.md', () => {
-  it('shows the file list; saving submits only SKILL.md', async () => {
+describe("View and edit a template's SKILL.md and files", () => {
+  it('disables Save until edited, submits only SKILL.md on Save or Cmd+S, and shows the Files tab', async () => {
     let body: unknown = null
     const { user } = setup('/skills/sk-1', [
       http.put(apiUrl('/skills/sk-1/skill-md'), async ({ request }) => {
         body = await request.json()
-        return HttpResponse.json(detail())
+        return HttpResponse.json(detail({ updatedAt: '2026-10-12T01:00:00Z' }))
       }),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    const files = await within(sheet).findByRole('list', { name: 'Files' })
-    expect(within(files).getByText('scripts/run.sh')).toBeInTheDocument()
-    const editor = within(sheet).getByLabelText('SKILL.md')
+    const pane = await screen.findByRole('region', { name: 'pdf-tools' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    const saveButton = within(pane).getByRole('button', { name: /Save/ })
+    expect(saveButton).toBeDisabled()
+
+    const editor = within(pane).getByLabelText('SKILL.md')
     await user.type(editor, 'Body')
-    await user.click(within(sheet).getByRole('button', { name: 'Save' }))
+    expect(saveButton).toBeEnabled()
+    expect(pane.querySelector('[data-dirty-dot]')).not.toBeNull()
+    await user.click(saveButton)
     await waitFor(() => expect(body).toEqual({ content: '---\nname: pdf-tools\ndescription: Work with PDF files\n---\nBody' }))
+
+    await user.click(within(pane).getByRole('tab', { name: /Files/ }))
+    const filesTable = await within(pane).findByRole('table', { name: 'Files' })
+    expect(within(filesTable).getByText('scripts/run.sh')).toBeInTheDocument()
   })
 
   it('when a background refresh fails keeps the unsaved edits and shows the reason', async () => {
@@ -155,13 +175,13 @@ describe('View and edit a template\'s SKILL.md', () => {
     const { user, client } = setup('/skills/sk-1', [
       http.get(apiUrl('/skills/sk-1'), () => (fail ? HttpResponse.json(errorBody('internal_error'), { status: 500 }) : HttpResponse.json(detail()))),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    const editor = within(sheet).getByLabelText('SKILL.md')
+    const pane = await screen.findByRole('region', { name: 'pdf-tools' })
+    const editor = within(pane).getByLabelText('SKILL.md')
     await user.type(editor, 'Not saved yet')
     fail = true
     await act(() => client.refetchQueries({ queryKey: keys.skill('sk-1') }))
-    expect(await within(sheet).findByText('Internal server error')).toBeInTheDocument()
-    expect(within(sheet).getByLabelText('SKILL.md')).toHaveValue('---\nname: pdf-tools\ndescription: Work with PDF files\n---\nNot saved yet')
+    expect(await within(pane).findByText('Internal server error')).toBeInTheDocument()
+    expect(within(pane).getByLabelText('SKILL.md')).toHaveValue('---\nname: pdf-tools\ndescription: Work with PDF files\n---\nNot saved yet')
   })
 })
 
@@ -174,10 +194,9 @@ describe('Replace and delete templates', () => {
         return HttpResponse.json(detail())
       }),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    await within(sheet).findByRole('list', { name: 'Files' })
-    // The grid's toolbar also has “Upload folder”, used for creating; replacing uses only the one in the drawer.
-    await user.upload(within(sheet).getByLabelText('Upload folder'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md')])
+    const pane = await screen.findByRole('region', { name: 'pdf-tools' })
+    // The page header also has "Upload folder" for creating; replacing uses the one inside the detail pane.
+    await user.upload(within(pane).getByLabelText('Upload folder'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md')])
     const confirm = await screen.findByRole('alertdialog')
     expect(confirm).toHaveTextContent('Skill copies already given to Agents are not affected')
     expect(replaced).toBe(false)
@@ -193,9 +212,8 @@ describe('Replace and delete templates', () => {
         return new HttpResponse(null, { status: 204 })
       }),
     ])
-    const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    await within(sheet).findByRole('list', { name: 'Files' })
-    await user.click(within(sheet).getByRole('button', { name: 'Delete' }))
+    const pane = await screen.findByRole('region', { name: 'pdf-tools' })
+    await user.click(within(pane).getByRole('button', { name: 'Delete' }))
     const confirm = await screen.findByRole('alertdialog')
     expect(confirm).toHaveTextContent('Skill copies already given to Agents are not affected')
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
@@ -204,104 +222,76 @@ describe('Replace and delete templates', () => {
   })
 })
 
-describe('The URL opens and closes the drawer', () => {
+describe('Master-detail URL navigation', () => {
   const templates = [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('b', 'git-helper', 'Help with git operations')]
 
-  it('opening /skills/:skillId directly shows the grid with the details drawer open; closing it returns to /skills', async () => {
-    const { user, router } = setup('/skills/sk-1', [], templates)
-    const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
-    expect(within(sheet).getByText('Work with PDF files')).toBeInTheDocument()
-    // The drawer is modal: the grid is temporarily hidden from assistive technology but is still on the page.
-    const list = await screen.findByRole('list', { name: 'Skills library', hidden: true })
-    await waitFor(() => expect(within(list).getAllByRole('link', { hidden: true })).toHaveLength(2))
-    expect(within(list).getByRole('link', { name: /pdf-tools/, hidden: true })).toHaveAttribute('aria-current', 'true')
-
-    await user.click(within(sheet).getByRole('button', { name: 'Close' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // The drawer opens and closes with the URL, and the new URL reaches the page
-    // only inside a transition, so wait until the drawer has actually closed.
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('list', { name: 'Skills library' })).toBeInTheDocument()
+  it('opening /skills/:skillId shows the rail and inline detail pane together without a modal backdrop', async () => {
+    setup('/skills/sk-1', [], templates)
+    const pane = await screen.findByRole('region', { name: 'pdf-tools' })
+    expect(within(pane).getByText('Work with PDF files')).toBeInTheDocument()
+    const list = await screen.findByRole('list', { name: 'Skills library' })
+    await waitFor(() => expect(within(list).getAllByRole('link')).toHaveLength(2))
+    expect(within(list).getByRole('link', { name: /pdf-tools/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('opening /skills/new directly shows the grid with the create drawer open; Esc closes it and returns to /skills', async () => {
+  it('the Cancel button of the inline create pane returns to /skills without creating a template', async () => {
     const { user, router } = setup('/skills/new', [], templates)
-    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
-    expect(within(sheet).getByLabelText('SKILL.md')).toBeInTheDocument()
-    expect(await screen.findByRole('list', { name: 'Skills library', hidden: true })).toBeInTheDocument()
-
-    await user.keyboard('{Escape}')
+    const pane = await screen.findByRole('region', { name: 'New Skill' })
+    await user.click(within(pane).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // The drawer opens and closes with the URL, and the new URL reaches the page
-    // only inside a transition, so wait until the drawer has actually closed.
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByRole('region', { name: 'New Skill' })).toBeNull()
   })
 
-  it('the Cancel button of the create drawer closes it without creating a template', async () => {
-    const { user, router } = setup('/skills/new', [], templates)
-    const sheet = await screen.findByRole('dialog', { name: 'New Skill' })
-    await user.click(within(sheet).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // The drawer opens and closes with the URL, and the new URL reaches the page
-    // only inside a transition, so wait until the drawer has actually closed.
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  })
-
-  it('clicking a template card opens the details drawer', async () => {
+  it('clicking a template row opens its inline detail pane in one click', async () => {
     const { user, router } = setup('/skills', [], templates)
     const list = await screen.findByRole('list', { name: 'Skills library' })
     await user.click(await within(list).findByRole('link', { name: /pdf-tools/ }))
-    expect(await screen.findByRole('dialog', { name: 'pdf-tools' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'pdf-tools' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/skills/sk-1')
   })
 
-  it('when the template doesn\'t exist the drawer says why', async () => {
+  it("when the template doesn't exist the inline detail pane says why", async () => {
     setup('/skills/gone', [http.get(apiUrl('/skills/gone'), () => HttpResponse.json(errorBody('not_found'), { status: 404 }))], templates)
-    const sheet = await screen.findByRole('dialog', { name: 'Template details' })
-    expect(await within(sheet).findByText('This template doesn\'t exist or was deleted.')).toBeInTheDocument()
+    const pane = await screen.findByRole('region', { name: 'Template details' })
+    expect(await within(pane).findByText("This template doesn't exist or was deleted.")).toBeInTheDocument()
   })
 })
 
-// "Printed sheet" redesign, step 4: the Skills library's page header, empty state and template cards.
 describe('Skills library on the sheet', () => {
-  it('the header is the page title: breadcrumb “Global›Skills library”, next to it the number of templates', async () => {
+  it('the header has breadcrumb "Global›Skills library", template count, and right-aligned xs actions', async () => {
     setup('/skills')
     const header = (await screen.findByRole('heading', { level: 1, name: 'Skills library' })).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Skills library')
     expect(await within(header).findByText('0 templates')).toBeInTheDocument()
+    expect(within(header).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink')
   })
 
-  it('the empty state is on the sheet: an overprinted card illustration and a yellow-marker title; secondary upload actions use control surface in mono skin and only “Create online” uses Plate fluorescent pink', async () => {
+  it('the empty state preserves mono and Plate styling on the sheet', async () => {
     setup('/skills')
     const title = await screen.findByText('No templates in the Skills library yet.')
     expect(title).toHaveClass('riso-marker', 'font-display-cn')
-    const empty = title.closest('[data-empty-library]')!
+    const empty = title.closest('[data-empty-library]') as HTMLElement
     expect(empty.closest('[data-sheet]')).not.toBeNull()
     expect(empty.querySelector('[data-empty-art]')).toHaveAttribute('aria-hidden', 'true')
     for (const name of ['Upload folder', 'Upload zip']) {
-      const button = within(empty as HTMLElement).getByRole('button', { name })
+      const button = within(empty).getByRole('button', { name })
       expect(button).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:bg-white')
       expect(button).not.toHaveClass('[[data-skin=plate]_&]:bg-riso-pink')
     }
-    expect(within(empty as HTMLElement).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(within(empty).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
   })
 
-  it('with templates: the entries sit in the header meta; templates are crisp control cards in mono skin and preserve white/yellow Plate cards with shadow', async () => {
+  it('selected rail row uses surface-active in mono skin and yellow with ink outline and shadow in Plate skin', async () => {
     setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('sk-2', 'csv-tools', 'Work with CSV files')])
-    const list = await screen.findByRole('list', { name: 'Skills library', hidden: true })
-    const header = screen.getByRole('heading', { level: 1, name: 'Skills library', hidden: true }).closest('header')!
-    expect(within(header).getByRole('link', { name: 'Create online', hidden: true })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink')
-    const [open, other] = within(list).getAllByRole('link', { hidden: true })
-    expect(open).toHaveAttribute('aria-current', 'true')
+    const list = await screen.findByRole('list', { name: 'Skills library' })
+    const [open, other] = within(list).getAllByRole('link')
+    expect(open).toHaveAttribute('aria-current', 'page')
     expect(open).toHaveClass(
-      'border',
-      'border-hairline-strong',
-      'bg-surface-control',
-      'aria-[current=true]:bg-surface-active',
-      '[[data-skin=plate]_&]:aria-[current=true]:bg-riso-yellow',
-      '[[data-skin=plate]_&]:border-2',
+      'bg-surface-active',
       '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+      '[[data-skin=plate]_&]:bg-riso-yellow',
+      '[[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]',
     )
     expect(other.closest('[data-sheet]')).not.toBeNull()
   })

@@ -38,7 +38,7 @@ function start(accounts: Schemas['ProjectCredentialAccount'][] = [codexAccount],
   return { user: userEvent.setup(), bodies }
 }
 
-const names = (scope: HTMLElement, role: 'option' | 'button') => within(scope).getAllByRole(role).map(item => item.querySelector('.font-bold')?.textContent ?? item.textContent)
+const names = (scope: HTMLElement, role: 'option' | 'button') => within(scope).getAllByRole(role).map(item => item.querySelector('.font-semibold')?.textContent ?? item.textContent)
 const option = (name: string) => screen.getByRole('option', { name: new RegExp(`^${name}`) })
 
 describe('Model provider picker', () => {
@@ -51,7 +51,7 @@ describe('Model provider picker', () => {
     expect(option('plain-plugin')).toHaveTextContent(/Plugin · plain/)
     expect(within(screen.getByRole('group', { name: 'Other' })).queryByRole('option', { name: /grok/ })).toBeNull()
     await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'subscription')
-    expect(screen.getAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent)).toEqual(['Grok CLI'])
+    expect(screen.getAllByRole('option').map(item => item.querySelector('.font-semibold')?.textContent)).toEqual(['Grok CLI'])
     await user.click(option('Grok CLI'))
     const chosen = screen.getByRole('group', { name: 'Add model account · provider' })
     expect(chosen).toHaveTextContent('Grok CLI')
@@ -88,7 +88,7 @@ describe('Model provider picker', () => {
     await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
     await screen.findByRole('option', { name: /^Anthropic/ })
     const search = screen.getByRole('searchbox', { name: 'Search providers' })
-    const results = async (query: string) => { await user.clear(search); if (query) await user.type(search, query); return screen.queryAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent) }
+    const results = async (query: string) => { await user.clear(search); if (query) await user.type(search, query); return screen.queryAllByRole('option').map(item => item.querySelector('.font-semibold')?.textContent) }
     expect(await results('z.ai')).toEqual(['Zhipu Z.ai'])
     expect(await results('zhipu')).toEqual(['Zhipu Z.ai'])
     expect(await results('kimi')).toEqual(['Moonshot Kimi'])
@@ -151,7 +151,7 @@ describe('Model provider picker', () => {
     await user.click(trigger)
     await screen.findByRole('option', { name: /^Anthropic/ })
     const search = screen.getByRole('searchbox', { name: 'Search providers' })
-    const current = () => document.getElementById(search.getAttribute('aria-activedescendant') ?? '')?.querySelector('.font-bold')?.textContent
+    const current = () => document.getElementById(search.getAttribute('aria-activedescendant') ?? '')?.querySelector('.font-semibold')?.textContent
     expect(search).not.toHaveAttribute('aria-activedescendant')
     await user.keyboard('{ArrowDown}')
     expect(current()).toBe('OpenAI Codex')

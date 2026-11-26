@@ -126,6 +126,7 @@ describe('Manual verification for five tools, formal HTTP fixture', () => {
       http.post(apiUrl(base), async ({ request }) => { const body = await request.json() as Schemas['CLIVerificationStart']; env.posts.push(body); const op = verificationOperation({ id: body.operationId, status: 'failed', phase: null, completedAt: '2026-10-16T10:01:00Z', result: { outcome: 'failed', verifiedAt: null, durationMs: 1, errorCode: 'tls_failed', httpStatus: null } }); env.set(op); return HttpResponse.json(op, { status: 202 }) }),
     )
     renderWithQuery(<DirtyContext.Provider value={() => {}}><ProjectAccounts projectId={account.projectId} purpose="cli" /></DirtyContext.Provider>)
+    await user.click(await screen.findByRole('button', { name: 'Verify' }))
     await readReady(); await user.click(screen.getByRole('button', { name: 'Replace credential' }))
     await user.type(screen.getByLabelText(/^Password/), 'synthetic-unsaved-password')
     expect(env.posts).toHaveLength(0)

@@ -23,12 +23,12 @@ export function IdentityInbox({ identityId }: { identityId: string }) {
   const unreadId = useId()
 
   return (
-    <section aria-labelledby="identity-inbox" className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
+    <section aria-labelledby="identity-inbox" className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-        <h3 id="identity-inbox" className="text-[17px] leading-[1.3] font-black">
+        <h3 id="identity-inbox" className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">
           {t.identities.inbox}
         </h3>
-        <span className="rounded-full bg-tint-yellow px-3 py-0.5 text-[12.5px] font-bold">{t.identities.inboxReadonly}</span>
+        <span className="rounded-full border border-hairline bg-surface-subtle px-2.5 py-0.5 text-[12px] font-medium text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">{t.identities.inboxReadonly}</span>
         <InboxLiveStatus />
         <div className="ml-auto flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
           <ToggleGroup aria-label={t.identities.direction} className={segmentedClass} value={direction} onValueChange={(value) => setDirection(value as InboxDirection)}>
@@ -38,13 +38,13 @@ export function IdentityInbox({ identityId }: { identityId: string }) {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <label htmlFor={unreadId} className="inline-flex min-h-9 cursor-pointer items-center gap-2 text-[13.5px] font-black">
+          <label htmlFor={unreadId} className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-[13px] font-medium [[data-skin=plate]_&]:font-black">
             <input
               id={unreadId}
               type="checkbox"
               checked={unreadOnly}
               onChange={(event) => setUnreadOnly(event.target.checked)}
-              className="m-0 size-[18px] accent-riso-pink focus-visible:shadow-focus"
+              className="m-0 size-4 accent-ink focus-visible:shadow-focus [[data-skin=plate]_&]:size-[18px] [[data-skin=plate]_&]:accent-riso-pink"
             />
             {t.identities.unreadOnly}
           </label>
@@ -54,9 +54,9 @@ export function IdentityInbox({ identityId }: { identityId: string }) {
       {inbox.isError && <ErrorAlert error={inbox.error} />}
       {inbox.isSuccess && messages.length === 0 && <p className="p-5 text-center text-[14px] text-ink-500">{t.identities.inboxEmpty}</p>}
       {messages.length > 0 && (
-        <ul aria-label={t.identities.inbox} className="flex flex-col gap-2">
+        <ul aria-label={t.identities.inbox} className="flex flex-col">
           {messages.map((message) => (
-            <ReadonlyMessage key={message.id} owner={{ kind: 'identity', identityId }} message={message} />
+            <ReadonlyMessage key={message.id} layout="row" owner={{ kind: 'identity', identityId }} message={message} />
           ))}
         </ul>
       )}

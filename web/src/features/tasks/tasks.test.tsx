@@ -10,6 +10,7 @@ import { agentsUrl, apiUrl, defaultProject, errorBody, makeAgent, projectsUrl, t
 import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
+import { makeSleep } from '@/test/sleep'
 import { makeTaskDetail, makeTaskMessage, nodeId, oldNodeId, taskId } from '@/test/tasks'
 import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
@@ -75,7 +76,7 @@ describe('project tasks', () => {
     const number = heading.previousElementSibling!
     expect(number).toHaveTextContent(/^#12$/)
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('font-display-latin', 'text-transparent')
+    expect(number).toHaveClass('font-mono', 'text-ink-500', '[[data-skin=plate]_&]:font-display-latin', '[[data-skin=plate]_&]:text-transparent')
     const header = heading.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Tasks›#12`)
     expect(within(header).getByRole('link', { name: 'Tasks' })).toHaveAttribute('href', tasksPath(defaultProject.name))
@@ -124,8 +125,14 @@ describe('node records and updates', () => {
     expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/Earlier successful result/)).toBeVisible()
     expect(screen.getByText(/for inspection only and is not passed downstream as a success/)).toBeVisible()
+    // Recovery actions stay accessible above both tabs even while viewing Node materials.
+    expect(screen.getByRole('button', { name: 'Retry current node' })).toBeVisible()
     await user.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
     expect(router.state.location.search).toContain(oldNodeId)
+    // Staying on Materials keeps the newly navigated record expanded; switching to Conversation shows the read-only history.
+    expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/Earlier successful result/)).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
     expect(screen.getByText('Reply from the task instance')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
@@ -250,7 +257,7 @@ it('steps on the workflow ruler can be selected with the keyboard; the canvas dr
   expect(screen.queryByLabelText('Workflow canvas; drag or use the arrow keys to pan')).not.toBeInTheDocument()
   expect(within(after).getAllByRole('button')).toHaveLength(3)
 })
-it('on narrow screens (stub hidden), a row of small step tags sits above the index tabs, and a click selects that step too', async () => {
+it('on narrow screens (left rail hidden), a row of small step tags and visit pills sits above the node workspace, and clicks select steps and visits', async () => {
   const original = window.matchMedia
   window.matchMedia = ((query: string) => ({ matches: query === narrowQuery, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia
   try {
@@ -259,7 +266,10 @@ it('on narrow screens (stub hidden), a row of small step tags sits above the ind
     const [chips, ruler] = screen.getAllByRole('navigation', { name: 'Workflow' })
     expect(chips).toHaveAttribute('data-workflow-chips')
     expect(chips.compareDocumentPosition(screen.getByRole('tablist', { name: 'Node record' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(ruler).toHaveClass('max-nav:hidden')
+    expect(ruler).toHaveClass('max-lg:hidden')
+    const visits = document.querySelector<HTMLElement>('[data-workflow-visits]')!
+    await userEvent.click(within(visits).getAllByRole('button')[0])
+    await waitFor(() => expect(router.state.location.search).toContain(`record=${oldNodeId}`))
     await userEvent.click(within(chips).getByRole('button', { name: /Submit report/ }))
     await waitFor(() => expect(router.state.location.search).toContain('step=finish'))
   } finally {
@@ -385,7 +395,7 @@ it('reconnecting reconciles all loaded pages from the first cursor, and a partia
   expect(screen.getByText('Reply from the task instance')).toBeVisible()
 })
 
-it('two run segments each load more than 50 messages without sharing cursors or gaps, and clicking a node goes back to the conversation by default', async () => {
+it('two run segments each load more than 50 messages without sharing cursors or gaps, and clicking a step preserves the active tab', async () => {
   // With 100+ messages on the page, role queries over the whole document are slow (each computes every element's role and name), so
   // controls are found by their text or inside the small part of the page that holds them.
   const button = (text: string, index = 0) => screen.getAllByText(text)[index].closest('button')!
@@ -406,7 +416,9 @@ it('two run segments each load more than 50 messages without sharing cursors or 
   expect(cursors).toContainEqual({ node: nodeId, cursor: `cursor-for-${nodeId}` })
   await userEvent.click(tab('Node materials'))
   await userEvent.click(within(document.querySelector('[data-ruler-step]')!.closest('nav')!).getByRole('button', { name: /Quality check/ }))
-  expect(tab('Conversation')).toHaveAttribute('aria-selected', 'true')
+  // Switching steps does not force-remount NodeRecordPanel or kick the user out of Materials.
+  expect(tab('Node materials')).toHaveAttribute('aria-selected', 'true')
+  await userEvent.click(tab('Conversation'))
   expect(screen.getByText('history segment #51')).toBeVisible()
   // The whole app renders the 100+ messages of the two segments again after each load and click. That is most of this test's time
   // (about 0.5 s here); a loaded CI machine took over the default 5 s, so this one test gets more.
@@ -423,11 +435,13 @@ it('a source link across steps locates the original record while keeping all seg
   await userEvent.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
   await waitFor(() => expect(router.state.location.search).toContain(`record=${oldNodeId}`))
   expect(router.state.location.search).toContain('step=check')
+  // Materials stays active across the step jump and opens the linked record immediately.
+  expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByText(/Earlier successful result/)).toBeVisible()
+  await userEvent.click(screen.getByRole('tab', { name: 'Conversation' }))
   expect(await screen.findByText('Reply from the task instance')).toBeVisible()
   expect(screen.getByText('history node reply')).toBeVisible()
   expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
-  await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
-  expect(screen.getByText(/Earlier successful result/)).toBeVisible()
 })
 
 it('the waiting state keeps the platform facts, the fixed reason and the original question permission, and shows no retry for history', async () => {
@@ -524,23 +538,29 @@ describe('task list on the sheet', () => {
   const rowOf = (title: string) => screen.getByRole('link', { name: title }).closest('li')!
   const tabs = () => screen.getByRole('group', { name: 'Status filter' })
 
-  it('the header is the page title: the breadcrumb is the project name and the title is “Tasks”, with the description and live status beside it', async () => {
+  it('the header shows the breadcrumb, title, inline KPI summary counts, and live status without duplicating a stub or verbose intro', async () => {
     await renderList()
     const header = screen.getByRole('heading', { level: 1, name: 'Tasks' }).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Tasks`)
     expect(within(header).getByRole('link', { name: defaultProject.name })).toHaveAttribute('href', `/?project=${encodeURIComponent(defaultProject.name)}`)
-    expect(within(header).getByText('This project\'s tasks, created by the project Manager')).toBeInTheDocument()
+    expect(within(header).queryByText("This project's tasks, created by the project Manager")).not.toBeInTheDocument()
+    const summary = header.querySelector<HTMLElement>('[data-tasks-summary]')!
+    await waitFor(() => expect(within(summary).getByText('in progress').previousElementSibling).toHaveTextContent(/^2$/))
+    expect(within(summary).getByText('blocked').previousElementSibling).toHaveTextContent(/^1$/)
+    expect(within(summary).getByText('blocked').previousElementSibling).toHaveClass('text-red-text')
+    expect(within(summary).getByText('completed').previousElementSibling).toHaveTextContent(/^1$/)
     expect(await within(header).findByText('Live')).toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Progress' })).not.toBeInTheDocument()
   })
 
-  it('status filters use underline tabs in mono skin and yellow/beige index tabs in Plate skin with counts; they filter only the tasks read so far', async () => {
+  it('status filters use segmented pills in a compact toolbar with counts and filter only the tasks read so far', async () => {
     const { list, user } = await renderList()
     const buttons = within(tabs()).getAllByRole('button')
     // In progress and Blocked use the server's counts (unfinished tasks); Completed and All count the tasks read so far.
     expect(buttons.map((button) => button.textContent)).toEqual(['All5', 'In progress2', 'Blocked1', 'Completed1'])
     expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
-    expect(buttons[0]).toHaveClass('border-b-2', 'border-ink', 'font-semibold', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:h-10')
-    expect(buttons[1]).toHaveClass('border-transparent', 'text-ink-500', '[[data-skin=plate]_&]:bg-paper-tab')
+    expect(buttons[0]).toHaveClass('h-7', 'bg-surface-control', 'font-semibold', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(buttons[1]).toHaveClass('h-7', 'text-ink-500')
     expect(within(list).getAllByRole('listitem')).toHaveLength(5)
     await user.click(buttons[1])
     expect(buttons[1]).toHaveAttribute('aria-pressed', 'true')
@@ -556,48 +576,76 @@ describe('task list on the sheet', () => {
     await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['All5+', 'In progress2', 'Blocked1', 'Completed1+']))
   })
 
-  it('one row per task: a title with a subtitle (the reason), the status (running a fluorescent-pink pill, blocked a tilted red stamp, completed a light-green pill), the current node in monospace, the responsible Agent, and the update time in monospace', async () => {
+  it('one row per task: a title with a truncated reason tooltip, status pill, current node in monospace, responsible Agent, and update time in monospace', async () => {
     await renderList()
     const running = rowOf('Sort user feedback for this week')
-    expect(running).toHaveClass('border-b-[1.5px]', 'border-dashed')
-    expect(within(running).getByText('Running')).toHaveClass('bg-riso-pink', 'rounded-full')
-    expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-tint-blue')
+    expect(running).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+    expect(within(running).getByText('Running')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:text-ink')
+    expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
     expect(running.querySelector('time')).toHaveClass('font-mono')
     const blocked = rowOf('Export timeout fix plan')
-    expect(within(blocked).getByText('Continues once you confirm the timeout limit')).toBeInTheDocument()
+    const reason = within(blocked).getByText('Continues once you confirm the timeout limit')
+    expect(reason).toHaveClass('truncate')
+    expect(reason).toHaveAttribute('title', 'Continues once you confirm the timeout limit')
     const stamp = within(blocked).getByText('Blocked').closest('[data-task-state]')!
     expect(stamp).toHaveAttribute('data-task-state', 'blocked')
     expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(rowOf('Weekly report draft')).getByText('Completed')).toHaveClass('bg-tint-green', 'text-green-text')
-    // The responsible Agent has an avatar (two small overprinted circles).
+    // The responsible Agent has an avatar (decorative).
     expect(within(running).getByText('task-checker').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('the number is the first column: the header says “No.” and each row has a monospace bold light-ink “#12” in the same group as the title, so narrow screens do not split them', async () => {
+  it('header and rows share CSS Grid tracks with the task number in the first column', async () => {
     const { list } = await renderList()
     const header = list.previousElementSibling!
     expect(header).toHaveAttribute('aria-hidden', 'true')
+    expect(header).toHaveClass('sm:grid', 'sm:grid-cols-[48px_minmax(0,1fr)_96px_116px_136px_84px]')
     expect(header.firstElementChild).toHaveTextContent(/^No\.$/)
-    expect(header.firstElementChild).toHaveClass('flex-[0_0_34px]')
     const running = rowOf('Sort user feedback for this week')
-    // First column, so screen readers read the column name first; the number and the title sit in the same non-wrapping group.
+    expect(running).toHaveClass('sm:grid', 'sm:grid-cols-[48px_minmax(0,1fr)_96px_116px_136px_84px]')
     const group = running.firstElementChild!
-    expect(group).toHaveClass('flex-nowrap')
+    expect(group).toHaveClass('sm:contents')
     expect(group).toContainElement(within(running).getByRole('link', { name: 'Sort user feedback for this week' }))
     const number = group.firstElementChild!
     expect(number).toHaveTextContent(/^No\.#12$/)
-    expect(number).toHaveClass('flex-[0_0_34px]', 'font-mono', 'text-[12px]', 'font-bold', 'text-ink-500')
+    expect(number).toHaveClass('font-mono', 'text-[12px]', 'font-medium', 'text-ink-500', '[[data-skin=plate]_&]:font-bold')
     expect(within(number as HTMLElement).getByText('No.')).toHaveClass('sr-only')
     expect(within(list).getAllByRole('listitem').map((row) => row.firstElementChild!.firstElementChild!.textContent)).toEqual(['No.#12', 'No.#11', 'No.#10', 'No.#9', 'No.#8'])
   })
 
-  it('the “Progress” stub holds three big numbers for in progress, blocked and completed; hidden on narrow screens', async () => {
-    await renderList()
-    const stub = screen.getByRole('complementary', { name: 'Progress' })
-    expect(stub).toHaveClass('max-nav:hidden')
-    await waitFor(() => expect(within(stub).getByText('in progress').previousElementSibling).toHaveTextContent(/^2$/))
-    expect(within(stub).getByText('blocked').previousElementSibling).toHaveTextContent(/^1$/)
-    expect(within(stub).getByText('completed').previousElementSibling).toHaveTextContent(/^1$/)
-    expect(within(stub).getByText('blocked').previousElementSibling).toHaveClass('text-red-text')
+  it('shows an explicit filtered-empty state with Show all and Load more actions when no loaded task matches the filter', async () => {
+    const env = setup()
+    server.use(
+      http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks: [env.detail.task], nextCursor: 'next-page' })),
+      http.get(apiUrl(`/projects/${defaultProject.id}/tasks/counts`), () => HttpResponse.json({ preparing: 0, running: 0, waiting: 0, blocked: 1 })),
+    )
+    renderRoutes(routes, tasksPath(defaultProject.name))
+    await screen.findByRole('list', { name: 'Tasks' })
+    const user = userEvent.setup()
+    await user.click(within(tabs()).getByRole('button', { name: /Completed/ }))
+    expect(screen.getByText('No tasks match this status filter.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Show all' }))
+    expect(await screen.findByRole('link', { name: env.detail.task.title })).toBeVisible()
+  })
+
+  it('deduplicates sleep display into a single compact strip in TaskDetail without repeating SleepUntil inside NodeRecordPanel', async () => {
+    const detail = makeTaskDetail(defaultProject.id)
+    detail.nodes[1].sleep = makeSleep({
+      id: '00000000-0000-7000-8000-000000000777',
+      scopeKind: 'task',
+      agentId: detail.nodes[1].agentId,
+      taskId,
+      nodeRunId: nodeId,
+      runtimeId: detail.nodes[1].runtimeId,
+      state: 'sleeping',
+      wakeAt: '2099-10-14T08:05:00Z',
+      reason: 'Waiting for CI build to finish',
+    })
+    setup(detail)
+    renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { name: 'General task acceptance' })
+    expect(screen.getAllByRole('region', { name: 'Sleeping' })).toHaveLength(1)
+    expect(document.querySelector('[data-task-sleep]')).toBeInTheDocument()
   })
 })

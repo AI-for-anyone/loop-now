@@ -34,6 +34,7 @@ export const shell = {
     agents: 'Agents',
     projects: 'Projects',
     platformAgents: 'Platform Agents',
+    platform: 'Platform',
   },
   chips: {
     busy: 'Replying',
@@ -42,8 +43,6 @@ export const shell = {
   noProjects: 'No projects yet',
   menu: 'Open navigation',
   closeMenu: 'Close navigation',
-  switchToLight: 'Switch to light mode',
-  switchToDark: 'Switch to dark mode',
   settingsShortcut: '⌘,',
   routeError: {
     title: 'Something went wrong',

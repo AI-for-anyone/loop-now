@@ -34,9 +34,9 @@ export function IdentityConversation({ identity }: { identity: Schemas['External
   const deleted = identity.deletedAt !== null
   const last = conversation.messages.at(-1)
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
+    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3.5">
       <div className="flex flex-col gap-1">
-        <h3 id={titleId} className="text-[17px] leading-[1.3] font-black">{text.conversation}</h3>
+        <h3 id={titleId} className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">{text.conversation}</h3>
         <p className="text-[13px] text-ink-500">{text.conversationIntro}</p>
       </div>
       <ErrorAlert error={conversation.error} />
@@ -110,7 +110,7 @@ function ReplyBox({ last, name }: { last: Message; name: string }) {
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-[13px] font-bold">{t.inbox.replyTo(name)}</label>
       <Textarea id={id} rows={3} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={localError ? true : undefined} />
-      {localError && <p role="alert" className="text-[13px] font-black text-red-text">{localError}</p>}
+      {localError && <p role="alert" className="text-[13px] font-semibold text-red-text [[data-skin=plate]_&]:font-black">{localError}</p>}
       <ErrorAlert error={reply.error} />
       <Button className="self-end" disabled={reply.isPending} onClick={() => void submit()}>
         <ReplyIcon />
@@ -140,7 +140,7 @@ function NewMessageBox({ identity, onClose }: { identity: Schemas['ExternalIdent
       <label htmlFor={id} className="text-[13px] font-bold">{text.newMessageLabel(identity.name)}</label>
       <p className="text-xs text-ink-500">{text.newMessageHint}</p>
       <Textarea id={id} rows={3} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={localError ? true : undefined} />
-      {localError && <p role="alert" className="text-[13px] font-black text-red-text">{localError}</p>}
+      {localError && <p role="alert" className="text-[13px] font-semibold text-red-text [[data-skin=plate]_&]:font-black">{localError}</p>}
       <ErrorAlert error={send.error} />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>{text.cancel}</Button>

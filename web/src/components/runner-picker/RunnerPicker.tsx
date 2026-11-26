@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
 import { useAllModels, useModelProviders, useModelsOf, useRuntimes } from '@/api/queries'
 import { t } from '@/i18n'
@@ -29,7 +29,7 @@ export interface RunnerChoice {
 export interface RunnerLead {
   name: string
   mark: ReactNode
-  // Under its name in the rail, and the same said in words for its tab's name.
+  // Inline status in the rail tab, and the same said in words for its accessible name.
   state: ReactNode
   stateText: string
   panel: ReactNode
@@ -48,7 +48,7 @@ interface RunnerPickerProps {
   agentId?: string
   // Creating an Agent in this project or the platform (a scope key): the catalog says which providers it could use right away.
   newIn?: ScopeKey
-  // inline: a field in a form (New Agent, the config page). popover: opened from the message box; the search box takes focus.
+  // inline: a field in a form (New Agent, Writing settings). popover: opened from the message box or Basics; the search box takes focus.
   variant?: 'inline' | 'popover'
   labelledBy?: string
   invalid?: boolean
@@ -57,36 +57,15 @@ interface RunnerPickerProps {
   lead?: RunnerLead
 }
 
-// Below this width the runtimes become a row of cards above the models and the thinking level a row below them.
-const WIDE = 600
 const MODEL_LIMIT = 200
 
-// The width of the picker, measured; wide until measured (and in tests, where nothing is laid out).
-function useWide() {
-  const ref = useRef<HTMLDivElement>(null)
-  const [wide, setWide] = useState(true)
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const measure = () => element.clientWidth > 0 && setWide(element.clientWidth >= WIDE)
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return [ref, wide] as const
-}
-
-// Pick who runs the Agent first, then the model: on the left the runtimes (CLIs found on this computer first, the bundled one last), each
-// with its state; on the right the models of the runtime being looked at, searchable, and the thinking level of the chosen model. A
-// runtime that cannot run here shows how to set it up instead of its models, so it cannot be chosen. Under a runtime with several model
-// providers (the bundled Pi) the providers are a level of their own: those the Agent can use now first, those it cannot choose at all last.
+// Single-column command selector: top horizontal runtime tab bar (local CLIs first, bundled runtime last), seamless search and model tree
+// (or setup guidance when a runtime cannot run here), a compact single-line context strip, and a horizontal thinking-level pill bar.
 // Runtimes, capabilities and status are read only through lib/runtime.ts.
 export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange, agentId, newIn, variant = 'inline', labelledBy, invalid, offers, lead }: RunnerPickerProps) {
   const lookup = useRuntimeLookup()
   const catalog = useModelProviders(agentId ?? (newIn === undefined ? undefined : { newIn }))
   const statuses = useRuntimes(lookup.all.some((definition) => !definition.capabilities.bundled))
-  const [ref, wide] = useWide()
   const panelId = useId(), tabBase = useId()
   const tabId = (id: AgentRuntime) => `${tabBase}-${id}`
   const searchRef = useRef<HTMLInputElement>(null)
@@ -203,23 +182,27 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
     browsed &&
     (browsed.definition.acpCommandId ? t.runtime.picker.addedNote(browsed.definition.name) : browsed.definition.capabilities.accounts === 'local' ? t.runtime.providerNote(browsed.definition.name) : t.runtime.picker.managed)
 
+  const showColophon = Boolean(colophon && !(lead && leading) && !catalog.isError && !(browsed && readiness?.state === 'problem'))
+  const hasContextStrip = Boolean(showColophon || note || showCurrent || showInUse)
+  const colophonTitle = colophon ? (browsedStatus?.binaryPath ? `${colophon} · ${browsedStatus.binaryPath}` : colophon) : undefined
+
   return (
     <div
-      ref={ref}
       role="group"
       aria-labelledby={labelledBy}
       aria-label={labelledBy ? undefined : t.runtime.picker.label}
       aria-invalid={invalid || undefined}
       className={cn(
-        'grid min-w-0 overflow-hidden bg-paper-raised text-ink',
-        variant === 'inline' && 'rounded-card border-2 border-ink shadow-[4px_4px_0_var(--ink)] aria-invalid:border-red aria-invalid:shadow-[4px_4px_0_var(--red)]',
-        wide ? 'grid-cols-[minmax(176px,212px)_minmax(0,1fr)_minmax(112px,168px)]' : 'grid-cols-[minmax(0,1fr)]',
-        variant === 'popover' && (wide ? 'h-full grid-rows-[minmax(0,1fr)_auto]' : 'h-full grid-rows-[auto_minmax(0,1fr)_auto_auto]'),
+        'flex min-w-0 flex-col overflow-hidden bg-surface-elevated text-ink [[data-skin=plate]_&]:bg-paper-raised',
+        variant === 'inline' &&
+          'rounded-panel border border-hairline-strong shadow-surface aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red [[data-skin=plate]_&]:rounded-card [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)] [[data-skin=plate]_&]:aria-invalid:border-red [[data-skin=plate]_&]:aria-invalid:ring-0 [[data-skin=plate]_&]:aria-invalid:shadow-[4px_4px_0_var(--red)]',
+        variant === 'popover' && 'min-h-0 flex-1',
       )}
     >
-      <div ref={railRef} className={cn('flex min-w-0 flex-col', wide && 'row-span-2')}>
+      {/* Band 1: compact horizontal runtime tab bar */}
+      <div ref={railRef} className="shrink-0">
         {lookup.error ? (
-          <p className="px-3 py-3 text-[13px] font-bold text-red-text">{describeError(lookup.error)}</p>
+          <p className="border-b border-hairline px-3 py-2 text-[12.5px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{describeError(lookup.error)}</p>
         ) : (
           <RunnerRail
             entries={entries}
@@ -235,66 +218,91 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
             }
             browsed={browsedId}
             current={valueRuntime}
-            wide={wide}
             tabId={tabId}
             panelId={panelId}
             onBrowse={browse}
-            // Right arrow leaves the rail for the model search, or for the first control in the first entry's own panel.
+            // Down arrow leaves the tab bar for the model search, or for the first control in the lead panel.
             onLeave={() => (leading ? panelRef.current?.querySelector<HTMLElement>('button:not([disabled]), a[href], input, textarea')?.focus() : searchRef.current?.focus())}
           />
         )}
       </div>
+
+      {/* Band 2: seamless search + compact model tree (or setup guidance / lead panel) */}
       <div
         ref={panelRef}
         id={panelId}
         role="tabpanel"
         aria-labelledby={leading ? leadTab : browsedId ? tabId(browsedId) : undefined}
-        className={cn('flex min-w-0 flex-col', variant === 'inline' ? (wide ? 'h-[340px]' : 'h-[320px]') : 'min-h-0')}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
       >
         {lead && leading ? (
-          lead.panel
+          <div className="max-h-[260px] overflow-y-auto">{lead.panel}</div>
         ) : catalog.isError ? (
-          <div className="grid gap-1.5 px-4 py-4 text-[13.5px] text-red-text">
-            <p className="font-bold">{t.config.basic.catalogUnavailable}</p>
+          <div className="grid gap-1 px-3 py-3 text-[12.5px] text-red-text">
+            <p className="font-semibold [[data-skin=plate]_&]:font-bold">{t.config.basic.catalogUnavailable}</p>
             <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
           </div>
         ) : browsed && readiness?.state === 'problem' ? (
           <RunnerSetup runtime={browsed.definition} problem={readiness.problem} version={browsed.version} />
         ) : (
-          <>
-            <ModelList
-              rows={rows}
-              hidden={hidden}
-              grouped={grouped}
-              query={query}
-              onQuery={setQuery}
-              active={activeKey}
-              onActive={setActive}
-              chosen={chosen}
-              loading={catalog.isLoading || reading.size > 0}
-              reading={reading}
-              failures={listedFailures}
-              reasonOf={reasonOf}
-              blocked={blocked}
-              onToggle={toggle}
-              onChoose={choose}
-              onRail={() => railRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus()}
-              onThinking={() => (thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ?? thinkingRef.current?.querySelector<HTMLElement>('[role="radio"]:not([disabled])'))?.focus()}
-              autoFocus={variant === 'popover'}
-              searchRef={searchRef}
-            />
-            {colophon && (
-              <p className="flex shrink-0 flex-wrap items-baseline gap-x-2 border-t-2 border-dashed border-ink/25 px-4 py-2 text-[12px] leading-snug text-ink-700">
-                <span className="font-bold">{colophon}</span>
-                {browsedStatus?.binaryPath && <span className="min-w-0 truncate font-mono text-[11px] text-ink-500">{browsedStatus.binaryPath}</span>}
-              </p>
-            )}
-          </>
+          <ModelList
+            rows={rows}
+            hidden={hidden}
+            grouped={grouped}
+            query={query}
+            onQuery={setQuery}
+            active={activeKey}
+            onActive={setActive}
+            chosen={chosen}
+            loading={catalog.isLoading || reading.size > 0}
+            reading={reading}
+            failures={listedFailures}
+            reasonOf={reasonOf}
+            blocked={blocked}
+            onToggle={toggle}
+            onChoose={choose}
+            onRail={() => railRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus()}
+            onThinking={() => (thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ?? thinkingRef.current?.querySelector<HTMLElement>('[role="radio"]:not([disabled])'))?.focus()}
+            autoFocus={variant === 'popover'}
+            listMaxHeightClass={variant === 'popover' ? 'max-h-[240px]' : 'max-h-[220px]'}
+            searchRef={searchRef}
+          />
         )}
       </div>
-      <div ref={thinkingRef} className={cn('flex min-w-0 flex-col', wide ? 'row-span-2' : 'border-t-2 border-dashed border-ink/35')}>
+
+      {/* Band 3: subtle single-line context strip */}
+      {hasContextStrip && (
+        <div className="flex shrink-0 flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-[11.5px] leading-snug text-ink-500 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700">
+          {showColophon && colophon && (
+            <p title={colophonTitle} className="flex min-w-0 items-center gap-1.5">
+              <span className="min-w-0 truncate">{colophon}</span>
+              {browsedStatus?.binaryPath && (
+                <span className="max-w-[38%] shrink-0 truncate font-mono text-[10.5px] text-ink-500/80">{browsedStatus.binaryPath}</span>
+              )}
+            </p>
+          )}
+          {note && (
+            <p role="note" title={note} className="truncate text-ink-700">
+              {note}
+            </p>
+          )}
+          {showCurrent && (
+            <p role="note" title={t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)} className="truncate text-ink-700">
+              {t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)}
+            </p>
+          )}
+          {showInUse && (
+            <p role="note" title={`${t.runtime.picker.inUse} ${value.provider} / ${value.modelId}`} className="truncate text-ink-700">
+              {`${t.runtime.picker.inUse} `}
+              <span className="font-mono">{`${value.provider} / ${value.modelId}`}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Band 4: compact horizontal thinking pill bar */}
+      <div ref={thinkingRef} className="shrink-0">
         <ThinkingRuler
-          orientation={wide ? 'vertical' : 'horizontal'}
           value={thinkingLevel}
           levels={levels}
           defaultLevel={chosenModel?.defaultThinkingLevel}
@@ -302,18 +310,6 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           onChange={onThinkingChange}
         />
       </div>
-      {(note || showCurrent || showInUse) && (
-        <div className={cn('grid gap-1 border-t-2 border-dashed border-ink/25 px-3.5 py-2 text-[12.5px] font-bold', wide && 'col-start-2')}>
-          {note && <p role="note" className="text-ink-700">{note}</p>}
-          {showCurrent && <p role="note" className="text-ink-700">{t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)}</p>}
-          {showInUse && (
-            <p role="note" className="text-ink-700">
-              {`${t.runtime.picker.inUse} `}
-              <span className="font-mono">{`${value.provider} / ${value.modelId}`}</span>
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 }

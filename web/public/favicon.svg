@@ -1,5 +1,116 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="15" fill="#2443B5"/>
-  <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="#FBF9F4"/>
-  <rect x="40" y="14" width="10" height="10" rx="3" fill="#FFE14D"/>
+  <defs>
+    <clipPath id="sq">
+      <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z"/>
+    </clipPath>
+    <clipPath id="lc">
+      <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z"/>
+    </clipPath>
+    <clipPath id="gc">
+      <rect x="40" y="14" width="10" height="10" rx="3"/>
+    </clipPath>
+    <linearGradient id="bg" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#2A2D34"/>
+      <stop offset="18%" stop-color="#1A1C22"/>
+      <stop offset="52%" stop-color="#0E1014"/>
+      <stop offset="100%" stop-color="#06070A"/>
+    </linearGradient>
+    <radialGradient id="oh" cx="50%" cy="2%" r="72%" fx="44%" fy="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="32%" stop-color="#DCE4F2" stop-opacity="0.08"/>
+      <stop offset="65%" stop-color="#FFFFFF" stop-opacity="0.015"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rf" cx="50%" cy="104%" r="60%">
+      <stop offset="0%" stop-color="#C8D6EE" stop-opacity="0.16"/>
+      <stop offset="45%" stop-color="#7B8BA6" stop-opacity="0.045"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dp" cx="50%" cy="50%" r="54%">
+      <stop offset="68%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.34"/>
+    </radialGradient>
+    <radialGradient id="ga" cx="45" cy="19" r="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8CE64" stop-opacity="0.28"/>
+      <stop offset="45%" stop-color="#C98A1E" stop-opacity="0.09"/>
+      <stop offset="100%" stop-color="#C98A1E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rd" x1="6%" y1="2%" x2="94%" y2="98%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.72"/>
+      <stop offset="18%" stop-color="#E8EEF8" stop-opacity="0.24"/>
+      <stop offset="48%" stop-color="#FFFFFF" stop-opacity="0.07"/>
+      <stop offset="80%" stop-color="#D4DFEE" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.46"/>
+    </linearGradient>
+    <linearGradient id="rs" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.24"/>
+      <stop offset="28%" stop-color="#FFFFFF" stop-opacity="0.03"/>
+      <stop offset="75%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+      <stop offset="100%" stop-color="#C8D8F0" stop-opacity="0.16"/>
+    </linearGradient>
+    <linearGradient id="sv" x1="20%" y1="6%" x2="78%" y2="94%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="22%" stop-color="#EEF1F6"/>
+      <stop offset="52%" stop-color="#CFD6E0"/>
+      <stop offset="76%" stop-color="#B0B8C5"/>
+      <stop offset="92%" stop-color="#C6CDD8"/>
+      <stop offset="100%" stop-color="#9CA4B2"/>
+    </linearGradient>
+    <radialGradient id="sb" cx="24" cy="20" r="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.62"/>
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="svb" x1="16%" y1="6%" x2="84%" y2="94%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.98"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="72%" stop-color="#353B46" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#EEF3FA" stop-opacity="0.48"/>
+    </linearGradient>
+    <linearGradient id="gd" x1="18%" y1="4%" x2="82%" y2="96%">
+      <stop offset="0%" stop-color="#FFF5C8"/>
+      <stop offset="22%" stop-color="#F9D876"/>
+      <stop offset="55%" stop-color="#DFAA39"/>
+      <stop offset="84%" stop-color="#B57E1B"/>
+      <stop offset="100%" stop-color="#CE992F"/>
+    </linearGradient>
+    <radialGradient id="gb" cx="43.5" cy="16.5" r="7.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFDF0" stop-opacity="0.72"/>
+      <stop offset="50%" stop-color="#FFE694" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFE694" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gdb" x1="12%" y1="6%" x2="88%" y2="94%">
+      <stop offset="0%" stop-color="#FFFDF2" stop-opacity="0.96"/>
+      <stop offset="42%" stop-color="#FFE89E" stop-opacity="0.32"/>
+      <stop offset="76%" stop-color="#5E3A05" stop-opacity="0.42"/>
+      <stop offset="100%" stop-color="#F7CF65" stop-opacity="0.56"/>
+    </linearGradient>
+    <filter id="ms" x="-25%" y="-25%" width="150%" height="165%">
+      <feDropShadow dx="0" dy="2.1" stdDeviation="2.2" flood-color="#000000" flood-opacity="0.72"/>
+      <feDropShadow dx="0" dy="0.5" stdDeviation="0.55" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="gs" x="-45%" y="-45%" width="190%" height="200%">
+      <feDropShadow dx="0" dy="1.8" stdDeviation="1.9" flood-color="#000000" flood-opacity="0.68"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#sq)">
+    <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#bg)"/>
+    <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#dp)"/>
+    <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#oh)"/>
+    <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#rf)"/>
+    <circle cx="45" cy="19" r="16" fill="url(#ga)"/>
+    <g filter="url(#ms)">
+      <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="url(#sv)"/>
+      <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="url(#sb)"/>
+      <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="none" stroke="url(#svb)" stroke-width="1.2" clip-path="url(#lc)"/>
+    </g>
+    <g filter="url(#gs)">
+      <rect x="40" y="14" width="10" height="10" rx="3" fill="url(#gd)"/>
+      <rect x="40" y="14" width="10" height="10" rx="3" fill="url(#gb)"/>
+      <rect x="40" y="14" width="10" height="10" rx="3" fill="none" stroke="url(#gdb)" stroke-width="1.05" clip-path="url(#gc)"/>
+    </g>
+    <path d="M32 0.75C50 0.75 55.9 0.75 59.6 4.4C63.25 8.1 63.25 14 63.25 32C63.25 50 63.25 55.9 59.6 59.6C55.9 63.25 50 63.25 32 63.25C14 63.25 8.1 63.25 4.4 59.6C0.75 55.9 0.75 50 0.75 32C0.75 14 0.75 8.1 4.4 4.4C8.1 0.75 14 0.75 32 0.75Z" fill="none" stroke="url(#rs)" stroke-width="2.6"/>
+    <path d="M32 0.75C50 0.75 55.9 0.75 59.6 4.4C63.25 8.1 63.25 14 63.25 32C63.25 50 63.25 55.9 59.6 59.6C55.9 63.25 50 63.25 32 63.25C14 63.25 8.1 63.25 4.4 59.6C0.75 55.9 0.75 50 0.75 32C0.75 14 0.75 8.1 4.4 4.4C8.1 0.75 14 0.75 32 0.75Z" fill="none" stroke="url(#rd)" stroke-width="0.95"/>
+    <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="none" stroke="#000000" stroke-opacity="0.52" stroke-width="0.8"/>
+  </g>
 </svg>

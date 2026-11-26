@@ -15,6 +15,7 @@ import { routes } from './routes'
 import { chooseModel } from '@/test/model-picker'
 import { openInboxStream } from '@/test/inbox'
 import { AppLayout, SIDEBAR_COLLAPSED_KEY } from './AppLayout'
+import { SIDEBAR_PLATFORM_OPEN_KEY } from './Sidebar'
 import { FakeEventSource } from '@/test/fake-event-source'
 
 // Global connection notice: told apart from the error messages inside each page by the server address in its description.
@@ -34,17 +35,29 @@ const hrefs = () => sidebarLinks().map((link) => link.getAttribute('href'))
 const names = () => sidebarLinks().map((link) => link.textContent)
 
 describe('sidebar and page structure', () => {
-  it('the root address is the overview of the global scope: Overview is current, followed by projects, platform Agents and the global entries at the bottom', async () => {
+  it('the root address is the overview of the global scope: Overview is current, followed by projects, platform Agents, collapsible Platform tools (expanded by default), and Settings in the footer dock', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const platform = makeAgent({ name: 'Inspector', scope: 'platform', projectId: null })
     server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(platform)] })), ...baseHandlers([makeAgent()]))
+    const user = userEvent.setup()
     renderRoutes(routes, '/')
     expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
     await within(sidebar()).findByRole('link', { name: 'Inspector' })
     expect(scopeSwitcher('Global')).toBeInTheDocument()
+    // Platform group starts expanded at the bottom of the scroll area above the footer dock.
+    const platformToggle = within(sidebar()).getByRole('button', { name: /Platform/ })
+    expect(platformToggle).toHaveAttribute('aria-expanded', 'true')
     expect(names()).toEqual(['LOOP NOW', 'Overview', 'test-project', 'Inspector', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
     expect(hrefs()).toEqual(['/', '/', '/?project=test-project', `/platform/agents/${platform.id}`, ...globalEntries])
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Overview'])
     expect(within(sidebar()).getByRole('list', { name: 'Platform Agents' })).toBeInTheDocument()
+    // Collapsing the Platform group hides the four global tools and persists the disclosure state.
+    await user.click(platformToggle)
+    expect(platformToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(window.localStorage.getItem(SIDEBAR_PLATFORM_OPEN_KEY)).toBe('false')
+    expect(names()).toEqual(['LOOP NOW', 'Overview', 'test-project', 'Inspector', 'Global settings'])
+    expect(hrefs()).toEqual(['/', '/', '/?project=test-project', `/platform/agents/${platform.id}`, '/settings'])
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
   })
 
   it('the main area has a layer of paper grain on its beige background; the sidebar does not', async () => {
@@ -70,6 +83,7 @@ describe('sidebar and page structure', () => {
   })
 
   it('opening an Agent config page directly: the sidebar shows its project with the Agent selected; the global entries are still reachable in the project', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
@@ -81,12 +95,13 @@ describe('sidebar and page structure', () => {
     expect(within(sidebar()).queryByRole('link', { name: /Inbox/ })).toBeNull()
     expect(await screen.findByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
     // Main-area page header: the location breadcrumb, the title in the display font, and the model.
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('test-project›Agent›dev-helper')
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('test-project/dev-helper')
     expect(screen.getByRole('heading', { name: 'dev-helper', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
   })
 
   it('opening a global page (Plugin market, Global settings) from a project keeps the current project in the sidebar', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     const user = userEvent.setup()
@@ -110,7 +125,7 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(within(list).getByRole('link', { name: 'Inspector' })).toHaveAttribute('aria-current', 'page'))
     expect(scopeSwitcher('Global')).toBeInTheDocument()
     expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('test-project')
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Platform Agent›Inspector')
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global/Inspector')
   })
 
   it('the full navigation has no Inbox entry, and the Inbox event stream is still set up (messages for you and items needing you are updated through it)', async () => {
@@ -151,10 +166,11 @@ describe('sidebar and page structure', () => {
     expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('Working notes')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Git' })).toBeInTheDocument()
     expect(reads).toContain('')
-    // Redesign: the folder sits directly on the tab's sheet, with the overview in the stub on the
-    // right; the description that used to sit at the top of the tab moved into the footer note.
-    expect(screen.getByRole('complementary', { name: 'Overview' }).closest('[data-sheet]')).not.toBeNull()
-    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent("dev-helper's folder: it works here")
+    // Full-bleed 2-pane explorer on the tab's sheet, with live counts/size and the folder note in the footer strip.
+    expect(document.querySelector('[data-file-manager]')?.closest('[data-sheet]')).not.toBeNull()
+    const footer = document.querySelector('[data-folder-footer]')
+    expect(footer).toHaveTextContent('0 folders · 1 file · 12 B')
+    expect(footer).toHaveTextContent("dev-helper's folder: it works here")
   })
 
   it('the sidebar “Project folder” opens the folder shared by the project and becomes current', async () => {
@@ -170,10 +186,11 @@ describe('sidebar and page structure', () => {
     expect(await screen.findByRole('heading', { name: 'Project folder', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: 'File tree' })).toHaveTextContent('Project folder')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Project folder'])
-    // Redesign: the title is outside the sheet, the folder is on a sheet, and the overview is in the stub on the right.
-    const sheet = screen.getByRole('complementary', { name: 'Overview' }).closest('[data-sheet]')!
+    // The title stays in PageHeader outside the sheet; the 2-pane explorer sits on the sheet with live counts in the footer strip.
+    const sheet = document.querySelector('[data-file-manager]')?.closest<HTMLElement>('[data-sheet]') ?? null
     expect(sheet).not.toBeNull()
     expect(sheet).not.toContainElement(screen.getByRole('heading', { name: 'Project folder', level: 1 }))
+    await waitFor(() => expect(document.querySelector('[data-folder-footer]')).toHaveTextContent('0 folders · 0 files'))
     expect(reads).toContain('')
   })
 
@@ -191,11 +208,17 @@ describe('sidebar and page structure', () => {
     expect(within(await screen.findByRole('dialog')).getByRole('heading', { name: 'New Agent' })).toBeInTheDocument()
   })
 
-  it.each(['/skills', '/identities', '/plugins', '/settings'])('global subpage %s keeps the five global entries and the Inbox event stream', async path => {
+  it.each(['/skills', '/identities', '/plugins', '/settings'])('global subpage %s keeps the five global entries reachable and the Inbox event stream', async path => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
+    const user = userEvent.setup()
     renderRoutes([{ path: '/', element: <AppLayout />, children: [{ path: path.slice(1), element: <p>Global page content</p> }] }], path)
     await screen.findByText('Global page content')
+    // Platform subpages auto-expand the Platform section; Settings keeps it collapsed until expanded.
+    const toggle = within(sidebar()).getByRole('button', { name: /Platform/ })
+    if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle)
     for (const href of globalEntries) expect(hrefs()).toContain(href)
     expect(FakeEventSource.instances.some(source => source.url.endsWith('/inbox/events') && source.readyState !== FakeEventSource.CLOSED)).toBe(true)
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
   })
 
   it('on narrow screens the menu button opens the sidebar as a drawer, which closes by itself once an entry changes the address', async () => {
@@ -500,7 +523,10 @@ describe('global settings page', () => {
       ),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     // The names in the test data differ from the row labels, so the assertions are scoped to the value that belongs to each label.
     await waitFor(() => expect(screen.getByText('Default organization').nextElementSibling).toHaveTextContent('test-org'))
     expect(screen.getByText('Default project').nextElementSibling).toHaveTextContent('test-project')
@@ -513,14 +539,17 @@ describe('global settings page', () => {
     expect(within(gh).getByText('checksum mismatch')).toBeInTheDocument()
     const lark = screen.getByRole('region', { name: 'lark-cli' })
     expect(within(lark).getByRole('note')).toHaveTextContent('system keychain')
-    // The sidebar has the scope switcher and search, so "no editing actions"
-    // (in the test title) means the parts of the page body outside the folder.
-    expect(within(page).getByRole('region', { name: 'Global folder' })).toBeInTheDocument()
-    const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    // The runtime status “Check again” button only reads again; it does not modify the server. “Add command” only opens the dialog
-    // for a local ACP command (the runtimes section's own editing, not the server information).
-    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again', 'Add command'])
-    expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
+    // Server & Diagnostics is read-only: no editing buttons or text inputs in the main body.
+    expect(within(page).queryAllByRole('button')).toEqual([])
+    expect(within(page).queryAllByRole('textbox')).toEqual([])
+
+    // Global folder lives under Workspace & Local Mode -> Global Folder and keeps its file editing actions.
+    await user.click(within(tabs).getByRole('link', { name: 'Workspace & Local Mode' }))
+    const workspaceViews = await within(page).findByRole('radiogroup', { name: 'Workspace & Local Mode view' })
+    await user.click(within(workspaceViews).getByRole('radio', { name: 'Global Folder' }))
+    const folder = await within(page).findByRole('region', { name: 'Global folder' })
+    expect(folder.querySelector('[data-file-manager]')).not.toBeNull()
+    expect(within(folder).getByRole('button', { name: 'New file' })).toBeInTheDocument()
   })
   it('the server section shows the version, taken from the Loop-Now-Version header of the server response', async () => {
     server.use(
@@ -529,7 +558,10 @@ describe('global settings page', () => {
       ),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     await waitFor(() => expect(screen.getByText('Version', { selector: 'dt' }).nextElementSibling).toHaveTextContent('dev-d6eed7b50c04'))
   })
 
@@ -538,7 +570,10 @@ describe('global settings page', () => {
       http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 300 << 20, events: 1 << 20 }, walWarning: true } })),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     const page = screen.getByRole('main')
     expect(await within(page).findByText('Database: OK')).toBeInTheDocument()
     expect(within(page).getByText(/^The database log file is very large/).closest('[role="note"]')).toHaveTextContent('The service is still available and will tidy up on its own.')

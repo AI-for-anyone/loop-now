@@ -69,13 +69,13 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       {/* Escape inside the Write with AI panel closes that panel, not the dialog with everything typed in it. */}
-      <DialogContent kind="create" className="sm:max-w-[860px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
+      <DialogContent kind="create" className="sm:max-w-[560px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>
         <form className="grid gap-[18px]" onSubmit={(e) => void submit(e)} noValidate>
           <div className="grid gap-2">
-            <span id={runnerLabel} className="text-[13.5px] leading-snug font-black">{t.runtime.picker.label}</span>
+            <span id={runnerLabel} className="text-[13.5px] leading-snug font-semibold [[data-skin=plate]_&]:font-black">{t.runtime.picker.label}</span>
             <RunnerPicker
               labelledBy={runnerLabel}
               newIn={scopeKey(scope)}
@@ -91,8 +91,8 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
             />
             <FieldError message={modelError} />
             <FieldError message={fieldMessages(create.error, (field) => field === 'thinkingLevel')} />
-            {modeNote && <p role="note" className="text-[13px] font-bold text-ink-700">{modeNote}</p>}
-            {ownRules && <p role="note" className="text-[13px] font-bold text-ink-700">{ownRules}</p>}
+            {modeNote && <p role="note" className="text-[13px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{modeNote}</p>}
+            {ownRules && <p role="note" className="text-[13px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{ownRules}</p>}
           </div>
           {(model?.provider === 'openai-codex' || chosenRuntime) && (
             <div className={cn('grid items-start gap-4', model?.provider === 'openai-codex' && chosenRuntime && 'sm:grid-cols-2')}>

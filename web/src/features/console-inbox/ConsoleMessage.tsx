@@ -54,23 +54,23 @@ export function ConsoleMessage({ message, agent, answerable = true, onReply, met
 }
 
 export function ToYouTag() {
-  return <span className="rounded-stamp border border-riso-pink/45 bg-tint-pink-2 px-1.5 text-[11.5px] leading-[18px] font-black text-pink-text">{text.toYou}</span>
+  return <span className="rounded-stamp border border-pink-text/30 bg-tint-yellow px-1.5 text-[11.5px] leading-[18px] font-semibold text-pink-text [[data-skin=plate]_&]:border-riso-pink/45 [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black">{text.toYou}</span>
 }
 
 export function UnreadDot() {
   return (
     <span title={text.unread} className="inline-flex">
-      <span aria-hidden="true" className="size-2 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
+      <span aria-hidden="true" className="size-2 rounded-full bg-pink-text [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]" />
       <span className="sr-only">{text.unread}</span>
     </span>
   )
 }
 
-const optionBase = 'inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-left text-[13.5px] leading-5 font-bold [overflow-wrap:anywhere] outline-none focus-visible:shadow-focus'
+const optionBase = 'inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border px-3.5 text-left text-[13.5px] leading-5 font-medium [overflow-wrap:anywhere] outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:font-bold'
 const optionStyle = {
   open: 'cursor-pointer border-hairline-strong bg-surface-control text-ink hover:border-ink hover:bg-surface-hover disabled:cursor-default disabled:opacity-60 [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[2px_2px_0_rgb(36_67_181/.18)] [[data-skin=plate]_&]:hover:border-riso-blue [[data-skin=plate]_&]:hover:bg-tint-blue',
   chosen: 'border-cta-bg bg-cta-bg text-cta-fg [[data-skin=plate]_&]:border-riso-blue [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:text-white',
-  faded: 'border-dashed border-ink/20 bg-transparent text-ink-500',
+  faded: 'border-hairline bg-transparent text-ink-500 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/20',
 }
 
 // The question's options: while waiting for an answer, each option is a button that submits itself as the answer when
@@ -91,8 +91,8 @@ export function QuestionChoices({ message, answerable = true, onReply }: { messa
   return (
     <section aria-label={text.question} className="flex min-w-0 flex-col gap-2">
       {question.kind === 'permission' && (
-        <p data-permission-question className="inline-flex items-center gap-1.5 self-start rounded-stamp bg-riso-pink px-2 text-[12px] leading-[22px] font-black text-ink shadow-[inset_0_0_0_1.5px_var(--ink)]">
-          <HandIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
+        <p data-permission-question className="inline-flex items-center gap-1.5 self-start rounded-stamp border border-hairline-strong bg-tint-yellow px-2 text-[12px] leading-[22px] font-semibold text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
+          <HandIcon aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
           {t.permissions.inbox.badge}
         </p>
       )}
@@ -158,7 +158,7 @@ export function ReplyChip({ name, preview, onCancel }: { name: string; preview: 
       <ReplyIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue" strokeWidth={2.4} />
       <span className="shrink-0 font-bold text-ink">{text.replying(name)}</span>
       <span className="min-w-0 flex-1 truncate text-ink-500" title={preview}>{preview}</span>
-      <button type="button" aria-label={text.cancelReply} title={text.cancelReply} onClick={onCancel} className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-full text-ink-700 outline-none hover:bg-tint-blue focus-visible:shadow-focus">
+      <button type="button" aria-label={text.cancelReply} title={text.cancelReply} onClick={onCancel} className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-full text-ink-700 outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:hover:bg-tint-blue">
         <XIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
       </button>
     </div>

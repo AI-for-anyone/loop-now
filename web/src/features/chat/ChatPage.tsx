@@ -152,21 +152,21 @@ export function ChatPage() {
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
   return (
-    // The whole page sits in the sheet: above is the message scroll area (with the ruler in the stub on the right), below is the input
-    // area merged into the bottom of the sheet.
-    // On narrow screens the conversation part gets a fixed height and scrolls with the whole page; the conversation flow still scrolls
-    // inside its own area (loading earlier messages and sticking to the bottom both depend on it).
-    <div className="flex h-full min-h-0 flex-col lg:overflow-hidden">
-      <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-        {/* Notice bars sit above the message area, with the same left and right padding as the message area. */}
-        <div className="flex shrink-0 flex-col px-[clamp(12px,2vw,28px)]">
+    // The whole page sits in the sheet: above is the centered message stream (with the floating PrecisionRuler overlay on the right),
+    // below is the floating unified composer card.
+    // On narrow screens (below nav: 901px) the conversation gets a fixed viewport height and scrolls with the whole page;
+    // at nav: and wider it locks cleanly to the viewport height matching AppLayout's nav:h-screen.
+    <div className="flex h-full min-h-0 flex-col nav:overflow-hidden">
+      <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink">
+        {/* Notice bars sit above the message area, centered with the conversation column. */}
+        <div className="mx-auto flex w-full max-w-[800px] shrink-0 flex-col px-4 sm:px-6">
           {notFound && (
             <Alert variant="warning" className="mt-4">
               <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
             </Alert>
           )}
           {aroundRun !== null && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13.5px] font-bold [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13px] font-semibold [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-bold">
               <span>{t.timeline.locate.viewing}</span>
               <span role="status" aria-live="polite">
                 {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
@@ -177,9 +177,9 @@ export function ChatPage() {
             </div>
           )}
         </div>
-        <div className="min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col">
           {messages.isError && !(aroundRun !== null && isNotFound(messages.error)) ? (
-            <ErrorAlert error={messages.error} className="mx-[clamp(12px,2vw,28px)] mt-6 w-auto" />
+            <ErrorAlert error={messages.error} className="mx-auto mt-6 w-full max-w-[800px] px-4 sm:px-6" />
           ) : (
             <MessageList
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.
@@ -224,6 +224,7 @@ export function ChatPage() {
                 agentId={agent.id}
                 items={queueItems}
                 queueSeq={live.queueSeq}
+                collapsible
                 onReceipt={recordQueueAction}
                 onEdit={(text, images) => composer.current?.refill(text, images)}
               />
@@ -239,29 +240,32 @@ export function ChatPage() {
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
-            // Busy hint: solid indicator dot next to the current phase text (Plate keeps its fluorescent pink dot with a navy outline).
+            // Compact live busy indicator in the composer toolbar (Plate keeps its fluorescent pink dot with navy outline).
             busy && (
-              <span role="status" className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">
-                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-ink [[data-skin=plate]_&]:size-2.5 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]" />
+              <span role="status" className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
+                <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-ink [[data-skin=plate]_&]:size-2 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]" />
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
             )
           }
           connection={
-            <span
-              role="status"
-              aria-live="polite"
-              className={cn(
-                'inline-flex items-center gap-1.5 text-[12px] font-black',
-                connection === 'open' ? 'text-green-text' : connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
-              )}
-            >
+            // Surface only degraded connection states (connecting / reconnecting); omit permanent "Live" noise when healthy.
+            connection !== 'open' ? (
               <span
-                aria-hidden="true"
-                className={cn('size-[7px] shrink-0 rounded-full', connection === 'open' ? 'bg-green' : connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
-              />
-              {t.chat.connection[connection]}
-            </span>
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-[11.5px] font-semibold [[data-skin=plate]_&]:font-black',
+                  connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn('size-1.5 shrink-0 rounded-full', connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
+                />
+                {t.chat.connection[connection]}
+              </span>
+            ) : undefined
           }
         />
       </div>

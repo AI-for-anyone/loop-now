@@ -279,9 +279,11 @@ describe('Sending while busy queues directly', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     // Queued messages appear in the queue tray above the input (the list
     // pushed by the server is authoritative), not in the conversation stream.
+    // Multiple queued items auto-collapse into a 1-line summary tray until expanded.
     await emit('queue.updated', { queuedRuns: [existing], items: [existingItem, makeQueueItem({ text: 'Queued now' })] })
     const log = screen.getByRole('log')
     const queue = screen.getByRole('region', { name: 'Queued messages' })
+    await user.click(within(queue).getByRole('button', { name: 'Expand' }))
     await waitFor(() => {
       const order = within(queue).getAllByText(/^(Queued earlier|Queued now)$/).map((el) => el.textContent)
       expect(order).toEqual(['Queued earlier', 'Queued now'])
@@ -335,13 +337,14 @@ describe('Queue display and reply state', () => {
     const n1 = makeRun({ status: 'queued', whenBusy: 'queue' })
     const n2 = makeRun({ status: 'queued', whenBusy: 'queue' })
     const i1 = makeRun({ status: 'queued', whenBusy: 'interrupt' })
-    const { agent, emit } = await renderChat({
+    const { agent, user, emit } = await renderChat({
       messages: [makeMessage({ text: 'Current', run: current }), makeMessage({ text: 'Normal one', run: n1 }), makeMessage({ text: 'Normal two', run: n2 }), makeMessage({ text: 'Cutting in', run: i1 })],
     })
     const items = [makeQueueItem({ runId: i1.id, text: 'Cutting in', whenBusy: 'interrupt' }), makeQueueItem({ runId: n1.id, text: 'Normal one' }), makeQueueItem({ runId: n2.id, text: 'Normal two' })]
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, '', [i1, n1, n2], items))
     const log = screen.getByRole('log')
     const queue = screen.getByRole('region', { name: 'Queued messages' })
+    await user.click(within(queue).getByRole('button', { name: 'Expand' }))
     await waitFor(() => {
       const order = within(queue).getAllByText(/^(Normal one|Normal two|Cutting in)$/).map((el) => el.textContent)
       expect(order).toEqual(['Cutting in', 'Normal one', 'Normal two'])

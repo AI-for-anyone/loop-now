@@ -96,12 +96,12 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
           title={detail}
           aria-label={copy.label(parts.join(' · '))}
           className={cn(
-            'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full border-2 border-ink bg-paper-raised pr-2.5 pl-0.5 text-[12.5px] font-black whitespace-nowrap text-ink shadow-[2px_2px_0_var(--ink)] outline-none hover:bg-white focus-visible:shadow-focus aria-expanded:bg-riso-yellow',
+            'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent bg-transparent pr-2 pl-1 text-[12px] font-medium whitespace-nowrap text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-active aria-expanded:text-ink [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:pr-2.5 [[data-skin=plate]_&]:pl-0.5 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:aria-expanded:bg-riso-yellow',
           )}
         >
-          {runtime && <RuntimeMark runtime={runtime} className="size-[22px]" />}
+          {runtime && <RuntimeMark runtime={runtime} className="size-[18px] [[data-skin=plate]_&]:size-[22px]" />}
           {parts.map((part, index) => (
-            <span key={index} className={cn('min-w-0 truncate', index === 1 && 'font-mono text-[12px] font-bold', index > 0 && 'text-ink-700')}>
+            <span key={index} className={cn('min-w-0 truncate', index === 1 && 'font-mono text-[11.5px] font-medium [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-bold', index > 0 && 'text-ink-500 [[data-skin=plate]_&]:text-ink-700')}>
               {index > 0 && <span aria-hidden="true" className="mr-1.5 font-sans text-ink-500">·</span>}
               {part}
             </span>
@@ -115,14 +115,19 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
             align="start"
             sideOffset={10}
             collisionPadding={12}
-            className="z-50 flex h-[min(480px,calc(100dvh-140px))] max-sm:h-[min(580px,calc(100dvh-120px))] w-[min(820px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)] outline-none"
+            className="z-50 flex max-h-[min(520px,calc(100dvh-140px))] w-[min(460px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)]"
           >
-            {/* A strip in the message bar's yellow: what this is and when a choice applies. */}
-            <div className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b-2 border-ink bg-tint-yellow px-4 py-2">
-              <span className="font-display text-[18px] leading-tight">{copy.title}</span>
-              <span className="text-[12.5px] font-bold text-ink-700">{Object.keys(draft).length > 0 ? copy.saving : copy.hint}</span>
+            {/* Compact header strip: picker title and save timing note. */}
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hairline bg-surface-subtle/60 px-3 py-2 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow">
+              <span className="shrink-0 text-[12.5px] leading-tight font-semibold text-ink [[data-skin=plate]_&]:font-black">{copy.title}</span>
+              <span
+                title={Object.keys(draft).length > 0 ? copy.saving : copy.hint}
+                className="min-w-0 truncate text-[11.5px] text-ink-500 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700"
+              >
+                {Object.keys(draft).length > 0 ? copy.saving : copy.hint}
+              </span>
             </div>
-            <div className="min-h-0 flex-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               <RunnerPicker
                 variant="popover"
                 agentId={agent.id}
@@ -134,15 +139,15 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
                 offers={(definition) => canRunAgent({ workingDirectory: agent.workingDirectory, permissionMode: mode }, definition)}
               />
             </div>
-            {/* At the bottom of the model picker (as T3): how often it asks before acting; saved at once, from the next message. */}
-            <div className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-1.5 border-t-2 border-ink bg-paper px-4 py-2.5">
-              <span id={modeLabel} className="inline-flex h-8 items-center text-[13px] font-black">
+            {/* Compact permissions footer: saved at once, applies from the next message. */}
+            <div className="flex shrink-0 flex-col gap-1.5 border-t border-hairline bg-surface-subtle/40 px-3 py-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper">
+              <span id={modeLabel} className="text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
                 {t.permissions.pickerTitle}
               </span>
               <PermissionModePicker variant="compact" value={mode} runtime={runtime} labelledBy={modeLabel} onChange={(next) => save({ permissionMode: next }, false)} />
             </div>
             {failure !== null && (
-              <div className="shrink-0 border-t-2 border-dashed border-ink/30 px-4 py-2.5">
+              <div className="shrink-0 border-t border-hairline px-3 py-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/30">
                 <ErrorAlert error={failure} />
               </div>
             )}
@@ -150,7 +155,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
         </PopoverPrimitive.Portal>
       </PopoverPrimitive.Root>
       {savedAt !== null && (
-        <span role="status" className="text-[12px] font-black whitespace-nowrap text-green-text">
+        <span role="status" className="text-[12px] font-semibold whitespace-nowrap text-green-text [[data-skin=plate]_&]:font-black">
           {copy.saved}
         </span>
       )}

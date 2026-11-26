@@ -12,23 +12,18 @@ afterEach(() => resetChatDraftsForTest())
 
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('when busy, the key hints switch to queue and interrupt, Stop stays available even with a draft, and an explicit Interrupt button appears', async () => {
+it('when busy, Stop stays available even with a draft, and explicit Interrupt and Queue buttons appear with Chinese key tooltips', async () => {
   mountBar(true)
-  const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
-  // The Chinese UI always writes the Enter key as “回车” (Enter); modifier keys are written as before.
-  expect(hint).toHaveTextContent('回车排队·Ctrl 回车立即打断')
-  expect(hint).not.toHaveTextContent('Enter')
-  // Left-aligned inside the input area, using the input area's key style.
-  expect(hint).toHaveClass('justify-start', 'text-ink-700')
-  expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
   expect(screen.queryByText('换行')).toBeNull()
   const stop = screen.getByRole('button', { name: '停止当前回复' })
-  expect(stop).toHaveClass('size-10', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-8', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
 
   await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '新的指示')
   expect(screen.getByRole('button', { name: '停止当前回复' })).toBeEnabled()
-  expect(screen.getByRole('button', { name: '打断并发送' })).toBeEnabled()
+  const interrupt = screen.getByRole('button', { name: '打断并发送' })
+  expect(interrupt).toBeEnabled()
+  expect(interrupt).toHaveAttribute('title', '打断并发送（Ctrl 回车）')
   expect(screen.getByRole('button', { name: '排队发送' })).toBeEnabled()
 })
 

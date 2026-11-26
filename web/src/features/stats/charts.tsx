@@ -72,7 +72,7 @@ function Tip({ id, x, width, title, rows }: { id: string; x: number; width: numb
       className="pointer-events-none absolute top-1 z-10 flex min-w-[120px] flex-col gap-0.5 rounded-input bg-tooltip-bg px-3 py-2 text-[12px] leading-[1.5] whitespace-nowrap text-tooltip-fg shadow-floating [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
       style={{ left: x, transform: shift }}
     >
-      <span className="font-bold text-tooltip-muted">{title}</span>
+      <span className="font-semibold text-tooltip-muted [[data-skin=plate]_&]:font-bold">{title}</span>
       {rows.map((row) => (
         <span key={row.label} className="flex items-center gap-2">
           {row.color && <span aria-hidden="true" className="h-0.5 w-3 shrink-0" style={{ background: row.color }} />}
@@ -228,7 +228,7 @@ export function StackedColumns({
             </g>
           )
         })}
-        <line data-baseline x1={left} x2={left + plotW} y1={top + plotH} y2={top + plotH} stroke="var(--hairline-strong)" strokeWidth={2} />
+        <line data-baseline x1={left} x2={left + plotW} y1={top + plotH} y2={top + plotH} stroke="var(--hairline-strong)" strokeWidth={1} className="[[data-skin=plate]_&]:stroke-[2]" />
         {labels.map((text, i) => {
           const x = left + slot * i + (slot - barW) / 2
           const parts = series.map((s) => ({ key: s.key, color: s.color, value: s.values[i] ?? 0 })).filter((part) => part.value > 0)

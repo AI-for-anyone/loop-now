@@ -1,85 +1,227 @@
-import { ScopeTag } from '@/features/projects/OverviewScope'
 import { Link } from 'react-router'
+import { ArrowRightIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { BackgroundCountTag } from '@/features/chat/BackgroundTasks'
 import { runErrorText, runPhaseText, runStatusText, useRunRuntimeName } from '@/features/chat/run-status-text'
-import { t } from '@/i18n'
+import { ScopeTag } from '@/features/projects/OverviewScope'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
+import { t } from '@/i18n'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
-import { NumberedSection } from '@/components/NumberedSection'
 import { rowState, summarize, type AgentRowState, type OverviewState } from './overview-state'
-import { BackgroundCountTag } from '@/features/chat/BackgroundTasks'
 
 type AgentOverview = Schemas['AgentOverview']
 
 const elapsedSince = (time: string, now: number) => t.overview.elapsed(now - Date.parse(time))
 
-// The most Agent names a summary card lists; beyond that it says “等 N 个” (and N more).
+// The most Agent names a KPI cell lists; beyond that it says “and N more”.
 const NAMES_SHOWN = 3
 
 function names(agents: AgentOverview[]): string {
   return agents.length === 0 ? '' : t.overview.run.names(agents.slice(0, NAMES_SHOWN).map((agent) => agent.name), agents.length)
 }
 
-// Background colors of the three summary cards: neutral surface-control in Mono; tinted backgrounds with 2px navy outline and 4px
-// solid navy offset shadow in Plate.
-const TILES = [
-  { key: 'busy', bg: '[[data-skin=plate]_&]:bg-tint-pink-2' },
-  { key: 'idle', bg: '[[data-skin=plate]_&]:bg-tint-green' },
-  { key: 'queued', bg: '[[data-skin=plate]_&]:bg-tint-blue' },
-] as const
+const KPI_CELL_CLASS =
+  'flex min-w-0 flex-col justify-center gap-0.5 px-3.5 py-2 [[data-skin=plate]_&]:px-4 [[data-skin=plate]_&]:py-2.5'
 
-function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
-  const summary = summarize(agents)
-  const queuedTotal = summary.queued.interrupt + summary.queued.normal
-  const values = {
-    busy: { label: t.overview.run.busy, value: summary.busy.length, note: names(summary.busy) },
-    idle: { label: t.overview.run.idle, value: summary.idle.length, note: names(summary.idle) },
-    queued: { label: t.overview.run.queued, value: queuedTotal, note: t.overview.run.queuedNote(summary.queued.interrupt, summary.queued.normal) },
+// Single-row hairline KPI strip (~56px tall): Replying · Idle · Queued · Issues 24h · Today's tokens with Stats link.
+// When syncing, renders a matching 5-cell skeleton strip.
+export function OverviewKpiStrip({
+  live,
+  issuesCount,
+  todayTokens,
+  statsHref,
+  onOpenIssues,
+}: {
+  live: OverviewState
+  issuesCount?: number
+  todayTokens?: number
+  statsHref: string
+  onOpenIssues?: () => void
+}) {
+  if (!live.synced) {
+    return (
+      <div
+        aria-busy="true"
+        className="grid min-h-[58px] grid-cols-2 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-y-0 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink"
+      >
+        {[0, 1, 2, 3, 4].map((index) => (
+          <div key={index} className={KPI_CELL_CLASS}>
+            <span className="riso-skeleton h-3 w-16 rounded-stamp" />
+            <span className="riso-skeleton mt-1 h-5 w-12 rounded-stamp" />
+          </div>
+        ))}
+      </div>
+    )
   }
+
+  const summary = summarize(live.agents)
+  const queuedTotal = summary.queued.interrupt + summary.queued.normal
+  const hasIssues = (issuesCount ?? 0) > 0
+
   return (
-    <ul aria-label={t.overview.run.summaryLabel} className="grid grid-cols-[repeat(auto-fit,minmax(min(190px,100%),1fr))] gap-x-3.5 gap-y-3">
-      {TILES.map((tile) => {
-        const { label, value, note } = values[tile.key]
-        return (
-          <li
-            key={tile.key}
-            data-tile={tile.key}
-            className={cn('mr-1 mb-1 flex flex-col gap-1 rounded-card border border-hairline bg-surface-control px-4 pt-3.5 pb-3 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]', tile.bg)}
+    <ul
+      aria-label={t.overview.run.summaryLabel}
+      className="grid min-h-[58px] grid-cols-2 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-y-0 [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]"
+    >
+      <li data-tile="busy" className={cn(KPI_CELL_CLASS, '[[data-skin=plate]_&]:bg-tint-pink-2')}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            {t.overview.run.busy}
+          </span>
+          <span className="font-display-latin text-[20px] leading-none font-semibold text-ink tabular-nums [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold">
+            {summary.busy.length}
+          </span>
+        </div>
+        <span className="min-h-[16px] truncate text-[11.5px] leading-4 text-ink-500 [[data-skin=plate]_&]:text-ink-700" title={names(summary.busy)}>
+          {names(summary.busy)}
+        </span>
+      </li>
+
+      <li data-tile="idle" className={cn(KPI_CELL_CLASS, '[[data-skin=plate]_&]:bg-tint-green')}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            {t.overview.run.idle}
+          </span>
+          <span className="font-display-latin text-[20px] leading-none font-semibold text-ink tabular-nums [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold">
+            {summary.idle.length}
+          </span>
+        </div>
+        <span className="min-h-[16px] truncate text-[11.5px] leading-4 text-ink-500 [[data-skin=plate]_&]:text-ink-700" title={names(summary.idle)}>
+          {names(summary.idle)}
+        </span>
+      </li>
+
+      <li data-tile="queued" className={cn(KPI_CELL_CLASS, '[[data-skin=plate]_&]:bg-tint-blue')}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            {t.overview.run.queued}
+          </span>
+          <span className="font-display-latin text-[20px] leading-none font-semibold text-ink tabular-nums [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold">
+            {queuedTotal}
+          </span>
+        </div>
+        <span className="min-h-[16px] truncate text-[11.5px] leading-4 text-ink-500 [[data-skin=plate]_&]:text-ink-700">
+          {t.overview.run.queuedNote(summary.queued.interrupt, summary.queued.normal)}
+        </span>
+      </li>
+
+      <li data-tile="issues" className={KPI_CELL_CLASS}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            {t.overview.kpi.issues}
+          </span>
+          <span
+            className={cn(
+              'font-display-latin text-[20px] leading-none font-semibold tabular-nums [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold',
+              hasIssues ? 'text-red-text' : 'text-ink',
+            )}
           >
-            <span className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{label}</span>
-            <span className="font-display-latin text-[46px] leading-none font-extrabold">{value}</span>
-            <span className="min-h-[18px] text-[12px] leading-[18px] text-ink-700 [overflow-wrap:anywhere]">{note}</span>
-          </li>
-        )
-      })}
+            {issuesCount !== undefined ? issuesCount : '—'}
+          </span>
+        </div>
+        <span className="min-h-[16px] truncate text-[11.5px] leading-4 text-ink-500">
+          {hasIssues && onOpenIssues ? (
+            <button
+              type="button"
+              onClick={onOpenIssues}
+              className="cursor-pointer font-medium text-red-text underline-offset-2 hover:underline focus-visible:shadow-focus"
+            >
+              {t.overview.anomalies.title}
+            </button>
+          ) : issuesCount === 0 ? (
+            t.overview.kpi.issuesZero
+          ) : null}
+        </span>
+      </li>
+
+      <li data-tile="tokens" className={cn(KPI_CELL_CLASS, 'col-span-2 sm:col-span-1')}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            {t.overview.kpi.todayTokens}
+          </span>
+          <span className="font-display-latin text-[20px] leading-none font-semibold text-ink tabular-nums [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold">
+            {todayTokens !== undefined ? t.overview.tokens(todayTokens) : '—'}
+          </span>
+        </div>
+        <span className="min-h-[16px] text-[11.5px] leading-4">
+          <Link
+            to={statsHref}
+            className="inline-flex items-center gap-1 font-medium text-ink-700 underline-offset-2 hover:text-ink hover:underline focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue"
+          >
+            {t.overview.kpi.statsLink}
+            <ArrowRightIcon aria-hidden="true" className="size-3" strokeWidth={2.4} />
+          </Link>
+        </span>
+      </li>
     </ul>
   )
 }
 
 // Status pill: flat crisp pill in Mono; slightly tilted background with a navy outline in Plate.
 const STATE_PILL: Record<AgentRowState, { label: string; back: string; text: string; dot?: string }> = {
-  busy: { label: t.overview.run.busy, back: 'border border-hairline-strong bg-surface-active [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-ink', dot: 'bg-ink' },
-  idle: { label: t.overview.run.idle, back: 'border border-green/25 bg-tint-green [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-green-text', dot: 'bg-green' },
+  busy: {
+    label: t.overview.run.busy,
+    back: 'border border-hairline-strong bg-surface-active [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]',
+    text: 'text-ink',
+    dot: 'bg-ink',
+  },
+  idle: {
+    label: t.overview.run.idle,
+    back: 'border border-green/25 bg-tint-green [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]',
+    text: 'text-green-text',
+    dot: 'bg-green',
+  },
 }
 
 function StatePill({ state }: { state: AgentRowState }) {
   const pill = STATE_PILL[state]
   return (
-    <span data-state-pill={state} className={cn('relative inline-flex min-h-6 items-center px-[11px] text-[12px] font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black', pill.text)}>
+    <span
+      data-state-pill={state}
+      className={cn(
+        'relative inline-flex min-h-[22px] items-center px-2.5 text-[11.5px] font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black',
+        pill.text,
+      )}
+    >
       <span aria-hidden="true" className={cn('absolute inset-0 rounded-full [[data-skin=plate]_&]:rotate-[-3deg]', pill.back)} />
       <span className="relative inline-flex items-center gap-1.5">
-        {pill.dot && <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', pill.dot)} />}
+        {pill.dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', pill.dot)} />}
         {pill.label}
       </span>
     </span>
   )
 }
 
-// Current reply: the phase, the time spent on this turn so far (counted from dispatch) and the config version; when no reply is
-// in progress, show the previous reply's result and end time.
+const PROCESS_DOT: Record<Schemas['ProcessState'], string> = {
+  busy: 'bg-ink [[data-skin=plate]_&]:bg-riso-pink',
+  idle: 'bg-green',
+  starting: 'bg-[var(--status-interrupt)] [[data-skin=plate]_&]:bg-riso-yellow',
+  stopped: 'bg-ink-500',
+}
+
+// Low-priority process telemetry folded into a concise muted subline beneath the state pill (with full detail in title).
+function ProcessSubline({ agent, now }: { agent: AgentOverview; now: number }) {
+  const { processState, processPid, processStartedAt } = agent.status
+  const exit = agent.lastProcessExit
+  const label = t.overview.run.process[processState] ?? t.common.unknown(processState)
+  const head = processPid !== null && processState !== 'stopped' ? `${label} ${t.chat.metaSeparator} ${t.overview.run.pid(processPid)}` : label
+  let meta: string | null = null
+  if (processStartedAt && processState !== 'stopped') meta = t.overview.run.uptime(processStartedAt, elapsedSince(processStartedAt, now))
+  else if (exit) meta = t.overview.run.exitMeta(exit.at, t.overview.run.exit[exit.reason] ?? t.common.unknown(exit.reason))
+  else if (processState === 'stopped') meta = t.overview.run.neverStarted
+  const full = meta ? `${head} · ${meta}` : head
+  return (
+    <span title={full} className="mt-0.5 flex min-w-0 items-center gap-1.5 font-mono text-[11px] leading-snug text-ink-500">
+      <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', PROCESS_DOT[processState])} />
+      <span className="truncate">{full}</span>
+    </span>
+  )
+}
+
+// Current reply: the phase, elapsed time and config version; when idle, shows the last reply's result and end time.
 function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
   const runtimeName = useRunRuntimeName()
   const current = agent.status.currentRun
@@ -93,7 +235,12 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
     if (run.status === 'failed') {
       main = t.overview.run.last.failed(runErrorText(run.errorCode, runtimeName(run)))
     } else if (run.status === 'interrupted') {
-      main = run.endReason === 'sleep_superseded' || run.endReason === 'sleep_invalidated' ? t.chat.status[run.endReason] : run.endReason === 'server_restart' ? t.overview.run.last.server_restart : t.overview.run.last.user_interrupt
+      main =
+        run.endReason === 'sleep_superseded' || run.endReason === 'sleep_invalidated'
+          ? t.chat.status[run.endReason]
+          : run.endReason === 'server_restart'
+            ? t.overview.run.last.server_restart
+            : t.overview.run.last.user_interrupt
     } else if (run.status === 'completed') {
       main = t.overview.run.last.completed
     } else {
@@ -110,9 +257,9 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
     main = t.overview.run.noRun
   }
   return (
-    <span className="flex flex-col text-[13px] text-ink-700">
-      <span>{main}</span>
-      {meta && <span className="font-mono text-[11px] text-ink-500">{meta}</span>}
+    <span className="flex min-w-0 flex-col text-[12.5px] leading-snug text-ink-700" title={meta ? `${main} — ${meta}` : main}>
+      <span className="truncate text-ink">{main}</span>
+      {meta && <span className="truncate font-mono text-[11px] text-ink-500">{meta}</span>}
     </span>
   )
 }
@@ -120,15 +267,12 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
 function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
   const total = queued.interrupt + queued.normal
   return (
-    // relative: the screen-reader text is absolutely positioned; without a positioned ancestor it escapes the table's horizontal
-    // scroll area and stretches the whole page wider.
+    // relative: the screen-reader text is absolutely positioned; without a positioned ancestor it escapes the table container.
     <span className="relative inline-flex items-baseline gap-1.5">
-      {/* The queue count is display type; screen readers read the full description next to it. */}
       <span
         aria-hidden="true"
         className={cn(
-          'font-display-latin text-[20px] font-extrabold',
-          // The misregistration shadow is only for display type ≥ 28px; at 20px here it is left off.
+          'font-display-latin text-[16px] font-semibold tabular-nums [[data-skin=plate]_&]:text-[18px] [[data-skin=plate]_&]:font-extrabold',
           total > 0 ? 'text-ink [[data-skin=plate]_&]:text-riso-pink' : 'text-ink-500',
         )}
       >
@@ -136,7 +280,7 @@ function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
       </span>
       <span className="sr-only">{t.overview.run.queueTotal(total, queued.interrupt, queued.normal)}</span>
       {total > 0 && (
-        <span aria-hidden="true" className="text-[12.5px] text-ink-700">
+        <span aria-hidden="true" className="text-[11.5px] whitespace-nowrap text-ink-500">
           {t.overview.run.queueDetail(queued.interrupt, queued.normal)}
         </span>
       )}
@@ -144,59 +288,26 @@ function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
   )
 }
 
-const PROCESS_DOT: Record<Schemas['ProcessState'], string> = {
-  busy: 'bg-ink [[data-skin=plate]_&]:bg-riso-pink',
-  idle: 'bg-green',
-  starting: 'bg-[var(--status-interrupt)] [[data-skin=plate]_&]:bg-riso-yellow',
-  stopped: 'bg-ink-500',
-}
-
-// Pi process: state and PID; while running, show how long it has been up; when not running, show the time and reason of the
-// last exit.
-function ProcessCell({ agent, now }: { agent: AgentOverview; now: number }) {
-  const { processState, processPid, processStartedAt } = agent.status
-  const exit = agent.lastProcessExit
-  const label = t.overview.run.process[processState] ?? t.common.unknown(processState)
-  let meta: string | null = null
-  if (processStartedAt && processState !== 'stopped') meta = t.overview.run.uptime(processStartedAt, elapsedSince(processStartedAt, now))
-  else if (exit) meta = t.overview.run.exitMeta(exit.at, t.overview.run.exit[exit.reason] ?? t.common.unknown(exit.reason))
-  else if (processState === 'stopped') meta = t.overview.run.neverStarted
-  return (
-    <span className="flex flex-col text-[13px] text-ink-700">
-      <span className="inline-flex items-center gap-1.5 font-bold">
-        <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full [[data-skin=plate]_&]:size-[9px] [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]', PROCESS_DOT[processState])} />
-        {processPid !== null && processState !== 'stopped' ? `${label} ${t.chat.metaSeparator} ${t.overview.run.pid(processPid)}` : label}
-      </span>
-      {meta && <span className="font-mono text-[11px] text-ink-500">{meta}</span>}
-    </span>
-  )
-}
-
-// A 2px solid line under the table header and 1.5px dashed lines between rows (redesign general rule 9); the table sits
-// directly on the sheet, not wrapped in a card.
-const headClass = 'py-2 pl-1 text-[12px] font-black text-ink-500'
+const headClass = 'py-2 pl-1 text-[11.5px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black'
 
 function AgentTable({ agents }: { agents: AgentOverview[] }) {
-  // Uptime and the time spent on the current turn tick every second, computed by the page itself without asking the server.
+  // Uptime and elapsed time on the current turn tick every second locally without asking the server.
   const now = useNow(1000)
   return (
-    <Table aria-label={t.overview.run.tableLabel} className="min-w-[860px]" card={false}>
+    <Table aria-label={t.overview.run.tableLabel} className="w-full table-fixed" card={false}>
       <TableHeader className="bg-transparent">
         <TableRow className="border-b border-solid border-hairline-strong last:border-b [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:last:border-b-2">
-          <TableHead scope="col" className={headClass}>
+          <TableHead scope="col" className={cn(headClass, 'w-[30%]')}>
             {t.overview.run.columns.agent}
           </TableHead>
-          <TableHead scope="col" className={headClass}>
+          <TableHead scope="col" className={cn(headClass, 'w-[28%]')}>
             {t.overview.run.columns.state}
           </TableHead>
-          <TableHead scope="col" className={headClass}>
+          <TableHead scope="col" className={cn(headClass, 'w-[30%]')}>
             {t.overview.run.columns.run}
           </TableHead>
-          <TableHead scope="col" className={cn(headClass, 'text-center')}>
+          <TableHead scope="col" className={cn(headClass, 'w-[12%] pr-1 text-right')}>
             {t.overview.run.columns.queue}
-          </TableHead>
-          <TableHead scope="col" className={headClass}>
-            {t.overview.run.columns.process}
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -204,36 +315,49 @@ function AgentTable({ agents }: { agents: AgentOverview[] }) {
         {agents.map((agent) => {
           const state = rowState(agent)
           return (
-            <TableRow key={agent.agentId} data-agent-id={agent.agentId} className="border-b border-hairline last:border-b [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:last:border-b-[1.5px]">
-              <TableCell className="py-[11px] pl-1 align-middle">
-                <Link to={`/agents/${agent.agentId}/chat`} className="group flex items-center gap-2.5 rounded-ticket text-ink">
-                  <AgentAvatar size="sm" id={agent.agentId} />
-                  <span className="flex min-w-0 flex-col leading-[1.35]">
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-[14.5px] font-black [overflow-wrap:anywhere] group-hover:text-riso-blue group-hover:underline">{agent.name}</span>
+            <TableRow
+              key={agent.agentId}
+              data-agent-id={agent.agentId}
+              className="border-b border-hairline last:border-b [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:last:border-b-[1.5px]"
+            >
+              <TableCell className="py-2 pl-1 align-middle">
+                <Link to={`/agents/${agent.agentId}/chat`} className="group flex min-w-0 items-center gap-2.5 rounded-ticket text-ink">
+                  <AgentAvatar
+                    size="sm"
+                    id={agent.agentId}
+                    busy={agent.status.busy}
+                    sleeping={!agent.status.busy && agent.status.sleep?.state === 'sleeping'}
+                  />
+                  <span className="flex min-w-0 flex-col leading-[1.3]">
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <span className="truncate text-[13.5px] font-semibold group-hover:underline [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:group-hover:text-riso-blue">
+                        {agent.name}
+                      </span>
                       <ScopeTag scope={agent.scope} projectId={agent.projectId} />
                     </span>
-                    <span className="font-mono text-[11px] text-ink-500">
+                    <span className="truncate font-mono text-[11px] text-ink-500">
                       {agent.model.provider} / {agent.model.modelId}
                     </span>
                   </span>
                 </Link>
               </TableCell>
-              <TableCell className="py-[11px] align-middle">
-                <span className="inline-flex flex-wrap items-center gap-1.5">
-                  <StatePill state={state} />
-                  {!agent.status.busy && <BackgroundCountTag count={agent.status.backgroundTasks.length} />}
-                </span>
-                {!agent.status.busy && agent.status.sleep?.state === 'sleeping' && agent.status.sleep.wakeAt && <SleepUntil at={agent.status.sleep.wakeAt} reason={agent.status.sleep.reason} />}
+              <TableCell className="py-2 align-middle">
+                <div className="flex min-w-0 flex-col">
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    <StatePill state={state} />
+                    {!agent.status.busy && <BackgroundCountTag count={agent.status.backgroundTasks.length} />}
+                  </span>
+                  {!agent.status.busy && agent.status.sleep?.state === 'sleeping' && agent.status.sleep.wakeAt && (
+                    <SleepUntil at={agent.status.sleep.wakeAt} reason={agent.status.sleep.reason} />
+                  )}
+                  <ProcessSubline agent={agent} now={now} />
+                </div>
               </TableCell>
-              <TableCell className="py-[11px] align-middle">
+              <TableCell className="py-2 align-middle">
                 <RunCell agent={agent} now={now} />
               </TableCell>
-              <TableCell className="py-[11px] text-center align-middle">
+              <TableCell className="py-2 pr-1 text-right align-middle">
                 <QueueCell queued={agent.status.queued} />
-              </TableCell>
-              <TableCell className="py-[11px] pr-1 align-middle">
-                <ProcessCell agent={agent} now={now} />
               </TableCell>
             </TableRow>
           )
@@ -243,40 +367,29 @@ function AgentTable({ agents }: { agents: AgentOverview[] }) {
   )
 }
 
-function Skeleton() {
+function TableSkeleton() {
   return (
-    <div aria-busy="true" className="flex flex-col gap-3">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3.5">
-        {[0, 1, 2, 3].map((index) => (
-          <span key={index} className="riso-skeleton h-[120px] rounded-panel" />
-        ))}
-      </div>
-      <span className="riso-skeleton h-[74px] rounded-[16px]" />
-      <span className="riso-skeleton h-[74px] rounded-[16px] opacity-70" />
-      <span role="status" className="text-[13px] font-bold text-ink-500">
+    <div aria-busy="true" className="flex flex-col gap-2">
+      <span className="riso-skeleton h-12 rounded-card" />
+      <span className="riso-skeleton h-12 rounded-card opacity-75" />
+      <span className="riso-skeleton h-12 rounded-card opacity-50" />
+      <span role="status" className="text-[12.5px] font-medium text-ink-500">
         {t.common.loading}
       </span>
     </div>
   )
 }
 
-// Run status: the four summary counts and the Agent table, updated live from the overview event stream. It is numbered
-// section `number` on the sheet.
-export function RunStatusSection({ live, number = 1 }: { live: OverviewState; number?: number }) {
+// Run status table: updated live from the overview event stream.
+export function RunStatusSection({ live }: { live: OverviewState }) {
   return (
-    <NumberedSection
-      number={number}
-      title={t.overview.run.title}
-      meta={live.synced && live.lastChangeAt && <span className="font-mono text-[11.5px] text-ink-500">{t.overview.run.lastChange(live.lastChangeAt)}</span>}
-    >
-      {live.synced ? (
-        <>
-          <SummaryTiles agents={live.agents} />
-          <AgentTable agents={live.agents} />
-        </>
-      ) : (
-        <Skeleton />
+    <section aria-label={t.overview.run.title} className="flex min-w-0 flex-col gap-2">
+      {live.synced && live.lastChangeAt && (
+        <div className="flex items-center justify-end">
+          <span className="font-mono text-[11px] text-ink-500">{t.overview.run.lastChange(live.lastChangeAt)}</span>
+        </div>
       )}
-    </NumberedSection>
+      {live.synced ? <AgentTable agents={live.agents} /> : <TableSkeleton />}
+    </section>
   )
 }

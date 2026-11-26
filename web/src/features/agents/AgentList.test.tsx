@@ -169,7 +169,7 @@ describe('Sidebar styling', () => {
   const manager = makeAgent({ name: 'manager', isManager: true })
   const other = makeAgent({ name: 'Researcher', isManager: true })
 
-  it('the project card and the selected Agent row use semantic monochrome chrome in mono skin and preserve the 2px navy border and 4px shadow in Plate skin', async () => {
+  it('the project card and the selected Agent row use semantic monochrome chrome in mono skin and preserve the 2px navy border and offset shadow in Plate skin', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
@@ -183,13 +183,14 @@ describe('Sidebar styling', () => {
     )
     const card = within(sidebar()).getByRole('button', { name: /^Switch scope/ })
     expect(card).toHaveClass(
-      'border',
-      'border-hairline-strong',
-      'bg-surface-control',
+      'h-8',
+      'border-0',
+      'bg-transparent',
+      '[[data-skin=plate]_&]:h-10',
       '[[data-skin=plate]_&]:border-2',
       '[[data-skin=plate]_&]:border-ink',
       '[[data-skin=plate]_&]:bg-paper-raised',
-      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+      '[[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]',
     )
     const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
     expect(unselected).not.toHaveClass('bg-sidebar-active-bg')
@@ -214,7 +215,8 @@ describe('Sidebar styling', () => {
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
     // The selected row no longer has a fixed height; it grows with its content when it wraps.
-    expect(row).toHaveClass('min-h-10')
+    expect(row).toHaveClass('min-h-9', '[[data-skin=plate]_&]:min-h-10')
+    expect(row).not.toHaveClass('h-9')
     expect(row).not.toHaveClass('h-10')
     const name = within(row).getByText('manager')
     expect(name).toHaveAttribute('title', 'manager')
@@ -225,7 +227,7 @@ describe('Sidebar styling', () => {
     expect(tags).not.toContainElement(name)
     // Unselected rows use the same layout.
     const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
-    expect(unselected).toHaveClass('min-h-9')
+    expect(unselected).toHaveClass('min-h-8', '[[data-skin=plate]_&]:min-h-9')
     expect(within(unselected).getByText('Researcher')).toHaveAttribute('title', 'Researcher')
   })
 
@@ -240,11 +242,11 @@ describe('Sidebar styling', () => {
     )
   })
 
-  it('the search box is 34px tall; the shortcut hint has a thin border', async () => {
+  it('the search box is 32px tall; the shortcut hint has a thin border', async () => {
     setup([manager])
     const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
     const box = search.parentElement!
-    expect(box).toHaveClass('h-[34px]', 'border-sidebar-border', 'bg-surface-control', '[[data-skin=plate]_&]:bg-ink/[0.42]')
+    expect(box).toHaveClass('h-[32px]', 'border-sidebar-border', 'bg-surface-control', '[[data-skin=plate]_&]:bg-ink/[0.42]')
     const kbd = box.querySelector('kbd')!
     const shortcut = kbd.closest('button') ?? kbd
     expect(shortcut).toHaveClass('border', 'border-sidebar-border', '[[data-skin=plate]_&]:border-white/45')

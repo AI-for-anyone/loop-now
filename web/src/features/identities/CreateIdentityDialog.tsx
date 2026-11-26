@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react'
+import { startTransition, useId, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -35,8 +35,8 @@ export function CreateIdentityDialog({ onClose }: { onClose: () => void }) {
     if (rule) return
     const identity = await create.mutateAsync(name).catch(() => null)
     if (!identity) return
-    onClose()
-    void navigate(`/identities/${identity.id}`)
+    void navigate(`/identities/${identity.id}/tokens`)
+    startTransition(onClose)
   }
 
   const serverError = serverNameError(create.error)
@@ -53,11 +53,11 @@ export function CreateIdentityDialog({ onClose }: { onClose: () => void }) {
             <div
               className={cn(
                 fieldClass,
-                'flex items-center px-0 has-focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]',
-                nameError && 'bg-error-field shadow-[inset_0_0_0_2px_var(--red)]',
+                'flex items-center px-0 has-focus-visible:border-ink/35 [[data-skin=plate]_&]:has-focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]',
+                nameError && 'border-red bg-error-field [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--red)]',
               )}
             >
-              <span aria-hidden="true" className="pr-1 pl-3.5 font-mono text-[14px] font-bold text-pink-text">
+              <span aria-hidden="true" className="pr-1 pl-3.5 font-mono text-[14px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-pink-text">
                 @
               </span>
               <input

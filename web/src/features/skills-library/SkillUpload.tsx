@@ -13,17 +13,18 @@ interface SkillUploadProps {
   // Called once a zip is picked or a folder is packed; when the returned Promise rejects, the reason is shown.
   onArchive: (archive: Blob) => Promise<unknown>
   disabled?: boolean
-  // Size and extra classes of the upload buttons: the Skills library toolbar uses lg; buttons on the light blue background in
-  // the drawer use a white background.
-  size?: 'sm' | 'lg'
+  // Size and extra classes of the upload buttons: header toolbars use xs, empty states use sm, and standalone forms may use lg.
+  size?: 'xs' | 'sm' | 'lg'
+  // Optional second set of upload buttons at another size sharing the same hidden file inputs (e.g. xs in header, sm in empty state).
+  secondarySize?: 'xs' | 'sm' | 'lg'
   buttonClassName?: string
   // Custom layout: place the button group and the result message separately (buttons in the toolbar, the message below the
   // toolbar). When omitted, the buttons go on top and the message below.
-  children?: (parts: { actions: ReactNode; feedback: ReactNode }) => ReactNode
+  children?: (parts: { actions: ReactNode; secondaryActions: ReactNode; feedback: ReactNode }) => ReactNode
 }
 
 // Upload a Skill: pick a zip, or pick a folder and pack it into a zip in the browser. Checked against the server limits first.
-export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName, children }: SkillUploadProps) {
+export function SkillUpload({ onArchive, disabled, size = 'sm', secondarySize = size, buttonClassName, children }: SkillUploadProps) {
   const context = useContextInfo()
   const limits = context.data?.limits
   const zipInput = useRef<HTMLInputElement>(null)
@@ -96,23 +97,25 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
     setLocalError(null)
   }
 
-  const actions = (
+  const renderButtons = (buttonSize: 'xs' | 'sm' | 'lg') => (
     <>
-      <Button size={size} variant="secondary" className={buttonClassName} disabled={disabled || pending} onClick={() => dirInput.current?.click()}>
+      <Button size={buttonSize} variant="secondary" className={buttonClassName} disabled={disabled || pending} onClick={() => dirInput.current?.click()}>
         {t.skills.uploadDir}
       </Button>
-      <Button size={size} variant="secondary" className={buttonClassName} disabled={disabled || pending} onClick={() => zipInput.current?.click()}>
+      <Button size={buttonSize} variant="secondary" className={buttonClassName} disabled={disabled || pending} onClick={() => zipInput.current?.click()}>
         {t.skills.uploadZip}
       </Button>
-      {pending && <span className="self-center text-[13px] font-bold text-ink-500">{t.common.uploading}</span>}
+      {pending && <span className="self-center text-[13px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.common.uploading}</span>}
     </>
   )
+  const actions = renderButtons(size)
+  const secondaryActions = renderButtons(secondarySize)
 
   // Failure reasons from both the local check and the server are shown in an error banner; on a name conflict, a hint below
   // the reason suggests using replace instead.
   const message = localError ?? (error ? describeError(error) : null)
   const feedback = message ? (
-    <Alert variant="error" className="shadow-print-ink">
+    <Alert variant="error" className="shadow-floating [[data-skin=plate]_&]:shadow-print-ink">
       <CircleAlertIcon />
       <AlertTitle>{message}</AlertTitle>
       {error instanceof ApiError && error.code === 'name_conflict' && <AlertDescription>{t.skills.nameConflictHint}</AlertDescription>}
@@ -138,7 +141,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
         {...({ webkitdirectory: '' } as Record<string, string>)}
       />
       {children ? (
-        children({ actions, feedback })
+        children({ actions, secondaryActions, feedback })
       ) : (
         <div className="grid gap-3">
           <div className="flex flex-wrap gap-2.5">{actions}</div>

@@ -13,7 +13,7 @@ import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
-import { barKbdClass, mac } from './composer-style'
+import { mac } from './composer-style'
 import { clearChatDraft, getChatDraft, setChatDraftImages, setChatDraftText } from './draft-store'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
@@ -91,9 +91,9 @@ type CommandList = Schemas['AgentCommandList']
 // Names of the built-in platform commands listed by the server; null while the list hasn't been fetched yet.
 const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
 
-// The border belongs to the outer input box container; the text area grows with its content and scrolls on its own past the maximum.
+// The border belongs to the unified floating composer card; the text area grows with its content and scrolls past the maximum.
 const inputClass =
-  'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
+  'field-sizing-fixed min-h-[42px] max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-[14px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
 export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
@@ -396,59 +396,127 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
-  // Row: add-image button on the left, elevated input box in the middle, and action controls on the right.
-  // While busy, the dedicated Stop button stays available even with a draft, and an explicit Interrupt button appears alongside Queue Send.
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu runtimeName={listRuntime?.name} open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2">
-    {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
-    <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-panel border border-hairline-strong bg-surface-control px-4 shadow-surface focus-within:border-ink focus-within:ring-2 focus-within:ring-ink/15 [[data-skin=plate]_&]:rounded-[22px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:focus-within:border-riso-blue [[data-skin=plate]_&]:focus-within:ring-riso-blue/25">
-      {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
-      {strip}
-      {editor}
-    </div>
-    <div className="flex shrink-0 items-center gap-1.5">
-      {showStop && (
-        <Button type="button" size="icon" className="size-10 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
-      )}
-      {showInterrupt && (
-        <Button type="button" variant="secondary" className="h-10 shrink-0 gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-3 text-[13px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink" aria-label={t.chat.interruptSend} title={t.chat.interruptSendTitle(mac)} disabled={submitDisabled || pending} onClick={() => void submit('interrupt')}>
-          <ZapIcon aria-hidden="true" className="size-3.5 shrink-0 text-pink-text" strokeWidth={2.5} />
-          <span className="hidden sm:inline">{t.chat.interruptAction}</span>
-        </Button>
-      )}
-      {showSend && (
-        <Button type="button" variant="interrupt" size="icon" className="size-10 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>
-      )}
-    </div>
-  </div></SlashCommandMenu>
-  return (
-    // Clean composer bar on surface-canvas with hairline border; Plate skin keeps its yellow bar and 2px navy edge.
-    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t border-hairline bg-surface-canvas px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow">
-      {localError && (
-        <p role="alert" className="text-[13px] font-black text-red-text">
-          {localError}
-        </p>
-      )}
-      <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
-      {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-      {notice}
-      {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
-          leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
-      <div className="flex min-w-0 flex-col">
-        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
-        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white">{input}</ImagePicker> : input()}
-      </div>
-      {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
-          right the live connection status. On wide screens it lines up with the left edge of the input box. */}
-      <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
-          {runner}
-          {status}
-          {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
-          {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
-          {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
-          {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+  // Unified floating composer card: upper region holds ReplyChip, attached image thumbnails and the borderless auto-sizing editor;
+  // integrated bottom toolbar holds image attach + RunnerChip + busy status on the left, and degraded connection + Stop / Interrupt / Send on the right.
+  const input = (addButton?: ReactNode, strip?: ReactNode) => (
+    <SlashCommandMenu
+      runtimeName={listRuntime?.name}
+      open={menuOpen}
+      listId={listId}
+      optionId={optionId}
+      items={menuItems}
+      blocked={menuBlocked}
+      active={active}
+      status={menuStatus}
+      onActive={setActive}
+      onChoose={choose}
+      onDismiss={() => setDismissed(token)}
+    >
+      <div
+        data-chat-composer
+        data-chat-input
+        className="flex min-w-0 flex-col rounded-2xl border border-hairline-strong bg-surface-elevated shadow-surface transition-colors focus-within:border-riso-blue/50 [[data-skin=plate]_&]:rounded-[22px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:focus-within:border-riso-blue [[data-skin=plate]_&]:focus-within:ring-2 [[data-skin=plate]_&]:focus-within:ring-riso-blue/25"
+      >
+        {(reply || strip) && (
+          <div className="flex min-w-0 flex-col gap-1.5 px-3 pt-2.5">
+            {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
+            {strip}
+          </div>
+        )}
+        {editor}
+        <div
+          data-chat-toolbar
+          className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2.5 pt-1 pb-2"
+        >
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            {addButton}
+            {runner}
+            {status}
+            {/* Warn before stopping or interrupting when the runtime's stop also terminates running background tasks. */}
+            {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {connection}
+            {showStop && (
+              <Button
+                type="button"
+                size="icon"
+                className="size-8 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white"
+                aria-label={stopLabel}
+                title={stopLabel}
+                disabled={stop.pending}
+                onClick={stop.onStop}
+              >
+                <StopMark className="size-3" />
+              </Button>
+            )}
+            {showInterrupt && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 shrink-0 gap-1 rounded-full border border-hairline-strong bg-surface-subtle px-2.5 text-[12px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink"
+                aria-label={t.chat.interruptSend}
+                title={t.chat.interruptSendTitle(mac)}
+                disabled={submitDisabled || pending}
+                onClick={() => void submit('interrupt')}
+              >
+                <ZapIcon aria-hidden="true" className="size-3 shrink-0 text-pink-text" strokeWidth={2.5} />
+                <span className="hidden sm:inline">{t.chat.interruptAction}</span>
+              </Button>
+            )}
+            {showSend && (
+              <Button
+                type="button"
+                variant="interrupt"
+                size="icon"
+                className="size-8 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink"
+                aria-label={sendLabel}
+                title={busy ? t.chat.queueSendTitle : `${sendLabel} (${t.chat.barKeys.enter})`}
+                disabled={submitDisabled || pending}
+                onClick={() => void submit()}
+              >
+                <ArrowUpIcon aria-hidden="true" className="size-4" strokeWidth={2.6} />
+              </Button>
+            )}
+          </div>
         </div>
-        {connection}
+      </div>
+    </SlashCommandMenu>
+  )
+  return (
+    // Centered floating composer dock aligned with the 800px conversation stream; Plate skin keeps its yellow bar and 2px navy edge.
+    <div
+      data-chat-bar
+      className="shrink-0 bg-surface-canvas px-4 pt-1 pb-3 sm:px-6 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow [[data-skin=plate]_&]:px-[clamp(12px,2vw,22px)] [[data-skin=plate]_&]:pt-3.5 [[data-skin=plate]_&]:pb-3"
+    >
+      <div className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-2">
+        {localError && (
+          <p role="alert" className="text-[13px] font-semibold text-red-text [[data-skin=plate]_&]:font-black">
+            {localError}
+          </p>
+        )}
+        <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
+        {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
+        {notice}
+        {/* Queue tray docks cleanly on top of the composer card with no gap between them. */}
+        <div className="flex min-w-0 flex-col">
+          {queue && <div className="flex min-w-0 flex-col">{queue}</div>}
+          {imageLimits ? (
+            <ImagePicker
+              images={images}
+              onChange={setImages}
+              limits={imageLimits}
+              disabled={disabled || reply !== undefined}
+              refused={imagesRefused ? t.images.modelRefuses : null}
+              uploads={uploads}
+              addClassName="size-7 rounded-lg border-0 bg-transparent text-ink-500 shadow-none hover:bg-surface-hover hover:text-ink [[data-skin=plate]_&]:size-8 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:hover:bg-white"
+            >
+              {input}
+            </ImagePicker>
+          ) : (
+            input()
+          )}
+        </div>
       </div>
       <ConfirmDialog
         open={confirmNew}
@@ -478,18 +546,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
 }
 
 const kbdClass = 'rounded-stamp border border-hairline-strong bg-surface-control px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700 [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-white'
-// Key hints below the input box when idle: Enter sends, Shift + Enter starts a new line.
-function IdleHint() {
-  return (
-    <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
-      <kbd className={barKbdClass}>{t.chat.barKeys.enter}</kbd>
-      <span>{t.chat.idleHint.send}</span>
-      <span aria-hidden="true">·</span>
-      <kbd className={barKbdClass}>{t.chat.barKeys.shiftEnter}</kbd>
-      <span>{t.chat.idleHint.newline}</span>
-    </p>
-  )
-}
 
 // Key hints below the input box: Enter queues, ⌘/Ctrl+Enter interrupts right away; when a reply is in progress, also explain the stop
 // button. The task node input box uses it too (with the default style and key labels);
@@ -529,8 +585,8 @@ export function KeyHint({
 // task node's turn takes its tasks with it).
 export function StopAlsoWarning({ count }: { count: number }) {
   return (
-    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full bg-tint-red px-2.5 text-[12px] leading-[22px] font-black text-red-text shadow-[inset_0_0_0_1.5px_var(--red)]">
-      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
+    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full border border-red-text/30 bg-tint-red px-2.5 text-[12px] leading-[22px] font-semibold text-red-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--red)]">
+      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.4} />
       {t.background.stopWarning(count)}
     </span>
   )

@@ -1,79 +1,79 @@
-/* Default skin: "mono" — Swiss high-contrast monochrome (pure neutral grayscale, light and dark). */
+/* Default skin: "mono" — Vercel Geist-inspired modern studio palette (layered surfaces + crisp semantic accents, light and dark). */
 
 :root,
 :root[data-skin="mono"] {
-  /* Core neutral surfaces (light) */
-  --surface-canvas: #FFFFFF;
-  --surface-subtle: #FAFAFA;
+  /* Core layered neutral surfaces (light): #FAFAFA canvas lifting crisp #FFFFFF cards */
+  --surface-canvas: #FAFAFA;
+  --surface-subtle: #F3F4F6;
   --surface-elevated: #FFFFFF;
   --surface-control: #FFFFFF;
-  --surface-hover: #F4F4F4;
-  --surface-active: #EAEAEA;
+  --surface-hover: #ECEEF2;
+  --surface-active: #E8F1FE;
 
   /* Sidebar chrome (light) */
   --sidebar-bg: #FAFAFA;
-  --sidebar-fg: #111111;
-  --sidebar-muted: #595959;
+  --sidebar-fg: #171717;
+  --sidebar-muted: #525866;
   --sidebar-border: rgb(0 0 0 / 0.08);
-  --sidebar-hover: #F0F0F0;
-  --sidebar-active-bg: #EAEAEA;
-  --sidebar-active-fg: #111111;
-  --sidebar-group: #666666;
+  --sidebar-hover: #EFEFF2;
+  --sidebar-active-bg: #EBF3FE;
+  --sidebar-active-fg: #0058C4;
+  --sidebar-group: #666E7C;
 
-  /* Hairlines and shadows (light) */
+  /* Hairlines and Geist micro-elevation shadows (light) */
   --hairline: rgb(0 0 0 / 0.08);
-  --hairline-strong: rgb(0 0 0 / 0.16);
-  --surface-shadow: none;
-  --floating-shadow: 0 2px 8px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(0 0 0 / 0.08);
-  --dialog-shadow: 0 16px 40px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.08);
+  --hairline-strong: rgb(0 0 0 / 0.14);
+  --surface-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.03);
+  --floating-shadow: 0 10px 30px -6px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.08);
+  --dialog-shadow: 0 20px 48px -8px rgb(0 0 0 / 0.16), 0 0 0 1px rgb(0 0 0 / 0.08);
 
-  /* Inverted CTA and tooltips (light) */
-  --cta-bg: #111111;
+  /* Geist Blue primary CTA and crisp dark tooltips (light) */
+  --cta-bg: #0066DB;
   --cta-fg: #FFFFFF;
-  --cta-hover: #262626;
-  --tooltip-bg: #111111;
+  --cta-hover: #0055BA;
+  --tooltip-bg: #171717;
   --tooltip-fg: #FFFFFF;
-  --tooltip-muted: #A3A3A3;
+  --tooltip-muted: #A1A1AA;
 
   /* Code blocks (light) */
-  --code-bg: #FAFAFA;
+  --code-bg: #F6F8FA;
   --code-fg: #171717;
   --code-border: rgb(0 0 0 / 0.08);
-  --code-muted: #595959;
+  --code-muted: #59606D;
 
-  /* Legacy paper/ink/riso tokens mapped to monochrome light */
-  --paper: #FFFFFF;
+  /* Semantic ink, accent and tinted wash tokens (light) */
+  --paper: #FAFAFA;
   --paper-raised: #FFFFFF;
-  --paper-tab: #F4F4F4;
-  --ink: #111111;
-  --ink-700: #444444;
-  --ink-500: #595959;
-  --riso-blue: #111111;
-  --riso-blue-soft: #737373;
-  --riso-pink: #F4F4F5;
+  --paper-tab: #F3F4F6;
+  --ink: #171717;
+  --ink-700: #404652;
+  --ink-500: #59606D;
+  --riso-blue: #0066DB;
+  --riso-blue-soft: #60A5FA;
+  --riso-pink: #F4F0FF;
   --pink-text: #92400E;
-  --riso-yellow: #EAEAEA;
-  --green: #16A34A;
-  --green-text: #146C34;
-  --red: #C81E1E;
+  --riso-yellow: #E8F1FE;
+  --green: #0D9488;
+  --green-text: #0F766E;
+  --red: #DC2626;
   --red-text: #B91C1C;
-  --tint-pink: #F4F4F5;
+  --tint-pink: #F4F0FF;
   --tint-pink-2: #FEF3C7;
-  --tint-blue: #F4F4F5;
-  --tint-green: #ECFDF3;
+  --tint-blue: #EDF5FF;
+  --tint-green: #ECFDF5;
   --tint-red: #FEF2F2;
-  --tint-yellow: #FEF9C3;
+  --tint-yellow: #FFFBEB;
   --error-field: #FEF2F2;
 
-  /* Charts and status (light) */
-  --chart-blue: #171717;
-  --chart-pink: #737373;
-  --chart-ochre: #A3A3A3;
-  --chart-other: #D4D4D4;
-  --chart-grid: #EAEAEA;
+  /* Geist multi-hue charts and status (light) */
+  --chart-blue: #0066DB;
+  --chart-pink: #7928CA;
+  --chart-ochre: #0D9488;
+  --chart-other: #D97706;
+  --chart-grid: #EAECEF;
   --chart-bar-stroke: transparent;
   --chart-point-stroke: #FFFFFF;
-  --status-done: #16A34A;
+  --status-done: #0D9488;
   --status-interrupt: #D97706;
   --status-fail: #DC2626;
 
@@ -83,18 +83,18 @@
   --print-blue: none;
   --print-ink: none;
   --print-dialog: none;
-  --focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px #111111;
+  --focus-ring: none;
 
   /* Crisp geometric radii */
-  --skin-radius-stamp: 4px;
-  --skin-radius-ticket: 6px;
+  --skin-radius-stamp: 5px;
+  --skin-radius-ticket: 7px;
   --skin-radius-input: 8px;
   --skin-radius-card: 10px;
   --skin-radius-panel: 12px;
-  --skin-radius-bubble: 12px;
+  --skin-radius-bubble: 14px;
   --skin-radius-dialog: 12px;
 
-  /* Typography: clean sans across headings in mono skin */
+  /* Typography: clean sans across headings in default skin */
   --skin-display-cn: var(--font-sans);
   --skin-display-latin: var(--font-sans);
 
@@ -116,89 +116,89 @@
   --destructive: var(--red);
   --border: var(--hairline);
   --input: var(--hairline-strong);
-  --ring: var(--ink);
+  --ring: var(--riso-blue);
   --radius: 0.625rem;
 }
 
 :root[data-skin="mono"][data-theme="dark"],
 :root.dark[data-skin="mono"] {
-  /* Core neutral surfaces (dark) */
+  /* Core layered neutral surfaces (dark): #000000 canvas with subtle lifted slate cards */
   --surface-canvas: #000000;
-  --surface-subtle: #0A0A0A;
-  --surface-elevated: #111111;
-  --surface-control: #111111;
-  --surface-hover: #1A1A1A;
-  --surface-active: #242424;
+  --surface-subtle: #111216;
+  --surface-elevated: #0B0C0F;
+  --surface-control: #111216;
+  --surface-hover: #191B21;
+  --surface-active: #10213A;
 
   /* Sidebar chrome (dark) */
-  --sidebar-bg: #0A0A0A;
+  --sidebar-bg: #08090B;
   --sidebar-fg: #EDEDED;
-  --sidebar-muted: #8F8F8F;
-  --sidebar-border: rgb(255 255 255 / 0.10);
-  --sidebar-hover: #171717;
-  --sidebar-active-bg: #222222;
-  --sidebar-active-fg: #FFFFFF;
-  --sidebar-group: #8F8F8F;
+  --sidebar-muted: #939AA8;
+  --sidebar-border: rgb(255 255 255 / 0.09);
+  --sidebar-hover: #16181E;
+  --sidebar-active-bg: #10213A;
+  --sidebar-active-fg: #7CC0FF;
+  --sidebar-group: #8A919E;
 
-  /* Hairlines and shadows (dark) */
-  --hairline: rgb(255 255 255 / 0.10);
-  --hairline-strong: rgb(255 255 255 / 0.18);
-  --surface-shadow: none;
-  --floating-shadow: 0 4px 16px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.12);
-  --dialog-shadow: 0 20px 50px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.14);
+  /* Hairlines and edge-lit shadows (dark) */
+  --hairline: rgb(255 255 255 / 0.09);
+  --hairline-strong: rgb(255 255 255 / 0.16);
+  --surface-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --floating-shadow: 0 16px 40px rgb(0 0 0 / 0.72), 0 0 0 1px rgb(255 255 255 / 0.13);
+  --dialog-shadow: 0 24px 56px rgb(0 0 0 / 0.84), 0 0 0 1px rgb(255 255 255 / 0.14);
 
-  /* Inverted CTA and tooltips (dark) */
-  --cta-bg: #FFFFFF;
-  --cta-fg: #000000;
-  --cta-hover: #E5E5E5;
+  /* Geist Blue primary CTA and tooltips (dark) */
+  --cta-bg: #0068E1;
+  --cta-fg: #FFFFFF;
+  --cta-hover: #1D7CF2;
   --tooltip-bg: #EDEDED;
   --tooltip-fg: #0A0A0A;
   --tooltip-muted: #525252;
 
   /* Code blocks (dark) */
-  --code-bg: #0D0D0D;
+  --code-bg: #0F1115;
   --code-fg: #EDEDED;
   --code-border: rgb(255 255 255 / 0.10);
-  --code-muted: #8F8F8F;
+  --code-muted: #8F98A8;
 
-  /* Legacy paper/ink/riso tokens mapped to monochrome dark */
+  /* Semantic ink, accent and tinted wash tokens (dark) */
   --paper: #000000;
-  --paper-raised: #0A0A0A;
-  --paper-tab: #141414;
+  --paper-raised: #0B0C0F;
+  --paper-tab: #14161C;
   --ink: #EDEDED;
-  --ink-700: #B3B3B3;
-  --ink-500: #8F8F8F;
-  --riso-blue: #EDEDED;
-  --riso-blue-soft: #A3A3A3;
-  --riso-pink: #262626;
+  --ink-700: #B4BAC6;
+  --ink-500: #8F98A8;
+  --riso-blue: #52A8FF;
+  --riso-blue-soft: #93C5FD;
+  --riso-pink: #1D1533;
   --pink-text: #FBBF24;
-  --riso-yellow: #262626;
-  --green: #22C55E;
-  --green-text: #4ADE80;
+  --riso-yellow: #10213A;
+  --green: #2DD4BF;
+  --green-text: #5EEAD4;
   --red: #C81E1E;
   --red-text: #F87171;
-  --tint-pink: #171717;
-  --tint-pink-2: #291D0A;
-  --tint-blue: #171717;
-  --tint-green: #052E16;
-  --tint-red: #2D0F0F;
-  --tint-yellow: #291D0A;
-  --error-field: #2D0F0F;
+  --tint-pink: #1D1533;
+  --tint-pink-2: #2D1F08;
+  --tint-blue: #0E1F38;
+  --tint-green: #06281B;
+  --tint-red: #2E1012;
+  --tint-yellow: #2B1F06;
+  --error-field: #2E1012;
 
-  /* Charts and status (dark) */
-  --chart-blue: #EDEDED;
-  --chart-pink: #A3A3A3;
-  --chart-ochre: #737373;
-  --chart-other: #404040;
-  --chart-grid: #222222;
+  /* Geist multi-hue charts and status (dark) */
+  --chart-blue: #3B9EFF;
+  --chart-pink: #A855F7;
+  --chart-ochre: #2DD4BF;
+  --chart-other: #FBBF24;
+  --chart-grid: #1F222A;
   --chart-bar-stroke: transparent;
-  --chart-point-stroke: #0A0A0A;
-  --status-done: #4ADE80;
+  --chart-point-stroke: #0B0C0F;
+  --status-done: #2DD4BF;
   --status-interrupt: #FBBF24;
   --status-fail: #F87171;
 
   /* Focus ring (dark) */
-  --focus-ring: 0 0 0 2px #000000, 0 0 0 4px #EDEDED;
+  --focus-ring: none;
 
   /* shadcn semantic variables */
   --background: var(--surface-canvas);
@@ -218,7 +218,7 @@
   --destructive: var(--red);
   --border: var(--hairline);
   --input: var(--hairline-strong);
-  --ring: var(--ink);
+  --ring: var(--riso-blue);
 }
 
 /* Neutralize Risograph-only ornaments and textures when mono skin is active. */
@@ -259,9 +259,9 @@
   display: none;
 }
 
-/* Select dropdown chevron adapts to light and dark mono modes. */
+/* Select dropdown chevron adapts to light and dark modes. */
 :root:not([data-skin="plate"]) .select-chevron {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-position: right 12px center;
   background-repeat: no-repeat;
 }
@@ -271,7 +271,7 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23EDEDED' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
-/* Monochrome syntax highlighting (light): every color reaches at least 4.5:1 on --code-bg (#FAFAFA). */
+/* Geist syntax highlighting (light): every color reaches at least 4.5:1 on --code-bg (#F6F8FA). */
 :root:not([data-skin="plate"]) .hljs {
   color: #171717;
 }
@@ -279,47 +279,47 @@
 :root:not([data-skin="plate"]) .hljs-selector-tag,
 :root:not([data-skin="plate"]) .hljs-literal,
 :root:not([data-skin="plate"]) .hljs-type {
-  color: #111111;
+  color: #7928CA;
   font-weight: 600;
 }
 :root:not([data-skin="plate"]) .hljs-string,
 :root:not([data-skin="plate"]) .hljs-regexp,
 :root:not([data-skin="plate"]) .hljs-symbol,
 :root:not([data-skin="plate"]) .hljs-template-tag {
-  color: #3F3F46;
+  color: #0F766E;
 }
 :root:not([data-skin="plate"]) .hljs-number,
 :root:not([data-skin="plate"]) .hljs-variable,
 :root:not([data-skin="plate"]) .hljs-template-variable,
 :root:not([data-skin="plate"]) .hljs-attr,
 :root:not([data-skin="plate"]) .hljs-attribute {
-  color: #146C34;
+  color: #B45309;
 }
 :root:not([data-skin="plate"]) .hljs-built_in,
 :root:not([data-skin="plate"]) .hljs-selector-class,
 :root:not([data-skin="plate"]) .hljs-selector-id {
-  color: #1D4ED8;
+  color: #0058C4;
 }
 :root:not([data-skin="plate"]) .hljs-comment,
 :root:not([data-skin="plate"]) .hljs-quote,
 :root:not([data-skin="plate"]) .hljs-meta {
-  color: #595959;
+  color: #59606D;
   font-style: italic;
 }
 :root:not([data-skin="plate"]) .hljs-title,
 :root:not([data-skin="plate"]) .hljs-section,
 :root:not([data-skin="plate"]) .hljs-name {
-  color: #111111;
+  color: #111827;
   font-weight: 600;
 }
 :root:not([data-skin="plate"]) .hljs-deletion {
   color: #B91C1C;
 }
 :root:not([data-skin="plate"]) .hljs-addition {
-  color: #146C34;
+  color: #0F766E;
 }
 
-/* Monochrome syntax highlighting (dark): every color reaches at least 4.5:1 on --code-bg (#0D0D0D). */
+/* Monochrome syntax highlighting (dark): every color reaches at least 4.5:1 on --code-bg (#0F1115). */
 :root[data-skin="mono"][data-theme="dark"] .hljs,
 :root.dark[data-skin="mono"] .hljs {
   color: #EDEDED;
@@ -332,7 +332,7 @@
 :root.dark[data-skin="mono"] .hljs-selector-tag,
 :root.dark[data-skin="mono"] .hljs-literal,
 :root.dark[data-skin="mono"] .hljs-type {
-  color: #FFFFFF;
+  color: #C084FC;
   font-weight: 600;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-string,
@@ -343,7 +343,7 @@
 :root.dark[data-skin="mono"] .hljs-regexp,
 :root.dark[data-skin="mono"] .hljs-symbol,
 :root.dark[data-skin="mono"] .hljs-template-tag {
-  color: #D4D4D8;
+  color: #5EEAD4;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-number,
 :root[data-skin="mono"][data-theme="dark"] .hljs-variable,
@@ -355,7 +355,7 @@
 :root.dark[data-skin="mono"] .hljs-template-variable,
 :root.dark[data-skin="mono"] .hljs-attr,
 :root.dark[data-skin="mono"] .hljs-attribute {
-  color: #4ADE80;
+  color: #FCD34D;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-built_in,
 :root[data-skin="mono"][data-theme="dark"] .hljs-selector-class,
@@ -363,7 +363,7 @@
 :root.dark[data-skin="mono"] .hljs-built_in,
 :root.dark[data-skin="mono"] .hljs-selector-class,
 :root.dark[data-skin="mono"] .hljs-selector-id {
-  color: #93C5FD;
+  color: #7CC0FF;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-comment,
 :root[data-skin="mono"][data-theme="dark"] .hljs-quote,
@@ -371,7 +371,7 @@
 :root.dark[data-skin="mono"] .hljs-comment,
 :root.dark[data-skin="mono"] .hljs-quote,
 :root.dark[data-skin="mono"] .hljs-meta {
-  color: #8F8F8F;
+  color: #8F98A8;
   font-style: italic;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-title,
@@ -380,7 +380,7 @@
 :root.dark[data-skin="mono"] .hljs-title,
 :root.dark[data-skin="mono"] .hljs-section,
 :root.dark[data-skin="mono"] .hljs-name {
-  color: #FFFFFF;
+  color: #F4F4F5;
   font-weight: 600;
 }
 :root[data-skin="mono"][data-theme="dark"] .hljs-deletion,

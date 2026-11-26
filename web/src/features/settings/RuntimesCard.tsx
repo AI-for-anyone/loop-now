@@ -68,7 +68,7 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
     // a status pill and the version number in monospace.
     <section aria-label={name} className="flex min-w-0 flex-col gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface [[data-skin=plate]_&]:mr-[5px] [[data-skin=plate]_&]:mb-[5px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]">
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-        <span className="font-display-cn text-[26px] leading-[1.1]">{name}</span>
+        <span className="font-display-cn text-[18px] leading-snug font-semibold [[data-skin=plate]_&]:text-[26px] [[data-skin=plate]_&]:leading-[1.1] [[data-skin=plate]_&]:font-normal">{name}</span>
         {runtime.version && (
           <span className="text-[12.5px] text-ink-700">
             {text.version} <span className="font-mono text-ink">{runtime.version}</span>
@@ -81,8 +81,8 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
       </div>
       {(runtime.binaryPath || account) && (
         <dl className="grid grid-cols-[minmax(60px,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[13.5px]">
-          {runtime.binaryPath && <><dt className="font-black text-ink-500">{text.path}</dt><dd className="min-w-0 font-mono text-[12.5px] break-all">{runtime.binaryPath}</dd></>}
-          {account && <><dt className="font-black text-ink-500">{text.account}</dt><dd className="min-w-0 break-words">{account}</dd></>}
+          {runtime.binaryPath && <><dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{text.path}</dt><dd className="min-w-0 font-mono text-[12.5px] break-all">{runtime.binaryPath}</dd></>}
+          {account && <><dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{text.account}</dt><dd className="min-w-0 break-words">{account}</dd></>}
         </dl>
       )}
       {problem && (

@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
+import { useInboxPending } from '@/api/console-inbox'
 import { useAgents } from '@/api/queries'
 import { tasksPath, useProjectTaskCounts, useProjectTasks } from '@/api/tasks'
-import { useInboxPending } from '@/api/console-inbox'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { LiveDot, PageFrame, PageHeader } from '@/components/PageHeader'
-import { RulerTicks, Sheet, Stub, StubFigure } from '@/components/Sheet'
+import { PageBody, Sheet } from '@/components/Sheet'
 import { Button } from '@/components/ui/button'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
 import { useScope } from '@/features/projects/scope-context'
 import { t } from '@/i18n'
-import { indexTabClass } from '@/lib/index-tab'
 import { overviewPath } from '@/lib/scope'
+import { segmentedClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { TaskBadge } from './TaskBadge'
 import { useTaskLive } from './useTaskLive'
@@ -21,11 +21,14 @@ import { useTaskLive } from './useTaskLive'
 type Task = Schemas['TaskSummary']
 type Filter = 'all' | 'active' | 'blocked' | 'completed'
 
-// Status filters: In progress covers preparing, running and waiting for reply; cancelled tasks appear only under “全部” (All).
+// Status filters: In progress covers preparing, running and waiting for reply; cancelled tasks appear only under All.
 const FILTERS: Filter[] = ['all', 'active', 'blocked', 'completed']
 const ACTIVE: Schemas['TaskStatus'][] = ['preparing', 'running', 'waiting']
 const inFilter = (filter: Filter, task: Task) =>
   filter === 'all' ? true : filter === 'active' ? ACTIVE.includes(task.status) : task.status === filter
+
+// Shared desktop table grid tracks so header and rows stay aligned across all desktop widths.
+const TASK_GRID = 'sm:grid sm:grid-cols-[48px_minmax(0,1fr)_96px_116px_136px_84px] sm:items-center sm:gap-x-4'
 
 export function TasksPage() {
   const scope = useScope()
@@ -33,12 +36,10 @@ export function TasksPage() {
   return <ProjectTasks project={scope.project} />
 }
 
-// Project tasks (step 3 of the "printed sheet" redesign): below the page title, the status filters on the sheet's top edge (index tabs,
-// with counts); on the sheet, the task list;
-// in the stub on the right, three big numbers: in progress, blocked, completed. The list API can't filter by status, so the filters
-// apply only to the tasks read so far;
-// the in-progress and blocked counts come from the API that counts unfinished tasks (consistent with the sidebar), while completed and
-// all are counted from the tasks read so far, with a trailing "+" while there are more pages.
+// Project tasks: compact single-row PageHeader with inline KPI summary counts and live status, a 40px segmented status filter toolbar,
+// and a full-width CSS Grid table inside PageBody (with ScrollRuler). The list API can't filter by status, so filters apply to loaded
+// tasks; active and blocked counts come from the unfinished-tasks counts API while completed and all reflect loaded tasks with "+" when
+// more pages exist.
 function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   const tasks = useProjectTasks(project.id)
   const counts = useProjectTaskCounts(project.id)
@@ -60,132 +61,210 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   }
   const shown = rows.filter((task) => inFilter(filter, task))
   const agentName = (id: string) => agents.data?.agents.find((agent) => agent.id === id)?.name ?? id
+  const blockedCount = Number.parseInt(amount.blocked, 10)
 
   return (
     <PageFrame>
       <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.tasks.title}>
-        <span>{t.tasks.intro}</span>
+        {tasks.isSuccess && (
+          <div data-tasks-summary aria-label={t.tasks.progress.title} className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-ink-500">
+            <span className="inline-flex items-baseline gap-1">
+              <span className="font-mono font-semibold text-ink tabular-nums [[data-skin=plate]_&]:font-extrabold">{amount.active}</span>
+              <span>{t.tasks.progress.active}</span>
+            </span>
+            <span aria-hidden="true" className="text-ink-500/50">·</span>
+            <span className="inline-flex items-baseline gap-1">
+              <span className={cn('font-mono font-semibold tabular-nums [[data-skin=plate]_&]:font-extrabold', blockedCount > 0 ? 'text-red-text' : 'text-ink-700')}>
+                {amount.blocked}
+              </span>
+              <span>{t.tasks.progress.blocked}</span>
+            </span>
+            <span aria-hidden="true" className="text-ink-500/50">·</span>
+            <span className="inline-flex items-baseline gap-1">
+              <span className="font-mono font-semibold text-green-text tabular-nums [[data-skin=plate]_&]:font-extrabold">{amount.completed}</span>
+              <span>{t.tasks.progress.completed}</span>
+            </span>
+          </div>
+        )}
         <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
       </PageHeader>
-      <div role="group" aria-label={t.tasks.filters.label} className="relative z-[1] flex shrink-0 items-end gap-1.5 pl-[26px] max-nav:overflow-x-auto max-nav:pt-1.5 max-nav:pl-3 max-nav:no-scrollbar">
-        {FILTERS.map((item) => (
-          <button key={item} type="button" aria-pressed={item === filter} onClick={() => setFilter(item)} className={cn(indexTabClass(item === filter), 'cursor-pointer')}>
-            {t.tasks.filters[item]}
-            <span className="font-display-latin text-[12px] font-extrabold">{amount[item]}</span>
-          </button>
-        ))}
+      <div className="flex min-h-10 shrink-0 items-center gap-3 overflow-x-auto border-b border-hairline bg-surface-canvas px-4 py-1.5 no-scrollbar sm:px-6 [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:px-0 [[data-skin=plate]_&]:pb-2">
+        <div
+          role="group"
+          aria-label={t.tasks.filters.label}
+          className={cn(
+            segmentedClass,
+            'inline-flex h-8 shrink-0 items-center gap-0.5 rounded-input border-hairline bg-surface-subtle p-0.5 [[data-skin=plate]_&]:gap-0 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:p-0',
+          )}
+        >
+          {FILTERS.map((item) => {
+            const active = item === filter
+            return (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilter(item)}
+                className={cn(
+                  'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[calc(var(--skin-radius-input)-2px)] px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:h-full [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:not-first:border-l-2 [[data-skin=plate]_&]:not-first:border-ink',
+                  active
+                    ? 'bg-surface-control font-semibold text-ink shadow-surface [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-none'
+                    : 'font-medium text-ink-500 hover:text-ink [[data-skin=plate]_&]:text-ink-700',
+                )}
+              >
+                {t.tasks.filters[item]}
+                <span className={cn('font-mono text-[11px] tabular-nums [[data-skin=plate]_&]:font-extrabold', active ? 'text-ink-700' : 'text-ink-500')}>
+                  {amount[item]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
       <Sheet className="flex-1">
-        <div className="flex min-h-0 flex-1">
-          {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with
-              the content instead of stretching the whole page based on their unscrolled position. */}
-          <div className="relative h-full min-w-0 flex-1 overflow-y-auto pt-[22px] pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,34px)]">
-            <ErrorAlert error={tasks.error} />
-            {tasks.isPending && <p className="text-[14px] text-ink-500">{t.tasks.loading}</p>}
-            {tasks.isSuccess && rows.length === 0 && (
-              <section className="flex flex-col items-start gap-4 py-6">
-                <p className="text-[14.5px]">{t.tasks.empty}</p>
-                <Button asChild variant="secondary">
-                  <Link to={project.managerAgentId ? `/p/${encodeURIComponent(project.name)}/agents/${project.managerAgentId}/chat` : `/p/${encodeURIComponent(project.name)}/settings`}>
-                    {project.managerAgentId ? t.tasks.manager : t.tasks.settings}
-                  </Link>
-                </Button>
-              </section>
-            )}
-            {rows.length > 0 && (
-              <>
-                {/* Table header (decorative; each row carries screen-reader text for the column names): a 2px solid line below it. */}
-                <div aria-hidden="true" className="flex items-center gap-[18px] border-b-2 border-ink px-1 pb-2 text-[12px] font-black text-ink-500 max-sm:hidden">
-                  <span className="flex-[0_0_34px]">{t.tasks.number}</span>
-                  <span className="flex-[1_1_280px]">{t.tasks.task}</span>
-                  <span className="flex-[0_0_84px]">{t.tasks.state}</span>
-                  <span className="flex-[0_0_104px]">{t.tasks.currentNode}</span>
-                  <span className="flex-[0_0_130px]">{t.tasks.responsible}</span>
-                  <span className="flex-[0_0_96px] text-right">{t.tasks.updated}</span>
-                </div>
-                <ul aria-label={t.tasks.title} className="flex flex-col">
-                  {shown.map((task) => (
-                    <TaskRow key={task.id} task={task} projectName={project.name} agentName={agentName} pending={pendingByTask.get(task.id)} />
-                  ))}
-                </ul>
-              </>
-            )}
-            {tasks.hasNextPage && (
-              <Button className="mt-5" variant="secondary" disabled={tasks.isFetchingNextPage} onClick={() => void tasks.fetchNextPage()}>
-                {t.tasks.more}
+        <PageBody width="wide" innerClassName="pb-12">
+          <ErrorAlert error={tasks.error} />
+          {tasks.isPending && <p className="text-[13.5px] text-ink-500">{t.tasks.loading}</p>}
+          {tasks.isSuccess && rows.length === 0 && (
+            <section className="flex flex-col items-start gap-3 py-8">
+              <p className="text-[13px] text-ink-500">{t.tasks.intro}</p>
+              <p className="text-[14.5px] font-medium text-ink">{t.tasks.empty}</p>
+              <Button asChild variant="secondary" size="sm">
+                <Link to={project.managerAgentId ? `/p/${encodeURIComponent(project.name)}/agents/${project.managerAgentId}/chat` : `/p/${encodeURIComponent(project.name)}/settings`}>
+                  {project.managerAgentId ? t.tasks.manager : t.tasks.settings}
+                </Link>
               </Button>
-            )}
-          </div>
-          <Stub as="aside" aria-label={t.tasks.progress.title} label={t.tasks.progress.title} className="w-[150px]">
-            {tasks.isSuccess && (
-              <div className="relative flex flex-1 flex-col gap-[22px] pt-1.5 pr-[30px] pl-[18px]">
-                <RulerTicks />
-                <StubFigure tone="pink" value={amount.active} label={t.tasks.progress.active} />
-                <StubFigure tone="red" value={amount.blocked} label={t.tasks.progress.blocked} />
-                <StubFigure tone="green" value={amount.completed} label={t.tasks.progress.completed} />
+            </section>
+          )}
+          {rows.length > 0 && shown.length === 0 && (
+            <section role="status" className="flex flex-col items-start gap-3 rounded-card border border-hairline bg-surface-subtle/50 px-5 py-6">
+              <p className="text-[13.5px] text-ink-700">{t.tasks.filteredEmpty}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="secondary" size="xs" onClick={() => setFilter('all')}>
+                  {t.tasks.showAll}
+                </Button>
+                {tasks.hasNextPage && (
+                  <Button type="button" variant="ghost" size="xs" disabled={tasks.isFetchingNextPage} onClick={() => void tasks.fetchNextPage()}>
+                    {t.tasks.more}
+                  </Button>
+                )}
               </div>
-            )}
-          </Stub>
-        </div>
+            </section>
+          )}
+          {shown.length > 0 && (
+            <>
+              {/* Decorative column header; each row carries screen-reader labels for its fields. */}
+              <div
+                aria-hidden="true"
+                className={cn(
+                  'hidden border-b border-hairline px-2 pb-2 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black',
+                  TASK_GRID,
+                )}
+              >
+                <span>{t.tasks.number}</span>
+                <span>{t.tasks.task}</span>
+                <span>{t.tasks.state}</span>
+                <span>{t.tasks.currentNode}</span>
+                <span>{t.tasks.responsible}</span>
+                <span className="text-right">{t.tasks.updated}</span>
+              </div>
+              <ul aria-label={t.tasks.title} className="flex flex-col">
+                {shown.map((task) => (
+                  <TaskRow key={task.id} task={task} projectName={project.name} agentName={agentName} pending={pendingByTask.get(task.id)} />
+                ))}
+              </ul>
+            </>
+          )}
+          {shown.length > 0 && tasks.hasNextPage && (
+            <Button className="mt-4" variant="secondary" size="sm" disabled={tasks.isFetchingNextPage} onClick={() => void tasks.fetchNextPage()}>
+              {t.tasks.more}
+            </Button>
+          )}
+        </PageBody>
       </Sheet>
     </PageFrame>
   )
 }
 
-// One row per task: monospace number, title (linking to the details) plus subtitle (wait or failure reason), status, monospace current
-// node, responsible Agent (with avatar), monospace updated time.
-// 1.5px dashed lines between rows; the columns wrap when narrow.
-function TaskRow({ task, projectName, agentName, pending }: { task: Task; projectName: string; agentName: (id: string) => string; pending?: Parameters<typeof PendingBadge>[0]['counts'] }) {
+// One row per task: shared 6-track CSS Grid on sm+ and compact 2-row stack on narrow screens.
+function TaskRow({
+  task,
+  projectName,
+  agentName,
+  pending,
+}: {
+  task: Task
+  projectName: string
+  agentName: (id: string) => string
+  pending?: Parameters<typeof PendingBadge>[0]['counts']
+}) {
   return (
-    <li className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3.5">
-      {/* Number and title form one group (width = number 34px + gap 18px + title from 280px) that doesn't wrap: on narrow screens the
-          number stays to the left of the title. */}
-      <span className="flex min-w-0 flex-[1_1_332px] flex-nowrap items-center gap-x-[18px] max-sm:items-start max-sm:gap-x-2.5">
-        <span className="flex-[0_0_34px] font-mono text-[12px] font-bold text-ink-500 max-sm:leading-[21px]">
+    <li
+      className={cn(
+        'flex flex-col gap-1.5 border-b border-hairline px-2 py-2.5 transition-colors hover:bg-surface-hover/50 [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-transparent',
+        TASK_GRID,
+      )}
+    >
+      {/* Mobile row 1: number + title/reason stay paired; dissolves into grid tracks 1 & 2 on sm+. */}
+      <span className="flex min-w-0 items-baseline gap-2.5 sm:contents">
+        <span className="w-10 shrink-0 font-mono text-[12px] font-medium text-ink-500 tabular-nums sm:w-auto [[data-skin=plate]_&]:font-bold">
           <span className="sr-only">{t.tasks.number}</span>
           {t.tasks.numberLabel(task.number)}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col leading-[1.4]">
-          <span className="flex min-w-0 items-start gap-2">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-[1.4]">
+          <span className="flex min-w-0 items-center gap-2">
             <Link
-              className="min-w-0 text-[15px] font-black break-words text-ink underline decoration-ink/30 underline-offset-4 hover:text-riso-blue hover:decoration-riso-blue"
+              className="min-w-0 truncate text-[13.5px] font-semibold text-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-ink [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-ink/30 [[data-skin=plate]_&]:hover:text-riso-blue [[data-skin=plate]_&]:hover:decoration-riso-blue"
               to={`${tasksPath(projectName)}/${task.id}`}
+              title={task.title || task.id}
             >
               {task.title || task.id}
             </Link>
             <PendingBadge counts={pending} />
           </span>
-          {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
+          {task.reason && (
+            <span title={task.reason} className={cn('truncate text-[12px]', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>
+              {task.reason}
+            </span>
+          )}
         </span>
       </span>
-      <span className="flex-[0_0_84px]">
-        <span className="sr-only">{t.tasks.state}</span>
-        <TaskBadge status={task.status} />
-      </span>
-      <span className="min-w-0 flex-[0_0_104px]">
-        <span className="sr-only">{t.tasks.currentNode}</span>
-        {task.currentStepId ? (
-          <span className="rounded-[4px] bg-tint-blue px-2 font-mono text-[12px] leading-[22px] break-all">{task.currentStepId}</span>
-        ) : (
-          <span className="text-ink-500">{t.tasks.none}</span>
-        )}
-      </span>
-      <span className="flex min-w-0 flex-[0_0_130px] items-center gap-2 text-[13.5px] font-bold">
-        <span className="sr-only">{t.tasks.responsible}</span>
-        {task.currentAgentId ? (
-          <>
-            <AgentAvatar size="sm" id={task.currentAgentId} />
-            <span className="min-w-0 truncate" title={agentName(task.currentAgentId)}>
-              {agentName(task.currentAgentId)}
+      {/* Mobile row 2: state, current node, responsible agent and updated time; dissolves into grid tracks 3-6 on sm+. */}
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[50px] sm:contents">
+        <span className="min-w-0">
+          <span className="sr-only">{t.tasks.state}</span>
+          <TaskBadge status={task.status} />
+        </span>
+        <span className="min-w-0">
+          <span className="sr-only">{t.tasks.currentNode}</span>
+          {task.currentStepId ? (
+            <span
+              title={task.currentStepId}
+              className="inline-block max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 font-mono text-[11.5px] leading-[20px] text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:text-ink"
+            >
+              {task.currentStepId}
             </span>
-          </>
-        ) : (
-          <span className="text-ink-500">{t.tasks.none}</span>
-        )}
+          ) : (
+            <span className="text-[12px] text-ink-500">{t.tasks.none}</span>
+          )}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
+          <span className="sr-only">{t.tasks.responsible}</span>
+          {task.currentAgentId ? (
+            <>
+              <AgentAvatar size="sm" id={task.currentAgentId} />
+              <span className="min-w-0 truncate" title={agentName(task.currentAgentId)}>
+                {agentName(task.currentAgentId)}
+              </span>
+            </>
+          ) : (
+            <span className="text-ink-500">{t.tasks.none}</span>
+          )}
+        </span>
+        <time dateTime={task.updatedAt} className="ml-auto font-mono text-[12px] text-ink-500 tabular-nums sm:ml-0 sm:text-right">
+          {t.tasks.updatedAt(task.updatedAt)}
+        </time>
       </span>
-      <time dateTime={task.updatedAt} className="flex-[0_0_96px] text-right font-mono text-[12px] text-ink-700 max-sm:text-left">
-        {t.tasks.updatedAt(task.updatedAt)}
-      </time>
     </li>
   )
 }

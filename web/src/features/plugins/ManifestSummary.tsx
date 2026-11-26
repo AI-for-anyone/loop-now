@@ -13,7 +13,7 @@ export function Chips({ items, className }: { items: string[]; className?: strin
   return (
     <ul className={cn('flex flex-wrap gap-1.5', className)}>
       {items.map((item) => (
-        <li key={item} className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 text-[12px] leading-[18px] font-bold text-ink-700">
+        <li key={item} className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[12px] leading-[18px] font-medium text-ink-700 [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.06] [[data-skin=plate]_&]:font-bold">
           {item}
         </li>
       ))}
@@ -22,9 +22,8 @@ export function Chips({ items, className }: { items: string[]; className?: strin
 }
 
 // table: how it looks in the plugin detail overview (redesign step 5): one row per group, group name on the left, and on the right each
-// item as a small tag (yellow; “无” (None) is beige-gray) plus a one-sentence explanation;
-// a solid line under the header and dashed lines between rows. groups: how it looks in the pre-install confirmation, with a small heading
-// per group and one row per item.
+// item as a small tag plus a one-sentence explanation;
+// groups: how it looks in the pre-install confirmation, with a small heading per group and one row per item.
 type Layout = 'groups' | 'table'
 const LayoutContext = createContext<Layout>('groups')
 
@@ -33,13 +32,22 @@ function Row({ name, hint }: { name: ReactNode; hint?: ReactNode }) {
   if (layout === 'table')
     return (
       <li className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[13.5px] leading-[1.6] [overflow-wrap:anywhere]">
-        <span className={cn('rounded-[4px] px-2 text-[12.5px] leading-[22px] font-black', name === text.none ? 'bg-paper-tab text-ink-700' : 'bg-riso-yellow text-ink')}>{name}</span>
+        <span
+          className={cn(
+            'rounded-stamp px-2 text-[12.5px] leading-[22px] font-medium [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:font-black',
+            name === text.none
+              ? 'border border-hairline bg-surface-subtle text-ink-500 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-tab [[data-skin=plate]_&]:text-ink-700'
+              : 'border border-hairline-strong bg-surface-active text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow',
+          )}
+        >
+          {name}
+        </span>
         {hint && <><span className="sr-only"> · </span><span className="min-w-0 text-ink-700">{hint}</span></>}
       </li>
     )
   return (
-    <li className="min-w-0 rounded-input bg-ink/[0.04] px-3 py-2 text-[13px] leading-snug [overflow-wrap:anywhere]">
-      <span className="font-black text-ink">{name}</span>
+    <li className="min-w-0 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] leading-snug [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04]">
+      <span className="font-semibold text-ink [[data-skin=plate]_&]:font-black">{name}</span>
       {hint && <span className="text-ink-700"> · {hint}</span>}
     </li>
   )
@@ -49,14 +57,14 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   const layout = useContext(LayoutContext)
   if (layout === 'table')
     return (
-      <section aria-label={title} className="grid min-w-0 gap-x-5 gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)]">
-        <h3 className="text-[13.5px] leading-[22px] font-black">{title}</h3>
+      <section aria-label={title} className="grid min-w-0 gap-x-5 gap-y-1.5 border-b border-hairline px-1 py-2.5 sm:grid-cols-[112px_minmax(0,1fr)] [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
+        <h3 className="text-[13.5px] leading-[22px] font-semibold [[data-skin=plate]_&]:font-black">{title}</h3>
         <ul className="grid min-w-0 gap-1.5">{children}</ul>
       </section>
     )
   return (
     <section className="grid min-w-0 gap-1.5">
-      <h3 className="text-[13px] font-black text-ink-700">{title}</h3>
+      <h3 className="text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{title}</h3>
       <ul className="grid min-w-0 gap-1.5">{children}</ul>
     </section>
   )
@@ -93,7 +101,7 @@ export function ManifestSummary({ manifest, columns = true, preview, layout = 'g
   const table = layout === 'table'
   return (
     <LayoutContext.Provider value={layout}>
-    <div className={cn('grid min-w-0', table ? 'border-t-2 border-ink' : 'gap-4', columns && !table && 'md:grid-cols-2')}>
+    <div className={cn('grid min-w-0', table ? 'border-t border-hairline-strong [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink' : 'gap-4', columns && !table && 'md:grid-cols-2')}>
       <div className={cn('grid min-w-0 content-start', !table && 'gap-4')}>
         <Group title={text.platformHalf}>{platformRows.length ? platformRows : <Row name={text.none} hint={text.noPlatform} />}</Group>
         <Group title={text.agentHalf}>{agentRows.length ? agentRows : <Row name={text.none} hint={text.noAgent} />}</Group>

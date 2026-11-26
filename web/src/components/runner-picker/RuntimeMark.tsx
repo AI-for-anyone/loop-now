@@ -1,24 +1,44 @@
 import { runtimeGlyph, type RuntimeDefinition } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/theme/store'
 
-// A runtime's mark, drawn in the console's riso print language rather than taken from a product's logo: two misregistered inks and a
-// glyph. The shape says what kind of runtime it is (a window for a CLI installed on this computer, a pressed disc for one that ships with
-// the platform), the glyph which one (lib/runtime.ts); a runtime without a glyph of its own gets its initial.
+// A runtime's mark: crisp monochrome geometric mark in mono skin (inverted terminal window for local CLIs, outlined disc for the bundled
+// runtime); two misregistered riso inks in Plate skin. The glyph comes from lib/runtime.ts, or falls back to the runtime's initial.
 export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
-  // Ink on the bundled runtime's yellow disc, paper on a CLI's blue window.
-  const color = runtime.capabilities.bundled ? 'var(--ink)' : 'var(--paper-raised)'
+  const { skin } = useTheme()
+  const isPlate = skin === 'plate'
+  const color = runtime.capabilities.bundled ? 'var(--ink)' : isPlate ? 'var(--paper-raised)' : 'var(--cta-fg)'
   const strokes = runtimeGlyph(runtime.id)
   const glyph = strokes ? (
-    <g fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+    <g fill="none" stroke={color} strokeWidth={isPlate ? '2.6' : '2.4'} strokeLinecap="round" strokeLinejoin="round">
       {strokes.map((d) => (
         <path key={d} d={d} />
       ))}
     </g>
   ) : (
-    <text x="16" y="21.6" textAnchor="middle" fontSize="13" fontWeight="800" fontFamily="var(--font-display-latin)" fill={color}>
+    <text x="16" y="21.6" textAnchor="middle" fontSize="13" fontWeight={isPlate ? '800' : '700'} fontFamily="var(--font-display-latin)" fill={color}>
       {runtime.name.slice(0, 1).toUpperCase()}
     </text>
   )
+
+  if (!isPlate) {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0', className)}>
+        {runtime.capabilities.bundled ? (
+          <circle cx="16" cy="16" r="13" fill="var(--surface-control)" stroke="var(--hairline-strong)" strokeWidth="1.5" />
+        ) : (
+          <>
+            <rect x="2.5" y="4" width="27" height="24" rx="5.5" fill="var(--cta-bg)" />
+            <path d="M2.5 10h27" stroke="var(--cta-fg)" strokeWidth="1.2" opacity=".32" />
+            <circle cx="6.5" cy="7.1" r="1.1" fill="var(--cta-fg)" opacity=".75" />
+            <circle cx="10" cy="7.1" r="1.1" fill="var(--cta-fg)" opacity=".45" />
+          </>
+        )}
+        {glyph}
+      </svg>
+    )
+  }
+
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0 overflow-visible', className)}>
       {runtime.capabilities.bundled ? (

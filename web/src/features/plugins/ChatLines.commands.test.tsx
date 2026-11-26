@@ -63,20 +63,20 @@ it('a command result header is a segmented receipt (command | source | time) wit
   expect(parts[2]).toHaveClass('border-l', 'border-hairline', 'font-mono', '[[data-skin=plate]_&]:border-l-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
   expect(parts[0].parentElement).toHaveClass('bg-surface-subtle', 'rounded-ticket', '[[data-skin=plate]_&]:bg-tint-blue', '[[data-skin=plate]_&]:rounded-[6px]')
   const reply = screen.getByText('Context compacted: 4200 → about 350 tokens')
-  expect(reply).toHaveClass('border-l-2', 'border-dashed')
+  expect(reply).toHaveClass('border-l', 'border-hairline-strong', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
 })
 
-it('the /resume session list: a solid line on top and dashed lines between rows; the current session is a yellow tag; ID and time in monospace; Resume uses secondary surface tokens in mono skin and paper/navy in Plate skin', () => {
+it('the /resume session list: hairline rules in mono skin and solid/dashed ink rules in Plate skin; the current session is highlighted; ID and time in monospace; Resume uses secondary surface tokens in mono skin and paper/navy in Plate skin', () => {
   render(<CommandLine command="/resume" at="2026-10-31T01:00:00Z" onResume={() => {}} result={{ ...base, command: 'resume', resumeSessions: [
     { id: '12345678-1234-1234-1234-123456789abc', title: 'Fix the resume list', preview: 'Latest discussion', updatedAt: '2026-10-31T01:00:00Z', current: false },
     { id: 'current-full-session-id', title: 'The current session', preview: '', updatedAt: '2026-10-30T01:00:00Z', current: true },
   ] }} />)
   const list = screen.getByRole('list', { name: 'Sessions available to resume' })
-  expect(list).toHaveClass('border-t-2', 'border-ink')
+  expect(list).toHaveClass('border-t', 'border-hairline-strong', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-ink')
   const rows = [...list.querySelectorAll('[role="listitem"]')]
   expect(rows).toHaveLength(2)
-  for (const row of rows) expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
-  expect(screen.getByText('Current')).toHaveClass('bg-riso-yellow', 'text-ink', 'font-black')
+  for (const row of rows) expect(row).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+  expect(screen.getByText('Current')).toHaveClass('bg-surface-active', 'text-ink', 'font-semibold', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:font-black')
   expect(screen.getByTitle('12345678-1234-1234-1234-123456789abc')).toHaveClass('font-mono')
   expect(rows[0].querySelector('time')).toHaveClass('font-mono')
   expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass(

@@ -69,8 +69,6 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
   }))
   const view = renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   const box = screen.getByRole('textbox', { name: 'Message' })
-  // When busy, the key hints appear below the input.
-  expect(screen.getByText('to interrupt')).toBeVisible()
   await userEvent.type(box, 'Queue this after{Enter}')
   await waitFor(() => expect(sent).toEqual([{ text: 'Queue this after', whenBusy: 'queue' }]))
   await waitFor(() => expect(box).toHaveValue(''))
@@ -81,55 +79,41 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
   await waitFor(() => expect(sent.at(-1)).toEqual({ text: 'Ctrl works too', whenBusy: 'interrupt' }))
 
   view.rerender(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
-  expect(screen.queryByText('to interrupt')).toBeNull()
   await waitFor(() => expect(box).toHaveValue(''))
   await userEvent.type(box, 'Thought it was idle{Meta>}{Enter}{/Meta}')
   await waitFor(() => expect(sent.slice(-2)).toEqual([{ text: 'Thought it was idle' }, { text: 'Thought it was idle', whenBusy: 'interrupt' }]))
 })
 
-// "Printed sheet" redesign: the input area merges into the bottom of the sheet.
+// Unified floating composer card centered with the conversation stream.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('the input area uses semantic surface-canvas with hairline border and preserves Plate yellow bar styling', () => {
+it('the composer dock floats cleanly on surface-canvas in mono skin and preserves Plate yellow bar styling', () => {
   mountBar()
   const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')
-  expect(bar).toHaveClass('bg-surface-canvas', 'border-t', 'border-hairline', '[[data-skin=plate]_&]:bg-tint-yellow', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-ink')
-  // On wide screens the vertical padding tightens (narrow screens are unchanged); the key-hint row stays.
-  expect(bar).toHaveClass('pt-3.5', 'pb-3', 'gap-2.5', 'nav:pt-2.5', 'nav:pb-2', 'nav:gap-1.5')
+  expect(bar).toHaveClass('bg-surface-canvas', '[[data-skin=plate]_&]:bg-tint-yellow', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-ink')
+  expect(bar).not.toHaveClass('border-t')
+  expect(bar?.firstElementChild).toHaveClass('mx-auto', 'max-w-[800px]')
 })
 
-it('the input uses semantic surface-control and hairline-strong border; the send button uses CTA tokens and preserves Plate styling', () => {
+it('the unified card uses surface-elevated with hairline-strong border and subtle focus-within; the send button uses CTA tokens and preserves Plate styling', () => {
   mountBar()
   const editor = screen.getByRole('textbox', { name: 'Message' })
-  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-control', 'border', 'border-hairline-strong', 'rounded-panel', '[[data-skin=plate]_&]:bg-paper-raised', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
-  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-10', 'rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:size-11', '[[data-skin=plate]_&]:bg-riso-pink')
+  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-elevated', 'border', 'border-hairline-strong', 'rounded-2xl', 'focus-within:border-riso-blue/50', '[[data-skin=plate]_&]:bg-paper-raised', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-8', 'rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:size-9', '[[data-skin=plate]_&]:bg-riso-pink')
 })
 
-it('when idle the placeholder is “Message <Agent>” and no longer explains the keys', () => {
+it('when idle the placeholder is “Message <Agent>” and keyboard hints stay in button tooltips instead of a permanent footer strip', () => {
   mountBar()
   expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message dev-helper')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('title', 'Send (Enter)')
+  expect(screen.queryByText('new line')).toBeNull()
 })
 
-it('when idle, the line under the input says Enter to send, Shift + Enter for a new line', () => {
-  mountBar()
-  const hint = screen.getByText('send', { selector: 'span' }).closest('p')!
-  expect(hint).toHaveTextContent('Entersend·Shift + Enternew line')
-  expect(hint.querySelectorAll('kbd')).toHaveLength(2)
-  expect(screen.queryByText('to queue', { selector: 'span' })).toBeNull()
-})
-
-it('when busy, the key hints switch to queue and interrupt, and with an empty input the stop button is shown', () => {
+it('when busy with an empty input, shows the compact Stop button inside the toolbar without a permanent key-hint footer', () => {
   mountBar(true)
-  const hint = screen.getByText('to queue', { selector: 'span' }).closest('p')!
-  // The input area writes keys its own way (t.chat.barKeys): in English that is “Enter” as elsewhere. The Chinese “回车” (Enter) is checked
-  // in src/zh-CN/features/chat/Composer.zh.test.tsx.
-  expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')
-  // Left-aligned inside the input area, using the input area's key style.
-  expect(hint).toHaveClass('justify-start', 'text-ink-700')
-  expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
   expect(screen.queryByText('new line')).toBeNull()
   const stop = screen.getByRole('button', { name: 'Stop the current reply' })
-  expect(stop).toHaveClass('size-10', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-8', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   expect(screen.queryByRole('button', { name: 'Queue' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Interrupt and send' })).toBeNull()
 })
@@ -196,12 +180,10 @@ it('preserves per-Agent draft text across unmount/remount and Agent switches, an
   expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('')
 })
 
-it('the queue tray sits on the top edge of the input, leaving room at the sides for the plus and send buttons', () => {
+it('the queue tray docks directly on top of the unified composer card with no hardcoded side offsets', () => {
   renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="A queued message">Queued · 1</section>} />)
   const slot = screen.getByRole('region', { name: 'A queued message' }).parentElement!
-  // At phone width the tray spans the full row and no longer leaves room at the sides; otherwise it would be too narrow.
-  expect(slot).toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
-  expect(slot).not.toHaveClass('pl-[50px]')
+  expect(slot).not.toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
   expect(slot.nextElementSibling).toContainElement(screen.getByRole('textbox', { name: 'Message' }))
 })
 
@@ -215,7 +197,7 @@ it('the key hints used elsewhere (the task node input) stay centered with second
   expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')
 })
 
-it('the input text is 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
+it('the input text is 14px on desktop and 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
   mountBar()
-  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[15.5px]', 'max-nav:text-base')
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[14px]', 'max-nav:text-base')
 })

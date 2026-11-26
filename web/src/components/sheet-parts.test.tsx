@@ -1,20 +1,23 @@
+import { createRef, useState } from 'react'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { indexTabClass } from '@/lib/index-tab'
-import { IndexTabLink, IndexTabs } from './IndexTabs'
+import { IndexTabLink, IndexTabs, SubNav } from './IndexTabs'
 import { HollowNumber, NumberedSection } from './NumberedSection'
-import { RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
+import { PageBody, RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
 import { StickyNote } from './StickyNote'
 
-// Shared parts of the "printed sheet" redesign: sheet, index tab, stub and ruler, numbered section heading, yellow sticky note.
+// Shared parts of the "printed sheet" redesign: sheet, page body, index tab / sub-nav, stub and ruler, numbered section heading, yellow sticky note.
 describe('Sheet', () => {
-  it('uses clean canvas and hairline top border in mono skin while preserving the paper sheet and shadow in Plate skin', () => {
+  it('uses clean borderless canvas in mono skin while preserving the paper sheet and shadow in Plate skin', () => {
     render(<Sheet data-testid="sheet">Body</Sheet>)
     const sheet = screen.getByTestId('sheet')
     expect(sheet).toHaveTextContent('Body')
     expect(sheet).toHaveAttribute('data-sheet')
-    expect(sheet).toHaveClass('bg-surface-canvas', 'border-t', 'border-hairline', 'overflow-hidden', 'riso-grain')
+    expect(sheet).toHaveClass('relative', 'flex', 'min-h-0', 'flex-1', 'flex-col', 'bg-surface-canvas', 'overflow-hidden', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-t')
     expect(sheet).toHaveClass(
       '[[data-skin=plate]_&]:bg-paper-raised',
       '[[data-skin=plate]_&]:border-2',
@@ -34,6 +37,31 @@ describe('Sheet', () => {
     render(<Sheet data-testid="sheet" className="flex-1" aria-busy="true" />)
     expect(screen.getByTestId('sheet')).toHaveClass('flex-1', 'bg-surface-canvas')
     expect(screen.getByTestId('sheet')).toHaveAttribute('aria-busy', 'true')
+  })
+})
+
+describe('PageBody', () => {
+  it('applies width presets, forwards ref, and supports innerClassName', () => {
+    const ref = createRef<HTMLDivElement>()
+    const { rerender } = render(
+      <PageBody ref={ref} data-testid="body" width="narrow" innerClassName="flex flex-col gap-6">
+        Content
+      </PageBody>,
+    )
+    const outer = screen.getByTestId('body')
+    expect(ref.current).toBe(outer)
+    expect(outer).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto')
+    expect(outer.firstElementChild).toHaveClass('mx-auto', 'w-full', 'max-w-[780px]', 'px-4', 'py-5', 'sm:px-6', 'flex', 'flex-col', 'gap-6')
+
+    rerender(<PageBody data-testid="body">Default</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('max-w-[1080px]')
+
+    rerender(<PageBody data-testid="body" width="wide">Wide</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('max-w-[1320px]')
+
+    rerender(<PageBody data-testid="body" width="full">Full</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('flex', 'h-full', 'min-h-0', 'w-full', 'flex-col')
+    expect(screen.getByTestId('body').firstElementChild).not.toHaveClass('px-4')
   })
 })
 
@@ -66,9 +94,9 @@ describe('Index tabs', () => {
     expect(other).toHaveClass('[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-b-0')
   })
 
-  it('on narrow screens the tabs scroll sideways when they do not fit, without widening the page', () => {
+  it('the tabs scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
-    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
+    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('h-9', 'overflow-x-auto', 'no-scrollbar', 'px-4', 'sm:px-6')
     expect(screen.getByRole('link', { name: 'Chat' })).toHaveClass('[[data-skin=plate]_&]:max-sm:px-2.5')
     expect(screen.getByRole('link', { name: 'Config' })).toHaveClass('[[data-skin=plate]_&]:max-sm:px-2.5')
   })
@@ -79,6 +107,73 @@ describe('Index tabs', () => {
     expect(indexTabClass(false)).toContain('border-transparent')
     expect(indexTabClass(false)).toContain('[[data-skin=plate]_&]:bg-paper-tab')
     expect(indexTabClass(true)).not.toContain('bg-paper-tab')
+  })
+
+  it('SubNav supports route links with counts', () => {
+    render(
+      <MemoryRouter initialEntries={['/plugins']}>
+        <SubNav
+          aria-label="Plugins"
+          items={[
+            { key: 'installed', label: 'Installed', to: '/plugins', end: true, count: 3 },
+            { key: 'market', label: 'Market', to: '/plugins/market' },
+          ]}
+        />
+      </MemoryRouter>,
+    )
+    const nav = screen.getByRole('navigation', { name: 'Plugins' })
+    const installed = within(nav).getByRole('link', { name: /Installed/ })
+    expect(installed).toHaveAttribute('aria-current', 'page')
+    expect(installed).toHaveTextContent('Installed3')
+    expect(within(nav).getByRole('link', { name: 'Market' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('SubNav supports controlled tablist mode with ArrowLeft, ArrowRight, Home, End keyboard navigation', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [active, setActive] = useState<'all' | 'running' | 'failed' | 'done'>('all')
+      return (
+        <SubNav
+          aria-label="Task filters"
+          value={active}
+          onChange={setActive}
+          items={[
+            { key: 'all', label: 'All', count: 5 },
+            { key: 'running', label: 'Running', count: 2 },
+            { key: 'failed', label: 'Failed', disabled: true },
+            { key: 'done', label: 'Done', count: 3 },
+          ]}
+        />
+      )
+    }
+    render(<Harness />)
+    const tablist = screen.getByRole('tablist', { name: 'Task filters' })
+    const all = within(tablist).getByRole('tab', { name: /All/ })
+    const running = within(tablist).getByRole('tab', { name: /Running/ })
+    const done = within(tablist).getByRole('tab', { name: /Done/ })
+    expect(all).toHaveAttribute('aria-selected', 'true')
+
+    all.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(running).toHaveAttribute('aria-selected', 'true')
+    expect(running).toHaveFocus()
+
+    // Skips disabled "Failed" tab
+    await user.keyboard('{ArrowRight}')
+    expect(done).toHaveAttribute('aria-selected', 'true')
+    expect(done).toHaveFocus()
+
+    await user.keyboard('{Home}')
+    expect(all).toHaveAttribute('aria-selected', 'true')
+    expect(all).toHaveFocus()
+
+    await user.keyboard('{End}')
+    expect(done).toHaveAttribute('aria-selected', 'true')
+    expect(done).toHaveFocus()
+
+    await user.keyboard('{ArrowLeft}')
+    expect(running).toHaveAttribute('aria-selected', 'true')
+    expect(running).toHaveFocus()
   })
 })
 
@@ -133,7 +228,7 @@ describe('Numbered section', () => {
     expect(number).toHaveClass('max-nav:hidden', 'tabular-nums', 'text-ink-500', '[[data-skin=plate]_&]:text-transparent')
   })
 
-  it('a section is a region named by its title: a two-digit number on the left and a clean semibold heading', () => {
+  it('a section is a region named by its title: number hidden in mono skin for clean edge alignment, compact 14.5px semibold heading', () => {
     render(
       <NumberedSection number={3} title="Local directories">
         <p>Section content</p>
@@ -141,12 +236,14 @@ describe('Numbered section', () => {
     )
     const region = screen.getByRole('region', { name: 'Local directories' })
     expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass(
-      'text-[16px]',
+      'text-[14.5px]',
       'font-semibold',
       'riso-marker',
       '[[data-skin=plate]_&]:font-display-cn',
     )
-    expect(within(region).getByText('03')).toHaveAttribute('aria-hidden', 'true')
+    const num = within(region).getByText('03')
+    expect(num).toHaveAttribute('aria-hidden', 'true')
+    expect(num).toHaveClass('hidden', '[[data-skin=plate]_&]:block')
     expect(region).toHaveTextContent('Section content')
   })
 

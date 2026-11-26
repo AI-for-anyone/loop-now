@@ -6,8 +6,17 @@ const models = (count: number) => `${count} ${plural('en-US', count, { one: 'mod
 
 export const config = {
   effectNotice: 'Changes take effect from the next dispatched message; a reply in progress is not affected.',
+  effectShort: 'Next message',
   staleRunNotice: 'The current reply uses the config from before the change.',
+  staleRunShort: 'Reply uses previous config',
   savedWhileBusy: 'Saved. The current reply is not affected; changes take effect from the next message.',
+  tabs: {
+    label: 'Configuration tabs',
+    general: 'General & Model',
+    workspace: 'Prompt & Workspace',
+    tools: 'Tools & Access',
+    danger: 'Danger',
+  },
   toc: {
     title: 'Contents',
   },
@@ -15,6 +24,8 @@ export const config = {
     title: 'Basics',
     id: 'Internal ID',
     name: 'Display name',
+    changeRunner: 'Change',
+    done: 'Done',
     modelCount: (count: number) => models(count),
     pluginUnavailable: {
       create: 'grant the plugin after creating, then choose',
@@ -165,6 +176,7 @@ export const config = {
     empty: 'No CLIs yet.',
     name: 'CLI name',
     add: 'Add CLI',
+    configure: 'Configure',
     nameInvalid: 'Use only lowercase letters, digits, dots, underscores, and hyphens, starting with a letter or digit',
     templateVersion: (version: string) => `Built-in template v${version}`,
     markerOnly: 'Marker only: not installed, no credential injected',

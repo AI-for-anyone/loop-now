@@ -14,8 +14,14 @@ const catalog: Schemas['Model'][] = [
 ]
 const modelHandler = http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json({ providerId: 'anthropic', models: catalog }))
 const basic = () => screen.getByRole('region', { name: 'Basics' })
-const picker = () => thinkingPicker(basic())
 const save = () => within(basic()).getByRole('button', { name: 'Save' })
+const openRunner = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
+  const trigger = within(basic()).getByRole('button', { name: /^Runs on/ })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+  const dialog = await screen.findByRole('dialog', { name: 'Runs on' })
+  await waitFor(() => expect(within(thinkingPicker(dialog)).getAllByRole('radio')[0]).toBeEnabled())
+  return dialog
+}
 
 async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail = false) {
   let current = makeAgent({ thinkingLevel })
@@ -29,22 +35,26 @@ async function setup(thinkingLevel: Schemas['ThinkingLevel'] | null = null, fail
       current = { ...current, ...body }; return HttpResponse.json(current)
     }),
   ] })
-  await waitFor(() => expect(within(picker()).getAllByRole('radio')[0]).toBeEnabled())
-  return { ...view, writes, changeServer: (level: Schemas['ThinkingLevel']) => { current = { ...current, thinkingLevel: level } } }
+  const runner = await openRunner(view.user)
+  return { ...view, runner, writes, changeServer: (level: Schemas['ThinkingLevel']) => { current = { ...current, thinkingLevel: level } } }
 }
 
 it('lists only the levels the model supports and the actual default; saves the level on its own without the model or name', async () => {
-  const { user, writes } = await setup()
-  expect(thinkingOptions(basic())).toEqual(['Default (Medium)', 'High', 'Medium', 'Low', 'Off'])
-  expect(thinkingChoice(basic())).toBe('Default (Medium)')
-  await chooseThinking(user, basic(), 'High'); await user.click(save())
+  const { user, runner, writes } = await setup()
+  expect(thinkingOptions(runner)).toEqual(['Default (Medium)', 'High', 'Medium', 'Low', 'Off'])
+  expect(thinkingChoice(runner)).toBe('Default (Medium)')
+  await chooseThinking(user, runner, 'High')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
+  await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: 'high' }]))
   await waitFor(() => expect(save()).toBeDisabled())
 })
 
 it('going back to the default sends null explicitly; a later name-only change does not send the level again', async () => {
-  const { user, writes } = await setup('high')
-  await chooseThinking(user, basic(), 'Default (Medium)'); await user.click(save())
+  const { user, runner, writes } = await setup('high')
+  await chooseThinking(user, runner, 'Default (Medium)')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
+  await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: null }]))
   await waitFor(() => expect(save()).toBeDisabled())
   await user.type(within(basic()).getByLabelText('Display name'), '2'); await user.click(save())
@@ -52,28 +62,33 @@ it('going back to the default sends null explicitly; a later name-only change do
 })
 
 it("switching models goes back to the default so the old model's level is not carried into the new model", async () => {
-  const { user, writes } = await setup('high')
-  await chooseModel(user, basic(), 'claude-haiku-5-5')
-  expect(thinkingChoice(basic())).toBe('Default (Low)')
-  expect(within(picker()).queryByRole('radio', { name: 'High' })).toBeNull()
+  const { user, runner, writes } = await setup('high')
+  await chooseModel(user, runner, 'claude-haiku-5-5')
+  expect(thinkingChoice(runner)).toBe('Default (Low)')
+  expect(within(thinkingPicker(runner)).queryByRole('radio', { name: 'High' })).toBeNull()
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
   await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' }, thinkingLevel: null }]))
 })
 
 it('a level validation failure is shown next to the field and the draft is kept', async () => {
-  const { user, writes } = await setup(null, true)
-  await chooseThinking(user, basic(), 'High'); await user.click(save())
+  const { user, runner, writes } = await setup(null, true)
+  await chooseThinking(user, runner, 'High')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
+  await user.click(save())
   expect(await within(basic()).findByText('The current model does not support this level')).toBeInTheDocument()
-  expect(thinkingChoice(basic())).toBe('High'); expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
+  const reopened = await openRunner(user)
+  expect(thinkingChoice(reopened)).toBe('High'); expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
 })
 
 it('a refresh updates an untouched level; an edited level is kept and a concurrent update is reported', async () => {
-  const { user, client, agent, changeServer, writes } = await setup()
+  const { user, runner, client, agent, changeServer, writes } = await setup()
   changeServer('low'); await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-  await waitFor(() => expect(thinkingChoice(basic())).toBe('Low')); expect(save()).toBeDisabled()
-  await chooseThinking(user, basic(), 'High'); changeServer('medium')
+  await waitFor(() => expect(thinkingChoice(runner)).toBe('Low')); expect(save()).toBeDisabled()
+  await chooseThinking(user, runner, 'High'); changeServer('medium')
   await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
   await waitFor(() => expect(within(basic()).getByText(/The server's config was updated/)).toBeInTheDocument())
-  expect(thinkingChoice(basic())).toBe('High')
+  expect(thinkingChoice(runner)).toBe('High')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
   await user.click(save()); await waitFor(() => expect(writes).toEqual([{ thinkingLevel: 'high' }]))
 })

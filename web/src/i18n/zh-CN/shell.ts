@@ -35,6 +35,7 @@ export const shell = {
     agents: 'Agent',
     projects: '项目',
     platformAgents: '平台 Agent',
+    platform: '平台管理',
   },
   chips: {
     busy: '回复中',
@@ -43,8 +44,6 @@ export const shell = {
   noProjects: '还没有项目',
   menu: '打开导航',
   closeMenu: '关闭导航',
-  switchToLight: '切换到浅色模式',
-  switchToDark: '切换到深色模式',
   settingsShortcut: '⌘,',
   routeError: {
     title: '页面加载出错',

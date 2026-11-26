@@ -68,4 +68,11 @@ export const identities = {
   read: '已读',
   unread: '未读',
   inboxEmpty: '没有符合条件的消息。',
+  tabs: { messages: '消息', tokens: '令牌与访问', settings: '设置' },
+  messageModes: { label: '消息视图', direct: '直接对话', all: '全部动态' },
+  tokenFilter: { label: '令牌状态', active: '有效', all: '全部', emptyActive: '没有有效令牌。' },
+  managedByPill: (label: string) => `由 ${label} 代管`,
+  metadata: { title: '身份信息', address: '地址', createdAt: '创建时间' },
+  dangerZone: '危险操作',
+  dangerHint: '删除外部身份会立即吊销它的全部令牌并释放名称。',
 } as const

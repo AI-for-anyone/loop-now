@@ -30,7 +30,7 @@ type Reload = () => Promise<Listing | undefined>
 // Same as maxItems in the contract.
 const MAX_DIRECTORIES = 50
 const copy = t.localMode.directories
-const linkClass = 'font-black underline decoration-riso-pink decoration-2 underline-offset-4'
+const linkClass = 'font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2'
 
 const toInput = (entry: Directory): DirectoryInput => ({ path: entry.path, note: entry.note })
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 412
@@ -76,28 +76,69 @@ export function ProjectLocalDirectories({ projectId }: { projectId: string }) {
   )
 }
 
-// The “本机目录” (Local directories) block in Agent config: a project Agent first lists the entries inherited from the project
-// (read-only), then its own; a platform Agent only has its own.
+// The "Local directories" block in Agent config: compact single-line caution + divide-y list, with inherited entries read-only above
+// the Agent's own entries and the add action tucked in the section header.
 export function AgentLocalDirectoriesSection({ agent }: { agent: Schemas['Agent'] }) {
   const scope = useScope()
   const query = useAgentLocalDirectories(agent.id)
   const put = usePutAgentLocalDirectories(agent.id)
   const project = agent.scope === 'project' && scope.kind === 'project' ? scope.project : null
+  const [adding, setAdding] = useState(false)
+  const full = (query.data?.directories.length ?? 0) >= MAX_DIRECTORIES
   return (
-    <Section id="local-dirs" title={copy.title}>
-      <p className="text-[13.5px] leading-[1.7] text-ink-700">{project ? copy.intro.agent : copy.intro.platform}</p>
-      <Cautions />
+    <Section
+      id="local-dirs"
+      title={copy.title}
+      count={query.data?.directories.length}
+      actions={
+        query.data && (
+          <Button size="sm" variant="secondary" disabled={full} onClick={() => setAdding(true)}>
+            <PlusIcon />
+            {copy.add}
+          </Button>
+        )
+      }
+    >
+      <p className="text-[13px] leading-snug text-ink-700">{project ? copy.intro.agent : copy.intro.platform}</p>
+      <CompactCautions />
       <DirectoriesOffNote />
       <Loaded query={query}>
         {(data) => (
           <>
-            {project && data.projectId === project.id && <InheritedDirectories projectName={project.name} entries={data.inherited} />}
-            {project && <h3 className="text-[15px] font-black">{copy.own}</h3>}
-            <DirectoryEditor listing={data} save={put.mutateAsync} reload={async () => (await query.refetch()).data} />
+            {project && data.projectId === project.id && <InheritedDirectories projectName={project.name} entries={data.inherited} compact />}
+            {project && <h3 className="text-[13.5px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{copy.own}</h3>}
+            <DirectoryEditor
+              listing={data}
+              save={put.mutateAsync}
+              reload={async () => (await query.refetch()).data}
+              compact
+              externalAddOpen={adding}
+              onExternalAddClose={() => setAdding(false)}
+            />
           </>
         )}
       </Loaded>
     </Section>
+  )
+}
+
+// Compact single-line caution strip for Agent config, keeping both plain statements visible without a tall alert box.
+function CompactCautions() {
+  return (
+    <div
+      role="note"
+      className="flex items-start gap-2 rounded-input border border-hairline bg-tint-yellow/60 px-3 py-2 text-[12.5px] leading-snug text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow"
+    >
+      <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-pink-text" />
+      <p className="min-w-0">
+        {copy.cautions.map((caution, index) => (
+          <span key={caution}>
+            {index > 0 && ' '}
+            {caution}
+          </span>
+        ))}
+      </p>
+    </div>
   )
 }
 
@@ -149,25 +190,45 @@ function Loaded<T extends Listing>({ query, children }: { query: UseQueryResult<
   return <p role="status" className="text-[13.5px] text-ink-500">{t.common.loading}</p>
 }
 
-function InheritedDirectories({ projectName, entries }: { projectName: string; entries: Directory[] }) {
+function InheritedDirectories({ projectName, entries, compact = false }: { projectName: string; entries: Directory[]; compact?: boolean }) {
   const title = copy.inherited.title(projectName)
+  if (compact) {
+    return (
+      <div role="region" aria-label={title} className="grid min-w-0 gap-2 rounded-card border border-hairline bg-surface-subtle px-3.5 py-2.5 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{title}</h3>
+          <Link to={projectSettingsPath({ name: projectName }, 'context')} className={`text-[12.5px] ${linkClass}`}>
+            {copy.inherited.edit}
+          </Link>
+        </div>
+        {entries.length > 0 ? <DirectoryRows label={title} entries={entries} compact /> : <p className="text-[12.5px] text-ink-500">{copy.inherited.empty}</p>}
+      </div>
+    )
+  }
   return (
-    <div role="region" aria-label={title} className="grid min-w-0 gap-2.5 rounded-card bg-tint-blue p-4">
-      <h3 className="text-[15px] font-black [overflow-wrap:anywhere]">{title}</h3>
+    <div role="region" aria-label={title} className="grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+      <h3 className="text-[15px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{title}</h3>
       <p className="-mt-1 text-[12.5px] text-ink-700">{copy.inherited.hint}</p>
       {entries.length > 0 ? <DirectoryRows label={title} entries={entries} /> : <p className="text-[13.5px] text-ink-500">{copy.inherited.empty}</p>}
-      <Link to={projectSettingsPath({ name: projectName })} className={`justify-self-start text-[13.5px] ${linkClass}`}>
+      <Link to={projectSettingsPath({ name: projectName }, 'context')} className={`justify-self-start text-[13.5px] ${linkClass}`}>
         {copy.inherited.edit}
       </Link>
     </div>
   )
 }
 
-function DirectoryRows({ label, entries, actions }: { label: string; entries: Directory[]; actions?: (entry: Directory) => ReactNode }) {
+function DirectoryRows({ label, entries, actions, compact = false }: { label: string; entries: Directory[]; actions?: (entry: Directory) => ReactNode; compact?: boolean }) {
   return (
-    <ul aria-label={label} className="grid gap-2">
+    <ul
+      aria-label={label}
+      className={
+        compact
+          ? 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+          : 'grid gap-2'
+      }
+    >
       {entries.map((entry, index) => (
-        <DirectoryRow key={`${index}:${entry.path}`} entry={entry} actions={actions?.(entry)} />
+        <DirectoryRow key={`${index}:${entry.path}`} entry={entry} actions={actions?.(entry)} compact={compact} />
       ))}
     </ul>
   )
@@ -175,15 +236,22 @@ function DirectoryRows({ label, entries, actions }: { label: string; entries: Di
 
 // One row: path and note; when the directory doesn't exist, isn't a directory or can't be read, this is marked in the row and
 // Agents aren't told about this entry for now, but saving is not blocked.
-function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNode }) {
+function DirectoryRow({ entry, actions, compact = false }: { entry: Directory; actions?: ReactNode; compact?: boolean }) {
   const problem = entry.status === 'ok' ? null : entry.status
   return (
-    <li aria-label={entry.path} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card border border-hairline bg-surface-control px-4 py-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
-      <div className="grid min-w-0 flex-[1_1_260px] gap-1">
-        <span className="font-mono text-[13.5px] font-bold break-all">{entry.path}</span>
-        {entry.note && <span className="text-[13.5px] text-ink-700 [overflow-wrap:anywhere]">{entry.note}</span>}
+    <li
+      aria-label={entry.path}
+      className={
+        compact
+          ? 'flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2'
+          : 'flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card border border-hairline bg-surface-control px-4 py-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+      }
+    >
+      <div className="grid min-w-0 flex-[1_1_240px] gap-0.5">
+        <span className="font-mono text-[13px] font-semibold break-all [[data-skin=plate]_&]:font-bold">{entry.path}</span>
+        {entry.note && <span className="text-[12.5px] text-ink-700 [overflow-wrap:anywhere]">{entry.note}</span>}
         {problem && (
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-700">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-700">
             <Badge tone="warning">
               <TriangleAlertIcon aria-hidden="true" />
               {copy.status[problem]}
@@ -197,11 +265,32 @@ function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNod
   )
 }
 
-function DirectoryEditor({ listing, save, reload, extra }: { listing: Listing; save: Save; reload: Reload; extra?: (entry: Directory) => ReactNode }) {
+function DirectoryEditor({
+  listing,
+  save,
+  reload,
+  extra,
+  compact = false,
+  externalAddOpen = false,
+  onExternalAddClose,
+}: {
+  listing: Listing
+  save: Save
+  reload: Reload
+  extra?: (entry: Directory) => ReactNode
+  compact?: boolean
+  externalAddOpen?: boolean
+  onExternalAddClose?: () => void
+}) {
   const [target, setTarget] = useState<Target | null>(null)
   const [removing, setRemoving] = useState<Directory | null>(null)
   const [removeOpen, setRemoveOpen] = useState(false)
   const full = listing.directories.length >= MAX_DIRECTORIES
+  const activeTarget: Target | null = target ?? (externalAddOpen ? { kind: 'add' } : null)
+  const closeDialog = () => {
+    setTarget(null)
+    onExternalAddClose?.()
+  }
 
   const remove = async (entry: Directory) => {
     const attempt = async (from: Listing) => {
@@ -222,19 +311,20 @@ function DirectoryEditor({ listing, save, reload, extra }: { listing: Listing; s
   return (
     <>
       {listing.directories.length === 0 ? (
-        <p className="text-[13.5px] text-ink-500">{copy.empty}</p>
+        <p className="text-[13px] text-ink-500">{copy.empty}</p>
       ) : (
         <DirectoryRows
           label={copy.list}
           entries={listing.directories}
+          compact={compact}
           actions={(entry) => (
             <>
               {extra?.(entry)}
-              <Button size="sm" variant="ghost" aria-label={copy.editLabel(entry.path)} onClick={() => setTarget({ kind: 'edit', entry })}>
+              <Button size={compact ? 'xs' : 'sm'} variant="ghost" aria-label={copy.editLabel(entry.path)} onClick={() => setTarget({ kind: 'edit', entry })}>
                 {copy.edit}
               </Button>
               <Button
-                size="sm"
+                size={compact ? 'xs' : 'sm'}
                 variant="ghost"
                 aria-label={copy.removeLabel(entry.path)}
                 onClick={() => {
@@ -248,14 +338,18 @@ function DirectoryEditor({ listing, save, reload, extra }: { listing: Listing; s
           )}
         />
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button variant="secondary" disabled={full} onClick={() => setTarget({ kind: 'add' })}>
-          <PlusIcon />
-          {copy.add}
-        </Button>
-        {full && <span className="text-[13px] text-ink-500">{copy.full(MAX_DIRECTORIES)}</span>}
-      </div>
-      {target && <DirectoryDialog target={target} listing={listing} save={save} reload={reload} onClose={() => setTarget(null)} />}
+      {(!compact || full) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {!compact && (
+            <Button variant="secondary" disabled={full} onClick={() => setTarget({ kind: 'add' })}>
+              <PlusIcon />
+              {copy.add}
+            </Button>
+          )}
+          {full && <span className="text-[12.5px] text-ink-500">{copy.full(MAX_DIRECTORIES)}</span>}
+        </div>
+      )}
+      {activeTarget && <DirectoryDialog target={activeTarget} listing={listing} save={save} reload={reload} onClose={closeDialog} />}
       <ConfirmDialog
         open={removeOpen}
         onOpenChange={setRemoveOpen}

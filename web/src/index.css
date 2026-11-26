@@ -126,16 +126,29 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
   }
   body {
-    @apply bg-surface-canvas text-ink text-[15px] leading-[1.65];
+    @apply bg-surface-canvas text-ink text-[13.5px] leading-[1.55];
+  }
+  [data-skin="plate"] body {
+    font-size: 15px;
+    line-height: 1.65;
   }
   :focus-visible {
     outline: none;
+  }
+  [data-skin="plate"] :focus-visible {
     box-shadow: var(--focus-ring);
   }
 }
@@ -144,16 +157,16 @@
   .riso-paper {
     background-color: var(--surface-canvas);
   }
-  /* Thin translucent scrollbars inside main surfaces. */
+  /* Scrollbars are always hidden across all scrollable surfaces. */
   :where(.riso-scrollbar, .riso-scrollbar *) {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink) 28%, transparent) transparent;
+    scrollbar-width: none;
   }
   /* Window drag strip in the desktop shell window (macOS hiddenInset); interactive controls remain clickable. */
   .window-drag {
     -webkit-app-region: drag;
   }
-  .window-drag :is(a, button, input, select, textarea, [role='button']) {
+  .window-drag :is(a, button, input, select, textarea, [role='button']),
+  .window-no-drag {
     -webkit-app-region: no-drag;
   }
   .riso-mark {
@@ -220,7 +233,7 @@
 /* Markdown styles for Agent replies */
 @layer components {
   .markdown {
-    @apply text-[15px] leading-[1.7] break-words;
+    @apply text-[14px] leading-[1.65] break-words;
   }
   .markdown > * + * {
     @apply mt-3;
@@ -281,6 +294,10 @@
 }
 
 /* Plate skin keeps its bolder editorial Markdown accents. */
+:root[data-skin="plate"] .markdown {
+  font-size: 15px;
+  line-height: 1.7;
+}
 :root[data-skin="plate"] .markdown h1,
 :root[data-skin="plate"] .markdown h2 {
   font-weight: 900;

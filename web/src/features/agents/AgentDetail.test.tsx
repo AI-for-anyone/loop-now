@@ -109,17 +109,19 @@ describe('Background refresh failure', () => {
   })
 })
 
-describe('Runtime badge in the header', () => {
-  it('a Claude Code Agent shows its runtime next to the name; a Pi Agent does not', async () => {
+describe('Workspace header identity', () => {
+  it('renders the translucent two-circle avatar and omits redundant runtime and model tags on the Chat tab', async () => {
     const claude = makeAgent({ name: 'Local assistant', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' })
-    const pi = makeAgent({ name: 'Pi assistant' })
-    server.use(...baseHandlers([claude, pi]))
-    const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'config'))
+    server.use(...baseHandlers([claude]))
+    const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'chat'))
     const header = (await heading('Local assistant')).closest('header')!
-    expect(within(header).getByTitle('Runtime: Claude Code on this computer')).toHaveTextContent(/^Claude Code$/)
-    await act(() => router.navigate(defaultAgentPath(pi.id, 'config')))
-    const piHeader = (await heading('Pi assistant')).closest('header')!
-    expect(within(piHeader).queryByTitle('Runtime: Claude Code on this computer')).toBeNull()
+    expect(header.querySelector('[data-avatar-palette]')).toBeInTheDocument()
+    expect(within(header).queryByTitle('Runtime: Claude Code on this computer')).toBeNull()
+    expect(within(header).queryByText('claude-code · sonnet')).toBeNull()
+
+    await act(() => router.navigate(defaultAgentPath(claude.id, 'config')))
+    const configHeader = (await heading('Local assistant')).closest('header')!
+    expect(within(configHeader).getByText('claude-code · sonnet')).toHaveClass('font-mono', 'border-hairline', 'bg-surface-subtle')
   })
 })
 
@@ -183,7 +185,7 @@ describe('Status label in the header', () => {
   })
 })
 
-// "Printed sheet" redesign: page header, index tabs and sheet.
+// Single-row 48px workspace header, segmented view switcher and sheet.
 describe('Header and tab layout', () => {
   async function open(agent: Schemas['Agent'], tab: 'chat' | 'config' = 'config') {
     server.use(...baseHandlers([agent]))
@@ -193,106 +195,95 @@ describe('Header and tab layout', () => {
     return { user, title, header: title.closest('header')! }
   }
 
-  it('the title uses crisp mono typography by default and keeps the display font and offset shadow in Plate skin, with the Manager badge and the status label next to it', async () => {
+  it('the title uses crisp mono typography by default and preserves the display font and offset shadow in Plate skin, with the avatar, Manager badge and status next to it', async () => {
     const { title, header } = await open(makeAgent({ name: 'manager', isManager: true }))
-    expect(title).toHaveClass('font-sans', 'text-[22px]', 'font-semibold', 'text-ink')
+    expect(title).toHaveClass('text-[14px]', 'font-semibold', 'text-ink')
     expect(title).toHaveClass(
       '[[data-skin=plate]_&]:font-display-cn',
-      '[[data-skin=plate]_&]:text-[clamp(38px,6vw,60px)]',
+      '[[data-skin=plate]_&]:text-[32px]',
       '[[data-skin=plate]_&]:text-riso-blue',
-      '[[data-skin=plate]_&]:[text-shadow:4px_4px_0_var(--riso-pink)]',
+      '[[data-skin=plate]_&]:[text-shadow:3px_3px_0_var(--riso-pink)]',
     )
-    expect(title).toHaveClass(
-      '[[data-skin=plate]_&]:nav:text-[40px]',
-      '[[data-skin=plate]_&]:nav:leading-none',
-      '[[data-skin=plate]_&]:nav:[text-shadow:3px_3px_0_var(--riso-pink)]',
-    )
+    expect(header.querySelector('[data-avatar-palette]')).toBeInTheDocument()
     expect(within(header).getByTitle('Project Manager')).toHaveTextContent('Manager')
     await waitFor(() => expect(header.querySelector('[data-agent-status]')).toHaveTextContent('Idle'))
   })
 
-  it('an Agent on a command a person added shows the command\'s name in the model tag, not its runtime id and "default"', async () => {
+  it('an Agent on a command a person added shows the command\'s name in the model tag on non-Chat tabs, not its runtime id and "default"', async () => {
     server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...runtimeDefinitions().runtimes, acpCommandDefinition()] })))
-    const { header } = await open(makeAgent({ name: 'Agent H', model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId }))
+    const { header } = await open(makeAgent({ name: 'Agent H', model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId }), 'config')
     const tag = await within(header).findByText('Hermes', { selector: '.font-mono' })
     expect(tag).toHaveClass('border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
     expect(header).not.toHaveTextContent(acpRuntimeId)
     expect(header).not.toHaveTextContent('default')
   })
 
-  it('the model sits in a monospace subtle tag (light-blue in Plate); the address sits in a dashed box, and the button next to it copies the address and says it was copied', async () => {
-    const { user, header } = await open(makeAgent({ name: 'Agent A', address: 'test-org/test-project/Agent A' }))
-    expect(within(header).getByText('anthropic · claude-sonnet-5-5')).toHaveClass('font-mono', 'border-hairline', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
-    const address = within(header).getByText('test-org/test-project/Agent A')
-    expect(address).toHaveClass('font-mono')
-    expect(address.parentElement).toHaveClass('border-dashed')
-    // English UI issue: the copy button's label glues t.common.copy and t.agents.address.label together without a space ("CopyAddress").
-    const copy = within(header).getByRole('button', { name: 'CopyAddress' })
+  it('compact address opens a popover with the full monospace address and copy button that copies and announces Copied', async () => {
+    const { user, header } = await open(makeAgent({ name: 'Agent A', address: 'test-org/test-project/Agent A' }), 'chat')
+    const trigger = within(header).getByRole('button', { name: 'Address' })
+    expect(trigger).toHaveAttribute('title', 'test-org/test-project/Agent A')
+    await user.click(trigger)
+    const copy = await screen.findByRole('button', { name: 'CopyAddress' })
+    expect(screen.getByText('test-org/test-project/Agent A', { selector: '.font-mono' })).toBeInTheDocument()
     await user.click(copy)
     expect(await navigator.clipboard.readText()).toBe('test-org/test-project/Agent A')
-    expect(await within(header).findByText('Copied')).toBeInTheDocument()
+    expect(await screen.findByText('Copied')).toBeInTheDocument()
     expect(copy).toHaveAccessibleName('CopyAddress')
   })
 
-  it('without an address, explains why and shows no copy button', async () => {
-    const { header } = await open(makeAgent({ name: 'old/bot', address: null }))
-    expect(within(header).getByText(/This Agent has no address yet/)).toBeInTheDocument()
-    expect(within(header).queryByRole('button', { name: 'CopyAddress' })).toBeNull()
+  it('without an address, shows a warning indicator whose popover explains why and shows no copy button', async () => {
+    const { user, header } = await open(makeAgent({ name: 'old/bot', address: null }), 'chat')
+    const trigger = within(header).getByRole('button', { name: 'Address' })
+    expect(trigger).toHaveAttribute('data-address-missing')
+    expect(trigger).toHaveAttribute('title', expect.stringMatching(/This Agent has no address yet/))
+    await user.click(trigger)
+    expect(await screen.findByText(/This Agent has no address yet/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'CopyAddress' })).toBeNull()
   })
 
-  it('the overprint decoration in the top-right corner is hidden from screen readers; it shows only when the header is wide enough, and then the text makes room for it in Plate skin instead of running under it', async () => {
+  it('the overprint decoration in the top-right corner is hidden from screen readers and reserves Plate space without affecting mono skin', async () => {
     const { header, title } = await open(makeAgent({ name: 'Agent A' }))
     const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
     expect(deco).toHaveClass('pointer-events-none', 'hidden', '@[820px]:block')
-    // In the compact header on wide screens, the decoration shrinks to the
-    // header's height (scaled to 0.6 as a whole, pinned to the top-right corner).
     expect(deco).toHaveClass('nav:top-2', 'nav:scale-[0.6]', 'origin-top-right')
-    // The header is a container: the layout follows its own width, not the window width.
     expect(header).toHaveClass('@container')
-    // In Plate skin, the block holding the title, badges, model and address leaves room for the decoration: 316px
-    // on narrow screens as before, and 196px on wide screens once the decoration has shrunk.
     const row = title.closest('[data-agent-title-row]')!
     expect(row).toHaveClass('[[data-skin=plate]_&]:@[820px]:pr-[316px]', '[[data-skin=plate]_&]:nav:@[820px]:pr-[196px]')
-    expect(row).toContainElement(within(header).getByText('anthropic · claude-sonnet-5-5'))
   })
 
-  it('on wide screens the header is compact: right of the title, one row holds identity, status, runtime, model and address and wraps when it doesn\'t fit; the breadcrumb is tighter; the sheet\'s top edge is closer to the top of the window', async () => {
-    const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: 'test-org/test-project/manager' }))
-    expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
-    const row = title.closest('[data-agent-title-row]')!
-    // Narrow screens keep two rows as before (title and badges in one, model and address in the other);
-    // on wide screens the content of both rows goes into a single row that wraps when it doesn't fit.
-    expect(row).toHaveClass('flex-col', 'nav:flex-row', 'nav:flex-wrap', 'nav:items-center')
-    const rows = [...row.children]
-    expect(rows).toHaveLength(2)
-    for (const inner of rows) expect(inner).toHaveClass('nav:contents')
-    expect(rows[0]).toContainElement(title)
-    expect(rows[1]).toContainElement(within(header).getByText('test-org/test-project/manager'))
-    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
+  it('collapses into a single 48px top bar holding breadcrumb, avatar, title, status, segmented views and address', async () => {
+    const { title } = await open(makeAgent({ name: 'manager', isManager: true, address: 'test-org/test-project/manager' }), 'chat')
+    const row = title.closest<HTMLElement>('[data-agent-title-row]')!
+    expect(row).toHaveClass('min-h-12', 'sm:h-12', 'border-b', 'border-hairline', 'bg-surface-canvas')
+    expect(within(row).getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument()
+    expect(within(row).getByRole('navigation', { name: 'manager' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Address' })).toBeInTheDocument()
   })
 
-  it('the four tabs use hairline underline tabs in mono skin and preserve yellow/beige index tabs in Plate skin', async () => {
+  it('the four views sit in a compact segmented switcher in mono skin and preserve yellow/beige tab styling in Plate skin', async () => {
     const agent = makeAgent({ name: 'Agent A' })
     await open(agent)
     const tabs = screen.getByRole('navigation', { name: 'Agent A' })
+    expect(tabs).toHaveClass('h-8', 'rounded-input', 'border', 'border-hairline', 'bg-surface-subtle')
     expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config', 'Folder', 'Inbox'])
     const current = within(tabs).getByRole('link', { name: 'Config' })
     expect(current).toHaveAttribute('aria-current', 'page')
-    expect(current).toHaveClass('border-b-2', 'border-ink', 'font-semibold', 'text-ink')
-    expect(current).toHaveClass('[[data-skin=plate]_&]:h-10', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:border-b-0')
+    expect(current).toHaveClass('bg-surface-elevated', 'font-semibold', 'text-ink', 'shadow-xs')
+    expect(current).toHaveClass('[[data-skin=plate]_&]:bg-riso-yellow')
     const chat = within(tabs).getByRole('link', { name: 'Chat' })
-    expect(chat).toHaveClass('border-transparent', 'text-ink-500', '[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab')
+    expect(chat).toHaveClass('text-ink-500', '[[data-skin=plate]_&]:bg-paper-tab')
     expect(chat).toHaveAttribute('href', defaultAgentPath(agent.id, 'chat'))
   })
 
-  it('the tab content sits on a sheet; the header and the tabs are outside the sheet', async () => {
+  it('the tab content sits on a sheet; the header and the segmented switcher are outside the sheet', async () => {
     const { header } = await open(makeAgent({ name: 'Agent A' }))
     const tabs = screen.getByRole('navigation', { name: 'Agent A' })
-    const sheet = tabs.nextElementSibling as HTMLElement
+    const sheet = header.nextElementSibling as HTMLElement
     expect(sheet).toHaveAttribute('data-sheet')
     expect(sheet).toContainElement(await screen.findByRole('heading', { name: 'Basics' }))
     expect(sheet).not.toContainElement(header)
+    expect(sheet).not.toContainElement(tabs)
     expect(header.closest('[data-sheet]')).toBeNull()
   })
 })

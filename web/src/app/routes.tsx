@@ -64,7 +64,7 @@ export const routes: RouteObject[] = [
       {
         path: 'p/:projectName',
         element: <ProjectScopeRoute />,
-        children: [{ index: true, element: <ScopeIndexRedirect /> }, agentsRoute(), { path: 'folder', element: <ProjectFolderPage /> }, { path: 'plugins', element: <ProjectPluginsPage /> }, { path: 'settings', element: <ProjectSettingsPage /> }, { path: 'tasks', element: <TasksPage /> }, { path: 'tasks/:taskId', element: <TaskDetail /> }],
+        children: [{ index: true, element: <ScopeIndexRedirect /> }, agentsRoute(), { path: 'folder', element: <ProjectFolderPage /> }, { path: 'plugins', element: <ProjectPluginsPage /> }, { path: 'settings/:tab?', element: <ProjectSettingsPage /> }, { path: 'tasks', element: <TasksPage /> }, { path: 'tasks/:taskId', element: <TaskDetail /> }],
       },
       {
         path: 'platform',
@@ -90,14 +90,14 @@ export const routes: RouteObject[] = [
       // forwarded by thread.
       { path: 'inbox/:threadId?', element: <InboxRedirect /> },
       // External identities belong to the platform, not to any project.
-      { path: 'identities/:identityId?', element: <IdentitiesPage /> },
+      { path: 'identities/:identityId?/:tab?', element: <IdentitiesPage /> },
       { path: 'plugins', element: <PluginsPage /> },
       // Plugin details: tabs other than the overview are appended to the path (/plugins/<id>/config and so on).
       { path: 'plugins/:pluginId/:tab?', element: <PluginDetailPage /> },
       // Like the overview, the stats page can be filtered to everything, a project or the platform (kept in the URL); the sidebar keeps the
       // previous scope.
       { path: 'stats', element: <StatsPage /> },
-      { path: 'settings', element: <SettingsPage /> },
+      { path: 'settings/:tab?', element: <SettingsPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

@@ -1,18 +1,85 @@
-import type { ComponentProps, ElementType, Ref } from 'react'
+import { useCallback, useRef, type ComponentProps, type ElementType, type Ref } from 'react'
+import { PageRuler, ScrollRuler, type SectionRulerAnchor } from '@/components/PrecisionRuler'
 import { cn } from '@/lib/utils'
 
-// Sheet: clean full-bleed canvas with hairline top separator in mono skin; raised paper sheet with 2px ink border, 18px radius and 6px
-// offset shadow in Plate skin. Keeps data-sheet and riso-scrollbar across both skins.
+// Sheet: clean full-bleed canvas in mono skin (PageHeader / SubNav already draw the bottom hairline); raised paper sheet with 2px ink
+// border, 18px radius and 6px offset shadow in Plate skin. Keeps data-sheet and riso-scrollbar across both skins.
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-sheet
       className={cn(
-        'riso-grain riso-scrollbar flex min-h-0 flex-col overflow-hidden border-t border-hairline bg-surface-canvas [[data-skin=plate]_&]:mr-1.5 [[data-skin=plate]_&]:rounded-panel [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-print-dialog',
+        'relative riso-grain riso-scrollbar flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-canvas [[data-skin=plate]_&]:mr-1.5 [[data-skin=plate]_&]:rounded-panel [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-print-dialog',
         className,
       )}
       {...props}
     />
+  )
+}
+
+export type PageBodyWidth = 'narrow' | 'default' | 'wide' | 'full'
+
+export type PageBodyRuler =
+  | 'scroll'
+  | 'none'
+  | {
+      label: string
+      sections: SectionRulerAnchor[]
+    }
+
+const PAGE_BODY_INNER: Record<PageBodyWidth, string> = {
+  narrow: 'mx-auto w-full max-w-[780px] px-4 py-5 sm:px-6',
+  default: 'mx-auto w-full max-w-[1080px] px-4 py-5 sm:px-6',
+  wide: 'mx-auto w-full max-w-[1320px] px-4 py-5 sm:px-6',
+  full: 'flex h-full min-h-0 w-full flex-col',
+}
+
+// Scrollable page body with consistent centered content width presets, or a zero-padding full-bleed column for split views.
+// Automatically mounts the global vernier ScrollRuler (or semantic PageRuler when sections are provided) as a zero-width-tax
+// floating rail anchored to the surrounding Sheet.
+export function PageBody({
+  width = 'default',
+  ruler,
+  ref,
+  className,
+  innerClassName,
+  children,
+  ...props
+}: {
+  width?: PageBodyWidth
+  ruler?: PageBodyRuler
+  innerClassName?: string
+} & ComponentProps<'div'>) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollRef.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) ref.current = node
+    },
+    [ref],
+  )
+  const effectiveRuler: PageBodyRuler = ruler ?? (width === 'full' ? 'none' : 'scroll')
+
+  return (
+    <>
+      <div
+        ref={setRef}
+        data-page-body
+        className={cn(
+          'relative min-h-0 flex-1 overflow-y-auto',
+          width === 'full' && 'flex flex-col',
+          className,
+        )}
+        {...props}
+      >
+        <div className={cn(PAGE_BODY_INNER[width], innerClassName)}>{children}</div>
+      </div>
+      {effectiveRuler === 'scroll' && <ScrollRuler targetRef={scrollRef} />}
+      {typeof effectiveRuler === 'object' && (
+        <PageRuler sections={effectiveRuler.sections} label={effectiveRuler.label} rootRef={scrollRef} />
+      )}
+    </>
   )
 }
 

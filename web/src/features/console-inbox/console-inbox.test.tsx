@@ -178,23 +178,38 @@ describe('Needs you', () => {
     expect(rows[0]).toHaveAttribute('href', `/agents/${agent.id}/chat`)
   })
 
-  it('redesign: “Needs you” sits at the very top of the overview sheet as a card with a pink shadow, unnumbered; Run status is still 01', async () => {
-    const { agent, note, question } = chatSetup()
-    const { snapshot } = await renderOverview({ handlers: [http.get(apiUrl('/inbox/pending'), () => HttpResponse.json(pendingOf([note, question])))] })
+  it('compact attention strip: “Needs you” sits above the KPI strip and caps default display to 3 items with an inline expand toggle', async () => {
+    const { agent } = chatSetup()
+    const messages = [1, 2, 3, 4, 5].map((n) =>
+      makeInboxMessage({ from: agentParty(agent), to: consoleParty, text: `Pending note ${n}`, whenBusy: null }),
+    )
+    const { snapshot, user } = await renderOverview({ handlers: [http.get(apiUrl('/inbox/pending'), () => HttpResponse.json(pendingOf(messages)))] })
     await snapshot([makeAgentOverview({ agentId: agent.id, name: agent.name })])
     const pending = await screen.findByRole('region', { name: 'Needs you' })
-    const run = screen.getByRole('region', { name: 'Run status' })
-    expect(pending.closest('[data-sheet]')).toBe(run.closest('[data-sheet]'))
-    expect(pending.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(pending).toHaveClass('border-2', 'border-ink', 'bg-tint-pink-2', 'shadow-print-pink')
-    expect(pending.querySelector('[data-section-number]')).toBeNull()
-    expect(run.querySelector('[data-section-number]')).toHaveTextContent('01')
+    const summary = screen.getByRole('list', { name: 'Run status summary' })
+    expect(pending.closest('[data-sheet]')).toBe(summary.closest('[data-sheet]'))
+    expect(pending.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(pending).toHaveClass(
+      'border',
+      'border-hairline-strong',
+      'bg-surface-subtle',
+      '[[data-skin=plate]_&]:border-2',
+      '[[data-skin=plate]_&]:border-ink',
+      '[[data-skin=plate]_&]:bg-tint-pink-2',
+      '[[data-skin=plate]_&]:shadow-print-pink',
+    )
+    expect(within(pending).getAllByRole('link')).toHaveLength(3)
+    const expand = within(pending).getByRole('button', { name: 'Show 2 more' })
+    await user.click(expand)
+    expect(within(pending).getAllByRole('link')).toHaveLength(5)
+    await user.click(within(pending).getByRole('button', { name: 'Show fewer' }))
+    expect(within(pending).getAllByRole('link')).toHaveLength(3)
   })
 
   it('with nothing needing you, the overview has no such block', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
-    await screen.findByRole('heading', { name: 'Run status' })
+    await screen.findByRole('region', { name: 'Run status' })
     expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull()
   })
 })

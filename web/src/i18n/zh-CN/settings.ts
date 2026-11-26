@@ -4,6 +4,23 @@ type S = components['schemas']
 
 export const settings = {
   title: '全局设置',
+  tabs: {
+    nav: '全局设置分组',
+    general: '常规与外观',
+    runtimes: '运行时与模型',
+    workspace: '工作区与本机模式',
+    server: '服务端与诊断',
+  },
+  runtimesViews: {
+    label: '运行时与模型视图',
+    runtimes: '运行时与 AI 帮写',
+    models: 'models.json',
+  },
+  workspaceViews: {
+    label: '工作区与本机模式视图',
+    localMode: '本机模式',
+    folder: '全局文件夹',
+  },
   // The UI language is saved only in this browser; it isn't server config.
   language: { title: '界面语言', hint: '只影响这个浏览器；切换后页面会重新加载。' },
   // Theme and color mode are stored only in this browser and take effect immediately without reloading.

@@ -20,7 +20,7 @@ const basic = () => screen.getByRole('region', { name: 'Basics' })
 function setupProject(handlers: HttpHandler[] = []) {
   const backend = projectBackend()
   server.use(...handlers, ...backend.handlers)
-  return { ...backend, ...renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/settings`), user: userEvent.setup() }
+  return { ...backend, ...renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/settings/context`), user: userEvent.setup() }
 }
 
 describe('Agent prompt: formal CAS and a separate draft', () => {
@@ -76,9 +76,15 @@ describe('Agent prompt: formal CAS and a separate draft', () => {
   it('refreshing project rules updates only the inherited section and leaves the Agent draft alone', async () => {
     let project: Schemas['ProjectPrompt'] = { prompt: 'Shared old version', promptVersion: 1 }
     const { user, client } = await renderConfig({ handlers: [http.get(apiUrl('/projects/:projectId/prompt'), () => HttpResponse.json(project))] })
+    const inherited = screen.getByRole('region', { name: 'Project prompt (read-only)' })
+    // Inherited prompt is collapsed by default; expand to inspect live updates.
+    const disclosure = within(inherited).getByRole('button', { name: /Project prompt · inherited from/ })
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+    await user.click(disclosure)
+    expect(await within(inherited).findByText('Shared old version')).toBeInTheDocument()
     await user.type(promptInput(), 'My duties'); project = { prompt: 'Shared new version', promptVersion: 2 }
     await act(() => client.invalidateQueries({ queryKey: projectPromptKey(defaultProject.id) }))
-    expect(await screen.findByText('Shared new version')).toBeInTheDocument(); expect(promptInput()).toHaveValue('My duties')
+    expect(await within(inherited).findByText('Shared new version')).toBeInTheDocument(); expect(promptInput()).toHaveValue('My duties')
     expect(screen.getByText('Editing from version 1')).toBeInTheDocument()
   })
   it('a platform Agent edits only its own rules and does not read the project prompt', async () => {
@@ -91,7 +97,6 @@ describe('Agent prompt: formal CAS and a separate draft', () => {
     expect(screen.queryByRole('region', { name: 'Project prompt (read-only)' })).toBeNull()
     expect(screen.getByText('Platform Agents use only their own prompt; they don\'t inherit project rules.')).toBeInTheDocument()
     expect(inheritedReads).toBe(0)
-    expect(screen.getByText('The current reply keeps the old config; the next dispatched message uses the new Agent prompt.')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Prompt' })).queryByText(/two-level snapshot/)).toBeNull()
   })
 })
@@ -110,14 +115,14 @@ describe('Project prompt: separate saving and leaving', () => {
     expect(requests[1]).toEqual({ prompt: '', expectedPromptVersion: 2 })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save project prompt' })).toBeDisabled())
     await user.type(input, 'Unsaved'); await user.click(within(sidebar()).getByRole('link', { name: 'Tasks' }))
-    await screen.findByRole('alertdialog'); expect(router.state.location.pathname).toMatch(/settings$/)
+    await screen.findByRole('alertdialog'); expect(router.state.location.pathname).toMatch(/\/settings\/context$/)
   })
   it('a rename with the same projectId normalizes the URL, keeps the prompt draft and does not wrongly show the leave confirmation', async () => {
     const { user, state, client, router } = setupProject()
     const input = await screen.findByRole('textbox', { name: 'Project prompt' }); await user.type(input, 'Draft during the rename')
     state.projects = state.projects.map(project => ({ ...project, name: 'Renamed project' }))
     await act(() => client.invalidateQueries({ queryKey: keys.projects }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/p/'+encodeURIComponent('Renamed project')+'/settings'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/p/'+encodeURIComponent('Renamed project')+'/settings/context'))
     expect(input).toHaveValue('Draft during the rename'); expect(screen.queryByRole('alertdialog')).toBeNull()
   })
   it('a project PUT conflict keeps the draft; after the GET of the latest text, an explicit review saves on the new base', async () => {

@@ -1,14 +1,15 @@
-import { useMemo, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { BookOpenTextIcon, DownloadIcon, LoaderCircleIcon, PencilIcon } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ScrollRuler } from '@/components/PrecisionRuler'
 import { Markdown } from '@/features/chat/Markdown'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { canEdit, ENTRY_FILE, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
+import { ENTRY_FILE, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
 import { useFolderFile, useFolderList } from './folder-queries'
-import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions, ListIcon } from './FolderParts'
+import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions } from './FolderParts'
 import { highlightCode } from './highlight'
 
 // ---------- Folder ----------
@@ -16,65 +17,62 @@ import { highlightCode } from './highlight'
 interface DirViewProps {
   source: FolderSource
   path: string
-  title: string
   actions: EntryActions
   onCreateEntry: () => void
   onEditEntry: (entry: FolderEntry) => void
 }
 
 // A folder's content list (name, size, modified time); at the root, AGENTS.md is shown below it, or a prompt to create it if missing.
-export function DirView({ source, path, title, actions, onCreateEntry, onEditEntry }: DirViewProps) {
+export function DirView({ source, path, actions, onCreateEntry, onEditEntry }: DirViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
   const list = useFolderList(source, path)
   const entries = list.data?.pages.flatMap((page) => page.entries) ?? []
   const entry = path === '' ? entries.find((item) => item.name === ENTRY_FILE && item.type === 'file') : undefined
-  const dirs = entries.filter((item) => item.type === 'dir').length
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {path === '' && list.isSuccess && !entry && <EntryMissing onCreate={onCreateEntry} />}
-      <div className="flex items-baseline gap-2.5 px-4 pt-3.5 pb-2">
-        <h3 className="min-w-0 truncate text-[15px] font-black">{title}</h3>
-        {list.isSuccess && <span className="shrink-0 text-[12px] text-ink-500">{list.hasNextPage ? t.folders.partial(entries.length) : t.folders.summary(dirs, entries.length - dirs)}</span>}
-      </div>
-      <ErrorAlert error={list.error} className="mx-4 w-auto" />
-      {list.isPending && <Pending />}
-      {list.isSuccess && entries.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-ink-500">{t.folders.empty}<br />{t.folders.emptyHint}</p>}
-      {entries.length > 0 && (
-        <table className="w-full table-fixed border-collapse text-[13px]">
-          {/* A 2px solid line under the header and 1.5px dashed lines between rows; size and time use a monospace font (rule 9 of the
-              redesign's general rules). */}
-          <thead className="sticky top-0 z-10 bg-paper-raised/95 text-[12px] font-black text-ink-500 backdrop-blur-sm">
-            <tr className="border-b-2 border-ink">
-              <th className="py-2 pl-2.5 text-left font-black">{t.folders.columns.name}</th>
-              <th className="w-24 pr-3 text-right font-black @max-[34rem]:hidden">{t.folders.columns.size}</th>
-              <th className="w-28 pr-2 text-right font-black @max-[34rem]:hidden">{t.folders.columns.modified}</th>
-              <th className="w-9"><span className="sr-only">{t.folders.actions('')}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...entries].sort((a, b) => Number(isEntryFile(b.path)) - Number(isEntryFile(a.path))).map((item) => (
-              <tr key={item.path} className="group h-[52px] border-b-[1.5px] border-dashed border-ink/25 hover:bg-tint-yellow/60">
-                <td className="py-0 pl-2.5">
-                  <button type="button" onClick={() => actions.open(item)} className={cn('flex w-full min-w-0 cursor-pointer items-center gap-3.5 text-left text-[14.5px] font-bold outline-none focus-visible:underline', item.type === 'other' && 'text-ink-500')}>
-                    <ListIcon path={item.path} type={item.type} />
-                    <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-black')}>{item.name}</span>
-                    {item.symlinkTarget && <span className="min-w-0 truncate text-[12px] text-ink-500">→ {item.symlinkTarget}</span>}
-                    {isEntryFile(item.path) && <EntryBadge />}
-                  </button>
-                </td>
-                <td className="pr-3 text-right font-mono text-[12px] text-ink-700 @max-[34rem]:hidden">{item.size === null ? '—' : t.folders.size(item.size)}</td>
-                <td className="truncate pr-2 text-right font-mono text-[12px] text-ink-700 @max-[34rem]:hidden">{t.folders.time(item.modifiedAt)}</td>
-                <td className="pr-2"><EntryMenu entry={item} actions={actions} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /></td>
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {path === '' && list.isSuccess && !entry && <EntryMissing onCreate={onCreateEntry} />}
+        <ErrorAlert error={list.error} className="mx-3 mt-3 w-auto" />
+        {list.isPending && <Pending />}
+        {list.isSuccess && entries.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-ink-500">{t.folders.empty}<br />{t.folders.emptyHint}</p>}
+        {entries.length > 0 && (
+          <table className="w-full table-fixed border-collapse text-[13px]">
+            {/* Crisp 1px hairlines in mono; 2px solid header line and 1.5px dashed row dividers in Plate. */}
+            <thead className="sticky top-0 z-10 bg-surface-canvas/95 text-[11.5px] font-medium text-ink-500 backdrop-blur-sm [[data-skin=plate]_&]:bg-paper-raised/95 [[data-skin=plate]_&]:font-black">
+              <tr className="border-b border-hairline-strong [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+                <th className="py-1.5 pl-3 text-left font-medium [[data-skin=plate]_&]:font-black">{t.folders.columns.name}</th>
+                <th className="w-24 pr-3 text-right font-medium @max-[34rem]:hidden [[data-skin=plate]_&]:font-black">{t.folders.columns.size}</th>
+                <th className="w-28 pr-2 text-right font-medium @max-[34rem]:hidden [[data-skin=plate]_&]:font-black">{t.folders.columns.modified}</th>
+                <th className="w-9"><span className="sr-only">{t.folders.actions('')}</span></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {list.hasNextPage && (
-        <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className="mx-4 my-2 self-start text-[12.5px] font-bold text-riso-blue hover:underline">
-          {list.isFetchingNextPage ? t.folders.loading : t.folders.showMore}
-        </button>
-      )}
-      {entry && <EntryPreview source={source} entry={entry} onEdit={() => onEditEntry(entry)} />}
+            </thead>
+            <tbody>
+              {[...entries].sort((a, b) => Number(isEntryFile(b.path)) - Number(isEntryFile(a.path))).map((item) => (
+                <tr key={item.path} className="group h-9 border-b border-hairline hover:bg-surface-hover [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-tint-yellow/60">
+                  <td className="py-0 pl-3">
+                    <button type="button" onClick={() => actions.open(item)} className={cn('flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 text-left text-[13px] font-medium outline-none focus-visible:underline [[data-skin=plate]_&]:font-bold', item.type === 'other' && 'text-ink-500')}>
+                      <EntryIcon path={item.path} type={item.type} />
+                      <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-semibold [[data-skin=plate]_&]:font-black')}>{item.name}</span>
+                      {item.symlinkTarget && <span className="min-w-0 truncate text-[11.5px] text-ink-500">→ {item.symlinkTarget}</span>}
+                      {isEntryFile(item.path) && <EntryBadge />}
+                    </button>
+                  </td>
+                  <td className="pr-3 text-right font-mono text-[12px] text-ink-500 tabular-nums @max-[34rem]:hidden">{item.size === null ? '—' : t.folders.size(item.size)}</td>
+                  <td className="truncate pr-2 text-right font-mono text-[12px] text-ink-500 tabular-nums @max-[34rem]:hidden">{t.folders.time(item.modifiedAt)}</td>
+                  <td className="pr-2"><EntryMenu entry={item} actions={actions} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {list.hasNextPage && (
+          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className="mx-3 my-2 self-start text-[12.5px] font-medium text-ink hover:underline [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue">
+            {list.isFetchingNextPage ? t.folders.loading : t.folders.showMore}
+          </button>
+        )}
+        {entry && <EntryPreview source={source} entry={entry} onEdit={() => onEditEntry(entry)} />}
+      </div>
+      <ScrollRuler targetRef={scrollRef} />
     </div>
   )
 }
@@ -88,17 +86,15 @@ function Pending() {
   )
 }
 
-// The root has no AGENTS.md yet: explain what it is for and offer one-click creation.
+// The root has no AGENTS.md yet: compact single-row banner offering one-click creation.
 function EntryMissing({ onCreate }: { onCreate: () => void }) {
   return (
-    // Redesign: a card with a light-pink background, a 2px navy outline and a fluorescent-pink solid offset shadow, with the create
-    // button on the right.
-    <div role="note" className="mx-1 mt-4 mr-2 flex flex-wrap items-center justify-between gap-x-[18px] gap-y-2.5 rounded-card border border-hairline-strong bg-surface-subtle px-[18px] py-3.5 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink">
-      <div className="min-w-0 flex-[1_1_240px]">
-        <p className="text-[15px] font-black">{t.folders.entry.missingTitle}</p>
-        <p className="text-[13px] leading-snug text-ink-700">{t.folders.entry.missingBody}</p>
+    <div role="note" className="mx-3 mt-3 mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3 py-2 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink">
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12.5px]">
+        <span className="shrink-0 font-semibold text-ink [[data-skin=plate]_&]:font-black">{t.folders.entry.missingTitle}</span>
+        <span className="min-w-0 text-ink-500 [[data-skin=plate]_&]:text-ink-700">{t.folders.entry.missingBody}</span>
       </div>
-      <Button size="sm" className="mr-[3px]" onClick={onCreate}>{t.folders.entry.create}</Button>
+      <Button size="xs" className="h-7 shrink-0" onClick={onCreate}>{t.folders.entry.create}</Button>
     </div>
   )
 }
@@ -107,15 +103,15 @@ function EntryMissing({ onCreate }: { onCreate: () => void }) {
 function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: FolderEntry; onEdit: () => void }) {
   const file = useFolderFile(source, entry.path)
   return (
-    <section aria-label={ENTRY_FILE} className="mx-4 mt-5 mb-4 rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-ink/12 [[data-skin=plate]_&]:bg-white">
-      <header className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border-b border-ink/10 px-4 py-1.5">
+    <section aria-label={ENTRY_FILE} className="mx-3 my-3 rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-ink/12 [[data-skin=plate]_&]:bg-white">
+      <header className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline px-3 py-1 [[data-skin=plate]_&]:border-ink/10">
         <BookOpenTextIcon aria-hidden="true" className="size-4 text-pink-text" strokeWidth={2} />
-        <span className="text-[13.5px] font-black">{ENTRY_FILE}</span>
+        <span className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{ENTRY_FILE}</span>
         <EntryBadge />
         <span className="text-[12px] text-ink-500">{t.folders.entry.hint}</span>
         <ToolButton className="ml-auto" icon={<PencilIcon />} label={t.folders.file.edit} onClick={onEdit} />
       </header>
-      <div className="px-6 py-4 text-[14.5px]">
+      <div className="px-5 py-3.5 text-[14px]">
         {file.data?.kind === 'text' ? <Markdown text={file.data.text} leadLabels={false} /> : file.isPending ? <Pending /> : <ErrorAlert error={file.error} />}
       </div>
     </section>
@@ -139,81 +135,42 @@ interface FileViewProps {
   entry: FolderEntry
   limits: TextEditLimits | undefined
   actions: EntryActions
+  file: ReturnType<typeof useFolderFile>
   edit: EditState | null
   mode: 'preview' | 'source'
-  onMode: (mode: 'preview' | 'source') => void
-  onEdit: (text: string, format: TextFormat) => void
   onDraft: (text: string) => void
   onSave: () => void
-  onCancel: () => void
 }
 
-export function FileView({ source, entry, limits, actions, edit, mode, onMode, onEdit, onDraft, onSave, onCancel }: FileViewProps) {
+export function FileView({ source, entry, limits, actions, file, edit, mode, onDraft, onSave }: FileViewProps) {
   const path = entry.path
   const maxBytes = limits?.maxBytes ?? 1 << 20
   const tooLarge = entry.size !== null && entry.size > maxBytes
-  const readable = entry.type === 'file' && !tooLarge && !isImage(path)
-  const file = useFolderFile(source, path, readable || (entry.type === 'symlink' && !!entry.symlinkTarget))
   const text = file.data?.kind === 'text' ? file.data.text : null
-  const editable = entry.type === 'file' && canEdit(path, entry.size, limits) && text !== null
   const markdown = isMarkdown(path)
   const editing = edit?.path === path ? edit : null
-  const dirty = !!editing && editing.text !== editing.original
-  const lines = text === null ? null : text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
 
   let body: ReactNode
-  if (editing) body = <Editor value={editing.text} onChange={onDraft} onSave={onSave} label={nameOf(path)} />
+  if (editing) body = <Editor key={path} value={editing.text} onChange={onDraft} onSave={onSave} label={nameOf(path)} />
   else if (entry.type === 'other') body = <Notice>{t.folders.file.other}</Notice>
   else if (tooLarge) body = <Notice download={() => actions.download(entry)}>{t.folders.file.tooLarge(maxBytes)}</Notice>
-  else if (entry.type === 'file' && isImage(path)) body = <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--paper)_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-6"><img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-print-rest" /></div>
-  else if (file.isPending) body = <Pending />
-  else if (file.error instanceof ApiError && file.error.status === 422 && entry.symlinkTarget && linksOutside(path, entry.symlinkTarget)) body = <Notice>{t.folders.file.symlinkOutside}</Notice>
-  else if (file.isError) body = <div className="p-4"><ErrorAlert error={file.error} /></div>
+  else if (entry.type === 'file' && isImage(path)) {
+    body = (
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--surface-subtle)_0_25%,var(--surface-control)_0_50%)] bg-[length:16px_16px] p-6 [[data-skin=plate]_&]:bg-[repeating-conic-gradient(var(--paper)_0_25%,#fff_0_50%)]">
+        <img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-surface [[data-skin=plate]_&]:shadow-print-rest" />
+      </div>
+    )
+  } else if (file.isPending) body = <Pending />
+  else if (file.error instanceof ApiError && file.error.status === 422 && entry.symlinkTarget && linksOutside(path, entry.symlinkTarget)) {
+    body = <Notice>{t.folders.file.symlinkOutside}</Notice>
+  } else if (file.isError) body = <div className="p-4"><ErrorAlert error={file.error} /></div>
   else if (file.data?.kind === 'binary') body = <Notice download={() => actions.download(entry)}>{t.folders.file.binary}</Notice>
-  else if (text !== null && markdown && mode === 'preview') body = <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5 text-[14.5px]"><Markdown text={text} leadLabels={false} /></div>
-  else if (text !== null) body = <CodeView path={path} text={text} />
+  else if (text !== null && markdown && mode === 'preview') body = <MarkdownPreview key={path} text={text} />
+  else if (text !== null) body = <CodeView key={path} path={path} text={text} />
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* When narrow, the name takes a row of its own and the action buttons wrap to the next row; when wide, they share one row and the
-          hint text is truncated first. */}
-      <div className={cn('flex min-h-11 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-ink/10 px-4 py-1.5 @min-[34rem]:flex-nowrap', editing && 'bg-tint-yellow/50')}>
-        <EntryIcon path={path} type={entry.type} />
-        <h3 className="min-w-0 shrink truncate text-[14px] font-black">{entry.name}</h3>
-        {isEntryFile(path) && <EntryBadge />}
-        {editing ? (
-          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-[12px] font-bold whitespace-nowrap text-ink-700">
-            {t.folders.file.editing}
-            {dirty && <span className="inline-flex items-center gap-1 text-pink-text"><span aria-hidden="true" className="size-1.5 rounded-full bg-riso-pink" />{t.folders.file.unsaved}</span>}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-[12px] whitespace-nowrap text-ink-500 tabular-nums @max-[34rem]:hidden">
-            {entry.type === 'symlink' ? t.folders.file.symlink(entry.symlinkTarget ?? '') : [entry.size !== null && t.folders.size(entry.size), t.folders.time(entry.modifiedAt), lines !== null && t.folders.file.lines(lines)].filter(Boolean).join(' · ')}
-          </span>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-1 @max-[34rem]:basis-full @max-[34rem]:justify-end">
-          {editing ? (
-            <>
-              <Button size="xs" variant="ghost" className="h-7 no-underline" onClick={onCancel} disabled={editing.saving}>{t.folders.file.cancel}</Button>
-              <Button size="xs" className="h-7 px-3 [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]" onClick={onSave} disabled={editing.saving || !dirty} title={t.folders.file.saveKey}>{editing.saving ? t.folders.file.saving : t.folders.file.save}</Button>
-            </>
-          ) : (
-            <>
-              {markdown && text !== null && (
-                <div role="radiogroup" aria-label={t.folders.file.view} className="mr-1 inline-flex rounded-full border border-ink/15 p-0.5">
-                  {(['preview', 'source'] as const).map((value) => (
-                    <button key={value} type="button" role="radio" aria-checked={mode === value} onClick={() => onMode(value)} className={cn('h-6 cursor-pointer rounded-full px-2.5 text-[12px] font-bold text-ink-700', mode === value && 'bg-tint-blue text-ink')}>{value === 'preview' ? t.folders.file.preview : t.folders.file.source}</button>
-                  ))}
-                </div>
-              )}
-              {entry.type === 'file' && <ToolButton icon={<PencilIcon />} label={t.folders.file.edit} onClick={() => file.data?.kind === 'text' && onEdit(file.data.text, file.data.format)} disabled={!editable} title={editable ? t.folders.file.edit : t.folders.file.notEditable} />}
-              {entry.type === 'file' && <ToolButton icon={<DownloadIcon />} label={t.folders.download} showLabel={false} onClick={() => actions.download(entry)} />}
-              <EntryMenu entry={entry} actions={actions} />
-            </>
-          )}
-        </div>
-      </div>
-      {editing?.error != null && <ErrorAlert error={editing.error} className="mx-4 mt-3 w-auto" />}
+      {editing?.error != null && <ErrorAlert error={editing.error} className="mx-3 mt-3 w-auto" />}
       {body}
     </div>
   )
@@ -228,22 +185,39 @@ function Notice({ children, download }: { children: ReactNode; download?: () => 
   )
 }
 
-// Read-only code view: line numbers plus highlighting, no wrapping, long lines scroll horizontally.
-function CodeView({ path, text }: { path: string; text: string }) {
-  const html = useMemo(() => highlightCode(text, languageOf(path)), [text, path])
-  const count = Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0))
+function MarkdownPreview({ text }: { text: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
   return (
-    <div className="code-view flex min-h-0 flex-1 overflow-auto bg-surface-control font-mono text-[12.5px] leading-5 [[data-skin=plate]_&]:bg-white">
-      <div aria-hidden="true" className="sticky left-0 shrink-0 border-r border-ink/10 bg-paper-raised py-3 pr-3 pl-4 text-right text-ink-500/70 tabular-nums select-none">
-        {Array.from({ length: count }, (_, index) => <div key={index}>{index + 1}</div>)}
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-5 text-[14.5px]">
+        <Markdown text={text} leadLabels={false} />
       </div>
-      <pre className="min-w-0 flex-1 py-3 pr-6 pl-4"><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>
+      <ScrollRuler targetRef={scrollRef} />
     </div>
   )
 }
 
-// Online editing: a monospace text box; Tab inserts a tab character, ⌘S / Ctrl+S saves.
+// Read-only code view: line numbers plus highlighting, no wrapping, long lines scroll horizontally.
+function CodeView({ path, text }: { path: string; text: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const html = useMemo(() => highlightCode(text, languageOf(path)), [text, path])
+  const count = Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0))
+  return (
+    <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div ref={scrollRef} className="code-view flex min-h-0 flex-1 overflow-auto bg-surface-control font-mono text-[12.5px] leading-5 [[data-skin=plate]_&]:bg-white">
+        <div aria-hidden="true" className="sticky left-0 shrink-0 border-r border-hairline bg-surface-subtle py-3 pr-3 pl-4 text-right text-ink-500/70 tabular-nums select-none [[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-paper-raised">
+          {Array.from({ length: count }, (_, index) => <div key={index}>{index + 1}</div>)}
+        </div>
+        <pre className="min-w-0 flex-1 py-3 pr-6 pl-4"><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>
+      </div>
+      <ScrollRuler targetRef={scrollRef} />
+    </div>
+  )
+}
+
+// Online editing: a monospace text box; Tab inserts a tab character, Cmd+S / Ctrl+S saves.
 function Editor({ value, onChange, onSave, label }: { value: string; onChange: (text: string) => void; onSave: () => void; label: string }) {
+  const scrollRef = useRef<HTMLTextAreaElement>(null)
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); onSave() }
     else if (event.key === 'Tab' && !event.shiftKey) {
@@ -254,14 +228,18 @@ function Editor({ value, onChange, onSave, label }: { value: string; onChange: (
     }
   }
   return (
-    <textarea
-      autoFocus
-      aria-label={label}
-      spellCheck={false}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      onKeyDown={onKeyDown}
-      className="min-h-0 flex-1 resize-none border-0 bg-surface-control px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none [[data-skin=plate]_&]:bg-white"
-    />
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <textarea
+        ref={scrollRef}
+        autoFocus
+        aria-label={label}
+        spellCheck={false}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        className="min-h-0 flex-1 resize-none border-0 bg-surface-control px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none [[data-skin=plate]_&]:bg-white"
+      />
+      <ScrollRuler targetRef={scrollRef} />
+    </div>
   )
 }

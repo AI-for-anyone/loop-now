@@ -85,9 +85,8 @@ function List({ pages, ...rest }: Omit<ComponentProps<typeof MessageList>, 'agen
 const nav = () => screen.getByRole('navigation', { name: 'Conversation turns' })
 const ticks = () => within(nav().querySelector('ol')!).getAllByRole('button')
 const turnBlock = (text: string) => screen.getByText(text).closest<HTMLElement>('[data-run-id]')!
-const mark = () => nav().querySelector<HTMLElement>('[data-ruler-mark]')
-const longTicks = () => ticks().filter((tick) => tick.querySelector('[data-ruler-long]'))
-const numbers = () => ticks().map((tick) => tick.querySelector('[data-ruler-number]')?.textContent ?? '')
+const rangeMarks = () => [...nav().querySelectorAll<HTMLElement>('[data-ruler-range]')]
+const majorTicks = () => ticks().filter((tick) => tick.querySelector('[data-ruler-tick][data-major="true"]'))
 const total = () => nav().querySelector<HTMLElement>('[data-ruler-total]')
 const texts = (count: number) => Array.from({ length: count }, (_, i) => `Question ${i + 1}`)
 
@@ -119,7 +118,7 @@ describe('ruler on the right of the conversation area', () => {
     expect(nav()).toHaveClass('max-nav:hidden')
   })
 
-  it('ticks of the turns visible in the conversation area are marked current and darker; they follow scrolling', () => {
+  it('ticks of the turns visible in the conversation area are marked current with a contiguous range spine; they follow scrolling', () => {
     render(<List pages={pagesOf(['One', 'Two', 'Three', 'Four'])} />)
     act(() => {
       FakeIntersectionObserver.trigger(turnBlock('Three'), true)
@@ -127,16 +126,17 @@ describe('ruler on the right of the conversation area', () => {
     })
     const current = () => ticks().filter((tick) => tick.getAttribute('aria-current') === 'true').map((tick) => tick.getAttribute('aria-label'))
     expect(current()).toEqual(['Three', 'Four'])
-    // The visible turns are covered by one yellow highlighter mark, drawn from the first visible tick to the last.
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Three' }))
-    expect(mark()).toHaveAttribute('data-count', '2')
+    expect(rangeMarks()).toHaveLength(1)
+    expect(rangeMarks()[0].closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Three' }))
+    expect(rangeMarks()[0]).toHaveAttribute('data-count', '2')
     act(() => {
       FakeIntersectionObserver.trigger(turnBlock('Four'), false)
       FakeIntersectionObserver.trigger(turnBlock('Two'), true)
     })
     expect(current()).toEqual(['Two', 'Three'])
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Two' }))
-    expect(mark()).toHaveAttribute('data-count', '2')
+    expect(rangeMarks()).toHaveLength(1)
+    expect(rangeMarks()[0].closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Two' }))
+    expect(rangeMarks()[0]).toHaveAttribute('data-count', '2')
   })
 
   it('clicking a tick jumps to the start of that turn; content growing afterwards does not pull back to the bottom, and the scroll from the jump does not load earlier messages', async () => {
@@ -238,92 +238,88 @@ describe('ruler on the right of the conversation area', () => {
   })
 })
 
-// "Printed sheet" redesign: the ruler sits in the stub on the right of the sheet, replacing the gray tick bar and the native scrollbar.
-describe('ruler in the stub', () => {
-  it('is the stub on the right of the sheet: the navigation name is unchanged, and screen readers do not repeat the small “TURNS” heading at the top', () => {
+// Floating PrecisionRuler overlay: zero-width-tax vernier tick rail replacing the old 74px permanent stub.
+describe('floating PrecisionRuler in chat', () => {
+  it('mounts as a floating PrecisionRuler overlay with zero horizontal layout stub', () => {
     render(<List pages={pagesOf(['One', 'Two'])} />)
-    expect(nav()).toHaveClass('border-l', 'border-hairline', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
-    expect(within(nav()).getByText('TURNS')).toHaveAttribute('aria-hidden', 'true')
+    expect(nav()).toHaveAttribute('data-precision-ruler')
+    expect(nav()).toHaveClass('absolute', 'right-1.5', 'pointer-events-none', 'max-nav:hidden')
+    expect(document.querySelector('[data-turn-stub]')).toBeNull()
   })
 
-  it('numbers from 1 when there are no turns before: every 5th turn gets a long tick with a number, the total is at the bottom', () => {
+  it('marks every 5th turn as a major tick, shows #N badges on hover preview, and displays the total at the bottom', async () => {
     render(<List pages={pagesOf(texts(12))} turnsBefore={0} turnsTotal={12} />)
     expect(ticks()).toHaveLength(12)
-    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 5', 'Question 10'])
-    expect(numbers()).toEqual(['', '', '', '', '5', '', '', '', '', '10', '', ''])
-    // The numbers are only labels on the ticks; the button's name is still the start of the turn.
-    expect(within(nav()).getByRole('button', { name: 'Question 5' }).querySelector('[data-ruler-number]')).toHaveAttribute('aria-hidden', 'true')
+    expect(majorTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 5', 'Question 10'])
+    await userEvent.setup().hover(within(nav()).getByRole('button', { name: 'Question 5' }))
+    const preview = nav().querySelector('[data-ruler-preview]')!
+    expect(preview.querySelector('[data-ruler-preview-badge]')).toHaveTextContent('#5')
+    expect(preview).toHaveTextContent('Question 5')
     expect(total()).toHaveTextContent('12')
     expect(total()).toHaveTextContent('12 turns in total')
   })
 
-  it('while the turn count is unknown (history not fetched yet): only ticks, no numbers, long ticks or total; no longer numbers from 1 just because there are “no earlier messages”', () => {
+  it('while the turn count is unknown (history not fetched yet): only minor ticks, no major ticks, badges or total', async () => {
     render(<List pages={pagesOf(texts(12))} hasOlder={false} />)
     expect(ticks()).toHaveLength(12)
-    expect(longTicks()).toHaveLength(0)
-    expect(numbers().join('')).toBe('')
+    expect(majorTicks()).toHaveLength(0)
     expect(total()).toBeNull()
+    await userEvent.setup().hover(within(nav()).getByRole('button', { name: 'Question 5' }))
+    expect(nav().querySelector('[data-ruler-preview-badge]')).toBeNull()
   })
 
-  it('numbers on when there are turns before (also when earlier messages are not loaded)', () => {
+  it('numbers on when there are turns before (also when earlier messages are not loaded)', async () => {
     render(<List pages={pagesOf(texts(4))} hasOlder turnsBefore={22} turnsTotal={26} />)
-    expect(numbers()).toEqual(['', '', '25', ''])
-    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 3'])
+    expect(majorTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 3'])
+    await userEvent.setup().hover(within(nav()).getByRole('button', { name: 'Question 3' }))
+    expect(nav().querySelector('[data-ruler-preview-badge]')).toHaveTextContent('#25')
     expect(total()).toHaveTextContent('26')
   })
 
   it('the bottom shows the total it was given, not the number of loaded turns (when locating there are unloaded turns after)', () => {
     const pages = pagesOf(texts(6))
     render(<List pages={pages} hasOlder={false} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={() => {}} turnsBefore={0} turnsTotal={150} />)
-    expect(numbers()).toEqual(['', '', '', '', '5', ''])
+    expect(majorTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 5'])
     expect(total()).toHaveTextContent('150')
     expect(total()).toHaveTextContent('150 turns in total')
   })
 
-  it('a yellow highlighter covers the first visible tick to the last with a pink arrow on the left; not drawn when no turn is visible', () => {
+  it('draws a contiguous range bar across multiple visible ticks and clears it when none are visible', () => {
     render(<List pages={pagesOf(texts(8))} turnsBefore={0} turnsTotal={8} />)
-    expect(mark()).toBeNull()
+    expect(rangeMarks()).toHaveLength(0)
     act(() => {
       for (const text of ['Question 6', 'Question 7', 'Question 8']) FakeIntersectionObserver.trigger(turnBlock(text), true)
     })
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Question 6' }))
-    expect(mark()).toHaveAttribute('data-count', '3')
-    expect(mark()).toHaveAttribute('aria-hidden', 'true')
-    // The height is computed from the tick spacing: it covers 3 ticks, with a little extra above and below.
-    expect(mark()!.style.height).toBe('calc(200% + 19px)')
-    expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
-    expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('bg-ink', '[[data-skin=plate]_&]:border-l-riso-pink')
+    expect(rangeMarks()).toHaveLength(1)
+    expect(rangeMarks()[0].closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Question 6' }))
+    expect(rangeMarks()[0]).toHaveAttribute('data-count', '3')
+    expect(rangeMarks()[0]).toHaveAttribute('aria-hidden', 'true')
     act(() => {
       for (const text of ['Question 6', 'Question 7', 'Question 8']) FakeIntersectionObserver.trigger(turnBlock(text), false)
     })
-    expect(mark()).toBeNull()
+    expect(rangeMarks()).toHaveLength(0)
   })
 
-  it('tick spacing is at most 23px and at least 8px; the ruler scrolls itself when they do not fit', () => {
+  it('scrolls itself internally when there are many turns, with hidden scrollbars', () => {
     render(<List pages={pagesOf(['One', 'Two'])} />)
     const list = nav().querySelector('ol')!
-    // The highlighter mark sticks out slightly past the right edge: the ruler scrolls only vertically and clips horizontally.
     expect(list).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar')
-    for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
+    for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_18px]', 'min-h-2.5')
   })
 
-  it('with only one turn or no conversation the stub stays (the sheet layout is unchanged) but has no ticks and is not a navigation region', () => {
+  it('renders nothing at all with fewer than 2 turns (zero empty stub column)', () => {
     const { rerender } = render(<List pages={pagesOf(['The only question'])} hasOlder={false} />)
-    const stub = document.querySelector<HTMLElement>('[data-turn-stub]')!
-    expect(stub).toHaveTextContent('TURNS')
-    expect(stub).toHaveAttribute('aria-hidden', 'true')
-    expect(stub).toHaveClass('max-nav:hidden')
-    expect(within(stub).queryByRole('button')).toBeNull()
+    expect(document.querySelector('[data-precision-ruler]')).toBeNull()
+    expect(document.querySelector('[data-turn-stub]')).toBeNull()
     rerender(<List pages={pagesOf(['One', 'Two'])} hasOlder={false} />)
-    expect(document.querySelector('[data-turn-stub]')).toBe(nav())
+    expect(document.querySelector('[data-precision-ruler]')).toBe(nav())
   })
 
-  it('keeps a usable thin scrollbar alongside the ruler on desktop so long replies can be scrolled directly', () => {
+  it('keeps native scrollbars hidden globally on the chat log container', () => {
     render(<List pages={pagesOf(['One', 'Two'])} />)
     const log = screen.getByRole('log')
-    expect(log).toHaveClass('riso-scrollbar', 'overflow-y-auto')
-    expect(log).not.toHaveClass('nav:no-scrollbar')
-    expect(log).not.toHaveClass('no-scrollbar')
+    expect(log).toHaveClass('overflow-y-auto')
+    expect(log).not.toHaveClass('riso-scrollbar')
   })
 
   it('clicking the ruler bottom/latest control jumps to the true bottom and re-enables auto-follow', async () => {
@@ -345,26 +341,17 @@ describe('ruler in the stub', () => {
     rerender(<List pages={{ ...pages, pages: [{ ...pages.pages[0], messages: [...messages.slice(0, -1), { ...messages.at(-1)!, text: 'Answer to Three, grown' }] }] }} turnsBefore={0} turnsTotal={3} />)
     expect(el.scrollTop).toBe(1900)
   })
-
-  it('with only one turn or no conversation the stub has no ticks and the native scrollbar stays (so a very long reply still shows the scroll position)', () => {
-    const { rerender } = render(<List pages={pagesOf(['The only question'])} />)
-    expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
-    rerender(<List pages={pagesOf([])} />)
-    expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
-    expect(screen.getByRole('log')).toHaveClass('overflow-y-auto')
-  })
 })
 
-describe('outlined number of each turn', () => {
+describe('inline turn numbers', () => {
   const turnNumbers = () => [...document.querySelectorAll('[data-turn-number]')].map((node) => node.textContent)
 
-  it('each turn has an outlined number on the left, matching the number on the ruler', () => {
+  it('each turn carries a subtle inline monospace turn number tag matching the ruler', () => {
     render(<List pages={pagesOf(texts(6))} turnsBefore={0} turnsTotal={6} />)
     expect(turnNumbers()).toEqual(['1', '2', '3', '4', '5', '6'])
     const number = turnBlock('Question 5').querySelector('[data-turn-number]')!
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('max-nav:hidden')
-    expect(numbers()[4]).toBe('5')
+    expect(number).toHaveClass('font-mono', 'text-[11px]', 'tabular-nums')
   })
 
   it('shows no numbers while the turn count is unknown', () => {
@@ -375,30 +362,6 @@ describe('outlined number of each turn', () => {
   it('numbers on when there are turns before', () => {
     render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} turnsTotal={26} />)
     expect(turnNumbers()).toEqual(['25', '26'])
-  })
-
-  // The number column is 36px wide (narrowed in the redesign): two-digit numbers are 26px, and from
-  // three digits up the size steps down so that four- and five-digit numbers also fit in the column.
-  // jsdom does no layout; the actual widths are confirmed with a browser check.
-  it('the number column narrows to 36px, 12px from the text; three-, four- and five-digit numbers get a smaller font so they do not push into the text on the right', () => {
-    const sizeOf = (text: string) => [...turnBlock(text).querySelector('[data-turn-number]')!.classList].filter((name) => name.startsWith('text-['))
-    const tens = render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={98} />)
-    expect(turnNumbers()).toEqual(['99', '100'])
-    expect(sizeOf('Question 1')).toEqual(['text-[26px]'])
-    expect(sizeOf('Question 2')).toEqual(['text-[20px]'])
-    const number = turnBlock('Question 1').querySelector('[data-turn-number]')!
-    expect(number).toHaveClass('w-9')
-    expect(number.parentElement).toHaveClass('gap-3')
-    tens.unmount()
-    const thousands = render(<List pages={pagesOf(texts(3))} hasOlder turnsBefore={998} />)
-    expect(turnNumbers()).toEqual(['999', '1000', '1001'])
-    expect(sizeOf('Question 1')).toEqual(['text-[20px]'])
-    expect(sizeOf('Question 2')).toEqual(['text-[15px]'])
-    thousands.unmount()
-    render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={9998} />)
-    expect(turnNumbers()).toEqual(['9999', '10000'])
-    expect(sizeOf('Question 1')).toEqual(['text-[15px]'])
-    expect(sizeOf('Question 2')).toEqual(['text-[12px]'])
   })
 })
 
@@ -432,23 +395,24 @@ describe('tick names', () => {
   })
 })
 
-// The conversation gets a larger share (user feedback after v0.2.5): reply text follows the conversation
-// column, with the cap widened to 1100px; user bubbles are widened to 88% of the conversation column.
-describe('conversation share', () => {
-  it('on wide screens reply text is at most 1100px wide (it was 760px), and code blocks, tables and images widen with it; narrow screens keep 760px', () => {
+// Centered high-density 800px conversation stream without a 48px left number gutter.
+describe('centered conversation stream', () => {
+  it('centers the conversation stream in a max-w-[800px] column with full-column reply prose', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
+    const column = screen.getByRole('log').firstElementChild!
+    expect(column).toHaveClass('mx-auto', 'max-w-[800px]')
     const body = turnBlock('Question 1').querySelector('article')!.parentElement!
-    expect(body).toHaveClass('nav:max-w-[1100px]', 'max-w-[760px]', 'min-w-0')
+    expect(body).toHaveClass('min-w-0', 'w-full')
   })
 
-  it('on wide screens user bubbles are at most 88% of the conversation column and no wider than the reply text cap; narrow screens keep 80%', () => {
+  it('caps user bubbles at 82% in mono skin and preserves Plate wide styling', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    expect(screen.getByText('Question 1')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
+    expect(screen.getByText('Question 1')).toHaveClass('max-w-[82%]', '[[data-skin=plate]_&]:nav:max-w-[min(88%,1100px)]')
   })
 
-  it('content inserted into the conversation flow (messages to you, questions) stays left-aligned with the text of the turns', () => {
+  it('aligns inserted flow items directly with the centered conversation column without a left gutter shift', () => {
     const inserts = [{ key: 'note', at: '2026-10-25T09:00:30Z', node: <p>A message inserted into the flow</p> }]
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} inserts={inserts} />)
-    expect(screen.getByText('A message inserted into the flow').parentElement).toHaveClass('nav:pl-12')
+    expect(screen.getByText('A message inserted into the flow').parentElement).not.toHaveClass('nav:pl-12')
   })
 })

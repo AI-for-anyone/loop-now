@@ -2,8 +2,17 @@ import { formatTime } from './format'
 
 export const config = {
   effectNotice: '修改从下一条派发的消息开始生效，进行中的回复不受影响。',
+  effectShort: '下条消息生效',
   staleRunNotice: '当前回复使用修改前的配置。',
+  staleRunShort: '当前回复用旧配置',
   savedWhileBusy: '已保存。当前回复不受影响，修改从下一条消息开始生效。',
+  tabs: {
+    label: '配置分区',
+    general: '常规与模型',
+    workspace: '提示词与工作区',
+    tools: '工具与权限',
+    danger: '危险操作',
+  },
   toc: {
     title: '目录',
   },
@@ -11,6 +20,8 @@ export const config = {
     title: '基本信息',
     id: '内部 ID',
     name: '显示名称',
+    changeRunner: '更换',
+    done: '完成',
     modelCount: (count: number) => `${count} 个模型`,
     // Short reason on a plugin provider's row in the runner picker; plugins_disabled doesn't block saving, it only warns.
     pluginUnavailable: {
@@ -157,6 +168,7 @@ export const config = {
     empty: '还没有可用 CLI。',
     name: 'CLI 名称',
     add: '添加 CLI',
+    configure: '配置',
     nameInvalid: '只能使用小写字母、数字、点、下划线和连字符，且以字母或数字开头',
     templateVersion: (version: string) => `内置模板 v${version}`,
     markerOnly: '只作标记，不安装，不注入凭证',

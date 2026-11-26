@@ -28,30 +28,30 @@ export function HandoffRow({ handoff }: { handoff: Schemas['ContextHandoff'] }) 
     return (
       <span className="inline-flex items-center gap-1.5">
         {runtime && <RuntimeMark runtime={runtime} className="size-6" />}
-        <span className="font-display-latin text-[14px] font-extrabold">{name}</span>
+        <span className="font-display-latin text-[13.5px] font-semibold [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:font-extrabold">{name}</span>
       </span>
     )
   }
   return (
     <div role="separator" aria-label={label} className="flex items-center gap-3">
-      <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-riso-blue/70" />
+      <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-riso-blue/70" />
       <div aria-hidden="true" className="grid justify-items-center gap-1">
-        <span className="inline-flex items-center gap-2.5 rounded-full border-2 border-ink bg-paper-raised py-1 pr-3.5 pl-1.5 text-ink shadow-[3px_3px_0_var(--riso-blue)]">
+        <span className="inline-flex items-center gap-2.5 rounded-full border border-hairline-strong bg-surface-subtle py-1 pr-3.5 pl-1.5 text-ink [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-blue)]">
           {renewed ? (
             side(handoff.toRuntime, copy.renewed(to))
           ) : (
             <>
               {side(handoff.fromRuntime, from)}
-              <ArrowRightIcon className="size-4 text-riso-pink" strokeWidth={3} />
+              <ArrowRightIcon className="size-4 text-ink-500 [[data-skin=plate]_&]:text-riso-pink" strokeWidth={2.5} />
               {side(handoff.toRuntime, to)}
               <span className="sr-only">{copy.route(from, to)}</span>
             </>
           )}
         </span>
-        {why && <span className="text-center text-[12.5px] font-black text-ink">{why}</span>}
-        <span className="text-center text-[12px] font-bold text-ink-700">{parts.join(' · ')}</span>
+        {why && <span className="text-center text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-black">{why}</span>}
+        <span className="text-center text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700">{parts.join(' · ')}</span>
       </div>
-      <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-riso-blue/70" />
+      <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-riso-blue/70" />
     </div>
   )
 }
@@ -63,13 +63,13 @@ export function ModelChangeLine({ from, to }: { from: Schemas['RunSelection']; t
   const shown = (selection: Schemas['RunSelection']) => (sameProvider ? selection.modelId : ref(selection))
   return (
     <div role="separator" aria-label={t.chat.modelChange(ref(from), ref(to))} className="flex items-center gap-2.5 px-6">
-      <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dotted border-ink/25" />
+      <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dotted [[data-skin=plate]_&]:border-ink/25" />
       <span aria-hidden="true" className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] text-ink-500">
         <span className="truncate">{shown(from)}</span>
-        <ArrowRightIcon className="size-3 shrink-0" strokeWidth={2.6} />
-        <span className="truncate font-bold text-ink-700">{shown(to)}</span>
+        <ArrowRightIcon className="size-3 shrink-0" strokeWidth={2.4} />
+        <span className="truncate font-semibold text-ink-700 [[data-skin=plate]_&]:font-bold">{shown(to)}</span>
       </span>
-      <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dotted border-ink/25" />
+      <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dotted [[data-skin=plate]_&]:border-ink/25" />
     </div>
   )
 }

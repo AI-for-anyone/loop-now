@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { PanelLeftOpen } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { useProjects } from '@/api/queries'
+import { BrandWordmark } from '@/components/BrandWordmark'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { CommandPalette } from './CommandPalette'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
+import { SidebarContext } from './sidebar-context'
 
 const text = t.shell
 
@@ -68,8 +70,8 @@ const wide = '(min-width: 56.3125rem)'
 // The console's frame: the sidebar plus the main area. The sidebar's scope comes from the URL (project pages and the overview); global pages
 // carry no scope and keep the previous one, so opening the plugin market, global settings and so on from inside a project does not lose
 // the current project. At widths ≤ 900 the sidebar folds into a drawer and the top becomes a narrow blue bar.
-// At widths ≥ 1024 the frame is fixed to the viewport height and each column scrolls within its own area; when narrower, the whole page
-// scrolls together and the sidebar sticks to the viewport.
+// At widths ≥ 901 (nav:) the frame is fixed to the viewport height and each column scrolls within its own area; when narrower, the whole page
+// scrolls together and the sidebar folds into a drawer.
 // In a desktop shell window, the blue bar at the top of the narrow layout also drags the window, and the menu button moves aside to the
 // right of the system's traffic-light buttons.
 export function AppLayout() {
@@ -139,14 +141,20 @@ export function AppLayout() {
     return () => query.removeEventListener('change', onChange)
   }, [])
 
+  const sidebarControl = useMemo(
+    () => ({ collapsed: sidebarCollapsed, expand: () => setCollapsed(false) }),
+    [sidebarCollapsed, setCollapsed],
+  )
+
   // Open one inbox event stream on entering the console; messages sent to you, the "needs you" summary and every inbox view rely on it for
   // live updates.
   useInboxLive()
   useDesktopNavigation()
   return (
-    <div className="riso-paper flex min-h-screen text-ink lg:h-screen">
+    <SidebarContext.Provider value={sidebarControl}>
+      <div className="riso-paper flex min-h-screen text-ink nav:h-screen">
       {!sidebarCollapsed && (
-        <div className="sticky top-0 h-screen w-[248px] shrink-0 self-start max-nav:hidden">
+        <div className="sticky top-0 h-screen w-[228px] shrink-0 self-start max-nav:hidden">
           <Sidebar
             scope={scope}
             projects={list}
@@ -177,7 +185,10 @@ export function AppLayout() {
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
-      <div className="riso-grain flex min-w-0 flex-1 flex-col lg:min-h-0">
+      <div
+        data-sidebar-collapsed={sidebarCollapsed ? 'true' : undefined}
+        className="riso-grain relative flex min-w-0 flex-1 flex-col nav:min-h-0"
+      >
         <header
           className={cn(
             'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden [[data-skin=plate]_&]:border-b-0',
@@ -193,44 +204,16 @@ export function AppLayout() {
           >
             <NavIcon name="menu" className="[stroke-width:2.6]" />
           </button>
-          <span className="font-display-latin text-[17px] leading-none font-semibold tracking-tight text-sidebar-fg [[data-skin=plate]_&]:text-[19px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.5px] [[data-skin=plate]_&]:[text-shadow:2px_2px_0_var(--riso-pink)]">
-            {t.app.brand}
-          </span>
+          <BrandWordmark />
           <Link
             to="/settings"
             aria-label={text.items.settings}
             title={`${text.items.settings} (${text.settingsShortcut})`}
             className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/35 [[data-skin=plate]_&]:bg-white/15 [[data-skin=plate]_&]:text-white"
           >
-            <NavIcon name="settings" />
+            <Settings className="size-4" strokeWidth={1.8} />
           </Link>
         </header>
-        {sidebarCollapsed && (
-          <div
-            className={cn(
-              'flex shrink-0 items-center gap-2 border-b border-hairline bg-surface-canvas px-3 py-1.5 max-nav:hidden',
-              desktop && 'window-drag h-12 py-0 pl-[84px]',
-            )}
-          >
-            <button
-              type="button"
-              aria-label={text.expandNav}
-              title={`${text.expandNav} (⌘B)`}
-              onClick={() => setCollapsed(false)}
-              className="inline-flex size-8 items-center justify-center rounded-ticket border border-hairline bg-surface-control text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]"
-            >
-              <PanelLeftOpen className="size-4" strokeWidth={1.8} />
-            </button>
-            <Link
-              to="/settings"
-              aria-label={text.items.settings}
-              title={`${text.items.settings} (${text.settingsShortcut})`}
-              className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-hairline bg-surface-control text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:text-ink"
-            >
-              <NavIcon name="settings" />
-            </Link>
-          </div>
-        )}
         <ConnectionBanner />
         <main className="min-h-0 flex-1">
           <Outlet />
@@ -238,6 +221,7 @@ export function AppLayout() {
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} scope={scope} projects={list} />
       <Toasts />
-    </div>
+      </div>
+    </SidebarContext.Provider>
   )
 }

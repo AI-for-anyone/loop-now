@@ -1,24 +1,26 @@
-import { TaskBadge } from './TaskBadge'
-import { useAgents } from '@/api/queries'
-import { LiveDot, PageFrame, PageHeader } from '@/components/PageHeader'
-import { Sheet } from '@/components/Sheet'
-import { overviewPath } from '@/lib/scope'
-import { narrowQuery, useMediaQuery } from '@/lib/use-media-query'
-import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
-import { PagePluginActions } from '@/features/plugins/PluginActions'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useSearchParams } from 'react-router'
-import { useTask, tasksPath } from '@/api/tasks'
-import { useScope } from '@/features/projects/scope-context'
+import { useAgents } from '@/api/queries'
+import { tasksPath, useTask } from '@/api/tasks'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { Button } from '@/components/ui/button'
+import { LiveDot, PageFrame, PageHeader } from '@/components/PageHeader'
+import { Sheet } from '@/components/Sheet'
+import { PagePluginActions } from '@/features/plugins/PluginActions'
+import { useScope } from '@/features/projects/scope-context'
+import { SleepUntil } from '@/features/sleep/SleepUntil'
+import { TaskInstanceSleeps } from '@/features/sleep/TaskInstanceSleeps'
 import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
-import { useTaskLive } from './useTaskLive'
-import { NodeRecordPanel, type NodeDraft } from './NodeRecordPanel'
+import { overviewPath } from '@/lib/scope'
+import { narrowQuery, useMediaQuery } from '@/lib/use-media-query'
+import { NodeRecordPanel, type NodeDraft, type NodePanelTab } from './NodeRecordPanel'
 import { TaskActions } from './TaskActions'
-import { TaskInstanceSleeps } from '@/features/sleep/TaskInstanceSleeps'
-import { SleepUntil } from '@/features/sleep/SleepUntil'
+import { TaskBadge } from './TaskBadge'
+import { useTaskLive } from './useTaskLive'
+import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
+
+// Breakpoint matching Tailwind's lg (1024px) where the 216px left step rail collapses to horizontal WorkflowChips.
+const compactRailQuery = '(width < 64rem)'
 
 export function TaskDetail() {
   const { taskId = '' } = useParams()
@@ -26,80 +28,203 @@ export function TaskDetail() {
   const task = useTask(taskId)
   const connection = useTaskLive(taskId, false)
   const agents = useAgents(scope.kind === 'project' ? scope.project.id : null)
-  const narrow = useMediaQuery(narrowQuery)
+  const belowLg = useMediaQuery(compactRailQuery)
+  const belowNav = useMediaQuery(narrowQuery)
+  const narrow = belowLg || belowNav
   const [params, setParams] = useSearchParams()
-  const [selection, setSelection] = useState(0)
+  const [tabState, setTabState] = useState<{ taskId: string; tab: NodePanelTab }>({ taskId, tab: 'conversation' })
+  const tab: NodePanelTab = tabState.taskId === taskId ? tabState.tab : 'conversation'
+  const setTab = (next: NodePanelTab) => setTabState({ taskId, tab: next })
   const [drafts, setDrafts] = useState<Record<string, NodeDraft>>({})
   const detail = task.data
-  const currentSleep = detail?.nodes.find(node => node.id === detail.task.currentNodeRunId)?.sleep
+  const currentSleep = detail?.nodes.find((node) => node.id === detail.task.currentNodeRunId)?.sleep
   const explicitRecord = params.get('record')
   const explicitStep = params.get('step')
   const records = detail?.nodes.filter((n) => !explicitStep || n.stepId === explicitStep) ?? []
-  const node = explicitRecord ? detail?.nodes.find((n) => n.id === explicitRecord && (!explicitStep || n.stepId === explicitStep)) : records.find((n) => n.id === detail?.task.currentNodeRunId) ?? records.at(-1)
+  const node = explicitRecord
+    ? detail?.nodes.find((n) => n.id === explicitRecord && (!explicitStep || n.stepId === explicitStep))
+    : records.find((n) => n.id === detail?.task.currentNodeRunId) ?? records.at(-1)
   const step = explicitStep ?? node?.stepId ?? null
+
   // Persist the initial choice; subsequent SSE updates must not take away a historical selection.
-  useEffect(() => { if (detail && node && !explicitRecord && !explicitStep) setParams(previous => { const next = new URLSearchParams(previous); next.set('step', node.stepId); next.set('record', node.id); return next }, { replace: true }) }, [detail, node, explicitRecord, explicitStep, setParams])
+  useEffect(() => {
+    if (detail && node && !explicitRecord && !explicitStep) {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous)
+          next.set('step', node.stepId)
+          next.set('record', node.id)
+          return next
+        },
+        { replace: true },
+      )
+    }
+  }, [detail, node, explicitRecord, explicitStep, setParams])
+
   if (scope.kind !== 'project') return null
   const agentName = (id: string) => agents.data?.agents.find((agent) => agent.id === id)?.name ?? id
   if (isNotFound(task.error)) return <p className="p-6">{t.tasks.missing}</p>
-  if (!detail) return <div className="p-6"><ErrorAlert error={task.error} />{!task.isError && t.tasks.loading}</div>
-  if (detail.task.projectId !== scope.project.id) return <p role="alert" className="p-6">{t.tasks.wrongProject}</p>
-  const viewRecord = (stepId: string, recordId?: string) => setParams(previous => {
-    const next = new URLSearchParams(previous)
-    next.set('step', stepId)
-    if (recordId) next.set('record', recordId)
-    else next.delete('record')
-    return next
-  })
-  // Clicking a step on the workflow ruler: select it and view its most recent visit; the Node materials tab goes back to Conversation
-  // (the panel remounts keyed by the selection count).
+  if (!detail) {
+    return (
+      <div className="p-6">
+        <ErrorAlert error={task.error} />
+        {!task.isError && t.tasks.loading}
+      </div>
+    )
+  }
+  if (detail.task.projectId !== scope.project.id) {
+    return (
+      <p role="alert" className="p-6">
+        {t.tasks.wrongProject}
+      </p>
+    )
+  }
+
+  const viewRecord = (stepId: string, recordId?: string) =>
+    setParams((previous) => {
+      const next = new URLSearchParams(previous)
+      next.set('step', stepId)
+      if (recordId) next.set('record', recordId)
+      else next.delete('record')
+      return next
+    })
+
+  // Selecting a step jumps to its latest visit while preserving the active Conversation/Materials tab.
   const select = (id: string) => {
-    setSelection(old => old + 1)
-    const latest = detail.nodes.filter((n) => n.stepId === id).sort((a, b) => a.visit - b.visit || a.attempt - b.attempt).at(-1)
+    const latest = detail.nodes
+      .filter((n) => n.stepId === id)
+      .sort((a, b) => a.visit - b.visit || a.attempt - b.attempt)
+      .at(-1)
     viewRecord(id, latest?.id)
   }
+
   const project = scope.project
-  const ruler = <WorkflowRuler detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} agentName={agentName} />
-  // Task details (redesign step 5): a compact page header (hollow task number, status stamp, archive status, live status, created and
-  // updated times, and a red-outlined “取消任务” (Cancel task) on the right),
-  // and below it one sheet filling the page: two index tabs on the sheet's top edge, the selected node's conversation or node materials
-  // on the sheet, and the vertical workflow ruler in the stub on the right.
-  // On narrow screens the stub is hidden, and a horizontally scrollable row of small step tags appears above the index tabs instead.
-  return <PageFrame>
-    <PageHeader
-      crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }, { label: t.tasks.title, to: tasksPath(project.name) }]}
-      current={t.tasks.numberLabel(detail.task.number)}
-      title={detail.task.title}
-      lead={<span aria-hidden="true" data-task-number className="shrink-0 font-display-latin text-[34px] leading-none font-extrabold tracking-[-0.02em] text-transparent [-webkit-text-stroke:1.6px_var(--riso-blue)] nav:text-[40px] nav:[-webkit-text-stroke:1.8px_var(--riso-blue)]">{t.tasks.numberLabel(detail.task.number)}</span>}
-      actions={<><TaskActions task={detail.task} disabled={connection !== 'open' || task.isError} showRetry={false} /><PagePluginActions page="task" where={{ taskId: detail.task.id }} projectId={project.id} /></>}
-    >
-      <TaskBadge status={detail.task.status} />
-      <span className="rounded-[4px] bg-paper-tab px-[9px] text-[12px] leading-[22px] font-bold text-ink-700">{t.tasks.cleanup[detail.cleanup]}</span>
-      <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
-      <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.meta(detail.task.createdAt, detail.task.updatedAt)}</span>
-    </PageHeader>
-    <ErrorAlert error={task.error} />
-    {currentSleep?.state === 'sleeping' && currentSleep.wakeAt && <div className="mb-3 rounded-card bg-tint-blue p-4"><SleepUntil at={currentSleep.wakeAt} reason={currentSleep.reason} /></div>}
-    <TaskInstanceSleeps detail={detail} />
-    {detail.task.currentNodeRunId && node?.id !== detail.task.currentNodeRunId && <div className="mb-2.5 flex flex-wrap items-center gap-3 text-[13px] font-bold"><span>{t.tasks.history}</span><Button variant="secondary" size="sm" onClick={() => viewRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>{t.tasks.currentChanged}</Button></div>}
-    {narrow && <WorkflowChips detail={detail} selected={step} onSelect={select} />}
-    {explicitRecord && !node ? <EmptySheet stub={ruler}><p role="alert">{t.tasks.invalidRecord}</p></EmptySheet> : node ? <NodeRecordPanel key={`${taskId}:${node.stepId}:${node.id}:${selection}`} detail={detail} node={node} disabled={connection !== 'open' || task.isError} stub={ruler}
-        draft={drafts[`${taskId}:${node.id}`] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }}
-        drafts={Object.entries(drafts).filter(([key]) => key.startsWith(`${taskId}:`)).map(([, value]) => value)}
-        onAction={action => setDrafts(old => { const key = `${taskId}:${node.id}`; return { ...old, [key]: { ...(old[key] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }), action } } })}
-        onAccepted={(sent, ids = []) => setDrafts(old => { const key = `${taskId}:${node.id}`, value = old[key]; return value ? { ...old, [key]: { ...value, text: value.text === sent ? '' : value.text, images: value.images?.filter(image => !ids.includes(image.id)) } } : old })}
-        onImages={images => setDrafts(old => { const key = `${taskId}:${node.id}`; return { ...old, [key]: { ...(old[key] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }), images } } })}
-        onDraft={text => setDrafts(old => ({ ...old, [`${taskId}:${node.id}`]: { ...(old[`${taskId}:${node.id}`] ?? { agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }), text } }))} /> : <EmptySheet stub={ruler}><p>{step ? t.tasks.noRecord : t.tasks.selectNode}</p></EmptySheet>}
-  </PageFrame>
+  const nodeSleep =
+    node?.sleep?.state === 'sleeping' && node.sleep.nodeRunId === node.id && node.sleep.runtimeId === node.runtimeId && node.sleep.wakeAt
+      ? node.sleep
+      : null
+  const activeSleep = nodeSleep ?? (currentSleep?.state === 'sleeping' && currentSleep.wakeAt ? currentSleep : null)
+  const metaTooltip = t.tasks.page.meta(detail.task.createdAt, detail.task.updatedAt)
+
+  return (
+    <PageFrame>
+      <PageHeader
+        crumbs={[
+          { label: project.name, to: overviewPath({ kind: 'project', name: project.name }) },
+          { label: t.tasks.title, to: tasksPath(project.name) },
+        ]}
+        current={t.tasks.numberLabel(detail.task.number)}
+        title={detail.task.title}
+        lead={
+          <span
+            aria-hidden="true"
+            data-task-number
+            className="shrink-0 font-mono text-[15px] leading-none font-semibold tracking-tight text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[34px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.02em] [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--riso-blue)] [[data-skin=plate]_&]:nav:text-[40px] [[data-skin=plate]_&]:nav:[-webkit-text-stroke:1.8px_var(--riso-blue)]"
+          >
+            {t.tasks.numberLabel(detail.task.number)}
+          </span>
+        }
+        actions={
+          <>
+            <TaskActions task={detail.task} disabled={connection !== 'open' || task.isError} showRetry={false} />
+            <PagePluginActions page="task" where={{ taskId: detail.task.id }} projectId={project.id} />
+          </>
+        }
+      >
+        <TaskBadge status={detail.task.status} />
+        <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
+        <span
+          title={metaTooltip}
+          className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[11.5px] leading-4 font-medium text-ink-500 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-tab [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700"
+        >
+          {t.tasks.cleanup[detail.cleanup]}
+        </span>
+        <time dateTime={detail.task.updatedAt} title={metaTooltip} className="hidden font-mono text-[11.5px] text-ink-500 tabular-nums sm:inline">
+          {t.tasks.updatedAt(detail.task.updatedAt)}
+        </time>
+      </PageHeader>
+      <ErrorAlert error={task.error} />
+      {activeSleep?.wakeAt && (
+        <div
+          data-task-sleep
+          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline bg-surface-subtle/60 px-4 py-2 text-[12px] sm:px-6 [[data-skin=plate]_&]:mb-2 [[data-skin=plate]_&]:rounded-card [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue"
+        >
+          <SleepUntil compact at={activeSleep.wakeAt} reason={activeSleep.reason} />
+        </div>
+      )}
+      <TaskInstanceSleeps detail={detail} />
+      {narrow && <WorkflowChips detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} />}
+      <Sheet className="min-h-0 flex-1 flex-row">
+        <WorkflowRuler detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} agentName={agentName} />
+        {explicitRecord && !node ? (
+          <EmptyPane>
+            <p role="alert">{t.tasks.invalidRecord}</p>
+          </EmptyPane>
+        ) : node ? (
+          <NodeRecordPanel
+            key={taskId}
+            detail={detail}
+            node={node}
+            tab={tab}
+            onTabChange={setTab}
+            onSelectRecord={viewRecord}
+            disabled={connection !== 'open' || task.isError}
+            draft={drafts[`${taskId}:${node.id}`] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }}
+            drafts={Object.entries(drafts)
+              .filter(([key]) => key.startsWith(`${taskId}:`))
+              .map(([, value]) => value)}
+            onAction={(action) =>
+              setDrafts((old) => {
+                const key = `${taskId}:${node.id}`
+                return {
+                  ...old,
+                  [key]: { ...(old[key] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }), action },
+                }
+              })
+            }
+            onAccepted={(sent, ids = []) =>
+              setDrafts((old) => {
+                const key = `${taskId}:${node.id}`,
+                  value = old[key]
+                return value
+                  ? { ...old, [key]: { ...value, text: value.text === sent ? '' : value.text, images: value.images?.filter((image) => !ids.includes(image.id)) } }
+                  : old
+              })
+            }
+            onImages={(images) =>
+              setDrafts((old) => {
+                const key = `${taskId}:${node.id}`
+                return {
+                  ...old,
+                  [key]: { ...(old[key] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }), images },
+                }
+              })
+            }
+            onDraft={(text) =>
+              setDrafts((old) => ({
+                ...old,
+                [`${taskId}:${node.id}`]: {
+                  ...(old[`${taskId}:${node.id}`] ?? { agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }),
+                  text,
+                },
+              }))
+            }
+          />
+        ) : (
+          <EmptyPane>
+            <p>{step ? t.tasks.noRecord : t.tasks.selectNode}</p>
+          </EmptyPane>
+        )}
+      </Sheet>
+    </PageFrame>
+  )
 }
 
-// When the selected step hasn't been visited yet (or the requested record doesn't exist): the sheet holds just one line of explanation,
-// and the stub still shows the workflow ruler.
-function EmptySheet({ stub, children }: { stub: ReactNode; children: ReactNode }) {
-  return <Sheet className="mt-[34px] min-h-0 flex-1">
-    <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 items-center justify-center p-8 text-center font-display-cn text-[26px] text-riso-blue">{children}</div>
-      {stub}
+// Right-pane empty state when the selected step has not been visited yet or the requested record does not exist.
+function EmptyPane({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-center p-8 text-center text-[14.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[26px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
+      {children}
     </div>
-  </Sheet>
+  )
 }
