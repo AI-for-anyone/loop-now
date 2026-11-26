@@ -161,7 +161,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
       if (el && target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top
     })
   }
-  const pad = 'px-[clamp(14px,3vw,34px)]'
+  const pad = 'px-3.5 nav:px-6'
   return <>
     {/* Two index tabs on the sheet's top edge: Conversation and Node materials. The left/right arrow keys switch between them. */}
     <div role="tablist" className={indexTabsClass} aria-label={t.tasks.record} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const next = tab === 'conversation' ? 'materials' : 'conversation'; setTab(next); event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus() } }}>
@@ -177,7 +177,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
                 tag, status stamp;
                 below it the reason (a red sticky note when blocked) and recovery actions (fluorescent-pink “重试当前节点” (Retry current
                 node); the others are secondary buttons). */}
-            <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
+            <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-3.5 pb-3', pad)} data-node-status>
               <NodeHeading number={number} title={stepTitle} stepId={node.stepId} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
@@ -202,31 +202,35 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               {node.question && <details className="text-[13.5px]"><summary className="cursor-pointer font-bold">{t.tasks.question} · {t.tasks.questionState[node.question.status]}</summary><PendingQuestion question={node.question} /></details>}
             </div>
             <div className="min-h-[120px] flex-1 overflow-hidden">
-              <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className={cn('relative h-full min-w-0 overflow-y-auto overscroll-contain pt-5 pb-3 outline-none focus-visible:shadow-focus', pad)} data-conversation-scroll>
-                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} requests={record.id === node.id ? permissionRequests : []} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
+              <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className={cn('relative h-full min-w-0 overflow-y-auto overscroll-contain pt-2.5 pb-2.5 outline-none focus-visible:shadow-focus', pad)} data-conversation-scroll>
+                <div data-node-messages className="mx-auto w-full max-w-[1600px]">
+                  {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} requests={record.id === node.id ? permissionRequests : []} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
+                </div>
               </div>
             </div>
             {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
             {/* Input area: a light-yellow bar at the bottom of the sheet (same as the chat page), with a line above it saying who it goes to. */}
-            <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-2.5 pb-3" data-node-draft>
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
-                <span>{t.tasks.page.sendTo}</span>
-                <span title={node.stepId} className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
-                <details className="ml-1"><summary className="cursor-pointer text-ink-500 underline decoration-dotted underline-offset-3">{t.tasks.targetDetails}</summary><p className="mt-1 font-mono text-[11.5px] font-normal break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
+            <div className={cn('flex max-h-[45dvh] min-h-0 shrink-0 flex-col overflow-y-auto border-t-2 border-ink bg-tint-yellow pt-2.5 pb-2.5', pad)} data-node-draft>
+              <div data-node-draft-inner className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
+                  <span>{t.tasks.page.sendTo}</span>
+                  <span title={node.stepId} className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
+                  <details className="ml-1"><summary className="cursor-pointer text-ink-500 underline decoration-dotted underline-offset-3">{t.tasks.targetDetails}</summary><p className="mt-1 font-mono text-[11.5px] font-normal break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
+                </div>
+                {current && unsupported && <p role="status" className="text-[13px] font-bold">{t.tasks.nodeMessagesUnsupported}</p>}
+                {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
+                {current && capability.data && !capability.data.canSend && <p role="status" className="text-[13px] font-bold">{capability.data.reason} · {capability.data.handlingHint}</p>}
+                {!current && (draft.text || !!draft.images?.length) && <p role="status" className="text-[13px] font-bold">{t.tasks.draftChanged}</p>}
+                {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
+                <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
+                  queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
+                  stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
+                  stopAlso={backgroundTasks.length}
+                  background={<BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />}
+                  reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
+                {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
+                {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
               </div>
-              {current && unsupported && <p role="status" className="text-[13px] font-bold">{t.tasks.nodeMessagesUnsupported}</p>}
-              {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
-              {current && capability.data && !capability.data.canSend && <p role="status" className="text-[13px] font-bold">{capability.data.reason} · {capability.data.handlingHint}</p>}
-              {!current && (draft.text || !!draft.images?.length) && <p role="status" className="text-[13px] font-bold">{t.tasks.draftChanged}</p>}
-              {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
-              <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
-                queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
-                stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
-                stopAlso={backgroundTasks.length}
-                background={<BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />}
-                reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
-              {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
-              {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
             </div>
           </div>
           <div id="task-materials" role="tabpanel" aria-label={t.tasks.materials} hidden={tab !== 'materials'} ref={materials} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:shadow-focus" data-materials-scroll>
@@ -335,13 +339,13 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
     }),
   ].sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key))
   const cutLabel = `${t.tasks.visit(node.visit, node.attempt)} · ${t.tasks.nodeStatuses[node.status]} · ${t.tasks.page.seeMaterials}`
-  return <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-7 min-w-0">
+  return <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-6 min-w-0 last:mb-0">
     {/* Between visits of the same node is a scissors cut line (like the chat page's “会话已重开” (session reopened) line); clicking the
         label in the middle opens this visit's node materials. */}
     <div className="mb-[18px]"><CutLine icon={ScissorsIcon} label={t.tasks.execution}><button type="button" className="min-w-0 cursor-pointer text-center text-[12.5px] font-black text-ink underline decoration-dotted underline-offset-4 [overflow-wrap:anywhere]" aria-label={`${t.tasks.execution} · ${cutLabel}`} onClick={onMaterials}>{cutLabel}</button></CutLine></div>
     <ErrorAlert error={messages.error} />{(messages.isPending || inbox.isPending) && <p>{t.common.loading}</p>}{messages.isSuccess && inbox.isSuccess && rows.length === 0 && <p>{t.tasks.noMessages}</p>}
     {!suppressInboxError && !nodeMessagesUnsupported(inbox.error) && <ErrorAlert error={inbox.error} />}
-    <ol className="flex min-w-0 flex-col gap-7 pb-2 pr-2">{rows.map(row => <li key={row.key} data-message-id={row.key} data-reading-anchor={`message:${row.key}`} className="min-w-0">{row.body}</li>)}</ol>
+    <ol className="flex min-w-0 flex-col gap-6 pr-1 pb-1">{rows.map(row => <li key={row.key} data-message-id={row.key} data-reading-anchor={`message:${row.key}`} className="min-w-0">{row.body}</li>)}</ol>
     {inbox.hasNextPage && <div className="mt-4"><p className="text-sm">{t.tasks.incomplete}</p><Button variant="secondary" disabled={inbox.isFetching} onClick={() => void inbox.fetchNextPage({ cancelRefetch: false })}>{t.tasks.more}</Button></div>}
     {messages.hasNextPage && <div className="mt-4"><p className="text-sm">{t.tasks.incomplete}</p><Button variant="secondary" disabled={messages.isFetching} onClick={() => void messages.fetchNextPage({ cancelRefetch: false })}>{t.tasks.more}</Button></div>}
   </section>

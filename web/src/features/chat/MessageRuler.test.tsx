@@ -305,15 +305,18 @@ describe('ruler in the stub', () => {
     for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
   })
 
-  it('with only one turn or no conversation the stub stays (the sheet layout is unchanged) but has no ticks and is not a navigation region', () => {
+  it('with only one turn or no conversation the stub stays at 40px wide (the sheet layout is unchanged) but has no ticks and is not a navigation region', () => {
     const { rerender } = render(<List pages={pagesOf(['The only question'])} hasOlder={false} />)
     const stub = document.querySelector<HTMLElement>('[data-turn-stub]')!
     expect(stub).toHaveTextContent('TURNS')
     expect(stub).toHaveAttribute('aria-hidden', 'true')
-    expect(stub).toHaveClass('max-nav:hidden')
+    expect(stub).toHaveClass('max-nav:hidden', 'w-10')
+    expect(stub).not.toHaveClass('w-[74px]')
     expect(within(stub).queryByRole('button')).toBeNull()
     rerender(<List pages={pagesOf(['One', 'Two'])} hasOlder={false} />)
     expect(document.querySelector('[data-turn-stub]')).toBe(nav())
+    expect(nav()).toHaveClass('w-10')
+    expect(nav()).not.toHaveClass('w-[74px]')
   })
 
   it('on wide screens the conversation area hides its native scrollbar in favor of the ruler; narrow screens have no stub and keep it; the scroll area still scrolls', () => {
@@ -409,18 +412,24 @@ describe('tick names', () => {
   })
 })
 
-// The conversation gets a larger share (user feedback after v0.2.5): reply text follows the conversation
-// column, with the cap widened to 1100px; user bubbles are widened to 88% of the conversation column.
+// The conversation uses the window width: the message column fills up to the 40px turn ruler with a 24px gutter each side
+// (14px on phone width), capped at 1600px so wide tables and code blocks use the full column; user bubbles follow up to 88%.
 describe('conversation share', () => {
-  it('on wide screens reply text is at most 1100px wide (it was 760px), and code blocks, tables and images widen with it; narrow screens keep 760px', () => {
+  it('the message column fills the space up to 1600px with tight horizontal and vertical padding; tables and code blocks use the full width', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
+    const scroller = screen.getByRole('log')
+    expect(scroller).toHaveClass('px-3.5', 'nav:px-6', 'pt-2.5', 'pb-3')
+    expect(scroller).not.toHaveClass('pb-[22px]', 'pr-[clamp(14px,3vw,44px)]')
+    const column = scroller.querySelector('[data-message-column]')!
+    expect(column).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]', 'min-w-0')
     const body = turnBlock('Question 1').querySelector('article')!.parentElement!
-    expect(body).toHaveClass('nav:max-w-[1100px]', 'max-w-[760px]', 'min-w-0')
+    expect(body).toHaveClass('w-full', 'max-w-[1600px]', 'min-w-0')
+    expect(body).not.toHaveClass('max-w-[760px]', 'nav:max-w-[1100px]')
   })
 
-  it('on wide screens user bubbles are at most 88% of the conversation column and no wider than the reply text cap; narrow screens keep 80%', () => {
+  it('on wide screens user bubbles are at most 88% of the conversation column and no wider than 1600px; narrow screens keep 80%', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    expect(screen.getByText('Question 1')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
+    expect(screen.getByText('Question 1')).toHaveClass('nav:max-w-[min(88%,1600px)]', 'max-w-[80%]')
   })
 
   it('content inserted into the conversation flow (messages to you, questions) stays left-aligned with the text of the turns', () => {

@@ -11,10 +11,9 @@ export interface Crumb {
   to?: string
 }
 
-// Page frame: the header on top, the sheet below. The side and bottom margins change with the window width, and the bottom leaves room
-// for the sheet's shadow (same as the Agent page).
+// Page frame: the header on top, the full-bleed sheet directly below, meeting the sidebar and window edges without outer margins.
 export function PageFrame({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4', className)} {...props} />
+  return <div className={cn('flex h-full min-h-0 flex-col', className)} {...props} />
 }
 
 // Page title (rule 3 of the redesign's general rules): breadcrumbs, a ZCOOL title (riso blue with a misregistered fluorescent pink copy),
@@ -50,7 +49,7 @@ export function PageHeader({
 }) {
   const heading = <h1 className={cn(sheetTitleClass, 'self-start nav:self-auto nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]', lead && 'min-w-0 [overflow-wrap:anywhere]')}>{title}</h1>
   return (
-    <header data-page-header className={cn('@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px] nav:gap-1.5 nav:pt-3 nav:pb-2.5', className)}>
+    <header data-page-header className={cn('@container relative flex shrink-0 flex-col gap-3 px-3.5 pt-[22px] pb-[18px] nav:gap-1.5 nav:px-6 nav:pt-3 nav:pb-2.5', className)}>
       <OverprintDeco compact />
       <nav aria-label={t.shell.breadcrumb} className="relative @[820px]:pr-[316px] nav:@[820px]:pr-[196px]">
         <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500 nav:leading-4">

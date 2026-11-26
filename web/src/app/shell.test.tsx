@@ -46,12 +46,18 @@ describe('sidebar and page structure', () => {
     expect(within(sidebar()).getByRole('list', { name: 'Platform Agents' })).toBeInTheDocument()
   })
 
-  it('the main area has a layer of paper grain on its beige background; the sidebar does not', async () => {
+  it('the main area has a layer of paper grain on its beige background and a 1.5px ink line next to the desktop sidebar; the sidebar has no grain', async () => {
     server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [] })), ...baseHandlers([makeAgent()]))
     renderRoutes(routes, '/')
     await screen.findByRole('heading', { name: 'Overview', level: 1 })
-    expect(screen.getByRole('main').closest('.riso-grain')).not.toBeNull()
+    const contentColumn = screen.getByRole('main').closest('.riso-grain')!
+    expect(contentColumn).not.toBeNull()
+    expect(contentColumn).toHaveClass('nav:border-l-[1.5px]', 'nav:border-ink')
     expect(sidebar().closest('.riso-grain')).toBeNull()
+    // Other pages using the shared PageFrame + Sheet use the same flush sheet with no outer margin or shadow.
+    const sheet = document.querySelector('[data-sheet]')!
+    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5', 'mt-2')
   })
 
   it('an address that does not exist goes back to the overview', async () => {

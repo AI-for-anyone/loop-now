@@ -110,12 +110,12 @@ export function SettingsPage() {
             </span>
           )}
         </PageHeader>
-        <Sheet className="mt-2 flex-1">
+        <Sheet className="flex-1">
           <div className="flex min-h-0 flex-1">
             {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
                 scroll with the content instead of stretching the whole page based on their unscrolled position. */}
             <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-              <div className="flex max-w-[960px] flex-col gap-6 pt-[26px] pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+              <div className="flex max-w-[960px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
                 <StickyNote>{t.settings.readonlyHint}</StickyNote>
                 <Part id="language">
                   <LanguagePicker />

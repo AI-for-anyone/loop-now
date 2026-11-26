@@ -203,7 +203,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       className={cn(
         '@container relative flex min-h-0 flex-col overflow-hidden text-ink',
         variant === 'sheet'
-          ? 'min-w-0 flex-1 gap-5 pt-4 pr-[clamp(14px,3vw,40px)] pb-[22px] pl-[clamp(12px,2vw,34px)]'
+          ? 'min-w-0 flex-1 gap-5 px-3.5 pt-4 pb-5 nav:px-6'
           : variant === 'panel'
             ? cn('gap-4 rounded-card border-2 border-ink bg-paper-raised px-4 pt-4 pb-3', className)
             : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),

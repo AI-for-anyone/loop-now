@@ -68,7 +68,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
         <span>{t.tasks.intro}</span>
         <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
       </PageHeader>
-      <div role="group" aria-label={t.tasks.filters.label} className="relative z-[1] flex shrink-0 items-end gap-1.5 pl-[26px] max-nav:overflow-x-auto max-nav:pt-1.5 max-nav:pl-3 max-nav:no-scrollbar">
+      <div role="group" aria-label={t.tasks.filters.label} className="relative z-[1] flex shrink-0 items-end gap-1.5 pl-6 max-nav:overflow-x-auto max-nav:pt-1.5 max-nav:pl-3.5 max-nav:no-scrollbar">
         {FILTERS.map((item) => (
           <button key={item} type="button" aria-pressed={item === filter} onClick={() => setFilter(item)} className={cn(indexTabClass(item === filter), 'cursor-pointer')}>
             {t.tasks.filters[item]}
@@ -80,7 +80,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
         <div className="flex min-h-0 flex-1">
           {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with
               the content instead of stretching the whole page based on their unscrolled position. */}
-          <div className="relative h-full min-w-0 flex-1 overflow-y-auto px-[clamp(12px,1.5vw,20px)] pt-3.5 pb-14">
+          <div className="relative h-full min-w-0 flex-1 overflow-y-auto px-3.5 pt-3.5 pb-14 nav:px-6">
             <ErrorAlert error={tasks.error} />
             {tasks.isPending && <p className="text-[14px] text-ink-500">{t.tasks.loading}</p>}
             {tasks.isSuccess && rows.length === 0 && (

@@ -128,7 +128,7 @@ function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
       {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
           content instead of stretching the whole page based on their unscrolled position. */}
       <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[1000px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
+        <div className="flex max-w-[1000px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
           {parts.map((part, index) => (
             <SheetSection key={part.key} id={partId(part.key)} titleId={`${partId(part.key)}-title`} index={index} title={part.title} meta={part.meta}>
               {part.body}
@@ -331,12 +331,14 @@ export function PluginDetailPage() {
           <IdVersion id={plugin.id} version={plugin.version} />
           <StatusLabel status={plugin.status} />
         </PageHeader>
-        <ErrorAlert error={installer.errorFor('update')} />
-        {plugin.status === 'error' && plugin.lastError && (
-          <p role="alert" className="mb-2.5 rounded-input bg-tint-red px-3.5 py-2.5 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
-            {plugin.lastError}
-          </p>
-        )}
+        <div className="flex shrink-0 flex-col px-3.5 nav:px-6 empty:hidden">
+          <ErrorAlert error={installer.errorFor('update')} />
+          {plugin.status === 'error' && plugin.lastError && (
+            <p role="alert" className="mb-2.5 rounded-input bg-tint-red px-3.5 py-2.5 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
+              {plugin.lastError}
+            </p>
+          )}
+        </div>
         <IndexTabs aria-label={name}>
           {tabs.map((value) => (
             <NavLink key={value} to={pluginPath(plugin.id, value === 'overview' ? undefined : value)} end className={cn(indexTabClass(value === tab), 'max-sm:px-3')} aria-current={value === tab ? 'page' : undefined}>
@@ -350,7 +352,7 @@ export function PluginDetailPage() {
             <Overview detail={detail} footer={versionFooter} />
           ) : (
             <div className="relative min-h-0 flex-1 overflow-y-auto">
-              <div className="flex max-w-[1180px] flex-col gap-4 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
+              <div className="flex max-w-[1180px] flex-col gap-4 px-3.5 pt-6 pb-16 nav:px-6">
                 {tab === 'config' && <ConfigTab detail={detail} />}
                 {tab === 'accounts' && <AccountsTab detail={detail} />}
                 {tab === 'events' && (

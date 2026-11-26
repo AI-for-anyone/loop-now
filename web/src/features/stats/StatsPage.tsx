@@ -217,11 +217,11 @@ export function StatsPage() {
         <ScopeSelect overview={overview} />
         <span className="font-mono text-[12px] text-ink-500">{`${scopeName(filter)} · ${eyebrow}`}</span>
       </PageHeader>
-      <Sheet className="mt-2 flex-1">
+      <Sheet className="flex-1">
         {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
             scroll with the content instead of stretching the whole page based on their unscrolled position. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="flex max-w-[1480px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+          <div className="flex max-w-[1480px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
             {overview.query ? (
               <StatsBody key={overview.key} range={range} query={overview.query} projects={overview.projects} />
             ) : (

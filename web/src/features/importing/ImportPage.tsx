@@ -235,7 +235,7 @@ function FoundFolders({ scan, projectId, starting, onImport }: { scan: Schemas['
   })
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[clamp(14px,3vw,40px)] pt-6 pb-8">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3.5 nav:px-6 pt-6 pb-8">
         <FoundTiles folders={scan.folders} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <p className="text-[14.5px] font-black">{all ? copy.found(scan.folders.length) : suggested.length > 0 ? copy.suggested(suggested.length) : copy.noneSuggested}</p>
@@ -260,7 +260,7 @@ function FoundFolders({ scan, projectId, starting, onImport }: { scan: Schemas['
         ))}
       </div>
       {/* The bar at the bottom of the sheet: what is picked, and Import. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-ink bg-tint-yellow px-[clamp(14px,3vw,40px)] py-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-ink bg-tint-yellow px-3.5 nav:px-6 py-3">
         <p role="status" className="min-w-0 flex-1 text-[14px] font-black">
           {total.conversations > 0 ? copy.selected(total.folders, total.conversations) : copy.nothingSelected}
         </p>
@@ -289,7 +289,7 @@ function ImportResult({ first, scan, onAgain }: { first: Schemas['ConversationIm
   const titleOf = (sessionId: string) => scan.folders.flatMap((folder) => folder.conversations).find((c) => c.sessionId === sessionId)?.title ?? sessionId
   const nameOf = (projectId: string) => projects.data?.projects.find((p) => p.id === projectId)?.name
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto px-[clamp(14px,3vw,40px)] pt-6 pb-10">
+    <div className="flex flex-col gap-5 overflow-y-auto px-3.5 nav:px-6 pt-6 pb-10">
       {lost ? (
         <div role="alert" className="flex flex-col items-start gap-2 rounded-card bg-tint-red px-5 py-4 shadow-[0_0_0_2px_var(--ink),5px_5px_0_var(--red)]">
           <p className="text-[15px] font-black text-red-text">{copy.progressLost}</p>
@@ -409,7 +409,7 @@ export function ImportPage() {
       />
       <Sheet className="flex-1">
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-start gap-x-6 gap-y-3 px-[clamp(14px,3vw,40px)] pt-5">
+          <div className="flex shrink-0 flex-wrap items-start gap-x-6 gap-y-3 px-3.5 nav:px-6 pt-5">
             <StickyNote className="min-w-0 flex-[1_1_420px] text-[13.5px] leading-relaxed">
               <p className="font-black">{copy.keepRunning}</p>
               <p>{copy.sameFolder}</p>
@@ -434,7 +434,7 @@ export function ImportPage() {
           {imported && scan ? (
             <ImportResult first={imported} scan={scan} onAgain={() => { setImported(null); setAttempt((n) => n + 1) }} />
           ) : startError !== null || (live.isError && scan?.state !== 'done') ? (
-            <div className="flex flex-col items-start gap-3 px-[clamp(14px,3vw,40px)] pt-6">
+            <div className="flex flex-col items-start gap-3 px-3.5 nav:px-6 pt-6">
               <p className="text-[15px] font-black text-red-text">{copy.scanFailed}</p>
               <ErrorAlert error={startError ?? live.error} />
               <Button type="button" variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
@@ -443,13 +443,13 @@ export function ImportPage() {
               </Button>
             </div>
           ) : !scan || scan.state === 'running' ? (
-            <div className="px-[clamp(14px,3vw,40px)] pt-6">
+            <div className="px-3.5 nav:px-6 pt-6">
               <Progress label={copy.scanning} done={scan?.filesDone ?? 0} total={scan?.filesTotal ?? 0}>
                 {scan && scan.filesTotal > 0 ? copy.scanProgress(scan.filesDone, scan.filesTotal) : null}
               </Progress>
             </div>
           ) : scan.state === 'failed' ? (
-            <div className="flex flex-col items-start gap-3 px-[clamp(14px,3vw,40px)] pt-6">
+            <div className="flex flex-col items-start gap-3 px-3.5 nav:px-6 pt-6">
               <p className="text-[15px] font-black text-red-text">{copy.scanFailed}</p>
               {scan.error && <p className="text-[13.5px] [overflow-wrap:anywhere]">{scan.error}</p>}
               <Button type="button" variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
@@ -458,12 +458,12 @@ export function ImportPage() {
               </Button>
             </div>
           ) : scan.folders.length === 0 ? (
-            <div className="flex flex-col items-start gap-3 px-[clamp(14px,3vw,40px)] pt-6">
+            <div className="flex flex-col items-start gap-3 px-3.5 nav:px-6 pt-6">
               <p className="text-[15px] font-black">{since === 'recent' ? copy.nothingRecent : copy.nothing}</p>
             </div>
           ) : (
             <>
-              {importError !== null && <ErrorAlert error={importError} className="mx-[clamp(14px,3vw,40px)] mt-4 w-auto" />}
+              {importError !== null && <ErrorAlert error={importError} className="mx-3.5 nav:mx-6 mt-4 w-auto" />}
               <FoundFolders key={scan.operationId} scan={scan} projectId={projectId} starting={starting} onImport={importNow} />
             </>
           )}

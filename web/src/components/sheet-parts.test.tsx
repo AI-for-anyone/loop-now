@@ -9,14 +9,13 @@ import { StickyNote } from './StickyNote'
 
 // Shared parts of the "printed sheet" redesign: sheet, index tab, stub and ruler, numbered section heading, yellow sticky note.
 describe('Sheet', () => {
-  it('puts the content on a sheet: light paper, navy border, large radius, solid riso-blue shadow, room on the right for the shadow', () => {
+  it('sits flush to the window and sidebar with no outer margin, thick border, rounded corners or drop shadow, separated from the header by a 1.5px ink line', () => {
     render(<Sheet data-testid="sheet">Body</Sheet>)
     const sheet = screen.getByTestId('sheet')
     expect(sheet).toHaveTextContent('Body')
     expect(sheet).toHaveAttribute('data-sheet')
-    expect(sheet).toHaveClass('bg-paper-raised', 'border-2', 'border-ink', 'rounded-panel', 'shadow-print-dialog', 'overflow-hidden', 'mr-1.5')
-    // The sheet surface also carries the main area's very faint paper grain.
-    expect(sheet).toHaveClass('riso-grain')
+    expect(sheet).toHaveClass('bg-paper-raised', 'border-t-[1.5px]', 'border-ink', 'overflow-hidden', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
   })
 
   it('scrollbars in the sheet are thin translucent navy ones (the sheet itself and every scrolling area inside it), not the grey system scrollbars', () => {
@@ -94,6 +93,11 @@ describe('Stub and ruler', () => {
     const nav = screen.getByRole('navigation', { name: 'Conversation turns' })
     expect(within(nav).getByText('TURNS')).toHaveAttribute('aria-hidden', 'true')
     expect(within(nav).getByRole('button', { name: 'Turn 1' })).toBeInTheDocument()
+  })
+
+  it('the stub accepts labelClassName for narrow rulers such as the 40px turn ruler', () => {
+    render(<Stub label="TURNS" labelClassName="text-[9px] indent-0" className="w-10" />)
+    expect(screen.getByText('TURNS')).toHaveClass('text-[9px]', 'indent-0')
   })
 
   it('the ruler ticks and highlighter mark are decoration, hidden from screen readers', () => {

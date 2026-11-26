@@ -88,8 +88,16 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
   const hint = hovered ?? focused
   const hintLabel = hint && turns.find((turn) => turn.key === hint.key)?.label
   return (
-    <Stub as="nav" ref={nav} data-turn-stub aria-label={t.chat.ruler.label} label={t.chat.ruler.title} className={cn('relative w-[74px]', className)}>
-      <ol ref={list} onScroll={replace} className="no-scrollbar relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2 font-mono text-[10.5px] leading-none font-bold text-ink-700">
+    <Stub
+      as="nav"
+      ref={nav}
+      data-turn-stub
+      aria-label={t.chat.ruler.label}
+      label={t.chat.ruler.title}
+      labelClassName="px-0.5 indent-0 text-[9px] tracking-[0.04em]"
+      className={cn('relative w-10', className)}
+    >
+      <ol ref={list} onScroll={replace} className="no-scrollbar relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2 font-mono text-[9.5px] leading-none font-bold text-ink-700">
         {turns.map((turn, index) => {
           const current = visible.has(turn.key)
           const number = firstNumber === null ? null : firstNumber + index
@@ -120,7 +128,7 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
                   pointing.current = false
                 }}
                 onBlur={() => setFocused((hint) => (hint?.key === turn.key ? null : hint))}
-                className="group relative flex w-full cursor-pointer items-center justify-end gap-1.5 focus-visible:shadow-none"
+                className="group relative flex w-full cursor-pointer items-center justify-end gap-[3px] focus-visible:shadow-none"
               >
                 {long && (
                   <span aria-hidden="true" data-ruler-number className={cn(current && 'text-ink')}>
@@ -132,7 +140,7 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
                   data-ruler-long={long || undefined}
                   className={cn(
                     'h-0.5 shrink-0 bg-ink group-hover:bg-riso-pink group-focus-visible:bg-riso-pink group-focus-visible:shadow-focus',
-                    long ? 'w-6 group-hover:w-[30px] group-focus-visible:w-[30px]' : 'w-3 group-hover:w-[18px] group-focus-visible:w-[18px]',
+                    long ? 'w-3.5 group-hover:w-[18px] group-focus-visible:w-[18px]' : 'w-2 group-hover:w-3 group-focus-visible:w-3',
                   )}
                 />
               </button>
@@ -141,7 +149,7 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
         })}
       </ol>
       {total !== null && (
-        <div data-ruler-total className="shrink-0 text-center font-display-latin text-[22px] leading-none font-extrabold text-riso-blue">
+        <div data-ruler-total className="shrink-0 text-center font-display-latin text-[18px] leading-none font-extrabold text-riso-blue">
           <span aria-hidden="true">{total}</span>
           <span className="sr-only">{t.chat.ruler.total(total)}</span>
         </div>

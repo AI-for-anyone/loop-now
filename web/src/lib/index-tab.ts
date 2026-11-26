@@ -3,10 +3,10 @@ import { cn } from './utils'
 // Index tab: a tab stuck to the top edge of the sheet, bordered only on the top, left and right. The current page's tab is yellow and
 // 40px high; the others are beige-gray and 34px high, and a row of tabs is aligned at the bottom.
 // Used by both links (page tabs) and buttons (status filters, categories).
-// The container for a row of index tabs: sits right on the top edge of the sheet below, indented 26px on the left, bottoms aligned; on
-// narrow screens it can scroll horizontally, with 6px left above for focus rings.
+// The container for a row of index tabs: sits right on the top edge of the sheet below, aligned with the page header's horizontal
+// gutters, bottoms aligned; on narrow screens it can scroll horizontally, with 6px left above for focus rings.
 export const indexTabsClass =
-  'relative z-[1] flex shrink-0 items-end gap-1.5 pl-[26px] max-nav:overflow-x-auto max-nav:pt-1.5 max-nav:pl-3 max-nav:no-scrollbar'
+  'relative z-[1] flex shrink-0 items-end gap-1.5 pl-6 max-nav:overflow-x-auto max-nav:pt-1.5 max-nav:pl-3.5 max-nav:no-scrollbar'
 
 export const indexTabClass = (current: boolean) =>
   cn(
