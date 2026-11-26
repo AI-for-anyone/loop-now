@@ -2,7 +2,7 @@
 
 中文：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)
 
-User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: it adds a note in `changes/` (see `changes/README.md`), and `scripts/release/collect-changes.sh` moves the notes into "## Unreleased" when a release is cut.
+User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
 ## Unreleased
 
