@@ -2962,6 +2962,7 @@ components:
         - link
         - version
         - branch
+        - workspaceMode
       properties:
         id:
           type: string
@@ -3016,6 +3017,15 @@ components:
           type:
             - string
             - 'null'
+        workspaceMode:
+          description: The mode of the task's workspace (TaskWorkspace.mode); null for a task without one.
+          type:
+            - string
+            - 'null'
+          enum:
+            - git
+            - copy
+            - null
       description: currentAgentId is the Agent responsible for the current node; it is kept while waiting or blocked and does not mean Pi is running. For what is actually running, see the node's messages and run status.
     TaskNodeRun:
       type: object

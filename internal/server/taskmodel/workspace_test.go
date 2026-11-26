@@ -53,3 +53,22 @@ func TestWorkspaceRoundTrips(t *testing.T) {
 		}
 	}
 }
+
+// A view stored before task.workspaceMode existed gets it from its workspace; a task without one keeps null.
+func TestDetailFillsWorkspaceMode(t *testing.T) {
+	var d Detail
+	stored := `{"task":{"branch":"task/3-fix"},"workspace":{"repository":"/code/app","path":"/p","branch":"task/3-fix","baseBranch":"main","baseCommit":null,"state":"active","kept":null}}`
+	if err := json.Unmarshal([]byte(stored), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Task.WorkspaceMode == nil || *d.Task.WorkspaceMode != WorkspaceModeGit || d.Workspace.Git == nil {
+		t.Fatalf("stage 1 view: mode %v, workspace %+v", d.Task.WorkspaceMode, d.Workspace)
+	}
+	var none Detail
+	if err := json.Unmarshal([]byte(`{"task":{"branch":null},"workspace":null}`), &none); err != nil {
+		t.Fatal(err)
+	}
+	if none.Task.WorkspaceMode != nil {
+		t.Fatalf("no workspace: mode %v", *none.Task.WorkspaceMode)
+	}
+}

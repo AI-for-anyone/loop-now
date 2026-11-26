@@ -30,6 +30,8 @@ type Summary struct {
 	Version          int64      `json:"version"`
 	// Branch is the branch of the task's workspace; nil for a task without one.
 	Branch *string `json:"branch"`
+	// WorkspaceMode is the mode of the task's workspace (Workspace.Mode); nil for a task without one.
+	WorkspaceMode *string `json:"workspaceMode"`
 }
 
 type Question struct {
@@ -95,6 +97,19 @@ const (
 	WorkspaceStateRemoved = "removed"
 	WorkspaceStateKept    = "kept"
 )
+
+// UnmarshalJSON also fills task.workspaceMode for views stored before it existed (stage 1, git mode only).
+func (d *Detail) UnmarshalJSON(b []byte) error {
+	type plain Detail
+	if err := json.Unmarshal(b, (*plain)(d)); err != nil {
+		return err
+	}
+	if d.Task.WorkspaceMode == nil && d.Workspace != nil {
+		mode := d.Workspace.Mode
+		d.Task.WorkspaceMode = &mode
+	}
+	return nil
+}
 
 // Workspace modes (TaskWorkspace.mode) and the requested mode of TaskWorkspaceInput.
 const (

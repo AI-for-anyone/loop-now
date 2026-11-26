@@ -139,6 +139,9 @@ func TestTaskWithoutWorkspaceHasNullWorkspace(t *testing.T) {
 	if b, ok := task["branch"]; !ok || b != nil {
 		t.Fatalf("task.branch = %v (present %v), want null", b, ok)
 	}
+	if m, ok := task["workspaceMode"]; !ok || m != nil {
+		t.Fatalf("task.workspaceMode = %v (present %v), want null", m, ok)
+	}
 	if _, ok := view["workspaceBranchGiven"]; ok {
 		t.Fatal("internal fields must not reach the view")
 	}
@@ -210,6 +213,9 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	branch := fmt.Sprintf("task/%d-fix-the-login-page", created.Task.Number)
 	if w == nil || w.State != "pending" || w.Git.Repository != ww.repo || w.Git.Branch != branch || w.Git.BaseCommit != nil || w.Kept != nil {
 		t.Fatalf("created workspace = %+v, want pending on %s", w, branch)
+	}
+	if created.Task.WorkspaceMode == nil || *created.Task.WorkspaceMode != "git" {
+		t.Fatalf("task.workspaceMode = %v", created.Task.WorkspaceMode)
 	}
 	if created.Task.Branch == nil || *created.Task.Branch != branch {
 		t.Fatalf("task.branch = %v", created.Task.Branch)
@@ -538,6 +544,13 @@ func TestTaskCopyWorkspaceRunsAndCompletes(t *testing.T) {
 	w := created.Workspace
 	if w == nil || w.Mode != "copy" || w.Folder != src || w.State != "pending" || w.Git != nil || w.Copy != nil || w.ModeNote != nil || created.Task.Branch != nil {
 		t.Fatalf("created workspace = %+v, task.branch %v", w, created.Task.Branch)
+	}
+	if created.Task.WorkspaceMode == nil || *created.Task.WorkspaceMode != "copy" {
+		t.Fatalf("task.workspaceMode = %v", created.Task.WorkspaceMode)
+	}
+	page, err := ww.a.Store.ListTasks(context.Background(), *ww.agent.ProjectID, "", 10)
+	if err != nil || len(page.Tasks) == 0 || page.Tasks[0].WorkspaceMode == nil || *page.Tasks[0].WorkspaceMode != "copy" {
+		t.Fatalf("the task list shows the mode: %+v %v", page, err)
 	}
 	if !strings.HasSuffix(w.Path, filepath.Join("worktrees", created.Task.ID.String(), "docs")) {
 		t.Fatalf("copy path = %s", w.Path)

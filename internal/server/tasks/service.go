@@ -323,6 +323,8 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				return taskmodel.Record{}, nil, e
 			}
 			r.View.Workspace = s.newWorkspace(workspace, id, r.View.Task.Number, in.Title)
+			mode := r.View.Workspace.Mode
+			r.View.Task.WorkspaceMode = &mode
 			if g := r.View.Workspace.Git; g != nil {
 				r.View.Task.Branch = &g.Branch
 			}
