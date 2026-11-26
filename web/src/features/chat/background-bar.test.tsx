@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, makeBackgroundTask, makeStatus } from '@/test/api'
+import { apiUrl, makeBackgroundTask, makeMessage, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 
 const NOW = new Date('2026-10-12T08:02:00Z')
@@ -10,6 +10,10 @@ const NOW = new Date('2026-10-12T08:02:00Z')
 function snapshot(agentId: string, status: Partial<Schemas['AgentStatus']> = {}) {
   return { status: makeStatus(agentId, status), currentText: null, queuedRuns: [], queueItems: [] }
 }
+function turn(text: string, reply: string, run: Schemas['Run']) {
+  return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: reply, run })]
+}
+const tool = (toolCallId: string, toolName: string): Schemas['ToolEvent'] => ({ toolCallId, toolName, state: 'succeeded', at: '2026-10-12T08:00:00Z' })
 const bar = () => document.querySelector<HTMLElement>('[data-chat-bar]')!
 const header = () => document.querySelector('[data-agent-status]')!.closest('header')!
 
@@ -59,5 +63,59 @@ describe('The background mark in the bar under the message box', () => {
     await within(bar()).findByRole('button', { name: /open to see or stop them/ })
     expect(within(header()).queryByRole('button', { name: /background tasks? (is|are) running/ })).toBeNull()
     expect(document.querySelectorAll('[data-background-mark]')).toHaveLength(1)
+  })
+})
+
+describe('A background tool in a reply is a compact chip', () => {
+  it('runs as “Bash Running in the background” with a spinner and no clock, then shows how it ended; the details are on click', async () => {
+    const task = makeBackgroundTask({ label: 'npm test', toolCallId: 'toolu_test', startedAt: '2026-10-12T08:00:37Z' })
+    const run = makeRun({ tools: [tool('toolu_read', 'Read'), tool('toolu_test', 'Bash')] })
+    const running = { ...task, runId: run.id }
+    run.backgroundTasks = [running]
+    const { user, emit } = await renderChat({ messages: turn('Run the tests', 'They are running.', run) })
+
+    const tools = screen.getByRole('list', { name: 'Tool calls' })
+    const chip = within(tools).getByRole('button', { name: 'Bash Running in the background: npm test' })
+    expect(chip).toHaveTextContent(/BashRunning in the background$/)
+    expect(chip.querySelector('[data-slot="tool-spinner"]')).not.toBeNull()
+    // A chip, not a card: no clock in the reply, and one chip for the tool.
+    expect(within(tools).queryByText(/1:23/)).toBeNull()
+    expect(within(tools).getAllByText('Bash')).toHaveLength(1)
+
+    await user.click(chip)
+    const details = await screen.findByRole('dialog', { name: 'Background task' })
+    expect(within(details).getByText('npm test')).toBeInTheDocument()
+    expect(within(details).getByText('Running for 1:23')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    const ended: Schemas['BackgroundTask'] = { ...running, status: 'failed', exitCode: 1, endedAt: '2026-10-12T08:01:49Z', output: 'FAIL src/a.test.ts\n1 failed' }
+    await emit('run.updated', { run: { ...run, backgroundTasks: [ended] } })
+    const failed = await within(tools).findByRole('button', { name: 'Bash Failed in the background: npm test' })
+    expect(failed.querySelector('[data-slot="tool-spinner"]')).toBeNull()
+    await user.click(failed)
+    const after = await screen.findByRole('dialog', { name: 'Background task' })
+    expect(after).toHaveTextContent('exit code 1')
+    expect(after).toHaveTextContent('took 1 min 12 s')
+    expect(within(after).getByText('Output (the last part)')).toBeInTheDocument()
+    expect(within(after).getByText(/FAIL src\/a\.test\.ts/)).toBeVisible()
+  })
+
+  it.each([
+    ['completed', { status: 'completed', exitCode: 0 }, 'Finished in the background', 'exit code 0'],
+    ['stopped', { status: 'stopped', stopReason: 'settings_changed' }, 'Stopped', 'stopped when a settings change restarted the CLI'],
+    ['unknown', { status: 'unknown' }, 'Outcome unknown', 'Loop Now restarted, so how it ended is unknown'],
+  ] as const)('an ended task (%s) says how it ended on the chip and why in its details', async (_, change, status, detail) => {
+    const task = makeBackgroundTask({ label: 'tail -f app.log', ...change, endedAt: '2026-10-12T08:01:00Z' })
+    const { user } = await renderChat({ messages: turn('Go', 'Started.', makeRun({ backgroundTasks: [task] })) })
+    // No tool name known: the chip names the kind.
+    const chip = screen.getByRole('button', { name: `Command ${status}: tail -f app.log` })
+    await user.click(chip)
+    expect(await screen.findByRole('dialog', { name: 'Background task' })).toHaveTextContent(detail)
+  })
+
+  it('a task asked to stop says it is stopping', async () => {
+    const task = makeBackgroundTask({ label: 'make', stopRequestedAt: '2026-10-12T08:01:00Z' })
+    await renderChat({ messages: turn('Go', 'Started.', makeRun({ backgroundTasks: [task] })) })
+    expect(screen.getByRole('button', { name: 'Command Stopping…: make' })).toBeInTheDocument()
   })
 })

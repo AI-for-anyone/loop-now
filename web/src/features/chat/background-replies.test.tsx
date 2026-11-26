@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { makeBackgroundTask, makeMessage, makeRun } from '@/test/api'
@@ -13,8 +13,6 @@ function turn(text: string, reply: string, run: Schemas['Run'], origin: Schemas[
   return [makeMessage({ text, run, origin }), makeMessage({ role: 'assistant', text: reply, run, origin })]
 }
 
-const tool = (toolCallId: string, toolName: string): Schemas['ToolEvent'] => ({ toolCallId, toolName, state: 'succeeded', at: '2026-10-12T08:00:00Z' })
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
@@ -22,46 +20,6 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('Background work in the replies', () => {
-  it('a tool that went on in the background is a card that runs, then says how it ended, with its output', async () => {
-    const task = makeBackgroundTask({ label: 'npm test', toolCallId: 'toolu_test', startedAt: '2026-10-12T08:00:37Z' })
-    const run = makeRun({ tools: [tool('toolu_read', 'Read'), tool('toolu_test', 'Bash')], backgroundTasks: [{ ...task, runId: '' }] })
-    const withRun = { ...task, runId: run.id }
-    run.backgroundTasks = [withRun]
-    const { user, emit } = await renderChat({ messages: turn('Run the tests', 'They are running.', run) })
-
-    const tools = screen.getByRole('list', { name: 'Tool calls' })
-    expect(within(tools).getByText('Read')).toBeInTheDocument()
-    // The backgrounded tool is not a chip as well.
-    expect(within(tools).queryByText('Bash')).toBeNull()
-    const card = screen.getByText('npm test').closest('[data-background-tool]') as HTMLElement
-    expect(within(card).getByText('Bash')).toBeInTheDocument()
-    expect(card).toHaveTextContent('Running in the background · 1:23')
-    // The clock changes every second, so it is not a live region.
-    expect(within(card).queryByRole('status')).toBeNull()
-
-    const ended: Schemas['BackgroundTask'] = { ...withRun, status: 'failed', exitCode: 1, endedAt: '2026-10-12T08:01:49Z', output: 'FAIL src/a.test.ts\n1 failed' }
-    await emit('run.updated', { run: { ...run, backgroundTasks: [ended] } })
-    await waitFor(() => expect(within(card).getByRole('status')).toHaveTextContent('Failed in the background'))
-    expect(card).toHaveTextContent('exit code 1')
-    expect(card).toHaveTextContent('took 1 min 12 s')
-    await user.click(within(card).getByText('Output (the last part)'))
-    expect(within(card).getByText(/FAIL src\/a\.test\.ts/)).toBeVisible()
-  })
-
-  it('a stopped task says why, and one whose end is unknown says so without a duration', async () => {
-    const stopped = makeBackgroundTask({ label: 'tail -f app.log', status: 'stopped', stopReason: 'settings_changed', endedAt: '2026-10-12T08:01:00Z' })
-    const unknown = makeBackgroundTask({ label: 'Explore the code', kind: 'subagent', status: 'unknown', endedAt: '2026-10-12T08:01:30Z' })
-    const run = makeRun({ backgroundTasks: [stopped, unknown] })
-    await renderChat({ messages: turn('Go', 'Started.', run) })
-    const stoppedCard = screen.getByText('tail -f app.log').closest('[data-background-tool]') as HTMLElement
-    expect(stoppedCard).toHaveTextContent('Stopped')
-    expect(stoppedCard).toHaveTextContent('stopped when a settings change restarted the CLI')
-    const unknownCard = screen.getByText('Explore the code').closest('[data-background-tool]') as HTMLElement
-    expect(unknownCard).toHaveTextContent('Outcome unknown')
-    expect(unknownCard).toHaveTextContent('Loop Now restarted, so how it ended is unknown')
-    expect(unknownCard).not.toHaveTextContent('took')
-  })
-
   it('a reply the CLI wrote by itself has no person’s message above it: one line says which task it follows', async () => {
     const tests = makeBackgroundTask({ label: 'npm test', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:00Z' })
     const first = makeRun({ backgroundTasks: [tests] })
