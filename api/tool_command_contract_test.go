@@ -29,6 +29,18 @@ func TestTimelineToolCommandContract(t *testing.T) {
 					t.Fatal("invalid command accepted")
 				}
 			}
+			entry.Command = nil
+			read := apitypes.TimelineToolEntry{TimelineBase: entry.TimelineBase, ToolCallID: "read-call", ToolName: "Read", State: "succeeded", Target: ptrCommand("internal/app/app.go")}
+			if err := schema.VisitJSON(jsonValue(t, read), openapi3.EnableJSONSchema2020()); err != nil {
+				t.Fatal(err)
+			}
+			for _, target := range []any{nil, 123, strings.Repeat("x", 513)} {
+				bad := jsonValue(t, read).(map[string]any)
+				bad["target"] = target
+				if err := schema.VisitJSON(bad, openapi3.EnableJSONSchema2020()); err == nil {
+					t.Fatal("invalid target accepted")
+				}
+			}
 		})
 	}
 }

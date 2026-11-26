@@ -9261,7 +9261,7 @@ components:
           type: [string, "null"]
           description: The session reference that was missing, as the runtime keeps it (a file path for Pi and Claude Code, a thread id for Codex)
     TimelineTool:
-      description: One tool call; at is the start time. Only bash may include a length-bounded, redacted command; no other arguments or output are included
+      description: One tool call; at is the start time. A shell command may include its length-bounded, redacted command; a file tool its file and a search tool its pattern or query as target. No other arguments and no output are included
       type: object
       required: [type, at, toolCallId, toolName, state, endedAt, durationMs]
       additionalProperties: false
@@ -9271,9 +9271,13 @@ components:
         toolCallId: { type: string }
         toolName: { type: string }
         command:
-          description: Safe display text of the actual bash command, at most 4096 characters; hidden for sensitive commands; omitted in old records and for other tools.
+          description: Safe display text of the shell command the tool ran (Claude Code Bash, Codex shell, ACP execute, Pi bash), at most 4096 characters; hidden for sensitive commands; omitted in old records and for other tools.
           type: string
           maxLength: 4096
+        target:
+          description: What the tool worked on, without contents or other arguments. A file tool (read, edit, write) gives its file, relative to the working folder when inside it and absolute otherwise; several files are joined with ", ". A search tool gives its pattern or query, at most 200 characters, hidden when it looks like it contains credentials. Omitted in old records and when nothing was recorded.
+          type: string
+          maxLength: 512
         state: { $ref: "#/components/schemas/ToolState" }
         endedAt: { type: [string, "null"], format: date-time }
         durationMs: { type: [integer, "null"] }
