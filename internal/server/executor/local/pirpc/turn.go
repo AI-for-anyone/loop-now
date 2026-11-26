@@ -301,8 +301,10 @@ func (t *turn) tool(end bool, id, name string, isError bool, args json.RawMessag
 	if end {
 		t.sink.ToolEnded(id, name, isError)
 	} else {
-		// Only bash.command is observed; arbitrary tool arguments and results
-		// never enter the public run-record path. Old sinks remain compatible.
+		// Only bash.command, the path of a file tool and the pattern of a search
+		// tool are observed; other tool arguments and results never enter the
+		// public run-record path. Old sinks remain compatible.
+		toolTarget(t.sink, id, name, args)
 		if name == "bash" {
 			if s, ok := t.sink.(interface{ ToolCommand(string, string, string) }); ok {
 				var input struct {
@@ -409,4 +411,22 @@ func contentText(raw json.RawMessage) string {
 		}
 	}
 	return b.String()
+}
+
+// toolTarget reports what a file or search tool of Pi works on: the path of read, edit and write, the pattern of grep
+// and find.
+func toolTarget(sink any, id, name string, args json.RawMessage) {
+	var in struct {
+		Path    string `json:"path"`
+		Pattern string `json:"pattern"`
+	}
+	if json.Unmarshal(args, &in) != nil {
+		return
+	}
+	switch name {
+	case "read", "edit", "write":
+		runturn.ToolFiles(sink, id, name, in.Path)
+	case "grep", "find":
+		runturn.ToolQuery(sink, id, name, in.Pattern)
+	}
 }

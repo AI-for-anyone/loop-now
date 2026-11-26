@@ -395,7 +395,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	if req.Origin == executor.OriginConsoleCompact {
 		return e.compact(ctx, p, r, req, snap), nil
 	}
-	adapter := sinkAdapter{s: sink, command: func(id, name, command string) { e.toolCommand(snap.AgentID, runID, id, name, command) },
+	adapter := sinkAdapter{s: sink, cwd: p.cwd, command: func(id, name, command string) { e.toolCommand(snap.AgentID, runID, id, name, command) },
 		event: func(typ string, data map[string]any) { e.event(snap.AgentID, &runID, typ, data) }}
 	// Replies the CLI began by itself and no run has taken came before this message: they go first in this reply. The
 	// tasks that ended so far are the CLI's to tell about in this reply.
@@ -485,6 +485,8 @@ func failed(code, msg string, version int64) executor.Result {
 type sinkAdapter struct {
 	s       executor.Sink
 	command func(string, string, string)
+	// cwd is where the CLI works; file targets inside it are recorded relative to it.
+	cwd string
 	// event records a run event of this turn.
 	event func(typ string, data map[string]any)
 }
@@ -492,6 +494,22 @@ type sinkAdapter struct {
 func (a sinkAdapter) ToolCommand(id, name, command string) {
 	if a.command != nil {
 		a.command(id, name, command)
+	}
+}
+
+// ToolFiles records the files a file tool (read, edit, write) worked on, in their display form.
+func (a sinkAdapter) ToolFiles(id, name string, paths []string) {
+	a.toolTarget(id, name, "files", toolcommand.Files(a.cwd, paths))
+}
+
+// ToolQuery records the pattern or query of a search tool, in its display form.
+func (a sinkAdapter) ToolQuery(id, name, query string) {
+	a.toolTarget(id, name, "query", toolcommand.Query(query))
+}
+
+func (a sinkAdapter) toolTarget(id, name, kind, target string) {
+	if target != "" && a.event != nil {
+		a.event("tool.target", map[string]any{"toolCallId": id, "toolName": name, "kind": kind, "target": target})
 	}
 }
 
