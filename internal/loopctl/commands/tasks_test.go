@@ -111,7 +111,21 @@ func TestTaskQueriesAndCreate(t *testing.T) {
 	if !bytes.Equal(lastReq(t, s).Body, b) {
 		t.Fatal("JSON was rewritten")
 	}
+	// A workspace goes to the server as written; task get shows the task's workspace as the server returns it.
+	withWorkspace := taskCreateInput()
+	withWorkspace["workspace"] = map[string]any{"repository": "/code/app", "baseBranch": "main", "branch": nil}
+	b, _ = json.Marshal(withWorkspace)
+	e.stdin = string(b)
+	e.run("task", "create", "--from-file", "-").ok(t)
+	if !bytes.Equal(lastReq(t, s).Body, b) {
+		t.Fatal("the workspace was rewritten")
+	}
+	if d := e.run("task", "get", taskUUID).ok(t); !hasKey(d, "workspace") || !hasKey(d["task"].(map[string]any), "branch") {
+		t.Fatalf("task get shows workspace and task.branch: %v", d)
+	}
 }
+
+func hasKey(m map[string]any, k string) bool { _, ok := m[k]; return ok }
 
 func TestTaskActionsPreserveContextAndReceipts(t *testing.T) {
 	s, e := withTaskSamples(t)
