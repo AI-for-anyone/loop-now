@@ -34,7 +34,9 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
 	runtime := agentruntime.ForProvider(snap.Provider)
 	cwd := workDir(snap, d)
-	if cwd != d.workspace && cwd == snap.TaskWorkspace {
+	if cwd != d.workspace && cwd == snap.TaskWorkspace && snap.TaskWorkspaceCopyOf != "" {
+		local = fmt.Sprintf("- Your working directory: %s, this task's copy of the folder %s. Every step of the task works in it; the original folder is never changed, so results are saved as task artifacts.\n", cwd, snap.TaskWorkspaceCopyOf) + local
+	} else if cwd != d.workspace && cwd == snap.TaskWorkspace {
 		local = fmt.Sprintf("- Your working directory: %s, this task's git worktree. Every step of the task works in it; its own CLAUDE.md or AGENTS.md belongs to the repository.\n", cwd) + local
 	} else if cwd != d.workspace {
 		local = fmt.Sprintf("- Your working directory: %s, a folder on this computer the person picked. You work there as they do in their terminal; its own CLAUDE.md or AGENTS.md belongs to that folder.\n", cwd) + local
