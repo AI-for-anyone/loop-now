@@ -45,6 +45,7 @@ describe('Chinese console', () => {
       '全局设置',
     ])
     expect(within(sidebar()).getByRole('button', { name: '切换范围，当前：test-project' })).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: '调整侧边栏宽度' })).toBeInTheDocument()
   })
 
   it('overview sections and run status summary', async () => {

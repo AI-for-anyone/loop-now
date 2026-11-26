@@ -50,12 +50,13 @@ export const background = {
     unknownHint: 'CLI 意外退出或 Loop Now 重启过，不知道它最后怎样了',
   },
   // The heading of a reply the CLI wrote by itself after background work ended (no person's message above it).
-  // The task's label sits between before and after, in its own type.
+  // The ended tasks follow as compact chips; when there are more than two, “+N” opens the rest.
   followUp: {
-    before: '后台任务「',
-    after: (runtime: string) => `」结束后，${runtime} 接着说：`,
-    afterMany: (others: number, runtime: string) => `」等 ${others + 1} 个结束后，${runtime} 接着说：`,
+    heading: (runtime: string) => `后台任务结束后，${runtime} 接着说：`,
     unknown: (runtime: string) => `后台任务结束后，${runtime} 接着说：`,
+    more: (count: number) => `+${count}`,
+    moreLabel: (count: number) => `查看另外 ${count} 个已结束的后台任务`,
+    moreTitle: (count: number) => `另外 ${count} 个后台任务`,
     ruler: '后台任务结束后',
   },
   // Lists (sidebar, overview, project Agents).

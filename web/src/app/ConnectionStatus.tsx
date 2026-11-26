@@ -33,16 +33,19 @@ export function ConnectionStatus({ className }: { className?: string }) {
   const state: ConnectionState =
     !reachable || health.isError ? 'unreachable' : health.isPending ? 'checking' : health.data.ok ? 'connected' : 'degraded'
   const style = stateStyle[state]
+  const host = apiHost(absoluteApiBase())
 
   return (
     <div
       role="status"
       aria-label={t.settings.health}
-      className={cn('inline-flex min-h-7 items-center gap-2 rounded-full text-[12.5px] font-black', style.chip, className)}
+      className={cn('inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-full text-[12.5px] font-black', style.chip, className)}
     >
       <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', style.dot)} />
-      <span>{style.label}</span>
-      <span className="font-mono text-[11.5px] font-bold">{apiHost(absoluteApiBase())}</span>
+      <span className="shrink-0 whitespace-nowrap">{style.label}</span>
+      <span title={host} className="min-w-0 truncate font-mono text-[11.5px] font-bold">
+        {host}
+      </span>
     </div>
   )
 }
