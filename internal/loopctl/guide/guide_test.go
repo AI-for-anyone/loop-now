@@ -204,11 +204,12 @@ func TestTaskJSONExamplesMatchContract(t *testing.T) {
 	md = strings.ReplaceAll(md, "<implementing Agent ID>", "0192f1a2-0000-7000-8000-000000000001")
 	md = strings.ReplaceAll(md, "<verifying Agent ID>", "0192f1a2-0000-7000-8000-000000000002")
 	md = strings.ReplaceAll(md, "<repository folder>", "/code/app")
+	md = strings.ReplaceAll(md, "<notes folder>", "/docs/notes")
 	blocks := regexp.MustCompile("(?s)```json\\n(.*?)```").FindAllStringSubmatch(md, -1)
-	if len(blocks) != 3 {
-		t.Fatalf("expected create, submit and workspace create JSON examples, got %d", len(blocks))
+	if len(blocks) != 4 {
+		t.Fatalf("expected create, submit, git workspace and copy workspace JSON examples, got %d", len(blocks))
 	}
-	for i, name := range []string{"TaskCreateInput", "TaskSubmitInput", "TaskCreateInput"} {
+	for i, name := range []string{"TaskCreateInput", "TaskSubmitInput", "TaskCreateInput", "TaskCreateInput"} {
 		var body any
 		if err := json.Unmarshal([]byte(blocks[i][1]), &body); err != nil {
 			t.Fatal(err)
@@ -228,6 +229,11 @@ func TestTaskJSONExamplesMatchContract(t *testing.T) {
 			t.Fatalf("example %d workflow: %v", i, err)
 		}
 		checkFlowEnds(t, i, in.Workflow)
+		// The workspace examples: git mode by default for a repository, copy mode named, never with a branch.
+		if want := map[int]string{2: "", 3: taskmodel.WorkspaceModeCopy}[i]; i >= 2 && (in.Workspace == nil || in.Workspace.Mode != want ||
+			(want == taskmodel.WorkspaceModeCopy && (in.Workspace.Branch != nil || in.Workspace.BaseBranch != nil))) {
+			t.Errorf("example %d workspace = %+v, want mode %q", i, in.Workspace, want)
+		}
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+	"loop-now/internal/server/tasks/gitbin"
 	"loop-now/internal/server/tasks/gitworkspace"
 	"loop-now/internal/server/workflow"
 )
@@ -81,15 +82,25 @@ func newWorkspaceWorld(t *testing.T) workspaceWorld {
 }
 
 func (ww workspaceWorld) create(title string, ws *taskmodel.WorkspaceInput) (json.RawMessage, error) {
+	return ww.createStep(title, ws, " !sleep=30s")
+}
+
+// createStep creates a one-step task whose step's fake Pi follows the directives in description.
+func (ww workspaceWorld) createStep(title string, ws *taskmodel.WorkspaceInput, description string) (json.RawMessage, error) {
 	return ww.a.Tasks.Create(context.Background(), auth.Principal{Kind: auth.KindAgent, ID: ww.agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: title,
 		Request: map[string]any{}, Workspace: ws, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "run",
-			Description: " !sleep=30s", AgentID: ww.agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}},
+			Description: description, AgentID: ww.agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}},
 			Edges: []workflow.Edge{}}})
 }
 
 func (ww workspaceWorld) mustCreate(t *testing.T, title string, ws *taskmodel.WorkspaceInput) taskmodel.Detail {
 	t.Helper()
-	body, err := ww.create(title, ws)
+	return ww.mustCreateStep(t, title, ws, " !sleep=30s")
+}
+
+func (ww workspaceWorld) mustCreateStep(t *testing.T, title string, ws *taskmodel.WorkspaceInput, description string) taskmodel.Detail {
+	t.Helper()
+	body, err := ww.createStep(title, ws, description)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +139,9 @@ func TestTaskWithoutWorkspaceHasNullWorkspace(t *testing.T) {
 	if b, ok := task["branch"]; !ok || b != nil {
 		t.Fatalf("task.branch = %v (present %v), want null", b, ok)
 	}
+	if m, ok := task["workspaceMode"]; !ok || m != nil {
+		t.Fatalf("task.workspaceMode = %v (present %v), want null", m, ok)
+	}
 	if _, ok := view["workspaceBranchGiven"]; ok {
 		t.Fatal("internal fields must not reach the view")
 	}
@@ -161,13 +175,17 @@ func TestTaskWorkspaceFieldErrors(t *testing.T) {
 		in    taskmodel.WorkspaceInput
 		field string
 	}{
-		{"relative", taskmodel.WorkspaceInput{Repository: "repo"}, "workspace.repository"},
-		{"missing", taskmodel.WorkspaceInput{Repository: filepath.Join(ww.folder, "nope")}, "workspace.repository"},
-		{"outside the allowed folders", taskmodel.WorkspaceInput{Repository: filepath.Join(outside, "other")}, "workspace.repository"},
-		{"not a repository", taskmodel.WorkspaceInput{Repository: plain}, "workspace.repository"},
-		{"bad branch", taskmodel.WorkspaceInput{Repository: ww.repo, Branch: strPtr("a..b")}, "workspace.branch"},
-		{"empty branch", taskmodel.WorkspaceInput{Repository: ww.repo, Branch: strPtr("")}, "workspace.branch"},
-		{"bad base", taskmodel.WorkspaceInput{Repository: ww.repo, BaseBranch: strPtr("-x")}, "workspace.baseBranch"},
+		{"relative", taskmodel.WorkspaceInput{Folder: "repo"}, "workspace.folder"},
+		{"missing", taskmodel.WorkspaceInput{Folder: filepath.Join(ww.folder, "nope")}, "workspace.folder"},
+		{"outside the allowed folders", taskmodel.WorkspaceInput{Folder: filepath.Join(outside, "other")}, "workspace.folder"},
+		{"git mode outside a repository", taskmodel.WorkspaceInput{Folder: plain, Mode: "git"}, "workspace.folder"},
+		{"a branch outside a repository", taskmodel.WorkspaceInput{Folder: plain, Branch: strPtr("b")}, "workspace.branch"},
+		{"a branch in copy mode", taskmodel.WorkspaceInput{Folder: ww.repo, Mode: "copy", Branch: strPtr("b")}, "workspace.branch"},
+		{"a base in copy mode", taskmodel.WorkspaceInput{Folder: ww.repo, Mode: "copy", BaseBranch: strPtr("main")}, "workspace.baseBranch"},
+		{"unknown mode", taskmodel.WorkspaceInput{Folder: ww.repo, Mode: "svn"}, "workspace.mode"},
+		{"bad branch", taskmodel.WorkspaceInput{Folder: ww.repo, Branch: strPtr("a..b")}, "workspace.branch"},
+		{"empty branch", taskmodel.WorkspaceInput{Folder: ww.repo, Branch: strPtr("")}, "workspace.branch"},
+		{"bad base", taskmodel.WorkspaceInput{Folder: ww.repo, BaseBranch: strPtr("-x")}, "workspace.baseBranch"},
 	}
 	for _, c := range cases {
 		_, err := ww.create("bad "+c.name, &c.in)
@@ -190,11 +208,14 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(ww.repo, "web", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "Fix the login page", &taskmodel.WorkspaceInput{Repository: filepath.Join(ww.repo, "web", "src")})
+	created := ww.mustCreate(t, "Fix the login page", &taskmodel.WorkspaceInput{Folder: filepath.Join(ww.repo, "web", "src")})
 	w := created.Workspace
 	branch := fmt.Sprintf("task/%d-fix-the-login-page", created.Task.Number)
-	if w == nil || w.State != "pending" || w.Repository != ww.repo || w.Branch != branch || w.BaseCommit != nil || w.Kept != nil {
+	if w == nil || w.State != "pending" || w.Git.Repository != ww.repo || w.Git.Branch != branch || w.Git.BaseCommit != nil || w.Kept != nil {
 		t.Fatalf("created workspace = %+v, want pending on %s", w, branch)
+	}
+	if created.Task.WorkspaceMode == nil || *created.Task.WorkspaceMode != "git" {
+		t.Fatalf("task.workspaceMode = %v", created.Task.WorkspaceMode)
 	}
 	if created.Task.Branch == nil || *created.Task.Branch != branch {
 		t.Fatalf("task.branch = %v", created.Task.Branch)
@@ -209,7 +230,7 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	}
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
 	w = d.Workspace
-	if w.State != "active" || w.BaseBranch != "main" || w.BaseCommit == nil || *w.BaseCommit != tip {
+	if w.State != "active" || w.Git.BaseBranch != "main" || w.Git.BaseCommit == nil || *w.Git.BaseCommit != tip {
 		t.Fatalf("running workspace = %+v, want active from main at %s", w, tip)
 	}
 	if got := gitT(t, w.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != branch {
@@ -250,7 +271,7 @@ func TestTaskWorkspaceFetchFailureBlocksAndRetrySucceeds(t *testing.T) {
 	if err := os.Rename(ww.remote, moved); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "fetch fails", &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, "fetch fails", &taskmodel.WorkspaceInput{Folder: ww.repo})
 	blocked := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	if blocked.Task.Reason == nil || !strings.Contains(*blocked.Task.Reason, "git fetch") || !strings.Contains(*blocked.Task.Reason, "origin.git") {
 		t.Fatalf("blocked reason = %v, want git's fetch message", blocked.Task.Reason)
@@ -263,7 +284,7 @@ func TestTaskWorkspaceFetchFailureBlocksAndRetrySucceeds(t *testing.T) {
 	}
 	ww.retry(t, blocked)
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
-	if d.Workspace.State != "active" || d.Workspace.BaseCommit == nil {
+	if d.Workspace.State != "active" || d.Workspace.Git.BaseCommit == nil {
 		t.Fatalf("workspace after retry = %+v", d.Workspace)
 	}
 }
@@ -276,13 +297,13 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 	if err := os.Rename(ww.remote, moved); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "adopt", &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, "adopt", &taskmodel.WorkspaceInput{Folder: ww.repo})
 	blocked := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	if err := os.Rename(moved, ww.remote); err != nil {
 		t.Fatal(err)
 	}
 	w := blocked.Workspace
-	first, err := gitworkspace.Create(context.Background(), "git", gitworkspace.Spec{Repository: w.Repository, Path: w.Path, Branch: w.Branch})
+	first, err := gitworkspace.Create(context.Background(), "git", gitworkspace.Spec{Repository: w.Git.Repository, Path: w.Path, Branch: w.Git.Branch})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +318,7 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 	gitT(t, clone, "push", "-q", "origin", "main")
 	ww.retry(t, blocked)
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
-	if d.Workspace.State != "active" || d.Workspace.BaseCommit == nil || *d.Workspace.BaseCommit != first.BaseCommit {
+	if d.Workspace.State != "active" || d.Workspace.Git.BaseCommit == nil || *d.Workspace.Git.BaseCommit != first.BaseCommit {
 		t.Fatalf("workspace = %+v, want the adopted base %s", d.Workspace, first.BaseCommit)
 	}
 	if branches := gitT(t, ww.repo, "branch", "--list", "task/*"); strings.Count(branches, "task/") != 1 {
@@ -308,7 +329,7 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 // runningWorkspaceTask creates a workspace task and waits until its step runs.
 func (ww workspaceWorld) runningWorkspaceTask(t *testing.T, title string) taskmodel.Detail {
 	t.Helper()
-	created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Folder: ww.repo})
 	return taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" && d.Workspace.State == "active" })
 }
 
@@ -364,7 +385,7 @@ func TestTaskWorkspaceKeptOnCancelThenRemoved(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ww.repo, "README")); err != nil {
 		t.Fatal("the person's checkout is untouched")
 	}
-	if gitT(t, ww.repo, "branch", "--list", w.Branch) == "" {
+	if gitT(t, ww.repo, "branch", "--list", w.Git.Branch) == "" {
 		t.Fatal("Remove leaves the branch alone")
 	}
 	if again := decode[taskmodel.Detail](t, ww.must(200, "POST", path, action)); again.Workspace.State != "removed" {
@@ -387,16 +408,16 @@ func TestTaskWorkspaceCleanup(t *testing.T) {
 		ww.commit(t, d.Workspace.Path, "merged.txt")
 		gitT(t, d.Workspace.Path, "push", "-q", "origin", "HEAD:main")
 		ended := ww.endTask(t, d)
-		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) != "" {
-			t.Fatalf("workspace %+v, branch %q", ended.Workspace, gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch))
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch) != "" {
+			t.Fatalf("workspace %+v, branch %q", ended.Workspace, gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch))
 		}
 	})
 	t.Run("pushed but not merged: worktree gone, branch stays", func(t *testing.T) {
 		d := ww.runningWorkspaceTask(t, "pushed")
 		ww.commit(t, d.Workspace.Path, "pushed.txt")
-		gitT(t, d.Workspace.Path, "push", "-q", "-u", "origin", d.Workspace.Branch)
+		gitT(t, d.Workspace.Path, "push", "-q", "-u", "origin", d.Workspace.Git.Branch)
 		ended := ww.endTask(t, d)
-		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) == "" {
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch) == "" {
 			t.Fatalf("workspace %+v", ended.Workspace)
 		}
 	})
@@ -435,7 +456,7 @@ func TestTaskWorkspaceRemoveSavesADetachedHead(t *testing.T) {
 		t.Fatalf("workspace %+v", ended.Workspace)
 	}
 	ww.must(200, "POST", "/tasks/"+d.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
-	saved := d.Workspace.Branch + "-detached-" + head[:7]
+	saved := d.Workspace.Git.Branch + "-detached-" + head[:7]
 	if got := gitT(t, ww.repo, "rev-parse", saved); got != head {
 		t.Fatalf("the detached commit is on %s: %q", saved, got)
 	}
@@ -446,7 +467,7 @@ func TestTaskWorkspaceRemoveSavesADetachedHead(t *testing.T) {
 	}
 	ww.endTask(t, other)
 	ww.must(200, "POST", "/tasks/"+other.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
-	if extra := gitT(t, ww.repo, "branch", "--list", other.Workspace.Branch+"-detached-*"); extra != "" {
+	if extra := gitT(t, ww.repo, "branch", "--list", other.Workspace.Git.Branch+"-detached-*"); extra != "" {
 		t.Fatalf("no branch is added for a worktree on its branch: %q", extra)
 	}
 }
@@ -470,5 +491,224 @@ func TestTaskWorkspaceRemoveRefusesATamperedPath(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(ww.repo, "README")); err != nil {
 		t.Fatal("the person's checkout must survive a tampered record")
+	}
+}
+
+// docs makes a plain folder of documents in the project's local directory, with a link to a file outside it.
+func (ww workspaceWorld) docs(t *testing.T, name string) string {
+	t.Helper()
+	dir := filepath.Join(ww.folder, name)
+	for file, text := range map[string]string{"a.md": "alpha\n", "notes/b.md": "beta\n"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, file)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(ww.repo, "README"), filepath.Join(dir, "readme-link")); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// treeState lists every entry of a tree with its type, size, modification time and content.
+func treeState(t *testing.T, root string) string {
+	t.Helper()
+	var b strings.Builder
+	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(&b, "%s %v %d %d", strings.TrimPrefix(p, root), info.Mode(), info.Size(), info.ModTime().UnixNano())
+		if info.Mode().IsRegular() {
+			data, _ := os.ReadFile(p)
+			b.Write(data)
+		}
+		b.WriteByte('\n')
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// A plain folder is copied while the task prepares; the step works in the copy and is told so; a completed task's copy
+// is removed even though files were added; the original never changes.
+func TestTaskCopyWorkspaceRunsAndCompletes(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	src := ww.docs(t, "docs")
+	before := treeState(t, src)
+	created := ww.mustCreateStep(t, "Summarize the docs", &taskmodel.WorkspaceInput{Folder: src}, " !sleep=2s")
+	w := created.Workspace
+	if w == nil || w.Mode != "copy" || w.Folder != src || w.State != "pending" || w.Git != nil || w.Copy != nil || w.ModeNote != nil || created.Task.Branch != nil {
+		t.Fatalf("created workspace = %+v, task.branch %v", w, created.Task.Branch)
+	}
+	if created.Task.WorkspaceMode == nil || *created.Task.WorkspaceMode != "copy" {
+		t.Fatalf("task.workspaceMode = %v", created.Task.WorkspaceMode)
+	}
+	page, err := ww.a.Store.ListTasks(context.Background(), *ww.agent.ProjectID, "", 10)
+	if err != nil || len(page.Tasks) == 0 || page.Tasks[0].WorkspaceMode == nil || *page.Tasks[0].WorkspaceMode != "copy" {
+		t.Fatalf("the task list shows the mode: %+v %v", page, err)
+	}
+	if !strings.HasSuffix(w.Path, filepath.Join("worktrees", created.Task.ID.String(), "docs")) {
+		t.Fatalf("copy path = %s", w.Path)
+	}
+	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool {
+		return d.Task.Status == "running" && len(d.Nodes[0].RunIDs) > 0 && ww.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy"
+	})
+	w = d.Workspace
+	if w.State != "active" || w.Copy == nil || *w.Copy != (taskmodel.WorkspaceCopy{Files: 2, Bytes: 11}) {
+		t.Fatalf("running workspace = %+v %+v", w, w.Copy)
+	}
+	if b, err := os.ReadFile(filepath.Join(w.Path, "notes", "b.md")); err != nil || string(b) != "beta\n" {
+		t.Fatalf("the copy has the files: %q %v", b, err)
+	}
+	if _, err := os.Lstat(filepath.Join(w.Path, "readme-link")); err == nil {
+		t.Fatal("a link to outside the folder is in the copy")
+	}
+	var started struct {
+		Cwd string `json:"cwd"`
+	}
+	if b, err := os.ReadFile(ww.dump); err != nil || json.Unmarshal(b, &started) != nil {
+		t.Fatalf("fake Pi dump: %v", err)
+	}
+	if real, _ := filepath.EvalSymlinks(w.Path); started.Cwd != w.Path && started.Cwd != real {
+		t.Fatalf("the step works in %s, want the copy %s", started.Cwd, w.Path)
+	}
+	var text string
+	if err := ww.a.Store.Pool.QueryRow(context.Background(), `SELECT text FROM task_turns WHERE task_id=$1 ORDER BY queue_seq LIMIT 1`, created.Task.ID).Scan(&text); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "a copy of the folder "+src) || !strings.Contains(text, "loopctl task artifact put") || strings.Contains(text, "branch") {
+		t.Fatalf("the step's turn carries the copy block:\n%s", text)
+	}
+	// The step writes a result in the copy and submits; the task completes.
+	if err := os.WriteFile(filepath.Join(w.Path, "summary.md"), []byte("sum\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	node := d.Nodes[0]
+	principal := auth.Principal{Kind: auth.KindAgent, ID: ww.agent.ID, TaskID: created.Task.ID, RuntimeID: node.RuntimeID}
+	if _, err := ww.a.Tasks.Submit(context.Background(), principal, created.Task.ID, node.ID, taskmodel.SubmitInput{ActionID: uuid.New(), Output: map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	ended := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "completed" && d.Cleanup == "archived" })
+	if ended.Workspace.State != "removed" || ended.Workspace.Kept != nil || !gone(w.Path) || !gone(filepath.Dir(w.Path)) {
+		t.Fatalf("after completion: %+v", ended.Workspace)
+	}
+	if treeState(t, src) != before {
+		t.Fatal("the original folder changed")
+	}
+}
+
+// Cancelled: kept when a file was added (the person removes it), removed when nothing changed.
+func TestTaskCopyWorkspaceCancel(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	src := ww.docs(t, "docs")
+	before := treeState(t, src)
+	running := func(title string) taskmodel.Detail {
+		created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Folder: src})
+		return taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" && d.Workspace.State == "active" })
+	}
+	d := running("one new file")
+	if err := os.WriteFile(filepath.Join(d.Workspace.Path, "draft.md"), []byte("draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ended := ww.endTask(t, d)
+	if ended.Workspace.State != "kept" || ended.Workspace.Kept == nil || *ended.Workspace.Kept != (taskmodel.WorkspaceKept{ChangedFiles: 1}) || gone(d.Workspace.Path) {
+		t.Fatalf("after cancel: %+v %+v", ended.Workspace, ended.Workspace.Kept)
+	}
+	path := "/tasks/" + d.Task.ID.String() + "/workspace/remove"
+	out := decode[taskmodel.Detail](t, ww.must(200, "POST", path, map[string]any{"actionId": uuid.New()}))
+	if out.Workspace.State != "removed" || !gone(d.Workspace.Path) || !gone(filepath.Dir(d.Workspace.Path)) {
+		t.Fatalf("after Remove: %+v", out.Workspace)
+	}
+
+	d = running("untouched")
+	if ended := ww.endTask(t, d); ended.Workspace.State != "removed" || !gone(d.Workspace.Path) {
+		t.Fatalf("an untouched copy: %+v", ended.Workspace)
+	}
+	if treeState(t, src) != before {
+		t.Fatal("the original folder changed")
+	}
+}
+
+// Two tasks on the same folder at once get two copies.
+func TestTaskCopyWorkspaceTwoAtOnce(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	src := ww.docs(t, "docs")
+	a := ww.mustCreate(t, "first", &taskmodel.WorkspaceInput{Folder: src})
+	b := ww.mustCreate(t, "second", &taskmodel.WorkspaceInput{Folder: src})
+	active := func(d taskmodel.Detail) bool { return d.Workspace.State == "active" }
+	pa, pb := taskWait(t, ww.server, a.Task.ID, active).Workspace.Path, taskWait(t, ww.server, b.Task.ID, active).Workspace.Path
+	if pa == pb {
+		t.Fatal("both tasks share one copy")
+	}
+	if err := os.WriteFile(filepath.Join(pa, "a.md"), []byte("first wrote this\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(pb, "a.md")); string(got) != "alpha\n" {
+		t.Fatalf("the second copy reads %q", got)
+	}
+}
+
+// A copy that fails (an unreadable file) blocks the task with the file's name; a retry after the fix copies.
+func TestTaskCopyWorkspaceFailureBlocksAndRetrySucceeds(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	ww := newWorkspaceWorld(t)
+	src := ww.docs(t, "docs")
+	secret := filepath.Join(src, "notes", "private.md")
+	if err := os.WriteFile(secret, []byte("x"), 0); err != nil {
+		t.Fatal(err)
+	}
+	created := ww.mustCreate(t, "unreadable", &taskmodel.WorkspaceInput{Folder: src})
+	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
+	if d.Workspace.State != "pending" || d.Task.Reason == nil || !strings.Contains(*d.Task.Reason, "Could not copy the task's folder") ||
+		!strings.Contains(*d.Task.Reason, "notes/private.md cannot be read") {
+		t.Fatalf("blocked: %v, workspace %+v", d.Task.Reason, d.Workspace)
+	}
+	if err := os.Chmod(secret, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ww.retry(t, d)
+	if d = taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Workspace.State == "active" }); d.Workspace.Copy.Files != 3 {
+		t.Fatalf("after retry: %+v", d.Workspace.Copy)
+	}
+}
+
+// Without a working git a repository is copied and the task says why; git mode or a branch is a field error naming
+// the missing git; mode copy copies a repository even when git works.
+func TestTaskWorkspaceWithoutGit(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	forced := ww.mustCreate(t, "read the repo", &taskmodel.WorkspaceInput{Folder: ww.repo, Mode: "copy"})
+	if forced.Workspace.Mode != "copy" || forced.Workspace.ModeNote != nil || forced.Task.Branch != nil {
+		t.Fatalf("forced copy: %+v", forced.Workspace)
+	}
+
+	ww.a.Tasks.Source.Git = &gitbin.Finder{Dirs: func(context.Context) []string { return []string{t.TempDir()} }}
+	before := treeState(t, ww.repo)
+	created := ww.mustCreate(t, "no git", &taskmodel.WorkspaceInput{Folder: filepath.Join(ww.repo)})
+	w := created.Workspace
+	if w.Mode != "copy" || w.ModeNote == nil || *w.ModeNote != "No working git on this computer, so the folder was copied." || created.Task.Branch != nil {
+		t.Fatalf("no git: %+v", w)
+	}
+	if d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Workspace.State == "active" }); d.Workspace.Copy.Files == 0 {
+		t.Fatalf("copied: %+v", d.Workspace.Copy)
+	}
+	for _, c := range []struct {
+		in    taskmodel.WorkspaceInput
+		field string
+	}{{taskmodel.WorkspaceInput{Folder: ww.repo, Mode: "git"}, "workspace.mode"}, {taskmodel.WorkspaceInput{Folder: ww.repo, Branch: strPtr("b")}, "workspace.branch"}} {
+		_, err := ww.create("needs git", &c.in)
+		e, ok := apperr.As(err)
+		if !ok || len(e.Fields) != 1 || e.Fields[0].Field != c.field || !strings.Contains(e.Fields[0].Message, "no working git") {
+			t.Errorf("%+v: %v, want a field error on %s naming the missing git", c.in, err, c.field)
+		}
+	}
+	if treeState(t, ww.repo) != before {
+		t.Fatal("the repository changed")
 	}
 }

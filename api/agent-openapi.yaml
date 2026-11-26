@@ -2518,7 +2518,7 @@ components:
 - background_task_not_found: the Agent has no background task with this id (404)
 - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails)
 - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails)
-- task_workspace_not_kept: the task's worktree can be removed only after the task has ended and when the worktree was kept (409)
+- task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409)
 - action_conflict: the same actionId was used for an action with different content (409)
 - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422)
 - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409)
@@ -2962,6 +2962,7 @@ components:
         - link
         - version
         - branch
+        - workspaceMode
       properties:
         id:
           type: string
@@ -3012,10 +3013,19 @@ components:
           type: integer
           minimum: 1
         branch:
-          description: The branch of the task's workspace; null for a task without one.
+          description: The branch of the task's workspace; null for a task without one or with a copy-mode workspace.
           type:
             - string
             - 'null'
+        workspaceMode:
+          description: The mode of the task's workspace (TaskWorkspace.mode); null for a task without one.
+          type:
+            - string
+            - 'null'
+          enum:
+            - git
+            - copy
+            - null
       description: currentAgentId is the Agent responsible for the current node; it is kept while waiting or blocked and does not mean Pi is running. For what is actually running, see the node's messages and run status.
     TaskNodeRun:
       type: object
@@ -3732,7 +3742,7 @@ components:
             - archived
             - failed
         workspace:
-          description: The task's git worktree; null for a task without one.
+          description: The task's workspace (a git worktree or a copy of a folder); null for a task without one.
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/TaskWorkspace'
@@ -3776,7 +3786,7 @@ components:
             - archived
             - failed
         workspace:
-          description: The task's git worktree; null for a task without one.
+          description: The task's workspace (a git worktree or a copy of a folder); null for a task without one.
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/TaskWorkspace'
@@ -3914,42 +3924,94 @@ components:
     TaskWorkspaceInput:
       type: object
       additionalProperties: false
-      description: A git worktree for the task. Loop Now creates it on a new branch while the task prepares, every step works in it, and it is removed at the end when nothing would be lost.
+      description: A workspace for the task, made while the task prepares; every step works in it. A folder inside a git work tree gets a git worktree on a new branch (git mode); any other folder is copied and the copy is worked in, so the original is never written (copy mode).
       required:
-        - repository
+        - folder
       properties:
-        repository:
-          description: Absolute path of a folder inside a git work tree on this computer; Loop Now resolves the repository it belongs to. It must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project.
+        folder:
+          description: Absolute path of a folder on this computer. It must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project.
           type: string
           minLength: 1
+        mode:
+          description: auto (the default) uses git mode when the folder is inside a git work tree and a working git is on this computer, otherwise copy mode. git requires both and is a field error without them; copy copies the folder even when it is in a repository, for a task that only reads it.
+          type: string
+          enum:
+            - auto
+            - git
+            - copy
         baseBranch:
-          description: The branch the task starts from. Omitted or null means the remote's default branch (fetched fresh), or the repository's current branch when it has no remote.
+          description: Git mode only. The branch the task starts from. Omitted or null means the remote's default branch (fetched fresh), or the repository's current branch when it has no remote.
           type:
             - string
             - 'null'
         branch:
-          description: The branch the task works on. Omitted or null means task/<task number>-<slug of the title>, which must not exist yet. A branch named here may exist already when no work tree has it checked out; the task then continues it.
+          description: Git mode only. The branch the task works on. Omitted or null means task/<task number>-<slug of the title>, which must not exist yet. A branch named here may exist already when no work tree has it checked out; the task then continues it.
           type:
             - string
             - 'null'
     TaskWorkspace:
       type: object
       additionalProperties: false
-      description: The task's git worktree. kept is non-null exactly when state is kept.
+      description: The task's workspace. git is non-null exactly in git mode; copy is non-null in copy mode once the copy exists; kept is non-null exactly when state is kept.
+      required:
+        - mode
+        - folder
+        - path
+        - state
+        - kept
+        - modeNote
+        - git
+        - copy
+      properties:
+        mode:
+          description: git, a worktree on the task's branch; copy, a copy of the folder that steps work in while the original is never written.
+          type: string
+          enum:
+            - git
+            - copy
+        folder:
+          description: The folder named when the task was created.
+          type: string
+        path:
+          description: The worktree or the copy, under Loop Now's own data folder.
+          type: string
+        state:
+          description: pending while the task prepares; active while the workspace is in use; removed after cleanup removed it; kept when it was left in place because removing it would lose work.
+          type: string
+          enum:
+            - pending
+            - active
+            - removed
+            - kept
+        kept:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TaskWorkspaceKept'
+        modeNote:
+          description: Why the mode is not the one the folder suggests, for example a repository copied because this computer has no working git; null otherwise.
+          type:
+            - string
+            - 'null'
+        git:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TaskWorkspaceGit'
+        copy:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TaskWorkspaceCopy'
+    TaskWorkspaceGit:
+      type: object
+      additionalProperties: false
+      description: The git side of a git-mode workspace.
       required:
         - repository
-        - path
         - branch
         - baseBranch
         - baseCommit
-        - state
-        - kept
       properties:
         repository:
           description: Root of the repository's main work tree.
-          type: string
-        path:
-          description: The worktree, under Loop Now's own data folder.
           type: string
         branch:
           type: string
@@ -3961,32 +4023,41 @@ components:
           type:
             - string
             - 'null'
-        state:
-          description: pending while the task prepares; active while the worktree is in use; removed after cleanup removed it; kept when it was left in place because removing it would lose work.
-          type: string
-          enum:
-            - pending
-            - active
-            - removed
-            - kept
-        kept:
-          oneOf:
-            - type: 'null'
-            - $ref: '#/components/schemas/TaskWorkspaceKept'
+    TaskWorkspaceCopy:
+      type: object
+      additionalProperties: false
+      description: The copy of a copy-mode workspace, as made when the task started.
+      required:
+        - files
+        - bytes
+      properties:
+        files:
+          description: Regular files copied.
+          type: integer
+          minimum: 0
+        bytes:
+          description: Total size of the copied files.
+          type: integer
+          minimum: 0
     TaskWorkspaceKept:
       type: object
       additionalProperties: false
-      description: What removing a kept worktree would lose.
+      description: What removing a kept workspace would lose; the counts that do not apply to the mode are 0.
       required:
         - uncommittedFiles
         - unpushedCommits
+        - changedFiles
       properties:
         uncommittedFiles:
-          description: Files with changes that are not committed, untracked files included and ignored files not counted.
+          description: Git mode. Files with changes that are not committed, untracked files included and ignored files not counted.
           type: integer
           minimum: 0
         unpushedCommits:
-          description: Commits of the branch that are neither merged into the base on the remote nor on the branch's own remote ref.
+          description: Git mode. Commits of the branch that are neither merged into the base on the remote nor on the branch's own remote ref.
+          type: integer
+          minimum: 0
+        changedFiles:
+          description: Copy mode. Files added or changed in the copy since the task started.
           type: integer
           minimum: 0
     TaskSubmitInput:

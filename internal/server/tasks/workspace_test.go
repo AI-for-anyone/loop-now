@@ -60,8 +60,7 @@ func TestStepTextWithWorkspace(t *testing.T) {
 	s, id, _ := fixture(t, false)
 	commit := "0123456789abcdef0123456789abcdef01234567"
 	text := lastTurnText(t, s, id, func(r *taskmodel.Record) {
-		r.View.Workspace = &taskmodel.Workspace{Repository: "/code/app", Path: "/data/worktrees/t/app", Branch: "task/3-fix", BaseBranch: "main",
-			BaseCommit: &commit, State: taskmodel.WorkspaceStateActive}
+		r.View.Workspace = &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: "/code/app", Path: "/data/worktrees/t/app", State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: "/code/app", Branch: "task/3-fix", BaseBranch: "main", BaseCommit: &commit}}
 	})
 	for _, want := range []string{"/data/worktrees/t/app", "branch task/3-fix", "started from main at 0123456789ab", "do not switch branches",
 		"main checkout (/code/app)", "push it to this branch", "one pull request", "Your own folder is still at its usual place"} {
@@ -136,7 +135,7 @@ func TestExecutionSnapshotWorkspace(t *testing.T) {
 		state string
 		want  string
 	}{{taskmodel.WorkspaceStatePending, ""}, {taskmodel.WorkspaceStateActive, path}, {taskmodel.WorkspaceStateKept, ""}} {
-		setWorkspace(t, s, id, &taskmodel.Workspace{Repository: "/code/app", Path: path, Branch: "b", BaseBranch: "main", State: c.state})
+		setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: "/code/app", Path: path, State: c.state, Git: &taskmodel.WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}})
 		got, err := src.ExecutionSnapshot(ctx, p.RuntimeID)
 		if err != nil || got.TaskWorkspace != c.want {
 			t.Fatalf("%s: TaskWorkspace = %q, %v; want %q", c.state, got.TaskWorkspace, err, c.want)
@@ -149,13 +148,13 @@ func TestExecutionSnapshotWorkspace(t *testing.T) {
 		}
 	}
 	// A tampered record pointing outside Loop Now's worktree folder does not start.
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: "/code/app", Path: "/code/app", Branch: "b", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: "/code/app", Path: "/code/app", State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}})
 	if _, err := src.ExecutionSnapshot(ctx, p.RuntimeID); err == nil {
 		t.Fatal("a worktree outside <WorkRoot>/worktrees must be refused")
 	}
 	// Without the Agent's own configuration the step only moves.
 	setInstanceSnapshot(t, s, id, p, taskruntime.Configuration{ConfigVersion: 1, Provider: agentruntime.ClaudeCodeProvider, ModelID: "m", CLIs: []string{"gh"}})
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: "/code/app", Path: path, Branch: "b", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: "/code/app", Path: path, State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}})
 	got, err := src.ExecutionSnapshot(ctx, p.RuntimeID)
 	if err != nil || got.TaskWorkspace != path || got.UseLocalConfig || len(got.CLIs) != 1 {
 		t.Fatalf("worktree without own configuration: %+v %v", got, err)
@@ -181,7 +180,7 @@ func TestImportedCaptureForWorkspaceTasks(t *testing.T) {
 	if got, err := src.importedCapture(ctx, inst, none, claude); err != nil || got != "" {
 		t.Fatalf("a task without a worktree: %q %v", got, err)
 	}
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: "/code/app", Path: "/w", Branch: "b", State: taskmodel.WorkspaceStatePending})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: "/code/app", Path: "/w", State: taskmodel.WorkspaceStatePending, Git: &taskmodel.WorkspaceGit{Repository: "/code/app", Branch: "b"}})
 	if got, err := src.importedCapture(ctx, inst, none, claude); err != nil || got != capture {
 		t.Fatalf("a workspace task: %q %v; want the capture", got, err)
 	}
@@ -226,7 +225,7 @@ func TestCleanupWorkspaceIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: path, Branch: "task/1-x", BaseBranch: res.BaseBranch, BaseCommit: &res.BaseCommit, State: taskmodel.WorkspaceStateActive})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: repo, Path: path, State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: repo, Branch: "task/1-x", BaseBranch: res.BaseBranch, BaseCommit: &res.BaseCommit}})
 	if err := os.WriteFile(filepath.Join(path, "dirty"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +239,7 @@ func TestCleanupWorkspaceIsIdempotent(t *testing.T) {
 		}
 	}
 	// A worktree whose folder is gone is recorded removed, and git's record of it goes too.
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: path, Branch: "task/1-x", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: repo, Path: path, State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: repo, Branch: "task/1-x", BaseBranch: "main"}})
 	if err := os.RemoveAll(path); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +253,7 @@ func TestCleanupWorkspaceIsIdempotent(t *testing.T) {
 		t.Fatalf("git still lists the worktree: %s", out)
 	}
 	// A record pointing outside Loop Now's worktree folder is refused, and the folder is left alone.
-	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: repo, Branch: "main", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	setWorkspace(t, s, id, &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: repo, Path: repo, State: taskmodel.WorkspaceStateActive, Git: &taskmodel.WorkspaceGit{Repository: repo, Branch: "main", BaseBranch: "main"}})
 	if err := s.cleanupWorkspace(ctx, id); err == nil {
 		t.Fatal("a tampered path must be refused")
 	}

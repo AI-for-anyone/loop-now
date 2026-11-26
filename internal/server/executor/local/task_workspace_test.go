@@ -221,3 +221,21 @@ func TestTaskWorkspaceSharesTheRegularMemory(t *testing.T) {
 		t.Fatalf("settings = %v, want the base Agent's own folder memory %s", got, want)
 	}
 }
+
+// A step of a task with a copy-mode workspace is told it works in a copy of the folder, not in a git worktree.
+func TestTaskCopyWorkspacePrompt(t *testing.T) {
+	dir := t.TempDir()
+	h := newClaudeHarness(t, func(o *Options) { o.ContextDir = t.TempDir() })
+	id := h.claudeAgent(func(s *agentconfig.Snapshot) {
+		taskStep(dir)(s)
+		s.TaskWorkspaceCopyOf = "/Users/someone/Documents/notes"
+	})
+	if res, _ := h.exec(id, "hello"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("turn: %+v", res)
+	}
+	b, _ := os.ReadFile(h.e.dirs(id).prompt)
+	if !strings.Contains(string(b), "Your working directory: "+dir+", this task's copy of the folder /Users/someone/Documents/notes.") ||
+		strings.Contains(string(b), "git worktree") {
+		t.Fatalf("the prompt says the step works in a copy:\n%s", b)
+	}
+}
