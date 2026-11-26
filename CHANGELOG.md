@@ -11,6 +11,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
 - The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
 
+### Files up to 20 MiB can be previewed
+
+- The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
+- `LOOP_NOW_TEXT_EDIT_MAX` still changes the limit; it is now checked against `LOOP_NOW_MAX_FOLDER_UPLOAD` (1 GiB by default, the limit for one file written to these folders) instead of `LOOP_NOW_MAX_UPLOAD_FILE`, so a server that sets `LOOP_NOW_MAX_FOLDER_UPLOAD` below 20 MiB must also set `LOOP_NOW_TEXT_EDIT_MAX`.
+- A Markdown file that is one very long list (thousands of items) can take a long time to preview at these sizes.
+
 ### The sidebar's width can be dragged
 
 - Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
