@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -58,5 +59,25 @@ func TestPiCommandsCachedAndHandled(t *testing.T) {
 	}
 	if res, _ := h.exec(id, "/unknown x"); res.Outcome != executor.OutcomeCompleted || res.CommandHandled || res.Text == "" || len(res.CommandNotices) != 0 {
 		t.Fatalf("an unknown command should go to the model: %+v", res)
+	}
+}
+
+// The command list is saved before stopping the process returns, also when Pi answers only as it is stopped: once
+// Shutdown returns nothing writes in the Agent's folder any more (a late write made removing the folder fail).
+func TestPiCommandsSavedBeforeStopReturns(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_COMMANDS_AT_EXIT") }, "")
+	h.env["FAKEPI_COMMANDS_AT_EXIT"] = "1"
+	id := h.agent(nil)
+	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("reply: %+v", res)
+	}
+	if c, err := h.e.Commands(id); err != nil || c != nil {
+		t.Fatalf("Pi has not answered yet: %+v %v", c, err)
+	}
+	if err := h.e.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.e.Commands(id); err != nil || c == nil {
+		t.Fatalf("the list Pi gave as it stopped is saved before Shutdown returns: %+v %v", c, err)
 	}
 }
