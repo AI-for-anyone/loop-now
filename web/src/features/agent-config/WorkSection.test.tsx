@@ -5,7 +5,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, makeAgent } from '@/test/api'
 import { renderConfig } from '@/test/config'
 import { acpCommandDefinition, acpRuntimeId, grokDefinition, withAllRuntimes } from '@/test/runtimes'
-import { canRunAgent, effectiveMode } from '@/lib/permissions'
+import { asksByOwnRules, canRunAgent, effectiveMode } from '@/lib/permissions'
 
 const claude = (overrides: Partial<Schemas['Agent']> = {}) => makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', ...overrides })
 
@@ -24,6 +24,8 @@ function patches(agent: Schemas['Agent']) {
 }
 
 const work = () => screen.getByRole('region', { name: 'How it works' })
+const grok = (permissionMode: Schemas['PermissionMode']) => makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' }, runtime: 'grok', permissionMode })
+const allRuntimes = http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes()))
 
 describe('How an Agent works (config page)', () => {
   it('the working folder is typed (or chosen) and saved on its own; it can go back to Loop Now’s workspace', async () => {
@@ -90,6 +92,17 @@ describe('How an Agent works (config page)', () => {
     expect(await within(work()).findByText('Hermes has no “Auto-accept edits”; it runs as Supervised')).toBeInTheDocument()
   })
 
+  it('a runtime that asks by its own rules says so in a mode other than Full access', async () => {
+    await renderConfig({ agent: grok('supervised'), handlers: [allRuntimes] })
+    expect(await within(work()).findByText('Grok decides by its own permission rules what to ask about, so some commands run without asking; to be asked about each one, use Claude Code or Codex')).toBeInTheDocument()
+  })
+
+  it('on Full access it says nothing of the sort', async () => {
+    await renderConfig({ agent: grok('full'), handlers: [allRuntimes] })
+    await within(work()).findByRole('radio', { name: /Full access/ })
+    expect(within(work()).queryByText(/its own permission rules/)).toBeNull()
+  })
+
   it('on Pi the folder and the local configuration are not offered, and only Full access is', async () => {
     const agent = makeAgent()
     await renderConfig({ agent })
@@ -109,6 +122,14 @@ describe('The permission rules', () => {
     expect(effectiveMode('auto', acpCommandDefinition())).toBe('supervised')
     expect(effectiveMode('accept_edits', grokDefinition)).toBe('accept_edits')
     expect(effectiveMode('full', undefined)).toBe('full')
+  })
+
+  it('a runtime that asks by its own rules does so in every mode but Full access', () => {
+    expect(asksByOwnRules('supervised', grokDefinition)).toBe(true)
+    expect(asksByOwnRules('auto', acpCommandDefinition())).toBe(true)
+    expect(asksByOwnRules('full', grokDefinition)).toBe(false)
+    expect(asksByOwnRules('supervised', withAllRuntimes().runtimes[1])).toBe(false)
+    expect(asksByOwnRules('supervised', undefined)).toBe(false)
   })
 
   it('an Agent with its own folder, or asking before it acts, cannot run on a runtime that cannot do that', () => {
