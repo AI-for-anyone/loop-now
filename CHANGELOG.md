@@ -6,6 +6,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### The Agent page header is one thin bar
+
+- The top of an Agent page (breadcrumb, large title, runtime and model tags, address box and the four folder tabs, about 200 px) is now one bar of 48 px shared by Chat, Config, Folder and Inbox, as in ChatGPT: the runtime mark, the Agent's name, the Manager chip and the status on the left, the four tabs as small text tabs, and a "⋯" menu on the right. The conversation starts right under it.
+- The "⋯" menu holds the Agent's address (with Copy), the runtime and model in words, and the way back to the project. The breadcrumb, the separate runtime badge and the model tag are gone from the header: the sidebar shows where you are, and the message box shows the runtime, model and level.
+- On a phone the bar takes two short lines (name and status; tabs below, scrolling sideways). A sleeping Agent's wake time shows in a thin strip at the top of the page.
+
 ### A compact task list that names the step
 
 - The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
