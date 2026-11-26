@@ -29,6 +29,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
 - When several tasks ended, two chips are shown and "+N" opens the rest.
 
+### Pictures in a reply are thumbnails you can open
+
+- A picture an Agent puts in its reply with Markdown (`![…](url)`) is a thumbnail now, at most 240 px high and 360 px wide, instead of filling the whole column. A click (or Enter) opens it large, with a link to the original in a new tab; Escape or a click outside closes it.
+- Pictures that follow each other sit side by side in a row: four 1:1 pictures fit on one line on a wide screen, two on a phone. A short caption above each picture (up to three lines, for example "2D-1: …" and a "local file" line) stays with its picture in the row; a heading or a rule starts a new row.
+- A picture after a line of text starts on its own line under it, not next to the text. A picture that cannot be loaded shows its description in a small box instead of an empty frame.
+- Pictures in a plugin's README still show their description only.
+
 ## v0.3.3
 
 Tasks can work on a folder of yours: a folder in a git repository gets its own worktree and branch, and any other folder is copied and only read, so several tasks can run on one project at once and leave nothing behind. A reply cut off by a quit or crash is remembered, the bar under the message box shows background work, each runtime shows its own logo, and loopctl can set an Agent's folder, configuration, permission mode and levels.
