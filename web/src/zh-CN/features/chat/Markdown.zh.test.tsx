@@ -48,4 +48,34 @@ describe('Markdown rendering and safety', () => {
     fireEvent.error(document.querySelector('img')!)
     expect(screen.getByRole('img', { name: '图片加载失败' })).toHaveTextContent('图片加载失败')
   })
+
+  it('keeps Chinese caption lines grouped with their images in one row', () => {
+    const reply = [
+      '做了四张候选图：',
+      '',
+      '2D-1：红蓝撞色，适合做封面',
+      '',
+      '![2D-1](https://example.com/1.png)',
+      '',
+      '2D-2：黄底黑线，风格更轻松',
+      '',
+      '![2D-2](https://example.com/2.png)',
+      '',
+      '2D-3：极简留白，突出主体',
+      '',
+      '![2D-3](https://example.com/3.png)',
+      '',
+      '2D-4：复古印刷质感',
+      '',
+      '![2D-4](https://example.com/4.png)',
+    ].join('\n')
+    const { container } = render(<Markdown text={reply} />)
+    expect([...container.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['做了四张候选图：'])
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+    const figures = [...row.querySelectorAll<HTMLElement>('figure.md-image-item')]
+    expect(figures).toHaveLength(4)
+    expect(figures[0].firstElementChild).toHaveTextContent('2D-1：红蓝撞色，适合做封面')
+    expect(within(figures[3]).getByRole('img', { name: '2D-4' })).toBeInTheDocument()
+  })
 })

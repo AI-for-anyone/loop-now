@@ -392,4 +392,126 @@ describe('Markdown images in a reply', () => {
     expect(container).toHaveTextContent('Architecture')
     expect(container).toHaveTextContent('Details')
   })
+
+  it('places consecutive images in one paragraph in a single row', () => {
+    const { container } = render(
+      <Markdown text={'![One](https://example.com/1.png) ![Two](https://example.com/2.png)\n![Three](https://example.com/3.png) ![Four](https://example.com/4.png)'} />,
+    )
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).not.toBeNull()
+    expect(row).toHaveAttribute('data-count', '4')
+    expect(row.querySelectorAll('.md-image-item')).toHaveLength(4)
+    expect(row.querySelectorAll('figure')).toHaveLength(0)
+    expect(within(row as HTMLElement).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['One', 'Two', 'Three', 'Four'])
+  })
+
+  it('merges consecutive image-only paragraphs into one row without pulling in an intro paragraph', () => {
+    const { container } = render(
+      <Markdown
+        text={[
+          'Here are four candidates:',
+          '',
+          '![One](https://example.com/1.png)',
+          '',
+          '![Two](https://example.com/2.png)',
+          '',
+          '![Three](https://example.com/3.png)',
+          '',
+          '![Four](https://example.com/4.png)',
+          '',
+          'Pick your favorite.',
+        ].join('\n')}
+      />,
+    )
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs.map((p) => p.textContent)).toEqual(['Here are four candidates:', 'Pick your favorite.'])
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+    expect(row.querySelectorAll('.md-image-item')).toHaveLength(4)
+    expect(row.querySelectorAll('figure')).toHaveLength(0)
+  })
+
+  it('groups caption lines with their following images in one row across blank-line, single-newline, and heading forms', () => {
+    const separated = [
+      'Four options:',
+      '',
+      '**2D-1**: bright blue poster',
+      '',
+      '![2D-1](https://example.com/1.png)',
+      '',
+      '**2D-2**: warm yellow print',
+      '',
+      '![2D-2](https://example.com/2.png)',
+      '',
+      'Which one works best?',
+    ].join('\n')
+    const view1 = render(<Markdown text={separated} />)
+    expect([...view1.container.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['Four options:', 'Which one works best?'])
+    const row1 = view1.container.querySelector('[data-md-image-row]')!
+    expect(row1).toHaveAttribute('data-count', '2')
+    const figures1 = [...row1.querySelectorAll<HTMLElement>('figure.md-image-item')]
+    expect(figures1).toHaveLength(2)
+    expect(figures1[0].firstElementChild!.tagName).toBe('FIGCAPTION')
+    expect(figures1[0].firstElementChild).toHaveTextContent('2D-1: bright blue poster')
+    expect(within(figures1[0]).getByRole('img', { name: '2D-1' })).toBeInTheDocument()
+    expect(figures1[1].firstElementChild).toHaveTextContent('2D-2: warm yellow print')
+    expect(within(figures1[1]).getByRole('img', { name: '2D-2' })).toBeInTheDocument()
+    view1.unmount()
+
+    const singleNewline = [
+      '2D-1: bright blue poster\n![2D-1](https://example.com/1.png)',
+      '',
+      '2D-2: warm yellow print\n![2D-2](https://example.com/2.png)',
+    ].join('\n')
+    const view2 = render(<Markdown text={singleNewline} />)
+    const figures2 = [...view2.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures2).toHaveLength(2)
+    expect(figures2[0].firstElementChild).toHaveTextContent('2D-1: bright blue poster')
+    expect(figures2[1].firstElementChild).toHaveTextContent('2D-2: warm yellow print')
+    view2.unmount()
+
+    const compact = '2D-1: bright blue\n![2D-1](https://example.com/1.png)\n2D-2: warm yellow\n![2D-2](https://example.com/2.png)'
+    const view3 = render(<Markdown text={compact} />)
+    const figures3 = [...view3.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures3).toHaveLength(2)
+    expect(figures3[0].firstElementChild).toHaveTextContent('2D-1: bright blue')
+    expect(figures3[1].firstElementChild).toHaveTextContent('2D-2: warm yellow')
+    view3.unmount()
+
+    const headings = '### 2D-1\n\n![2D-1](https://example.com/1.png)\n\n### 2D-2\n\n![2D-2](https://example.com/2.png)'
+    const view4 = render(<Markdown text={headings} />)
+    const figures4 = [...view4.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures4).toHaveLength(2)
+    expect(figures4[0].firstElementChild).toHaveTextContent('2D-1')
+    expect(figures4[1].firstElementChild).toHaveTextContent('2D-2')
+  })
+
+  it('does not turn long prose paragraphs or a single captioned image into an image row', () => {
+    const prose = [
+      'After refactoring the scheduler we ran the full benchmark suite across three machines and verified that tail latency dropped steadily.',
+      '',
+      '![Latency](https://example.com/latency.png)',
+      '',
+      'Next we checked garbage collection pause times under the same steady workload because earlier versions spiked whenever compaction ran.',
+      '',
+      '![Pauses](https://example.com/pauses.png)',
+    ].join('\n')
+    const view1 = render(<Markdown text={prose} />)
+    expect(view1.container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(view1.container.querySelectorAll('figure')).toHaveLength(0)
+    view1.unmount()
+
+    const single = render(<Markdown text={'2D-1: bright blue\n![2D-1](https://example.com/1.png)\n\nClosing note.'} />)
+    expect(single.container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(single.container.querySelectorAll('p')).toHaveLength(2)
+  })
+
+  it('keeps consecutive images in one row while streaming with the output cursor after the row', () => {
+    const { container } = render(<Markdown cursor text={'![One](https://example.com/1.png)\n\n![Two](https://example.com/2.png)'} />)
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '2')
+    const cursor = container.querySelector('.riso-cursor')!
+    expect(cursor).not.toBeNull()
+    expect(row.contains(cursor)).toBe(false)
+  })
 })

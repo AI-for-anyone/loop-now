@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { ImagePreviewDialog } from '@/features/images/ImagePreview'
 import { cn } from '@/lib/utils'
 import { MermaidBlock } from './MermaidBlock'
+import { rehypeImageRows } from './rehype-image-rows'
 import { rehypeLeadLabel } from './rehype-lead-label'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -237,9 +238,15 @@ export const Markdown = memo(function Markdown({ text, cursor = false, readme = 
           footnoteLabel: t.chat.footnoteLabel,
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
-        // Labels are processed after the cursor: the cursor gets wrapped together with the text after the label and stays at the end
-        // of the text.
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : []), ...(leadLabels ? [rehypeLeadLabel] : [])]}
+        // Image rows run before the cursor so streaming doesn't break a row; labels run after the cursor so the cursor stays at the end
+        // of the text after the label.
+        rehypePlugins={[
+          [rehypeHighlight, { detect: false, ignore: ['mermaid'] }],
+          [rehypePrefixFootnoteLabel, prefix],
+          ...(readme ? [] : [rehypeImageRows]),
+          ...(cursor ? [rehypeCursor] : []),
+          ...(leadLabels ? [rehypeLeadLabel] : []),
+        ]}
         components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, ...tableComponents }}
       >
         {text}
