@@ -40,7 +40,8 @@ func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 		run := e.send(true, "")
 		at := time.Now().UTC()
 		for i, state := range []string{"started", "succeeded"} {
-			if err := e.s.AddToolEvent(ctx, run.ID, store.ToolEvent{ToolCallID: "bash-one", ToolName: "bash", State: state, At: at.Add(time.Duration(i) * time.Second)}); err != nil {
+			// Claude Code names its shell tool Bash; its command event says bash.
+			if err := e.s.AddToolEvent(ctx, run.ID, store.ToolEvent{ToolCallID: "bash-one", ToolName: "Bash", State: state, At: at.Add(time.Duration(i) * time.Second)}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -66,9 +67,10 @@ func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 		task, node, _, turn := taskConsoleRecord(t, s)
 		observer := &tasks.Observer{Store: s, Normal: &runrecord.Recorder{Store: s, Log: log}, Timeout: time.Second * 5, Log: log}
 		at := time.Now().UTC()
-		observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.command", At: at, Data: map[string]any{"toolCallId": "bash-one", "toolName": "bash", "command": command}})
+		// An ACP agent (Antigravity) names its shell tool execute.
+		observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.command", At: at, Data: map[string]any{"toolCallId": "bash-one", "toolName": "execute", "command": command}})
 		for i, state := range []string{"started", "succeeded"} {
-			observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.changed", At: at.Add(time.Duration(i) * time.Second), Data: map[string]any{"toolCallId": "bash-one", "toolName": "bash", "state": state}})
+			observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.changed", At: at.Add(time.Duration(i) * time.Second), Data: map[string]any{"toolCallId": "bash-one", "toolName": "execute", "state": state}})
 		}
 		page, err := (&runrecord.Service{Store: s}).TaskNodeTimeline(ctx, task, node, turn.ID, "", 100)
 		if err != nil {

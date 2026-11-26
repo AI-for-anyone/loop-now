@@ -470,9 +470,10 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	return res, nil
 }
 
-// toolCommand records the command of a tool call (bash and the like) on the run, in its safe display form.
+// toolCommand records the command of a shell tool call (Bash, shell, execute, bash) on the run, in its safe display
+// form.
 func (e *Executor) toolCommand(agentID, runID uuid.UUID, id, name, command string) {
-	if command = toolcommand.Display(name, command); command != "" {
+	if command = toolcommand.Display(command); command != "" {
 		e.event(agentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
 	}
 }

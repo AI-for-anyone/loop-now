@@ -8,6 +8,8 @@ import (
 
 // Commands are persisted in the existing scoped lifecycle JSON records. No
 // session scan/backfill and no new table/column is needed for old tool summaries.
+// A tool.command event is written only for a shell tool, whatever that runtime
+// names it, so the command goes to the entry with the same toolCallId.
 func toolCommands(events []store.LifecycleEvent) map[string]string {
 	out := map[string]string{}
 	for _, ev := range events {
@@ -15,7 +17,7 @@ func toolCommands(events []store.LifecycleEvent) map[string]string {
 			continue
 		}
 		if id := str(ev.Data, "toolCallId"); id != "" {
-			if command := toolcommand.Display(str(ev.Data, "toolName"), str(ev.Data, "command")); command != "" {
+			if command := toolcommand.Display(str(ev.Data, "command")); command != "" {
 				out[id] = command
 			}
 		}
@@ -24,7 +26,7 @@ func toolCommands(events []store.LifecycleEvent) map[string]string {
 }
 
 func withToolCommand(value any, commands map[string]string) any {
-	if tool, ok := value.(apitypes.TimelineToolEntry); ok && tool.ToolName == "bash" {
+	if tool, ok := value.(apitypes.TimelineToolEntry); ok {
 		if command := commands[tool.ToolCallID]; command != "" {
 			tool.Command = &command
 		}
