@@ -18,11 +18,6 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - A conversation uses the width up to the turn ruler (24 px gutters, up to 1600 px); tables and code blocks use all of it, and the message box lines up with the messages. On a 1920 px window the space left of the ruler went from about 360 px to about 37 px. The turn ruler is 40 px wide, and there is less space above the first message and above the message box.
 - Task node conversations get the same width; phones keep their layout with 14 px gutters.
 
-### Change notes are one file per change
-
-- A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
-- The loopctl guide tells a step in a task with a git workspace to write its notes as such a file when the repository keeps one per change.
-
 ### The run record says what each tool did
 
 - A tool in a reply's run record now shows what it did, on the line under its name: the command a shell tool ran on every runtime (Claude Code Bash, Codex shell, Antigravity and local ACP commands, Pi bash), the file a read, write or edit tool worked on (relative to the working folder when inside it), and the pattern or query of a search tool. Before, only Pi's commands were shown and every other tool showed just its name. Long text is one line with "…"; a click shows it all.
