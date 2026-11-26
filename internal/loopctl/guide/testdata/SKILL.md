@@ -174,7 +174,7 @@ The rest of this section is about git mode, except where it says otherwise.
 
 **Ending a copy.** When a copy-mode task completes, Loop Now deletes the copy: what was not saved as an artifact is gone. When it is cancelled, the copy is kept if files were added or changed in it (the task page shows how many) and a person can remove it; otherwise it is deleted. The original folder is never touched.
 
-**As a step in such a task.** Work only in the workspace from your prompt. In git mode stay on its branch: do not switch branches, and do not touch the repository's main checkout or any other worktree; commit your work and push it to this branch; there is one pull request for the whole task. In copy mode, do not write to the original folder; save each result as a task artifact. Your own folder is still where it always is, for your notes and context.
+**As a step in such a task.** Work only in the workspace from your prompt. In git mode stay on its branch: do not switch branches, and do not touch the repository's main checkout or any other worktree; commit your work and push it to this branch; there is one pull request for the whole task. When the repository keeps one note file per change (Loop Now does, in `changes/`; its AGENTS.md says how), write the change's notes as that new file instead of adding to a shared changelog, so pull requests waiting in a merge queue do not conflict. In copy mode, do not write to the original folder; save each result as a task artifact. Your own folder is still where it always is, for your notes and context.
 
 A flow for such a task (implement, verify, the pull request, then a last step that ends it; capped ways back from verify and from the pull request), as task.json:
 

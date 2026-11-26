@@ -12,16 +12,31 @@ import { TaskRunRecord } from './TaskRunRecord'
 const dto = taskRunTimeline(), endpoint = apiUrl(`/tasks/${dto.taskId}/nodes/${dto.nodeRunId}/runs/${dto.run.id}/timeline`)
 const tool = (state: Schemas['ToolState']): Schemas['TimelineTool'] => ({ type: 'tool', at: '2026-10-18T00:00:02Z', toolCallId: 'actual-call', toolName: 'fixture_tool', state, endedAt: state === 'started' ? null : '2026-10-18T00:00:03Z', durationMs: null })
 function renderRecord() { return renderWithQuery(<TaskRunRecord taskId={dto.taskId} nodeRunId={dto.nodeRunId} runId={dto.run.id} agentId={dto.agentId} runtimeId={dto.runtimeId} />) }
-it('the task record reuses the command text display and does not switch to the regular API', async () => {
+it('the task record reuses the command and target display and does not switch to the regular API', async () => {
   const command = 'printf "task"\npwd'
-  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ entries: [{ ...tool('succeeded'), toolName: 'bash', command }] }))))
+  const entries: Schemas['TimelineEntry'][] = [
+    { ...tool('succeeded'), toolCallId: 'bash-call', toolName: 'Bash', command },
+    { ...tool('succeeded'), toolCallId: 'read-call', toolName: 'Read', target: 'web/src/features/chat/TimelineBody.tsx' },
+    { ...tool('succeeded'), toolCallId: 'grep-call', toolName: 'Grep', target: 'StepCode' },
+    { ...tool('succeeded'), toolCallId: 'old-edit', toolName: 'Edit' },
+  ]
+  server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ entries }))))
   const user = userEvent.setup()
   renderRecord()
-  await screen.findByText('bash')
+  await screen.findByText('Bash')
   await user.click(screen.getByRole('button', { name: /^Run log/ }))
-  const row = screen.getByText('Tool bash').closest('li')!
-  expect(row.querySelector('code')?.textContent).toBe(command)
-  expect(row).toHaveAttribute('data-tone', 'ok')
+  const bashRow = screen.getByText('Tool Bash').closest('li')!
+  expect(bashRow.querySelector('code')?.textContent).toBe(command)
+  expect(bashRow).toHaveAttribute('data-tone', 'ok')
+  const toggle = within(bashRow).getByRole('button')
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await user.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  expect(screen.getByText('Tool Read').closest('li')?.querySelector('code')?.textContent).toBe('web/src/features/chat/TimelineBody.tsx')
+  expect(screen.getByText('Tool Grep').closest('li')?.querySelector('code')?.textContent).toBe('StepCode')
+  const oldEdit = screen.getByText('Tool Edit').closest('li')!
+  expect(oldEdit.querySelector('code')).toBeNull()
+  expect(within(oldEdit).queryByText(/Command not recorded/)).toBeNull()
   expect(screen.queryByText(/tools\[/)).toBeNull()
 })
 it('task tools load with their own cursor without adding up the full usage of each page, and the regular API is not called', async () => {

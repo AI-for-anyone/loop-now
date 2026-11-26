@@ -2,9 +2,26 @@
 
 English: [CHANGELOG.md](CHANGELOG.md)
 
-各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
+各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。改动不直接改这个文件，而是在 `changes/` 里加一个说明文件（见 `changes/README.md`），发布时由 `scripts/release/collect-changes.sh` 放进“## 未发布”。
 
 ## 未发布
+
+### 每个改动的说明各写一个文件
+
+- 给 Loop Now 的改动现在新加一个文件 `changes/<slug>.md` 来写说明，里面分英文、中文和 MAIN.md 三部分，不再直接改 CHANGELOG.md、CHANGELOG.zh-CN.md 和 MAIN.md；在合并队列里一起排队的几个 PR 不会再在这些地方冲突、被踢出队列。发布时由 `scripts/release/collect-changes.sh <版本>` 把说明放进去，之前可以用 `scripts/release/notes.sh Unreleased` 预览。PR 如果直接在“未发布”下加行，或在 MAIN.md 的改动列表里加新条目，CI 会失败（发布分支除外）。
+- loopctl 指南告诉 git 工作区任务里的步骤：仓库如果每个改动各有一个说明文件，就按这个方式写。
+
+### 运行记录里看得到每个工具干了什么
+
+- 回复的运行记录里，每个工具名字下面多了一行，写着它干了什么：所有运行时的命令行工具执行的命令（Claude Code 的 Bash、Codex 的 shell、Antigravity 和自己添加的 ACP 命令、Pi 的 bash），读写和修改文件的工具碰的是哪个文件（在工作文件夹里就写相对路径），搜索工具搜的是什么。以前只有 Pi 的命令显示出来，其余的工具只有名字。太长的只显示一行带省略号，点一下看全文。
+- 含有密码、令牌之类的命令和搜索内容仍然隐藏。文件内容和其他参数都不记录。
+- 这个版本之前 Claude Code 和 Pi 跑过的命令也能看到；Codex 和 Antigravity 以前的命令当时没记下来，那些行保持原样。
+- 接口：`TimelineTool.command` 不再只限 bash，新增 `TimelineTool.target`。
+
+### 运行时图标：一种颜色、一个框
+
+- 每个运行时的图标现在都是同一个样子：一个深蓝色的圆角方框，中间是各家标志的轮廓，用浅色画（Claude 的星芒、OpenAI 的结、Grok 的标志、Antigravity 的拱形、Pi 的像素标志）。自己添加的 ACP 命令在同样的框里写首字母。v0.3.3 用的是各家原本的彩色标志放在浅色小方块上，和控制台不搭。
+- “谁来跑”、输入框、换运行时的那一行、侧边栏、Agent 页顶部、AI 帮写和 ACP 命令里都用同一个图标，大小不同样子不变。
 
 ### Agent 页顶部压成一条细栏
 
@@ -38,6 +55,10 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 - 拖左边栏的右边缘就能调宽窄：200 到 420 像素之间，并且不超过窗口宽度的 40%。宽度会记在这个浏览器里（桌面版也一样），刷新后还在；窗口变窄时左边栏暂时跟着变窄，窗口再变宽就恢复记住的宽度。双击边缘恢复默认宽度（248）。用键盘时，选中边缘后按左右方向键（每次 16 像素）、Home 和 End。
 - 不管多宽，太长的 Agent 名、项目名和菜单名都以省略号结尾，标记、数字和“+”按钮不会被挡住。手机上左边栏仍是抽屉，没有拖动把手。
+
+### 任务里的步骤会等它的 CLI 把后台的活都干完
+
+- 任务里的步骤不会再在 CLI 还在干活时就结束、让任务以“没有提交结果就结束了”卡住。Antigravity：前一条命令结束后，agy 在自己接着说的回复里又启动的命令，现在和第一条一样算这个步骤的后台任务，步骤会等它跑完、等 agy 说完。普通 Agent 上，这样的命令现在也会显示在“后台任务 N”里，结束后会有一条接着说的回复。Claude Code：后台任务在 Claude Code 自己接着说的回复里启动又结束时（比如一个马上失败的监视命令），步骤现在会等 Claude Code 之后对它的回复。
 
 ### CLI 自己接着说话时，上面那行标题只占一行
 

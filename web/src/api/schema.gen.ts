@@ -6547,7 +6547,7 @@ export interface components {
             at: string;
             info: Record<string, never>;
         };
-        /** @description One tool call; at is the start time. Only bash may include a length-bounded, redacted command; no other arguments or output are included */
+        /** @description One tool call; at is the start time. A shell command may include its length-bounded, redacted command; a file tool its file and a search tool its pattern or query as target. No other arguments and no output are included */
         TimelineTool: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -6558,8 +6558,10 @@ export interface components {
             at: string;
             toolCallId: string;
             toolName: string;
-            /** @description Safe display text of the actual bash command, at most 4096 characters; hidden for sensitive commands; omitted in old records and for other tools. */
+            /** @description Safe display text of the shell command the tool ran (Claude Code Bash, Codex shell, ACP execute, Pi bash), at most 4096 characters; hidden for sensitive commands; omitted in old records and for other tools. */
             command?: string;
+            /** @description What the tool worked on, without contents or other arguments. A file tool (read, edit, write) gives its file, relative to the working folder when inside it and absolute otherwise; several files are joined with ", ". A search tool gives its pattern or query, at most 200 characters, hidden when it looks like it contains credentials. Omitted in old records and when nothing was recorded. */
+            target?: string;
             state: components["schemas"]["ToolState"];
             /** Format: date-time */
             endedAt: string | null;

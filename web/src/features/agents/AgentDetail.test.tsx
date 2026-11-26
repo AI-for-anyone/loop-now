@@ -117,7 +117,7 @@ describe('Runtime mark in the header', () => {
     const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'config'))
     const header = (await heading('Local assistant')).closest('header')!
     const mark = within(header).getByTitle('Runtime: Claude Code on this computer')
-    expect(mark.querySelector('img')).toHaveAttribute('data-logo', 'claude')
+    expect(mark.querySelector('svg')).toHaveAttribute('data-logo', 'claude')
     expect(mark).not.toHaveAttribute('data-slot', 'badge')
     expect(within(header).queryByText('Claude Code')).toBeNull()
     await act(() => router.navigate(defaultAgentPath(pi.id, 'config')))

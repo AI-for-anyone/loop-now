@@ -17,6 +17,8 @@ export interface TimelineStep {
   // The corresponding field name, shown in a monospaced font.
   field: string | null
   command: string | null
+  // What a file or search tool worked on (file path or search pattern/query), shown in code style under the name.
+  target: string | null
   detail: string | null
   // Additional notes listed one per line (each synced source, the tail of Pi's error output).
   lines: string[]
@@ -71,9 +73,13 @@ function endedLabel(entry: Extract<Entry, { type: 'ended' }>): { label: string; 
   return { label: t.timeline.step.ended.user_interrupt, tone: 'hot' }
 }
 
+// Shell tool names across runtimes (Pi, Claude Code, Codex, ACP), for saying “未记录命令” (Command not recorded) on old records that
+// have no command stored. When a command is stored, it is shown whatever the tool's name is.
+const SHELL_TOOLS: ReadonlySet<string> = new Set(['bash', 'Bash', 'shell', 'execute'])
+
 // Turn timeline entries into steps for the UI. When there is no queued entry (sent while idle, or a reply from before this feature
 // shipped), add a step at the run's queued time.
-// bash shows the actual command from the record; no other arguments or tool output are shown.
+// Tools show their recorded command (shell tools) or target (files or search query); no other arguments or tool output are shown.
 // runtimeName gives a runtime's name (useRuntimeLookup().name). Startup phases and process entries carry their runtime; the server fills
 // it in for records written before it was recorded.
 export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entries: Entry[], runtimeName: (runtime: Runtime) => string): TimelineStep[] {
@@ -83,6 +89,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
     at: entry.at,
     field: null,
     command: null,
+    target: null,
     detail: null,
     lines: [],
     output: null,
@@ -243,7 +250,8 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
         )
         break
       case 'tool': {
-        const command = entry.toolName === 'bash' && entry.command?.trim() ? entry.command : null
+        const command = entry.command?.trim() ? entry.command : null
+        const target = entry.target?.trim() ? entry.target : null
         const noResult = entry.state === 'no_result' || (entry.state === 'started' && turnEnded)
         const state = noResult ? t.timeline.detail.toolNoResult : entry.state === 'started' ? t.timeline.detail.toolRunning : null
         steps.push(
@@ -251,7 +259,8 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
             label: t.timeline.step.tool(entry.toolName),
             field: t.timeline.field.tool(entry.state),
             command,
-            detail: [entry.toolName === 'bash' && !command ? t.timeline.detail.commandUnavailable : null, state].filter(Boolean).join(' · ') || null,
+            target,
+            detail: [!command && !target && SHELL_TOOLS.has(entry.toolName) ? t.timeline.detail.commandUnavailable : null, state].filter(Boolean).join(' · ') || null,
             duration: entry.durationMs !== null ? t.timeline.duration(entry.durationMs) : null,
             tone: entry.state === 'succeeded' ? 'ok' : entry.state === 'failed' ? 'fail' : noResult ? 'neutral' : 'warn',
           }),

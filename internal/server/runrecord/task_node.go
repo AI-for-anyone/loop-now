@@ -67,9 +67,9 @@ func (s *Service) TaskNodeTimeline(ctx context.Context, task, node, run uuid.UUI
 		return out, e
 	}
 	projected = append(projected, permissionEntries(requests)...)
-	commands := toolCommands(events)
+	details := toolDetailsOf(events)
 	for i := range projected {
-		projected[i].value = withToolCommand(projected[i].value, commands)
+		projected[i].value = withToolDetails(projected[i].value, details)
 	}
 	for _, u := range usage {
 		projected = append(projected, taskNodeTimelineItem{id: u.ID, at: u.At, value: apitypes.TimelineModelCallEntry{TimelineBase: base(apitypes.TimelineModelCall, u.At), Kind: u.Kind, Provider: strPtr(u.Provider), Model: strPtr(u.Model), ResponseModel: strPtr(u.ResponseModel), StopReason: strPtr(u.StopReason), Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, Total: u.Total, DurationMs: u.DurationMs}})

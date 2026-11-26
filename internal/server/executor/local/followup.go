@@ -22,6 +22,7 @@ type followUp struct {
 	agentID  uuid.UUID
 	runID    uuid.UUID // the run of origin background made for it
 	triggers []executor.BackgroundTask
+	about    string // the task the CLI says it is about (it may end just after the reply began); empty when none
 	sel      executor.Selection
 	version  int64
 	done     chan struct{}
@@ -74,6 +75,22 @@ func (f *followUp) ToolCommand(id, name, command string) {
 			ToolCommand(id, name, command string)
 		}); ok {
 			c.ToolCommand(id, name, command)
+		}
+	})
+}
+func (f *followUp) ToolFiles(id, name string, paths []string) {
+	f.do(func(k runturn.Sink) {
+		if c, ok := k.(interface {
+			ToolFiles(id, name string, paths []string)
+		}); ok {
+			c.ToolFiles(id, name, paths)
+		}
+	})
+}
+func (f *followUp) ToolQuery(id, name, query string) {
+	f.do(func(k runturn.Sink) {
+		if c, ok := k.(interface{ ToolQuery(id, name, query string) }); ok {
+			c.ToolQuery(id, name, query)
 		}
 	})
 }
@@ -156,7 +173,7 @@ func (f *followUp) take(runID uuid.UUID, sink runturn.Sink) {
 // A task instance gets no runs of that kind: its turn waits for its background work, and a reply after that wait is
 // not recorded.
 func (e *Executor) selfTurnBegan(p *proc, about string) runturn.SelfTurn {
-	f := &followUp{e: e, agentID: p.agentID, runID: uuid.Must(uuid.NewV7()), triggers: e.bgTakeEnded(p), done: make(chan struct{}),
+	f := &followUp{e: e, agentID: p.agentID, runID: uuid.Must(uuid.NewV7()), triggers: e.bgTakeEnded(p), about: about, done: make(chan struct{}),
 		sel: executor.Selection{Runtime: p.drv.runtime(), Provider: p.provider, ModelID: p.model, ThinkingLevel: p.thinking}, version: p.version}
 	host := e.followUps.Load()
 	e.mu.Lock()
@@ -271,7 +288,11 @@ func (e *Executor) executeFollowUp(ctx context.Context, r *run, req executor.Req
 		p.curRun.Store(&runID)
 	}
 	sink.Running(f.version, f.sel)
-	f.take(req.RunID, sinkAdapter{s: sink, command: func(id, name, command string) {
+	cwd := ""
+	if p != nil {
+		cwd = p.cwd
+	}
+	f.take(req.RunID, sinkAdapter{s: sink, cwd: cwd, command: func(id, name, command string) {
 		e.toolCommand(req.AgentID, req.RunID, id, name, command)
 	}, event: func(typ string, data map[string]any) { e.event(req.AgentID, &req.RunID, typ, data) }})
 	select {
@@ -361,6 +382,8 @@ type quietRuntime interface {
 // its text is returned. When nothing comes from the runtime for the background wait (Options.ACPBackgroundWait) the
 // tasks still running are stopped (task_limit) and the turn ends, saying why. When the run is stopped meanwhile, the
 // tasks are stopped with it and stopped reports true.
+// A task that ends while a reply of the CLI's own is being taken (it may also have started in it) is told about in
+// the CLI's next own reply, so after such a reply the turn waits for the next one as after any end.
 func (e *Executor) holdForBackground(ctx context.Context, p *proc, r *run, runID uuid.UUID, sink sinkAdapter) (string, bool) {
 	limit := e.o.ACPBackgroundWait
 	if limit <= 0 {
@@ -401,7 +424,7 @@ func (e *Executor) holdForBackground(ctx context.Context, p *proc, r *run, runID
 			if text := strings.TrimSpace(f.result.Text); text != "" {
 				texts = append(texts, text)
 			}
-			last, expect = time.Now(), false
+			last, expect = time.Now(), !quiet && e.bgUntold(p, f.about)
 		}
 		running := len(e.bgRunning(p))
 		e.mu.Lock()

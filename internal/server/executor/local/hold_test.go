@@ -19,7 +19,8 @@ func asTask(s *agentconfig.Snapshot) {
 }
 
 // A task instance's turn ends only once the background work it started has ended and the CLI's own reply about it has
-// come (it goes into the same turn), on every runtime: no follow-up run is asked for. Codex replies with nothing.
+// come (it goes into the same turn), on every runtime: no follow-up run is asked for. Codex replies with nothing, and
+// its turn does not wait for a reply (the reply wait is minutes).
 func TestTaskInstanceHoldsAllRuntimes(t *testing.T) {
 	cases := []struct {
 		name, msg, want string
@@ -49,7 +50,7 @@ func TestTaskInstanceHoldsAllRuntimes(t *testing.T) {
 			h, id, host := c.agent(t)
 			start := time.Now()
 			res, sink := h.exec(id, c.msg)
-			if res.Outcome != executor.OutcomeCompleted || res.Text != c.want || time.Since(start) < 150*time.Millisecond {
+			if took := time.Since(start); res.Outcome != executor.OutcomeCompleted || res.Text != c.want || took < 150*time.Millisecond || took > 30*time.Second {
 				t.Fatalf("the turn holds until the work ended: %+v after %v", res, time.Since(start))
 			}
 			if got := sink.text.String(); got != c.want {
@@ -162,5 +163,102 @@ func TestAntigravityStopBackground(t *testing.T) {
 	}
 	if other := waitEnded(t, obs, running[1].ID); other.Status != executor.BackgroundStopped || other.StopReason != executor.StopByPerson {
 		t.Fatalf("the other one ends with it: %+v", other)
+	}
+}
+
+// agy starts commands in its own replies too (no prompt open): one still running when that reply ends is a background
+// task of the held turn like the prompt's, and the turn waits for it and for agy's next own reply.
+// (The second command outlasts acpSettle, so it is still running when its reply ends.)
+func TestTaskInstanceHoldsForOwnReplyCommands(t *testing.T) {
+	obs, host := &bgObs{}, newFollowUpHost()
+	h := newACPHarness(t, "agy", func(o *Options) { o.Observer = obs })
+	h.e.SetFollowUps(host)
+	id := h.acpAgent(asTask)
+	run := uuid.Must(uuid.NewV7())
+	sink := newSink()
+	res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: run, Message: "fake:background 200ms+4s"}, sink)
+	want := "backgrounded\n\nreported 1\n\nreported 1"
+	if err != nil || res.Outcome != executor.OutcomeCompleted || res.Text != want || sink.text.String() != want {
+		t.Fatalf("the turn waits for the command of the own reply and the reply after it: %+v %v %q", res, err, sink.text.String())
+	}
+	obs.bgMu.Lock()
+	tasks := map[string]executor.BackgroundTask{}
+	for _, r := range obs.tasks {
+		tasks[r.t.ID] = r.t
+	}
+	obs.bgMu.Unlock()
+	if len(tasks) != 2 {
+		t.Fatalf("two background tasks: %+v", tasks)
+	}
+	for _, task := range tasks {
+		if task.RunID != run || task.Status != executor.BackgroundCompleted {
+			t.Fatalf("each belongs to the held turn and ended there: %+v", task)
+		}
+	}
+	select {
+	case call := <-host.calls:
+		t.Fatalf("no follow-up run for a task instance: %+v", call)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// For an Antigravity Agent, a command agy starts in its own reply is listed on that reply's run, and its end brings a
+// follow-up run of its own.
+func TestAntigravityOwnReplyCommandIsListed(t *testing.T) {
+	obs, host := &bgObs{}, newFollowUpHost()
+	h := newACPHarness(t, "agy", func(o *Options) { o.Observer = obs })
+	h.e.SetFollowUps(host)
+	id := h.acpAgent(nil)
+	if res, _ := h.exec(id, "fake:background 200ms+4s"); res.Text != "backgrounded" {
+		t.Fatalf("no hold: %+v", res)
+	}
+	first := lastItem(t, obs)
+	call := host.next(t)
+	follow, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, newSink())
+	if err != nil || follow.Text != "reported 1" {
+		t.Fatalf("the first own reply: %+v %v", follow, err)
+	}
+	second := lastItem(t, obs)
+	if second == first {
+		t.Fatal("the command of the own reply is not listed")
+	}
+	if r := obs.reports(second)[0]; r.RunID != call.run || r.Label != "sleep 4s" || r.Status != executor.BackgroundRunning {
+		t.Fatalf("listed on the own reply's run: %+v", r)
+	}
+	if end := waitEnded(t, obs, second); end.Status != executor.BackgroundCompleted {
+		t.Fatalf("ended: %+v", end)
+	}
+	next := host.next(t)
+	if len(next.triggers) != 1 || next.triggers[0].ID != second {
+		t.Fatalf("a follow-up run for its end: %+v", next)
+	}
+	if res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: next.run, Origin: executor.OriginBackground}, newSink()); err != nil || res.Text != "reported 1" {
+		t.Fatalf("the next own reply: %+v %v", res, err)
+	}
+}
+
+// A background task that starts and ends inside the CLI's own reply (Claude Code's watcher that fails at once) brings
+// another own reply after that one: the held turn waits for it and takes it, instead of ending with nothing running.
+func TestTaskInstanceHoldsAfterTaskEndedInFollowUp(t *testing.T) {
+	obs, host := &bgObs{}, newFollowUpHost()
+	h := newClaudeHarness(t, func(o *Options) { o.Observer = obs })
+	h.e.SetFollowUps(host)
+	id := h.claudeAgent(asTask)
+	run := uuid.Must(uuid.NewV7())
+	sink := newSink()
+	res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: run, Message: "fake:background 200ms then:50ms"}, sink)
+	want := "started\n\nbackground done\n\nbackground done"
+	if err != nil || res.Outcome != executor.OutcomeCompleted || res.Text != want || sink.text.String() != want {
+		t.Fatalf("the turn takes the reply about the task that ended inside the follow-up: %+v %v %q", res, err, sink.text.String())
+	}
+	for _, task := range []string{"b1", "b2"} {
+		if end := waitEnded(t, obs, task); end.RunID != run || end.Status != executor.BackgroundCompleted {
+			t.Fatalf("%s belongs to the held turn and ended: %+v", task, end)
+		}
+	}
+	select {
+	case call := <-host.calls:
+		t.Fatalf("no follow-up run for a task instance: %+v", call)
+	case <-time.After(300 * time.Millisecond):
 	}
 }

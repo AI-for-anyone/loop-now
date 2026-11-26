@@ -397,6 +397,39 @@ func TestBackgroundCommandsGoOn(t *testing.T) {
 	}
 }
 
+// A command the agent starts in a reply of its own (no prompt of the client open) that is still running when that reply
+// ends goes on in the background just as one of a prompt's: it is reported as a background task, its end goes to that
+// reply's sink and is reported with its output, and the agent's next own reply follows.
+func TestBackgroundCommandFromOwnReply(t *testing.T) {
+	c, sess, obs, turns := agyWithTasks(t)
+	prompt(t, c, sess, "fake:background 100ms+400ms", &sink{})
+	first := recv(t, obs.ended, "the first command's end")
+	self := recv(t, turns, "the agent's own reply")
+	if res := recv(t, self.ended, "its end"); res.Outcome != runturn.OutcomeCompleted || strings.TrimSpace(res.Text) != "reported 1" {
+		t.Fatalf("own reply: %+v", res)
+	}
+	obs.mu.Lock()
+	started := append([]acp.Task(nil), obs.started...)
+	obs.mu.Unlock()
+	if len(started) != 2 || started[1].Command != "sleep 400ms" || started[1].ID == first.ID {
+		t.Fatalf("the command started in the own reply is a background task: %+v", started)
+	}
+	if got := self.toolList(); got != "start:execute" {
+		t.Fatalf("it stays open on the own reply: %s", got)
+	}
+	end := recv(t, obs.ended, "the second command's end")
+	if end.ID != started[1].ID || end.Killed || end.Output == nil || *end.Output != "finished" {
+		t.Fatalf("its end: %+v", end)
+	}
+	if got := self.toolList(); got != "start:execute,end:execute:ok" {
+		t.Fatalf("its end goes to the own reply that started it: %s", got)
+	}
+	next := recv(t, turns, "the next own reply")
+	if res := recv(t, next.ended, "its end"); strings.TrimSpace(res.Text) != "reported 1" {
+		t.Fatalf("next own reply: %+v", res)
+	}
+}
+
 // A daemon command does not go on as a background task (it may never end): it is closed without a result when the
 // prompt ends. An agent run without Background has none.
 func TestBackgroundDaemonAndOtherAgents(t *testing.T) {
