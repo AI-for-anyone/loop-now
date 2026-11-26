@@ -6,6 +6,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### The run record says what each tool did
+
+- A tool in a reply's run record now shows what it did, on the line under its name: the command a shell tool ran on every runtime (Claude Code Bash, Codex shell, Antigravity and local ACP commands, Pi bash), the file a read, write or edit tool worked on (relative to the working folder when inside it), and the pattern or query of a search tool. Before, only Pi's commands were shown and every other tool showed just its name. Long text is one line with "…"; a click shows it all.
+- Commands and searches that contain credentials stay hidden. No file contents and no other arguments are recorded.
+- Commands Claude Code and Pi ran before this version show up too; Codex's and Antigravity's older commands were not recorded, so their rows stay as they were.
+- API: `TimelineTool.command` is no longer limited to bash, and `TimelineTool.target` is new.
+
 ### The heading above a CLI's own follow-up is one short line
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
