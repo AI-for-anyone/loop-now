@@ -11,6 +11,10 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - `loopctl agent create` 和 `agent update` 新增 `--working-dir`、`--use-local-config true|false`、`--permission-mode supervised|accept_edits|auto|full`、`--thinking-level` 和 `--service-tier`，在命令行里就能把 Agent 设置完整，不用再去配置页一个个点。`agent update` 只发送给出的项，可以用 `--clear-working-dir`、`--clear-thinking-level`、`--clear-service-tier` 恢复默认。
 - 有固定取值的选项由 loopctl 先检查，不发请求；其余的（文件夹要是绝对路径、思考档位要是模型支持的、速度档位只用于 Pi 里的 Codex 模型、Pi 不能指定工作文件夹）由服务端检查，原样显示它的提示。
 
+### 每个运行时显示它自己的标志
+
+- Claude Code、Codex、Grok、Antigravity 和内置的 Pi 改用各自产品的标志（Claude、OpenAI、Grok、Google Antigravity、Pi 的像素标志），保持原本的颜色，不再用画出来的图标：用在“谁来跑”、输入框、换运行时的分隔行、侧边栏、Agent 顶部、AI 帮写和 ACP 命令里。你自己添加的 ACP 命令仍用带首字母的通用图标。
+
 ### 带工作区的任务：git worktree，或任意文件夹的副本
 
 - 任务可以带一个工作区：Manager 建任务时指定这台电脑上的一个文件夹，任务的每一步都在那里干活，不再是在 Agent 自己文件夹的副本里。每一步和 Agent 平时的对话一样干活：打开了“用我本机的 CLI 配置”时，它有你的设置、技能、插件、MCP 和登录，Claude Code 还用同一份记忆。所有运行时都能参加，包括内置的 Pi。同一个文件夹上可以同时跑好几个任务，互不影响，也不动这个文件夹本身。
