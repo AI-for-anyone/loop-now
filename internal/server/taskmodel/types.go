@@ -2,6 +2,7 @@
 package taskmodel
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +84,7 @@ type Detail struct {
 	Nodes             []NodeRun           `json:"nodes"`
 	Artifacts         []Artifact          `json:"artifacts"`
 	Cleanup           string              `json:"cleanup"`
-	// Workspace is the task's git worktree; nil for a task without one (and for records written before workspaces).
+	// Workspace is the task's workspace; nil for a task without one (and for records written before workspaces).
 	Workspace *Workspace `json:"workspace"`
 }
 
@@ -95,26 +96,74 @@ const (
 	WorkspaceStateKept    = "kept"
 )
 
-// Workspace is the task's git worktree (TaskWorkspace). Kept is non-nil exactly when State is WorkspaceStateKept.
+// Workspace modes (TaskWorkspace.mode) and the requested mode of TaskWorkspaceInput.
+const (
+	WorkspaceModeGit  = "git"
+	WorkspaceModeCopy = "copy"
+	WorkspaceModeAuto = "auto"
+)
+
+// Workspace is the task's workspace (TaskWorkspace): a git worktree (Mode git, Git set) or a copy of a folder (Mode
+// copy, Copy set once the copy exists). Kept is non-nil exactly when State is WorkspaceStateKept.
 type Workspace struct {
-	Repository string         `json:"repository"`
-	Path       string         `json:"path"`
-	Branch     string         `json:"branch"`
-	BaseBranch string         `json:"baseBranch"`
-	BaseCommit *string        `json:"baseCommit"`
-	State      string         `json:"state"`
-	Kept       *WorkspaceKept `json:"kept"`
+	Mode     string         `json:"mode"`
+	Folder   string         `json:"folder"`
+	Path     string         `json:"path"`
+	State    string         `json:"state"`
+	Kept     *WorkspaceKept `json:"kept"`
+	ModeNote *string        `json:"modeNote"`
+	Git      *WorkspaceGit  `json:"git"`
+	Copy     *WorkspaceCopy `json:"copy"`
 }
 
-// WorkspaceKept says what removing a kept worktree would lose (TaskWorkspaceKept).
+// WorkspaceGit is the git side of a git-mode workspace (TaskWorkspaceGit).
+type WorkspaceGit struct {
+	Repository string  `json:"repository"`
+	Branch     string  `json:"branch"`
+	BaseBranch string  `json:"baseBranch"`
+	BaseCommit *string `json:"baseCommit"`
+}
+
+// WorkspaceCopy describes the copy of a copy-mode workspace as made (TaskWorkspaceCopy).
+type WorkspaceCopy struct {
+	Files int   `json:"files"`
+	Bytes int64 `json:"bytes"`
+}
+
+// UnmarshalJSON also reads the stage 1 shape stored before modes existed (repository, branch, baseBranch and
+// baseCommit at the top level, no mode) as a git-mode workspace with the same values.
+func (w *Workspace) UnmarshalJSON(b []byte) error {
+	type plain Workspace
+	var v struct {
+		plain
+		Repository *string `json:"repository"`
+		Branch     string  `json:"branch"`
+		BaseBranch string  `json:"baseBranch"`
+		BaseCommit *string `json:"baseCommit"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*w = Workspace(v.plain)
+	if w.Mode == "" && v.Repository != nil {
+		w.Mode, w.Folder = WorkspaceModeGit, *v.Repository
+		w.Git = &WorkspaceGit{Repository: *v.Repository, Branch: v.Branch, BaseBranch: v.BaseBranch, BaseCommit: v.BaseCommit}
+	}
+	return nil
+}
+
+// WorkspaceKept says what removing a kept workspace would lose (TaskWorkspaceKept); counts that do not apply to the
+// mode are 0.
 type WorkspaceKept struct {
 	UncommittedFiles int `json:"uncommittedFiles"`
 	UnpushedCommits  int `json:"unpushedCommits"`
+	ChangedFiles     int `json:"changedFiles"`
 }
 
 // WorkspaceInput asks for a workspace when a task is created (TaskWorkspaceInput).
 type WorkspaceInput struct {
-	Repository string  `json:"repository"`
+	Folder     string  `json:"folder"`
+	Mode       string  `json:"mode,omitempty"`
 	BaseBranch *string `json:"baseBranch,omitempty"`
 	Branch     *string `json:"branch,omitempty"`
 }

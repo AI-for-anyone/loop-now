@@ -150,7 +150,7 @@ The output.json of the last node in this example looks like this (use another ne
 
 For work on a code repository on this computer (a feature, a fix), the Manager gives the task a workspace: one git worktree on one new branch, made by Loop Now when the task starts. One requirement is one task, one worktree, one branch and one pull request, front end and back end together. Tasks with their own worktrees are isolated from each other and from the person's checkout, so several can run at once.
 
-- Add `"workspace": {"repository": "<folder in the repository>"}` to the `TaskCreateInput`. The folder must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project. `baseBranch` (default: the remote's default branch, fetched fresh; without a remote, the current branch) and `branch` (default: `task/<task number>-<words of the title>`) are optional. A `branch` you name may already exist when no work tree has it checked out: that is how a new task carries on the branch of a cancelled one.
+- Add `"workspace": {"folder": "<folder in the repository>"}` to the `TaskCreateInput`. The folder must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project. `baseBranch` (default: the remote's default branch, fetched fresh; without a remote, the current branch) and `branch` (default: `task/<task number>-<words of the title>`) are optional. A `branch` you name may already exist when no work tree has it checked out: that is how a new task carries on the branch of a cancelled one.
 - The worktree lives in Loop Now's own data folder; `loopctl task get <taskId>` shows it under `workspace` (`path`, `branch`, `baseBranch`, `baseCommit`, `state`) and the branch as `task.branch`. If git fails while the task prepares (for example the fetch), the task is blocked with git's message; fix the cause and retry.
 - Every step works in the worktree, with its Agent's own CLI configuration and memory when the Agent uses them in its regular conversation, and the permission mode the Agent had at task start. Each step is told the path, the branch and the base in its prompt.
 
@@ -173,7 +173,7 @@ A flow for such a task (implement, verify, the pull request, then a last step th
   "actionId": "<new action UUID>",
   "title": "Show the branch in the task list",
   "request": {"goal": "What the feature must do", "repository": "<repository folder>"},
-  "workspace": {"repository": "<repository folder>"},
+  "workspace": {"folder": "<repository folder>"},
   "workflow": {
     "startStepId": "implement",
     "steps": [

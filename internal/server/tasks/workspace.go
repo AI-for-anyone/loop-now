@@ -21,7 +21,7 @@ import (
 
 // workspacePlan is a checked workspace request: the repository resolved, the branch and base as given.
 type workspacePlan struct {
-	root, branch, baseBranch string
+	folder, root, branch, baseBranch string
 }
 
 func (s *Source) git() string {
@@ -56,33 +56,37 @@ func (s *Service) checkWorkspace(ctx context.Context, projectID uuid.UUID, in ta
 		}
 		*f.out = *f.value
 	}
-	repo := in.Repository
-	if !filepath.IsAbs(repo) {
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must be an absolute path.")
+	if in.Mode != "" && in.Mode != taskmodel.WorkspaceModeAuto && in.Mode != taskmodel.WorkspaceModeGit {
+		return workspacePlan{}, apperr.Invalid("workspace.mode", "Copy mode is not available yet.")
 	}
-	if info, err := os.Stat(repo); err != nil || !info.IsDir() {
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must be a folder on this computer.")
+	folder := in.Folder
+	if !filepath.IsAbs(folder) {
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must be an absolute path.")
 	}
-	real, err := filepath.EvalSymlinks(repo)
+	if info, err := os.Stat(folder); err != nil || !info.IsDir() {
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must be a folder on this computer.")
+	}
+	real, err := filepath.EvalSymlinks(folder)
 	if err != nil {
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must be a folder on this computer.")
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must be a folder on this computer.")
 	}
+	plan.folder = folder
 	allowed, err := s.workspaceFolders(ctx, projectID, def)
 	if err != nil {
 		return workspacePlan{}, err
 	}
 	if !slices.ContainsFunc(allowed, func(dir string) bool { return within(dir, real) }) {
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project.")
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project.")
 	}
 	if within(s.Source.WorktreeRoot(), real) {
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must not be inside a task's worktree.")
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must not be inside a task's worktree.")
 	}
 	plan.root, err = gitworkspace.Resolve(ctx, s.Source.git(), real)
 	if err != nil {
 		if ctx.Err() != nil {
 			return workspacePlan{}, ctx.Err()
 		}
-		return workspacePlan{}, apperr.Invalid("workspace.repository", "Must be inside a git work tree: "+err.Error())
+		return workspacePlan{}, apperr.Invalid("workspace.folder", "Must be inside a git work tree: "+err.Error())
 	}
 	return plan, nil
 }
@@ -139,22 +143,24 @@ func (s *Service) newWorkspace(plan workspacePlan, id uuid.UUID, number int64, t
 	if branch == "" {
 		branch = gitworkspace.BranchName(int(number), title)
 	}
-	return &taskmodel.Workspace{Repository: plan.root, Path: filepath.Join(s.Source.WorktreeRoot(), id.String(), filepath.Base(plan.root)),
-		Branch: branch, BaseBranch: plan.baseBranch, State: taskmodel.WorkspaceStatePending}
+	return &taskmodel.Workspace{Mode: taskmodel.WorkspaceModeGit, Folder: plan.folder,
+		Path: filepath.Join(s.Source.WorktreeRoot(), id.String(), filepath.Base(plan.root)), State: taskmodel.WorkspaceStatePending,
+		Git: &taskmodel.WorkspaceGit{Repository: plan.root, Branch: branch, BaseBranch: plan.baseBranch}}
 }
 
 // prepareWorkspace creates the task's worktree while the task prepares (adopting it when an earlier preparation already
 // made it) and returns the base it starts from; nil when the task has no pending workspace.
 func (s *Service) prepareWorkspace(ctx context.Context, r taskmodel.Record) (*gitworkspace.Result, error) {
 	w := r.View.Workspace
-	if w == nil || w.State != taskmodel.WorkspaceStatePending {
+	if w == nil || w.State != taskmodel.WorkspaceStatePending || w.Git == nil {
 		return nil, nil
 	}
 	if !within(s.Source.WorktreeRoot(), w.Path) {
 		return nil, errors.New("the recorded worktree is not under Loop Now's worktree folder")
 	}
-	res, err := gitworkspace.Create(ctx, s.Source.git(), gitworkspace.Spec{Repository: w.Repository, Path: w.Path, Branch: w.Branch,
-		BaseBranch: w.BaseBranch, BranchGiven: r.WorkspaceBranchGiven})
+	g := w.Git
+	res, err := gitworkspace.Create(ctx, s.Source.git(), gitworkspace.Spec{Repository: g.Repository, Path: w.Path, Branch: g.Branch,
+		BaseBranch: g.BaseBranch, BranchGiven: r.WorkspaceBranchGiven})
 	if err != nil {
 		return nil, err
 	}
@@ -163,25 +169,29 @@ func (s *Service) prepareWorkspace(ctx context.Context, r taskmodel.Record) (*gi
 
 // activateWorkspace records the created worktree on the task.
 func activateWorkspace(r *taskmodel.Record, res *gitworkspace.Result) {
-	if res == nil || r.View.Workspace == nil {
+	if res == nil || r.View.Workspace == nil || r.View.Workspace.Git == nil {
 		return
 	}
 	commit := res.BaseCommit
 	r.View.Workspace.State = taskmodel.WorkspaceStateActive
-	r.View.Workspace.BaseBranch = res.BaseBranch
-	r.View.Workspace.BaseCommit = &commit
+	r.View.Workspace.Git.BaseBranch = res.BaseBranch
+	r.View.Workspace.Git.BaseCommit = &commit
 }
 
 // workspaceBlock tells a step of a task with a worktree where and how it works.
 func workspaceBlock(w taskmodel.Workspace) string {
-	base := w.BaseBranch
-	if w.BaseCommit != nil {
-		base += " at " + shortCommit(*w.BaseCommit)
+	g := w.Git
+	if g == nil {
+		return ""
+	}
+	base := g.BaseBranch
+	if g.BaseCommit != nil {
+		base += " at " + shortCommit(*g.BaseCommit)
 	}
 	return fmt.Sprintf("This task works in one git worktree: %s, on branch %s, started from %s. Work only in this worktree and stay on this "+
 		"branch: do not switch branches, and do not touch the repository's main checkout (%s) or any other worktree. Commit your work "+
 		"and push it to this branch; this branch has one pull request for the whole task. Your own folder is still at its usual place "+
-		"(see \"Folders and context\").", w.Path, w.Branch, base, w.Repository)
+		"(see \"Folders and context\").", w.Path, g.Branch, base, g.Repository)
 }
 
 func shortCommit(c string) string {
@@ -202,37 +212,37 @@ func (s *Service) cleanupWorkspace(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	w := r.View.Workspace
-	if w == nil || w.State == taskmodel.WorkspaceStateRemoved || w.State == taskmodel.WorkspaceStateKept {
+	if w == nil || w.State == taskmodel.WorkspaceStateRemoved || w.State == taskmodel.WorkspaceStateKept || w.Git == nil {
 		return nil
 	}
 	if !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
 		return errors.New("the recorded worktree is not under Loop Now's worktree folder; it is left alone")
 	}
-	git := s.Source.git()
-	st, err := gitworkspace.Inspect(ctx, git, w.Path, w.BaseBranch)
+	git, g := s.Source.git(), w.Git
+	st, err := gitworkspace.Inspect(ctx, git, w.Path, g.BaseBranch)
 	if err != nil {
 		return err
 	}
 	var kept *taskmodel.WorkspaceKept
 	switch {
 	case st.Missing:
-		if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, false); err != nil {
+		if err := gitworkspace.Remove(ctx, git, g.Repository, w.Path, false); err != nil {
 			return err
 		}
 	case st.UncommittedFiles == 0 && st.UnpushedCommits == 0:
-		if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, false); err != nil {
+		if err := gitworkspace.Remove(ctx, git, g.Repository, w.Path, false); err != nil {
 			// git refuses any worktree holding a submodule without force, even a clean one; Inspect has just found
 			// this one clean, submodule changes included.
 			if !strings.Contains(err.Error(), "submodule") {
 				return err
 			}
-			if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, true); err != nil {
+			if err := gitworkspace.Remove(ctx, git, g.Repository, w.Path, true); err != nil {
 				return err
 			}
 		}
 		if st.Merged {
-			if err := gitworkspace.DeleteBranch(ctx, git, w.Repository, w.Branch, w.BaseBranch); err != nil && s.Log != nil {
-				s.Log.Info("kept the task's merged branch", "task_id", id, "branch", w.Branch, "reason", err.Error())
+			if err := gitworkspace.DeleteBranch(ctx, git, g.Repository, g.Branch, g.BaseBranch); err != nil && s.Log != nil {
+				s.Log.Info("kept the task's merged branch", "task_id", id, "branch", g.Branch, "reason", err.Error())
 			}
 		}
 	default:
@@ -293,15 +303,18 @@ func (s *Service) RemoveWorkspace(ctx context.Context, p auth.Principal, id uuid
 	if s.Source == nil || !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
 		return nil, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The recorded worktree is not under Loop Now's worktree folder; it is not removed.")
 	}
-	git := s.Source.git()
+	git, g := s.Source.git(), w.Git
+	if g == nil {
+		return nil, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "Removing a copied workspace is not available yet.")
+	}
 	if _, err := os.Stat(w.Path); err == nil {
-		if saved, err := gitworkspace.SaveDetached(ctx, git, w.Repository, w.Path, w.Branch); err != nil {
+		if saved, err := gitworkspace.SaveDetached(ctx, git, g.Repository, w.Path, g.Branch); err != nil {
 			return nil, err
 		} else if saved != "" && s.Log != nil {
 			s.Log.Info("saved the commits of a detached HEAD before removing the task's worktree", "task_id", id, "branch", saved)
 		}
 	}
-	if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, true); err != nil {
+	if err := gitworkspace.Remove(ctx, git, g.Repository, w.Path, true); err != nil {
 		return nil, err
 	}
 	_ = os.Remove(filepath.Dir(w.Path))

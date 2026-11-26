@@ -113,7 +113,7 @@ func TestTaskQueriesAndCreate(t *testing.T) {
 	}
 	// A workspace goes to the server as written; task get shows the task's workspace as the server returns it.
 	withWorkspace := taskCreateInput()
-	withWorkspace["workspace"] = map[string]any{"repository": "/code/app", "baseBranch": "main", "branch": nil}
+	withWorkspace["workspace"] = map[string]any{"folder": "/code/app", "baseBranch": "main", "branch": nil}
 	b, _ = json.Marshal(withWorkspace)
 	e.stdin = string(b)
 	e.run("task", "create", "--from-file", "-").ok(t)

@@ -161,13 +161,13 @@ func TestTaskWorkspaceFieldErrors(t *testing.T) {
 		in    taskmodel.WorkspaceInput
 		field string
 	}{
-		{"relative", taskmodel.WorkspaceInput{Repository: "repo"}, "workspace.repository"},
-		{"missing", taskmodel.WorkspaceInput{Repository: filepath.Join(ww.folder, "nope")}, "workspace.repository"},
-		{"outside the allowed folders", taskmodel.WorkspaceInput{Repository: filepath.Join(outside, "other")}, "workspace.repository"},
-		{"not a repository", taskmodel.WorkspaceInput{Repository: plain}, "workspace.repository"},
-		{"bad branch", taskmodel.WorkspaceInput{Repository: ww.repo, Branch: strPtr("a..b")}, "workspace.branch"},
-		{"empty branch", taskmodel.WorkspaceInput{Repository: ww.repo, Branch: strPtr("")}, "workspace.branch"},
-		{"bad base", taskmodel.WorkspaceInput{Repository: ww.repo, BaseBranch: strPtr("-x")}, "workspace.baseBranch"},
+		{"relative", taskmodel.WorkspaceInput{Folder: "repo"}, "workspace.folder"},
+		{"missing", taskmodel.WorkspaceInput{Folder: filepath.Join(ww.folder, "nope")}, "workspace.folder"},
+		{"outside the allowed folders", taskmodel.WorkspaceInput{Folder: filepath.Join(outside, "other")}, "workspace.folder"},
+		{"not a repository", taskmodel.WorkspaceInput{Folder: plain}, "workspace.folder"},
+		{"bad branch", taskmodel.WorkspaceInput{Folder: ww.repo, Branch: strPtr("a..b")}, "workspace.branch"},
+		{"empty branch", taskmodel.WorkspaceInput{Folder: ww.repo, Branch: strPtr("")}, "workspace.branch"},
+		{"bad base", taskmodel.WorkspaceInput{Folder: ww.repo, BaseBranch: strPtr("-x")}, "workspace.baseBranch"},
 	}
 	for _, c := range cases {
 		_, err := ww.create("bad "+c.name, &c.in)
@@ -190,10 +190,10 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(ww.repo, "web", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "Fix the login page", &taskmodel.WorkspaceInput{Repository: filepath.Join(ww.repo, "web", "src")})
+	created := ww.mustCreate(t, "Fix the login page", &taskmodel.WorkspaceInput{Folder: filepath.Join(ww.repo, "web", "src")})
 	w := created.Workspace
 	branch := fmt.Sprintf("task/%d-fix-the-login-page", created.Task.Number)
-	if w == nil || w.State != "pending" || w.Repository != ww.repo || w.Branch != branch || w.BaseCommit != nil || w.Kept != nil {
+	if w == nil || w.State != "pending" || w.Git.Repository != ww.repo || w.Git.Branch != branch || w.Git.BaseCommit != nil || w.Kept != nil {
 		t.Fatalf("created workspace = %+v, want pending on %s", w, branch)
 	}
 	if created.Task.Branch == nil || *created.Task.Branch != branch {
@@ -209,7 +209,7 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	}
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
 	w = d.Workspace
-	if w.State != "active" || w.BaseBranch != "main" || w.BaseCommit == nil || *w.BaseCommit != tip {
+	if w.State != "active" || w.Git.BaseBranch != "main" || w.Git.BaseCommit == nil || *w.Git.BaseCommit != tip {
 		t.Fatalf("running workspace = %+v, want active from main at %s", w, tip)
 	}
 	if got := gitT(t, w.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != branch {
@@ -250,7 +250,7 @@ func TestTaskWorkspaceFetchFailureBlocksAndRetrySucceeds(t *testing.T) {
 	if err := os.Rename(ww.remote, moved); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "fetch fails", &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, "fetch fails", &taskmodel.WorkspaceInput{Folder: ww.repo})
 	blocked := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	if blocked.Task.Reason == nil || !strings.Contains(*blocked.Task.Reason, "git fetch") || !strings.Contains(*blocked.Task.Reason, "origin.git") {
 		t.Fatalf("blocked reason = %v, want git's fetch message", blocked.Task.Reason)
@@ -263,7 +263,7 @@ func TestTaskWorkspaceFetchFailureBlocksAndRetrySucceeds(t *testing.T) {
 	}
 	ww.retry(t, blocked)
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
-	if d.Workspace.State != "active" || d.Workspace.BaseCommit == nil {
+	if d.Workspace.State != "active" || d.Workspace.Git.BaseCommit == nil {
 		t.Fatalf("workspace after retry = %+v", d.Workspace)
 	}
 }
@@ -276,13 +276,13 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 	if err := os.Rename(ww.remote, moved); err != nil {
 		t.Fatal(err)
 	}
-	created := ww.mustCreate(t, "adopt", &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, "adopt", &taskmodel.WorkspaceInput{Folder: ww.repo})
 	blocked := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	if err := os.Rename(moved, ww.remote); err != nil {
 		t.Fatal(err)
 	}
 	w := blocked.Workspace
-	first, err := gitworkspace.Create(context.Background(), "git", gitworkspace.Spec{Repository: w.Repository, Path: w.Path, Branch: w.Branch})
+	first, err := gitworkspace.Create(context.Background(), "git", gitworkspace.Spec{Repository: w.Git.Repository, Path: w.Path, Branch: w.Git.Branch})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 	gitT(t, clone, "push", "-q", "origin", "main")
 	ww.retry(t, blocked)
 	d := taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" })
-	if d.Workspace.State != "active" || d.Workspace.BaseCommit == nil || *d.Workspace.BaseCommit != first.BaseCommit {
+	if d.Workspace.State != "active" || d.Workspace.Git.BaseCommit == nil || *d.Workspace.Git.BaseCommit != first.BaseCommit {
 		t.Fatalf("workspace = %+v, want the adopted base %s", d.Workspace, first.BaseCommit)
 	}
 	if branches := gitT(t, ww.repo, "branch", "--list", "task/*"); strings.Count(branches, "task/") != 1 {
@@ -308,7 +308,7 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 // runningWorkspaceTask creates a workspace task and waits until its step runs.
 func (ww workspaceWorld) runningWorkspaceTask(t *testing.T, title string) taskmodel.Detail {
 	t.Helper()
-	created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Repository: ww.repo})
+	created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Folder: ww.repo})
 	return taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" && d.Workspace.State == "active" })
 }
 
@@ -364,7 +364,7 @@ func TestTaskWorkspaceKeptOnCancelThenRemoved(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ww.repo, "README")); err != nil {
 		t.Fatal("the person's checkout is untouched")
 	}
-	if gitT(t, ww.repo, "branch", "--list", w.Branch) == "" {
+	if gitT(t, ww.repo, "branch", "--list", w.Git.Branch) == "" {
 		t.Fatal("Remove leaves the branch alone")
 	}
 	if again := decode[taskmodel.Detail](t, ww.must(200, "POST", path, action)); again.Workspace.State != "removed" {
@@ -387,16 +387,16 @@ func TestTaskWorkspaceCleanup(t *testing.T) {
 		ww.commit(t, d.Workspace.Path, "merged.txt")
 		gitT(t, d.Workspace.Path, "push", "-q", "origin", "HEAD:main")
 		ended := ww.endTask(t, d)
-		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) != "" {
-			t.Fatalf("workspace %+v, branch %q", ended.Workspace, gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch))
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch) != "" {
+			t.Fatalf("workspace %+v, branch %q", ended.Workspace, gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch))
 		}
 	})
 	t.Run("pushed but not merged: worktree gone, branch stays", func(t *testing.T) {
 		d := ww.runningWorkspaceTask(t, "pushed")
 		ww.commit(t, d.Workspace.Path, "pushed.txt")
-		gitT(t, d.Workspace.Path, "push", "-q", "-u", "origin", d.Workspace.Branch)
+		gitT(t, d.Workspace.Path, "push", "-q", "-u", "origin", d.Workspace.Git.Branch)
 		ended := ww.endTask(t, d)
-		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) == "" {
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Git.Branch) == "" {
 			t.Fatalf("workspace %+v", ended.Workspace)
 		}
 	})
@@ -435,7 +435,7 @@ func TestTaskWorkspaceRemoveSavesADetachedHead(t *testing.T) {
 		t.Fatalf("workspace %+v", ended.Workspace)
 	}
 	ww.must(200, "POST", "/tasks/"+d.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
-	saved := d.Workspace.Branch + "-detached-" + head[:7]
+	saved := d.Workspace.Git.Branch + "-detached-" + head[:7]
 	if got := gitT(t, ww.repo, "rev-parse", saved); got != head {
 		t.Fatalf("the detached commit is on %s: %q", saved, got)
 	}
@@ -446,7 +446,7 @@ func TestTaskWorkspaceRemoveSavesADetachedHead(t *testing.T) {
 	}
 	ww.endTask(t, other)
 	ww.must(200, "POST", "/tasks/"+other.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
-	if extra := gitT(t, ww.repo, "branch", "--list", other.Workspace.Branch+"-detached-*"); extra != "" {
+	if extra := gitT(t, ww.repo, "branch", "--list", other.Workspace.Git.Branch+"-detached-*"); extra != "" {
 		t.Fatalf("no branch is added for a worktree on its branch: %q", extra)
 	}
 }
