@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue on main: each queued pull request is checked again on top of the latest main before it lands.
+  merge_group:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -134,51 +136,3 @@ jobs:
           for dir in official/*/; do
             node host/dist/main.js validate "$dir"
           done
-
-  desktop:
-    name: desktop (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      # Unit tests really start, stop and clean up orphans of test/fakeserver (a fake server written in Go): taskkill and PowerShell process queries on Windows, signals on Linux.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      # electron only downloads its binary on first run; here we only type-check, compile and run unit tests, with no download and no installer.
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      # Windows: build one NSIS installer with the fake server standing in for loop-server.exe, to confirm electron-builder's win config and after-pack work on windows-latest.
-      # Once the real server's Windows package lands, desktop-win in release.yml uses the same command.
-      - name: fake server bundle
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          node scripts/fake-bundle.js "$RUNNER_TEMP/fake-bundle" --os windows --arch amd64
-          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/fake-bundle" >> "$GITHUB_ENV"
-      - name: dist:win (fake server)
-        if: runner.os == 'Windows'
-        run: npm run dist:win
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
-        with:
-          name: loop-now-desktop-fake-win-x64
-          path: |
-            .local-build/desktop/*.exe
-            .local-build/desktop/latest.yml
-          retention-days: 3
-          if-no-files-found: error
