@@ -96,10 +96,10 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
           title={detail}
           aria-label={copy.label(parts.join(' · '))}
           className={cn(
-            'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full border-2 border-ink bg-paper-raised pr-2.5 pl-0.5 text-[12.5px] font-black whitespace-nowrap text-ink shadow-[2px_2px_0_var(--ink)] outline-none hover:bg-white focus-visible:shadow-focus aria-expanded:bg-riso-yellow',
+            'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full border-2 border-ink bg-paper-raised pr-2.5 pl-1 text-[12.5px] font-black whitespace-nowrap text-ink shadow-[2px_2px_0_var(--ink)] outline-none hover:bg-white focus-visible:shadow-focus aria-expanded:bg-riso-yellow',
           )}
         >
-          {runtime && <RuntimeMark runtime={runtime} className="size-[22px]" />}
+          {runtime && <RuntimeMark runtime={runtime} className="size-5" />}
           {parts.map((part, index) => (
             <span key={index} className={cn('min-w-0 truncate', index === 1 && 'font-mono text-[12px] font-bold', index > 0 && 'text-ink-700')}>
               {index > 0 && <span aria-hidden="true" className="mr-1.5 font-sans text-ink-500">·</span>}

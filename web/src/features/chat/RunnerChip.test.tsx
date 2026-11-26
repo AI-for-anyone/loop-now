@@ -52,6 +52,16 @@ describe('who runs it, on the message box', () => {
     expect(chip()).toHaveAttribute('title', 'Run by Claude Code (this computer) · provider claude-code · model Claude Haiku (latest) (haiku) · thinking Medium')
   })
 
+  it('the chip shows the runtime’s ink frame with room inside the rounded pill border', async () => {
+    await setup(makeAgent({ model: { provider: 'claude-code', modelId: 'haiku' }, runtime: 'claude-code', thinkingLevel: null }))
+    await waitFor(() => expect(chip().querySelector('svg[data-logo="claude"]')).not.toBeNull())
+    const button = chip()
+    const svg = button.querySelector('svg[data-logo="claude"]')!
+    expect(button).toHaveClass('pl-1')
+    expect(svg).toHaveClass('size-5')
+    expect(svg.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+  })
+
   it('the bundled runtime reads "provider · model · level"; its name is only in the details', async () => {
     await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi', thinkingLevel: 'high' }))
     await waitFor(() => expect(chip()).toHaveAccessibleName('Runs on: anthropic · claude-sonnet-5-5 · High. Open to change'))
