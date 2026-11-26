@@ -1,11 +1,12 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_STORAGE_KEY } from '@/lib/sidebar-width'
-import { defaultAgentsPath, makeAgent } from '@/test/api'
+import { apiUrl, defaultAgentsPath, makeAgent } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
-import { baseHandlers } from '@/test/shell'
+import { baseHandlers, sidebar } from '@/test/shell'
 import { routes } from './routes'
 
 const originalInnerWidth = window.innerWidth
@@ -245,5 +246,54 @@ describe('desktop sidebar resizing', () => {
     await user.click(screen.getByRole('button', { name: 'Open navigation' }))
     const drawer = await screen.findByRole('dialog', { name: 'Main navigation' })
     expect(within(drawer).queryByRole('separator')).toBeNull()
+  })
+
+  it('keeps headings, names, labels, marks, badges and the "+" button from clipping at narrow sidebar widths', async () => {
+    const agent = makeAgent({
+      name: 'loop-now-publicity-with-very-long-name',
+      model: { provider: 'claude-code', modelId: 'sonnet' },
+      runtime: 'claude-code',
+      isManager: true,
+    })
+    server.use(
+      http.get(apiUrl('/inbox/pending'), () =>
+        HttpResponse.json({
+          questions: [],
+          unread: [],
+          byAgent: [{ agentId: agent.id, projectId: agent.projectId, questions: 1, unread: 1 }],
+          byTask: [],
+        }),
+      ),
+      ...baseHandlers([agent]),
+    )
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, '200')
+    renderRoutes(routes, defaultAgentsPath)
+    const nav = sidebar()
+    const list = await within(nav).findByRole('list', { name: 'Agents' })
+
+    // Group heading truncates so the "+" button never shrinks or clips off the right edge.
+    const heading = within(nav).getByRole('heading', { name: 'Agents' })
+    expect(heading).toHaveClass('min-w-0', 'truncate')
+    expect(heading.parentElement).toHaveClass('min-w-0', 'gap-2')
+    const createButton = within(nav).getByRole('button', { name: 'New Agent' })
+    expect(createButton).toHaveClass('shrink-0')
+
+    // Scope switcher trigger allows its project name to truncate without overflowing or squishing its icons.
+    const scopeButton = within(nav).getByRole('button', { name: /^Switch scope/ })
+    expect(scopeButton).toHaveClass('min-w-0')
+    expect(within(scopeButton).getByText('test-project')).toHaveClass('min-w-0', 'truncate')
+
+    // Agent row name truncates; right-side marks container stays within the row width and wraps if all three marks are shown at 200px.
+    const row = await within(list).findByRole('link', { name: /loop-now-publicity-with-very-long-name/ })
+    expect(within(row).getByText('loop-now-publicity-with-very-long-name')).toHaveClass('max-w-full', 'truncate')
+    const marks = within(row).getByText('Manager').parentElement!
+    expect(marks).toHaveClass('ml-auto', 'shrink-0', 'max-w-full', 'flex-wrap')
+
+    // Nav labels truncate, search shortcut does not shrink, and connection status truncates its host inside the sidebar.
+    expect(within(within(nav).getByRole('link', { name: 'Project settings' })).getByText('Project settings')).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(within(nav).getByRole('searchbox', { name: 'Search Agents' }).closest('label')!.querySelector('kbd')).toHaveClass('shrink-0')
+    const status = within(nav).getByRole('status', { name: 'Connection' })
+    expect(status).toHaveClass('min-w-0')
+    expect(within(status).getByText('127.0.0.1:8780')).toHaveClass('min-w-0', 'truncate')
   })
 })

@@ -105,7 +105,7 @@ export function AgentNavGroup({
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <div className={navGroupClass}>
-        <h2 id={headingId} className="font-normal">
+        <h2 id={headingId} className="min-w-0 truncate font-normal">
           {title}
         </h2>
         <button type="button" aria-label={t.agents.create} disabled={!reachable || !scope} onClick={onCreate} className={navAddClass}>
@@ -138,7 +138,7 @@ export function AgentNavGroup({
                       <span title={agent.name} className="max-w-full truncate">
                         {agent.name}
                       </span>
-                      <span className="ml-auto flex shrink-0 items-center gap-2 empty:hidden">
+                      <span className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 empty:hidden">
                         <RuntimeMark runtime={agent.runtime} />
                         <StatusTag agent={agent} current={current} />
                         <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
