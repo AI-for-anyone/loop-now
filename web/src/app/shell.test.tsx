@@ -79,10 +79,14 @@ describe('sidebar and page structure', () => {
     expect(hrefs()).toEqual(['/', '/?project=test-project', `${project}/tasks`, `${project}/folder`, `${project}/settings`, `${project}/agents/${agent.id}`, ...globalEntries])
     expect(within(sidebar()).queryByRole('link', { name: /Inbox/ })).toBeNull()
     expect(await screen.findByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
-    // Main-area page header: the location breadcrumb, the title in the display font, and the model.
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('test-project›Agent›dev-helper')
+    // Agent page header is one thin bar with no breadcrumb; details and back-to-project link live in the More menu.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'dev-helper', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
+    expect(within(menu).getByRole('link', { name: 'Back to test-project' })).toHaveAttribute('href', '/?project=test-project')
   })
 
   it('opening a global page (Plugin market, Global settings) from a project keeps the current project in the sidebar', async () => {
@@ -109,7 +113,8 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(within(list).getByRole('link', { name: 'Inspector' })).toHaveAttribute('aria-current', 'page'))
     expect(scopeSwitcher('Global')).toBeInTheDocument()
     expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('test-project')
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Platform Agent›Inspector')
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Inspector', level: 1 })).toBeInTheDocument()
   })
 
   it('the full navigation has no Inbox entry, and the Inbox event stream is still set up (messages for you and items needing you are updated through it)', async () => {

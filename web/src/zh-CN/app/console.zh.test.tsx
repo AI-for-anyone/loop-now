@@ -1,4 +1,5 @@
 import { act, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { tasksPath } from '@/api/tasks'
@@ -64,6 +65,20 @@ describe('Chinese console', () => {
     expect(screen.getByText('Shift + 回车')).toBeInTheDocument()
     expect(screen.getByText('换行')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+  })
+
+  it('Agent header bar and More menu', async () => {
+    const agent = makeAgent({ name: 'dev-helper', address: 'test-org/test-project/dev-helper' })
+    server.use(...baseHandlers([agent]))
+    const user = userEvent.setup()
+    renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
+    const tabs = await screen.findByRole('navigation', { name: 'dev-helper' })
+    expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['对话', '配置', '文件夹', '收件箱'])
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent 信息' })
+    expect(within(menu).getByText('Pi（内置）')).toBeInTheDocument()
+    expect(within(menu).getByRole('button', { name: '复制地址' })).toBeInTheDocument()
+    expect(within(menu).getByRole('link', { name: '返回项目 test-project' })).toBeInTheDocument()
   })
 
   it('Agent config sections', async () => {

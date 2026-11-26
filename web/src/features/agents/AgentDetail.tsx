@@ -1,36 +1,141 @@
 import { useCallback, useState } from 'react'
-import { Link, Navigate, Outlet, useLocation, useParams } from 'react-router'
+import { Link, NavLink, Navigate, Outlet, useLocation, useParams } from 'react-router'
+import { ArrowLeftIcon, EllipsisIcon } from 'lucide-react'
+import { Popover as PopoverPrimitive } from 'radix-ui'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { IndexTabLink, IndexTabs } from '@/components/IndexTabs'
 import { ManagerBadge } from '@/components/ManagerBadge'
-import { OverprintDeco } from '@/components/OverprintDeco'
-import { RuntimeBadge } from '@/components/RuntimeBadge'
+import { RuntimeMark } from '@/components/RuntimeBadge'
 import { Sheet } from '@/components/Sheet'
 import type { Schemas } from '@/api/client'
 import { useAgent, useAgentStatus, useProjects } from '@/api/queries'
 import { config } from '@/config'
 import { runPhaseText } from '@/features/chat/run-status-text'
-import { useRuntimeLookup, type RuntimeLookup } from '@/lib/runtime'
+import { useRuntimeLookup } from '@/lib/runtime'
 import { t } from '@/i18n'
 import { useScope } from '@/features/projects/scope-context'
 import { isNotFound } from '@/lib/errors'
-import { agentPath, agentScope, GLOBAL, overviewPath, sameScope } from '@/lib/scope'
-import { sheetTitleClass } from '@/lib/page-title'
+import { agentPath, agentScope, GLOBAL, overviewPath, sameScope, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
-// The model tag in the header: "provider · model", except for a command a person added, whose provider id (acp-<command id>) and one
-// model ("default") say nothing: it shows the command's name.
-function modelTag(model: Schemas['ModelRef'], runtimes: RuntimeLookup): string {
-  const runtime = runtimes.forProvider(model.provider)
-  return runtime?.acpCommandId ? runtime.name : `${model.provider} · ${model.modelId}`
+// Compact status indicator in the header bar: a colored dot plus Busy (and the current phase) or Idle.
+function StatusDot({ state }: { state: AgentStickerState }) {
+  const [tone, label] = state.busy ? (['busy', t.agents.busy] as const) : (['success', t.agents.idle] as const)
+  const phase = state.busy ? state.phase : null
+  return (
+    <span
+      role="status"
+      data-agent-status
+      data-tone={tone}
+      className={cn(
+        'inline-flex min-w-0 shrink items-center gap-1.5 text-[12px] leading-5 font-black whitespace-nowrap',
+        tone === 'busy' ? 'text-pink-text' : 'text-green-text',
+      )}
+    >
+      <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', tone === 'busy' ? 'bg-riso-pink' : 'bg-green')} />
+      <span className="shrink-0">{label}</span>
+      {phase && <span className="min-w-0 truncate font-medium text-ink-700">{phase}</span>}
+    </span>
+  )
 }
 
-// The status tag next to the title (an outlined, slightly tilted pill): busy (plus the current phase), or idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
-// is used, and until that result arrives, the busy/idle and session state from the Agent details.
-function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStickerState | null }) {
+// Compact text tabs in the header bar: the current tab is a yellow riso pill with a navy outline and small offset shadow;
+// the others are plain text links that keep the same border width so switching tabs never shifts the row.
+const tabClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'inline-flex h-[30px] shrink-0 items-center rounded-full border-[1.5px] px-3 text-[13px] leading-none whitespace-nowrap no-underline outline-none focus-visible:shadow-focus',
+    isActive
+      ? 'border-ink bg-riso-yellow font-black text-ink shadow-[2px_2px_0_var(--ink)]'
+      : 'border-transparent font-bold text-ink-700 hover:bg-ink/[0.06] hover:text-ink',
+  )
+
+// The "..." menu on the right of the header bar: holds the Inbox address (kept visible with its copy button), the runtime and
+// model in words, and the link back to the project (or Global for a platform Agent).
+function AgentHeaderMenu({ agent, scope, className }: { agent: Schemas['Agent']; scope: Scope; className?: string }) {
+  const [open, setOpen] = useState(false)
+  const runtimes = useRuntimeLookup()
+  const definition = runtimes.get(agent.runtime)
+  const providerRuntime = runtimes.forProvider(agent.model.provider)
+  // A local ACP command a person added has only its program's own "default" model and a synthetic provider id, so showing a
+  // separate model line would say nothing useful; its name is already on the Runtime line.
+  const isAddedCommand = Boolean(definition?.acpCommandId || providerRuntime?.acpCommandId)
+  const runtimeText = definition
+    ? t.agents.menu.runtimeValue(definition.name, definition.capabilities.bundled ? t.runtime.picker.chip.bundled : t.runtime.picker.chip.local)
+    : runtimes.name(agent.runtime)
+  const backTarget = overviewPath(scope.kind === 'project' ? { kind: 'project', name: scope.project.name } : GLOBAL)
+  const backLabel = scope.kind === 'project' ? t.agents.menu.backToProject(scope.project.name) : t.agents.menu.backToGlobal
+
+  return (
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Trigger
+        type="button"
+        aria-label={t.agents.menu.label}
+        title={t.agents.menu.label}
+        className={cn(
+          'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-700 outline-none hover:bg-ink/[0.08] hover:text-ink focus-visible:shadow-focus aria-expanded:bg-riso-yellow aria-expanded:text-ink aria-expanded:shadow-[inset_0_0_0_1.5px_var(--ink)]',
+          className,
+        )}
+      >
+        <EllipsisIcon aria-hidden="true" className="size-4" strokeWidth={2.4} />
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          side="bottom"
+          align="end"
+          sideOffset={8}
+          collisionPadding={12}
+          aria-label={t.agents.menu.title}
+          className="z-50 flex w-[min(340px,calc(100vw-24px))] flex-col gap-3 rounded-card border-2 border-ink bg-paper-raised p-3.5 text-ink shadow-[4px_4px_0_var(--riso-blue)] outline-none"
+        >
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.address.label}</span>
+            <AgentAddress address={agent.address} showSrLabel={false} />
+          </div>
+          <dl className="grid gap-2 border-t-[1.5px] border-dashed border-ink/20 pt-2.5 text-[12.5px]">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.menu.runtime}</dt>
+              <dd className="min-w-0 font-bold [overflow-wrap:anywhere] text-ink">{runtimeText}</dd>
+            </div>
+            {!isAddedCommand && (
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <dt className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.menu.model}</dt>
+                <dd className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{`${agent.model.provider} · ${agent.model.modelId}`}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="border-t-[1.5px] border-dashed border-ink/20 pt-2">
+            <Link
+              to={backTarget}
+              onClick={() => setOpen(false)}
+              className="inline-flex w-full items-center gap-2 rounded-ticket px-2 py-1.5 text-[13px] font-bold text-ink no-underline outline-none hover:bg-tint-blue focus-visible:shadow-focus"
+            >
+              <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-500" strokeWidth={2.4} />
+              <span className="min-w-0 truncate">{backLabel}</span>
+            </Link>
+          </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  )
+}
+
+function AgentDetailView({
+  agent,
+  scope,
+  refreshError,
+  live,
+  reportLiveStatus,
+}: {
+  agent: Schemas['Agent']
+  scope: Scope
+  refreshError: unknown
+  live: AgentStickerState | null
+  reportLiveStatus: (state: AgentStickerState | null) => void
+}) {
+  // The live status handed over by the Chat tab takes precedence; without it, use the periodically polled status endpoint,
+  // and until that arrives, the busy/idle state from the Agent details.
   const status = useAgentStatus(agent.id, config.agentListPollMs)
   const polled: AgentStickerState = status.data
     ? {
@@ -39,32 +144,53 @@ function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStick
         sleep: status.data.sleep,
       }
     : { busy: agent.busy, phase: null }
-  const state = live ?? polled
-  const [tone, label] = state.busy ? (['busy', t.agents.busy] as const) : (['success', t.agents.idle] as const)
-  const phase = state.busy ? state.phase : null
+  const statusState = live ?? polled
+  const sleeping = !statusState.busy && statusState.sleep?.state === 'sleeping' && statusState.sleep.wakeAt ? statusState.sleep : null
+
   return (
-    <>
-      <span
-        role="status"
-        data-agent-status
-        data-tone={tone}
-        className={cn(
-          'riso-tilt inline-flex min-h-[26px] max-w-full flex-wrap items-center gap-x-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-black [--tilt-shadow:inset_0_0_0_2px_var(--ink)] [--tilt:-3deg]',
-          chipTone[tone],
-        )}
+    // One thin header bar (~48px on wide screens) directly above the sheet shared by all four tabs.
+    // On phone width it becomes two short lines (name + status + "..." on row 1; horizontally scrollable tabs on row 2),
+    // while keeping DOM and keyboard focus order as: name area, tabs, "...".
+    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
+      <header
+        data-agent-header
+        className="mr-1.5 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-1 py-1.5 nav:flex nav:h-12 nav:flex-nowrap nav:items-center nav:gap-3 nav:py-0"
       >
-        <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', chipDot[tone])} />
-        <span>{label}</span>
-        {phase && <span className="font-medium">{phase}</span>}
-      </span>
-      {!state.busy && state.sleep?.state === 'sleeping' && state.sleep.wakeAt &&
-        <SleepUntil at={state.sleep.wakeAt} reason={state.sleep.reason} />}
-    </>
+        <div data-agent-identity className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 nav:flex-1">
+          <RuntimeMark runtime={agent.runtime} />
+          <h1 title={agent.name} className="min-w-0 truncate text-[15px] leading-6 font-black text-ink">
+            {agent.name}
+          </h1>
+          {agent.isManager && <ManagerBadge size="sm" />}
+          <StatusDot state={statusState} />
+        </div>
+        <nav
+          aria-label={agent.name}
+          data-agent-tabs
+          className="col-span-2 row-start-2 flex items-center gap-1 max-nav:-mx-1.5 max-nav:-my-1.5 max-nav:overflow-x-auto max-nav:px-1.5 max-nav:py-1.5 max-nav:no-scrollbar nav:shrink-0"
+        >
+          <NavLink to={agentPath(scope, agent.id, 'chat')} className={tabClass}>{t.agents.tabs.chat}</NavLink>
+          <NavLink to={agentPath(scope, agent.id, 'config')} className={tabClass}>{t.agents.tabs.config}</NavLink>
+          <NavLink to={agentPath(scope, agent.id, 'folder')} className={tabClass}>{t.agents.tabs.folder}</NavLink>
+          <NavLink to={agentPath(scope, agent.id, 'inbox')} className={tabClass}>{t.agents.tabs.inbox}</NavLink>
+        </nav>
+        <AgentHeaderMenu key={agent.id} agent={agent} scope={scope} className="col-start-2 row-start-1 nav:shrink-0" />
+      </header>
+      <Sheet className="flex-1">
+        {sleeping && sleeping.wakeAt && (
+          <div className="shrink-0 border-b-[1.5px] border-dashed border-ink/20 bg-tint-blue/70 px-[clamp(14px,2vw,28px)] py-2">
+            <SleepUntil compact at={sleeping.wakeAt} reason={sleeping.reason} />
+          </div>
+        )}
+        {refreshError !== null && <ErrorAlert error={refreshError} className="mx-6 mt-3 w-auto" />}
+        <div className="min-h-0 flex-1">
+          {/* Remount the tabs per Agent: drafts, dialogs, live status and scroll position must not carry over to another Agent. */}
+          <Outlet key={agent.id} context={{ agent, reportLiveStatus } satisfies AgentOutletContext} />
+        </div>
+      </Sheet>
+    </div>
   )
 }
-
-const chipTone = { success: 'text-green-text [--tilt-bg:var(--tint-green)]', busy: 'text-ink [--tilt-bg:var(--tint-pink)]', danger: 'text-red-text [--tilt-bg:var(--tint-red)]' }
-const chipDot = { success: 'bg-green', busy: 'bg-riso-pink', danger: 'bg-red' }
 
 export function AgentDetail() {
   const { agentId = '' } = useParams()
@@ -72,7 +198,6 @@ export function AgentDetail() {
   const scope = useScope()
   const projects = useProjects()
   const agent = useAgent(agentId)
-  const runtimes = useRuntimeLookup()
   // The live status handed over by the Chat tab, recorded together with the Agent it belongs to, so that switching Agents never
   // uses the previous Agent's status.
   const [live, setLive] = useState<{ agentId: string; state: AgentStickerState } | null>(null)
@@ -81,7 +206,7 @@ export function AgentDetail() {
   if (isNotFound(agent.error)) {
     return <p className="px-6 py-7 text-[15px] text-ink-500" role="status">{t.agents.notFound}</p>
   }
-  // Once data exists, a failed background refresh is only reported above the tabs; the tab content is not unmounted, so
+  // Once data exists, a failed background refresh is only reported above the tab panel; the tab content is not unmounted, so
   // unsaved edits are not lost.
   if (!agent.data) {
     if (agent.isError) return <ErrorAlert error={agent.error} className="mx-6 my-7 w-auto" />
@@ -98,60 +223,12 @@ export function AgentDetail() {
   }
 
   return (
-    // The page header and index tabs are on top, and the tab content is in the sheet below. The left, right and bottom padding
-    // varies with the window width; the bottom padding leaves room for the sheet's shadow.
-    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
-      {/* On wide screens the header is compact (used by all four tabs): a tighter breadcrumb, a 40px title, and the role (Manager),
-          status, runtime, model and address in one row to the right of the title, wrapping when they don't fit;
-          the decoration shrinks to the header's height. Narrow screens stay as before. */}
-      <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px] nav:gap-1.5 nav:pt-3 nav:pb-2.5" data-agent-header>
-        <OverprintDeco compact />
-        <nav aria-label={t.shell.breadcrumb} className="relative">
-          <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500 nav:leading-4">
-            <li className="min-w-0">
-              <Link to={overviewPath(scope.kind === 'project' ? { kind: 'project', name: scope.project.name } : GLOBAL)} className="[overflow-wrap:anywhere] hover:text-ink hover:underline">
-                {scope.kind === 'project' ? scope.project.name : t.shell.global}
-              </Link>
-            </li>
-            <li aria-hidden="true">›</li>
-            <li>{scope.kind === 'project' ? t.shell.agentCrumb : t.shell.platformAgentCrumb}</li>
-            <li aria-hidden="true">›</li>
-            <li aria-current="page" className="min-w-0 [overflow-wrap:anywhere] text-riso-blue">
-              {agent.data.name}
-            </li>
-          </ol>
-        </nav>
-        <div
-          data-agent-title-row
-          className="relative flex min-w-0 flex-col gap-3 @[820px]:pr-[316px] nav:flex-row nav:flex-wrap nav:items-center nav:gap-x-3 nav:gap-y-1.5 nav:@[820px]:pr-[196px]"
-        >
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 nav:contents">
-            <h1 className={cn(sheetTitleClass, 'mr-1.5 nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]')}>{agent.data.name}</h1>
-            {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
-            <RuntimeBadge runtime={agent.data.runtime} />
-            <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
-          </div>
-          {/* Model and address: the model is a monospace tag on a light blue background, the address is in a dashed box.
-              On narrow screens they get a row of their own. */}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] nav:contents">
-            <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{modelTag(agent.data.model, runtimes)}</span>
-            <AgentAddress address={agent.data.address} />
-          </div>
-        </div>
-      </header>
-      <IndexTabs aria-label={agent.data.name}>
-        <IndexTabLink to={agentPath(scope, agentId, 'chat')}>{t.agents.tabs.chat}</IndexTabLink>
-        <IndexTabLink to={agentPath(scope, agentId, 'config')}>{t.agents.tabs.config}</IndexTabLink>
-        <IndexTabLink to={agentPath(scope, agentId, 'folder')}>{t.agents.tabs.folder}</IndexTabLink>
-        <IndexTabLink to={agentPath(scope, agentId, 'inbox')}>{t.agents.tabs.inbox}</IndexTabLink>
-      </IndexTabs>
-      <Sheet className="flex-1">
-        {agent.isError && <ErrorAlert error={agent.error} className="mx-6 mt-3 w-auto" />}
-        <div className="min-h-0 flex-1">
-          {/* Remount the tabs per Agent: drafts, dialogs, live status and scroll position must not carry over to another Agent. */}
-          <Outlet key={agentId} context={{ agent: agent.data, reportLiveStatus } satisfies AgentOutletContext} />
-        </div>
-      </Sheet>
-    </div>
+    <AgentDetailView
+      agent={agent.data}
+      scope={scope}
+      refreshError={agent.isError ? agent.error : null}
+      live={live?.agentId === agentId ? live.state : null}
+      reportLiveStatus={reportLiveStatus}
+    />
   )
 }
