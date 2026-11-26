@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { Schemas } from '@/api/client'
 import { useRuntimeDefinitions } from '@/api/queries'
 import { t } from '@/i18n'
+import { acpBrandIconByName, type BrandIconKey } from '@/lib/brand-icons'
 
 export type AgentRuntime = Schemas['AgentRuntime']
 export type RuntimeDefinition = Schemas['RuntimeDefinition']
@@ -114,3 +115,18 @@ const glyphs: Record<BuiltInRuntime, readonly string[]> = {
 }
 
 export const runtimeGlyph = (id: AgentRuntime): readonly string[] | null => (Object.hasOwn(glyphs, id) ? glyphs[id as BuiltInRuntime] : null)
+
+const brandIcons: Record<BuiltInRuntime, BrandIconKey> = {
+  'claude-code': 'claudecode',
+  codex: 'codex',
+  antigravity: 'antigravity',
+  grok: 'grok',
+  pi: 'pi',
+}
+
+// Official brand icon key for a runtime in the default mono skin: built-in runtimes map directly; user-added ACP runtimes match common
+// mainstream CLI names (Gemini CLI, OpenCode, Cursor, Copilot, Amp, Cline, Goose, Kiro, Windsurf, Roo Code, Trae) or fall back to ACP.
+export function runtimeBrandIcon(definition: Pick<RuntimeDefinition, 'id' | 'name'>): BrandIconKey {
+  if (Object.hasOwn(brandIcons, definition.id)) return brandIcons[definition.id as BuiltInRuntime]
+  return acpBrandIconByName(definition.name)
+}

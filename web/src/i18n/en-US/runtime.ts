@@ -101,6 +101,22 @@ export const runtime = {
       saving: 'Saving…',
       saved: 'Changed; applies from the next message',
     },
+    menus: {
+      harnessTitle: 'Harness',
+      modelTitle: 'Model',
+      thinkingTitle: 'Thinking',
+      permissionsTitle: 'Permissions',
+      harnessLabel: (name: string) => `Harness: ${name}. Open to change`,
+      modelLabel: (name: string) => `Model: ${name}. Open to change`,
+      thinkingLabel: (level: string) => `Thinking: ${level}. Open to change`,
+      permissionsLabel: (mode: string) => `Permissions: ${mode}. Open to change`,
+      shortPermission: {
+        supervised: 'Supervised',
+        accept_edits: 'Auto-accept',
+        auto: 'Auto',
+        full: 'Full access',
+      },
+    },
     setup: {
       title: (name: string) => `Set up ${name} first`,
       install: 'Install it: run this in a terminal on this computer',

@@ -197,15 +197,18 @@ describe('Sidebar styling', () => {
     expect(unselected).not.toHaveClass('[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]')
   })
 
-  it('the Manager badge uses CTA contrast in the selected row and muted chrome in unselected rows, preserving solid and semi-transparent navy in Plate skin', async () => {
+  it('the Manager badge uses elevated pill contrast in the selected row and subtle chrome in unselected rows, preserving solid and semi-transparent navy in Plate skin', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(within(row).getByText('Manager')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+    expect(within(row).getByText('Manager')).toHaveClass('bg-surface-elevated', 'text-sidebar-active-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
     const tag = within(within(sidebar()).getByRole('link', { name: /Researcher/ })).getByText('Manager')
-    expect(tag).toHaveClass('bg-sidebar-hover', 'text-sidebar-muted', '[[data-skin=plate]_&]:bg-ink/45', '[[data-skin=plate]_&]:text-white')
-    expect(tag).not.toHaveClass('bg-cta-bg')
+    expect(tag).toHaveClass('bg-surface-subtle', 'text-sidebar-muted', '[[data-skin=plate]_&]:bg-ink/45', '[[data-skin=plate]_&]:text-white')
+    expect(tag).not.toHaveClass('bg-surface-elevated')
     expect(tag).not.toHaveClass('[[data-skin=plate]_&]:bg-ink')
+    // The sidebar "+" create button is borderless in mono skin and keeps its 2px ink border in Plate skin.
+    const createBtn = within(sidebar()).getByRole('button', { name: 'New Agent' })
+    expect(createBtn).toHaveClass('border-0', '[[data-skin=plate]_&]:border-2')
   })
 
   // Redesign step 3: the selected Manager row used to leave only 66px for the name

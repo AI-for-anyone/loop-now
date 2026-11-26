@@ -34,6 +34,9 @@
   --surface-control: #FFFFFF;
   --surface-hover: var(--tint-blue);
   --surface-active: var(--riso-yellow);
+  --segment-track: var(--tint-blue);
+  --segment-active: var(--riso-yellow);
+  --switch-track: var(--paper);
 
   --sidebar-bg: var(--riso-blue);
   --sidebar-fg: #FFFFFF;

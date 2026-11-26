@@ -38,6 +38,9 @@ export class MainWindow {
   private consoleURL: string | undefined
   // Whether the user has opened the window yet (false before the first show in a background start).
   private opened: boolean
+  // Whether the window is currently hidden or minimized; used to replay the boarding splash when reopening.
+  private hidden = true
+  private lastBoardingAt = 0
   private bgColor: string
 
   constructor(private readonly o: Options) {
@@ -63,7 +66,10 @@ export class MainWindow {
     this.opened = true
     void app.dock?.show()
     const win = this.ensure()
+    const reopening = this.hidden || !win.isVisible() || win.isMinimized()
+    if (reopening) this.triggerBoarding(win)
     if (win.isMinimized()) win.restore()
+    this.hidden = false
     win.show()
     win.focus()
   }
@@ -77,11 +83,19 @@ export class MainWindow {
   showStatus(view: StatusView): void {
     const win = this.ensure()
     this.consoleURL = undefined
-    const query: Record<string, string> = { title: view.title, body: view.body }
+    const query: Record<string, string> = { title: view.title, body: view.body, bg: this.bgColor }
     if (view.log) query.log = view.log
     if (view.actions) Object.assign(query, view.actions)
     if (view.busy) query.busy = '1'
     void win.loadFile(statusPage, { query })
+  }
+
+  private triggerBoarding(win: BrowserWindow): void {
+    if (this.consoleURL === undefined || win.isDestroyed()) return
+    const now = Date.now()
+    if (now - this.lastBoardingAt < 250) return
+    this.lastBoardingAt = now
+    win.webContents.send('loop-now:boarding')
   }
 
   // Whether a call the page sends through preload comes from the console the server serves in the window (main frame, same origin), not
@@ -139,6 +153,20 @@ export class MainWindow {
     })
     win.once('ready-to-show', () => this.opened && win.show())
     win.once('show', () => this.o.onFirstShow?.(win))
+    win.on('hide', () => {
+      this.hidden = true
+    })
+    win.on('minimize', () => {
+      this.hidden = true
+    })
+    win.on('show', () => {
+      if (this.hidden) this.triggerBoarding(win)
+      this.hidden = false
+    })
+    win.on('restore', () => {
+      if (this.hidden) this.triggerBoarding(win)
+      this.hidden = false
+    })
     win.on('close', (event) => {
       if (this.o.quitting()) return
       event.preventDefault()

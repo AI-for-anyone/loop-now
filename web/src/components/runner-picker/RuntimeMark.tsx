@@ -1,43 +1,29 @@
-import { runtimeGlyph, type RuntimeDefinition } from '@/lib/runtime'
+import { BrandIcon } from '@/components/BrandIcon'
+import { runtimeBrandIcon, runtimeGlyph, type RuntimeDefinition } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme/store'
 
-// A runtime's mark: crisp monochrome geometric mark in mono skin (inverted terminal window for local CLIs, outlined disc for the bundled
-// runtime); two misregistered riso inks in Plate skin. The glyph comes from lib/runtime.ts, or falls back to the runtime's initial.
+// A runtime's mark: official @lobehub/icons brand logo in mono skin; two misregistered riso inks in Plate skin.
+// The logo mapping lives exclusively in lib/runtime.ts (checked by check-runtime-ids.mjs).
 export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
   const { skin } = useTheme()
-  const isPlate = skin === 'plate'
-  const color = runtime.capabilities.bundled ? 'var(--ink)' : isPlate ? 'var(--paper-raised)' : 'var(--cta-fg)'
+  if (skin !== 'plate') {
+    return <BrandIcon name={runtimeBrandIcon(runtime)} className={cn('size-4 shrink-0', className)} />
+  }
+
+  const color = runtime.capabilities.bundled ? 'var(--ink)' : 'var(--paper-raised)'
   const strokes = runtimeGlyph(runtime.id)
   const glyph = strokes ? (
-    <g fill="none" stroke={color} strokeWidth={isPlate ? '2.6' : '2.4'} strokeLinecap="round" strokeLinejoin="round">
+    <g fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
       {strokes.map((d) => (
         <path key={d} d={d} />
       ))}
     </g>
   ) : (
-    <text x="16" y="21.6" textAnchor="middle" fontSize="13" fontWeight={isPlate ? '800' : '700'} fontFamily="var(--font-display-latin)" fill={color}>
+    <text x="16" y="21.6" textAnchor="middle" fontSize="13" fontWeight="800" fontFamily="var(--font-display-latin)" fill={color}>
       {runtime.name.slice(0, 1).toUpperCase()}
     </text>
   )
-
-  if (!isPlate) {
-    return (
-      <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0', className)}>
-        {runtime.capabilities.bundled ? (
-          <circle cx="16" cy="16" r="13" fill="var(--surface-control)" stroke="var(--hairline-strong)" strokeWidth="1.5" />
-        ) : (
-          <>
-            <rect x="2.5" y="4" width="27" height="24" rx="5.5" fill="var(--cta-bg)" />
-            <path d="M2.5 10h27" stroke="var(--cta-fg)" strokeWidth="1.2" opacity=".32" />
-            <circle cx="6.5" cy="7.1" r="1.1" fill="var(--cta-fg)" opacity=".75" />
-            <circle cx="10" cy="7.1" r="1.1" fill="var(--cta-fg)" opacity=".45" />
-          </>
-        )}
-        {glyph}
-      </svg>
-    )
-  }
 
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0 overflow-visible', className)}>
@@ -54,7 +40,7 @@ export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition
           {/* The window's title bar: a rule and two dots in paper color. */}
           <path d="M2.6 10h25" stroke="var(--paper-raised)" strokeWidth="1.4" opacity=".55" />
           <circle cx="6.4" cy="7.1" r="1.1" fill="var(--paper-raised)" />
-          <circle cx="9.8" cy="7.1" r="1.1" fill="var(--paper-raised)" opacity=".7" />
+          <circle cx="9.8" cy="7.1" r="1.1" fill="var(--paper-raised)" />
         </>
       )}
       {glyph}
@@ -62,9 +48,12 @@ export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition
   )
 }
 
-// The glyph alone, in the text color, for small places (the Agent header's runtime badge, a sidebar row): a runtime's own strokes, or its
-// initial.
+// The glyph alone, for small places (the Agent header's runtime badge, a sidebar row): official brand logo in mono skin, strokes in Plate.
 export function RuntimeGlyph({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
+  const { skin } = useTheme()
+  if (skin !== 'plate') {
+    return <BrandIcon name={runtimeBrandIcon(runtime)} className={cn('size-3.5 shrink-0', className)} />
+  }
   const strokes = runtimeGlyph(runtime.id)
   return (
     <svg viewBox="7 9.5 18 15" aria-hidden="true" className={cn('size-3.5 shrink-0', className)}>

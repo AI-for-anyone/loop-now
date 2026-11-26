@@ -99,7 +99,7 @@ it('the unified card uses surface-elevated with hairline-strong border and subtl
   mountBar()
   const editor = screen.getByRole('textbox', { name: 'Message' })
   expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-elevated', 'border', 'border-hairline-strong', 'rounded-2xl', 'focus-within:border-riso-blue/50', '[[data-skin=plate]_&]:bg-paper-raised', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
-  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-8', 'rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:size-9', '[[data-skin=plate]_&]:bg-riso-pink')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-7', 'rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:size-9', '[[data-skin=plate]_&]:bg-riso-pink')
 })
 
 it('when idle the placeholder is “Message <Agent>” and keyboard hints stay in button tooltips instead of a permanent footer strip', () => {
@@ -113,7 +113,7 @@ it('when busy with an empty input, shows the compact Stop button inside the tool
   mountBar(true)
   expect(screen.queryByText('new line')).toBeNull()
   const stop = screen.getByRole('button', { name: 'Stop the current reply' })
-  expect(stop).toHaveClass('size-8', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   expect(screen.queryByRole('button', { name: 'Queue' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Interrupt and send' })).toBeNull()
 })

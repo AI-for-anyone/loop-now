@@ -20,6 +20,9 @@
     --color-surface-control: var(--surface-control);
     --color-surface-hover: var(--surface-hover);
     --color-surface-active: var(--surface-active);
+    --color-segment-track: var(--segment-track);
+    --color-segment-active: var(--segment-active);
+    --color-switch-track: var(--switch-track);
     --color-sidebar-bg: var(--sidebar-bg);
     --color-sidebar-fg: var(--sidebar-fg);
     --color-sidebar-muted: var(--sidebar-muted);
@@ -281,6 +284,37 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+@keyframes boarding-gold-turn {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  19%,
+  25% {
+    transform: rotate(90deg);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  44%,
+  50% {
+    transform: rotate(180deg);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  69%,
+  75% {
+    transform: rotate(270deg);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  94%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.boarding-gold-square {
+  transform-origin: 45px 19px;
+  animation: boarding-gold-turn 4.6s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

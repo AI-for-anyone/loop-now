@@ -97,13 +97,14 @@ export type CatalogFor = string | { newIn: ScopeKey }
 // it can run without entering an account or key first (usable); for a new Agent, usable is asked of its project or the platform. Accounts,
 // project enablement and grants can change elsewhere, so these are not cached for long and are re-read when a page opens and when the
 // window regains focus.
-export function useModelProviders(subject?: CatalogFor) {
+export function useModelProviders(subject?: CatalogFor, options?: { enabled?: boolean }) {
   const query =
     subject === undefined ? undefined : typeof subject === 'string' ? { agentId: subject } : subject.newIn === PLATFORM ? { scope: 'platform' as const } : { projectId: subject.newIn }
   return useQuery({
     queryKey: subject === undefined ? keys.modelProviders : typeof subject === 'string' ? keys.agentModelProviders(subject) : keys.newAgentModelProviders(subject.newIn),
     queryFn: () => call(api.GET('/model-providers', query ? { params: { query } } : {})),
     staleTime: subject === undefined ? Infinity : 0,
+    enabled: options?.enabled ?? true,
   })
 }
 

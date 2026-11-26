@@ -83,7 +83,7 @@ describe('project tasks', () => {
     expect(within(header).getByText('Blocked')).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(header).getByText('Not archived yet')).toBeInTheDocument()
     expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass(
-      'border-red-text/40',
+      'border-red-text/30',
       'text-red-text',
       '[[data-skin=plate]_&]:border-red-text',
     )

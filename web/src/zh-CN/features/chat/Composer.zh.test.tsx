@@ -16,7 +16,7 @@ it('when busy, Stop stays available even with a draft, and explicit Interrupt an
   mountBar(true)
   expect(screen.queryByText('换行')).toBeNull()
   const stop = screen.getByRole('button', { name: '停止当前回复' })
-  expect(stop).toHaveClass('size-8', 'rounded-full', 'border', 'border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
   expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
 
   await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '新的指示')

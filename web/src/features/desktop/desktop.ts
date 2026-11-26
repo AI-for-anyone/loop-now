@@ -28,6 +28,8 @@ export type DesktopBridge = {
   pickPath?: (request: PickPathRequest) => Promise<string | null>
   // Synchronizes the console's skin and color mode with the Electron shell (nativeTheme + window background). Absent in older shells.
   setAppearance?: (appearance: DesktopAppearance) => void
+  // Fired when a hidden or minimized desktop window is reopened so the console can replay the minimalist boarding screen.
+  onBoarding?: (listener: () => void) => () => void
 }
 
 declare global {

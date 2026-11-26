@@ -97,7 +97,7 @@ export function Combobox({
         disabled={disabled}
         className={cn(
           fieldClass,
-          "flex h-11 items-center gap-2 text-left aria-expanded:border-ink aria-expanded:shadow-focus [[data-skin=plate]_&]:aria-expanded:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
+          "flex h-9 items-center gap-2 text-left aria-expanded:border-ink/45 aria-expanded:shadow-focus [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:aria-expanded:border-ink [[data-skin=plate]_&]:aria-expanded:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
         )}
         {...aria}
       >

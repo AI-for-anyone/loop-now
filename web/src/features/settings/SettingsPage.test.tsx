@@ -74,12 +74,12 @@ describe('Global settings tabs and routing', () => {
     expect(router.state.location.hash).toBe(expectedHash)
   })
 
-  it('the UI language is a segmented button, using hairline active styling in mono skin and yellow in Plate skin', async () => {
+  it('the UI language is a segmented button, using recessed Geist track styling in mono skin and yellow in Plate skin', async () => {
     await open()
     const group = within(region('Language')).getByRole('radiogroup', { name: 'Language' })
-    expect(group).toHaveClass('border', 'border-hairline-strong', 'rounded-ticket', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
+    expect(group).toHaveClass('border', 'border-hairline', 'bg-segment-track', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
     expect(within(group).getByRole('radio', { name: 'English' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-surface-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
+    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-segment-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
   })
 
   it('switching theme between Risograph (Classic) and Minimal updates document.documentElement.dataset.skin', async () => {
@@ -100,7 +100,7 @@ describe('Global settings tabs and routing', () => {
     const switches = await within(local).findAllByRole('switch')
     expect(switches).toHaveLength(4)
     for (const item of switches) {
-      expect(item).toHaveClass('border', 'border-hairline-strong', 'data-[state=checked]:bg-cta-bg', '[[data-skin=plate]_&]:data-[state=checked]:bg-riso-yellow', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+      expect(item).toHaveClass('bg-switch-track', 'data-[state=checked]:bg-cta-bg', '[[data-skin=plate]_&]:data-[state=checked]:bg-riso-yellow', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
       expect(item.closest('li')).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
       expect(item.nextElementSibling).toHaveTextContent(item.getAttribute('aria-checked') === 'true' ? 'On' : 'Off')
     }

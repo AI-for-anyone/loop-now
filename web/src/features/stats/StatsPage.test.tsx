@@ -218,9 +218,10 @@ describe('Stats layout & styling', () => {
     )
     expect(within(actions as HTMLElement).getByRole('radiogroup', { name: 'Time range' })).toHaveClass(
       'h-8',
-      'rounded-ticket',
+      'rounded-[8px]',
       'border',
-      'border-hairline-strong',
+      'border-hairline',
+      'bg-segment-track',
       '[[data-skin=plate]_&]:border-2',
       '[[data-skin=plate]_&]:border-ink',
       '[[data-skin=plate]_&]:rounded-full',

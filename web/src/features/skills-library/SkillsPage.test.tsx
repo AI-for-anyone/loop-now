@@ -264,7 +264,7 @@ describe('Skills library on the sheet', () => {
     const header = (await screen.findByRole('heading', { level: 1, name: 'Skills library' })).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Skills library')
     expect(await within(header).findByText('0 templates')).toBeInTheDocument()
-    expect(within(header).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink')
+    expect(within(header).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control', '[[data-skin=plate]_&]:bg-riso-pink')
   })
 
   it('the empty state preserves mono and Plate styling on the sheet', async () => {
@@ -279,7 +279,7 @@ describe('Skills library on the sheet', () => {
       expect(button).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:bg-white')
       expect(button).not.toHaveClass('[[data-skin=plate]_&]:bg-riso-pink')
     }
-    expect(within(empty).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(within(empty).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
   })
 
   it('selected rail row uses surface-active in mono skin and yellow with ink outline and shadow in Plate skin', async () => {

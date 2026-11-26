@@ -59,8 +59,8 @@ export function PermissionModePicker({
         <ToggleGroup
           aria-labelledby={labelledBy}
           aria-describedby={hintId}
-          // Compact segmented pill track that wraps cleanly on narrow screens.
-          className="inline-flex w-fit max-w-full flex-wrap items-center justify-start gap-0.5 rounded-input border border-hairline bg-surface-hover/70 p-0.5 [[data-skin=plate]_&]:rounded-input [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised"
+          // Compact Vercel Geist segmented track that wraps cleanly on narrow screens.
+          className="w-fit max-w-full justify-start p-[3px] [[data-skin=plate]_&]:rounded-input [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:p-0.5"
           value={value}
           disabled={disabled}
           onValueChange={(next) => next && onChange(next as Mode)}
@@ -70,7 +70,7 @@ export function PermissionModePicker({
               key={mode}
               value={mode}
               disabled={onlyFull && mode !== 'full'}
-              className="h-7 min-h-0 gap-1 rounded-ticket px-2 text-[11.5px] font-medium text-ink-500 shadow-none hover:text-ink data-[state=on]:bg-surface-elevated data-[state=on]:font-semibold data-[state=on]:text-ink data-[state=on]:shadow-xs [[data-skin=plate]_&]:min-h-0 [[data-skin=plate]_&]:rounded-ticket [[data-skin=plate]_&]:px-2.5 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:font-black [[data-skin=plate]_&]:data-[state=on]:text-ink [[data-skin=plate]_&]:data-[state=on]:shadow-[inset_0_0_0_1.5px_var(--ink)]"
+              className="h-6.5 min-h-0 gap-1 px-2 text-[11.5px] [[data-skin=plate]_&]:min-h-0 [[data-skin=plate]_&]:rounded-ticket [[data-skin=plate]_&]:px-2.5 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:font-black [[data-skin=plate]_&]:data-[state=on]:text-ink [[data-skin=plate]_&]:data-[state=on]:shadow-[inset_0_0_0_1.5px_var(--ink)]"
             >
               <PermissionModeIcon mode={mode} className="size-3" />
               {t.permissions.modes[mode].name}

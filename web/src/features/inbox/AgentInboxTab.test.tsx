@@ -155,7 +155,7 @@ describe('The inbox on the sheet', () => {
     expect(screen.queryByRole('complementary', { name: 'Mail' })).toBeNull()
     const all = screen.getByRole('radio', { name: /^All/ })
     const unread = screen.getByRole('radio', { name: /^Unread only/ })
-    for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-ticket', 'border', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:rounded-full')
+    for (const pill of [all, unread]) expect(pill).toHaveClass('rounded-[5px]', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:rounded-full')
     expect(all).toHaveAttribute('aria-checked', 'true')
     expect(all).toHaveClass(
       'data-[state=on]:bg-surface-active',

@@ -32,18 +32,18 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
 // Manager. Nothing is shown when idle. Uses semantic monochrome surfaces in mono and preserves high-contrast Plate accents.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
   const quiet = current
-    ? 'rounded-full bg-cta-bg px-2 text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white'
-    : 'border border-sidebar-border bg-sidebar-hover text-sidebar-muted [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/45 [[data-skin=plate]_&]:text-white'
+    ? 'border-transparent bg-surface-elevated text-sidebar-active-fg shadow-[0_1px_2px_rgb(0_0_0/0.06)] [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:shadow-none'
+    : 'border-hairline bg-surface-subtle text-sidebar-muted [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/45 [[data-skin=plate]_&]:text-white'
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
   const [label, tone, title] =
     agent.busy
-      ? [text.chips.busy, 'border border-hairline-strong bg-surface-active text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink', undefined]
+      ? [text.chips.busy, 'border-riso-blue/25 bg-tint-blue text-riso-blue [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink', undefined]
       : agent.backgroundTaskCount > 0
         ? [
             t.background.listTag(agent.backgroundTaskCount),
             current
-              ? 'rounded-full bg-cta-bg px-2 text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-riso-yellow'
-              : 'border border-hairline-strong bg-tint-yellow text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow',
+              ? 'border-pink-text/25 bg-tint-yellow text-pink-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-riso-yellow'
+              : 'border-pink-text/25 bg-tint-yellow text-pink-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink',
             t.background.listTitle(agent.backgroundTaskCount),
           ]
         : sleeping
@@ -53,7 +53,7 @@ function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; curren
             : [null, '', undefined]
   if (!label) return null
   return (
-    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black', tone)}>
+    <span title={title} className={cn('inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-[11px] leading-none font-medium whitespace-nowrap [[data-skin=plate]_&]:h-auto [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:py-px [[data-skin=plate]_&]:leading-[18px] [[data-skin=plate]_&]:font-black', tone)}>
       {label}
     </span>
   )

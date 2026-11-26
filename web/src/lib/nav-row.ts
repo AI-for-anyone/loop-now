@@ -26,6 +26,6 @@ export const navRowClass = (current: boolean, kind: 'nav' | 'agent' | 'compact' 
 export const navGroupClass =
   'mt-2 flex h-[26px] items-center pr-1 pl-2.5 font-display-latin text-[11.5px] font-semibold tracking-[0.08em] text-sidebar-group uppercase [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[0.1em]'
 
-// The "+" on the right of a group heading: clean subtle icon button in mono; yellow ink-bordered square in Plate.
+// The "+" on the right of a group heading: borderless ghost icon button matching all sidebar controls in mono; yellow ink-bordered square in Plate.
 export const navAddClass =
-  'ml-auto inline-flex size-[24px] items-center justify-center rounded-stamp border border-sidebar-border bg-transparent text-sidebar-muted transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus disabled:opacity-50 [[data-skin=plate]_&]:size-[26px] [[data-skin=plate]_&]:rounded-[8px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'
+  'ml-auto inline-flex size-6 cursor-pointer items-center justify-center rounded-ticket border-0 bg-transparent text-sidebar-muted transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40 [[data-skin=plate]_&]:size-[26px] [[data-skin=plate]_&]:rounded-[8px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'

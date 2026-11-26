@@ -71,8 +71,8 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
         <span className="font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{selected.name}</span>
         {selected.name !== value && <span className="font-mono text-[12px] [overflow-wrap:anywhere]">{value}</span>}
         {selected.plugin !== null && <PluginBadge name={selected.plugin} />}
-        {selected.options.length > 1 && <ToggleGroup aria-label={text.region} value={value} onValueChange={onChange} className="border border-hairline-strong bg-surface-control [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
-          {selected.options.map(option => <ToggleGroupItem key={option.id} value={option.id} className="min-h-[30px] px-3 text-[13px] data-[state=on]:bg-cta-bg data-[state=on]:text-cta-fg data-[state=on]:shadow-none [[data-skin=plate]_&]:data-[state=on]:bg-ink [[data-skin=plate]_&]:data-[state=on]:text-white">{option.label}</ToggleGroupItem>)}
+        {selected.options.length > 1 && <ToggleGroup aria-label={text.region} value={value} onValueChange={onChange} className="[[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
+          {selected.options.map(option => <ToggleGroupItem key={option.id} value={option.id} className="[[data-skin=plate]_&]:min-h-[30px] [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:data-[state=on]:bg-ink [[data-skin=plate]_&]:data-[state=on]:text-white">{option.label}</ToggleGroupItem>)}
         </ToggleGroup>}
         <button ref={change} type="button" disabled={disabled} onClick={() => setOpen(true)} className="ml-auto rounded-ticket px-1 font-medium underline outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold">{text.change}</button>
       </div>

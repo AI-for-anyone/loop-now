@@ -240,10 +240,11 @@ export function ChatPage() {
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
-            // Compact live busy indicator in the composer toolbar (Plate keeps its fluorescent pink dot with navy outline).
+            // Visually hidden in mono skin (header badge + composer placeholder + stop button already convey busy state without crowding the
+            // 4 inline menus); kept accessible via role="status" and shown visibly in classic Plate skin.
             busy && (
-              <span role="status" className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
-                <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-ink [[data-skin=plate]_&]:size-2 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink)]" />
+              <span role="status" className="sr-only [[data-skin=plate]_&]:not-sr-only [[data-skin=plate]_&]:inline-flex [[data-skin=plate]_&]:items-center [[data-skin=plate]_&]:gap-1.5 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
+                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
             )

@@ -8,6 +8,7 @@ import { BrandWordmark } from '@/components/BrandWordmark'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
+import { BoardingSplash } from '@/features/desktop/BoardingSplash'
 import { hasInsetTitleBar, useDesktopNavigation } from '@/features/desktop/desktop'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
@@ -221,6 +222,7 @@ export function AppLayout() {
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} scope={scope} projects={list} />
       <Toasts />
+      <BoardingSplash />
       </div>
     </SidebarContext.Provider>
   )

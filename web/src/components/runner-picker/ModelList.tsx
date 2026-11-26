@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type RefObject } from 'react'
 import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
+import { BrandIcon } from '@/components/BrandIcon'
 import { ScrollRuler } from '@/components/PrecisionRuler'
 import { t } from '@/i18n'
+import { providerBrandIcon } from '@/lib/brand-icons'
 import { describeError } from '@/lib/errors'
+import { shortModelName } from '@/lib/model-name'
 import { cn } from '@/lib/utils'
 import { pluginName, type Unavailable } from './provider-access'
 import type { Row } from './runner-rows'
@@ -168,6 +171,8 @@ export function ModelList(props: ModelListProps) {
   const modelRow = (row: Extract<Row, { kind: 'model' }>) => {
     const isChosen = row.key === chosen, isActive = row.key === active, locked = blocked(row.provider)
     const figure = contextFigure(row.model.contextWindow)
+    const displayName = shortModelName(row.model)
+    const providerIcon = !row.grouped ? providerBrandIcon(row.provider.id) : null
     return (
       <li
         key={row.key}
@@ -177,6 +182,7 @@ export function ModelList(props: ModelListProps) {
         aria-selected={isChosen}
         aria-disabled={locked || undefined}
         aria-label={t.config.basic.modelOption(row.model.name, row.model.id)}
+        title={t.config.basic.modelOption(row.model.name, row.model.id)}
         onMouseMove={() => !isActive && onActive(row.key)}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => !locked && onChoose(row.provider, row.model)}
@@ -195,6 +201,7 @@ export function ModelList(props: ModelListProps) {
           locked && 'cursor-not-allowed opacity-45',
         )}
       >
+        {providerIcon && <BrandIcon name={providerIcon} className="size-3.5 shrink-0 [[data-skin=plate]_&]:hidden" />}
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className={cn('relative min-w-0 truncate text-ink [[data-skin=plate]_&]:font-black', isChosen ? 'font-semibold' : 'font-medium')}>
             {isChosen && (
@@ -203,13 +210,16 @@ export function ModelList(props: ModelListProps) {
                 className="hidden [[data-skin=plate]_&]:absolute [[data-skin=plate]_&]:inset-x-[-4px] [[data-skin=plate]_&]:top-[45%] [[data-skin=plate]_&]:bottom-[-1px] [[data-skin=plate]_&]:block [[data-skin=plate]_&]:-rotate-[1deg] [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:mix-blend-multiply"
               />
             )}
-            <span className="relative">{row.model.name}</span>
+            <span className="relative [[data-skin=plate]_&]:hidden">{displayName}</span>
+            <span className="relative hidden [[data-skin=plate]_&]:inline">{row.model.name}</span>
           </span>
-          {row.model.name !== row.model.id && <span className="min-w-0 truncate font-mono text-[11px] text-ink-500">{row.model.id}</span>}
+          {row.model.name !== row.model.id && (
+            <span className="hidden min-w-0 truncate font-mono text-[11px] text-ink-500 [[data-skin=plate]_&]:inline">{row.model.id}</span>
+          )}
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {figure && <span className="font-mono text-[11px] font-normal text-ink-500 tabular-nums">{figure}</span>}
-          {isChosen && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink [[data-skin=plate]_&]:text-riso-pink" strokeWidth={2.5} />}
+          {isChosen && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue [[data-skin=plate]_&]:text-riso-pink" strokeWidth={2.5} />}
         </span>
       </li>
     )
@@ -291,6 +301,9 @@ export function ModelList(props: ModelListProps) {
                   )}
                 >
                   <ChevronRightIcon aria-hidden="true" className={cn('size-3.5 shrink-0 text-ink-500 transition-transform motion-reduce:transition-none [[data-skin=plate]_&]:text-ink', expanded && 'rotate-90')} />
+                  {providerBrandIcon(provider.id) && (
+                    <BrandIcon name={providerBrandIcon(provider.id)!} className="size-3.5 shrink-0 [[data-skin=plate]_&]:hidden" />
+                  )}
                   <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
                     <span className="font-mono text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">{provider.id}</span>
                     {provider.source === 'plugin' && <span className="min-w-0 truncate text-[11.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{[provider.name, pluginName(provider)].filter(Boolean).join(' · ')}</span>}

@@ -9,6 +9,9 @@
   --surface-control: #FFFFFF;
   --surface-hover: #ECEEF2;
   --surface-active: #E8F1FE;
+  --segment-track: #F0F1F4;
+  --segment-active: #FFFFFF;
+  --switch-track: #D4D6DC;
 
   /* Sidebar chrome (light) */
   --sidebar-bg: #FAFAFA;
@@ -87,8 +90,8 @@
 
   /* Crisp geometric radii */
   --skin-radius-stamp: 5px;
-  --skin-radius-ticket: 7px;
-  --skin-radius-input: 8px;
+  --skin-radius-ticket: 6px;
+  --skin-radius-input: 6px;
   --skin-radius-card: 10px;
   --skin-radius-panel: 12px;
   --skin-radius-bubble: 14px;
@@ -129,6 +132,9 @@
   --surface-control: #111216;
   --surface-hover: #191B21;
   --surface-active: #10213A;
+  --segment-track: #0A0B0E;
+  --segment-active: #1E2028;
+  --switch-track: #2B2E38;
 
   /* Sidebar chrome (dark) */
   --sidebar-bg: #08090B;

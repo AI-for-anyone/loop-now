@@ -336,7 +336,7 @@ describe('External identities on the sheet', () => {
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›External identities')
     expect(await within(header).findByText('1 identity')).toBeInTheDocument()
     expect(within(header).getByRole('button', { name: 'New' })).toHaveClass(
-      'bg-surface-hover',
+      'bg-surface-control',
       '[[data-skin=plate]_&]:border-2',
       '[[data-skin=plate]_&]:border-ink',
       '[[data-skin=plate]_&]:bg-riso-pink',

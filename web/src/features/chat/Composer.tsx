@@ -426,10 +426,13 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         {editor}
         <div
           data-chat-toolbar
-          className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2.5 pt-1 pb-2"
+          className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1.5 px-2 pt-1 pb-2"
         >
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {addButton}
+            {addButton && runner && (
+              <span aria-hidden="true" className="mx-0.5 h-3.5 w-px shrink-0 bg-hairline-strong [[data-skin=plate]_&]:hidden" />
+            )}
             {runner}
             {status}
             {/* Warn before stopping or interrupting when the runtime's stop also terminates running background tasks. */}
@@ -437,30 +440,17 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {connection}
-            {showStop && (
-              <Button
-                type="button"
-                size="icon"
-                className="size-8 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white"
-                aria-label={stopLabel}
-                title={stopLabel}
-                disabled={stop.pending}
-                onClick={stop.onStop}
-              >
-                <StopMark className="size-3" />
-              </Button>
-            )}
             {showInterrupt && (
               <Button
                 type="button"
                 variant="secondary"
-                className="h-8 shrink-0 gap-1 rounded-full border border-hairline-strong bg-surface-subtle px-2.5 text-[12px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink"
+                className="h-7 shrink-0 gap-1 rounded-full border border-hairline-strong bg-surface-subtle px-2.5 text-[11.5px] font-medium text-ink shadow-none hover:border-ink/30 hover:bg-surface-hover [[data-skin=plate]_&]:h-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink"
                 aria-label={t.chat.interruptSend}
                 title={t.chat.interruptSendTitle(mac)}
                 disabled={submitDisabled || pending}
                 onClick={() => void submit('interrupt')}
               >
-                <ZapIcon aria-hidden="true" className="size-3 shrink-0 text-pink-text" strokeWidth={2.5} />
+                <ZapIcon aria-hidden="true" className="size-3 shrink-0 text-pink-text" strokeWidth={2.4} />
                 <span className="hidden sm:inline">{t.chat.interruptAction}</span>
               </Button>
             )}
@@ -469,13 +459,26 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
                 type="button"
                 variant="interrupt"
                 size="icon"
-                className="size-8 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink"
+                className="size-7 rounded-full border-0 bg-cta-bg text-cta-fg shadow-[0_1px_4px_rgb(0_102_219/0.30)] transition-[background-color,transform,box-shadow] hover:-translate-y-[0.5px] hover:bg-cta-hover active:scale-[0.94] disabled:translate-y-0 disabled:bg-ink/[0.08] disabled:text-ink/30 disabled:opacity-100 disabled:shadow-none [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:translate-y-0 [[data-skin=plate]_&]:hover:bg-riso-pink [[data-skin=plate]_&]:disabled:opacity-40"
                 aria-label={sendLabel}
                 title={busy ? t.chat.queueSendTitle : `${sendLabel} (${t.chat.barKeys.enter})`}
                 disabled={submitDisabled || pending}
                 onClick={() => void submit()}
               >
-                <ArrowUpIcon aria-hidden="true" className="size-4" strokeWidth={2.6} />
+                <ArrowUpIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
+              </Button>
+            )}
+            {showStop && (
+              <Button
+                type="button"
+                size="icon"
+                className="size-7 rounded-full border-0 bg-red text-white shadow-[0_1px_4px_rgb(220_38_38/0.30)] transition-[background-color,transform,box-shadow] hover:-translate-y-[0.5px] hover:bg-red/90 active:scale-[0.94] [[data-skin=plate]_&]:size-9 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:hover:translate-y-0 [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white"
+                aria-label={stopLabel}
+                title={stopLabel}
+                disabled={stop.pending}
+                onClick={stop.onStop}
+              >
+                <StopMark className="size-2.5" />
               </Button>
             )}
           </div>

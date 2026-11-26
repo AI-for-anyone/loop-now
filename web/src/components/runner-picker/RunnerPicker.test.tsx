@@ -414,7 +414,8 @@ describe('runner picker', () => {
           </>,
         )
         expect(mono.container.innerHTML).not.toContain('mix-blend-mode: multiply')
-        expect(mono.container.innerHTML).toContain('var(--cta-bg)')
+        expect(mono.container.querySelector('[data-brand-icon="pi"]')).not.toBeNull()
+        expect(mono.container.querySelector('[data-brand-icon="claudecode"]')).not.toBeNull()
         mono.unmount()
 
         setSkin('plate')
