@@ -200,6 +200,9 @@
   .window-drag :is(a, button, input, select, textarea, [role='button']) {
     -webkit-app-region: no-drag;
   }
+  .window-no-drag {
+    -webkit-app-region: no-drag;
+  }
   .riso-halftone {
     background-image: radial-gradient(rgb(255 255 255 / .12) 1px, transparent 1.3px);
     background-size: 6px 6px;
