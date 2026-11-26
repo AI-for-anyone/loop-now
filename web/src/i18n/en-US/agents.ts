@@ -10,7 +10,17 @@ export const agents = {
   tabs: { chat: 'Chat', config: 'Config', folder: 'Folder', inbox: 'Inbox' },
   address: {
     label: 'Address',
+    copy: 'Copy address',
     missing: "This Agent has no address yet: its name doesn't meet the naming rules. Rename it to get one. Until then, use its internal ID to send it Inbox messages.",
+  },
+  menu: {
+    label: 'More',
+    title: 'Agent info',
+    runtime: 'Runtime',
+    runtimeValue: (name: string, where: string) => `${name} (${where})`,
+    model: 'Model',
+    backToProject: (name: string) => `Back to ${name}`,
+    backToGlobal: 'Back to Global',
   },
   selectHint: 'Pick an Agent in the sidebar.',
   manager: 'Manager',
