@@ -87,12 +87,13 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
 // "Printed sheet" redesign: the input area merges into the bottom of the sheet.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('the input area is a light yellow bar at the bottom of the sheet with a 2px navy line along its top edge', () => {
+it('the input area is a light yellow bar at the bottom of the sheet whose inner column matches the message column up to 1600px and aligns with the 40px turn ruler', () => {
   mountBar()
-  const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')
+  const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')!
   expect(bar).toHaveClass('bg-tint-yellow', 'border-t-2', 'border-ink')
-  // On wide screens the vertical padding tightens (narrow screens are unchanged); the key-hint row stays.
-  expect(bar).toHaveClass('pt-3.5', 'pb-3', 'gap-2.5', 'nav:pt-2.5', 'nav:pb-2', 'nav:gap-1.5')
+  expect(bar).toHaveClass('px-3.5', 'pt-3.5', 'pb-3', 'nav:pt-2.5', 'nav:pb-2', 'nav:pl-6', 'nav:pr-[64px]')
+  const inner = bar.querySelector('[data-chat-bar-inner]')!
+  expect(inner).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]', 'gap-2.5', 'nav:gap-1.5')
 })
 
 it('the input has a light paper background and a navy border; the send button is a fluorescent pink round stamp (navy border plus a solid navy shadow)', () => {

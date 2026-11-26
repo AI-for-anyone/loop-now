@@ -169,28 +169,30 @@ export function ChatPage() {
     // inside its own area (loading earlier messages and sticking to the bottom both depend on it).
     <div className="flex h-full min-h-0 flex-col lg:overflow-hidden">
       <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-        {/* Notice bars sit above the message area, with the same left and right padding as the message area. */}
-        <div className="flex shrink-0 flex-col px-[clamp(12px,2vw,28px)]">
-          {notFound && (
-            <Alert variant="warning" className="mt-4">
-              <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
-            </Alert>
-          )}
-          {aroundRun !== null && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
-              <span>{t.timeline.locate.viewing}</span>
-              <span role="status" aria-live="polite">
-                {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
-              </span>
-              <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
-                {t.timeline.locate.backToLatest}
-              </Button>
-            </div>
-          )}
+        {/* Notice bars sit above the message area, aligned with the message column and 40px turn ruler. */}
+        <div className="flex shrink-0 flex-col px-3.5 nav:pr-[64px] nav:pl-6 empty:hidden">
+          <div className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col empty:hidden">
+            {notFound && (
+              <Alert variant="warning" className="mt-3">
+                <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
+              </Alert>
+            )}
+            {aroundRun !== null && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
+                <span>{t.timeline.locate.viewing}</span>
+                <span role="status" aria-live="polite">
+                  {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
+                </span>
+                <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
+                  {t.timeline.locate.backToLatest}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="min-h-0 flex-1">
           {messages.isError && !(aroundRun !== null && isNotFound(messages.error)) ? (
-            <ErrorAlert error={messages.error} className="mx-[clamp(12px,2vw,28px)] mt-6 w-auto" />
+            <ErrorAlert error={messages.error} className="mx-3.5 mt-4 w-auto nav:mx-6" />
           ) : (
             <MessageList
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.

@@ -362,9 +362,8 @@ export function MessageList({
         ref={container}
         onScroll={onScroll}
         className={cn(
-          // On wide screens the left padding is a bit narrower (the number column got narrower too), moving the body left; narrow
-          // screens are unchanged.
-          'relative h-full min-w-0 flex-1 overflow-y-auto pt-3.5 pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
+          // Tight horizontal gutters (14px on phone, 24px on desktop) and compact vertical padding above the first message and below the last.
+          'relative h-full min-w-0 flex-1 overflow-y-auto px-3.5 pt-2.5 pb-3 nav:px-6',
           // With a ruler (at least two turns, wide screen) hide the native scrollbar; without ticks keep it, so you can still tell how far
           // you've scrolled through one very long reply.
           turns.length > 1 && 'nav:no-scrollbar',
@@ -372,8 +371,8 @@ export function MessageList({
         role="log"
         aria-label={t.chat.messagesLabel}
       >
-        {/* The right padding also leaves room for the print shadows of bubbles and code blocks, so the scroll area doesn't clip them. */}
-        <div ref={content} className="flex min-w-0 w-full flex-col gap-7">
+        {/* The message column fills the space up to the turn ruler, capped at 1600px on ultrawide windows. */}
+        <div ref={content} data-message-column className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-7">
           {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
           {hasOlder && !loadingOlder && (
             <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
@@ -409,9 +408,8 @@ export function MessageList({
                       ) : (
                         <UserBubble message={turn.user} run={turn.run} />
                       ))}
-                    {/* The reply body follows the conversation column, up to 1100px on wide screens: no wasted space in a wide window,
-                        and code blocks, tables and images widen with it. Narrow screens keep 760px. */}
-                    <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
+                    {/* The reply body follows the conversation column up to 1600px: wide tables, code blocks and long text use the full width. */}
+                    <div className="w-full max-w-[1600px] min-w-0">
                       <ReplyBubble turn={turn} agent={agent} located={isTarget} requests={permissionRequests.filter((request) => request.runId === turn.run.id)} />
                     </div>
                   </div>
@@ -437,7 +435,7 @@ export function MessageList({
           total={firstNumber === null ? null : (turnsTotal ?? null)}
         />
       ) : (
-        <Stub data-turn-stub aria-hidden="true" label={t.chat.ruler.title} className="w-[74px]" />
+        <Stub data-turn-stub aria-hidden="true" label={t.chat.ruler.title} labelClassName="px-0.5 indent-0 text-[9px] tracking-[0.04em]" className="w-10" />
       )}
     </div>
   )
