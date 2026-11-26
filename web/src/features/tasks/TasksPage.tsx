@@ -157,6 +157,7 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
             <PendingBadge counts={pending} />
           </span>
           {task.branch && <Branch name={task.branch} />}
+          {task.workspaceMode === 'copy' && <span className="w-fit rounded-[4px] bg-tint-blue px-1.5 text-[11.5px] leading-[20px] font-bold text-riso-blue">{t.tasks.workspace.copyLabel}</span>}
           {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
         </span>
       </span>

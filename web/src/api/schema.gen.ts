@@ -7210,6 +7210,11 @@ export interface components {
             version: number;
             /** @description The branch of the task's workspace; null for a task without one or with a copy-mode workspace. */
             branch: string | null;
+            /**
+             * @description The mode of the task's workspace (TaskWorkspace.mode); null for a task without one.
+             * @enum {string|null}
+             */
+            workspaceMode: "git" | "copy" | null;
         };
         TaskNodeRun: {
             /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
