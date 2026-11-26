@@ -25,6 +25,9 @@
 //	                   task_started, a tool result naming the task and its output file), reply started; after <dur> the task
 //	                   ends (task_updated, task_notification, an empty background_tasks_changed) and, when no turn is going on,
 //	                   Claude Code replies by itself: a turn of its own (init, text "background done", result with usage)
+//	                   A <cmd> of then:<dur2> has that turn of its own start another background task for <dur2> and end
+//	                   after it has ended; Claude Code then replies by itself once more about it, 0.5 s after that turn
+//	                   (as claude 2.1.332 did with a watcher that failed at once).
 //	fake:wait <dur>    reply waited after <dur>
 //	fake:ask <cmd>     ask the host to use the Bash tool on <cmd> (a can_use_tool control request, as with
 //	                   --permission-prompt-tool stdio, in claude 2.1.332's shape), then reply allowed, or denied:
@@ -89,6 +92,8 @@ var (
 type bgTask struct {
 	id, toolUse, command, outFile string
 	timer                         *time.Timer
+	// own: it was started in a turn of Claude Code's own, and ends while that turn goes on.
+	own bool
 }
 
 func emit(v any) {
@@ -585,23 +590,7 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 	case "fake:background":
 		durText, command, _ := strings.Cut(arg, " ")
 		dur, _ := time.ParseDuration(durText)
-		tasksMu.Lock()
-		nextBg++
-		t := &bgTask{id: fmt.Sprintf("b%d", nextBg), toolUse: fmt.Sprintf("toolu_bg_%d", nextBg), command: command}
-		t.outFile = filepath.Join(os.TempDir(), fmt.Sprintf("fakeclaude-%d-%s.output", os.Getpid(), t.id))
-		tasks[t.id] = t
-		list := backgroundList()
-		tasksMu.Unlock()
-		stream(nil, map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_bg", "model": model}})
-		stream(nil, map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash", "input": map[string]any{}}})
-		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_bg", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash",
-			"input": map[string]any{"command": command, "description": "Run it in the background", "run_in_background": true}}}}})
-		emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": list, "session_id": sess.id})
-		emit(map[string]any{"type": "system", "subtype": "task_started", "task_id": t.id, "tool_use_id": t.toolUse, "is_backgrounded": true, "task_type": "local_bash",
-			"description": "Run it in the background", "session_id": sess.id})
-		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": t.toolUse,
-			"content": "Command running in background with ID: " + t.id + ". Output is being written to: " + t.outFile, "is_error": false}}}})
-		t.timer = time.AfterFunc(dur, func() { endTask(t.id, true, sess, model) })
+		startTask(dur, command, false, sess, model)
 		reply(model, "started")
 	case "fake:wait":
 		dur, _ := time.ParseDuration(arg)
@@ -680,6 +669,31 @@ func settleStale(ids []string, sess *session, model string) {
 	result(map[string]any{"subtype": "success", "is_error": false, "result": "", "num_turns": 0, "terminal_reason": "completed"}, map[string]any{})
 }
 
+// startTask runs command with the Bash tool in the background for dur (see fake:background); own: in a turn of Claude
+// Code's own.
+func startTask(dur time.Duration, command string, own bool, sess *session, model string) *bgTask {
+	tasksMu.Lock()
+	nextBg++
+	t := &bgTask{id: fmt.Sprintf("b%d", nextBg), toolUse: fmt.Sprintf("toolu_bg_%d", nextBg), command: command, own: own}
+	t.outFile = filepath.Join(os.TempDir(), fmt.Sprintf("fakeclaude-%d-%s.output", os.Getpid(), t.id))
+	tasks[t.id] = t
+	list := backgroundList()
+	tasksMu.Unlock()
+	stream(nil, map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_bg", "model": model}})
+	stream(nil, map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash", "input": map[string]any{}}})
+	emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_bg", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": t.toolUse, "name": "Bash",
+		"input": map[string]any{"command": command, "description": "Run it in the background", "run_in_background": true}}}}})
+	emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": list, "session_id": sess.id})
+	emit(map[string]any{"type": "system", "subtype": "task_started", "task_id": t.id, "tool_use_id": t.toolUse, "is_backgrounded": true, "task_type": "local_bash",
+		"description": "Run it in the background", "session_id": sess.id})
+	emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": t.toolUse,
+		"content": "Command running in background with ID: " + t.id + ". Output is being written to: " + t.outFile, "is_error": false}}}})
+	tasksMu.Lock()
+	t.timer = time.AfterFunc(dur, func() { endTask(t.id, true, sess, model) })
+	tasksMu.Unlock()
+	return t
+}
+
 // backgroundList is the background_tasks_changed list of the running tasks; tasksMu is held.
 func backgroundList() []any {
 	list := []any{}
@@ -710,10 +724,38 @@ func endTask(id string, completed bool, sess *session, model string) {
 	emit(map[string]any{"type": "system", "subtype": "task_notification", "task_id": t.id, "tool_use_id": t.toolUse, "status": status, "output_file": t.outFile,
 		"summary": "Background command \"Run it in the background\" " + status, "session_id": sess.id})
 	emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": list, "session_id": sess.id})
+	if t.own {
+		// It ended while the turn of Claude Code's own that started it goes on: Claude Code replies about it after that
+		// turn.
+		go func() {
+			turnMu.Lock()
+			turnMu.Unlock()
+			time.Sleep(500 * time.Millisecond)
+			turnMu.Lock()
+			defer turnMu.Unlock()
+			ownTurn(sess, model)
+		}()
+		return
+	}
 	if !turnMu.TryLock() {
 		return // the turn in progress takes the notification
 	}
 	defer turnMu.Unlock()
+	if then, ok := strings.CutPrefix(t.command, "then:"); ok {
+		emit(map[string]any{"type": "system", "subtype": "init", "session_id": sess.id, "model": model, "claude_code_version": version(), "tools": []string{}, "skills": []string{}, "mcp_servers": []any{}})
+		dur, _ := time.ParseDuration(then)
+		startTask(dur, "true", true, sess, model)
+		time.Sleep(dur + 100*time.Millisecond)
+		reply(model, "background done")
+		result(map[string]any{"subtype": "success", "is_error": false, "result": "background done", "terminal_reason": "completed"},
+			map[string]any{model: map[string]any{"inputTokens": 7, "outputTokens": 3, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "thinkingTokens": 0}})
+		return
+	}
+	ownTurn(sess, model)
+}
+
+// ownTurn is a reply Claude Code gives by itself after a background task ended; turnMu is held.
+func ownTurn(sess *session, model string) {
 	emit(map[string]any{"type": "system", "subtype": "init", "session_id": sess.id, "model": model, "claude_code_version": version(), "tools": []string{}, "skills": []string{}, "mcp_servers": []any{}})
 	reply(model, "background done")
 	if os.Getenv("FAKECLAUDE_FOLLOWUP_NO_RESULT") == "1" {

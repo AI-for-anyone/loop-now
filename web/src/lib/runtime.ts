@@ -101,9 +101,9 @@ export function railOrder(definitions: readonly RuntimeDefinition[], readiness: 
   return definitions.map((definition, index) => ({ definition, index, rank: rank(definition) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(({ definition }) => definition)
 }
 
-// The product mark each built-in runtime shows: the product's own logo (Claude for Claude Code, OpenAI's for Codex, Grok's, Google
-// Antigravity's, Pi's own pixel mark), drawn by components/runner-picker/RuntimeMark.tsx from the official files in
-// src/assets/runtime-logos. Any other runtime (a local ACP command a person added) has no product logo of its own and gets a neutral mark.
+// The product shape each built-in runtime shows inside its ink frame: Claude's burst for Claude Code, OpenAI's knot for Codex, Grok's
+// mark, Google Antigravity's arch, Pi's pixel mark — drawn as one-color silhouettes by components/runner-picker/RuntimeMark.tsx from the
+// official files in src/assets/runtime-logos. Any other runtime (a local ACP command a person added) shows its initial in the same frame.
 export type RuntimeLogo = 'claude' | 'openai' | 'grok' | 'antigravity' | 'pi'
 const logos: Record<BuiltInRuntime, RuntimeLogo> = { 'claude-code': 'claude', codex: 'openai', grok: 'grok', antigravity: 'antigravity', pi: 'pi' }
 

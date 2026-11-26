@@ -11,6 +11,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
 - The loopctl guide tells a step in a task with a git workspace to write its notes as such a file when the repository keeps one per change.
 
+### Runtime marks: one color, one frame
+
+- Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
+- The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
+
 ### The Agent page header is one thin bar
 
 - The top of an Agent page (breadcrumb, large title, runtime and model tags, address box and the four folder tabs, about 200 px) is now one bar of 48 px shared by Chat, Config, Folder and Inbox, as in ChatGPT: the runtime mark, the Agent's name, the Manager chip and the status on the left, the four tabs as small text tabs, and a "⋯" menu on the right. The conversation starts right under it.
@@ -34,6 +39,10 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 - Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
 - At every width long Agent, project and menu names end in an ellipsis, and the marks, badges and the "+" button stay whole. On a phone the sidebar is still the drawer, without a handle.
+
+### A task step waits for all of its CLI's background work
+
+- A task step no longer ends, and blocks the task with "ended without submitting a result", while its CLI is still working. Antigravity: a command agy starts in a reply of its own, after an earlier command ended, is now background work of the step like the first one; the step waits for it and for agy's reply about it. For a regular Agent such a command now shows in the "Background N" mark and its end brings a follow-up reply. Claude Code: when a background task starts and ends inside Claude Code's own reply (a watcher that fails at once), the step now waits for the reply Claude Code gives about it afterwards.
 
 ### The heading above a CLI's own follow-up is one short line
 
