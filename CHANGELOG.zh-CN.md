@@ -6,6 +6,11 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### 每个改动的说明各写一个文件
+
+- 给 Loop Now 的改动现在新加一个文件 `changes/<slug>.md` 来写说明，里面分英文、中文和 MAIN.md 三部分，不再直接改 CHANGELOG.md、CHANGELOG.zh-CN.md 和 MAIN.md；在合并队列里一起排队的几个 PR 不会再在这些地方冲突、被踢出队列。发布时由 `scripts/release/collect-changes.sh <版本>` 把说明放进去，之前可以用 `scripts/release/notes.sh Unreleased` 预览。PR 如果直接在“未发布”下加行，或在 MAIN.md 的改动列表里加新条目，CI 会失败（发布分支除外）。
+- loopctl 指南告诉 git 工作区任务里的步骤：仓库如果每个改动各有一个说明文件，就按这个方式写。
+
 ### 20 MiB 以内的文件都能预览
 
 - 文件夹页面（Agent 的文件夹、项目和全局的上下文文件夹）里，20 MiB 以内的文件都能预览和在线编辑，以前只有 1 MiB，图片也一样：3.5 MiB、15 MiB 的图片能直接看，5 MiB 的文本能打开、编辑和保存。更大的文件照旧显示提示和“下载”，提示里写着上限。

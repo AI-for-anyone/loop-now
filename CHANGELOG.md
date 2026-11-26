@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Change notes are one file per change
+
+- A change to Loop Now records its notes as one new file, `changes/<slug>.md`, with its English, Chinese and MAIN.md parts, instead of editing CHANGELOG.md, CHANGELOG.zh-CN.md and MAIN.md; pull requests waiting together in the merge queue no longer conflict there and drop out of the queue. `scripts/release/collect-changes.sh <version>` moves the notes into place when a release is cut, and `scripts/release/notes.sh Unreleased` previews them before that. CI fails a pull request that adds lines under "Unreleased" or a new entry to MAIN.md's change list (release branches excepted).
+- The loopctl guide tells a step in a task with a git workspace to write its notes as such a file when the repository keeps one per change.
+
 ### Files up to 20 MiB can be previewed
 
 - The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
