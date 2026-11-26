@@ -380,6 +380,65 @@
           "required": false,
           "repeatable": false,
           "description": "Read the Prompt from a file; - means standard input"
+        },
+        {
+          "name": "working-dir",
+          "type": "string",
+          "required": false,
+          "repeatable": false,
+          "description": "Absolute path of the folder the Agent's CLI works in (not with a Pi model); checked by the server"
+        },
+        {
+          "name": "use-local-config",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "true",
+            "false"
+          ],
+          "description": "Whether the CLI uses this computer's own configuration and login (true) or Loop Now's (false)"
+        },
+        {
+          "name": "permission-mode",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "supervised",
+            "accept_edits",
+            "auto",
+            "full"
+          ],
+          "description": "How much the runtime may do without asking; a Pi model only takes full; without it, create takes the default from permission settings"
+        },
+        {
+          "name": "thinking-level",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "description": "Thinking level; it must be one the model supports (checked by the server); without it, create uses the model's default"
+        },
+        {
+          "name": "service-tier",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "default",
+            "priority",
+            "ultrafast"
+          ],
+          "description": "Codex speed tier (default is Standard, priority is Fast); only openai-codex models take it"
         }
       ],
       "constraints": [
@@ -1172,7 +1231,7 @@
     },
     {
       "path": "agent update",
-      "summary": "Change an Agent's name, model or Prompt; a change that includes the Prompt (including clearing it or the same text) must explicitly give the promptVersion from agent get, a version conflict exits with 8, and it does not read the new version and retry automatically; creating, or changing only the name/model, is not subject to this. Takes effect at the next dispatch",
+      "summary": "Change an Agent's name, model, Prompt, working folder, local configuration, permission mode, thinking level or service tier; only the settings given are sent. A change that includes the Prompt (including clearing it or the same text) must explicitly give the promptVersion from agent get, a version conflict exits with 8, and it does not read the new version and retry automatically; creating, or a change without the Prompt, is not subject to this. Takes effect at the next dispatch",
       "identities": [
         "external"
       ],
@@ -1219,6 +1278,86 @@
           "repeatable": false,
           "min": 1,
           "description": "The positive integer agent get.promptVersion the edit is based on; give it together with --prompt-file; configVersion is not used"
+        },
+        {
+          "name": "working-dir",
+          "type": "string",
+          "required": false,
+          "repeatable": false,
+          "description": "Absolute path of the folder the Agent's CLI works in (not with a Pi model); checked by the server"
+        },
+        {
+          "name": "use-local-config",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "true",
+            "false"
+          ],
+          "description": "Whether the CLI uses this computer's own configuration and login (true) or Loop Now's (false)"
+        },
+        {
+          "name": "permission-mode",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "supervised",
+            "accept_edits",
+            "auto",
+            "full"
+          ],
+          "description": "How much the runtime may do without asking; a Pi model only takes full; without it, create takes the default from permission settings"
+        },
+        {
+          "name": "thinking-level",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "description": "Thinking level; it must be one the model supports (checked by the server); without it, create uses the model's default"
+        },
+        {
+          "name": "service-tier",
+          "type": "enum",
+          "required": false,
+          "repeatable": false,
+          "values": [
+            "default",
+            "priority",
+            "ultrafast"
+          ],
+          "description": "Codex speed tier (default is Standard, priority is Fast); only openai-codex models take it"
+        },
+        {
+          "name": "clear-working-dir",
+          "type": "bool",
+          "required": false,
+          "repeatable": false,
+          "description": "Remove the working folder"
+        },
+        {
+          "name": "clear-thinking-level",
+          "type": "bool",
+          "required": false,
+          "repeatable": false,
+          "description": "Go back to the model's default thinking level"
+        },
+        {
+          "name": "clear-service-tier",
+          "type": "bool",
+          "required": false,
+          "repeatable": false,
+          "description": "Go back to Standard"
         }
       ],
       "constraints": [
@@ -1227,7 +1366,15 @@
           "flags": [
             "name",
             "provider",
-            "prompt-file"
+            "prompt-file",
+            "working-dir",
+            "clear-working-dir",
+            "use-local-config",
+            "permission-mode",
+            "thinking-level",
+            "clear-thinking-level",
+            "service-tier",
+            "clear-service-tier"
           ]
         },
         {
@@ -1244,6 +1391,27 @@
             "expected-prompt-version"
           ],
           "hint": "Run agent get first to see prompt and promptVersion, check the version your edit is based on, then submit explicitly. On a conflict, nothing is overwritten automatically. Keep your local draft."
+        },
+        {
+          "kind": "atMostOne",
+          "flags": [
+            "working-dir",
+            "clear-working-dir"
+          ]
+        },
+        {
+          "kind": "atMostOne",
+          "flags": [
+            "thinking-level",
+            "clear-thinking-level"
+          ]
+        },
+        {
+          "kind": "atMostOne",
+          "flags": [
+            "service-tier",
+            "clear-service-tier"
+          ]
         }
       ],
       "destructive": false,
