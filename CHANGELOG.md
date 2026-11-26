@@ -4,7 +4,9 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-## Unreleased
+## v0.3.3
+
+Tasks can work on a folder of yours: a folder in a git repository gets its own worktree and branch, and any other folder is copied and only read, so several tasks can run on one project at once and leave nothing behind. A reply cut off by a quit or crash is remembered, the bar under the message box shows background work, each runtime shows its own logo, and loopctl can set an Agent's folder, configuration, permission mode and levels.
 
 ### A reply cut off in the middle is remembered
 
