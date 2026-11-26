@@ -9,8 +9,9 @@
 #   scripts/release/notes.sh <tag>
 #   scripts/release/notes.sh Unreleased
 #
-# "Unreleased" previews the next release before the change notes are collected: the "## Unreleased" and "## 未发布"
-# sections with the notes still in changes/ on top, as scripts/release/collect-changes.sh would put them.
+# "Unreleased" previews the next release before its notes are collected: the notes in the descriptions of the pull
+# requests merged since the last release (scripts/release/collect-pr-notes.sh --print, which needs gh) on top of the
+# "## Unreleased" and "## 未发布" sections, as collect-pr-notes.sh would put them. A tagged version never calls gh.
 #
 # The annotation must be read from an annotated tag: the tag actions/checkout fetches is lightweight, so fetch this
 # tag once with git fetch before calling.
@@ -23,7 +24,7 @@ fi
 tag="$1"
 version="${tag#v}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-collect="$(cd "$(dirname "$0")" && pwd)/collect-changes.sh"
+collect="$(cd "$(dirname "$0")" && pwd)/collect-pr-notes.sh"
 
 # blank TEXT: true when TEXT has nothing but whitespace. Uses tr rather than ${TEXT//[[:space:]]/}: in bash 3.2 (macOS)
 # that substitution takes time roughly cubic in the length, minutes for a 16 KB section.
@@ -46,7 +47,7 @@ section() {
 	' "$1"
 }
 
-# with_pending PART TEXT: for "Unreleased", the notes' PART from changes/ above TEXT; otherwise TEXT.
+# with_pending PART TEXT: for "Unreleased", the PART (English or 中文) of the pull request notes above TEXT; otherwise TEXT.
 with_pending() {
 	local pending
 	if [ "$tag" != Unreleased ]; then
@@ -69,7 +70,7 @@ if blank "$notes" && [ "$(git -C "$root" cat-file -t "refs/tags/$tag" 2>/dev/nul
 	[ "$(printf '%s' "$notes" | tr -d '[:space:]')" = "$tag" ] && notes=""
 fi
 if blank "$notes"; then
-	echo "The release notes are empty: add a \"## $tag\" section to CHANGELOG.md (collect the notes in changes/ with scripts/release/collect-changes.sh), or write an annotation with git tag -a $tag." >&2
+	echo "The release notes are empty: add a \"## $tag\" section to CHANGELOG.md (write it with scripts/release/collect-pr-notes.sh), or write an annotation with git tag -a $tag." >&2
 	exit 1
 fi
 # Drop leading blank lines (command substitution has already removed the trailing newlines).
