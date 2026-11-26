@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useSearchParams } from 'react-router'
 import { folderSource } from '@/api/folders'
 import { useContextInfo } from '@/api/queries'
 import { useAgentContext } from '@/features/agents/agent-context'
@@ -7,6 +8,7 @@ import { Sheet } from '@/components/Sheet'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { overviewPath } from '@/lib/scope'
 import { t } from '@/i18n'
+import { folderPath } from './folder-source'
 import { FileManager } from './FileManager'
 
 // The Agent's “文件夹” (Folder) tab: its one and only folder, both its working directory and its own context. Laid directly on the tab's
@@ -16,11 +18,15 @@ import { FileManager } from './FileManager'
 export function AgentFolderTab() {
   const { agent } = useAgentContext()
   const context = useContextInfo()
+  const [searchParams] = useSearchParams()
+  const initialPath = folderPath(searchParams.get('path') ?? '') || undefined
   const source = useMemo(() => folderSource({ kind: 'agent', agentId: agent.id }), [agent.id])
   return (
     <FileManager
+      key={initialPath ?? ''}
       variant="sheet"
       source={source}
+      initialPath={initialPath}
       rootLabel={t.folders.rootLabel.agent(agent.name)}
       note={t.folders.agent.intro(agent.name)}
       limits={context.data?.limits.textEdit}
