@@ -21,7 +21,7 @@ function list() {
     { ...base, id: '00000000-0000-7000-8000-000000000301', number: 13, title: 'With a branch', reason: null, branch: long, workspaceMode: 'git' as const, currentStepId: 'implement', currentStepTitle: 'Implement' },
     { ...base, id: '00000000-0000-7000-8000-000000000302', number: 14, title: 'Without a branch', reason: null, branch: null, currentStepId: 'verify', currentStepTitle: null },
     { ...base, id: '00000000-0000-7000-8000-000000000303', number: 15, title: 'On a folder copy', reason: null, branch: null, workspaceMode: 'copy' as const, currentStepId: null, currentStepTitle: null },
-    { ...base, id: '00000000-0000-7000-8000-000000000304', number: 16, title: longTitle, reason: null, branch: 'task/16-short', workspaceMode: 'git' as const, currentAgentId: longAgentId, currentStepId: 'pr', currentStepTitle: 'Pull request' },
+    { ...base, id: '00000000-0000-7000-8000-000000000304', number: 16, title: longTitle, reason: null, branch: long, workspaceMode: 'git' as const, currentAgentId: longAgentId, currentStepId: 'pr', currentStepTitle: 'Pull request' },
   ]
   const agents = [
     makeAgent({ id: base.currentAgentId!, name: 'loop-now-main' }),
@@ -47,9 +47,10 @@ describe('compact task list rows', () => {
     expect(branch).toHaveAttribute('title', long)
     expect(branch).toHaveClass('font-mono', 'text-ink-500')
     expect(within(branch).getByText(`Branch ${long}`)).toHaveClass('sr-only')
-    // Title and branch share the same single-line flex container instead of stacking vertically.
-    expect(branch.parentElement).toBe(link.parentElement)
-    expect(link.parentElement).not.toHaveClass('flex-col')
+    // Title and branch share the same single-line grid container (title gets minmax(0,max-content) first; branch takes the leftover 1fr).
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+    expect(branch.parentElement).toBe(cell)
   })
 
   it('a row without a workspace has neither branch nor Folder copy label', async () => {
@@ -59,13 +60,17 @@ describe('compact task list rows', () => {
     expect(within(plain).queryByText('Folder copy')).not.toBeInTheDocument()
   })
 
-  it('a task on a folder copy shows a small Folder copy label inline on the same line as the title', async () => {
+  it('a task on a folder copy shows a small Folder copy label in the trailing space after the title so the title wins first', async () => {
     list()
     const copied = await row('On a folder copy')
     const link = within(copied).getByRole('link', { name: 'On a folder copy' })
     const label = within(copied).getByText('Folder copy')
     expect(label).toBeVisible()
-    expect(label.parentElement).toBe(link.parentElement)
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+    expect(label.parentElement).toHaveClass('@container', 'min-w-0', 'overflow-hidden')
+    expect(label.parentElement!.parentElement).toBe(cell)
+    expect(label).toHaveClass('@max-[84px]:hidden')
     expect(within(copied).queryByTestId('task-branch')).not.toBeInTheDocument()
     expect(within(await row('With a branch')).queryByText('Folder copy')).not.toBeInTheDocument()
   })
@@ -88,12 +93,24 @@ describe('compact task list rows', () => {
     expect(within(none).getByText('—')).toBeVisible()
   })
 
-  it('long task titles and long Agent names truncate with their full text in the tooltip, and the Agent column is widened so normal names fit', async () => {
+  it('with a long title and a long branch, the title wins the space first while the branch shrinks into the leftover track and hides when too narrow', async () => {
     list()
     const item = await row(longTitle)
     const link = within(item).getByRole('link', { name: longTitle })
     expect(link).toHaveAttribute('title', longTitle)
     expect(link).toHaveClass('truncate')
+
+    const cell = link.parentElement!.parentElement!
+    expect(cell).toHaveClass('grid', 'grid-cols-[minmax(0,max-content)_minmax(0,1fr)]')
+
+    const branch = within(item).getByTestId('task-branch')
+    expect(branch.parentElement).toBe(cell)
+    expect(branch).toHaveAttribute('title', long)
+    expect(branch).toHaveClass('@container', 'min-w-0', 'overflow-hidden')
+    expect(branch).not.toHaveClass('shrink-0')
+    expect(within(branch).getByText(`Branch ${long}`)).toHaveClass('sr-only')
+    const visual = branch.querySelector('[aria-hidden="true"]')!
+    expect(visual).toHaveClass('@max-[108px]:hidden')
 
     const agent = await within(item).findByText(longAgentName)
     expect(agent).toHaveAttribute('title', longAgentName)

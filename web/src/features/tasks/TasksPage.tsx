@@ -140,6 +140,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
 function TaskRow({ task, projectName, agentName, pending }: { task: Task; projectName: string; agentName: (id: string) => string; pending?: Parameters<typeof PendingBadge>[0]['counts'] }) {
   const title = task.title || task.id
   const stepLabel = task.currentStepTitle || task.currentStepId
+  const hasWorkspaceTag = Boolean(task.branch) || task.workspaceMode === 'copy'
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b-[1.5px] border-dashed border-ink/25 px-1 py-[7px] max-sm:gap-x-2">
       {/* Number and title form one group (width = number 34px + gap 12px + title from 134px) that doesn't wrap: on narrow screens they stay
@@ -149,19 +150,25 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
           <span className="sr-only">{t.tasks.number}</span>
           {t.tasks.numberLabel(task.number)}
         </span>
-        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          <Link
-            title={title}
-            className="min-w-0 shrink truncate text-[14px] leading-[22px] font-black text-ink underline decoration-ink/30 underline-offset-3 hover:text-riso-blue hover:decoration-riso-blue"
-            to={`${tasksPath(projectName)}/${task.id}`}
-          >
-            {title}
-          </Link>
-          <PendingBadge counts={pending} />
+        {/* Title (+ unread badge) always wins space first via minmax(0, max-content); branch or Folder copy sits in the remaining 1fr
+            track and gives way (shrinking to a short stub, then hiding) before the title ever truncates. */}
+        <span className={cn('min-w-0 flex-1 items-center', hasWorkspaceTag ? 'grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)]' : 'flex gap-2')}>
+          <span className="flex min-w-0 items-center gap-2">
+            <Link
+              title={title}
+              className="min-w-0 truncate text-[14px] leading-[22px] font-black text-ink underline decoration-ink/30 underline-offset-3 hover:text-riso-blue hover:decoration-riso-blue"
+              to={`${tasksPath(projectName)}/${task.id}`}
+            >
+              {title}
+            </Link>
+            <PendingBadge counts={pending} />
+          </span>
           {task.branch && <Branch name={task.branch} />}
           {task.workspaceMode === 'copy' && (
-            <span className="shrink-0 rounded-[4px] bg-tint-blue px-1.5 text-[11px] leading-[18px] font-bold whitespace-nowrap text-riso-blue">
-              {t.tasks.workspace.copyLabel}
+            <span className="@container flex min-w-0 items-center overflow-hidden">
+              <span className="ml-2 rounded-[4px] bg-tint-blue px-1.5 text-[11px] leading-[18px] font-bold whitespace-nowrap text-riso-blue @max-[84px]:hidden">
+                {t.tasks.workspace.copyLabel}
+              </span>
             </span>
           )}
         </span>
@@ -218,20 +225,23 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
   )
 }
 
-// The branch of a task with a worktree, inline after its title: small, muted monospace, cut in the middle when narrow (the whole name is
-// in the hover title and for screen readers).
+// The branch of a task with a worktree, inline in the remaining space after the title: small, muted monospace, middle-truncated down to a
+// short stub and hidden visually when too narrow for a readable stub so the title always wins the row width first (the full name stays in
+// the hover title and for screen readers).
 function Branch({ name }: { name: string }) {
   const { head, tail } = branchParts(name)
   return (
-    <span data-testid="task-branch" title={name} className="flex max-w-[44%] shrink-0 overflow-hidden font-mono text-[11.5px] leading-[18px] text-ink-500">
+    <span data-testid="task-branch" title={name} className="@container min-w-0 overflow-hidden font-mono text-[11.5px] leading-[18px] text-ink-500">
       <span className="sr-only">{t.tasks.branchLabel(name)}</span>
       {head ? (
-        <>
-          <span aria-hidden="true" className="min-w-0 truncate">{head}</span>
-          <span aria-hidden="true" className="shrink-0 whitespace-pre">{tail}</span>
-        </>
+        <span aria-hidden="true" className="flex min-w-0 pl-2 @max-[108px]:hidden">
+          <span className="min-w-0 truncate">{head}</span>
+          <span className="shrink-0 whitespace-pre">{tail}</span>
+        </span>
       ) : (
-        <span aria-hidden="true" className="min-w-0 truncate">{tail}</span>
+        <span aria-hidden="true" className="block min-w-0 truncate pl-2 @max-[56px]:hidden">
+          {tail}
+        </span>
       )}
     </span>
   )
