@@ -1,8 +1,10 @@
+import { waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from './client'
-import { folderSource } from './folders'
+import { agentFolderContentURL, folderRoots, folderSource, taskNodeFolderContentURL, useAgentFolderLocation, useTaskNodeFolderLocation } from './folders'
 import { apiUrl, errorBody } from '@/test/api'
+import { renderHookWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 
 const entry = (path: string, type: Schemas['FolderEntry']['type'] = 'file'): Schemas['FolderEntry'] => ({ name: path.split('/').at(-1)!, path, type, size: type === 'file' ? 5 : null, modifiedAt: '2026-10-25T08:00:00Z', symlinkTarget: null })
@@ -86,5 +88,21 @@ describe('folder API', () => {
     expect(bodies).toEqual([{ actionId: expect.stringMatching(/^[\da-f-]{36}$/), url: pull.url, branch: 'main', path: 'x' }])
     expect(await git.list()).toEqual([pull])
     expect(limit).toBe('20')
+  })
+
+  it('reads folder locations for an Agent and a task node, builds their content URLs, and deduplicates roots', async () => {
+    server.use(
+      http.get(apiUrl('/agents/a1/folder'), () => HttpResponse.json({ path: '/var/work/a1/workspace', realPath: '/private/var/work/a1/workspace' })),
+      http.get(apiUrl('/tasks/t1/nodes/n1/folder'), () => HttpResponse.json({ path: '/work/t1/workspace', realPath: '/work/t1/workspace' })),
+    )
+    const agent = renderHookWithQuery(() => useAgentFolderLocation('a1'))
+    const node = renderHookWithQuery(() => useTaskNodeFolderLocation('t1', 'n1'))
+    await waitFor(() => expect(agent.result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(node.result.current.isSuccess).toBe(true))
+    expect(folderRoots(agent.result.current.data)).toEqual(['/var/work/a1/workspace', '/private/var/work/a1/workspace'])
+    expect(folderRoots(node.result.current.data)).toEqual(['/work/t1/workspace'])
+    expect(folderRoots(undefined)).toEqual([])
+    expect(agentFolderContentURL('a1', 'assets/preview.png')).toMatch(/\/agents\/a1\/folder\/content\?path=assets%2Fpreview\.png$/)
+    expect(taskNodeFolderContentURL('t1', 'n1', 'assets/preview.svg')).toMatch(/\/tasks\/t1\/nodes\/n1\/folder\/content\?path=assets%2Fpreview\.svg$/)
   })
 })

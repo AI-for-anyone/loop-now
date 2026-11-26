@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { t } from '@/i18n'
 
 // Shared lightbox preview for attached images and Markdown images in replies: fits the window, closes on Escape or outside click, and
-// offers a new-tab link to the original for non-data URLs.
+// offers a new-tab link to the original for non-data/non-blob URLs (an explicit originalHref can point to a safe download URL when
+// src is a local Blob URL, so SVG blobs are never opened as top-level documents).
 export function ImagePreviewDialog({
   open,
   onOpenChange,
@@ -13,6 +14,7 @@ export function ImagePreviewDialog({
   title,
   referrerPolicy,
   showOriginal = false,
+  originalHref,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -21,8 +23,10 @@ export function ImagePreviewDialog({
   title: string
   referrerPolicy?: HTMLAttributeReferrerPolicy
   showOriginal?: boolean
+  originalHref?: string
 }) {
-  const canOpen = showOriginal && Boolean(src) && !/^data:/i.test(src)
+  const original = originalHref ?? src
+  const canOpen = showOriginal && Boolean(original) && !/^(?:data|blob):/i.test(original)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent kind="view" className="max-h-[90dvh] sm:max-w-[min(90vw,1200px)]" aria-describedby={undefined}>
@@ -31,7 +35,7 @@ export function ImagePreviewDialog({
         {canOpen && (
           <div className="flex justify-end">
             <a
-              href={src}
+              href={original}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-riso-blue underline decoration-2 underline-offset-2 outline-none focus-visible:shadow-focus"

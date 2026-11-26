@@ -1,12 +1,13 @@
-import { useMemo, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { BookOpenTextIcon, DownloadIcon, LoaderCircleIcon, PencilIcon } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Markdown } from '@/features/chat/Markdown'
+import { blobToImageUrl } from '@/features/images/blob-url'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { canEdit, ENTRY_FILE, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
+import { canEdit, ENTRY_FILE, extensionOf, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
 import { useFolderFile, useFolderList } from './folder-queries'
 import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions, ListIcon } from './FolderParts'
 import { highlightCode } from './highlight'
@@ -79,7 +80,7 @@ export function DirView({ source, path, title, actions, onCreateEntry, onEditEnt
   )
 }
 
-function Pending() {
+export function Pending() {
   return (
     <p className="flex items-center gap-2 px-4 py-6 text-[13px] text-ink-500">
       <LoaderCircleIcon aria-hidden="true" className="riso-spin size-4 motion-reduce:animate-none" />
@@ -165,7 +166,7 @@ export function FileView({ source, entry, limits, actions, edit, mode, onMode, o
   if (editing) body = <Editor value={editing.text} onChange={onDraft} onSave={onSave} label={nameOf(path)} />
   else if (entry.type === 'other') body = <Notice>{t.folders.file.other}</Notice>
   else if (tooLarge) body = <Notice download={() => actions.download(entry)}>{t.folders.file.tooLarge(maxBytes)}</Notice>
-  else if (entry.type === 'file' && isImage(path)) body = <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--paper)_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-6"><img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-print-rest" /></div>
+  else if (entry.type === 'file' && isImage(path)) body = <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--paper)_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-6">{extensionOf(nameOf(path)) === 'svg' ? <FolderSvgImage source={source} path={path} alt={entry.name} /> : <img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-print-rest" />}</div>
   else if (file.isPending) body = <Pending />
   else if (file.error instanceof ApiError && file.error.status === 422 && entry.symlinkTarget && linksOutside(path, entry.symlinkTarget)) body = <Notice>{t.folders.file.symlinkOutside}</Notice>
   else if (file.isError) body = <div className="p-4"><ErrorAlert error={file.error} /></div>
@@ -217,6 +218,42 @@ export function FileView({ source, entry, limits, actions, edit, mode, onMode, o
       {body}
     </div>
   )
+}
+
+// Folder file downloads answer application/octet-stream, which browsers do not sniff as SVG inside <img>. Wrap the bytes in an
+// image/svg+xml Blob URL so SVG files render as <img> (never inlined, so embedded scripts cannot run).
+function FolderSvgImage({ source, path, alt }: { source: FolderSource; path: string; alt: string }) {
+  const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null)
+  const [failedKey, setFailedKey] = useState<string | null>(null)
+  const key = `${source.key}:${path}`
+
+  useEffect(() => {
+    let active = true
+    let revoke: (() => void) | null = null
+    void source
+      .read(path)
+      .then((blob) => blob.arrayBuffer())
+      .then((buffer) => blobToImageUrl(new Blob([buffer], { type: 'image/svg+xml' })))
+      .then((result) => {
+        if (!active) {
+          result.revoke()
+          return
+        }
+        revoke = result.revoke
+        setLoaded({ key, url: result.url })
+      })
+      .catch(() => {
+        if (active) setFailedKey(key)
+      })
+    return () => {
+      active = false
+      revoke?.()
+    }
+  }, [source, path, key])
+
+  if (failedKey === key) return <Notice>{t.folders.file.binary}</Notice>
+  if (loaded?.key !== key) return <Pending />
+  return <img src={loaded.url} alt={alt} className="max-h-full max-w-full rounded-stamp shadow-print-rest" />
 }
 
 function Notice({ children, download }: { children: ReactNode; download?: () => void }) {

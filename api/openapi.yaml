@@ -2607,6 +2607,28 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /agents/{agentId}/folder:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [folders]
+      operationId: getAgentFolder
+      x-access: console
+      summary: Where an Agent folder is on this computer
+      description: |
+        The absolute path of the Agent folder, the root that the other folder endpoints take relative paths from. The
+        console uses it to turn an absolute path the Agent wrote in a reply into a path within the folder.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The folder's location
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FolderLocation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /agents/{agentId}/folder/entries:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -6438,6 +6460,61 @@ paths:
         20, at most 100; an empty `nextCursor` means this query has reached the end. Returns only the user and assistant
         messages of the runs of this `nodeRunId`. Later live updates come from the task SSE; paging through history does
         not mark Inbox messages read.
+  /tasks/{taskId}/nodes/{nodeRunId}/folder:
+    parameters:
+      - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: nodeRunId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [folders]
+      operationId: getTaskNodeFolder
+      x-access: console
+      summary: Where the folder of a node's task instance is on this computer
+      description: |
+        The absolute path of the folder of the task instance that runs this node: the copy of its Agent's folder made
+        when the task started, which is reclaimed when the task ends. Every node run of the same Agent in a task has the
+        same folder. The path is given even when the folder is already gone; its content then answers 404.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The folder's location
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FolderLocation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /tasks/{taskId}/nodes/{nodeRunId}/folder/content:
+    parameters:
+      - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: nodeRunId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [folders]
+      operationId: getTaskNodeFolderFileContent
+      x-access: console
+      summary: Download a file from the folder of a node's task instance (raw bytes)
+      description: Read only, with the same checks and Range support as getAgentFolderFileContent. 404 when the file or the
+        folder does not exist, for example after the task ended and its folder was reclaimed.
+      parameters:
+        - $ref: "#/components/parameters/FolderEntryPath"
+      responses:
+        "200":
+          description: File content
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /tasks/{taskId}/retry:
     post:
       tags:
@@ -12037,6 +12114,19 @@ components:
       description: Retired folder source kind, used only by workspace sync entries in old task run records
       type: string
       enum: [git, files]
+
+    FolderLocation:
+      type: object
+      required: [path, realPath]
+      additionalProperties: false
+      properties:
+        path:
+          description: Absolute path of the folder on this computer, as the Agent's system prompt names it
+          type: string
+        realPath:
+          description: The same folder with symlinks resolved, which is the form a CLI that prints its working folder
+            gives; equal to path when nothing on the way is a symlink or the folder does not exist
+          type: string
 
     FolderEntry:
       type: object

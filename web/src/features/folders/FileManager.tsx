@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlertIcon, CircleCheckIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -10,7 +10,7 @@ import { pickedFiles } from '@/lib/upload'
 import { cn } from '@/lib/utils'
 import { ancestorsOf, encodeText, ENTRY_FILE, folderKeys, joinPath, nameOf, parentOf, PLAIN_TEXT, segmentsOf, within, type FolderEntry, type FolderSource, type GitPull, type TextEditLimits, type TextFormat, type UploadItem } from './folder-source'
 import { refreshDirs, useFolderList, useGitPulls, type FileText, type Selection } from './folder-queries'
-import { DirView, FileView, type EditState } from './FolderContent'
+import { DirView, FileView, Pending, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
 import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
@@ -19,6 +19,8 @@ import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-upl
 
 interface FileManagerProps {
   source: FolderSource
+  // Relative path to open right away (e.g. from a chat link into the Agent's Folder tab); ancestors are expanded in the tree.
+  initialPath?: string
   // The root's name in the tree and the path bar, e.g. “server 的工作区” (server's workspace).
   rootLabel: string
   // Context.limits.textEdit: the extensions and size limit for online editing.
@@ -47,12 +49,13 @@ const INTERNAL = 'application/x-loop-now-path'
 
 // File manager: the file tree, expanded level by level, on the left; the folder list or file content on the right. When narrow, only the
 // right side shows and the file tree slides out from the left.
-export function FileManager({ source, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
+export function FileManager({ source, initialPath, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
   // sheet and panel use the redesigned toolbar (pills with labels), a dashed line and a note at the bottom; only sheet has a stub.
   const sheet = variant !== 'card'
   const client = useQueryClient()
-  const [selection, setSelection] = useState<Selection>(ROOT)
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  // User navigation overrides initialPath once clicked; while waiting to resolve initialPath we look it up in its parent directory.
+  const [navSelection, setNavSelection] = useState<{ forInitial: string | undefined; value: Selection } | null>(null)
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(initialPath ? ancestorsOf(initialPath) : []))
   const [naming, setNaming] = useState<Naming | null>(null)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
@@ -66,6 +69,40 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
   const fileInput = useRef<HTMLInputElement>(null), folderInput = useRef<HTMLInputElement>(null), uploadTarget = useRef('')
   const uploads = useFolderUploads(source, maxUpload, useCallback((dirs: string[]) => void refreshDirs(client, source, ...dirs), [client, source]))
   const pulls = useGitPulls(source)
+
+  const hasNav = navSelection !== null && navSelection.forInitial === initialPath
+  const locating = !hasNav && Boolean(initialPath)
+  const targetParent = locating && initialPath ? parentOf(initialPath) : ''
+  const targetList = useFolderList(source, targetParent, locating)
+  const targetFound = locating && initialPath ? targetList.data?.pages.flatMap((page) => page.entries).find((entry) => entry.path === initialPath) : undefined
+  // If the target wasn't on the first page of a large parent folder, fetch subsequent pages until found or exhausted.
+  useEffect(() => {
+    if (locating && targetList.isSuccess && !targetFound && targetList.hasNextPage && !targetList.isFetchingNextPage) {
+      void targetList.fetchNextPage()
+    }
+  }, [locating, targetFound, targetList])
+  const locatingPending = locating && !targetFound && !targetList.isError && (!targetList.isSuccess || targetList.hasNextPage)
+  const selection: Selection = hasNav
+    ? navSelection.value
+    : !initialPath
+      ? ROOT
+      : targetFound
+        ? { path: targetFound.path, type: targetFound.type, entry: targetFound }
+        : targetList.isSuccess && !targetList.hasNextPage
+          ? (targetParent ? { path: targetParent, type: 'dir', entry: null } : ROOT)
+          : ROOT
+  const setSelection = (next: Selection | ((old: Selection) => Selection)) =>
+    setNavSelection((prev) => {
+      const current = prev && prev.forInitial === initialPath ? prev.value : selection
+      return { forInitial: initialPath, value: typeof next === 'function' ? next(current) : next }
+    })
+  const effectiveExpanded = useMemo(() => {
+    if (!locating || !initialPath) return expanded
+    const extra = [...ancestorsOf(initialPath), ...(targetFound?.type === 'dir' ? [targetFound.path] : [])]
+    return extra.every((item) => expanded.has(item)) ? expanded : new Set([...expanded, ...extra])
+  }, [expanded, locating, initialPath, targetFound])
+  const displayError = error ?? (locating && targetList.isError ? targetList.error : null)
+
   const currentDir = selection.type === 'dir' ? selection.path : parentOf(selection.path)
   const dirty = !!edit && edit.text !== edit.original
 
@@ -183,7 +220,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
     <FileTree
       rootLabel={rootLabel}
       source={source}
-      expanded={expanded}
+      expanded={effectiveExpanded}
       selected={selection.path}
       naming={naming}
       dropTarget={dropTarget}
@@ -239,8 +276,10 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
           </div>
         )}
         <section data-folder-content className="flex min-w-0 flex-1 flex-col" aria-label={t.folders.label}>
-          {error != null && <ErrorAlert error={error} className="mx-4 mt-3 w-auto" />}
-          {selection.type === 'dir' ? (
+          {displayError != null && <ErrorAlert error={displayError} className="mx-4 mt-3 w-auto" />}
+          {locatingPending ? (
+            <Pending />
+          ) : selection.type === 'dir' ? (
             <DirView
               source={source}
               path={selection.path}
