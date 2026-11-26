@@ -18,7 +18,8 @@
 # the old changes/ files or by hand). "None" / "无" in both sections means nobody using Loop Now can see the change: it
 # is skipped. Release branches (release-*) are skipped. Every description is checked before anything is written: one
 # bad description (only one of the two sections, None on one side only, a part that does not start with a "### "
-# title, an empty part, or one gh cannot read) is named by its number and nothing changes.
+# title or still has the template's placeholder title, an empty part, or one gh cannot read) is named by its number and
+# nothing changes.
 set -euo pipefail
 
 usage() {
@@ -172,7 +173,11 @@ for entry in ${prs[@]+"${prs[@]}"}; do
 			errors="$errors#$number ($title): \"## $name\" says None but the other section has notes; write both or neither."$'\n'
 			bad=1
 		else
-			case "$(printf '%s\n' "$text" | head -n 1)" in
+			case "$(printf '%s\n' "$text" | head -n 1 | sed 's/[[:space:]]*$//')" in
+			"### Title" | "### 标题")
+				errors="$errors#$number ($title): the section \"## $name\" still has the template's placeholder title; write the notes, or \"None\" / \"无\" in both sections."$'\n'
+				bad=1
+				;;
 			"### "*) ;;
 			*)
 				errors="$errors#$number ($title): the section \"## $name\" must start with a \"### \" title."$'\n'

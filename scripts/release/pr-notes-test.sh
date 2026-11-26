@@ -290,6 +290,10 @@ out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" && fail "a part
 case "$out" in *"#3"*English*) ;; *) fail "the missing title is not named: $out" ;; esac
 describe 3 "Empty" "$(printf '## English\n\n<!-- hint -->\n\n## 中文\n\n### 标题\n\n- 一条。\n')"
 out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" && fail "an empty part was accepted"
+# The template left as it is (its placeholder titles) is refused.
+describe 3 "Template" "$(cat "$here/../../.github/pull_request_template.md")"
+out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" && fail "the template's placeholder was accepted"
+case "$out" in *"#3"*placeholder*) ;; *) fail "the placeholder is not named: $out" ;; esac
 # A description gh cannot read stops it too.
 rm "$FAKE_GH_PRS/3"
 out="$("$repo/scripts/release/collect-pr-notes.sh" v0.2.0 2>&1)" && fail "an unreadable description was accepted"
