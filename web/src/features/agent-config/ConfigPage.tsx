@@ -41,7 +41,7 @@ export function ConfigPage() {
   return (
     <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}><div className="flex h-full min-h-0">
       <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[960px] flex-col gap-6 pt-4 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+        <div className="flex max-w-[960px] flex-col gap-6 px-3.5 pt-4 pb-16 nav:px-6">
           {/* “当前回复使用修改前的配置” (The current reply uses the config from before the change) is bold navy: the artboard's pink
               text on the yellow sticky note has a contrast ratio of only 4.45:1. */}
           <StickyNote>

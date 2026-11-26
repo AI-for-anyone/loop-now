@@ -346,10 +346,17 @@ describe('Header bar and tabs', () => {
     expect(within(menu).queryByRole('button', { name: 'Copy address' })).toBeNull()
   })
 
-  it('the sheet starts directly under the bar; the bar is outside the sheet', async () => {
+  it('the sheet starts directly under the bar with no outer margin, thick border or drop shadow; the bar is outside the sheet and keeps phone two-row layout', async () => {
     const { header } = await open(makeAgent({ name: 'Agent A' }))
+    const frame = header.parentElement as HTMLElement
+    expect(frame).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col')
+    expect(frame).not.toHaveClass('px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]', 'max-nav:pb-4')
+    expect(header).toHaveClass('px-3.5', 'nav:px-6', 'grid-cols-[minmax(0,1fr)_auto]')
+    expect(header).not.toHaveClass('mr-1.5')
     const sheet = header.nextElementSibling as HTMLElement
     expect(sheet).toHaveAttribute('data-sheet')
+    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
     expect(sheet).toContainElement(await screen.findByRole('heading', { name: 'Basics' }))
     expect(sheet).not.toContainElement(header)
     expect(header.closest('[data-sheet]')).toBeNull()

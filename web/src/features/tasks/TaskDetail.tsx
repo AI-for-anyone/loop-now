@@ -79,12 +79,14 @@ export function TaskDetail() {
       <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
       <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.meta(detail.task.createdAt, detail.task.updatedAt)}</span>
     </PageHeader>
-    <ErrorAlert error={task.error} />
-    <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} />
-    {currentSleep?.state === 'sleeping' && currentSleep.wakeAt && <div className="mb-3 rounded-card bg-tint-blue p-4"><SleepUntil at={currentSleep.wakeAt} reason={currentSleep.reason} /></div>}
-    <TaskInstanceSleeps detail={detail} />
-    {detail.task.currentNodeRunId && node?.id !== detail.task.currentNodeRunId && <div className="mb-2.5 flex flex-wrap items-center gap-3 text-[13px] font-bold"><span>{t.tasks.history}</span><Button variant="secondary" size="sm" onClick={() => viewRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>{t.tasks.currentChanged}</Button></div>}
-    {narrow && <WorkflowChips detail={detail} selected={step} onSelect={select} />}
+    <div className="flex shrink-0 flex-col px-3.5 nav:px-6 empty:hidden">
+      <ErrorAlert error={task.error} />
+      <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} />
+      {currentSleep?.state === 'sleeping' && currentSleep.wakeAt && <div className="mb-3 rounded-card bg-tint-blue p-4"><SleepUntil at={currentSleep.wakeAt} reason={currentSleep.reason} /></div>}
+      <TaskInstanceSleeps detail={detail} />
+      {detail.task.currentNodeRunId && node?.id !== detail.task.currentNodeRunId && <div className="mb-2.5 flex flex-wrap items-center gap-3 text-[13px] font-bold"><span>{t.tasks.history}</span><Button variant="secondary" size="sm" onClick={() => viewRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>{t.tasks.currentChanged}</Button></div>}
+      {narrow && <WorkflowChips detail={detail} selected={step} onSelect={select} />}
+    </div>
     {explicitRecord && !node ? <EmptySheet stub={ruler}><p role="alert">{t.tasks.invalidRecord}</p></EmptySheet> : node ? <NodeRecordPanel key={`${taskId}:${node.stepId}:${node.id}:${selection}`} detail={detail} node={node} disabled={connection !== 'open' || task.isError} stub={ruler}
         draft={drafts[`${taskId}:${node.id}`] ?? { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }}
         drafts={Object.entries(drafts).filter(([key]) => key.startsWith(`${taskId}:`)).map(([, value]) => value)}
@@ -98,7 +100,7 @@ export function TaskDetail() {
 // When the selected step hasn't been visited yet (or the requested record doesn't exist): the sheet holds just one line of explanation,
 // and the stub still shows the workflow ruler.
 function EmptySheet({ stub, children }: { stub: ReactNode; children: ReactNode }) {
-  return <Sheet className="mt-[34px] min-h-0 flex-1">
+  return <Sheet className="min-h-0 flex-1">
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 items-center justify-center p-8 text-center font-display-cn text-[26px] text-riso-blue">{children}</div>
       {stub}

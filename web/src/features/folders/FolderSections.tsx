@@ -69,7 +69,7 @@ export function ProjectFolderPage() {
       <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.folders.project.title}>
         <span>{t.folders.project.intro}</span>
       </PageHeader>
-      <Sheet className="mt-2 h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
+      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
         <FileManager
           key={projectId}
           variant="sheet"
