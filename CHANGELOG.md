@@ -12,6 +12,15 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - The "⋯" menu holds the Agent's address (with Copy), the runtime and model in words, and the way back to the project. The breadcrumb, the separate runtime badge and the model tag are gone from the header: the sidebar shows where you are, and the message box shows the runtime, model and level.
 - On a phone the bar takes two short lines (name and status; tabs below, scrolling sideways). A sleeping Agent's wake time shows in a thin strip at the top of the page.
 
+### Pictures an Agent names by path show in its reply
+
+- When an Agent's reply names a picture in its own folder (png, jpg, gif, webp, svg), the picture is shown as a thumbnail: a Markdown image with a relative, absolute or `file://` path, and an absolute path written in code or as plain text (the text stays; the thumbnails follow the paragraph or list item, several in one row). A click opens it large; in a regular conversation the path is a link that opens the file in the Agent's Folder tab.
+- This works in task node conversations too, for the task's copy of the Agent's folder, while the task runs; after the task ends and its copy is reclaimed, only the text (or the image's alt text) is shown.
+- Only files inside the Agent's own folder are shown, read through the folder's content endpoint with the same checks as the Folder tab; a path outside it, a missing file or one above the preview limit stays plain text. SVG is shown as a picture and never run: a script inside it does nothing.
+- The Folder tab can open a given file (`?path=`) and previews SVG files.
+- The loopctl guide tells Agents to show a picture by writing a Markdown image of a file in their own folder.
+- API: `GET /agents/{agentId}/folder` and `GET /tasks/{taskId}/nodes/{nodeRunId}/folder` (`FolderLocation`: `path`, `realPath`), `GET /tasks/{taskId}/nodes/{nodeRunId}/folder/content`.
+
 ### A compact task list that names the step
 
 - The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
