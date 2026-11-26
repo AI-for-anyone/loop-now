@@ -33,13 +33,26 @@ function PlatformReminder({ agentId, message, run, slept }: { agentId: string; m
   if (message.origin === 'inbox_reminder') return <InboxReminder agentId={agentId} messageId={run.triggerInboxMessageId ?? message.run?.triggerInboxMessageId} at={message.createdAt} wakeSleepId={run.wakeSleepId ?? message.run?.wakeSleepId} />
   return <SleepWakeLine text={message.text} at={message.createdAt} sleepId={run.wakeSleepId ?? message.run?.wakeSleepId} slept={slept} />
 }
+// Tool names for the tasks that triggered a follow-up reply, from the earlier turns currently loaded in the conversation
+// (each task names the run and tool call that started it). When that turn is not loaded, the chip falls back to the task's kind.
+function followUpToolNames(tasks: Schemas['BackgroundTask'][], turns: Turn[]): ReadonlyMap<string, string> {
+  const names = new Map<string, string>()
+  const byRun = new Map(turns.map((turn) => [turn.run.id, turn.run.tools]))
+  for (const task of tasks) {
+    if (!task.toolCallId) continue
+    const own = byRun.get(task.runId)?.find((tool) => tool.toolCallId === task.toolCallId)
+    const found = own ?? turns.flatMap((turn) => turn.run.tools).find((tool) => tool.toolCallId === task.toolCallId)
+    if (found) names.set(task.toolCallId, found.toolName)
+  }
+  return names
+}
 // A reply the CLI wrote by itself after background work ended has no person's message above it: one line says which task it follows,
-// named by the runtime that ran it.
-function BackgroundFollowUp({ message, run, agent }: { message: Schemas['Message']; run: Schemas['Run']; agent: Partial<Pick<Schemas['Agent'], 'runtime'>> }) {
+// named by the runtime that ran it, with compact chips for the ended tasks.
+function BackgroundFollowUp({ message, run, agent, turns }: { message: Schemas['Message']; run: Schemas['Run']; agent: Partial<Pick<Schemas['Agent'], 'runtime'>>; turns: Turn[] }) {
   const runtimes = useRuntimeLookup()
   const tasks = run.triggerBackgroundTasks ?? message.run?.triggerBackgroundTasks ?? []
   const runtime = tasks[0]?.runtime ?? run.selection?.runtime ?? agent.runtime
-  return <BackgroundFollowUpLine tasks={tasks} runtimeName={runtime ? runtimes.name(runtime) : ''} at={message.createdAt} />
+  return <BackgroundFollowUpLine tasks={tasks} runtimeName={runtime ? runtimes.name(runtime) : ''} at={message.createdAt} toolNames={followUpToolNames(tasks, turns)} />
 }
 // A deadline wake follows straight on from the turn that went to sleep: sleep starts only once that turn
 // completes, and any new work in between would have woken it early. So the gap between them is the sleep.
@@ -390,7 +403,7 @@ export function MessageList({
                     {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
                     {turn.user &&
                       (turn.user.origin === 'background' ? (
-                        <BackgroundFollowUp message={turn.user} run={turn.run} agent={agent} />
+                        <BackgroundFollowUp message={turn.user} run={turn.run} agent={agent} turns={turns} />
                       ) : (turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
                         <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
                       ) : (
