@@ -2,15 +2,14 @@
 
 English: [CHANGELOG.md](CHANGELOG.md)
 
-各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
+各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。改动不直接改这个文件，而是在 `changes/` 里加一个说明文件（见 `changes/README.md`），发布时由 `scripts/release/collect-changes.sh` 放进“## 未发布”。
 
 ## 未发布
 
-### 页面内容用满整个窗口
+### 每个改动的说明各写一个文件
 
-- 控制台各页面的内容区（Agent 的四个标签页、任务页、任务列表、总览、设置、统计、插件、Skills、外部身份、导入）不再放在一张带粗边框、圆角和阴影、四周留空的"纸"上，而是直接贴着顶栏、左边栏和窗口边缘，顶栏下面和左边栏旁边各留一条细线。
-- 对话的消息铺满到右边的轮次标尺（两边各 24 像素，最宽 1600 像素），表格和代码块用满整个宽度，输入框和消息对齐。1920 像素宽的窗口里，消息右边空出的地方从约 360 像素变成约 37 像素。轮次标尺变窄到 40 像素，第一条消息上方和输入框上方的留白也收紧了。
-- 任务节点的对话同样加宽；手机上布局不变，两边留 14 像素。
+- 给 Loop Now 的改动现在新加一个文件 `changes/<slug>.md` 来写说明，里面分英文、中文和 MAIN.md 三部分，不再直接改 CHANGELOG.md、CHANGELOG.zh-CN.md 和 MAIN.md；在合并队列里一起排队的几个 PR 不会再在这些地方冲突、被踢出队列。发布时由 `scripts/release/collect-changes.sh <版本>` 把说明放进去，之前可以用 `scripts/release/notes.sh Unreleased` 预览。PR 如果直接在“未发布”下加行，或在 MAIN.md 的改动列表里加新条目，CI 会失败（发布分支除外）。
+- loopctl 指南告诉 git 工作区任务里的步骤：仓库如果每个改动各有一个说明文件，就按这个方式写。
 
 ### 运行记录里看得到每个工具干了什么
 

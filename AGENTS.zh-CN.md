@@ -12,4 +12,5 @@ English: [AGENTS.md](AGENTS.md)（以英文版为准）
 - Git 提交、推送、部署、业务数据写入和对外消息按用户授权执行。保留现有数据和共享工作区改动，不输出或提交凭证。
 - API 以 `api/*.yaml` 为准；Web 类型由它生成，不手改生成文件。
 - Agent 运行时登记在 `internal/server/agentruntime`。要判断时问登记表里的能力，不要比较运行时 id；例外只有这个包和执行器的驱动文件（Go），以及 `web/src/lib/runtime.ts`（控制台）。`go test ./internal/server/agentruntime` 和 `npm run lint` 会检查。
+- 记录改动时新加一个文件 `changes/<slug>.md`（slug 是分支名去掉 `task/`），依次写 `## English`、`## 中文`、`## MAIN.md` 三节，见 `changes/README.md`。不要在两个 CHANGELOG 文件的“## Unreleased”／“## 未发布”下加行，也不要在 MAIN.md 的改动列表里加新条目：在合并队列里排队的 PR 改同一处会互相冲突，CI 会拦下。发布时在发布分支上运行 `scripts/release/collect-changes.sh <版本>`，把这些说明放进上面几个文件。
 - 英文为主，中文作补充。代码面向贡献者的文字用英文：注释、日志、错误消息、接口说明、提交信息、测试名和测试数据。文档以英文版为准，中文版放在同名的 `.zh-CN.md` 里（README、CHANGELOG、AGENTS）；`MAIN.md` 只有英文一份，引用用户原话时保留中文原文并在后面附英文。界面文案只放在文案表里（en-US 与 zh-CN 两套），其他给界面看的文字用 `LocalizedText`，英文写在前面。确实在测中文处理的测试数据可以是中文，用 `check-english: zh (原因)` 标明。`npm run check:text`（web、desktop、plugins）和 `go run ./scripts/check-english`（Go、`api/*.yaml`）在 CI 里检查。
