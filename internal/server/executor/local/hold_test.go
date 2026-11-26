@@ -19,7 +19,8 @@ func asTask(s *agentconfig.Snapshot) {
 }
 
 // A task instance's turn ends only once the background work it started has ended and the CLI's own reply about it has
-// come (it goes into the same turn), on every runtime: no follow-up run is asked for. Codex replies with nothing.
+// come (it goes into the same turn), on every runtime: no follow-up run is asked for. Codex replies with nothing, and
+// its turn does not wait for a reply (the reply wait is minutes).
 func TestTaskInstanceHoldsAllRuntimes(t *testing.T) {
 	cases := []struct {
 		name, msg, want string
@@ -49,7 +50,7 @@ func TestTaskInstanceHoldsAllRuntimes(t *testing.T) {
 			h, id, host := c.agent(t)
 			start := time.Now()
 			res, sink := h.exec(id, c.msg)
-			if res.Outcome != executor.OutcomeCompleted || res.Text != c.want || time.Since(start) < 150*time.Millisecond {
+			if took := time.Since(start); res.Outcome != executor.OutcomeCompleted || res.Text != c.want || took < 150*time.Millisecond || took > 30*time.Second {
 				t.Fatalf("the turn holds until the work ended: %+v after %v", res, time.Since(start))
 			}
 			if got := sink.text.String(); got != c.want {
@@ -233,5 +234,31 @@ func TestAntigravityOwnReplyCommandIsListed(t *testing.T) {
 	}
 	if res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: next.run, Origin: executor.OriginBackground}, newSink()); err != nil || res.Text != "reported 1" {
 		t.Fatalf("the next own reply: %+v %v", res, err)
+	}
+}
+
+// A background task that starts and ends inside the CLI's own reply (Claude Code's watcher that fails at once) brings
+// another own reply after that one: the held turn waits for it and takes it, instead of ending with nothing running.
+func TestTaskInstanceHoldsAfterTaskEndedInFollowUp(t *testing.T) {
+	obs, host := &bgObs{}, newFollowUpHost()
+	h := newClaudeHarness(t, func(o *Options) { o.Observer = obs })
+	h.e.SetFollowUps(host)
+	id := h.claudeAgent(asTask)
+	run := uuid.Must(uuid.NewV7())
+	sink := newSink()
+	res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: run, Message: "fake:background 200ms then:50ms"}, sink)
+	want := "started\n\nbackground done\n\nbackground done"
+	if err != nil || res.Outcome != executor.OutcomeCompleted || res.Text != want || sink.text.String() != want {
+		t.Fatalf("the turn takes the reply about the task that ended inside the follow-up: %+v %v %q", res, err, sink.text.String())
+	}
+	for _, task := range []string{"b1", "b2"} {
+		if end := waitEnded(t, obs, task); end.RunID != run || end.Status != executor.BackgroundCompleted {
+			t.Fatalf("%s belongs to the held turn and ended: %+v", task, end)
+		}
+	}
+	select {
+	case call := <-host.calls:
+		t.Fatalf("no follow-up run for a task instance: %+v", call)
+	case <-time.After(300 * time.Millisecond):
 	}
 }
