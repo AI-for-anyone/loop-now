@@ -1,6 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { apiUrl } from '@/test/api'
+import { server } from '@/test/server'
+import type { ReplyFolderContext } from './local-images'
 import { Markdown } from './Markdown'
 
 describe('Markdown rendering and safety', () => {
@@ -590,5 +594,181 @@ describe('Markdown images in a reply', () => {
     const inlineButton = screen.getByRole('button', { name: 'Enlarge image: Icon' })
     expect(inlineButton).not.toHaveAttribute('data-md-block-image')
     expect(inlineButton.className).toContain('inline-block')
+  })
+})
+
+describe('Local folder images in a reply', () => {
+  const ROOT = '/var/work/agents/a1/workspace'
+  const REAL_ROOT = '/private/var/work/agents/a1/workspace'
+  const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const SVG_BYTES = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><script>window.__svgRan=true</script><rect width="32" height="32" fill="#2443b5"/></svg>'
+
+  function makeFolder(overrides: Partial<ReplyFolderContext> = {}): ReplyFolderContext {
+    return {
+      roots: [ROOT, REAL_ROOT],
+      contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      folderLink: (rel) => `/p/demo/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      maxBytes: 1024,
+      ...overrides,
+    }
+  }
+
+  function mockFolderFiles(files: Record<string, Uint8Array | string>) {
+    const requested: string[] = []
+    server.use(
+      http.get(apiUrl('/agents/a1/folder/content'), ({ request }) => {
+        const rel = new URL(request.url).searchParams.get('path') ?? ''
+        requested.push(rel)
+        const body = files[rel]
+        if (body === undefined) return new HttpResponse(null, { status: 404 })
+        return new HttpResponse(body, { headers: { 'Content-Type': 'application/octet-stream' } })
+      }),
+    )
+    return requested
+  }
+
+  it('loads absolute, realPath, relative, and file:// Markdown image sources through the folder content endpoint and opens the preview dialog', async () => {
+    const user = userEvent.setup()
+    const requested = mockFolderFiles({
+      'assets/abs.png': PNG_BYTES,
+      'assets/rel.JPG': PNG_BYTES,
+      'assets/file.webp': PNG_BYTES,
+      'assets/real.svg': SVG_BYTES,
+    })
+    const folder = makeFolder()
+    const md = [
+      `![Abs](${ROOT}/assets/abs.png)`,
+      '',
+      '![Rel](./assets/rel.JPG)',
+      '',
+      `![File](file://${ROOT}/assets/file.webp)`,
+      '',
+      `![Real](${REAL_ROOT}/assets/real.svg)`,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+
+    for (const label of ['Abs', 'Rel', 'File', 'Real']) {
+      expect(await screen.findByRole('button', { name: `Enlarge image: ${label}` })).toBeInTheDocument()
+    }
+    expect(requested.sort()).toEqual(['assets/abs.png', 'assets/file.webp', 'assets/real.svg', 'assets/rel.JPG'])
+
+    // SVG is rendered inside <img>, never inlined, and its preview dialog never links to a blob: URL.
+    const svgImg = screen.getByRole('img', { name: 'Real' })
+    expect(svgImg.tagName).toBe('IMG')
+    expect(container.querySelector('svg script')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Enlarge image: Real' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Real' })
+    expect(within(dialog).getByRole('img', { name: 'Real' }).tagName).toBe('IMG')
+    const original = within(dialog).getByRole('link', { name: 'Open original in new tab' })
+    expect(original.getAttribute('href')).toBe(folder.contentURL('assets/real.svg'))
+    expect(original.getAttribute('href')).not.toMatch(/^blob:/i)
+  })
+
+  it('keeps inline-code and bare absolute paths as folder links and shows thumbnails right after the paragraph or as one row after a list', async () => {
+    mockFolderFiles({
+      'assets/preview-2x2.png': PNG_BYTES,
+      'assets/bare.jpg': PNG_BYTES,
+      'assets/a.svg': SVG_BYTES,
+      'assets/b.svg': SVG_BYTES,
+      'assets/c.svg': SVG_BYTES,
+    })
+    const folder = makeFolder()
+    const md = [
+      `Preview image \`${ROOT}/assets/preview-2x2.png\` and bare (${ROOT}/assets/bare.jpg).`,
+      '',
+      `- **Option A**: \`${ROOT}/assets/a.svg\``,
+      `- **Option B**: \`${ROOT}/assets/b.svg\``,
+      `- **Option C**: \`${ROOT}/assets/c.svg\``,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    // Every path text becomes a link to the Agent's Folder tab.
+    const inlineLink = screen.getByRole('link', { name: `${ROOT}/assets/preview-2x2.png` })
+    expect(inlineLink).toHaveAttribute('href', folder.folderLink!('assets/preview-2x2.png'))
+    expect(inlineLink).toHaveAttribute('title', 'Open in folder')
+    expect(screen.getByRole('link', { name: `${ROOT}/assets/bare.jpg` })).toHaveAttribute('href', folder.folderLink!('assets/bare.jpg'))
+    expect(screen.getByRole('link', { name: `${ROOT}/assets/a.svg` })).toHaveAttribute('href', folder.folderLink!('assets/a.svg'))
+
+    // Both the paragraph thumbnails and the list thumbnails appear as rows directly after their blocks.
+    await waitFor(() => expect(container.querySelectorAll('[data-md-local-images] [data-md-image-row]')).toHaveLength(2))
+    const rows = [...container.querySelectorAll<HTMLElement>('[data-md-local-images] [data-md-image-row]')]
+    expect(rows[0]).toHaveAttribute('data-count', '2')
+    expect(within(rows[0]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['preview-2x2.png', 'bare.jpg'])
+    expect(rows[1]).toHaveAttribute('data-count', '3')
+    expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['a.svg', 'b.svg', 'c.svg'])
+
+    // The list itself kept lead-label formatting because the thumbnail row sits after the <ul>.
+    const list = container.querySelector('ul')!
+    expect(list).toHaveClass('md-lead-list')
+    expect(list.nextElementSibling).toHaveAttribute('data-md-local-images')
+  })
+
+  it('places a single-item list thumbnail right after that list item', async () => {
+    mockFolderFiles({ 'shots/one.png': PNG_BYTES })
+    const folder = makeFolder()
+    const md = [
+      `- First item: \`${ROOT}/shots/one.png\``,
+      '- Second item without image',
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    const img = await screen.findByRole('img', { name: 'one.png' })
+    const items = container.querySelectorAll('li')
+    expect(items[0].contains(img)).toBe(true)
+    expect(items[1].contains(img)).toBe(false)
+  })
+
+  it('shows no thumbnail and keeps text intact for outside paths, missing files, and files above the preview limit', async () => {
+    const requested = mockFolderFiles({
+      'assets/huge.png': new Uint8Array(2048),
+      'assets/ok.png': PNG_BYTES,
+    })
+    const folder = makeFolder({ maxBytes: 512 })
+    const md = [
+      'Outside markdown: ![Outside](/etc/secret.png) ![Escape](../secret.png)',
+      '',
+      'Outside inline: `/etc/secret.png` and bare /tmp/other.jpg.',
+      '',
+      `Missing: \`${ROOT}/assets/missing.png\``,
+      '',
+      `Too large: \`${ROOT}/assets/huge.png\``,
+      '',
+      'Missing markdown: ![Missing](assets/missing.png)',
+      '',
+      'Huge markdown: ![Huge](assets/huge.png)',
+      '',
+      `Valid: \`${ROOT}/assets/ok.png\``,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    // Wait until the valid image finishes loading so every missing/too-large fetch has settled too.
+    expect(await screen.findByRole('img', { name: 'ok.png' })).toBeInTheDocument()
+
+    // Outside paths were never requested and never linked.
+    expect(requested.every((path) => path.startsWith('assets/'))).toBe(true)
+    expect(screen.queryByRole('link', { name: '/etc/secret.png' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '/tmp/other.jpg' })).toBeNull()
+    expect(container).toHaveTextContent('/etc/secret.png')
+    expect(container).toHaveTextContent('/tmp/other.jpg')
+
+    // Only the single valid file produced a thumbnail; missing, too-large, and outside paths show no thumbnail or error box.
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    expect(container.querySelector('[data-md-image-error]')).toBeNull()
+    expect(container).toHaveTextContent('Outside')
+    expect(container).toHaveTextContent('Missing')
+    expect(container).toHaveTextContent('Huge')
+  })
+
+  it('renders thumbnails without folder links when folderLink is omitted (task node conversations)', async () => {
+    mockFolderFiles({ 'assets/node.png': PNG_BYTES })
+    const folder = makeFolder({ folderLink: undefined })
+    render(<Markdown folder={folder} text={`Saved to \`${ROOT}/assets/node.png\`.`} />)
+    expect(await screen.findByRole('img', { name: 'node.png' })).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText(`${ROOT}/assets/node.png`)).toBeInTheDocument()
   })
 })
