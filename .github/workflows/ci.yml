@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue on main: each queued pull request is checked again on top of the latest main before it lands.
+  merge_group:
 
 concurrency:
   group: ci-${{ github.ref }}
