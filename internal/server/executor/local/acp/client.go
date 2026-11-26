@@ -115,6 +115,8 @@ type Client struct {
 	// ours are the ids the agent gave the client's own prompts (the last few), so a late announcement of one is not
 	// taken for a prompt of the agent's own.
 	ours []string
+	// answered are the sessions whose prompt the agent has begun to answer (it has the session saved by then).
+	answered map[string]bool
 
 	done    chan struct{}
 	exitErr error

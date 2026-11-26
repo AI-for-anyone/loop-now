@@ -83,6 +83,10 @@ type Options struct {
 	Hostname                  string
 	// StderrTailBytes is how much of the end of Pi's stderr goes into error messages and run records; 0 means 1000.
 	StderrTailBytes int
+	// SessionCheckInterval is how often, while a turn runs, the executor asks whether the runtime has saved the session
+	// yet, to record it before the turn ends (so a turn that never ends, for example when the app quits, is not
+	// forgotten); 0 means one second.
+	SessionCheckInterval time.Duration
 	// Observer receives run records; nil means they are discarded.
 	Observer executor.Observer
 	// Tokens issues an Agent token for every Pi process started; nil means no token is injected (for tests).
@@ -397,7 +401,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	// tasks that ended so far are the CLI's to tell about in this reply.
 	before := e.absorbFollowUps(ctx, p, runID, adapter)
 	e.bgTakeEnded(p)
+	stopWatch := e.watchSession(p)
 	tr, err := p.rt.Prompt(ctx, req.Message, adapter, req.Images...)
+	stopWatch()
 	if before != "" && err == nil {
 		tr.Text = before + "\n\n" + tr.Text
 	}
@@ -893,6 +899,49 @@ func (e *Executor) recordSession(p *proc) error {
 	return nil
 }
 
+// noteSession takes the session reference the runtime has saved so far, if it reports one, and records it.
+func (e *Executor) noteSession(p *proc) error {
+	if ref := p.drv.savedSession(p); ref != "" {
+		p.sessMu.Lock()
+		p.sessionFile = ref
+		p.sessMu.Unlock()
+	}
+	return e.recordSession(p)
+}
+
+// watchSession records the session while a turn runs, as soon as the runtime has saved it, checking every
+// SessionCheckInterval until it is recorded or the returned function is called (when the turn ends).
+func (e *Executor) watchSession(p *proc) (stop func()) {
+	every := e.o.SessionCheckInterval
+	if every <= 0 {
+		every = time.Second
+	}
+	done, finished := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(finished)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if e.noteSession(p) == nil && e.sessionRecorded(p) {
+					return
+				}
+			}
+		}
+	}()
+	return func() { close(done); <-finished }
+}
+
+// sessionRecorded reports whether the process's session reference is the one recorded.
+func (e *Executor) sessionRecorded(p *proc) bool {
+	p.sessMu.Lock()
+	defer p.sessMu.Unlock()
+	return p.sessionFile != "" && p.sessionFile == p.recorded
+}
+
 func (e *Executor) idleExpired(p *proc) {
 	e.mu.Lock()
 	if e.procs[p.agentID] != p || p.busy || e.handoffs[p.agentID] != nil {
@@ -978,7 +1027,8 @@ func (e *Executor) stop(p *proc, why stopCause) {
 		if p.idleTimer != nil {
 			p.idleTimer.Stop()
 		}
-		e.recordSession(p)
+		// Record the session before the process ends, also when the turn that saved it never finished.
+		e.noteSession(p)
 		_ = p.rt.CloseStdin()
 		if !waitDone(p, e.o.StopGrace) {
 			_ = procgroup.Terminate(p.rt.Pid())

@@ -172,6 +172,20 @@ func (c *Client) LastTurnStarted() bool {
 	return c.lastStarted
 }
 
+// ThreadSaved reports whether a turn of this client has started, the one in progress or the latest: Codex then has the
+// thread saved.
+func (c *Client) ThreadSaved() bool {
+	c.mu.Lock()
+	t, started := c.turn, c.lastStarted
+	c.mu.Unlock()
+	if started || t == nil {
+		return started
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.id != ""
+}
+
 // InTurn reports whether a turn is in progress.
 func (c *Client) InTurn() bool {
 	c.mu.Lock()
