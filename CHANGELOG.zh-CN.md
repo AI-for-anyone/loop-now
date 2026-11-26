@@ -6,6 +6,11 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
+### 回复到一半被打断，也记得
+
+- Agent 正在回复时 Loop Now 退出、崩溃或被停掉，下次它会记得这轮回复：做了什么、跑了哪些命令、停在哪里。以前只有回复正常结束时才保存对话，没结束的那轮就丢了；如果是 Agent 的第一轮回复（包括导入的 Agent），整段对话会从头开始，导入的 Agent 会回到刚导入时的样子。
+- 现在 CLI 一保存对话，Loop Now 就在回复进行中记下来，停掉 CLI 之前再记一次。适用于 Claude Code、Codex、Grok、Antigravity、自己添加的 ACP 命令和 Pi。
+
 ### loopctl 能设置 Agent 的工作文件夹、配置、批准模式和档位
 
 - `loopctl agent create` 和 `agent update` 新增 `--working-dir`、`--use-local-config true|false`、`--permission-mode supervised|accept_edits|auto|full`、`--thinking-level` 和 `--service-tier`，在命令行里就能把 Agent 设置完整，不用再去配置页一个个点。`agent update` 只发送给出的项，可以用 `--clear-working-dir`、`--clear-thinking-level`、`--clear-service-tier` 恢复默认。

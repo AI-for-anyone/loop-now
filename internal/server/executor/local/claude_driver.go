@@ -75,6 +75,8 @@ type claudeProcess struct {
 	// binary and version are the real path and the version of the claude executable; sessionID is the session ID the
 	// platform gave this process.
 	binary, version, sessionID string
+	// projects is where claude keeps session transcripts (read once at start).
+	projects string
 	// initChecked: the Skill list claude reported has been checked (once per process).
 	initChecked atomic.Bool
 }
@@ -415,7 +417,8 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	if err := procgroup.Started(cmd); err != nil {
 		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
-	return started{rt: &claudeProcess{Client: client, binary: bin, version: version, sessionID: sessionID}}, nil
+	projects := e.claude.ProjectsDir(ctx, bin, e.claudeHelperEnv(ctx, home), home)
+	return started{rt: &claudeProcess{Client: client, binary: bin, version: version, sessionID: sessionID, projects: projects}}, nil
 }
 
 // claudeRegularMemory is the auto memory folder of the base Agent's regular conversation, for a step of a task with a
@@ -558,6 +561,16 @@ func (cd claudeDriver) stopBackground(ctx context.Context, p *proc, ids []string
 	return errors.Join(errs...)
 }
 
+// savedSession is the transcript claude writes for the process's session, once it is on disk: claude writes it as the
+// turn goes, starting with the message.
+func (claudeDriver) savedSession(p *proc) string {
+	cp := claudeOf(p)
+	if cp == nil || cp.projects == "" {
+		return ""
+	}
+	return claudecli.TranscriptPath(cp.projects, p.cwd, cp.sessionID)
+}
+
 // ready: claude only prints init after it receives the first message, so a successful start means the process is up; an
 // exit or timeout before the first turn is reported by that turn as a start failure.
 func (claudeDriver) ready(context.Context, *proc, startSpec) error { return nil }
@@ -576,7 +589,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	defer cancel()
 	home, _ := e.o.RealHome()
 	env := e.claudeHelperEnv(ctx, home)
-	if path := claudecli.TranscriptPath(e.claude.ProjectsDir(ctx, cp.binary, env, home), p.cwd, cp.sessionID); path != "" {
+	if path := cd.savedSession(p); path != "" {
 		p.sessMu.Lock()
 		p.sessionFile = path
 		p.sessMu.Unlock()

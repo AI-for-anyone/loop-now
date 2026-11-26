@@ -47,6 +47,10 @@ type fakeSource struct {
 	recordLog map[uuid.UUID][]string
 	// recordRuntimes are the runtimes passed with each recorded session file.
 	recordRuntimes map[uuid.UUID][]string
+	// imported is the capture of an imported Agent: like agentconfig, its turns fork it while no session is recorded.
+	imported map[uuid.UUID]string
+	// onRecord, when set, is called (with the source locked) for every recorded session file.
+	onRecord func(id uuid.UUID)
 }
 
 func newFakeSource() *fakeSource {
@@ -83,6 +87,9 @@ func (f *fakeSource) ExecutionSnapshot(_ context.Context, id uuid.UUID) (agentco
 		s.Session = store.AgentSession{State: "active", SessionFile: f.recorded[id], Epoch: 1}
 	default:
 		s.Session = store.AgentSession{State: "none", Epoch: 1}
+		if c := f.imported[id]; c != "" {
+			s.ForkSessionFile = c
+		}
 	}
 	return s, nil
 }
@@ -130,6 +137,9 @@ func (f *fakeSource) RecordSessionFile(_ context.Context, id uuid.UUID, runtime,
 		f.recordRuntimes = map[uuid.UUID][]string{}
 	}
 	f.recordRuntimes[id] = append(f.recordRuntimes[id], runtime)
+	if f.onRecord != nil {
+		f.onRecord(id)
+	}
 	return nil
 }
 

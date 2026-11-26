@@ -214,6 +214,10 @@ func (pd piDriver) beforeTurn(ctx context.Context, p *proc, snap agentconfig.Sna
 	return nil
 }
 
+// savedSession: Pi reports its session file when the process is ready (see ready); recordSession waits until it is on
+// disk.
+func (piDriver) savedSession(*proc) string { return "" }
+
 func (piDriver) afterTurn(_ *proc, tr runturn.Result) runturn.Result { return tr }
 
 func (piDriver) exited() (string, string) { return executor.ErrPiExited, "The Pi process exited." }

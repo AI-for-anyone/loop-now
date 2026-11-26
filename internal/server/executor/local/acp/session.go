@@ -337,6 +337,14 @@ func (c *Client) InPrompt() bool {
 	return c.turn != nil
 }
 
+// Answered reports whether the agent has begun to answer a prompt of the session (sent text, thoughts, a tool call or
+// a plan for it), during the prompt or after it.
+func (c *Client) Answered(sessionID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.answered[sessionID]
+}
+
 // sessionUpdate is what the client uses of one session/update notification.
 type sessionUpdate struct {
 	SessionID, Kind, ToolCallID, Title, ToolKind, Status string
@@ -397,6 +405,15 @@ func (c *Client) update(params json.RawMessage) {
 	t := c.ownReply(u)
 	if t == nil || t.sessionID != u.SessionID || t.sink == nil {
 		return
+	}
+	switch u.Kind {
+	case "agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update", "plan":
+		c.mu.Lock()
+		if c.answered == nil {
+			c.answered = map[string]bool{}
+		}
+		c.answered[u.SessionID] = true
+		c.mu.Unlock()
 	}
 	t.mu.Lock()
 	if t.finished {
