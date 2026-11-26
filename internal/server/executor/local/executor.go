@@ -1344,7 +1344,9 @@ func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {
 	return executor.ProcessInfo{State: executor.ProcessStopped}
 }
 
-// Shutdown implements executor.Executor: it ends all processes.
+// Shutdown implements executor.Executor: it ends all processes. It also waits for the processes already taken out of
+// the table and being stopped elsewhere (one that exited by itself and is wrapped up by watch, one retired after its
+// reply was stopped): that wrap-up still writes in the Agent's folder, so Shutdown must not return before it ends.
 func (e *Executor) Shutdown(ctx context.Context) error {
 	e.mu.Lock()
 	if !e.closed {
@@ -1356,6 +1358,10 @@ func (e *Executor) Shutdown(ctx context.Context) error {
 		procs = append(procs, p)
 		delete(e.procs, id)
 	}
+	live := make([]*proc, 0, len(e.live))
+	for p := range e.live {
+		live = append(live, p)
+	}
 	for _, r := range e.runs {
 		r.cancel()
 	}
@@ -1365,7 +1371,13 @@ func (e *Executor) Shutdown(ctx context.Context) error {
 		wg.Go(func() { e.stop(p, stopCause{reason: stopShutdown}) })
 	}
 	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
+	go func() {
+		wg.Wait()
+		for _, p := range live {
+			<-p.stopDone
+		}
+		close(done)
+	}()
 	select {
 	case <-done:
 		return nil
