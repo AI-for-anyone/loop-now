@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
+	"loop-now/internal/server/tasks/gitworkspace"
 )
 
 // lastTurnText runs prepareNode on the task (with change applied to its record first) and returns the text of the turn
@@ -197,5 +199,66 @@ func TestImportedCaptureForWorkspaceTasks(t *testing.T) {
 	}
 	if _, err := src.importedCapture(ctx, inst, none, claude); err == nil {
 		t.Fatal("a missing capture must fail the preparation, not start a step without its conversation")
+	}
+}
+
+// Cleanup of a workspace runs safely again (a retry after a failure, a restart): its first decision stands.
+func TestCleanupWorkspaceIsIdempotent(t *testing.T) {
+	s, id, _ := fixture(t, false)
+	ctx := context.Background()
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not installed")
+	}
+	work, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Source = &Source{Store: s.Store, WorkRoot: work, GitBin: git}
+	repo := filepath.Join(work, "repo")
+	for _, args := range [][]string{{"init", "-q", "-b", "main", repo}, {"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "init"}} {
+		if out, err := exec.Command(git, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	path := filepath.Join(s.Source.WorktreeRoot(), id.String(), "repo")
+	res, err := gitworkspace.Create(ctx, git, gitworkspace.Spec{Repository: repo, Path: path, Branch: "task/1-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: path, Branch: "task/1-x", BaseBranch: res.BaseBranch, BaseCommit: &res.BaseCommit, State: taskmodel.WorkspaceStateActive})
+	if err := os.WriteFile(filepath.Join(path, "dirty"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := s.cleanupWorkspace(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		w := current(t, s, id).View.Workspace
+		if w.State != taskmodel.WorkspaceStateKept || w.Kept == nil || w.Kept.UncommittedFiles != 1 {
+			t.Fatalf("workspace %+v", w)
+		}
+	}
+	// A worktree whose folder is gone is recorded removed, and git's record of it goes too.
+	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: path, Branch: "task/1-x", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	if err := os.RemoveAll(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.cleanupWorkspace(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if w := current(t, s, id).View.Workspace; w.State != taskmodel.WorkspaceStateRemoved || w.Kept != nil {
+		t.Fatalf("workspace %+v", w)
+	}
+	if out, _ := exec.Command(git, "-C", repo, "worktree", "list").CombinedOutput(); strings.Contains(string(out), path) {
+		t.Fatalf("git still lists the worktree: %s", out)
+	}
+	// A record pointing outside Loop Now's worktree folder is refused, and the folder is left alone.
+	setWorkspace(t, s, id, &taskmodel.Workspace{Repository: repo, Path: repo, Branch: "main", BaseBranch: "main", State: taskmodel.WorkspaceStateActive})
+	if err := s.cleanupWorkspace(ctx, id); err == nil {
+		t.Fatal("a tampered path must be refused")
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
+		t.Fatal("the repository must be untouched")
 	}
 }

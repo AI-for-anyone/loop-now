@@ -393,6 +393,12 @@ func Inspect(ctx context.Context, git, path, baseBranch string) (Status, error) 
 	} else if err != nil {
 		return Status{}, err
 	}
+	if baseBranch == "" {
+		// A task cancelled before its record said which base it took: the worktree knows.
+		if res, err := recorded(ctx, git, path); err == nil {
+			baseBranch = res.BaseBranch
+		}
+	}
 	var st Status
 	out, err := run(ctx, git, "-C", path, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none")
 	if err != nil {
@@ -428,7 +434,9 @@ func Inspect(ctx context.Context, git, path, baseBranch string) (Status, error) 
 		}
 	}
 	notIn := []string{}
-	if found, err := refExists(ctx, git, path, baseRef); err != nil {
+	if baseBranch == "" || !ValidBranch(baseBranch) {
+		baseRef = "" // no known base: every commit counts as existing only here
+	} else if found, err := refExists(ctx, git, path, baseRef); err != nil {
 		return Status{}, err
 	} else if found {
 		notIn = append(notIn, baseRef)
@@ -460,6 +468,46 @@ func count(ctx context.Context, git, path string, refs []string) (int, error) {
 		return 0, err
 	}
 	return strconv.Atoi(strings.TrimSpace(out))
+}
+
+// SaveDetached keeps the commits of a worktree whose HEAD is detached and holds commits that are not on its task
+// branch: it creates the new local branch <branch>-detached-<short sha> (the first free name) at HEAD, only creating a
+// ref. It returns the branch created, or "" when nothing needed saving.
+func SaveDetached(ctx context.Context, git, repository, path, branch string) (string, error) {
+	if _, err := run(ctx, git, "-C", path, "symbolic-ref", "--quiet", "HEAD"); err == nil {
+		return "", nil // on a branch: its commits are on that branch
+	}
+	head, err := run(ctx, git, "-C", path, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		return "", nil // no commit at all
+	}
+	refs := []string{}
+	if found, err := refExists(ctx, git, path, "refs/heads/"+branch); err != nil {
+		return "", err
+	} else if found {
+		refs = append(refs, "refs/heads/"+branch)
+	}
+	extra, err := count(ctx, git, path, refs)
+	if err != nil || extra == 0 {
+		return "", err
+	}
+	defer lock(repository)()
+	name := branch + "-detached-" + head[:min(len(head), 7)]
+	for i := 2; ; i++ {
+		found, err := refExists(ctx, git, repository, "refs/heads/"+name)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			break
+		}
+		name = fmt.Sprintf("%s-detached-%s-%d", branch, head[:min(len(head), 7)], i)
+	}
+	// An empty old value makes git refuse when the ref appeared in the meantime.
+	if _, err := run(ctx, git, "-C", repository, "update-ref", "refs/heads/"+name, head, ""); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // Remove removes the one worktree at path with `git worktree remove`; force also removes uncommitted changes. A

@@ -540,3 +540,45 @@ func TestInspectCountsChangesInsideASubmodule(t *testing.T) {
 		t.Fatalf("Inspect with a changed submodule = %+v, %v; the change exists only here", got, err)
 	}
 }
+
+func TestSaveDetached(t *testing.T) {
+	f := newRepo(t, true)
+	ctx := context.Background()
+	path := f.path("t1")
+	if _, err := Create(ctx, f.git, Spec{Repository: f.repo, Path: path, Branch: "task/1-x"}); err != nil {
+		t.Fatal(err)
+	}
+	if name, err := SaveDetached(ctx, f.git, f.repo, path, "task/1-x"); err != nil || name != "" {
+		t.Fatalf("on its branch: %q %v", name, err)
+	}
+	sh(t, path, "checkout", "-q", "--detach")
+	if name, err := SaveDetached(ctx, f.git, f.repo, path, "task/1-x"); err != nil || name != "" {
+		t.Fatalf("detached without commits of its own: %q %v", name, err)
+	}
+	write(t, filepath.Join(path, "d"), "d")
+	sh(t, path, "add", ".")
+	sh(t, path, "commit", "-q", "-m", "d")
+	head := sh(t, path, "rev-parse", "HEAD")
+	sh(t, f.repo, "branch", "task/1-x-detached-"+head[:7], "main") // the first name is taken
+	name, err := SaveDetached(ctx, f.git, f.repo, path, "task/1-x")
+	if err != nil || name != "task/1-x-detached-"+head[:7]+"-2" || sh(t, f.repo, "rev-parse", name) != head {
+		t.Fatalf("saved as %q, %v", name, err)
+	}
+	if sh(t, f.repo, "rev-parse", "task/1-x-detached-"+head[:7]) == head {
+		t.Fatal("an existing branch must not be moved")
+	}
+}
+
+func TestInspectWithoutAKnownBase(t *testing.T) {
+	f := newRepo(t, true)
+	ctx := context.Background()
+	path := f.path("t1")
+	res, err := Create(ctx, f.git, Spec{Repository: f.repo, Path: path, Branch: "task/1-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The base the worktree recorded is used when the caller does not know it.
+	if got, err := Inspect(ctx, f.git, path, ""); err != nil || got != (Status{Merged: true}) || res.BaseBranch != "main" {
+		t.Fatalf("Inspect = %+v, %v", got, err)
+	}
+}

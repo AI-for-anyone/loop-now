@@ -134,6 +134,9 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 			s.Log.Warn("could not clean up Claude Code's data for the task's worktree", "task_id", id, "error", e)
 		}
 	}
+	if err = s.cleanupWorkspace(ctx, id); err != nil {
+		return err
+	}
 	root, err := os.OpenRoot(s.Source.WorkRoot)
 	if err != nil {
 		return err

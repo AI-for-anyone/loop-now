@@ -66,6 +66,9 @@ func newWorkspaceWorld(t *testing.T) workspaceWorld {
 	if err := os.WriteFile(filepath.Join(ww.repo, "README"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(ww.repo, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gitT(t, ww.repo, "add", ".")
 	gitT(t, ww.repo, "commit", "-q", "-m", "init")
 	gitT(t, folder, "init", "-q", "--bare", "-b", "main", ww.remote)
@@ -299,5 +302,173 @@ func TestTaskWorkspaceAdoptsAnExistingWorktree(t *testing.T) {
 	}
 	if branches := gitT(t, ww.repo, "branch", "--list", "task/*"); strings.Count(branches, "task/") != 1 {
 		t.Fatalf("branches = %q, want exactly one task branch", branches)
+	}
+}
+
+// runningWorkspaceTask creates a workspace task and waits until its step runs.
+func (ww workspaceWorld) runningWorkspaceTask(t *testing.T, title string) taskmodel.Detail {
+	t.Helper()
+	created := ww.mustCreate(t, title, &taskmodel.WorkspaceInput{Repository: ww.repo})
+	return taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" && d.Workspace.State == "active" })
+}
+
+// endTask cancels the task and waits for its cleanup.
+func (ww workspaceWorld) endTask(t *testing.T, d taskmodel.Detail) taskmodel.Detail {
+	t.Helper()
+	if _, err := ww.a.Tasks.Cancel(context.Background(), auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
+		t.Fatal(err)
+	}
+	return taskWait(t, ww.server, d.Task.ID, func(d taskmodel.Detail) bool { return d.Cleanup == "archived" || d.Cleanup == "failed" })
+}
+
+func (ww workspaceWorld) commit(t *testing.T, path, file string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(path, file), []byte(file+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, path, "add", ".")
+	gitT(t, path, "commit", "-q", "-m", file)
+}
+
+func gone(path string) bool { _, err := os.Stat(path); return os.IsNotExist(err) }
+
+// Cancelled with edits: the worktree is kept with the counts and nothing is deleted; the person's Remove deletes only
+// that worktree, and the branch stays.
+func TestTaskWorkspaceKeptOnCancelThenRemoved(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	d := ww.runningWorkspaceTask(t, "edits")
+	w := d.Workspace
+	if err := os.WriteFile(filepath.Join(w.Path, "README"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(w.Path, "new.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ended := ww.endTask(t, d)
+	if ended.Cleanup != "archived" || ended.Workspace.State != "kept" || ended.Workspace.Kept == nil ||
+		*ended.Workspace.Kept != (taskmodel.WorkspaceKept{UncommittedFiles: 2}) {
+		t.Fatalf("after cancel: cleanup %s, workspace %+v %+v", ended.Cleanup, ended.Workspace, ended.Workspace.Kept)
+	}
+	if b, err := os.ReadFile(filepath.Join(w.Path, "README")); err != nil || string(b) != "edited\n" {
+		t.Fatal("a kept worktree keeps its files")
+	}
+	path := "/tasks/" + d.Task.ID.String() + "/workspace/remove"
+	action := map[string]any{"actionId": uuid.New()}
+	out := decode[taskmodel.Detail](t, ww.must(200, "POST", path, action))
+	if out.Workspace.State != "removed" || out.Workspace.Kept != nil {
+		t.Fatalf("after Remove: %+v", out.Workspace)
+	}
+	if !gone(w.Path) || !gone(filepath.Dir(w.Path)) {
+		t.Fatal("the worktree and its task folder are gone")
+	}
+	if _, err := os.Stat(filepath.Join(ww.repo, "README")); err != nil {
+		t.Fatal("the person's checkout is untouched")
+	}
+	if gitT(t, ww.repo, "branch", "--list", w.Branch) == "" {
+		t.Fatal("Remove leaves the branch alone")
+	}
+	if again := decode[taskmodel.Detail](t, ww.must(200, "POST", path, action)); again.Workspace.State != "removed" {
+		t.Fatalf("replaying the action: %+v", again.Workspace)
+	}
+	code, body := ww.call("POST", path, map[string]any{"actionId": uuid.New()})
+	if code != 409 || !strings.Contains(string(body), "task_workspace_not_kept") {
+		t.Fatalf("a second Remove: %d %s", code, body)
+	}
+	if code, _ := ww.call("POST", "/tasks/"+uuid.NewString()+"/workspace/remove", map[string]any{"actionId": uuid.New()}); code != 404 {
+		t.Fatalf("an unknown task: %d", code)
+	}
+}
+
+// What cleanup does with each kind of worktree at the end.
+func TestTaskWorkspaceCleanup(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	t.Run("merged: worktree and local branch gone", func(t *testing.T) {
+		d := ww.runningWorkspaceTask(t, "merged")
+		ww.commit(t, d.Workspace.Path, "merged.txt")
+		gitT(t, d.Workspace.Path, "push", "-q", "origin", "HEAD:main")
+		ended := ww.endTask(t, d)
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) != "" {
+			t.Fatalf("workspace %+v, branch %q", ended.Workspace, gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch))
+		}
+	})
+	t.Run("pushed but not merged: worktree gone, branch stays", func(t *testing.T) {
+		d := ww.runningWorkspaceTask(t, "pushed")
+		ww.commit(t, d.Workspace.Path, "pushed.txt")
+		gitT(t, d.Workspace.Path, "push", "-q", "-u", "origin", d.Workspace.Branch)
+		ended := ww.endTask(t, d)
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) || gitT(t, ww.repo, "branch", "--list", d.Workspace.Branch) == "" {
+			t.Fatalf("workspace %+v", ended.Workspace)
+		}
+	})
+	t.Run("unpushed commit: kept", func(t *testing.T) {
+		d := ww.runningWorkspaceTask(t, "unpushed")
+		ww.commit(t, d.Workspace.Path, "local.txt")
+		ended := ww.endTask(t, d)
+		if ended.Workspace.State != "kept" || ended.Workspace.Kept == nil || *ended.Workspace.Kept != (taskmodel.WorkspaceKept{UnpushedCommits: 1}) || gone(d.Workspace.Path) {
+			t.Fatalf("workspace %+v %+v", ended.Workspace, ended.Workspace.Kept)
+		}
+	})
+	t.Run("only ignored files: removed", func(t *testing.T) {
+		d := ww.runningWorkspaceTask(t, "ignored")
+		if err := os.MkdirAll(filepath.Join(d.Workspace.Path, "node_modules", "x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d.Workspace.Path, "node_modules", "x", "index.js"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		ended := ww.endTask(t, d)
+		if ended.Workspace.State != "removed" || !gone(d.Workspace.Path) {
+			t.Fatalf("workspace %+v %+v", ended.Workspace, ended.Workspace.Kept)
+		}
+	})
+}
+
+// A detached HEAD's own commits are saved as a branch before the person's Remove; the usual case adds no branch.
+func TestTaskWorkspaceRemoveSavesADetachedHead(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	d := ww.runningWorkspaceTask(t, "detached")
+	path := d.Workspace.Path
+	gitT(t, path, "checkout", "-q", "--detach")
+	ww.commit(t, path, "detached.txt")
+	head := gitT(t, path, "rev-parse", "HEAD")
+	if ended := ww.endTask(t, d); ended.Workspace.State != "kept" || ended.Workspace.Kept.UnpushedCommits != 1 {
+		t.Fatalf("workspace %+v", ended.Workspace)
+	}
+	ww.must(200, "POST", "/tasks/"+d.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
+	saved := d.Workspace.Branch + "-detached-" + head[:7]
+	if got := gitT(t, ww.repo, "rev-parse", saved); got != head {
+		t.Fatalf("the detached commit is on %s: %q", saved, got)
+	}
+
+	other := ww.runningWorkspaceTask(t, "attached")
+	if err := os.WriteFile(filepath.Join(other.Workspace.Path, "dirty"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ww.endTask(t, other)
+	ww.must(200, "POST", "/tasks/"+other.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()})
+	if extra := gitT(t, ww.repo, "branch", "--list", other.Workspace.Branch+"-detached-*"); extra != "" {
+		t.Fatalf("no branch is added for a worktree on its branch: %q", extra)
+	}
+}
+
+// A record whose worktree path points outside Loop Now's worktree folder is never removed.
+func TestTaskWorkspaceRemoveRefusesATamperedPath(t *testing.T) {
+	ww := newWorkspaceWorld(t)
+	d := ww.runningWorkspaceTask(t, "tampered")
+	if err := os.WriteFile(filepath.Join(d.Workspace.Path, "dirty"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ww.endTask(t, d)
+	if _, err := ww.a.Store.MutateTask(context.Background(), d.Task.ID, nil, func(m *store.TaskMutation) (any, error) {
+		m.Record.View.Workspace.Path = ww.repo
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := ww.call("POST", "/tasks/"+d.Task.ID.String()+"/workspace/remove", map[string]any{"actionId": uuid.New()}); code != 409 {
+		t.Fatalf("a tampered path: %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(ww.repo, "README")); err != nil {
+		t.Fatal("the person's checkout must survive a tampered record")
 	}
 }

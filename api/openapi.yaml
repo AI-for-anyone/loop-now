@@ -6667,9 +6667,11 @@ paths:
       summary: Removes the kept worktree of an ended task
       description: |
         For a person, after a task has ended and its worktree was kept because removing it would lose work. Removes
-        exactly the recorded worktree, uncommitted changes and commits that exist only there included; the branch is
-        left alone. Returns the task with workspace state removed. 409 `task_workspace_not_kept` when the task has not
-        ended or its worktree is not kept; replaying an actionId returns the same result.
+        exactly the recorded worktree. Its uncommitted changes are lost; its commits stay on the task's local branch
+        (the commits of a detached HEAD are first saved under `<branch>-detached-<short sha>`); the branch itself and
+        anything on the remote are left alone. Returns the task with workspace state removed. 409
+        `task_workspace_not_kept` when the task has not ended or its worktree is not kept; replaying an actionId
+        returns the same result.
       parameters:
         - name: taskId
           in: path

@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -190,14 +191,123 @@ func shortCommit(c string) string {
 	return c
 }
 
-// RemoveWorkspace removes the kept worktree of an ended task, for a person in the console. Until workspaces are
-// created no task has a kept worktree, so every known task answers task_workspace_not_kept.
-func (s *Service) RemoveWorkspace(ctx context.Context, p auth.Principal, id uuid.UUID, in taskmodel.RemoveWorkspaceInput) (taskmodel.Detail, error) {
+// cleanupWorkspace settles the worktree of an ended task once its steps are released: removed when that loses
+// nothing (no uncommitted or untracked changes, every commit merged into the base on the remote or on the branch's
+// own remote ref), with the local branch deleted only when merged; otherwise kept, with what removing it would lose.
+// A missing folder counts as removed. Running it again changes nothing; a git failure is returned (cleanup failed,
+// retried later).
+func (s *Service) cleanupWorkspace(ctx context.Context, id uuid.UUID) error {
+	r, err := s.Store.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	w := r.View.Workspace
+	if w == nil || w.State == taskmodel.WorkspaceStateRemoved || w.State == taskmodel.WorkspaceStateKept {
+		return nil
+	}
+	if !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
+		return errors.New("the recorded worktree is not under Loop Now's worktree folder; it is left alone")
+	}
+	git := s.Source.git()
+	st, err := gitworkspace.Inspect(ctx, git, w.Path, w.BaseBranch)
+	if err != nil {
+		return err
+	}
+	var kept *taskmodel.WorkspaceKept
+	switch {
+	case st.Missing:
+		if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, false); err != nil {
+			return err
+		}
+	case st.UncommittedFiles == 0 && st.UnpushedCommits == 0:
+		if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, false); err != nil {
+			// git refuses any worktree holding a submodule without force, even a clean one; Inspect has just found
+			// this one clean, submodule changes included.
+			if !strings.Contains(err.Error(), "submodule") {
+				return err
+			}
+			if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, true); err != nil {
+				return err
+			}
+		}
+		if st.Merged {
+			if err := gitworkspace.DeleteBranch(ctx, git, w.Repository, w.Branch, w.BaseBranch); err != nil && s.Log != nil {
+				s.Log.Info("kept the task's merged branch", "task_id", id, "branch", w.Branch, "reason", err.Error())
+			}
+		}
+	default:
+		kept = &taskmodel.WorkspaceKept{UncommittedFiles: st.UncommittedFiles, UnpushedCommits: st.UnpushedCommits}
+	}
+	if kept == nil {
+		_ = os.Remove(filepath.Dir(w.Path)) // <worktrees>/<task id>, when empty
+	}
+	_, err = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
+		cur := m.Record.View.Workspace
+		if cur == nil || cur.State == taskmodel.WorkspaceStateRemoved || cur.State == taskmodel.WorkspaceStateKept {
+			m.Unchanged()
+			return nil, nil
+		}
+		cur.Kept = kept
+		cur.State = taskmodel.WorkspaceStateRemoved
+		if kept != nil {
+			cur.State = taskmodel.WorkspaceStateKept
+		}
+		return nil, nil
+	})
+	return err
+}
+
+// RemoveWorkspace removes the kept worktree of an ended task, for a person in the console: exactly the recorded path,
+// forced. Uncommitted changes are lost; commits stay on the task's local branch, and those of a detached HEAD are first
+// saved under <branch>-detached-<short sha>; the branch and the remote are left alone. Replaying an actionId returns
+// the first result.
+func (s *Service) RemoveWorkspace(ctx context.Context, p auth.Principal, id uuid.UUID, in taskmodel.RemoveWorkspaceInput) (json.RawMessage, error) {
 	if p.Kind != auth.KindConsole {
-		return taskmodel.Detail{}, apperr.Forbidden("Only a person can remove a task's worktree.")
+		return nil, apperr.Forbidden("Only a person can remove a task's worktree.")
 	}
-	if _, err := s.Store.GetTask(ctx, id); err != nil {
-		return taskmodel.Detail{}, err
+	if in.ActionID == uuid.Nil {
+		return nil, apperr.Invalid("actionId", "A valid actionId is required.")
 	}
-	return taskmodel.Detail{}, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The task has no kept worktree to remove.")
+	action := bodyAction(p, in.ActionID, "removeTaskWorkspace", in)
+	settle := func(m *store.TaskMutation) (any, error) {
+		w := m.Record.View.Workspace
+		if !m.Record.Ended() || w == nil || w.State != taskmodel.WorkspaceStateKept {
+			return nil, notKept()
+		}
+		w.State, w.Kept = taskmodel.WorkspaceStateRemoved, nil
+		return m.Record.View, nil
+	}
+	if recorded, err := s.ActionRecorded(ctx, p, in.ActionID); err != nil {
+		return nil, err
+	} else if recorded {
+		return s.Store.MutateTask(ctx, id, action, settle)
+	}
+	r, err := s.Store.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	w := r.View.Workspace
+	if !r.Ended() || w == nil || w.State != taskmodel.WorkspaceStateKept {
+		return nil, notKept()
+	}
+	if s.Source == nil || !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
+		return nil, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The recorded worktree is not under Loop Now's worktree folder; it is not removed.")
+	}
+	git := s.Source.git()
+	if _, err := os.Stat(w.Path); err == nil {
+		if saved, err := gitworkspace.SaveDetached(ctx, git, w.Repository, w.Path, w.Branch); err != nil {
+			return nil, err
+		} else if saved != "" && s.Log != nil {
+			s.Log.Info("saved the commits of a detached HEAD before removing the task's worktree", "task_id", id, "branch", saved)
+		}
+	}
+	if err := gitworkspace.Remove(ctx, git, w.Repository, w.Path, true); err != nil {
+		return nil, err
+	}
+	_ = os.Remove(filepath.Dir(w.Path))
+	return s.Store.MutateTask(ctx, id, action, settle)
+}
+
+func notKept() error {
+	return apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The task's worktree can be removed only after the task has ended and when it was kept.")
 }

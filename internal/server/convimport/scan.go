@@ -210,6 +210,10 @@ func TemporaryFolders() []string {
 // loopNowWorkspace matches a folder under a Loop Now Agent's (or task instance's) own workspace, in any work root.
 var loopNowWorkspace = regexp.MustCompile(`(^|/)agents/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/workspace(/|$)`)
 
+// loopNowWorktree matches a folder under a task's git worktree, which Loop Now keeps under <work root>/worktrees/<task
+// id>/ in any work root: its conversations are task steps, not projects.
+var loopNowWorktree = regexp.MustCompile(`(^|/)worktrees/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/|$)`)
+
 // loopNowRunHeader starts the message of every turn Loop Now runs (executor.RunIDLine), in English and as older
 // versions wrote it.
 var loopNowRunHeaders = []string{"Run ID for this turn: ", "本轮运行ID："} // check-english: zh (older Loop Now runs start with this line)
@@ -227,11 +231,12 @@ func loopNowPrompt(text string) (uuid.UUID, bool) {
 	return uuid.Nil, false
 }
 
-// leftOut reports whether a conversation is not offered at all: it is in one of Loop Now's Agent workspaces, or it
+// leftOut reports whether a conversation is not offered at all: it is in one of Loop Now's Agent workspaces or task
+// worktrees, or it
 // worked in a folder that is not a project (scratch, downloads, temporary).
 func (o ScanOptions) leftOut(c Conversation) bool {
 	cwd := filepath.ToSlash(filepath.Clean(c.Cwd))
-	if loopNowWorkspace.MatchString(cwd) {
+	if loopNowWorkspace.MatchString(cwd) || loopNowWorktree.MatchString(cwd) {
 		return true
 	}
 	excluded := slices.Clone(o.Excluded)

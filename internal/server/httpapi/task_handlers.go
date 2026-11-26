@@ -519,5 +519,5 @@ func (s *Server) removeTaskWorkspace(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, e)
 		return
 	}
-	writeJSON(w, http.StatusOK, apitypes.ConsoleTaskDetail{Detail: out})
+	writeJSON(w, http.StatusOK, out)
 }
