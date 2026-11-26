@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### loopctl sets an Agent's folder, configuration, mode and levels
+
+- `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
+- Values with a fixed list are checked by loopctl before anything is sent; the rest (an absolute folder, a level the model supports, a service tier only for Codex models in Pi, no working folder on Pi) is checked by the server, whose message is shown as it is.
+
 ### Tasks that work on code: one worktree per task
 
 - A task can carry a workspace. The Manager names a git repository on this computer when it creates the task, and Loop Now creates one worktree on one new branch for it: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. Every step of the task works in that worktree, so several tasks can run on one repository at the same time without touching each other or your own checkout.

@@ -148,7 +148,8 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 		spec("alpha", map[string]any{"stateProbe": true, "failEvents": []string{"x.fail"}}, "inbox.received", "x.fail", "run.ended"),
 		spec("beta", map[string]any{"fail": "manifest and code subscriptions do not match"}, "inbox.received"),
 	}, nil)
-	base := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)
+	// Recent event times: events older than EventRetention (30 days) are pruned when the host starts.
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	// Written in the reverse order of event time: delivery follows event time.
 	late := e.addEvent("run.ended", base.Add(2*time.Second), "alpha")
 	failing := e.addEvent("x.fail", base.Add(time.Second), "alpha")
