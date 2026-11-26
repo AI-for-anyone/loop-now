@@ -94,7 +94,7 @@ describe('Chat history and continuing the conversation', () => {
 
   it('shows a divider between the messages before and after a new session', async () => {
     await renderChat({ messages: [...turn('Old session', 'Old reply', {}, 1), ...turn('New session', 'New reply', {}, 2)] })
-    expect(await screen.findByRole('separator')).toHaveTextContent('Session switched; page history is kept')
+    expect(await within(screen.getByRole('main')).findByRole('separator')).toHaveTextContent('Session switched; page history is kept')
   })
 })
 
