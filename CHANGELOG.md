@@ -6,6 +6,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### The page body uses the whole window
+
+- The body of every console page (an Agent's four tabs, a task, the task list, overview, settings, stats, plugins, Skills, identities, import) no longer sits on an inset sheet with a thick border, rounded corners and a drop shadow: it meets the header, the sidebar and the window edges, with a thin ink line under the header and between the sidebar and the page.
+- A conversation uses the width up to the turn ruler (24 px gutters, up to 1600 px); tables and code blocks use all of it, and the message box lines up with the messages. On a 1920 px window the space left of the ruler went from about 360 px to about 37 px. The turn ruler is 40 px wide, and there is less space above the first message and above the message box.
+- Task node conversations get the same width; phones keep their layout with 14 px gutters.
+
 ### The Agent page header is one thin bar
 
 - The top of an Agent page (breadcrumb, large title, runtime and model tags, address box and the four folder tabs, about 200 px) is now one bar of 48 px shared by Chat, Config, Folder and Inbox, as in ChatGPT: the runtime mark, the Agent's name, the Manager chip and the status on the left, the four tabs as small text tabs, and a "⋯" menu on the right. The conversation starts right under it.
