@@ -174,9 +174,9 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 	for _, p := range permissionEntries(requests) {
 		entries = append(entries, timed{at: p.at, v: p.value})
 	}
-	commands := toolCommands(events)
+	details := toolDetailsOf(events)
 	for i := range entries {
-		entries[i].v = withToolCommand(entries[i].v, commands)
+		entries[i].v = withToolDetails(entries[i].v, details)
 	}
 	for _, u := range usage {
 		entries = append(entries, timed{at: u.At, v: apitypes.TimelineModelCallEntry{

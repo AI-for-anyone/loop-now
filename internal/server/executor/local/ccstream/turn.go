@@ -395,6 +395,9 @@ func (c *Client) handleLine(line []byte) {
 					t.sink.ToolStarted(b.ID, b.Name)
 				}
 			}
+			if active {
+				toolTarget(t.sink, b.ID, b.Name, b.Input)
+			}
 			if b.Name != "Bash" {
 				continue
 			}
@@ -543,4 +546,26 @@ func blocks(raw json.RawMessage) []wireBlock {
 		return nil
 	}
 	return out
+}
+
+// toolTarget reports what a file or search tool of Claude Code works on: the file of Read, Edit, Write, MultiEdit and
+// NotebookEdit, the pattern of Grep and Glob, the query of WebSearch. Nothing else of the input goes out.
+func toolTarget(sink any, id, name string, input json.RawMessage) {
+	var in struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+		Pattern      string `json:"pattern"`
+		Query        string `json:"query"`
+	}
+	if json.Unmarshal(input, &in) != nil {
+		return
+	}
+	switch name {
+	case "Read", "Edit", "Write", "MultiEdit", "NotebookEdit":
+		runturn.ToolFiles(sink, id, name, in.FilePath, in.NotebookPath)
+	case "Grep", "Glob":
+		runturn.ToolQuery(sink, id, name, in.Pattern)
+	case "WebSearch":
+		runturn.ToolQuery(sink, id, name, in.Query)
+	}
 }

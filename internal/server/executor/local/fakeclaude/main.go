@@ -11,6 +11,7 @@
 //	fake:images        reply images=<number of images>
 //	fake:tool <cmd>    call the Bash tool once, then reply ran
 //	fake:tool2 <cmd>   same, but the tool call appears only in the full assistant message and its result is an error; reply ran2
+//	fake:files         call Read, Edit, NotebookEdit, Grep, Glob and WebSearch once each (full assistant message), then reply files
 //	fake:bigline       print one very long line, then print nothing more
 //	fake:subagent      first print some sub-Agent text (non-empty parent_tool_use_id), then reply main
 //	fake:error <msg>   end the turn with an error
@@ -513,6 +514,21 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_tool2", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": id, "name": "Bash", "input": map[string]any{"command": arg}}}}})
 		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "ok", "is_error": true}}}})
 		reply(model, "ran2")
+	case "fake:files":
+		tools := []any{
+			map[string]any{"type": "tool_use", "id": "toolu_read", "name": "Read", "input": map[string]any{"file_path": "/w/a.go", "offset": 3}},
+			map[string]any{"type": "tool_use", "id": "toolu_edit", "name": "Edit", "input": map[string]any{"file_path": "/w/b.go", "old_string": "PRIVATE", "new_string": "PRIVATE"}},
+			map[string]any{"type": "tool_use", "id": "toolu_nb", "name": "NotebookEdit", "input": map[string]any{"notebook_path": "/w/n.ipynb", "new_source": "PRIVATE"}},
+			map[string]any{"type": "tool_use", "id": "toolu_grep", "name": "Grep", "input": map[string]any{"pattern": "func main", "path": "PRIVATE"}},
+			map[string]any{"type": "tool_use", "id": "toolu_glob", "name": "Glob", "input": map[string]any{"pattern": "**/*.go"}},
+			map[string]any{"type": "tool_use", "id": "toolu_web", "name": "WebSearch", "input": map[string]any{"query": "go 1.27 release"}},
+		}
+		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_files", "model": model, "content": tools}})
+		for _, tool := range tools {
+			id := tool.(map[string]any)["id"]
+			emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "PRIVATE", "is_error": false}}}})
+		}
+		reply(model, "files")
 	case "fake:bigline":
 		// One very long line of output, then nothing more (if the reader stops reading, this blocks).
 		stream(nil, map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": strings.Repeat("x", 8192)}})

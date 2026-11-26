@@ -13,6 +13,7 @@
 //	fake:images         reply images=<number of images>
 //	fake:tool <cmd>     run one command item, then reply ran
 //	fake:toolfail       run one command item that fails, then reply ran
+//	fake:files          a file change of two files and a web search whose query comes with its end, then reply files
 //	fake:approval       ask the client to approve a command, then reply approval=<decision>
 //	fake:ask            ask the client a question, then reply answers=<JSON>
 //	fake:sleep <dur>    wait for the duration (the word after it), or until interrupted, then reply slept
@@ -469,6 +470,19 @@ func (s *server) turn(t *thread, turnID string, p map[string]any, stop chan stru
 		}
 		s.notify("item/completed", map[string]any{"threadId": tid, "turnId": turnID, "item": item})
 		reply("ran")
+	case "fake:files":
+		// A file change knows its files when it starts; a web search's query comes only with its end.
+		patch := map[string]any{"type": "fileChange", "id": newID(), "status": "inProgress", "changes": []any{
+			map[string]any{"path": "/w/a.go", "kind": map[string]any{"type": "update"}, "diff": "PRIVATE"},
+			map[string]any{"path": "/w/b.go", "kind": map[string]any{"type": "add"}, "diff": "PRIVATE"}}}
+		s.notify("item/started", map[string]any{"threadId": tid, "turnId": turnID, "item": patch, "startedAtMs": 0})
+		patch["status"] = "completed"
+		s.notify("item/completed", map[string]any{"threadId": tid, "turnId": turnID, "item": patch})
+		search := map[string]any{"type": "webSearch", "id": newID(), "query": ""}
+		s.notify("item/started", map[string]any{"threadId": tid, "turnId": turnID, "item": search, "startedAtMs": 0})
+		search["query"], search["results"] = "go 1.27 release", []any{"PRIVATE"}
+		s.notify("item/completed", map[string]any{"threadId": tid, "turnId": turnID, "item": search})
+		reply("files")
 	case "fake:approval":
 		r := s.ask("item/commandExecution/requestApproval", map[string]any{"threadId": tid, "turnId": turnID, "itemId": newID(), "command": "rm -rf build"})
 		var decision struct {

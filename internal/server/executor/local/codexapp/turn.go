@@ -63,6 +63,7 @@ type turn struct {
 	streamed        map[string]bool // agent message items that streamed deltas
 	tools           map[string]string
 	commands        map[string]Command // command items in progress, by item id
+	targeted        map[string]bool    // items whose target was reported
 	failure         *TurnError
 }
 
@@ -90,7 +91,7 @@ func (c *Client) Compact(ctx context.Context, threadID string) (runturn.Result, 
 }
 
 func (c *Client) runTurn(ctx context.Context, threadID string, sink runturn.Sink, method string, params map[string]any) (runturn.Result, error) {
-	t := &turn{c: c, sink: sink, threadID: threadID, done: make(chan struct{}), streamed: map[string]bool{}, tools: map[string]string{}, commands: map[string]Command{}}
+	t := &turn{c: c, sink: sink, threadID: threadID, done: make(chan struct{}), streamed: map[string]bool{}, tools: map[string]string{}, commands: map[string]Command{}, targeted: map[string]bool{}}
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -332,6 +333,7 @@ func (t *turn) item(raw json.RawMessage, completed bool) {
 		}
 		t.mu.Unlock()
 		t.sink.ToolStarted(id, name)
+		t.target(id, name, kind, item)
 		if command, _ := item["command"].(string); command != "" {
 			if s, ok := t.sink.(interface {
 				ToolCommand(id, name, command string)
@@ -341,9 +343,11 @@ func (t *turn) item(raw json.RawMessage, completed bool) {
 		}
 		return
 	}
+	t.target(id, name, kind, item)
 	t.mu.Lock()
 	delete(t.tools, id)
 	delete(t.commands, id)
+	delete(t.targeted, id)
 	t.mu.Unlock()
 	status, _ := item["status"].(string)
 	failed := status == "failed" || status == "declined"
@@ -446,4 +450,39 @@ func rpcMessage(err error) string {
 		return e.Message
 	}
 	return err.Error()
+}
+
+// target reports what a file change or a web search works on (the paths of its changes, its query), once per item: at
+// its start when known there, else at its end. Diffs and results never go out.
+func (t *turn) target(id, name, kind string, item map[string]any) {
+	var paths []string
+	query := ""
+	switch kind {
+	case "fileChange":
+		changes, _ := item["changes"].([]any)
+		for _, c := range changes {
+			if change, ok := c.(map[string]any); ok {
+				if path, _ := change["path"].(string); path != "" {
+					paths = append(paths, path)
+				}
+			}
+		}
+	case "webSearch":
+		query, _ = item["query"].(string)
+	}
+	if len(paths) == 0 && query == "" {
+		return
+	}
+	t.mu.Lock()
+	done := t.targeted[id]
+	t.targeted[id] = true
+	t.mu.Unlock()
+	if done {
+		return
+	}
+	if len(paths) > 0 {
+		runturn.ToolFiles(t.sink, id, name, paths...)
+	} else {
+		runturn.ToolQuery(t.sink, id, name, query)
+	}
 }
