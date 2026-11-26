@@ -60,7 +60,6 @@ export const background = {
     ruler: '后台任务结束后',
   },
   // Lists (sidebar, overview, project Agents).
-  listTag: (count: number) => `后台 ${count}`,
   listTitle: (count: number) => `空闲，${count} 个后台任务还在运行`,
   // Above the message box, and next to Stop.
   restartWarning: (runtime: string, count: number) => `设置已改：下一条消息会重启 ${runtime}，正在运行的 ${count} 个后台任务会被停掉。`,

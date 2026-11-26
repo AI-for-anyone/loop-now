@@ -37,7 +37,6 @@ export const shell = {
   },
   chips: {
     busy: 'Replying',
-    sleep: 'zZ sleep',
   },
   noProjects: 'No projects yet',
   menu: 'Open navigation',

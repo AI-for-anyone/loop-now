@@ -17,19 +17,23 @@ function snapshot(agentId: string, status: Partial<Schemas['AgentStatus']>) {
 }
 
 describe('An idle Agent whose background tasks still run is marked in the lists', () => {
-  it('the sidebar row says “Bg N” instead of nothing; replying still comes first', async () => {
+  it('the sidebar row shows a compact shell-and-count pill with the full status in the tooltip; replying still comes first', async () => {
     const idle = makeAgent({ name: 'Builder', backgroundTaskCount: 2 })
     const busy = makeAgent({ name: 'Runner', busy: true, backgroundTaskCount: 1 })
     const quiet = makeAgent({ name: 'Quiet' })
     server.use(http.get(agentsUrl, () => HttpResponse.json({ agents: [idle, busy, quiet].map((agent) => toListItem(agent)) })), ...baseHandlers([idle, busy, quiet]))
     renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
+    const builder = await within(list).findByRole('link', { name: /Builder/ })
     const row = (name: string) => within(list).getByRole('link', { name: new RegExp(name) })
-    await waitFor(() => expect(row('Builder')).toHaveTextContent('Bg 2'))
-    expect(within(row('Builder')).getByText('Bg 2')).toHaveAttribute('title', 'Idle; 2 background tasks are still running')
-    expect(row('Runner')).toHaveTextContent('Replying')
-    expect(row('Runner')).not.toHaveTextContent('Bg')
-    expect(row('Quiet')).not.toHaveTextContent('Bg')
+    const pill = within(builder).getByTitle('Idle; 2 background tasks are still running')
+    expect(pill).toHaveAttribute('data-status', 'background')
+    expect(pill.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(pill).getByText('2')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(pill).getByText('Idle; 2 background tasks are still running')).toHaveClass('sr-only')
+    expect(within(row('Runner')).getByTitle('Replying')).toHaveAttribute('data-status', 'busy')
+    expect(row('Runner').querySelector('[data-status="background"]')).toBeNull()
+    expect(row('Quiet').querySelector('[data-status]')).toBeNull()
   })
 
   it('the overview row shows “Background N” next to an idle state, and not next to a busy one', async () => {

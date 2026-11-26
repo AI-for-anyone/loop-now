@@ -1,7 +1,9 @@
+import { MoonIcon, SquareTerminalIcon } from 'lucide-react'
 import { useId, useSyncExternalStore } from 'react'
 import { Link } from 'react-router'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ManagerFlag } from '@/components/ManagerBadge'
 import { NavIcon } from '@/components/NavIcon'
 import { RuntimeMark } from '@/components/RuntimeBadge'
 import { reachability, type Schemas } from '@/api/client'
@@ -28,29 +30,71 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
   return keyword === '' || searchableText(agent).some((text) => text.toLowerCase().includes(keyword))
 }
 
-// At most one status tag on the right of each row, by priority: replying, background tasks still running (“后台 N”, Bg N, in yellow), sleep,
-// Manager. Nothing is shown when idle. On the selected row (itself yellow) the background tag turns into yellow text on navy.
-// On the blue background, sleep and Manager use a semi-transparent navy background; when their row is selected (yellow
-// background) they become a pill with white text on solid navy, because the semi-transparent one is hard to read on yellow.
+// At most one compact status symbol on the right of each row, by priority: replying (pulsing pink dot), background tasks still running
+// (small yellow pill with the shell glyph and count), sleep (moon glyph), Manager (flag glyph). Full words go in the tooltip and
+// screen-reader text. Nothing is shown when idle. Colors adapt on the selected (yellow) row: the background pill flips to yellow on navy,
+// sleep and Manager switch from semi-transparent navy to solid navy, and the pink dot gains a navy outline for contrast against yellow.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
-  const quiet = current ? 'rounded-full bg-ink px-2 text-white' : 'bg-ink/45 text-white'
-  const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
-  const [label, tone, title] =
-    agent.busy
-      ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
-      : agent.backgroundTaskCount > 0
-        ? [t.background.listTag(agent.backgroundTaskCount), current ? 'rounded-full bg-ink px-2 text-riso-yellow' : 'bg-riso-yellow text-ink', t.background.listTitle(agent.backgroundTaskCount)]
-        : sleeping
-          ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
-          : agent.isManager
-            ? [t.agents.manager, quiet, t.agents.managerTitle]
-            : [null, '', undefined]
-  if (!label) return null
-  return (
-    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-black whitespace-nowrap', tone)}>
-      {label}
-    </span>
-  )
+  if (agent.busy) {
+    return (
+      <span data-status="busy" title={text.chips.busy} className="inline-flex size-[18px] shrink-0 items-center justify-center">
+        <span
+          aria-hidden="true"
+          data-status-dot
+          className={cn(
+            'size-2.5 rounded-full bg-riso-pink animate-pulse motion-reduce:animate-none',
+            current && 'shadow-[0_0_0_1.5px_var(--ink)]',
+          )}
+        />
+        <span className="sr-only">{text.chips.busy}</span>
+      </span>
+    )
+  }
+  if (agent.backgroundTaskCount > 0) {
+    const label = t.background.listTitle(agent.backgroundTaskCount)
+    return (
+      <span
+        data-status="background"
+        title={label}
+        className={cn(
+          'inline-flex h-[18px] shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[11px] leading-none font-black tabular-nums whitespace-nowrap',
+          current ? 'bg-ink text-riso-yellow' : 'bg-riso-yellow text-ink',
+        )}
+      >
+        <SquareTerminalIcon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.6} />
+        <span aria-hidden="true">{agent.backgroundTaskCount}</span>
+        <span className="sr-only">{label}</span>
+      </span>
+    )
+  }
+  const quiet = current ? 'bg-ink text-white' : 'bg-ink/45 text-white'
+  const sleeping = agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
+  if (sleeping) {
+    const label = [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')
+    return (
+      <span
+        data-status="sleeping"
+        title={label}
+        className={cn('inline-flex size-[18px] shrink-0 items-center justify-center rounded-full', quiet)}
+      >
+        <MoonIcon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.6} />
+        <span className="sr-only">{label}</span>
+      </span>
+    )
+  }
+  if (agent.isManager) {
+    return (
+      <span
+        data-status="manager"
+        title={t.agents.managerTitle}
+        className={cn('inline-flex size-[18px] shrink-0 items-center justify-center rounded-full', quiet)}
+      >
+        <ManagerFlag className="size-3 shrink-0" />
+        <span className="sr-only">{t.agents.managerTitle}</span>
+      </span>
+    )
+  }
+  return null
 }
 
 // When the server can't be reached, show a halftone skeleton as a placeholder; the explanatory text is the same as when the
@@ -131,18 +175,15 @@ export function AgentNavGroup({
                 <li key={agent.id} className="min-w-0">
                   <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, 'agent')}>
                     <AgentAvatar size="sm" id={agent.id} />
-                    {/* The name fills the space first: names of usual length are shown in full (also when selected), and the
-                        runtime, status and Manager marks on the right wrap to the next line, right-aligned, when they don't fit.
-                        Only a name longer than the whole row is truncated; hovering shows the full name. */}
-                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span title={agent.name} className="max-w-full truncate">
-                        {agent.name}
-                      </span>
-                      <span className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 empty:hidden">
-                        <RuntimeMark runtime={agent.runtime} />
-                        <StatusTag agent={agent} current={current} />
-                        <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
-                      </span>
+                    {/* One line at every sidebar width: the name gives way first with an ellipsis (full name in the tooltip), while the
+                        compact runtime, status and pending marks stay right-aligned. */}
+                    <span title={agent.name} className="min-w-0 flex-1 truncate">
+                      {agent.name}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5 empty:hidden">
+                      <RuntimeMark runtime={agent.runtime} />
+                      <StatusTag agent={agent} current={current} />
+                      <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
                     </span>
                   </Link>
                 </li>
