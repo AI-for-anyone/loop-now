@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SIDEBAR_WIDTH_DEFAULT, SIDEBAR_WIDTH_STORAGE_KEY } from '@/lib/sidebar-width'
-import { apiUrl, defaultAgentsPath, makeAgent } from '@/test/api'
+import { apiUrl, defaultAgentPath, makeAgent } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers, sidebar } from '@/test/shell'
@@ -22,8 +22,10 @@ function setViewportWidth(width: number, notify = true) {
 
 function renderShell(viewport = 1440) {
   setViewportWidth(viewport, false)
-  server.use(...baseHandlers([makeAgent({ name: 'loop-now-publicity' })]))
-  return renderRoutes(routes, defaultAgentsPath)
+  const agent = makeAgent({ name: 'loop-now-publicity' })
+  server.use(...baseHandlers([agent]))
+  // Open an Agent chat URL directly instead of /agents, which redirects asynchronously and would close the mobile drawer.
+  return renderRoutes(routes, defaultAgentPath(agent.id, 'chat'))
 }
 
 const resizeHandle = () => screen.getByRole('separator', { name: 'Resize sidebar' })
@@ -267,7 +269,7 @@ describe('desktop sidebar resizing', () => {
       ...baseHandlers([agent]),
     )
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, '200')
-    renderRoutes(routes, defaultAgentsPath)
+    renderRoutes(routes, defaultAgentPath(agent.id, 'chat'))
     const nav = sidebar()
     const list = await within(nav).findByRole('list', { name: 'Agents' })
 
