@@ -51,7 +51,8 @@ section() {
 	' "$1"
 }
 
-# with_pending PART TEXT: for "Unreleased", the PART (English or 中文) of the pull request notes above TEXT; otherwise TEXT.
+# with_pending PART TEXT: for "Unreleased", the PART (English or 中文) of the pull request notes above TEXT; otherwise
+# TEXT.
 with_pending() {
 	local pending
 	if [ "$tag" != Unreleased ]; then

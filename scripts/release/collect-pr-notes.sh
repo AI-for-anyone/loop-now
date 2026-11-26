@@ -12,11 +12,11 @@
 # merge too), each description read with "gh pr view N" (gh is used here, in the release process only, never by the
 # product). The previous release is the newest v* tag reachable from HEAD; when that tag is on the merge of a release-*
 # pull request, the range starts where that release branch was cut from main, so a pull request merged into main while
-# the release was being prepared comes into the next release, unless the release branch merged main and collected it. Each pull request's notes
-# get its number after their titles ("### Title (#N)"); a number already in a title anywhere in the file is not copied
-# again, so running it twice, or a range that reaches back into the previous release, adds nothing twice. The notes go
-# newest first into the version section, above the entries already there (a "## Unreleased" / "## 未发布" section
-# becomes the version section) and below a summary paragraph written under the heading.
+# the release was being prepared comes into the next release, unless the release branch merged main and collected it.
+# Each pull request's notes get its number after their titles ("### Title (#N)"); a number already in a title anywhere
+# in the file is not copied again, so running it twice, or a range that reaches back into the previous release, adds
+# nothing twice. The notes go newest first into the version section, above the entries already there (a "## Unreleased"
+# / "## 未发布" section becomes the version section) and below a summary paragraph written under the heading.
 # Not copied, and listed with number and title so the release session can decide: pull requests whose description has
 # neither section, and pull requests merged before this script was on main (their notes reached the CHANGELOG through
 # the old changes/ files or by hand). "None" / "无" in both sections means nobody using Loop Now can see the change: it
