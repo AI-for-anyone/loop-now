@@ -11,6 +11,12 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - Agent 正在回复时 Loop Now 退出、崩溃或被停掉，下次它会记得这轮回复：做了什么、跑了哪些命令、停在哪里。以前只有回复正常结束时才保存对话，没结束的那轮就丢了；如果是 Agent 的第一轮回复（包括导入的 Agent），整段对话会从头开始，导入的 Agent 会回到刚导入时的样子。
 - 现在 CLI 一保存对话，Loop Now 就在回复进行中记下来，停掉 CLI 之前再记一次。适用于 Claude Code、Codex、Grok、Antigravity、自己添加的 ACP 命令和 Pi。
 
+### 后台任务挪到输入框下面那一栏
+
+- CLI 放到后台的活还在跑时，输入框下面那一栏在“谁来跑”标签后面显示一个 shell 标志和数量（和 Claude Code 命令行的状态栏一样）。点开是列表：在跑什么、哪轮回复启动的、跑了多久，可以单个停止或全部停止。没有在跑的就不显示。任务里每一步的输入框下面也一样，只显示这一步的。
+- Agent 页顶部不再显示后台任务标记；侧边栏、总览和项目的 Agent 列表里的标记照旧。
+- 回复里，转到后台的工具和其他工具一样是个小标签：运行中显示“Bash 后台运行中”和转圈，结束后显示结果（后台已完成、后台出错、后台已停止、后台结果未知）。点开能看到命令、跑了多久或怎么结束的，以及最后一段输出。原来那张带计时的大卡片去掉了。
+
 ### loopctl 能设置 Agent 的工作文件夹、配置、批准模式和档位
 
 - `loopctl agent create` 和 `agent update` 新增 `--working-dir`、`--use-local-config true|false`、`--permission-mode supervised|accept_edits|auto|full`、`--thinking-level` 和 `--service-tier`，在命令行里就能把 Agent 设置完整，不用再去配置页一个个点。`agent update` 只发送给出的项，可以用 `--clear-working-dir`、`--clear-thinking-level`、`--clear-service-tier` 恢复默认。

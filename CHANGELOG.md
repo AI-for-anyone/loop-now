@@ -11,6 +11,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - When Loop Now quits, crashes or is stopped while an Agent is replying, the Agent now remembers that reply the next time: what it had done, which commands it ran, and where it stopped. Before, the conversation was saved only when a reply ended, so a reply that never ended was lost; for an Agent's very first reply (an imported Agent's included) the whole conversation started over, and an imported Agent went back to the moment of import.
 - Loop Now now notes the conversation as soon as the CLI has saved it, while the reply runs, and once more before it stops the CLI. This applies to Claude Code, Codex, Grok, Antigravity, local ACP commands and Pi.
 
+### Background tasks live in the message box bar
+
+- While a CLI's background work runs, the bar under the message box shows a shell mark with the count, right after the runner chip (as Claude Code's status line does). A click opens the list: what runs, which reply started it, for how long, Stop and Stop all. The mark is gone when nothing runs. A task step's message box has the same mark for that step's work.
+- The Agent header no longer shows a background mark; the sidebar, the overview and the project's Agent list keep theirs.
+- In a reply, a tool that went on in the background is a small chip like the other tools: "Bash Running in the background" with a spinner, then how it ended (finished, failed, stopped, outcome unknown). A click shows the command, how long it has run or how it ended, and its last output. The large card with a live clock is gone.
+
 ### loopctl sets an Agent's folder, configuration, mode and levels
 
 - `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
