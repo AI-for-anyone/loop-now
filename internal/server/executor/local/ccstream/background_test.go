@@ -1,6 +1,8 @@
 package ccstream_test
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -113,21 +115,41 @@ func TestStopTask(t *testing.T) {
 }
 
 // A message sent while Claude Code is in a turn of its own waits for that turn to end: the turn's output is not taken
-// for the reply to the message.
+// for the reply to the message. That holds from the turn's first line, also while its place is still being made.
 func TestPromptWaitsForSelfTurn(t *testing.T) {
 	c := start(t, ccstream.Options{})
 	c.SetObserver(newBgObs())
-	turns := withSelfTurns(c)
+	made, release := make(chan *selfTurn, 1), make(chan struct{})
+	c.SetSelfTurns(func() runturn.SelfTurn {
+		s := &selfTurn{sink: newSink(), ended: make(chan runturn.Result, 1)}
+		made <- s
+		<-release // the place of the turn is being made
+		return s
+	})
 	if _, err := c.Prompt(ctx(t), "fake:background 100ms true", newSink()); err != nil {
 		t.Fatal(err)
 	}
-	self := recv(t, turns, "a self turn")
-	res, err := c.Prompt(ctx(t), "hello", newSink())
-	if err != nil || res.Text != "echo: hello" {
-		t.Fatalf("the reply to the message: %+v %v", res, err)
+	self := recv(t, made, "a self turn")
+	// A message whose caller has given up before the turn opened is not written at all.
+	gone, cancel := context.WithCancel(ctx(t))
+	cancel()
+	if _, err := c.Prompt(gone, "ignored", newSink()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a message given up while the turn opens: %v", err)
 	}
+	reply := make(chan runturn.Result, 1)
+	go func() {
+		res, err := c.Prompt(ctx(t), "hello", newSink())
+		if err != nil {
+			t.Error(err)
+		}
+		reply <- res
+	}()
+	close(release)
 	if r := recv(t, self.ended, "the self turn's end"); r.Text != "background done" {
 		t.Fatalf("self turn: %+v", r)
+	}
+	if res := recv(t, reply, "the reply to the message"); res.Text != "echo: hello" {
+		t.Fatalf("the reply to the message: %+v", res)
 	}
 }
 

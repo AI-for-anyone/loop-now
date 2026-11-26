@@ -137,6 +137,9 @@ type Client struct {
 	observer Observer
 	// selfTurns receives the turns Claude Code begins by itself (its reply after background work ended); nil drops them.
 	selfTurns func() runturn.SelfTurn
+	// selfOpening is closed once the turn Claude Code has begun by itself is open (its place is made by selfTurns
+	// meanwhile); nil when none is opening. A message waits for it like for the turn.
+	selfOpening chan struct{}
 	// commands are the Bash commands of recent tool calls, by tool_use id (to label background tasks); tasks are the
 	// background tasks reported, foreground the tasks not (yet) in the background, ended those whose end was reported.
 	// All are used by the reader goroutine only.
@@ -333,13 +336,15 @@ func (c *Client) Prompt(ctx context.Context, text string, sink runturn.Sink, ima
 		c.awaitExit()
 		return runturn.Result{}, runturn.ErrExited
 	}
-	if c.turn != nil && c.turn.self {
-		// Claude Code is in a turn of its own: the message would only be read after it. Wait for it to end, so its
-		// output is not taken for the reply to this message.
-		self := c.turn
+	if wait := c.selfOpening; wait != nil || (c.turn != nil && c.turn.self) {
+		// Claude Code is in a turn of its own (or has begun one that is being opened): the message would only be read
+		// after it. Wait for it to end, so its output is not taken for the reply to this message.
+		if wait == nil {
+			wait = c.turn.done
+		}
 		c.mu.Unlock()
 		select {
-		case <-self.done:
+		case <-wait:
 		case <-ctx.Done():
 			return runturn.Result{}, ctx.Err()
 		}

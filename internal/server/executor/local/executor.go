@@ -204,6 +204,9 @@ type proc struct {
 	stopDone            chan struct{}
 	stopErr             error
 	bg                  procBackground // the background tasks its CLI started
+	// commandsRead is closed once the reading and saving of its command list has ended (nil when its runtime has
+	// none): stopping waits for it, so nothing writes in the Agent's folder for a process that has stopped.
+	commandsRead chan struct{}
 	// replyStopping: a reply on it is being stopped; if the process ends meanwhile, its background tasks were stopped
 	// with the reply.
 	replyStopping atomic.Bool
@@ -792,7 +795,11 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, err
 	}
 	if nc, ok := drv.(nativeCommander); ok {
-		go e.cacheCommands(p, nc)
+		p.commandsRead = make(chan struct{})
+		go func() {
+			defer close(p.commandsRead)
+			e.cacheCommands(p, nc)
+		}()
 	}
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
@@ -1056,6 +1063,13 @@ func (e *Executor) stop(p *proc, why stopCause) {
 				if !waitDone(p, e.o.StopGrace) {
 					p.stopErr = ErrRuntimeStopUnconfirmed
 				}
+			}
+		}
+		if p.commandsRead != nil {
+			select {
+			case <-p.rt.Done():
+				<-p.commandsRead // the process has ended, so the read has its answer or its error by now
+			default: // it did not end: the read gives up at its own timeout
 			}
 		}
 		e.removeProcPidFile(p)

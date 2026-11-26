@@ -184,6 +184,13 @@ func (c *Client) selfTurn(m wireLine) *turn {
 		return nt
 	}
 	start := begins && hook != nil
+	var opening chan struct{}
+	if start {
+		// This line is Claude Code's own turn: a message sent while its place is made is read only after it, so the
+		// message waits (see Prompt) instead of taking this turn's output for its reply.
+		opening = make(chan struct{})
+		c.selfOpening = opening
+	}
 	c.mu.Unlock()
 	if !start {
 		return t
@@ -192,14 +199,9 @@ func (c *Client) selfTurn(m wireLine) *turn {
 	nt := newTurn(st)
 	nt.self, nt.end, nt.activity = true, st.End, make(chan struct{}, 1)
 	c.mu.Lock()
-	if c.turn != nil {
-		// A message was sent meanwhile: what follows is its turn.
-		t := c.turn
-		c.mu.Unlock()
-		st.End(runturn.Result{Outcome: runturn.OutcomeCompleted})
-		return t
-	}
 	c.turn = nt
+	c.selfOpening = nil
+	close(opening)
 	c.mu.Unlock()
 	go c.watchSelfTurn(nt)
 	return nt

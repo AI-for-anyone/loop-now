@@ -108,7 +108,12 @@ func TestV1SignatureScopeReplay(t *testing.T) {
 	if calls.Load() != 0 || forwarded.Load() != 0 {
 		t.Fatal("rejected input reached token source/upstream")
 	}
-	if status(t, good()) != 200 || status(t, good()) != 409 || forwarded.Load() != 1 || calls.Load() != 1 {
+	// A replay is the same signed write sent again. The signature covers the second it was made in, so signing the
+	// write anew in a later second is a new write, not a replay.
+	write := good()
+	replay, _ := http.NewRequest(write.Method, write.URL.String(), strings.NewReader(`{"content":"synthetic"}`))
+	replay.Header = write.Header.Clone()
+	if status(t, write) != 200 || status(t, replay) != 409 || forwarded.Load() != 1 || calls.Load() != 1 {
 		t.Fatal("write replay was forwarded")
 	}
 	// GETs within the same second are legitimate and not treated as write replay.
