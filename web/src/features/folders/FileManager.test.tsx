@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
@@ -173,6 +173,35 @@ describe('File manager', () => {
     expect(await screen.findByText('Symlink to handoff/notes.md')).toBeInTheDocument()
     expect(await screen.findByText('The budget ledger write order is done; the tests still need a run.')).toBeInTheDocument()
   })
+
+  it('with the default 20 MiB limit, previews a 3.7 MiB image and a 5 MiB text file and saves it after an edit; a 21 MiB file can only be downloaded', async () => {
+    const source = createMockFolder({ key: 'w', preset: 'workspace', latency: 0 })
+    await source.write('shots/large.png', new Blob([new Uint8Array(3_700_000)], { type: 'image/png' }), true)
+    await source.write('shots/huge.png', new Blob([new Uint8Array(21 << 20)], { type: 'image/png' }), true)
+    // About 5,000 lines of 1 KiB: the test DOM is slow at many lines, a real browser much less so.
+    const line = 'A line of a large text file, long enough to count. '.repeat(20) + '\n'
+    const big = line.repeat(Math.ceil((5 << 20) / line.length))
+    await source.write('big.txt', big, true)
+    const write = vi.spyOn(source, 'write')
+    const user = userEvent.setup()
+    renderWithQuery(<FileManager source={source} rootLabel="server's folder" limits={{ maxBytes: 20 << 20, extensions: ['.txt'] }} className="h-[600px]" />)
+
+    await user.click(await findRow('shots'))
+    await user.click(await findRow('shots/large.png'))
+    expect(await screen.findByRole('img', { name: 'large.png' })).toHaveAttribute('src', source.contentURL('shots/large.png'))
+    await user.click(await findRow('shots/huge.png'))
+    expect(await screen.findByText('File is over 20.0 MiB; it can\'t be previewed or edited online.')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'huge.png' })).toBeNull()
+
+    await user.click(await findRow('big.txt'))
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    const editor = await screen.findByRole('textbox', { name: 'big.txt' })
+    expect((editor as HTMLTextAreaElement).value).toHaveLength(big.length)
+    fireEvent.change(editor, { target: { value: big + 'One more line.\n' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(write).toHaveBeenCalledWith('big.txt', big + 'One more line.\n', false))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'big.txt' })).toBeNull())
+  }, 30_000)
 
   it('symlink pointing outside the folder: when the server refuses to read it, says why instead of showing the generic validation error', async () => {
     const source = createMockFolder({ key: 'w', preset: 'workspace', latency: 0 })
