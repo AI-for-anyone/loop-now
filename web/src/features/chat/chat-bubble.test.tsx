@@ -9,8 +9,8 @@ describe('User bubble', () => {
     expect(screen.getByText('Can you take a look')).toHaveClass('max-w-[80%]')
   })
 
-  it('the Agent chat page passes wide: on wide screens at most 88% of the chat column and no more than 1100px; on narrow screens still 80%', () => {
+  it('the Agent chat page passes wide: on wide screens at most 88% of the chat column and no more than 1600px; on narrow screens still 80%', () => {
     render(<UserChatBubble wide text="Can you take a look" time="09:14" />)
-    expect(screen.getByText('Can you take a look')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
+    expect(screen.getByText('Can you take a look')).toHaveClass('nav:max-w-[min(88%,1600px)]', 'max-w-[80%]')
   })
 })

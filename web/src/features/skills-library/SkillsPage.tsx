@@ -59,11 +59,11 @@ export function SkillsPage() {
               </>
             )}
           </PageHeader>
-          <PaperSheet className="mt-2 flex-1">
+          <PaperSheet className="flex-1">
             {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
                 scroll with the content instead of stretching the whole page based on their unscrolled position. */}
             <div className="relative min-h-0 flex-1 overflow-y-auto">
-              <div className={cn('flex min-h-full flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]', empty && 'justify-center')}>
+              <div className={cn('flex min-h-full flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6', empty && 'justify-center')}>
                 {feedback}
                 {empty && (
                   <EmptyLibrary>

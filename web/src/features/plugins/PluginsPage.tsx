@@ -207,7 +207,7 @@ export function PluginsPage() {
         {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
             content instead of stretching the whole page based on their unscrolled position. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="flex max-w-[1180px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+          <div className="flex max-w-[1180px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
             {tab === 'installed' && (
               <section aria-label={text.installedBadge} className="flex flex-col gap-3">
                 {plugins.isError ? (

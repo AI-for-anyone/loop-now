@@ -50,6 +50,8 @@ describe('Global settings on the sheet', () => {
     await open()
     await screen.findByRole('region', { name: 'Server' })
     const sheet = region('Language').closest('[data-sheet]')!
+    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5', 'mt-2')
     titles.forEach((name, index) => {
       const section = region(name)
       expect(sheet).toContainElement(section)

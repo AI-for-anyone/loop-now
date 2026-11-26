@@ -76,9 +76,9 @@ function Header({ overview, connection }: { overview: Overview; connection?: Con
 // of stretching the whole page based on their unscrolled position.
 function OverviewSheet({ children }: { children: ReactNode }) {
   return (
-    <Sheet className="mt-2 flex-1">
+    <Sheet className="flex-1">
       <div className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[1260px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,30px)]">{children}</div>
+        <div className="flex max-w-[1260px] flex-col gap-6 px-3.5 pt-6 pb-14 nav:px-6">{children}</div>
       </div>
     </Sheet>
   )

@@ -71,12 +71,12 @@ export function ProjectSettingsPage() {
           {project.isDefault && <span className="shrink-0 rounded-full bg-ink px-2.5 text-[12px] leading-[22px] font-black text-white">{t.projects.settings.defaultBadge}</span>}
           <span className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{project.id}</span>
         </PageHeader>
-        <Sheet className="mt-2 flex-1">
+        <Sheet className="flex-1">
           <div className="flex min-h-0 flex-1">
             {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
                 scroll with the content instead of stretching the whole page based on their unscrolled position. */}
             <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-              <div className="flex max-w-[960px] flex-col gap-6 pt-[26px] pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+              <div className="flex max-w-[960px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
                 {/* Remount by project ID: inputs and messages don't carry over to another project; after a rename the ID is
                     the same, so “已保存” (Saved) stays. */}
                 <NameCard key={`name-${project.id}`} project={project} />

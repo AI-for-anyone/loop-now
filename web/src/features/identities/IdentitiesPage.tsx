@@ -42,7 +42,7 @@ export function IdentitiesPage() {
       <PageHeader crumbs={[{ label: t.shell.global }]} title={t.identities.title}>
         {identities.data && <span>{t.identities.count(list.length)}</span>}
       </PageHeader>
-      <Sheet className="mt-2 flex-1">
+      <Sheet className="flex-1">
         <div className="flex min-h-0 flex-1 flex-col nav:flex-row">
           <aside
             aria-label={t.identities.list}
@@ -82,7 +82,7 @@ export function IdentitiesPage() {
           </aside>
           {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
               scroll with the content instead of stretching the whole page based on their unscrolled position. */}
-          <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(14px,2vw,30px)]">
+          <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-3.5 pt-6 pb-16 nav:px-6">
             {identityId ? (
               <IdentityDetail key={identityId} identityId={identityId} />
             ) : (

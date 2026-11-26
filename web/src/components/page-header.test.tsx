@@ -57,9 +57,18 @@ describe('Page title', () => {
     expect(document.querySelector('[data-page-meta]')).toBeNull()
   })
 
-  it('page frame: the side and bottom padding follows the window width, same as the Agent page', () => {
-    render(<PageFrame data-testid="frame">Body</PageFrame>)
-    expect(screen.getByTestId('frame')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col', 'px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]')
+  it('page frame: fills the content area directly without outer margins; the header carries its own horizontal gutters', () => {
+    render(
+      <MemoryRouter>
+        <PageFrame data-testid="frame">
+          <PageHeader crumbs={[{ label: 'Demo', to: '/?project=Demo' }]} title="Tasks" />
+        </PageFrame>
+      </MemoryRouter>,
+    )
+    const frame = screen.getByTestId('frame')
+    expect(frame).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col')
+    expect(frame).not.toHaveClass('px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]', 'max-nav:pb-4')
+    expect(screen.getByRole('banner')).toHaveClass('px-3.5', 'nav:px-6')
   })
 })
 

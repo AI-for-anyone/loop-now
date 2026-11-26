@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils'
 // A message sent as an interrupt: light pink fill with a fluorescent pink border, and a small “打断” (Interrupt) on the name line.
 // wakeSleepId: this message woke a sleep early; the name line is marked “提前唤醒 sleep” (Woke early).
 // wide: on a wide screen of the Agent chat page the bubble is at most 88% of the conversation column (no wider than the reply
-// body's 1100px); narrow screens and task node conversations stay at 80%.
+// body's 1600px); narrow screens and task node conversations stay at 80%.
 export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, images, wide = false }: { images?: ReactNode; text: string; time: string; interrupted?: boolean; wakeSleepId?: string | null; wide?: boolean }) {
   return <div className="flex flex-col items-end gap-1.5">
     <span className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink-500"><span>{t.chat.you}</span> {t.chat.metaSeparator} {time}{interrupted && <span className="text-[11.5px] font-black text-pink-text">{t.chat.interruptTag}</span>}{wakeSleepId && <EarlyWake sleepId={wakeSleepId} />}</span>
-    <div className={cn('max-w-[80%]', wide && 'nav:max-w-[min(88%,1100px)]', 'rounded-[20px_20px_4px_20px] px-5 py-3.5 text-base leading-[1.8] font-medium whitespace-pre-wrap [overflow-wrap:anywhere]', interrupted ? 'border-[1.5px] border-riso-pink bg-tint-pink-2' : 'bg-tint-pink shadow-print-blue')}>{text}{images}</div>
+    <div className={cn('max-w-[80%]', wide && 'nav:max-w-[min(88%,1600px)]', 'rounded-[20px_20px_4px_20px] px-5 py-3.5 text-base leading-[1.8] font-medium whitespace-pre-wrap [overflow-wrap:anywhere]', interrupted ? 'border-[1.5px] border-riso-pink bg-tint-pink-2' : 'bg-tint-pink shadow-print-blue')}>{text}{images}</div>
   </div>
 }
 export function PlatformChatReminder({ text, at, wakeSleepId, label }: { text: string; at: string; wakeSleepId?: string | null; label?: ReactNode }) {

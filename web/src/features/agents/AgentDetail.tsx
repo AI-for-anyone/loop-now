@@ -148,13 +148,13 @@ function AgentDetailView({
   const sleeping = !statusState.busy && statusState.sleep?.state === 'sleeping' && statusState.sleep.wakeAt ? statusState.sleep : null
 
   return (
-    // One thin header bar (~48px on wide screens) directly above the sheet shared by all four tabs.
+    // One thin header bar (~48px on wide screens) directly above the full-bleed sheet shared by all four tabs.
     // On phone width it becomes two short lines (name + status + "..." on row 1; horizontally scrollable tabs on row 2),
     // while keeping DOM and keyboard focus order as: name area, tabs, "...".
-    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
+    <div className="flex h-full min-h-0 flex-col">
       <header
         data-agent-header
-        className="mr-1.5 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-1 py-1.5 nav:flex nav:h-12 nav:flex-nowrap nav:items-center nav:gap-3 nav:py-0"
+        className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-3.5 py-1.5 nav:flex nav:h-12 nav:flex-nowrap nav:items-center nav:gap-3 nav:px-6 nav:py-0"
       >
         <div data-agent-identity className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 nav:flex-1">
           <RuntimeMark runtime={agent.runtime} />
@@ -178,11 +178,11 @@ function AgentDetailView({
       </header>
       <Sheet className="flex-1">
         {sleeping && sleeping.wakeAt && (
-          <div className="shrink-0 border-b-[1.5px] border-dashed border-ink/20 bg-tint-blue/70 px-[clamp(14px,2vw,28px)] py-2">
+          <div className="shrink-0 border-b-[1.5px] border-dashed border-ink/20 bg-tint-blue/70 px-3.5 py-2 nav:px-6">
             <SleepUntil compact at={sleeping.wakeAt} reason={sleeping.reason} />
           </div>
         )}
-        {refreshError !== null && <ErrorAlert error={refreshError} className="mx-6 mt-3 w-auto" />}
+        {refreshError !== null && <ErrorAlert error={refreshError} className="mx-3.5 mt-3 w-auto nav:mx-6" />}
         <div className="min-h-0 flex-1">
           {/* Remount the tabs per Agent: drafts, dialogs, live status and scroll position must not carry over to another Agent. */}
           <Outlet key={agent.id} context={{ agent, reportLiveStatus } satisfies AgentOutletContext} />

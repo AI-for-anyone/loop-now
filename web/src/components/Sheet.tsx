@@ -1,15 +1,14 @@
 import type { ComponentProps, ElementType, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
-// Sheet: the page body sits on a sheet of paper. Light paper background (with the very faint grain of the main area), 2px navy border,
-// 18px corner radius, 6px riso-blue solid offset shadow; 6px is left free on the right for the shadow.
-// When content overflows, the areas inside scroll on their own and the sheet itself clips the overflow. Scrollbars inside the sheet are
-// always the thin translucent navy ones (riso-scrollbar).
+// Sheet: the page body sits flush under the header bar, meeting the sidebar and window edges directly (no outer margin, no thick
+// border, no drop shadow). A 1.5px navy line separates it from the header above; light paper background with the very faint paper
+// grain and thin translucent navy scrollbars (riso-scrollbar) stay.
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-sheet
-      className={cn('riso-grain riso-scrollbar mr-1.5 flex min-h-0 flex-col overflow-hidden rounded-panel border-2 border-ink bg-paper-raised shadow-print-dialog', className)}
+      className={cn('riso-grain riso-scrollbar flex min-h-0 flex-col overflow-hidden border-t-[1.5px] border-ink bg-paper-raised', className)}
       {...props}
     />
   )
@@ -22,13 +21,14 @@ export function Sheet({ className, ...props }: ComponentProps<'div'>) {
 export function Stub({
   as: Tag = 'div',
   label,
+  labelClassName,
   className,
   children,
   ...props
-}: { as?: ElementType; label: string; ref?: Ref<HTMLElement> } & Omit<ComponentProps<'div'>, 'ref'>) {
+}: { as?: ElementType; label: string; labelClassName?: string; ref?: Ref<HTMLElement> } & Omit<ComponentProps<'div'>, 'ref'>) {
   return (
     <Tag className={cn('flex shrink-0 flex-col gap-2.5 border-l-2 border-dashed border-ink/40 pt-4 pb-3.5 max-nav:hidden', className)} {...props}>
-      <div aria-hidden={props['aria-label'] ? true : undefined} className="shrink-0 text-center indent-[0.3em] text-[11px] leading-[1.75] font-black tracking-[0.3em] text-ink-500">
+      <div aria-hidden={props['aria-label'] ? true : undefined} className={cn('shrink-0 text-center indent-[0.3em] text-[11px] leading-[1.75] font-black tracking-[0.3em] text-ink-500', labelClassName)}>
         {label}
       </div>
       {children}

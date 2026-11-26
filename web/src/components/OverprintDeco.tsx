@@ -13,7 +13,7 @@ export function OverprintDeco({ className, compact = false }: { className?: stri
     <div
       aria-hidden="true"
       data-overprint-deco
-      className={cn('pointer-events-none absolute top-5 right-1.5 hidden h-[132px] w-[300px] origin-top-right @[820px]:block', compact && 'nav:top-2 nav:scale-[0.6]', className)}
+      className={cn('pointer-events-none absolute top-5 right-3.5 hidden h-[132px] w-[300px] origin-top-right nav:right-6 @[820px]:block', compact && 'nav:top-2 nav:scale-[0.6]', className)}
     >
       <span className="absolute top-[34px] left-0 h-[84px] w-[150px] bg-[radial-gradient(var(--ink)_1.7px,transparent_2.1px)] bg-size-[9px_9px] opacity-55" />
       <span className="absolute top-2 left-[70px] size-24 rounded-full bg-riso-blue mix-blend-multiply" />

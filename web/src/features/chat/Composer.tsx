@@ -377,36 +377,39 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     )}
   </div></SlashCommandMenu>
   return (
-    // The input area is a light yellow bar at the bottom of the sheet, with a navy line along its top edge. On wide screens the top and
-    // bottom padding is tighter, leaving a few more lines for the conversation.
-    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2">
-      {localError && (
-        <p role="alert" className="text-[13px] font-black text-red-text">
-          {localError}
-        </p>
-      )}
-      <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
-      {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-      {notice}
-      {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
-          leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
-      <div className="flex min-w-0 flex-col">
-        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
-        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
-      </div>
-      {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
-          right the live connection status. On wide screens it lines up with the left edge of the input box. */}
-      <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
-          {runner}
-          {background}
-          {status}
-          {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
-          {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
-          {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
-          {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+    // The input area is a light yellow bar at the bottom of the sheet, with a navy line along its top edge. On wide screens the inner
+    // column matches the message column (24px left gutter, 24px + 40px turn ruler on the right, up to 1600px wide), and vertical padding
+    // tightens to leave more lines for the conversation.
+    <div data-chat-bar className="flex shrink-0 flex-col border-t-2 border-ink bg-tint-yellow px-3.5 pt-3.5 pb-3 nav:pt-2.5 nav:pb-2 nav:pr-[64px] nav:pl-6">
+      <div data-chat-bar-inner className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-2.5 nav:gap-1.5">
+        {localError && (
+          <p role="alert" className="text-[13px] font-black text-red-text">
+            {localError}
+          </p>
+        )}
+        <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
+        {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
+        {notice}
+        {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
+            leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
+        <div className="flex min-w-0 flex-col">
+          {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
+          {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
         </div>
-        {connection}
+        {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
+            right the live connection status. On wide screens it lines up with the left edge of the input box. */}
+        <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
+            {runner}
+            {background}
+            {status}
+            {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
+            {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
+            {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
+            {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+          </div>
+          {connection}
+        </div>
       </div>
       <ConfirmDialog
         open={confirmNew}

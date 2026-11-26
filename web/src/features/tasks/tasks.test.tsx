@@ -611,4 +611,18 @@ describe('task list on the sheet', () => {
     expect(within(stub).getByText('completed').previousElementSibling).toHaveTextContent(/^1$/)
     expect(within(stub).getByText('blocked').previousElementSibling).toHaveClass('text-red-text')
   })
+
+  it('task node conversation uses the flush sheet, tight gutters and a 1600px message column matched by the composer bar', async () => {
+    await renderDetail()
+    const scroll = document.querySelector<HTMLElement>('[data-conversation-scroll]')!
+    const sheet = scroll.closest<HTMLElement>('[data-sheet]')!
+    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
+    expect(scroll).toHaveClass('px-3.5', 'nav:px-6', 'pt-2.5', 'pb-2.5')
+    const messages = scroll.querySelector<HTMLElement>('[data-node-messages]')!
+    expect(messages).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]')
+    const draft = document.querySelector<HTMLElement>('[data-node-draft]')!
+    expect(draft).toHaveClass('px-3.5', 'nav:px-6')
+    expect(draft.querySelector('[data-node-draft-inner]')).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]')
+  })
 })
