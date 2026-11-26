@@ -227,5 +227,42 @@ func TestTaskJSONExamplesMatchContract(t *testing.T) {
 		if err := in.Workflow.Validate(workflow.Limits{MaxSteps: 100, MaxEdges: 300}); err != nil {
 			t.Fatalf("example %d workflow: %v", i, err)
 		}
+		checkFlowEnds(t, i, in.Workflow)
+	}
+}
+
+// checkFlowEnds checks the rule the server applies on submit: only a step without outgoing edges may submit
+// edgeId null, so a step told to submit null has none, and the flow has such a step reachable from the start.
+func checkFlowEnds(t *testing.T, i int, d workflow.Definition) {
+	t.Helper()
+	next := map[string][]string{}
+	for _, e := range d.Edges {
+		next[e.From] = append(next[e.From], e.To)
+	}
+	submitsNull := regexp.MustCompile(`(?i)edgeId"?:? ?null`)
+	for _, s := range d.Steps {
+		if submitsNull.MatchString(s.Description) && len(next[s.ID]) > 0 {
+			t.Errorf("example %d: step %q is told to submit edgeId null but has outgoing edges", i, s.ID)
+		}
+	}
+	seen := map[string]bool{}
+	var walk func(string) bool
+	walk = func(id string) bool {
+		if seen[id] {
+			return false
+		}
+		seen[id] = true
+		if len(next[id]) == 0 {
+			return true
+		}
+		for _, to := range next[id] {
+			if walk(to) {
+				return true
+			}
+		}
+		return false
+	}
+	if !walk(d.StartStepID) {
+		t.Errorf("example %d: no step without outgoing edges is reachable from the start, so the task cannot end", i)
 	}
 }
