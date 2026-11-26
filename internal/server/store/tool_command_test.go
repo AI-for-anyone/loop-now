@@ -31,6 +31,26 @@ func assertCommand(t *testing.T, entries []any, command *string) {
 	}
 }
 
+func assertTarget(t *testing.T, entries []any, want map[string]string) {
+	t.Helper()
+	seen := 0
+	for _, entry := range entries {
+		if tool, ok := entry.(apitypes.TimelineToolEntry); ok {
+			w, known := want[tool.ToolCallID]
+			if !known {
+				continue
+			}
+			seen++
+			if w == "" && tool.Target != nil || w != "" && (tool.Target == nil || *tool.Target != w) {
+				t.Fatal("tool target mismatch", tool.ToolCallID, tool.Target)
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Fatal("tool rows", seen, len(want))
+	}
+}
+
 func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -40,7 +60,8 @@ func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 		run := e.send(true, "")
 		at := time.Now().UTC()
 		for i, state := range []string{"started", "succeeded"} {
-			if err := e.s.AddToolEvent(ctx, run.ID, store.ToolEvent{ToolCallID: "bash-one", ToolName: "bash", State: state, At: at.Add(time.Duration(i) * time.Second)}); err != nil {
+			// Claude Code names its shell tool Bash; its command event says bash.
+			if err := e.s.AddToolEvent(ctx, run.ID, store.ToolEvent{ToolCallID: "bash-one", ToolName: "Bash", State: state, At: at.Add(time.Duration(i) * time.Second)}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -57,6 +78,18 @@ func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertCommand(t, page.Entries, &command)
+		// A file tool's target goes to its own entry; the shell entry keeps its command and gets no target.
+		for i, state := range []string{"started", "succeeded"} {
+			if err := e.s.AddToolEvent(ctx, run.ID, store.ToolEvent{ToolCallID: "read-one", ToolName: "Read", State: state, At: at.Add(time.Duration(i) * time.Second)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		recorder.Event(e.agent, &run.ID, executor.Event{Type: "tool.target", At: at, Data: map[string]any{"toolCallId": "read-one", "toolName": "Read", "kind": "files", "target": "internal/main.go"}})
+		page, err = service.Timeline(ctx, e.agent, run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertTarget(t, page.Entries, map[string]string{"bash-one": "", "read-one": "internal/main.go"})
 		if _, err = service.Timeline(ctx, e.agent, uuid.New()); err == nil {
 			t.Fatal("unrelated run accepted")
 		}
@@ -66,14 +99,19 @@ func TestToolCommandPersistedNormalAndTaskTimeline(t *testing.T) {
 		task, node, _, turn := taskConsoleRecord(t, s)
 		observer := &tasks.Observer{Store: s, Normal: &runrecord.Recorder{Store: s, Log: log}, Timeout: time.Second * 5, Log: log}
 		at := time.Now().UTC()
-		observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.command", At: at, Data: map[string]any{"toolCallId": "bash-one", "toolName": "bash", "command": command}})
+		// An ACP agent (Antigravity) names its shell tool execute.
+		observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.command", At: at, Data: map[string]any{"toolCallId": "bash-one", "toolName": "execute", "command": command}})
 		for i, state := range []string{"started", "succeeded"} {
-			observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.changed", At: at.Add(time.Duration(i) * time.Second), Data: map[string]any{"toolCallId": "bash-one", "toolName": "bash", "state": state}})
+			observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.changed", At: at.Add(time.Duration(i) * time.Second), Data: map[string]any{"toolCallId": "bash-one", "toolName": "execute", "state": state}})
 		}
+		observer.Event(turn.RuntimeID, &turn.ID, executor.Event{Type: "tool.target", At: at, Data: map[string]any{"toolCallId": "bash-one", "toolName": "execute", "kind": "files", "target": "notes/plan.md"}})
 		page, err := (&runrecord.Service{Store: s}).TaskNodeTimeline(ctx, task, node, turn.ID, "", 100)
 		if err != nil {
 			t.Fatal(err)
 		}
 		assertCommand(t, page.Entries, &command)
+		// The task record attaches a target the same way (a runtime never sends one for a shell tool; this only checks
+		// the task path reads tool.target).
+		assertTarget(t, page.Entries, map[string]string{"bash-one": "notes/plan.md"})
 	})
 }

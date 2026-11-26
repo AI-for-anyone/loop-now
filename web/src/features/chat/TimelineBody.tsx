@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -26,7 +27,36 @@ function QuestionLink({ id }: { id: string }) {
   )
 }
 
+// Shown in code style on one line with an ellipsis under the step's name; hovering shows the full text, and clicking toggles the
+// full wrapped view (leaving text selection intact).
+function StepCode({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return
+    setExpanded((value) => !value)
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      title={expanded ? undefined : text}
+      onClick={toggle}
+      className="mt-0.5 block min-w-0 max-w-full cursor-pointer self-start rounded-[4px] text-left outline-none hover:text-riso-blue focus-visible:shadow-focus"
+    >
+      <code
+        className={cn(
+          'block min-w-0 max-w-full select-text font-mono text-[12px]',
+          expanded ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'truncate',
+        )}
+      >
+        {text}
+      </code>
+    </button>
+  )
+}
+
 function Step({ step, last }: { step: TimelineStep; last: boolean }) {
+  const code = step.command ?? step.target
   return (
     <li data-tone={step.tone} className="grid grid-cols-[minmax(0,92px)_20px_minmax(0,1fr)_max-content] gap-x-2.5">
       <span className="pt-px font-mono text-[11.5px] text-ink-500">{t.timeline.clock(step.at)}</span>
@@ -37,9 +67,9 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
       <span className={cn('flex min-w-0 flex-col pb-3', step.sub && 'pl-2')}>
         <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className={cn('font-black', step.sub ? 'text-[13px]' : 'text-[13.5px]')}>{step.label}</span>
-          {step.command && <code className="min-w-0 max-w-full whitespace-pre-wrap font-mono text-[12px] [overflow-wrap:anywhere]">{step.command}</code>}
           {step.field && <span className="font-mono text-[11px] text-ink-500">{step.field}</span>}
         </span>
+        {code && <StepCode text={code} />}
         {step.detail && <span className="text-[12.5px] [overflow-wrap:anywhere] text-ink-700">{step.detail}</span>}
         {step.lines.length > 0 && (
           <ul className="text-[12.5px] [overflow-wrap:anywhere] text-ink-700">

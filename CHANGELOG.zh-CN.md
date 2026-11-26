@@ -11,6 +11,13 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 给 Loop Now 的改动现在新加一个文件 `changes/<slug>.md` 来写说明，里面分英文、中文和 MAIN.md 三部分，不再直接改 CHANGELOG.md、CHANGELOG.zh-CN.md 和 MAIN.md；在合并队列里一起排队的几个 PR 不会再在这些地方冲突、被踢出队列。发布时由 `scripts/release/collect-changes.sh <版本>` 把说明放进去，之前可以用 `scripts/release/notes.sh Unreleased` 预览。PR 如果直接在“未发布”下加行，或在 MAIN.md 的改动列表里加新条目，CI 会失败（发布分支除外）。
 - loopctl 指南告诉 git 工作区任务里的步骤：仓库如果每个改动各有一个说明文件，就按这个方式写。
 
+### 运行记录里看得到每个工具干了什么
+
+- 回复的运行记录里，每个工具名字下面多了一行，写着它干了什么：所有运行时的命令行工具执行的命令（Claude Code 的 Bash、Codex 的 shell、Antigravity 和自己添加的 ACP 命令、Pi 的 bash），读写和修改文件的工具碰的是哪个文件（在工作文件夹里就写相对路径），搜索工具搜的是什么。以前只有 Pi 的命令显示出来，其余的工具只有名字。太长的只显示一行带省略号，点一下看全文。
+- 含有密码、令牌之类的命令和搜索内容仍然隐藏。文件内容和其他参数都不记录。
+- 这个版本之前 Claude Code 和 Pi 跑过的命令也能看到；Codex 和 Antigravity 以前的命令当时没记下来，那些行保持原样。
+- 接口：`TimelineTool.command` 不再只限 bash，新增 `TimelineTool.target`。
+
 ### 运行时图标：一种颜色、一个框
 
 - 每个运行时的图标现在都是同一个样子：一个深蓝色的圆角方框，中间是各家标志的轮廓，用浅色画（Claude 的星芒、OpenAI 的结、Grok 的标志、Antigravity 的拱形、Pi 的像素标志）。自己添加的 ACP 命令在同样的框里写首字母。v0.3.3 用的是各家原本的彩色标志放在浅色小方块上，和控制台不搭。
