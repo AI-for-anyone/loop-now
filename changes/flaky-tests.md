@@ -18,3 +18,4 @@
   - `TestPromptWaitsForSelfTurn` (code): a message sent while the client was still recording a turn Claude Code began by itself was written and took that turn's output as its reply. It now waits, as it does for an open self turn.
   - `TestV1SignatureScopeReplay` (test only): its "replay" signed the write again, which is a new write when the two signings fall in different seconds; it now sends the same signed request again.
   - Verified by reproducing each failure (stress runs at GOMAXPROCS=1 next to busy loops, or by injecting the delay the cause suggests) and showing 0 failures in the same runs after the fix.
+  - Checked again by a second session that wrote none of it: stress after the fix 0/1000 records, 0/400 new Pi commands test, 0/1000 self turn, 0/2000 lark, 0/200 permission; with the fixes reverted the new ccstream test failed 5/5 and the new Pi commands test failed under stress.
