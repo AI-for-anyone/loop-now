@@ -354,4 +354,12 @@ describe('Header bar and tabs', () => {
     expect(sheet).not.toContainElement(header)
     expect(header.closest('[data-sheet]')).toBeNull()
   })
+
+  it('the conversation panel under the bar uses tighter top padding above the first message', async () => {
+    const { header } = await open(makeAgent({ name: 'Agent A' }), 'chat')
+    const sheet = header.nextElementSibling as HTMLElement
+    const log = await within(sheet).findByRole('log', { name: 'Conversation' })
+    expect(log).toHaveClass('pt-3.5')
+    expect(log).not.toHaveClass('pt-[26px]')
+  })
 })
