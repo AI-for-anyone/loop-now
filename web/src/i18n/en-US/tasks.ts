@@ -105,6 +105,7 @@ export const tasks = {
     filesLost: (count: number) => (count === 1 ? 'The file with uncommitted changes is lost for good.' : `The ${count} files with uncommitted changes are lost for good.`),
     commitsStay: (count: number, branch: string) => (count === 1 ? `The commit that exists only here stays on branch ${branch}, not pushed.` : `The ${count} commits that exist only here stay on branch ${branch}, not pushed.`),
   },
+  branchLabel: (name: string) => `Branch ${name}`,
   history: 'Viewing history',
   currentChanged: 'View current node',
   conversation: 'Node conversation',

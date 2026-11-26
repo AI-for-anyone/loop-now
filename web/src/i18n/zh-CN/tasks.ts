@@ -46,6 +46,7 @@ export const tasks = {
     filesLost: (count: number) => `那 ${count} 个文件里没提交的改动会彻底丢掉。`,
     commitsStay: (count: number, branch: string) => `那 ${count} 个只在这里有的提交还留在分支 ${branch} 上，没有推送。`,
   },
+  branchLabel: (name: string) => `分支 ${name}`,
   history: '正在查看历史记录', currentChanged: '查看当前节点',
   conversation: '节点会话', noMessages: '还没有会话消息。', readonly: '只读的任务节点会话', input: '实际输入', output: '输出', noOutput: '尚未提交输出',
   inspectOnly: '执行异常，已提交结果仅供检查，不作为成功结果交给下游。', versions: '输入来源记录', source: (name: string) => `输入 ${name} 的来源`,
