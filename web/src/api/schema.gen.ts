@@ -3297,6 +3297,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{taskId}/workspace/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Removes the kept worktree of an ended task
+         * @description For a person, after a task has ended and its worktree was kept because removing it would lose work. Removes
+         *     exactly the recorded worktree, uncommitted changes and commits that exist only there included; the branch is
+         *     left alone. Returns the task with workspace state removed. 409 `task_workspace_not_kept` when the task has not
+         *     ended or its worktree is not kept; replaying an actionId returns the same result.
+         */
+        post: operations["removeTaskWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{taskId}/artifacts/{artifactId}": {
         parameters: {
             query?: never;
@@ -4046,10 +4069,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's worktree can be removed only after the task has ended and when the worktree was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended" | "permission_request_answered";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -7182,6 +7205,8 @@ export interface components {
             endedAt: string | null;
             link: string;
             version: number;
+            /** @description The branch of the task's workspace; null for a task without one. */
+            branch: string | null;
         };
         TaskNodeRun: {
             /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
@@ -7393,6 +7418,8 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
+            /** @description The task's git worktree; null for a task without one. */
+            workspace: null | components["schemas"]["TaskWorkspace"];
         };
         TaskDetail: {
             /** @description Instances of this task that are sleeping, including those in regular conversation mode; the workflow is not advanced based on this */
@@ -7406,6 +7433,8 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
+            /** @description The task's git worktree; null for a task without one. */
+            workspace: null | components["schemas"]["TaskWorkspace"];
         };
         TaskCounts: {
             /** @description Preparing */
@@ -7469,6 +7498,41 @@ export interface components {
             workflow: components["schemas"]["TaskWorkflow"];
             /** Format: uuid */
             sourceInboxMessageId?: string | null;
+            workspace?: null | components["schemas"]["TaskWorkspaceInput"];
+        };
+        /** @description A git worktree for the task. Loop Now creates it on a new branch while the task prepares, every step works in it, and it is removed at the end when nothing would be lost. */
+        TaskWorkspaceInput: {
+            /** @description Absolute path of a folder inside a git work tree on this computer; Loop Now resolves the repository it belongs to. It must be, or lie inside, the working folder of an Agent in the flow or a local directory of the project. */
+            repository: string;
+            /** @description The branch the task starts from. Omitted or null means the remote's default branch (fetched fresh), or the repository's current branch when it has no remote. */
+            baseBranch?: string | null;
+            /** @description The branch the task works on. Omitted or null means task/<task number>-<slug of the title>, which must not exist yet. A branch named here may exist already when no work tree has it checked out; the task then continues it. */
+            branch?: string | null;
+        };
+        /** @description The task's git worktree. kept is non-null exactly when state is kept. */
+        TaskWorkspace: {
+            /** @description Root of the repository's main work tree. */
+            repository: string;
+            /** @description The worktree, under Loop Now's own data folder. */
+            path: string;
+            branch: string;
+            /** @description The branch the task started from; empty while the task is still preparing and none was given. */
+            baseBranch: string;
+            /** @description The commit the branch started from; null until the worktree is created. */
+            baseCommit: string | null;
+            /**
+             * @description pending while the task prepares; active while the worktree is in use; removed after cleanup removed it; kept when it was left in place because removing it would lose work.
+             * @enum {string}
+             */
+            state: "pending" | "active" | "removed" | "kept";
+            kept: null | components["schemas"]["TaskWorkspaceKept"];
+        };
+        /** @description What removing a kept worktree would lose. */
+        TaskWorkspaceKept: {
+            /** @description Files with changes that are not committed, untracked files included and ignored files not counted. */
+            uncommittedFiles: number;
+            /** @description Commits of the branch that are neither merged into the base on the remote nor on the branch's own remote ref. */
+            unpushedCommits: number;
         };
         TaskSubmitInput: {
             /**
@@ -7501,6 +7565,10 @@ export interface components {
             expectedNodeRunId: string;
         };
         TaskCancelInput: {
+            /** Format: uuid */
+            actionId: string;
+        };
+        TaskWorkspaceRemoveInput: {
             /** Format: uuid */
             actionId: string;
         };
@@ -16911,6 +16979,50 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Standard error response */
+            500: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeTaskWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskWorkspaceRemoveInput"];
+            };
+        };
+        responses: {
+            /** @description The task after its worktree was removed */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleTaskDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
             /** @description Standard error response */
             500: {
                 headers: {
