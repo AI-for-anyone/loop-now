@@ -168,6 +168,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 	if a.ProjectID == nil || !a.IsManager {
 		return nil, apperr.Forbidden("Only the project's current Manager can create tasks.")
 	}
+	var workspace workspacePlan
+	if in.Workspace != nil {
+		if workspace, err = s.checkWorkspace(ctx, *a.ProjectID, *in.Workspace, in.Workflow); err != nil {
+			return nil, err
+		}
+	}
 	action := bodyAction(p, in.ActionID, "createTask", in)
 	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx *db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 
@@ -310,6 +316,16 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 			requestID = &id
 		}
 		r := taskmodel.Record{CreationRequestID: requestID, SourceInboxMessageID: in.SourceInboxMessageID, View: view, EdgeCounts: map[string]int{}}
+		if in.Workspace != nil {
+			// The generated branch carries the task's number. Write transactions are serialized, so the next number
+			// read here is the one the store assigns; the store checks that it is.
+			if e := tx.QueryRow(ctx, `SELECT last_task_number+1 FROM projects WHERE id=$1`, *a.ProjectID).Scan(&r.View.Task.Number); e != nil {
+				return taskmodel.Record{}, nil, e
+			}
+			r.View.Workspace = s.newWorkspace(workspace, id, r.View.Task.Number, in.Title)
+			r.View.Task.Branch = &r.View.Workspace.Branch
+			r.WorkspaceBranchGiven = workspace.branch != ""
+		}
 		start, _ := in.Workflow.Step(in.Workflow.StartStepID)
 		var inst store.TaskInstance
 		for _, i := range instances {
@@ -539,7 +555,7 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 		if e := m.Tx.QueryRow(ctx, `SELECT prepared FROM task_instances WHERE id=$1`, node.RuntimeID).Scan(&prepared); e != nil {
 			return nil, e
 		}
-		if !prepared {
+		if !prepared || m.Record.View.Workspace != nil && m.Record.View.Workspace.State == taskmodel.WorkspaceStatePending {
 			m.Record.View.Task.Status = "preparing"
 			return m.Record.View, nil
 		}

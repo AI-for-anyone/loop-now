@@ -125,6 +125,8 @@ type Record struct {
 	SourceInboxMessageID *uuid.UUID     `json:"sourceInboxMessageId,omitempty"`
 	View                 Detail         `json:"view"`
 	EdgeCounts           map[string]int `json:"edgeCounts"`
+	// WorkspaceBranchGiven is internal: the Manager named the workspace branch, so it may exist already.
+	WorkspaceBranchGiven bool `json:"workspaceBranchGiven,omitempty"`
 	// NodeQueueDigests is internal: the last emitted node queue per node, so a
 	// task.node.queue.updated event is written only when the queue changes.
 	NodeQueueDigests map[uuid.UUID]string `json:"nodeQueueDigests,omitempty"`

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"loop-now/internal/procgroup"
 )
 
 // Timeout bounds one git command; a fetch over a slow network is the longest.
@@ -94,7 +96,10 @@ func run(ctx context.Context, git string, args ...string) (string, error) {
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	// A fetch starts helpers (ssh, credential helpers): a timeout ends the whole group, not only git.
+	cmd.Cancel = procgroup.Cancel(cmd)
+	cmd.WaitDelay = 10 * time.Second
+	if err := procgroup.Run(cmd); err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("timed out after %s: %w", Timeout, ctx.Err())
 		}

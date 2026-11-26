@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -335,8 +336,13 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		// The number is the next value of the project counter: write transactions are serialized, so concurrent
 		// creations in the same project never get the same number; if the creation fails and rolls back, the counter
 		// rolls back with it.
+		predicted := r.View.Task.Number
 		if err = tx.QueryRow(ctx, `UPDATE projects SET last_task_number=last_task_number+1 WHERE id=$1 RETURNING last_task_number`, projectID).Scan(&r.View.Task.Number); err != nil {
 			return err
+		}
+		if r.View.Workspace != nil && predicted != r.View.Task.Number {
+			// The build named the workspace branch after the number it expected.
+			return fmt.Errorf("task number %d assigned, %d expected", r.View.Task.Number, predicted)
 		}
 		encoded, err := json.Marshal(r)
 		if err != nil {

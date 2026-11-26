@@ -213,11 +213,19 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 					return s.blockTask(ctx, id, "Could not prepare the task fork or its directories.")
 				}
 			}
+			created, e := s.prepareWorkspace(ctx, r)
+			if e != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return s.blockTask(ctx, id, "Could not create the task's worktree: "+e.Error())
+			}
 			_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 				if m.Record.Ended() || m.Record.View.Task.Status != "preparing" {
 					m.Unchanged()
 					return nil, nil
 				}
+				activateWorkspace(m.Record, created)
 				m.Record.View.Task.Status = "running"
 				return nil, s.prepareNode(ctx, m, "")
 			})
