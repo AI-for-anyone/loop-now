@@ -11,6 +11,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
 - The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
 
+### A compact task list that names the step
+
+- The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
+- "Current node" shows the step's title as the Manager wrote it ("检查结果", "Second pass") instead of its id; the id is in the tooltip. The task page shows step ids only in tooltips too.
+- The responsible Agent column is wider, so names such as loop-now-main are no longer cut.
+- API: `TaskSummary.currentStepTitle`.
+
 ### Files up to 20 MiB can be previewed
 
 - The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
@@ -26,6 +33,13 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
 - When several tasks ended, two chips are shown and "+N" opens the rest.
+
+### Pictures in a reply are thumbnails you can open
+
+- A picture an Agent puts in its reply with Markdown (`![…](url)`) is a thumbnail now, at most 240 px high and 360 px wide, instead of filling the whole column. A click (or Enter) opens it large, with a link to the original in a new tab; Escape or a click outside closes it.
+- Pictures that follow each other sit side by side in a row: four 1:1 pictures fit on one line on a wide screen, two on a phone. A short caption above each picture (up to three lines, for example "2D-1: …" and a "local file" line) stays with its picture in the row; a heading or a rule starts a new row.
+- A picture after a line of text starts on its own line under it, not next to the text. A picture that cannot be loaded shows its description in a small box instead of an empty frame.
+- Pictures in a plugin's README still show their description only.
 
 ## v0.3.3
 

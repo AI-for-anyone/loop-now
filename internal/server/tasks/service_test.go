@@ -50,7 +50,7 @@ func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 	inst := store.TaskInstance{ID: runtime, TaskID: id, AgentID: a.ID, AgentName: a.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}
 	node := freshNode(id, def.Steps[0], inst, 1, 1)
 	record := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: dc.Project.ID, Title: "Task", Status: "preparing", CreatedAt: now, UpdatedAt: now, Version: 1}, Request: map[string]any{}, Workflow: def, Nodes: []taskmodel.NodeRun{node}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
-	setCurrent(&record, node)
+	record.SetCurrent(node)
 	_, e = st.CreateTask(ctx, dc.Project.ID, a.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return record, []store.TaskInstance{inst}, nil
 	})
@@ -626,5 +626,55 @@ func TestRetryPreservesQuestionAnsweredDuringClose(t *testing.T) {
 	r = current(t, s, id)
 	if r.View.Nodes[0].Question.Status != "answered" || r.Current().ID == old {
 		t.Fatal("retry overwrote answered history")
+	}
+}
+
+// The task's current step title follows the step when the flow moves on, in the task and in the project's list.
+func TestCurrentStepTitleFollowsTheStep(t *testing.T) {
+	s, id, p := fixture(t, false)
+	ctx := context.Background()
+	_, e := s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
+		wf := &m.Record.View.Workflow
+		check := wf.Steps[0]
+		check.ID, check.Title, check.OutputFields = "check", "Check the answer", []workflow.Field{}
+		wf.Steps = append(wf.Steps, check)
+		wf.Edges = []workflow.Edge{{ID: "next", From: "work", To: "check", Label: "Next"}}
+		return nil, nil
+	})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got := current(t, s, id).View.Task.CurrentStepTitle; got == nil || *got != "Handle" {
+		t.Fatalf("first step title = %v", got)
+	}
+	v := turn(t, s, id)
+	edge := "next"
+	submit(t, s, id, p, &edge)
+	if e = s.settle(ctx, v, executor.Result{Outcome: "completed"}); e != nil {
+		t.Fatal(e)
+	}
+	r := current(t, s, id)
+	if *r.View.Task.CurrentStepID != "check" || r.View.Task.CurrentStepTitle == nil || *r.View.Task.CurrentStepTitle != "Check the answer" {
+		t.Fatalf("after next: step %v title %v", *r.View.Task.CurrentStepID, r.View.Task.CurrentStepTitle)
+	}
+	page, e := s.Store.ListTasks(ctx, r.View.Task.ProjectID, "", 10)
+	if e != nil || len(page.Tasks) != 1 || page.Tasks[0].CurrentStepTitle == nil || *page.Tasks[0].CurrentStepTitle != "Check the answer" {
+		t.Fatalf("list = %+v, %v", page.Tasks, e)
+	}
+	// The live event carries the record as changed in memory, not as read back.
+	events, e := s.Store.TaskEvents(ctx, &id, nil, 0, 1000)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var last struct{ Task taskmodel.Summary }
+	for _, ev := range events {
+		if ev.Type == "task.updated" {
+			if e = json.Unmarshal(ev.Data, &last); e != nil {
+				t.Fatal(e)
+			}
+		}
+	}
+	if last.Task.CurrentStepTitle == nil || *last.Task.CurrentStepTitle != "Check the answer" {
+		t.Fatalf("last task.updated: step %v title %v", last.Task.CurrentStepID, last.Task.CurrentStepTitle)
 	}
 }

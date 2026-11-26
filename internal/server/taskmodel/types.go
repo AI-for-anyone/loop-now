@@ -21,6 +21,8 @@ type Summary struct {
 	Status           string     `json:"status"`
 	CurrentNodeRunID *uuid.UUID `json:"currentNodeRunId"`
 	CurrentStepID    *string    `json:"currentStepId"`
+	// CurrentStepTitle is the title of the current step in the frozen workflow; nil when there is no current step.
+	CurrentStepTitle *string    `json:"currentStepTitle"`
 	CurrentAgentID   *uuid.UUID `json:"currentAgentId"`
 	Reason           *string    `json:"reason"`
 	CreatedAt        time.Time  `json:"createdAt"`
@@ -98,7 +100,8 @@ const (
 	WorkspaceStateKept    = "kept"
 )
 
-// UnmarshalJSON also fills task.workspaceMode for views stored before it existed (stage 1, git mode only).
+// UnmarshalJSON also fills task.workspaceMode for views stored before it existed (stage 1, git mode only), and
+// task.currentStepTitle from the workflow for views stored before that existed.
 func (d *Detail) UnmarshalJSON(b []byte) error {
 	type plain Detail
 	if err := json.Unmarshal(b, (*plain)(d)); err != nil {
@@ -108,7 +111,20 @@ func (d *Detail) UnmarshalJSON(b []byte) error {
 		mode := d.Workspace.Mode
 		d.Task.WorkspaceMode = &mode
 	}
+	d.Task.CurrentStepTitle = d.stepTitle(d.Task.CurrentStepID)
 	return nil
+}
+
+// stepTitle is the title of the workflow step with this id; nil for a nil id or a step the workflow does not have.
+func (d *Detail) stepTitle(id *string) *string {
+	if id == nil {
+		return nil
+	}
+	step, ok := d.Workflow.Step(*id)
+	if !ok {
+		return nil
+	}
+	return &step.Title
 }
 
 // Workspace modes (TaskWorkspace.mode) and the requested mode of TaskWorkspaceInput.
@@ -207,6 +223,15 @@ func (r *Record) Current() *NodeRun {
 	}
 	return nil
 }
+
+// SetCurrent makes n the task's current node: its node run, step (id and title) and Agent.
+func (r *Record) SetCurrent(n NodeRun) {
+	r.View.Task.CurrentNodeRunID = &n.ID
+	r.View.Task.CurrentStepID = &n.StepID
+	r.View.Task.CurrentStepTitle = r.View.stepTitle(&n.StepID)
+	r.View.Task.CurrentAgentID = &n.AgentID
+}
+
 func (r *Record) Ended() bool {
 	return r.View.Task.Status == "completed" || r.View.Task.Status == "cancelled"
 }

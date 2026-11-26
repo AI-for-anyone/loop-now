@@ -382,6 +382,50 @@
   .markdown pre code.hljs {
     @apply bg-transparent p-0;
   }
+  /* Consecutive Markdown images in replies sit side by side in a wrapping row (grouped by rehype-image-rows):
+     2 per row on narrow columns (e.g. 390px), up to 3 on medium columns, and up to 4 on wide columns (e.g. 1440px).
+     2- and 3-image rows keep fewer columns so each thumbnail can still grow up to 360px wide. */
+  .markdown .md-image-row-wrap {
+    container-type: inline-size;
+    width: 100%;
+  }
+  .markdown .md-image-row {
+    --md-row-gap: 0.75rem;
+    --md-cols: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--md-row-gap);
+  }
+  @container (min-width: 520px) {
+    .markdown .md-image-row:not([data-count='2']) {
+      --md-cols: 3;
+    }
+  }
+  @container (min-width: 720px) {
+    .markdown .md-image-row:not([data-count='2']):not([data-count='3']) {
+      --md-cols: 4;
+    }
+  }
+  .markdown .md-image-row > .md-image-item {
+    max-width: min(360px, calc((100% - (var(--md-cols) - 1) * var(--md-row-gap) - 1px) / var(--md-cols)));
+    min-width: 0;
+  }
+  .markdown .md-image-row > figure.md-image-item {
+    @apply m-0 flex flex-col items-start gap-1.5;
+  }
+  .markdown .md-image-row > .md-image-item > [data-md-image] {
+    @apply block max-w-full;
+  }
+  .markdown .md-image-row > .md-image-item > [data-md-image-error] {
+    @apply max-w-full;
+  }
+  .markdown .md-image-caption {
+    @apply w-full text-[13.5px] leading-[1.5] text-ink-700 [overflow-wrap:anywhere];
+  }
+  .markdown .md-image-caption strong {
+    @apply text-ink;
+  }
 }
 
 /* Code highlighting: colors on the riso-blue background, each with a contrast of at least 4.5:1 against it (see the tokens contrast test). */
