@@ -16,8 +16,8 @@ export const navRowClass = (current: boolean, kind: 'nav' | 'agent' | 'compact' 
   )
 
 // Group headings (AGENT, “项目” (Projects)): small yellow Bricolage text with wide letter spacing; a create button can sit on the right.
-export const navGroupClass = 'mt-2 flex h-[26px] items-center pr-1 pl-2.5 font-display-latin text-[13px] font-extrabold tracking-[0.1em] text-riso-yellow uppercase'
+export const navGroupClass = 'mt-2 flex h-[26px] min-w-0 items-center gap-2 pr-1 pl-2.5 font-display-latin text-[13px] font-extrabold tracking-[0.1em] text-riso-yellow uppercase'
 
 // The "+" on the right of a group heading: a small yellow square with a navy border and an offset shadow.
 export const navAddClass =
-  'ml-auto inline-flex size-[26px] items-center justify-center rounded-[8px] border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)] outline-none focus-visible:shadow-focus disabled:opacity-50'
+  'ml-auto inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)] outline-none focus-visible:shadow-focus disabled:opacity-50'

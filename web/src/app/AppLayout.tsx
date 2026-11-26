@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Outlet, useLocation } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import type { Schemas } from '@/api/client'
@@ -9,9 +9,24 @@ import { useInboxLive } from '@/features/inbox/useInboxLive'
 import { inDesktopWindow, useDesktopNavigation } from '@/features/desktop/desktop'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
+import {
+  SIDEBAR_WIDTH_DEFAULT,
+  SIDEBAR_WIDTH_MIN,
+  clampSidebarWidth,
+  maxSidebarWidth,
+  sidebarWidth,
+} from '@/lib/sidebar-width'
 import { cn } from '@/lib/utils'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
+import { SidebarResizeHandle } from './SidebarResizeHandle'
+
+function subscribeResize(onChange: () => void) {
+  window.addEventListener('resize', onChange)
+  return () => window.removeEventListener('resize', onChange)
+}
+
+const getViewportWidth = () => window.innerWidth
 
 const text = t.shell
 
@@ -97,10 +112,32 @@ export function AppLayout() {
   // live updates.
   useInboxLive()
   useDesktopNavigation()
+
+  const viewportWidth = useSyncExternalStore(subscribeResize, getViewportWidth, () => 1440)
+  const [preferredWidth, setPreferredWidth] = useState<number>(() => sidebarWidth.read())
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
+  const maxWidth = maxSidebarWidth(viewportWidth)
+  const currentSidebarWidth = clampSidebarWidth(dragWidth ?? preferredWidth, viewportWidth)
+
   return (
     <div className="riso-paper flex min-h-screen text-ink lg:h-screen">
-      <div className="sticky top-0 h-screen w-[248px] shrink-0 self-start max-nav:hidden">
+      <div style={{ width: currentSidebarWidth }} className="sticky top-0 z-20 h-screen shrink-0 self-start max-nav:hidden">
         <Sidebar scope={scope} projects={list} projectsError={projects.error} searchRef={searchRef} />
+        <SidebarResizeHandle
+          width={currentSidebarWidth}
+          min={SIDEBAR_WIDTH_MIN}
+          max={maxWidth}
+          onPreview={setDragWidth}
+          onCommit={(next) => {
+            setPreferredWidth(next)
+            sidebarWidth.write(next)
+          }}
+          onReset={() => {
+            setDragWidth(null)
+            setPreferredWidth(SIDEBAR_WIDTH_DEFAULT)
+            sidebarWidth.clear()
+          }}
+        />
       </div>
       <DialogPrimitive.Root open={drawerOpen} onOpenChange={(open) => setDrawerAt(open ? location.key : null)}>
         <DialogPrimitive.Portal>

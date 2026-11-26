@@ -43,6 +43,7 @@ export const shell = {
   noProjects: '还没有项目',
   menu: '打开导航',
   closeMenu: '关闭导航',
+  resizeSidebar: '调整侧边栏宽度',
   // Location trail in the main-area page header: project › Agent › name.
   breadcrumb: '页面位置',
   agentCrumb: 'Agent',

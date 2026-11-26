@@ -130,12 +130,12 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
           title={name}
           className={cn(
             // Project card: same outline and shadow as the selected row, with 3px on the right left free for the shadow.
-            'mr-[3px] flex min-h-12 items-center gap-2.5 rounded-card border-2 border-ink bg-paper-raised px-2.5 text-[14.5px] text-ink shadow-[4px_4px_0_var(--ink)] outline-none focus-visible:shadow-focus',
+            'mr-[3px] flex min-h-12 min-w-0 items-center gap-2.5 rounded-card border-2 border-ink bg-paper-raised px-2.5 text-[14.5px] text-ink shadow-[4px_4px_0_var(--ink)] outline-none focus-visible:shadow-focus',
             open && 'shadow-[4px_4px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
           )}
         >
           <ScopeMark scope={scope} />
-          <span className="min-w-0 truncate font-black">{name}</span>
+          <span className="min-w-0 flex-1 truncate text-left font-black">{name}</span>
           <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 [stroke-width:2.8]" />
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
