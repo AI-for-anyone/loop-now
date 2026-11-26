@@ -1,0 +1,13 @@
+<!-- Pi, the coding agent Loop Now ships. Drawn 2026-11-26 from piLogoLines() in dist/modes/interactive/components/pi-logo.js of the @earendil-works/pi-coding-agent npm package 1.4.0: a 4 by 4 grid of square pixels in its brand colors coral rgb(228,138,122), blue rgb(79,142,179) and yellow rgb(234,182,93), as Pi prints it in a terminal. Used only to identify the runtime an Agent runs on. -->
+<svg width="4" height="4" viewBox="0 0 4 4" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+<rect x="0" y="0" width="1" height="1" fill="#E48A7A"/>
+<rect x="1" y="0" width="1" height="1" fill="#E48A7A"/>
+<rect x="2" y="0" width="1" height="1" fill="#E48A7A"/>
+<rect x="0" y="1" width="1" height="1" fill="#4F8EB3"/>
+<rect x="2" y="1" width="1" height="1" fill="#E48A7A"/>
+<rect x="0" y="2" width="1" height="1" fill="#4F8EB3"/>
+<rect x="1" y="2" width="1" height="1" fill="#4F8EB3"/>
+<rect x="3" y="2" width="1" height="1" fill="#EAB65D"/>
+<rect x="0" y="3" width="1" height="1" fill="#4F8EB3"/>
+<rect x="3" y="3" width="1" height="1" fill="#EAB65D"/>
+</svg>
