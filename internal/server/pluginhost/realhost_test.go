@@ -109,7 +109,8 @@ func TestRealHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 }`},
 		{id: "beta", events: []string{"inbox.received"}, code: `export default function (api) { api.on('run.ended', () => {}) }`},
 	}, nil)
-	base := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)
+	// Recent event times: events older than EventRetention (30 days) are pruned when the host starts.
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	late := e.addEvent("run.ended", base.Add(2*time.Second), "alpha")
 	failing := e.addEvent("agent.created", base.Add(time.Second), "alpha")
 	early := e.addEvent("inbox.received", base, "alpha", "beta")
