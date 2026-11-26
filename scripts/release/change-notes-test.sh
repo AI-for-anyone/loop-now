@@ -281,6 +281,58 @@ printf '## English\n\n### Bad\n\n- b\n' >"$repo/changes/bad.md"
 out="$("$repo/scripts/release/notes.sh" Unreleased 2>&1)" && fail "notes.sh Unreleased passed with a bad note: $out"
 case "$out" in *changes/bad.md*) ;; *) fail "notes.sh Unreleased does not name the bad note: $out" ;; esac
 
+# ---- check-change-notes.sh ----
+
+repo="$(new_repo check)"
+base="$(cd "$repo" && git rev-parse HEAD)"
+check() { # check BRANCH: runs the check from the base to HEAD as if on BRANCH; prints the output, fails like the check.
+	(cd "$repo" && scripts/release/check-change-notes.sh "$base" HEAD "$1" 2>&1)
+}
+reset() { (cd "$repo" && g reset -q --hard "$base"); }
+
+# A change note passes.
+(cd "$repo" && note changes/feature.md "Feature" && commit_at 1000000300 note)
+out="$(check task/feature)" || fail "a PR adding a change note failed: $out"
+reset
+
+# A line added under "## Unreleased" fails and points to changes/.
+(cd "$repo" && awk '{print} /^## Unreleased/{print "\n### Direct\n\n- Written by hand."}' CHANGELOG.md >x && mv x CHANGELOG.md && commit_at 1000000300 direct)
+if out="$(check task/direct)"; then
+	fail "a PR adding to Unreleased passed"
+fi
+case "$out" in *CHANGELOG.md*changes/*) ;; *) fail "the failure does not name the file and changes/: $out" ;; esac
+# The same on a release branch passes.
+out="$(check release-v0.2.0)" || fail "a release branch adding to Unreleased failed: $out"
+reset
+
+# A line added under "## 未发布" fails.
+(cd "$repo" && awk '{print} /^## 未发布/{print "\n### 直接写\n\n- 手写的。"}' CHANGELOG.zh-CN.md >x && mv x CHANGELOG.zh-CN.md && commit_at 1000000300 direct-zh)
+out="$(check task/direct-zh)" && fail "a PR adding to 未发布 passed"
+case "$out" in *CHANGELOG.zh-CN.md*) ;; *) fail "the failure does not name CHANGELOG.zh-CN.md: $out" ;; esac
+reset
+
+# A fix to the notes of a released version passes.
+(cd "$repo" && sed 's/^- Released\.$/- Released, with a fix./' CHANGELOG.md >x && mv x CHANGELOG.md && commit_at 1000000300 fix-old)
+out="$(check task/fix-old)" || fail "a PR fixing a released version's notes failed: $out"
+reset
+
+# A new top-level entry in MAIN.md's change list fails; a new detail under an existing entry passes.
+(cd "$repo" && awk '{print} /^<!-- New change entries/{print "- A new entry by hand.\n  - Detail."}' MAIN.md >x && mv x MAIN.md && commit_at 1000000300 main-entry)
+out="$(check task/main-entry)" && fail "a PR adding a MAIN.md entry passed"
+case "$out" in *MAIN.md*changes/*) ;; *) fail "the MAIN.md failure does not name the file and changes/: $out" ;; esac
+out="$(check release-v0.2.0)" || fail "a release branch adding a MAIN.md entry failed: $out"
+reset
+(cd "$repo" && awk '{print} /^  - Its detail\.$/ && !done {print "  - Release: released as v0.1.0."; done=1}' MAIN.md >x && mv x MAIN.md && commit_at 1000000300 main-detail)
+out="$(check task/main-detail)" || fail "a PR adding a detail to a MAIN.md entry failed: $out"
+reset
+
+# Before the base has collect-changes.sh, the check does not apply yet (the change that adds it writes its notes the
+# old way).
+(cd "$repo" && g rm -q scripts/release/collect-changes.sh && commit_at 1000000250 old-base)
+base="$(cd "$repo" && git rev-parse HEAD)"
+(cd "$repo" && awk '{print} /^## Unreleased/{print "\n### Direct\n\n- Written by hand."}' CHANGELOG.md >x && mv x CHANGELOG.md && commit_at 1000000300 direct)
+out="$(check task/direct)" || fail "the check applied before the base had collect-changes.sh: $out"
+
 if [ "$failures" -gt 0 ]; then
 	echo "$failures change notes test(s) failed" >&2
 	exit 1
