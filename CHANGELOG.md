@@ -13,6 +13,12 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - Commands Claude Code and Pi ran before this version show up too; Codex's and Antigravity's older commands were not recorded, so their rows stay as they were.
 - API: `TimelineTool.command` is no longer limited to bash, and `TimelineTool.target` is new.
 
+### Files up to 20 MiB can be previewed
+
+- The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
+- `LOOP_NOW_TEXT_EDIT_MAX` still changes the limit; it is now checked against `LOOP_NOW_MAX_FOLDER_UPLOAD` (1 GiB by default, the limit for one file written to these folders) instead of `LOOP_NOW_MAX_UPLOAD_FILE`, so a server that sets `LOOP_NOW_MAX_FOLDER_UPLOAD` below 20 MiB must also set `LOOP_NOW_TEXT_EDIT_MAX`.
+- A Markdown file that is one very long list (thousands of items) can take a long time to preview at these sizes.
+
 ### The sidebar's width can be dragged
 
 - Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
