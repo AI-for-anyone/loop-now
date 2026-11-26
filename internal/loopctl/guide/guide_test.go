@@ -16,6 +16,8 @@ import (
 	"loop-now/internal/loopctl/clitest"
 	"loop-now/internal/loopctl/commands"
 	"loop-now/internal/server/content"
+	"loop-now/internal/server/taskmodel"
+	"loop-now/internal/server/workflow"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -199,17 +201,31 @@ func TestTaskJSONExamplesMatchContract(t *testing.T) {
 	doc := clitest.Load(t, "agent-openapi.yaml")
 	md := strings.ReplaceAll(render(t), "<new action UUID>", "0192f1a2-0000-7000-8000-000000000053")
 	md = strings.ReplaceAll(md, "<executor Agent ID>", "0192f1a2-0000-7000-8000-000000000001")
+	md = strings.ReplaceAll(md, "<implementing Agent ID>", "0192f1a2-0000-7000-8000-000000000001")
+	md = strings.ReplaceAll(md, "<verifying Agent ID>", "0192f1a2-0000-7000-8000-000000000002")
+	md = strings.ReplaceAll(md, "<repository folder>", "/code/app")
 	blocks := regexp.MustCompile("(?s)```json\\n(.*?)```").FindAllStringSubmatch(md, -1)
-	if len(blocks) != 2 {
-		t.Fatalf("expected create and submit JSON examples, got %d", len(blocks))
+	if len(blocks) != 3 {
+		t.Fatalf("expected create, submit and workspace create JSON examples, got %d", len(blocks))
 	}
-	for i, name := range []string{"TaskCreateInput", "TaskSubmitInput"} {
+	for i, name := range []string{"TaskCreateInput", "TaskSubmitInput", "TaskCreateInput"} {
 		var body any
 		if err := json.Unmarshal([]byte(blocks[i][1]), &body); err != nil {
 			t.Fatal(err)
 		}
 		if err := doc.Components.Schemas[name].Value.VisitJSON(body, openapi3.EnableJSONSchema2020()); err != nil {
-			t.Fatalf("%s example violates contract: %v", name, err)
+			t.Fatalf("example %d (%s) violates contract: %v", i, name, err)
+		}
+		if name != "TaskCreateInput" {
+			continue
+		}
+		// The flow itself passes the server's workflow checks (edges, loops and their caps, input mappings).
+		var in taskmodel.CreateInput
+		if err := json.Unmarshal([]byte(blocks[i][1]), &in); err != nil {
+			t.Fatal(err)
+		}
+		if err := in.Workflow.Validate(workflow.Limits{MaxSteps: 100, MaxEdges: 300}); err != nil {
+			t.Fatalf("example %d workflow: %v", i, err)
 		}
 	}
 }
