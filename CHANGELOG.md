@@ -4,7 +4,9 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-## Unreleased
+## v0.3.2
+
+Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16 and 17 once.
 
 ### Import your Claude Code and Codex conversations
 
