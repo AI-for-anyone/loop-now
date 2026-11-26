@@ -2,7 +2,7 @@
 
 English: [CHANGELOG.md](CHANGELOG.md)
 
-各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
+各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。改动不直接改这个文件，而是在 `changes/` 里加一个说明文件（见 `changes/README.md`），发布时由 `scripts/release/collect-changes.sh` 放进“## 未发布”。
 
 ## 未发布
 
