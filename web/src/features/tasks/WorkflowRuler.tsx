@@ -160,6 +160,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                   {isSelected && <RulerMark className="top-0.5 right-1 bottom-0.5 left-[62px]" />}
                   <button
                     type="button"
+                    title={view.step.id}
                     aria-pressed={isSelected}
                     aria-current={view.state === 'current' ? 'step' : undefined}
                     onClick={() => onSelect(view.step.id)}
@@ -167,11 +168,11 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                   >
                     <span className="flex min-w-0 items-baseline gap-[7px]">
                       <span className="font-mono text-[11px] font-bold text-ink-500">{view.number}</span>
-                      <span className={cn('min-w-0 text-[14.5px] leading-[1.3] font-black [overflow-wrap:anywhere]', stateText[view.state === 'todo' ? 'todo' : 'current'])}>{view.step.title}</span>
+                      <span className={cn('min-w-0 text-[14.5px] leading-[1.3] font-black [overflow-wrap:anywhere]', stateText[view.state === 'todo' ? 'todo' : 'current'])}>{view.step.title || view.step.id}</span>
                     </span>
                     <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-700">
                       <AgentAvatar size="sm" id={view.step.agentId} />
-                      <span className="min-w-0 truncate">{name}</span>
+                      <span className="min-w-0 truncate" title={name}>{name}</span>
                       {/* Status and visit count are one unit: when they don't fit, they wrap to the next line together, so "×2" is never
                           left dangling on its own. */}
                       <span data-step-state className="inline-flex items-baseline gap-x-1.5 whitespace-nowrap">
@@ -260,6 +261,7 @@ export function WorkflowChips({ detail, selected, onSelect }: Pick<Props, 'detai
           <button
             key={view.step.id}
             type="button"
+            title={view.step.id}
             aria-pressed={isSelected}
             aria-current={view.state === 'current' ? 'step' : undefined}
             onClick={() => onSelect(view.step.id)}
@@ -274,7 +276,7 @@ export function WorkflowChips({ detail, selected, onSelect }: Pick<Props, 'detai
             {isSelected && <span aria-hidden="true" className="size-0 border-y-[5px] border-l-[7px] border-y-transparent border-l-riso-pink" />}
             {view.state === 'done' && <CheckIcon aria-hidden="true" className="size-3" strokeWidth={3.2} />}
             <span className="font-mono text-[11px]">{view.number}</span>
-            {view.step.title}
+            {view.step.title || view.step.id}
           </button>
         )
       })}

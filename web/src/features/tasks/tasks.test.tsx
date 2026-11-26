@@ -82,6 +82,7 @@ describe('project tasks', () => {
     expect(within(header).getByText('Blocked')).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(header).getByText('Not archived yet')).toBeInTheDocument()
     expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass('border-red-text')
+    expect(screen.getByRole('heading', { level: 2, name: 'Quality check' })).toHaveAttribute('title', 'check')
   })
   it('a task of another project does not show its details', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
@@ -423,7 +424,7 @@ it('two run segments each load more than 50 messages without sharing cursors or 
 it('a source link across steps locates the original record while keeping all segments of that step, and the latest failed group is expanded by default', async () => {
   const env = setup(), thirdId = '00000000-0000-7000-8000-000000000903'
   const third = { ...env.detail.nodes[1], id: thirdId, stepId: 'finish', visit: 1, attempt: 1, inputVersions: [{ input: 'review', nodeRunId: oldNodeId }] }
-  env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentNodeRunId: thirdId } }
+  env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentStepTitle: 'Submit report', currentNodeRunId: thirdId } }
   const { router } = renderRoutes(routes, detailPath())
   await screen.findByRole('heading', { name: 'General task acceptance' })
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
