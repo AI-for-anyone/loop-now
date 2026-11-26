@@ -69,8 +69,10 @@ func TestMakeLeavesOutWhatReachesOutside(t *testing.T) {
 			t.Errorf("%s is not in the copy", kept)
 		}
 	}
-	if l.Left < 7 {
-		t.Fatalf("left out %d entries, want at least 7", l.Left)
+	// Five links and the .git file; on macOS the clone also brings the pipe and the socket, which are then removed
+	// (the plain copy elsewhere never copies them).
+	if l.Left < 6 {
+		t.Fatalf("left out %d entries, want at least 6", l.Left)
 	}
 	if snapshot(t, src) != before || snapshot(t, outside) != outsideBefore {
 		t.Fatal("the original or the outside folder changed")
