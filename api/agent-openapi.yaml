@@ -9148,6 +9148,9 @@ components:
         request to approve is a PermissionRequest; the reply waits until someone answers it in the chat or the Inbox.
         Not every runtime has every mode (RuntimeCapabilities.permissionModes): a mode a runtime lacks runs as
         supervised, never as full.
+        Grok, Antigravity and the local ACP commands decide by their own permission rules and settings what to ask
+        about (RuntimeCapabilities.permissionAsksByOwnRules), so in their supervised, accept_edits and auto some actions
+        go ahead without asking.
       type: string
       enum: [supervised, accept_edits, auto, full]
 

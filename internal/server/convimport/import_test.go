@@ -454,3 +454,50 @@ func TestClaudeCaptureEndsAtLastFinishedTurn(t *testing.T) {
 		t.Fatalf("the chat still shows the conversation: %d", len(page.Items))
 	}
 }
+
+// A conversation Loop Now ran a turn in is that Agent's own: the fork an imported Agent continues in (Claude Code or
+// Codex, in the same folder as the original) and an Agent's own session there are listed with that Agent and importing
+// them gives it back; one whose Agent is gone is not listed at all.
+func TestAgentsOwnConversationsAreTheirs(t *testing.T) {
+	f := newFixture(t)
+	repo := f.repo("forked", "")
+	orig := "f0000001-1111-4111-8111-111111111111"
+	f.claude(orig, repo, 3*time.Hour, "original work")
+	s, st := importEnv(t, f)
+	first := runImport(t, s, doneScan(t, s).OperationID, apitypes.ConversationImportFolder{Path: repo, SessionIDs: []string{orig}})
+	agentID := agentOf(t, first, orig)
+	var run uuid.UUID
+	if err := st.Pool.QueryRow(context.Background(), `SELECT id FROM runs WHERE agent_id = $1 LIMIT 1`, agentID).Scan(&run); err != nil {
+		t.Fatal(err)
+	}
+	line := "Run ID for this turn: " + run.String() + ".\n\n"
+	fork, own, codexFork, gone := "f0000002-1111-4111-8111-111111111111", "f0000003-1111-4111-8111-111111111111",
+		"f0000004-1111-4111-8111-111111111111", "f0000005-1111-4111-8111-111111111111"
+	f.claude(fork, repo, time.Hour, "original work", line+"go on")
+	f.claude(own, repo, time.Hour, line+"hello")
+	f.codexRollout(codexFork, repo, "gpt-6", "earlier", line+"go on")
+	f.claude(gone, repo, time.Hour, "earlier", "Run ID for this turn: "+uuid.NewString()+".\n\ngo on")
+	scan := doneScan(t, s)
+	listed := map[string]*uuid.UUID{}
+	for _, c := range scan.Folders[0].Conversations {
+		listed[c.SessionID] = c.AgentID
+	}
+	for _, id := range []string{orig, fork, own, codexFork} {
+		if a, ok := listed[id]; !ok || a == nil || *a != agentID {
+			t.Errorf("%s is the Agent's: %v", id, a)
+		}
+	}
+	if _, ok := listed[gone]; ok || len(scan.Folders) != 1 {
+		t.Errorf("one whose Agent is gone is not listed: %+v", scan.Folders)
+	}
+	again := runImport(t, s, scan.OperationID, apitypes.ConversationImportFolder{Path: repo, SessionIDs: []string{fork, own, codexFork}})
+	for _, id := range []string{fork, own, codexFork} {
+		if a := agentOf(t, again, id); a != agentID {
+			t.Errorf("importing %s gives the Agent back: %s", id, a)
+		}
+	}
+	agents, err := st.ListAgents(context.Background(), store.ProjectScope(first.Projects[0].ProjectID))
+	if err != nil || len(agents) != 1 {
+		t.Fatalf("still one Agent: %d %v", len(agents), err)
+	}
+}

@@ -41,7 +41,7 @@ func newClaudeHarness(t *testing.T, mutate func(o *Options)) *claudeHarness {
 	h := newHarness(t, func(o *Options) {
 		o.ClaudeBin = fakeclaudebin.Path(t)
 		o.RealHome = func() (string, error) { return realHome, nil }
-		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "FAKECLAUDE_NO_TRANSCRIPT", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
+		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "FAKECLAUDE_NO_TRANSCRIPT", "FAKECLAUDE_STALE_TASK", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
 		if mutate != nil {
 			mutate(o)
 		}

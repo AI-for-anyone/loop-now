@@ -168,6 +168,9 @@ func (r *claudeReader) record(line []byte) bool {
 		return true
 	}
 	r.m.messages++
+	if role == "user" {
+		r.m.prompt(text)
+	}
 	if role == "user" && r.m.firstPrompt == "" && strings.TrimSpace(titleText) != "" {
 		r.m.firstPrompt, r.m.titlePrompt = clip(titleText, promptLimit), titleText
 	}

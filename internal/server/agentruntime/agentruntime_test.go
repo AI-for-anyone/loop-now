@@ -192,6 +192,21 @@ func TestWorkingFolderAndLocalConfigCapabilities(t *testing.T) {
 	}
 }
 
+// Grok, Antigravity and the local ACP commands decide by their own rules what to ask about; Claude Code and Codex ask
+// about every action the mode does not allow; Pi never asks.
+func TestPermissionAsksByOwnRules(t *testing.T) {
+	want := map[string]bool{Pi: false, ClaudeCode: false, Codex: false, Grok: true, Antigravity: true}
+	for id, own := range want {
+		r, _ := ByID(id)
+		if r.Capabilities.PermissionAsksByOwnRules != own {
+			t.Errorf("%s: permissionAsksByOwnRules %v, want %v", id, r.Capabilities.PermissionAsksByOwnRules, own)
+		}
+	}
+	if cmd := LocalCommandRuntime(uuid.New(), "Mine", LocalCommand{Command: "/bin/true"}); !cmd.Capabilities.PermissionAsksByOwnRules {
+		t.Error("a local ACP command asks by its own rules")
+	}
+}
+
 // The permission modes each runtime offers: Claude Code, Codex, Grok and Antigravity all four, a local ACP command
 // Supervised and Full access, Pi Full access only.
 func TestPermissionModesPerRuntime(t *testing.T) {

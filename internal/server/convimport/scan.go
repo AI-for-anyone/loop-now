@@ -18,6 +18,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Skip reasons, matching ImportConversation.skipReason.
@@ -72,6 +74,9 @@ type ScanOptions struct {
 	// Loop Now's work root).
 	Home     string
 	Excluded []string
+	// LoopNowAgent gives the live Agent a run of Loop Now belongs to (uuid.Nil when there is none): a conversation Loop
+	// Now ran a turn in is that Agent's. Nil leaves all such conversations out.
+	LoopNowAgent func(ctx context.Context, runID uuid.UUID) (uuid.UUID, error)
 }
 
 // Folder is a group of conversations: a git repository (its main checkout, its worktrees and checkouts with the same
@@ -101,6 +106,9 @@ type Conversation struct {
 	SizeBytes    int64
 	Model        string
 	SkipReason   string
+	// AgentID is the Agent whose own conversation this is: Loop Now ran a turn in it (the Agent's session, or the fork
+	// an imported Agent continues in). Importing it gives that Agent.
+	AgentID uuid.UUID
 }
 
 // Scan finds the conversations and groups them by folder: git repositories first, then newest first.
@@ -142,10 +150,23 @@ func Scan(ctx context.Context, o ScanOptions) ([]Folder, error) {
 		if o.Path != "" && !within(c.Cwd, o.Path) {
 			continue
 		}
-		if o.leftOut(c) {
+		if o.leftOut(c.Conversation) {
 			continue
 		}
-		convs = append(convs, c)
+		if c.loopNow {
+			if c.loopNowRun == uuid.Nil || o.LoopNowAgent == nil {
+				continue
+			}
+			agent, err := o.LoopNowAgent(ctx, c.loopNowRun)
+			if err != nil {
+				return nil, err
+			}
+			if agent == uuid.Nil {
+				continue // its Agent is gone
+			}
+			c.AgentID = agent
+		}
+		convs = append(convs, c.Conversation)
 	}
 	return group(o, convs), nil
 }
@@ -189,21 +210,29 @@ func TemporaryFolders() []string {
 // loopNowWorkspace matches a folder under a Loop Now Agent's (or task instance's) own workspace, in any work root.
 var loopNowWorkspace = regexp.MustCompile(`(^|/)agents/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/workspace(/|$)`)
 
-// loopNowRunHeader starts the first message of every turn Loop Now runs (executor.RunIDLine), in English and as older
+// loopNowRunHeader starts the message of every turn Loop Now runs (executor.RunIDLine), in English and as older
 // versions wrote it.
 var loopNowRunHeaders = []string{"Run ID for this turn: ", "本轮运行ID："} // check-english: zh (older Loop Now runs start with this line)
 
-// leftOut reports whether a conversation is not offered at all: Loop Now made it (one of its Agents' workspaces, or
-// a run header), or it worked in a folder that is not a project (scratch, downloads, temporary).
+// loopNowPrompt reports whether Loop Now wrote a prompt (it starts with a run header), and the run it names (uuid.Nil
+// when it cannot be read).
+func loopNowPrompt(text string) (uuid.UUID, bool) {
+	text = strings.TrimSpace(text)
+	for _, h := range loopNowRunHeaders {
+		if rest, ok := strings.CutPrefix(text, h); ok {
+			run, _ := uuid.Parse(rest[:min(len(rest), 36)])
+			return run, true
+		}
+	}
+	return uuid.Nil, false
+}
+
+// leftOut reports whether a conversation is not offered at all: it is in one of Loop Now's Agent workspaces, or it
+// worked in a folder that is not a project (scratch, downloads, temporary).
 func (o ScanOptions) leftOut(c Conversation) bool {
 	cwd := filepath.ToSlash(filepath.Clean(c.Cwd))
 	if loopNowWorkspace.MatchString(cwd) {
 		return true
-	}
-	for _, h := range loopNowRunHeaders {
-		if strings.HasPrefix(c.FirstPrompt, h) {
-			return true
-		}
 	}
 	excluded := slices.Clone(o.Excluded)
 	if o.Home != "" {
@@ -230,8 +259,15 @@ func within(path, root string) bool {
 }
 
 // readConversation reads one record file; false when it is not a conversation (a sub-agent's, say).
-func readConversation(o ScanOptions, f candidate, names map[string]string) (Conversation, bool) {
-	c := Conversation{CLI: f.cli, SessionID: f.id, Path: f.path, SizeBytes: f.size, LastActiveAt: f.mtime}
+// scanned is a conversation as read, with the last Loop Now run it holds (loopNow: Loop Now ran a turn in it).
+type scanned struct {
+	Conversation
+	loopNow    bool
+	loopNowRun uuid.UUID
+}
+
+func readConversation(o ScanOptions, f candidate, names map[string]string) (scanned, bool) {
+	c := scanned{Conversation: Conversation{CLI: f.cli, SessionID: f.id, Path: f.path, SizeBytes: f.size, LastActiveAt: f.mtime}}
 	if f.size > o.MaxBytes {
 		// Its folder is still wanted, to list it with why it is not imported: read the first records only.
 		c.SkipReason = SkipTooLarge
@@ -259,6 +295,7 @@ func readConversation(o ScanOptions, f candidate, names map[string]string) (Conv
 		}
 	}
 	c.Cwd, c.Title, c.FirstPrompt, c.Model, c.MessageCount = m.cwd, m.title, m.firstPrompt, m.model, m.messages
+	c.loopNow, c.loopNowRun = m.loopNow, m.loopNowRun
 	if !m.lastAt.IsZero() {
 		c.LastActiveAt = m.lastAt
 	}
@@ -290,6 +327,19 @@ type meta struct {
 	firstPrompt           string
 	messages              int
 	lastAt                time.Time
+	// loopNow: a prompt starts with Loop Now's run header; loopNowRun is the last run such a prompt names.
+	loopNow    bool
+	loopNowRun uuid.UUID
+}
+
+// prompt notes a prompt written by Loop Now.
+func (m *meta) prompt(text string) {
+	if run, ok := loopNowPrompt(text); ok {
+		m.loopNow = true
+		if run != uuid.Nil {
+			m.loopNowRun = run
+		}
+	}
 }
 
 // eachRecord calls fn with each complete record (line) of the file, and returns how many there were. A last line

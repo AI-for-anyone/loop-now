@@ -85,6 +85,9 @@ type Capabilities struct {
 	ReadsEntryFile bool `json:"-"`
 	// PermissionModes are the permission modes the runtime offers (Agent.permissionMode values); always at least full.
 	PermissionModes []string `json:"permissionModes"`
+	// PermissionAsksByOwnRules: in the modes other than full, the runtime decides by its own permission rules and
+	// settings what to ask about, so some actions go ahead without asking (Grok, Antigravity, local ACP commands).
+	PermissionAsksByOwnRules bool `json:"permissionAsksByOwnRules"`
 	// WorkingDirectory: can work in a folder the person picks (Agent.workingDirectory).
 	WorkingDirectory bool `json:"workingDirectory"`
 	// LocalConfig: can load the person's own CLI configuration, as in their terminal (Agent.useLocalConfig).
@@ -193,7 +196,7 @@ func LocalCommandRuntimeID(id uuid.UUID) string { return LocalCommandPrefix + id
 func LocalCommandRuntime(id uuid.UUID, name string, cmd LocalCommand) Runtime {
 	rid := LocalCommandRuntimeID(id)
 	return Runtime{ID: rid, Name: name, Providers: []string{rid}, Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, PermissionModes: []string{ModeSupervised, ModeFull},
-		WorkingDirectory: true},
+		PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Command: &cmd, CommandID: id, TextGeneration: &TextGeneration{Rank: localCommandWriterRank}}
 }
 
@@ -296,7 +299,7 @@ var registry = []Runtime{
 		Name:      "Grok",
 		Providers: []string{GrokProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true,
-			PermissionModes: allModes(), WorkingDirectory: true},
+			PermissionModes: allModes(), PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Setup:          grokSetup,
 		MinVersion:     "1.0.88",
 		TextGeneration: &TextGeneration{Rank: 4},
@@ -309,7 +312,7 @@ var registry = []Runtime{
 		Name:      "Antigravity",
 		Providers: []string{AntigravityProvider},
 		Capabilities: Capabilities{Accounts: AccountsLocal, RealHome: true, StopEndsBackgroundTasks: true, PermissionModes: allModes(),
-			WorkingDirectory: true},
+			PermissionAsksByOwnRules: true, WorkingDirectory: true},
 		Setup:          antigravitySetup,
 		MinVersion:     "1.5.14",
 		TextGeneration: &TextGeneration{Rank: 3, Models: []string{"gemini-4-neon", "flash"}, Level: LowestLevel},

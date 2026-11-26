@@ -155,6 +155,9 @@ func (r *codexReader) take(msg Message) {
 		r.m.lastAt = msg.At
 	}
 	r.m.messages++
+	if msg.Role == "user" {
+		r.m.prompt(msg.Text)
+	}
 	if msg.Role == "user" && r.m.firstPrompt == "" {
 		r.m.firstPrompt, r.m.titlePrompt = clip(msg.Text, promptLimit), msg.Text
 	}
