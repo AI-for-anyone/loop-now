@@ -31,3 +31,9 @@ __pycache__/
 # 浏览器集成测试结果（测试脚本保留在 integration 目录）
 /web/scripts/integration/**/*.json
 /web/scripts/integration/**/*.png
+
+# Fake runtimes built by hand for tests (go build ./internal/server/executor/local/fake*/); never commit them.
+/fakeacp
+/fakeclaude
+/fakecodex
+/fakepi
