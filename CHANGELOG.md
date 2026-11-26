@@ -11,6 +11,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
 - The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
 
+### The sidebar's width can be dragged
+
+- Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
+- At every width long Agent, project and menu names end in an ellipsis, and the marks, badges and the "+" button stay whole. On a phone the sidebar is still the drawer, without a handle.
+
 ### The heading above a CLI's own follow-up is one short line
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.

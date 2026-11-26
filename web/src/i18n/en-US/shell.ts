@@ -42,6 +42,7 @@ export const shell = {
   noProjects: 'No projects yet',
   menu: 'Open navigation',
   closeMenu: 'Close navigation',
+  resizeSidebar: 'Resize sidebar',
   breadcrumb: 'Breadcrumb',
   agentCrumb: 'Agent',
   platformAgentCrumb: 'Platform Agent',

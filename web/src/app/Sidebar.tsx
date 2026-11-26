@@ -49,7 +49,7 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <h2 id={headingId} className={navGroupClass}>
-        {text.groups.projects}
+        <span className="min-w-0 truncate">{text.groups.projects}</span>
       </h2>
       {!projects && <p className="px-2.5 text-[12.5px] text-white/75">{t.common.loading}</p>}
       {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-white/75">{text.noProjects}</p>}
@@ -132,11 +132,11 @@ export function Sidebar({
   return (
     <nav aria-label={text.nav} className="riso-halftone flex h-full w-full flex-col bg-riso-blue text-white">
       {desktop && <div aria-hidden="true" className="window-drag h-12 shrink-0" />}
-      <div className={cn('flex shrink-0 flex-col gap-4 px-3.5 pb-3', desktop ? 'pt-1' : 'pt-5')}>
+      <div className={cn('flex min-w-0 shrink-0 flex-col gap-4 px-3.5 pb-3', desktop ? 'pt-1' : 'pt-5')}>
         <div className="flex items-center justify-between gap-2 px-1.5">
           <Link
             to="/"
-            className="rounded-sm font-display-latin text-[26px] leading-none font-extrabold tracking-[-0.5px] text-white outline-none [text-shadow:2.5px_2.5px_0_var(--riso-pink)] focus-visible:shadow-focus"
+            className="rounded-sm font-display-latin text-[26px] leading-none font-extrabold tracking-[-0.5px] whitespace-nowrap text-white outline-none [text-shadow:2.5px_2.5px_0_var(--riso-pink)] focus-visible:shadow-focus"
           >
             {t.app.brand}
           </Link>
@@ -163,7 +163,7 @@ export function Sidebar({
             onChange={(event) => setSearch(event.target.value)}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/80"
           />
-          <kbd aria-hidden="true" className="rounded-stamp border border-white/45 px-[5px] font-sans text-[11px] leading-4">
+          <kbd aria-hidden="true" className="shrink-0 rounded-stamp border border-white/45 px-[5px] font-sans text-[11px] leading-4">
             {text.search.shortcut}
           </kbd>
         </label>
@@ -232,13 +232,13 @@ export function Sidebar({
         <SidebarDeco />
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5 border-t-2 border-dashed border-white/35 px-3.5 pt-2.5 pb-3.5">
+      <div className="flex min-w-0 shrink-0 flex-col gap-0.5 border-t-2 border-dashed border-white/35 px-3.5 pt-2.5 pb-3.5">
         <NavItem compact to="/plugins" icon="plugins" label={text.items.plugins} current={here.global === 'plugins'} />
         <NavItem compact to="/skills" icon="skills" label={text.items.skills} current={here.global === 'skills'} />
         <NavItem compact to="/stats" icon="stats" label={text.items.stats} current={here.global === 'stats'} />
         <NavItem compact to="/identities" icon="identities" label={text.items.identities} current={here.global === 'identities'} />
         <NavItem compact to="/settings" icon="settings" label={text.items.settings} current={here.global === 'settings'} />
-        <ConnectionStatus className="mt-1.5 ml-2.5 self-start text-[11.5px]" />
+        <ConnectionStatus className="mt-1.5 ml-2.5 max-w-[calc(100%-0.625rem)] self-start text-[11.5px]" />
       </div>
       {creating && <CreateAgentDialog scope={creating} onClose={() => setCreating(null)} />}
     </nav>
