@@ -1,4 +1,5 @@
 import { LoaderCircleIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import type { Schemas } from '@/api/client'
 import { badgeVariants } from '@/components/ui/badge'
@@ -40,42 +41,78 @@ function RunningFor({ task }: { task: Task }) {
   return <span className="tabular-nums">{t.background.elapsedLabel(elapsedClock(now - Date.parse(task.startedAt)))}</span>
 }
 
-// The details of a background tool, opened from its chip: what it runs, how long it has run or how it ended, and its last output.
-function Details({ task, name }: { task: Task; name: string }) {
+// Header line of a background task's details: its kind icon, tool name (or kind), and status pill.
+export function BackgroundTaskHead({ task, name }: { task: Task; name: string }) {
+  return (
+    <>
+      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-ink text-riso-yellow">
+        <BackgroundKindIcon kind={task.kind} className="size-3.5" />
+      </span>
+      <span className="font-mono text-[13px] font-black">{name}</span>
+      <span className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status])}>{statusText(task)}</span>
+    </>
+  )
+}
+
+// Body of a background task's details: what it runs, how long it has run or how it ended, and its last output.
+export function BackgroundTaskBody({ task }: { task: Task }) {
   const facts = task.status === 'running' ? [] : endFacts(task)
   return (
     <>
+      <p className="font-mono text-[13px] leading-[1.5] font-bold [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">{task.label}</p>
+      {(task.status === 'running' || facts.length > 0) && (
+        <p className="flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 font-bold text-ink-500">
+          {task.status === 'running' ? (
+            <RunningFor task={task} />
+          ) : (
+            facts.map((fact, index) => (
+              <span key={index} className="inline-flex gap-x-1.5">
+                {fact}
+                {index < facts.length - 1 && <span aria-hidden="true">{t.chat.metaSeparator}</span>}
+              </span>
+            ))
+          )}
+        </p>
+      )}
+      {task.status !== 'running' && task.output && (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[12.5px] font-black text-ink">{t.background.card.outputTail}</span>
+          <pre className="riso-halftone max-h-64 min-w-0 overflow-auto rounded-input bg-riso-blue px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-white [overflow-wrap:anywhere]">
+            {task.output}
+          </pre>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Popover frame shared by a single task chip and the “+N” overflow chip in follow-up headings.
+export function BackgroundTaskPopover({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+        aria-label={label}
+        className="z-50 flex max-h-[min(460px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)] outline-none"
+      >
+        {children}
+      </PopoverPrimitive.Content>
+    </PopoverPrimitive.Portal>
+  )
+}
+
+// The details of a background tool, opened from its chip: what it runs, how long it has run or how it ended, and its last output.
+function Details({ task, name }: { task: Task; name: string }) {
+  return (
+    <>
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b-2 border-ink bg-tint-yellow px-4 py-2.5">
-        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-ink text-riso-yellow">
-          <BackgroundKindIcon kind={task.kind} className="size-3.5" />
-        </span>
-        <span className="font-mono text-[13px] font-black">{name}</span>
-        <span className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status])}>{statusText(task)}</span>
+        <BackgroundTaskHead task={task} name={name} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
-        <p className="font-mono text-[13px] leading-[1.5] font-bold [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">{task.label}</p>
-        {(task.status === 'running' || facts.length > 0) && (
-          <p className="flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 font-bold text-ink-500">
-            {task.status === 'running' ? (
-              <RunningFor task={task} />
-            ) : (
-              facts.map((fact, index) => (
-                <span key={index} className="inline-flex gap-x-1.5">
-                  {fact}
-                  {index < facts.length - 1 && <span aria-hidden="true">{t.chat.metaSeparator}</span>}
-                </span>
-              ))
-            )}
-          </p>
-        )}
-        {task.status !== 'running' && task.output && (
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[12.5px] font-black text-ink">{t.background.card.outputTail}</span>
-            <pre className="riso-halftone max-h-64 min-w-0 overflow-auto rounded-input bg-riso-blue px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-white [overflow-wrap:anywhere]">
-              {task.output}
-            </pre>
-          </div>
-        )}
+        <BackgroundTaskBody task={task} />
       </div>
     </>
   )
@@ -84,7 +121,7 @@ function Details({ task, name }: { task: Task; name: string }) {
 // One tool of a reply that went on in the background (a command, a sub-agent), as a chip among the reply's other tools: “Bash 后台运行中”
 // (Bash Running in the background) with a spinner while it runs, then how it ended. The details are behind a click. The person's reply has
 // long ended by then; the chip changes wherever that reply is shown.
-function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string }) {
+export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string }) {
   const name = toolName ?? t.background.kind[task.kind]
   const status = statusText(task)
   return (
@@ -107,18 +144,9 @@ function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string 
         <span className="self-baseline font-mono text-ink">{name}</span>
         <span>{status}</span>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
-        <PopoverPrimitive.Content
-          side="bottom"
-          align="start"
-          sideOffset={8}
-          collisionPadding={12}
-          aria-label={t.background.card.label}
-          className="z-50 flex max-h-[min(460px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)] outline-none"
-        >
-          <Details task={task} name={name} />
-        </PopoverPrimitive.Content>
-      </PopoverPrimitive.Portal>
+      <BackgroundTaskPopover label={t.background.card.label}>
+        <Details task={task} name={name} />
+      </BackgroundTaskPopover>
     </PopoverPrimitive.Root>
   )
 }
