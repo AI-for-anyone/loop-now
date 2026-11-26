@@ -501,3 +501,23 @@ func (s *Server) listManagerTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, out)
 }
+func (s *Server) removeTaskWorkspace(w http.ResponseWriter, r *http.Request) {
+	if !s.taskReady(w, r) {
+		return
+	}
+	id, ok := s.taskID(w, r)
+	if !ok {
+		return
+	}
+	var in taskmodel.RemoveWorkspaceInput
+	if e := s.taskBody(w, r, &in); e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	out, e := s.Tasks.RemoveWorkspace(r.Context(), principal(r), id, in)
+	if e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	writeJSON(w, http.StatusOK, apitypes.ConsoleTaskDetail{Detail: out})
+}
