@@ -6,6 +6,11 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
+### Runtime marks: one color, one frame
+
+- Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
+- The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
+
 ### The heading above a CLI's own follow-up is one short line
 
 - When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
