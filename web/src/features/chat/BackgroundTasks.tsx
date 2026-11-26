@@ -1,4 +1,4 @@
-import { BotIcon, ChevronDownIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
+import { BotIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Popover as PopoverPrimitive } from 'radix-ui'
@@ -61,7 +61,7 @@ function useBackgroundStop(stopper: BackgroundStopper) {
 }
 
 // The running background tasks of an Agent (or of a task's node): what each one is, which reply started it, how long it has run, and Stop;
-// Stop all below when there are several. Shown in the panel of the header mark, and in a task node's header.
+// Stop all below when there are several. Shown in the panel of the mark under the message box (an Agent's, or a task node's).
 // control: the stop state, when it must outlive the list (the panel closes and opens again); otherwise the list keeps its own.
 export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control: shared }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; onNavigate?: () => void; control?: BackgroundStopControl }) {
   const now = useNow(1000, tasks.length > 0)
@@ -140,8 +140,8 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
   )
 }
 
-// The mark next to the Agent's state while background tasks run: “后台任务 N” (Background N), a yellow tilted pill with a spinning
-// mark, so an idle Agent with work still going does not look finished. It opens the list.
+// The mark in the bar under the message box, right after the runner chip, while background tasks run: a shell glyph and the count (as
+// Claude Code's status line has it), a navy pill so it reads as a thing that runs rather than a setting. It opens the list above it.
 // hint: what the list is about (by default, that the reply has ended and these still run).
 // While the list is open it stays when the last task ends (it says they all ended, and focus is not lost); closed, the mark goes. Stopping
 // is kept here, so a retry after an unknown outcome still repeats its actionId after the list was closed and opened again.
@@ -155,23 +155,26 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
     if (ended && (document.activeElement === null || document.activeElement === document.body)) trigger.current?.focus()
   }, [ended])
   if (tasks.length === 0 && !open) return null
+  const label = tasks.length > 0 ? t.background.markLabel(tasks.length) : t.background.allEnded
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger
         ref={trigger}
+        type="button"
         data-background-mark
-        aria-label={tasks.length > 0 ? t.background.markLabel(tasks.length) : t.background.allEnded}
+        aria-label={label}
+        title={label}
         className={cn(
-          'riso-tilt inline-flex min-h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-black whitespace-nowrap text-ink outline-none [--tilt-bg:var(--riso-yellow)] [--tilt-shadow:inset_0_0_0_2px_var(--ink),2px_2px_0_var(--ink)] [--tilt:2deg] focus-visible:shadow-focus',
+          'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink pr-2.5 pl-2 font-mono text-[13px] font-black whitespace-nowrap text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)] outline-none hover:bg-ink-700 focus-visible:shadow-focus aria-expanded:bg-riso-blue',
           className,
         )}
       >
-        <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" strokeWidth={3} />
-        <span>{t.background.mark(tasks.length)}</span>
-        <ChevronDownIcon aria-hidden="true" className={cn('size-3.5 transition-transform motion-reduce:transition-none', open && 'rotate-180')} strokeWidth={3} />
+        <SquareTerminalIcon aria-hidden="true" className="size-4" strokeWidth={2.4} />
+        <span className="tabular-nums">{tasks.length}</span>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
+          side="top"
           align="start"
           sideOffset={10}
           collisionPadding={12}

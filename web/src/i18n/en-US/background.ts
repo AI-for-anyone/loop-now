@@ -29,9 +29,8 @@ export const background = {
   allEnded: 'All background tasks have ended.',
   card: {
     label: 'Background task',
-    listLabel: 'Tools that went on in the background',
-    runningFor: (clock: string) => `Running in the background · ${clock}`,
-    stopping: (clock: string) => `Stopping · ${clock}`,
+    // The chip's name: the tool (or the kind), how it stands, and what it runs.
+    chipLabel: (tool: string, status: string, label: string) => `${tool} ${status}: ${label}`,
     status: { running: 'Running in the background', completed: 'Finished in the background', failed: 'Failed in the background', stopped: 'Stopped', unknown: 'Outcome unknown' } satisfies Record<Task['status'], string>,
     exitCode: (code: number) => `exit code ${code}`,
     took: (duration: string) => `took ${duration}`,

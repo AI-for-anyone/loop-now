@@ -76,6 +76,8 @@ interface ComposerProps {
   stop?: StopControl
   // Who runs the Agent now (the runner chip), at the start of the line below the input box.
   runner?: ReactNode
+  // The running background tasks (a shell mark with the count), right after the runner chip.
+  background?: ReactNode
   reply?: QuestionReply
   // One line above the input box that the next message needs to say first (the next message restarts the CLI and stops its background
   // tasks).
@@ -94,7 +96,7 @@ const platformNames = (list: CommandList | undefined) => (list ? new Set(list.co
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, notice, stopAlso = 0 }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, background, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -397,6 +399,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
           {runner}
+          {background}
           {status}
           {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
           {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}

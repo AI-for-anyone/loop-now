@@ -36,7 +36,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-describe('The background tasks mark and list in the Agent header', () => {
+describe('The background tasks mark under the message box and its list', () => {
   it('shows each running task with its label, the reply that started it and how long it has run, and follows the live list', async () => {
     const first = makeRun()
     const second = makeRun()
@@ -47,7 +47,7 @@ describe('The background tasks mark and list in the Agent header', () => {
 
     await emit('snapshot', snapshot(agent.id, { backgroundTasks: [build, devServer] }))
     const mark = await screen.findByRole('button', { name: '2 background tasks are running; open to see or stop them' })
-    expect(mark).toHaveTextContent('Background 2')
+    expect(mark).toHaveTextContent(/^2$/)
 
     await user.click(mark)
     const list = await screen.findByRole('list', { name: 'Background tasks' })
@@ -64,7 +64,7 @@ describe('The background tasks mark and list in the Agent header', () => {
     expect(screen.getByRole('button', { name: 'Stop all (2)' })).toBeInTheDocument()
 
     await emit('background_tasks.updated', { tasks: [build] })
-    expect(await screen.findByRole('button', { name: '1 background task is running; open to see or stop them' })).toHaveTextContent('Background 1')
+    expect(await screen.findByRole('button', { name: '1 background task is running; open to see or stop them' })).toHaveTextContent(/^1$/)
     expect(within(screen.getByRole('list', { name: 'Background tasks' })).getAllByRole('listitem')).toHaveLength(1)
     // One task: no Stop all.
     expect(screen.queryByRole('button', { name: /^Stop all/ })).toBeNull()
@@ -77,7 +77,7 @@ describe('The background tasks mark and list in the Agent header', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'All background tasks have ended.' })).toBeNull())
   })
 
-  it('before the live stream says anything, the header shows the tasks from the status', async () => {
+  it('before the live stream says anything, the mark shows the tasks from the status', async () => {
     const task = makeBackgroundTask({ label: 'pytest -x' })
     const { user } = await renderChat({ status: { backgroundTasks: [task] } })
     await user.click(await screen.findByRole('button', { name: '1 background task is running; open to see or stop them' }))

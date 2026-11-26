@@ -20,7 +20,7 @@ import { unfinishedTool } from './tool-state'
 import { runStartedAt } from './time'
 import { InboxReminder } from './InboxReminder'
 import { BackgroundFollowUpLine } from './BackgroundFollowUp'
-import { BackgroundToolCards } from './BackgroundToolCard'
+import { BackgroundToolChips } from './BackgroundToolChip'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { MessageRuler } from './MessageRuler'
 import { turnPreview, useVisibleTurns } from './ruler'
@@ -83,9 +83,8 @@ function ReplyBubble({ turn, agent, located, requests = [] }: { turn: Turn; agen
           </p>
         )
       )}
-      {/* Tools that went on in the background are cards of their own, with how they ended; the others stay chips. */}
-      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} exclude={backgroundTools} />
-      <BackgroundToolCards tasks={run.backgroundTasks ?? []} toolNames={toolNames} />
+      {/* Tools that went on in the background are chips of their own, with how they ended and their details behind a click. */}
+      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} exclude={backgroundTools} after={run.backgroundTasks?.length ? <BackgroundToolChips tasks={run.backgroundTasks} toolNames={toolNames} /> : undefined} />
       {/* What the reply waits for a person to approve, where it asked. */}
       {requests.map((request) => (
         <PermissionRequestCard key={request.id} request={request} agentName={agent.name} />

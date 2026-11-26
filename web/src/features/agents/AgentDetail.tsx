@@ -20,8 +20,6 @@ import { cn } from '@/lib/utils'
 import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
-import { stopAllBackgroundTasks, stopBackgroundTask } from '@/api/background-tasks'
-import { BackgroundTasksMark, type BackgroundStopper } from '@/features/chat/BackgroundTasks'
 
 // The model tag in the header: "provider · model", except for a command a person added, whose provider id (acp-<command id>) and one
 // model ("default") say nothing: it shows the command's name.
@@ -32,16 +30,13 @@ function modelTag(model: Schemas['ModelRef'], runtimes: RuntimeLookup): string {
 
 // The status tag next to the title (an outlined, slightly tilted pill): busy (plus the current phase), or idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
 // is used, and until that result arrives, the busy/idle and session state from the Agent details.
-// Background tasks still running get their own mark after it (“后台任务 N”, Background N), which opens the list to see or stop them.
 function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStickerState | null }) {
   const status = useAgentStatus(agent.id, config.agentListPollMs)
-  const scope = useScope()
   const polled: AgentStickerState = status.data
     ? {
         busy: status.data.busy,
         phase: status.data.currentRun ? runPhaseText(status.data.currentRun) : null,
         sleep: status.data.sleep,
-        backgroundTasks: status.data.backgroundTasks,
       }
     : { busy: agent.busy, phase: null }
   const state = live ?? polled
@@ -64,23 +59,9 @@ function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStick
       </span>
       {!state.busy && state.sleep?.state === 'sleeping' && state.sleep.wakeAt &&
         <SleepUntil at={state.sleep.wakeAt} reason={state.sleep.reason} />}
-      <BackgroundTasksMark
-        tasks={state.backgroundTasks ?? []}
-        stopper={backgroundStopper(agent.id)}
-        // The reply that started a task: located in the conversation, named by its number when the Chat tab has it loaded.
-        origin={(task) => {
-          const number = state.replyNumbers?.[task.runId]
-          return { to: `${agentPath(scope, agent.id, 'chat')}#run-${encodeURIComponent(task.runId)}`, label: number ? t.background.fromReply(number) : t.background.fromReplyAt(t.chat.time(task.startedAt)) }
-        }}
-      />
     </>
   )
 }
-
-const backgroundStopper = (agentId: string): BackgroundStopper => ({
-  stop: (taskId, actionId) => stopBackgroundTask(agentId, taskId, actionId),
-  stopAll: (actionId) => stopAllBackgroundTasks(agentId, actionId),
-})
 
 const chipTone = { success: 'text-green-text [--tilt-bg:var(--tint-green)]', busy: 'text-ink [--tilt-bg:var(--tint-pink)]', danger: 'text-red-text [--tilt-bg:var(--tint-red)]' }
 const chipDot = { success: 'bg-green', busy: 'bg-riso-pink', danger: 'bg-red' }

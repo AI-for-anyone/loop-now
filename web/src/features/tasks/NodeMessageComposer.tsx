@@ -24,12 +24,13 @@ const copy = t.taskInbox
 // The border belongs to the shared container; the text area grows with its content and scrolls on its own once it hits the limit.
 const inputClass = 'min-h-10 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[9px] text-[15px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
-type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply; stopAlso?: number }
+type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply; stopAlso?: number; background?: ReactNode }
 // queue: the node's queue tray, attached to the top of the input.
 // stop: given while the node has a reply in progress; with an empty draft the send button becomes stop.
 // reply: answering a question the node asked you; the text goes out as that answer (an Inbox reply), not as a node message.
 // stopAlso: the background tasks this node's turns started; stopping or interrupting the turn stops them too, and the box says so.
-export function NodeMessageComposer({ taskId, draft, current, disabled, capability, text, onChange, onImages, imageLimits, onAccepted, onAction, queue, stop, reply, stopAlso = 0 }: Props) {
+// background: the mark for those tasks (a shell glyph and the count), first in the line below the box.
+export function NodeMessageComposer({ taskId, draft, current, disabled, capability, text, onChange, onImages, imageLimits, onAccepted, onAction, queue, stop, reply, stopAlso = 0, background }: Props) {
   const client = useQueryClient(), busy = useRef(false)
   const [localError, setLocalError] = useState(''), [reading, setReading] = useState(false), [preparing, setPreparing] = useState(false), [uploads, setUploads] = useState<ImageUploads>({})
   const canSend = current && !disabled && capability?.canSend === true && capability.taskId === taskId && capability.nodeRunId === draft.nodeRunId && capability.agentId === draft.agentId && capability.runtimeId === draft.runtimeId
@@ -119,6 +120,7 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   return <div className="grid gap-2">
     <div className="flex min-w-0 flex-col">{queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[50px]')}>{queue}</div>}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{field}</ImagePicker> : field()}</div>
     {current && <div className={cn('flex flex-wrap items-center gap-x-3.5 gap-y-1.5', imageLimits && onImages && 'sm:pl-[52px]')}>
+      {background}
       <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-[12px] text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} />
       {stop !== undefined && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
     </div>}

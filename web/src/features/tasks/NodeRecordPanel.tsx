@@ -181,7 +181,6 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
-                <BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />
                 <TaskBadge className="ml-auto" status={node.status} />
               </NodeHeading>
               {/* Next to the reason note are the recovery actions: fluorescent-pink “重试当前节点” (Retry current node), and beside it
@@ -224,6 +223,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
                 queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
                 stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
                 stopAlso={backgroundTasks.length}
+                background={<BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />}
                 reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
               {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
               {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
