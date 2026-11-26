@@ -6,16 +6,19 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 ## 未发布
 
-### 能在代码上干活的任务：一个任务一个工作区
+### 带工作区的任务：git worktree，或任意文件夹的副本
 
-- 任务可以带一个工作区。Manager 建任务时指定这台电脑上的一个 git 仓库，Loop Now 就为这个任务开一个 worktree 和一个新分支：从远端默认分支的最新提交开出，名字是 `task/<编号>-<标题>`，Manager 也可以自己起名。任务的每一步都在这个 worktree 里干活，所以同一个仓库上可以同时跑好几个任务，互不影响，也不碰你自己的检出。
-- 这种任务里的每一步，和 Agent 平时的对话一样干活。打开了“用我本机的 CLI 配置”时，它有你的设置、技能、插件、MCP 和登录，Claude Code 还用同一份记忆。所有运行时都能参加，包括内置的 Pi。
-- 任务结束或取消时，不会丢东西才删除 worktree：没有未提交的改动，并且每个提交都已合入或已推送。本地分支只在已合入时删除。否则 worktree 会保留，任务页写明原因（几个文件有未提交的改动、几个提交只在这里有），并给你一个“删除工作区”按钮；删除会丢掉未提交的改动，提交仍留在分支上。
-- 任务页显示仓库、分支、从哪里开出和所在文件夹；任务列表显示分支。
-- Loop Now 只动它自己开的 worktree（在它自己的数据文件夹里）。它不会运行 `git worktree prune`，不会在你的检出里切换分支或清理文件，不会删除远端分支，也不会关闭 PR。
-- loopctl 指南新增“改代码的任务”一节，写给 Manager 和任务里的 Agent：建任务前先把流程给人看、同一时间只有一个 Agent 写代码、验证的 Agent 不能是写代码的、打回重做有次数上限、一个任务一个 PR、怎么盯 PR、合并前先问、收尾时清理。
+- 任务可以带一个工作区：Manager 建任务时指定这台电脑上的一个文件夹，任务的每一步都在那里干活，不再是在 Agent 自己文件夹的副本里。每一步和 Agent 平时的对话一样干活：打开了“用我本机的 CLI 配置”时，它有你的设置、技能、插件、MCP 和登录，Claude Code 还用同一份记忆。所有运行时都能参加，包括内置的 Pi。同一个文件夹上可以同时跑好几个任务，互不影响，也不动这个文件夹本身。
+- 在 git 仓库里的文件夹会得到一个 git worktree 和一个新分支：从远端默认分支的最新提交开出，名字是 `task/<编号>-<标题>`，Manager 也可以自己起名。提交、推送和开 PR 由 Agent 自己做。任务结束或取消时，不会丢东西才删除 worktree（没有未提交的改动，每个提交都已合入或已推送）；本地分支只在已合入时删除。
+- 其他文件夹（完全不需要版本管理）会为任务复制一份（在 macOS 上瞬间完成），只读不改：原文件夹永远不会被改动，也不会把东西放回去。结果存成任务的成果文件，任务完成后副本删除。指向文件夹外面的链接不会进入副本。只需要读的代码仓库，Manager 也可以要求复制一份。
+- 只有这台电脑上有能用的 git 时才用 git。没有时（在 macOS 上是没有装开发者工具，且绝不会弹出“安装开发者工具”的窗口），仓库也会被复制，任务页会写明原因。
+- 被取消的任务，如果它的 worktree 或副本里有删掉就会丢的东西，就先保留；任务页写明原因（几个文件有未提交的改动、几个提交只在这里有、副本里新增或改过几个文件），并给你一个删除按钮。
+- 任务页显示工作区（worktree：仓库、分支、从哪里开出；副本：复制自哪个文件夹、多少个文件）；任务列表显示分支或“文件夹副本”。
+- Loop Now 只动它自己开的 worktree 和副本（在它自己的数据文件夹里）。它不会运行 `git worktree prune`，不会在你的检出里切换分支或清理文件，不会删除远端分支，也不会关闭 PR。
+- loopctl 指南新增“带工作区的任务”一节，写给 Manager 和任务里的 Agent：建任务前先把流程给人看、同一时间只有一个 Agent 写代码、验证的 Agent 不能是写代码的、打回重做有次数上限、一个任务一个 PR、合并前先问、在副本里把结果存成成果文件、收尾时清理。
 - 不带工作区的任务和以前一样。
-- 接口：`TaskCreateInput.workspace`、任务上的 `TaskWorkspace`（`workspace`）、`TaskSummary.branch`、`POST /tasks/{taskId}/workspace/remove`、错误码 `task_workspace_not_kept`。
+- 接口：`TaskCreateInput.workspace`（`folder`、`mode` auto / git / copy、`branch`、`baseBranch`）、任务上的 `TaskWorkspace`（`workspace`：`mode`、`git`、`copy`、`state`、`kept`、`modeNote`）、`TaskSummary.branch` 和 `TaskSummary.workspaceMode`、`POST /tasks/{taskId}/workspace/remove`、错误码 `task_workspace_not_kept`。
+
 
 ## v0.3.2
 

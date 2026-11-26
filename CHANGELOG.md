@@ -6,16 +6,19 @@ User-facing changes in each version. The release pipeline takes the matching ver
 
 ## Unreleased
 
-### Tasks that work on code: one worktree per task
+### Tasks with a workspace: a git worktree, or a copy of any folder
 
-- A task can carry a workspace. The Manager names a git repository on this computer when it creates the task, and Loop Now creates one worktree on one new branch for it: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. Every step of the task works in that worktree, so several tasks can run on one repository at the same time without touching each other or your own checkout.
-- A step of such a task works like the Agent's regular conversation. With "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included.
-- When the task ends or is cancelled, the worktree is removed if nothing would be lost: no uncommitted changes, and every commit merged or pushed. The local branch is deleted only when it is merged. Otherwise the worktree is kept, and the task page says why (how many files have uncommitted changes, how many commits exist only there) with a "Remove worktree" button for you; removing it loses the uncommitted changes, the commits stay on the branch.
-- The task page shows the repository, the branch, where it was started from and the folder; the task list shows the branch.
-- Loop Now only touches worktrees it created, in its own data folder. It never runs `git worktree prune`, never switches branches in or cleans your checkout, never deletes a remote branch and never closes a pull request.
-- The loopctl guide has a new part, "Tasks that change code", for Managers and the Agents in such a task: show the flow before creating the task, one Agent writes at a time, the verifier wrote none of the code, loops have limits, one pull request, how to watch it, ask before merging, clean up at the end.
+- A task can carry a workspace: the Manager names a folder on this computer when it creates the task, and every step of the task works there instead of in a copy of the Agent's own folder. A step works like the Agent's regular conversation: with "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included. Several tasks can run on the same folder at once without touching each other or the folder itself.
+- A folder inside a git repository gets a git worktree on one new branch: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. The Agents commit, push and open the pull request themselves. When the task ends or is cancelled, the worktree is removed if nothing would be lost (no uncommitted changes, every commit merged or pushed); the local branch is deleted only when it is merged.
+- Any other folder, which needs no version control at all, is copied for the task (instantly on macOS) and only read: the original is never changed and nothing is put back. Results are saved as the task's artifacts, and the copy is deleted when the task completes. Links that point outside the folder are not in the copy. The Manager can also ask for a copy of a repository it only needs to read.
+- Git is used only when a working one is on this computer. Without one (on macOS: without the developer tools, and the "install developer tools" dialog is never opened), a repository is copied too, and the task page says why.
+- A cancelled task whose worktree or copy holds work that would be lost keeps it; the task page says why (files with uncommitted changes, commits that exist only there, files added or changed in the copy) with a button for you to remove it.
+- The task page shows the workspace (worktree: repository, branch, where it started; copy: the folder it copies, how many files); the task list shows the branch or "Folder copy".
+- Loop Now only touches worktrees and copies it created, in its own data folder. It never runs `git worktree prune`, never switches branches in or cleans your checkout, never deletes a remote branch and never closes a pull request.
+- The loopctl guide has a new part, "Tasks with a workspace", for Managers and the Agents in such a task: show the flow before creating the task, one Agent writes at a time, the verifier wrote none of the code, loops have limits, one pull request, ask before merging, save results as artifacts in a copy, clean up at the end.
 - Tasks without a workspace are unchanged.
-- API: `TaskCreateInput.workspace`, `TaskWorkspace` on the task (`workspace`), `TaskSummary.branch`, `POST /tasks/{taskId}/workspace/remove`, error code `task_workspace_not_kept`.
+- API: `TaskCreateInput.workspace` (`folder`, `mode` auto / git / copy, `branch`, `baseBranch`), `TaskWorkspace` on the task (`workspace`: `mode`, `git`, `copy`, `state`, `kept`, `modeNote`), `TaskSummary.branch` and `TaskSummary.workspaceMode`, `POST /tasks/{taskId}/workspace/remove`, error code `task_workspace_not_kept`.
+
 
 ## v0.3.2
 
