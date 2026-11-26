@@ -78,4 +78,43 @@ describe('Markdown rendering and safety', () => {
     expect(figures[0].firstElementChild).toHaveTextContent('2D-1：红蓝撞色，适合做封面')
     expect(within(figures[3]).getByRole('img', { name: '2D-4' })).toBeInTheDocument()
   })
+
+  it('groups two-line Chinese captions with hard breaks and local file links into rows split by headings and dividers', () => {
+    const reply = [
+      '4 张 **Loop Now** 卡通形象候选图都已经用 `nano-banana-pro`（1:1，2K）生成完成，实际消耗 **60 Tapies**（当前剩余 **1,803 Tapies**），原图全部存进我自己的工作目录并做了本地 Git 提交（`8fffd3f`）。',
+      '',
+      '### 2D 粗边印刷/贴纸风（对齐现有封面风格）',
+      '',
+      '**2D-1**：笑眼很萌，但右上角开口处多了一根细白连线。  ',
+      '本地文件：[mascot-2d-1.png](file:///workspace/assets/mascot/mascot-2d-1.png)',
+      '![Loop Now 2D-1](https://example.com/2d-1.png)',
+      '',
+      '**2D-2（2D 首推）**：右上角小黄块干净悬浮，身体开口和 Logo 一致，配色和现有 Riso 封面最搭。  ',
+      '本地文件：[mascot-2d-2.png](file:///workspace/assets/mascot/mascot-2d-2.png)',
+      '![Loop Now 2D-2](https://example.com/2d-2.png)',
+      '',
+      '---',
+      '',
+      '### 3D 潮玩/盲盒风',
+      '',
+      '**3D-1**：盲盒材质很好，不过右上角开口切得偏小，Logo 轮廓不如第二张明显。  ',
+      '本地文件：[mascot-3d-1.png](file:///workspace/assets/mascot/mascot-3d-1.png)',
+      '![Loop Now 3D-1](https://example.com/3d-1.png)',
+      '',
+      '**3D-2（3D 首推）**：右上角开口清楚，一眼能认出是 Loop Now Logo 变的，表情和悬浮小金块都很讨喜。  ',
+      '本地文件：[mascot-3d-2.png](file:///workspace/assets/mascot/mascot-3d-2.png)',
+      '![Loop Now 3D-2](https://example.com/3d-2.png)',
+    ].join('\n')
+    const { container } = render(<Markdown text={reply} />)
+    const rows = [...container.querySelectorAll<HTMLElement>('[data-md-image-row]')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.getAttribute('data-count'))).toEqual(['2', '2'])
+    expect([...container.querySelectorAll('h3')].map((h) => h.textContent)).toEqual([
+      '2D 粗边印刷/贴纸风（对齐现有封面风格）',
+      '3D 潮玩/盲盒风',
+    ])
+    expect(container.querySelectorAll('hr')).toHaveLength(1)
+    expect(within(rows[0]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 2D-1', 'Loop Now 2D-2'])
+    expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 3D-1', 'Loop Now 3D-2'])
+  })
 })

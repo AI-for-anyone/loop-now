@@ -82,10 +82,13 @@ function Link(allProps: ComponentProps<'a'> & ExtraProps) {
   return <a {...props} href={href}>{body}</a>
 }
 
+type MarkdownImageProps = ComponentProps<'img'> & ExtraProps & { 'data-md-block-image'?: string }
+
 // Reply images render as rounded thumbnails capped at 240px high and 360px wide, keeping aspect ratio; click or Enter opens the shared
 // preview dialog. Images that fail to load (or have a blocked URL) show their alt text in a small box instead of an empty frame.
-function Image(allProps: ComponentProps<'img'> & ExtraProps) {
-  const { src, alt = '', title, className, ...props } = withoutNode(allProps)
+function Image(allProps: MarkdownImageProps) {
+  const { src, alt = '', title, className, 'data-md-block-image': blockAttr, ...props } = withoutNode(allProps)
+  const block = blockAttr !== undefined
   const insideLink = useContext(InsideLink)
   const [open, setOpen] = useState(false)
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
@@ -99,7 +102,11 @@ function Image(allProps: ComponentProps<'img'> & ExtraProps) {
         aria-label={alt || t.images.loadFailed}
         title={tooltip}
         data-md-image-error
-        className="inline-flex max-w-[min(100%,360px)] items-center gap-2 rounded-input border border-dashed border-ink/25 bg-paper px-3 py-2 align-top text-[13px] leading-snug text-ink-500"
+        data-md-block-image={block ? '' : undefined}
+        className={cn(
+          block ? 'mt-1.5 flex w-fit' : 'inline-flex align-top',
+          'max-w-[min(100%,360px)] items-center gap-2 rounded-input border border-dashed border-ink/25 bg-paper px-3 py-2 text-[13px] leading-snug text-ink-500',
+        )}
       >
         <ImageOffIcon aria-hidden="true" className="size-4 shrink-0" />
         <span className="min-w-0 break-words">{alt || t.images.loadFailed}</span>
@@ -119,6 +126,7 @@ function Image(allProps: ComponentProps<'img'> & ExtraProps) {
       className={cn(
         'block h-auto max-h-[240px] w-auto max-w-full',
         insideLink && 'max-w-[min(100%,360px)] rounded-input border border-ink/20 bg-white',
+        insideLink && block && 'mt-1.5',
         className,
       )}
     />
@@ -134,7 +142,11 @@ function Image(allProps: ComponentProps<'img'> & ExtraProps) {
         title={tooltip}
         onClick={() => setOpen(true)}
         data-md-image
-        className="inline-block max-w-[min(100%,360px)] cursor-zoom-in overflow-hidden rounded-input border border-ink/20 bg-white p-0 align-top outline-none hover:border-ink/40 focus-visible:shadow-focus"
+        data-md-block-image={block ? '' : undefined}
+        className={cn(
+          block ? 'mt-1.5 block' : 'inline-block align-top',
+          'max-w-[min(100%,360px)] cursor-zoom-in overflow-hidden rounded-input border border-ink/20 bg-white p-0 outline-none hover:border-ink/40 focus-visible:shadow-focus',
+        )}
       >
         {image}
       </button>

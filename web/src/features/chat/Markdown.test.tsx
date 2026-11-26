@@ -514,4 +514,81 @@ describe('Markdown images in a reply', () => {
     expect(cursor).not.toBeNull()
     expect(row.contains(cursor)).toBe(false)
   })
+
+  it('groups multi-line captions (up to 3 lines with hard/soft breaks and inline links) into rows while rejecting 4+ lines', () => {
+    const twoSections = [
+      'Intro summary for all four candidates.',
+      '',
+      '### 2D sticker style',
+      '',
+      '**2D-1**: cute smile, one thin white line near the top corner.  ',
+      'Local file: [mascot-2d-1.png](file:///workspace/mascot-2d-1.png)',
+      '![Mascot 2D-1](https://example.com/2d-1.png)',
+      '',
+      '**2D-2 (pick)**: clean floating yellow block and matching cover colors.  ',
+      'Local file: [mascot-2d-2.png](https://example.com/2d-2.png)',
+      '![Mascot 2D-2](https://example.com/2d-2.png)',
+      '',
+      '---',
+      '',
+      '### 3D vinyl toy style',
+      '',
+      '**3D-1**: smooth material, slightly smaller corner opening.  ',
+      'Local file: [mascot-3d-1.png](https://example.com/3d-1.png)',
+      '![Mascot 3D-1](https://example.com/3d-1.png)',
+      '',
+      '**3D-2 (pick)**: crisp logo silhouette, warm expression and gold accent.  ',
+      'Local file: [mascot-3d-2.png](https://example.com/3d-2.png)',
+      '![Mascot 3D-2](https://example.com/3d-2.png)',
+    ].join('\n')
+    const view = render(<Markdown text={twoSections} />)
+    const rows = [...view.container.querySelectorAll<HTMLElement>('[data-md-image-row]')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.getAttribute('data-count'))).toEqual(['2', '2'])
+    expect(view.container.querySelectorAll('h3')).toHaveLength(2)
+    expect(view.container.querySelectorAll('hr')).toHaveLength(1)
+    const firstCaption = rows[0].querySelector('figure figcaption')!
+    expect(firstCaption.querySelector('br')).not.toBeNull()
+    expect(firstCaption).toHaveTextContent('2D-1: cute smile, one thin white line near the top corner.')
+    expect(firstCaption).toHaveTextContent('Local file: mascot-2d-1.png')
+    // The blocked file:// link stays visible as a span inside the caption.
+    expect(firstCaption.querySelector('span')).toHaveTextContent('mascot-2d-1.png')
+    view.unmount()
+
+    const tooManyLines = [
+      'Line 1  \nLine 2  \nLine 3  \nLine 4\n![One](https://example.com/1.png)',
+      '',
+      'Line 1  \nLine 2  \nLine 3  \nLine 4\n![Two](https://example.com/2.png)',
+    ].join('\n')
+    const view2 = render(<Markdown text={tooManyLines} />)
+    expect(view2.container.querySelector('[data-md-image-row]')).toBeNull()
+  })
+
+  it('starts a trailing image after a soft or hard line break on its own line even when not in a row, while keeping inline images inline', () => {
+    const softBreak = render(<Markdown text={'Local file: mascot.png\n![Mascot](https://example.com/a.png)'} />)
+    const softButton = screen.getByRole('button', { name: 'Enlarge image: Mascot' })
+    expect(softButton).toHaveAttribute('data-md-block-image')
+    expect(softButton.className).toContain('block')
+    expect(softButton.className).not.toContain('inline-block')
+    softBreak.unmount()
+
+    const hardBreak = render(<Markdown text={'Local file: mascot.png  \n![Mascot](https://example.com/a.png)'} />)
+    const hardButton = screen.getByRole('button', { name: 'Enlarge image: Mascot' })
+    expect(hardButton).toHaveAttribute('data-md-block-image')
+    expect(hardButton.className).toContain('block')
+    expect(hardBreak.container.querySelector('p br')).toBeNull()
+    hardBreak.unmount()
+
+    const failedTrailing = render(<Markdown text={'Local file: missing.png\n![Missing](https://example.com/missing.png)'} />)
+    fireEvent.error(screen.getByRole('img', { name: 'Missing' }))
+    const errorBox = screen.getByRole('img', { name: 'Missing' })
+    expect(errorBox).toHaveAttribute('data-md-block-image')
+    expect(errorBox.className).toContain('flex')
+    failedTrailing.unmount()
+
+    render(<Markdown text="Look at ![Icon](https://example.com/icon.png) right here" />)
+    const inlineButton = screen.getByRole('button', { name: 'Enlarge image: Icon' })
+    expect(inlineButton).not.toHaveAttribute('data-md-block-image')
+    expect(inlineButton.className).toContain('inline-block')
+  })
 })

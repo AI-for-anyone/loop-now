@@ -421,7 +421,7 @@
     @apply max-w-full;
   }
   .markdown .md-image-caption {
-    @apply w-full text-[13.5px] leading-[1.5] break-words text-ink-700;
+    @apply w-full text-[13.5px] leading-[1.5] text-ink-700 [overflow-wrap:anywhere];
   }
   .markdown .md-image-caption strong {
     @apply text-ink;

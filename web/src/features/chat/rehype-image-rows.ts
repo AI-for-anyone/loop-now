@@ -1,11 +1,14 @@
 type HastNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
-// Maximum display width of a caption line (a CJK/full-width character counts as 2, everything else as 1): keeps short labels such as
-// "2D-1: ..." grouped with their picture without pulling long prose paragraphs into an image row.
-const MAX_CAPTION_UNITS = 80
+// Limits on a caption above an image in a row: up to 3 lines (hard or soft breaks), each line at most 110 display units and the whole
+// caption at most 160 units (a CJK/full-width character counts as 2, everything else as 1). Keeps short multi-line descriptions (such as
+// a label line plus a local file link) grouped with their picture without pulling long prose paragraphs into an image row.
+const MAX_CAPTION_LINES = 3
+const MAX_CAPTION_LINE_UNITS = 110
+const MAX_CAPTION_TOTAL_UNITS = 160
 
 const CAPTION_HEADINGS = new Set(['h3', 'h4', 'h5', 'h6'])
-const DISALLOWED_IN_CAPTION = new Set(['img', 'br', 'p', 'div', 'ul', 'ol', 'pre', 'blockquote', 'table', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+const DISALLOWED_IN_CAPTION = new Set(['img', 'p', 'div', 'ul', 'ol', 'pre', 'blockquote', 'table', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 const CONTAINERS = new Set(['blockquote', 'li'])
 
 interface RowItem {
@@ -18,7 +21,6 @@ const isElement = (node: HastNode, tag?: string) => node.type === 'element' && (
 const isImg = (node: HastNode) => isElement(node, 'img')
 const isBr = (node: HastNode) => isElement(node, 'br')
 
-const textOf = (node: HastNode): string => (node.type === 'text' ? (node.value ?? '') : (node.children ?? []).map(textOf).join(''))
 const units = (text: string) => Array.from(text).reduce((sum, char) => sum + ((char.codePointAt(0) ?? 0) > 0x2e7f ? 2 : 1), 0)
 
 function hasDisallowedCaptionNode(node: HastNode): boolean {
@@ -26,12 +28,48 @@ function hasDisallowedCaptionNode(node: HastNode): boolean {
   return (node.children ?? []).some(hasDisallowedCaptionNode)
 }
 
+// Split inline caption nodes into logical lines across <br> hard breaks and soft newlines. Markdown hard breaks emit a <br> followed by
+// a "\n" text node, so one leading newline right after <br> is part of that same break, not a second line break.
+function captionLines(nodes: HastNode[]): string[] {
+  const lines = ['']
+  let afterBr = false
+  const walk = (node: HastNode) => {
+    if (isBr(node)) {
+      lines.push('')
+      afterBr = true
+      return
+    }
+    if (node.type === 'text') {
+      let value = node.value ?? ''
+      if (afterBr) {
+        value = value.replace(/^\r?\n/, '')
+        afterBr = false
+      }
+      const parts = value.split(/\r?\n/)
+      lines[lines.length - 1] += parts[0]!
+      for (let i = 1; i < parts.length; i++) lines.push(parts[i]!)
+      return
+    }
+    afterBr = false
+    for (const child of node.children ?? []) walk(child)
+  }
+  for (const node of nodes) walk(node)
+  return lines.map((line) => line.trim())
+}
+
 function validCaptionNodes(nodes: HastNode[]): boolean {
   if (nodes.some(hasDisallowedCaptionNode)) return false
-  const raw = nodes.map(textOf).join('')
-  if (/[\r\n]/.test(raw)) return false
-  const trimmed = raw.trim()
-  return trimmed.length > 0 && units(trimmed) <= MAX_CAPTION_UNITS
+  const lines = captionLines(nodes)
+  if (lines.length === 0 || lines.length > MAX_CAPTION_LINES) return false
+  const nonEmpty = lines.filter(Boolean)
+  if (nonEmpty.length === 0) return false
+  let total = 0
+  for (const line of lines) {
+    const width = units(line)
+    if (width > MAX_CAPTION_LINE_UNITS) return false
+    total += width
+  }
+  return total <= MAX_CAPTION_TOTAL_UNITS
 }
 
 // Images in a paragraph that holds only images (plus whitespace and line breaks); null otherwise.
@@ -173,6 +211,35 @@ function makeRow(items: RowItem[]): HastNode {
   }
 }
 
+// When a paragraph that stays outside an image row ends with an image right after a soft or hard line break, mark that image to start
+// on its own line below the text instead of sitting inline to the right of the last text line, and drop the now-redundant break before it.
+function markTrailingBlockImage(node: HastNode) {
+  if (!isElement(node, 'p') || !node.children?.length) return
+  const children = node.children
+  let lastIdx = children.length - 1
+  while (lastIdx >= 0 && isBlank(children[lastIdx]!)) lastIdx--
+  if (lastIdx <= 0 || !isImg(children[lastIdx]!)) return
+
+  const before = children.slice(0, lastIdx).map((child) => (child.type === 'text' ? { ...child } : child))
+  let endedWithBreak = false
+  while (before.length > 0 && before.at(-1)!.type === 'text' && /^[ \t]*$/.test(before.at(-1)!.value ?? '')) before.pop()
+  const prev = before.at(-1)
+  if (prev?.type === 'text' && /\r?\n[ \t]*$/.test(prev.value ?? '')) {
+    prev.value = (prev.value ?? '').replace(/\r?\n[ \t]*$/, '')
+    if (prev.value === '') before.pop()
+    if (before.length > 0 && isBr(before.at(-1)!)) before.pop()
+    endedWithBreak = true
+  } else if (prev && isBr(prev)) {
+    before.pop()
+    endedWithBreak = true
+  }
+  if (!endedWithBreak || before.every(isBlank)) return
+
+  const image = children[lastIdx]!
+  ;(image.properties ??= {}).dataMdBlockImage = ''
+  node.children = [...before, image, ...children.slice(lastIdx + 1)]
+}
+
 function groupChildren(parent: HastNode) {
   const children = parent.children
   if (!children?.length) return
@@ -230,6 +297,7 @@ function groupChildren(parent: HastNode) {
       }
     }
 
+    markTrailingBlockImage(node)
     out.push(node)
     i++
   }
