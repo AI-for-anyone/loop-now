@@ -633,7 +633,11 @@ func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note s
 	}
 	n.Inputs, n.InputVersions = inputs, versions
 	data, _ := json.Marshal(inputs)
-	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\nThe current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder. Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data))
+	where := "The current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder."
+	if w := m.Record.View.Workspace; w != nil && w.State == taskmodel.WorkspaceStateActive {
+		where = workspaceBlock(*w)
+	}
+	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\n%s Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data), where)
 	if note != "" {
 		text += "Retry note: " + note
 	}

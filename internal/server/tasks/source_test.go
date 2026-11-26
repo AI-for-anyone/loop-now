@@ -54,7 +54,7 @@ func TestArchiveClaudeSession(t *testing.T) {
 	}
 	own := write(claudecli.ProjectDirName(workspace))
 	inst.SessionFile = &own
-	data, err := src.archiveSession(context.Background(), inst)
+	data, err := src.archiveSession(context.Background(), inst, "")
 	var archived struct {
 		Session []byte `json:"session"`
 	}
@@ -65,13 +65,44 @@ func TestArchiveClaudeSession(t *testing.T) {
 	if names := claudecli.ProjectDirNames(workspace); len(names) > 1 {
 		raw := write(names[1])
 		inst.SessionFile = &raw
-		if _, err := src.archiveSession(context.Background(), inst); err != nil {
+		if _, err := src.archiveSession(context.Background(), inst, ""); err != nil {
 			t.Fatalf("session record with the path encoded as is: %v", err)
 		}
 	}
 	other := write("-some-other-workspace")
 	inst.SessionFile = &other
-	if _, err := src.archiveSession(context.Background(), inst); err == nil {
+	if _, err := src.archiveSession(context.Background(), inst, ""); err == nil {
 		t.Fatal("a session record from another workspace must not be archived for this instance")
+	}
+}
+
+// In a task with a worktree, Claude Code keeps every step's session under the worktree's name: each instance's
+// archive takes its own recorded file there, and the worktree's folder is accepted only for that task.
+func TestArchiveClaudeSessionInTheWorktree(t *testing.T) {
+	work, projects := t.TempDir(), t.TempDir()
+	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
+	worktree := filepath.Join(work, "worktrees", uuid.NewString(), "app")
+	if err := os.MkdirAll(worktree, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	record := func(content string) string {
+		p := filepath.Join(projects, claudecli.ProjectDirName(worktree), uuid.NewString()+".jsonl")
+		_ = os.MkdirAll(filepath.Dir(p), 0o700)
+		_ = os.WriteFile(p, []byte(content+"\n"), 0o600)
+		return p
+	}
+	first, second := record(`{"step":"implement"}`), record(`{"step":"verify"}`)
+	for file, want := range map[string]string{first: `{"step":"implement"}`, second: `{"step":"verify"}`} {
+		inst := store.TaskInstance{ID: uuid.New(), TaskID: uuid.New(), AgentID: uuid.New(), SessionState: "active", SessionFile: &file}
+		data, err := src.archiveSession(context.Background(), inst, worktree)
+		var archived struct {
+			Session []byte `json:"session"`
+		}
+		if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != want+"\n" {
+			t.Fatalf("archive of %s: %s %v", file, data, err)
+		}
+		if _, err := src.archiveSession(context.Background(), inst, ""); err == nil {
+			t.Fatal("without the task's worktree, a record under its name is not this instance's")
+		}
 	}
 }

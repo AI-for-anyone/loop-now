@@ -254,6 +254,34 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 	}
 }
 
+// PurgeClaudeWorktree runs claude purge <worktree> -y for a task's git worktree under the platform's work root
+// (<WorkRoot>/worktrees/...), when Claude Code keeps anything for it; any other path is refused. The task's steps have
+// been released and their sessions archived by then.
+func (e *Executor) PurgeClaudeWorktree(ctx context.Context, worktree string) error {
+	if e.o.RealHome == nil || e.claude == nil || e.log == nil {
+		return nil // executor not built by New (for tests): no Claude Code
+	}
+	if !filepath.IsAbs(worktree) || !within(filepath.Join(e.o.WorkRoot, "worktrees"), worktree) || filepath.Clean(worktree) == filepath.Join(e.o.WorkRoot, "worktrees") {
+		return fmt.Errorf("path %s is not a task worktree under the platform work root", worktree)
+	}
+	home, err := e.o.RealHome()
+	if err != nil || !filepath.IsAbs(home) {
+		return nil
+	}
+	bin, err := e.claudeBinary(ctx)
+	if err != nil {
+		return nil // no Claude Code on this computer: it kept nothing
+	}
+	env := e.claudeHelperEnv(ctx, home)
+	projects := e.claude.ProjectsDir(ctx, bin, env, home)
+	for _, name := range claudecli.ProjectDirNames(worktree) {
+		if info, err := os.Lstat(filepath.Join(projects, name)); err == nil && info.IsDir() {
+			return claudecli.Purge(ctx, bin, env, worktree)
+		}
+	}
+	return nil
+}
+
 // purgeClaudeWorkspace runs claude purge <path> -y. path must be exactly this Agent's (or task instance's) workspace
 // under the platform's work root: for any other path (including local directories bound to it) nothing is run; it logs
 // and returns an error.
@@ -342,6 +370,11 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 		// The person's settings, CLAUDE.md files and MCP servers are not read; auto memory and Claude Code's own Skills
 		// are off. With the person's own configuration Claude Code reads all of them, as in their terminal.
 		args = append(args, "--setting-sources", "", "--settings", claudeSettings, "--strict-mcp-config")
+	} else if memory := e.claudeRegularMemory(ctx, snap, bin, home); memory != "" {
+		// A step in a task's worktree: Claude Code would key auto memory by the worktree, a new empty folder; it uses
+		// the regular conversation's memory instead (measured on 2.1.332: flag settings are honoured).
+		b, _ := json.Marshal(map[string]string{"autoMemoryDirectory": memory})
+		args = append(args, "--settings", string(b))
 	}
 	if _, err := os.Stat(d.claudeMCP); err == nil {
 		args = append(args, "--mcp-config", d.claudeMCP)
@@ -383,6 +416,23 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
 	return started{rt: &claudeProcess{Client: client, binary: bin, version: version, sessionID: sessionID}}, nil
+}
+
+// claudeRegularMemory is the auto memory folder of the base Agent's regular conversation, for a step of a task with a
+// worktree: <Claude projects dir>/<record folder name of the regular working folder>/memory, where the regular folder
+// is the one workDir gives the regular conversation. Empty for any other start.
+func (e *Executor) claudeRegularMemory(ctx context.Context, snap agentconfig.Snapshot, bin, home string) string {
+	if snap.TaskID == uuid.Nil || snap.TaskWorkspace == "" || snap.ConfigurationAgentID == uuid.Nil {
+		return ""
+	}
+	regular := snap
+	regular.TaskID, regular.TaskWorkspace, regular.WorkingDirectory = uuid.Nil, "", snap.RegularWorkingDirectory
+	cwd := workDir(regular, e.dirs(snap.ConfigurationAgentID))
+	projects := e.claude.ProjectsDir(ctx, bin, e.claudeHelperEnv(ctx, home), home)
+	if projects == "" {
+		return ""
+	}
+	return filepath.Join(projects, claudecli.ProjectDirName(cwd), "memory")
 }
 
 // claudeSessionArgs returns the session ID and arguments for this start: with a session record it continues that

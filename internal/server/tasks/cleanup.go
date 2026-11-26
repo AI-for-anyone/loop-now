@@ -38,6 +38,14 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	if err != nil {
 		return err
 	}
+	record, err := s.Store.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	worktree := ""
+	if w := record.View.Workspace; w != nil && within(s.Source.WorktreeRoot(), w.Path) {
+		worktree = w.Path
+	}
 	for _, inst := range instances {
 		if inst.Retired {
 			continue
@@ -80,7 +88,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 		if exists {
 			continue
 		}
-		data, e := s.Source.archiveSession(ctx, inst)
+		data, e := s.Source.archiveSession(ctx, inst, worktree)
 		if e != nil {
 			return e
 		}
@@ -119,6 +127,13 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 			return err
 		}
 	}
+	// Every step has been released: what Claude Code keeps for the worktree (the steps' session records, archived
+	// above) belongs to this task alone.
+	if worktree != "" && s.Source.PurgeClaudeFolder != nil {
+		if e := s.Source.PurgeClaudeFolder(ctx, worktree); e != nil && s.Log != nil {
+			s.Log.Warn("could not clean up Claude Code's data for the task's worktree", "task_id", id, "error", e)
+		}
+	}
 	root, err := os.OpenRoot(s.Source.WorkRoot)
 	if err != nil {
 		return err
@@ -139,11 +154,12 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 }
 
 // archiveSession reads a task instance's session for archiving: Pi's is in the instance's own sessions directory;
-// Claude Code's is the one <session ID>.jsonl that claude left for this instance's workspace (only files in the
-// subdirectory of claude's session record directory that corresponds to the instance workspace are accepted). A runtime
+// Claude Code's is the one <session ID>.jsonl that claude left for this instance's workspace, or for the task's
+// worktree (only the instance's own recorded file in the subdirectory of claude's session record directory that
+// corresponds to that folder is accepted; the task's other steps keep theirs beside it). A runtime
 // that keeps its sessions itself (Codex) is not read: the archive records its runtime and session reference, and the
 // runtime keeps the session (the executor archives it there when the instance is released).
-func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([]byte, error) {
+func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance, worktree string) ([]byte, error) {
 	if inst.SessionState == "missing" {
 		return nil, errors.New("the task session is missing; the directory is kept for repair")
 	}
@@ -161,7 +177,7 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 		base := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "sessions")
 		rel, err := filepath.Rel(base, *inst.SessionFile)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-			base, rel = s.claudeInstanceSession(ctx, inst, *inst.SessionFile)
+			base, rel = s.claudeInstanceSession(ctx, inst, *inst.SessionFile, worktree)
 			if base == "" {
 				return nil, errors.New("the task session is not in the instance's directory")
 			}
@@ -217,20 +233,29 @@ func (s *Source) keptSessionRuntime(inst store.TaskInstance) string {
 	return runtime
 }
 
-// claudeInstanceSession decides whether file is a session record claude left for this task instance's workspace: if so
-// it returns the session record directory and the relative path, otherwise both are empty.
-func (s *Source) claudeInstanceSession(ctx context.Context, inst store.TaskInstance, file string) (string, string) {
+// claudeInstanceSession decides whether file is a session record claude left for this task instance's workspace, or
+// for the task's worktree (worktree, empty when there is none): if so it returns the session record directory and the
+// relative path, otherwise both are empty. file is the instance's own recorded session, never another step's.
+func (s *Source) claudeInstanceSession(ctx context.Context, inst store.TaskInstance, file, worktree string) (string, string) {
 	if s.ClaudeProjects == nil {
 		return "", ""
 	}
 	projects := s.ClaudeProjects(ctx)
-	workspace := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "workspace")
 	if projects == "" || !claudecli.InProjects(projects, file) {
 		return "", ""
 	}
+	if inst.SessionFile == nil || *inst.SessionFile != file {
+		return "", ""
+	}
+	folders := []string{filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "workspace")}
+	if worktree != "" {
+		folders = append(folders, worktree)
+	}
 	owned := false
-	for _, name := range claudecli.ProjectDirNames(workspace) {
-		owned = owned || filepath.Dir(file) == filepath.Join(projects, name)
+	for _, folder := range folders {
+		for _, name := range claudecli.ProjectDirNames(folder) {
+			owned = owned || filepath.Dir(file) == filepath.Join(projects, name)
+		}
 	}
 	if !owned {
 		return "", ""

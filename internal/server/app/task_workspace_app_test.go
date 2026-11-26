@@ -14,6 +14,7 @@ import (
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/config"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks/gitworkspace"
@@ -38,6 +39,7 @@ func gitT(t *testing.T, dir string, args ...string) string {
 type workspaceWorld struct {
 	*server
 	w                    *world
+	dump                 string // where the fake Pi writes how it was started
 	agent                apitypes.Agent
 	folder, repo, remote string
 }
@@ -48,7 +50,9 @@ func newWorkspaceWorld(t *testing.T) workspaceWorld {
 		t.Skip("git is not installed")
 	}
 	w := newWorld(t)
-	s := w.start(nil)
+	dump := filepath.Join(t.TempDir(), "dump.json")
+	t.Setenv("FAKEPI_DUMP", dump)
+	s := w.start(func(c *config.Config) { c.ExecEnvPassthrough = []string{"FAKEPI_DUMP"} })
 	t.Cleanup(s.stop)
 	_, agent := s.createAgent("workspace Manager")
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
@@ -57,7 +61,7 @@ func newWorkspaceWorld(t *testing.T) workspaceWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ww := workspaceWorld{server: s, w: w, agent: agent, folder: folder, repo: filepath.Join(folder, "repo"), remote: filepath.Join(folder, "origin.git")}
+	ww := workspaceWorld{server: s, w: w, dump: dump, agent: agent, folder: folder, repo: filepath.Join(folder, "repo"), remote: filepath.Join(folder, "origin.git")}
 	gitT(t, folder, "init", "-q", "-b", "main", ww.repo)
 	if err := os.WriteFile(filepath.Join(ww.repo, "README"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -210,6 +214,29 @@ func TestTaskWorkspaceIsCreatedBeforeTheFirstStep(t *testing.T) {
 	}
 	if got := gitT(t, ww.repo, "rev-parse", "--abbrev-ref", "HEAD"); got != "main" {
 		t.Fatalf("the person's checkout moved to %s", got)
+	}
+	// The step's Pi runs in the worktree and is told so; its turn carries the workspace block.
+	taskWait(t, ww.server, created.Task.ID, func(d taskmodel.Detail) bool { return ww.a.Executor.Process(d.Nodes[0].RuntimeID).State == "busy" })
+	var started struct {
+		Cwd          string `json:"cwd"`
+		SystemPrompt string `json:"systemPrompt"`
+	}
+	b, err := os.ReadFile(ww.dump)
+	if err != nil || json.Unmarshal(b, &started) != nil {
+		t.Fatalf("fake Pi dump: %v", err)
+	}
+	if real, _ := filepath.EvalSymlinks(w.Path); started.Cwd != w.Path && started.Cwd != real {
+		t.Fatalf("the step's Pi works in %s, want the worktree %s", started.Cwd, w.Path)
+	}
+	if !strings.Contains(started.SystemPrompt, "this task's git worktree") {
+		t.Fatalf("the step's prompt says where it works:\n%s", started.SystemPrompt)
+	}
+	var text string
+	if err := ww.a.Store.Pool.QueryRow(context.Background(), `SELECT text FROM task_turns WHERE task_id=$1 ORDER BY queue_seq LIMIT 1`, created.Task.ID).Scan(&text); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "on branch "+branch) || strings.Contains(text, "clean copy") {
+		t.Fatalf("the step's turn carries the workspace block:\n%s", text)
 	}
 }
 

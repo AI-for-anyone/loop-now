@@ -461,6 +461,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.Config.Releaser = a.Executor
 	taskSource.ForkBaseline = a.Executor.ForkBaseline
 	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
+	taskSource.PurgeClaudeFolder = a.Executor.PurgeClaudeWorktree
 	taskSource.KeepsSessions = a.Executor.KeepsSessions
 	taskSource.HandoffBudget = cfg.ContextHandoffTokens
 	// Preserve unresolved handoff process evidence before generic cleanup can

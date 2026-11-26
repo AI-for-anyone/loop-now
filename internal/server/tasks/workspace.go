@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -168,6 +169,25 @@ func activateWorkspace(r *taskmodel.Record, res *gitworkspace.Result) {
 	r.View.Workspace.State = taskmodel.WorkspaceStateActive
 	r.View.Workspace.BaseBranch = res.BaseBranch
 	r.View.Workspace.BaseCommit = &commit
+}
+
+// workspaceBlock tells a step of a task with a worktree where and how it works.
+func workspaceBlock(w taskmodel.Workspace) string {
+	base := w.BaseBranch
+	if w.BaseCommit != nil {
+		base += " at " + shortCommit(*w.BaseCommit)
+	}
+	return fmt.Sprintf("This task works in one git worktree: %s, on branch %s, started from %s. Work only in this worktree and stay on this "+
+		"branch: do not switch branches, and do not touch the repository's main checkout (%s) or any other worktree. Commit your work "+
+		"and push it to this branch; this branch has one pull request for the whole task. Your own folder is still at its usual place "+
+		"(see \"Folders and context\").", w.Path, w.Branch, base, w.Repository)
+}
+
+func shortCommit(c string) string {
+	if len(c) > 12 {
+		return c[:12]
+	}
+	return c
 }
 
 // RemoveWorkspace removes the kept worktree of an ended task, for a person in the console. Until workspaces are
