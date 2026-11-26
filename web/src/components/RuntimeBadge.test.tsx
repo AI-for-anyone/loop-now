@@ -23,22 +23,33 @@ describe('runtime badge and sidebar mark', () => {
   })
 })
 
-describe('runtime logos in the badge and the sidebar mark', () => {
-  it('each runtime installed on this computer shows its own logo, so a Claude Code Agent and a Codex Agent tell apart; one without a logo shows its initial', async () => {
+describe('runtime marks in the badge and the sidebar row', () => {
+  it('each runtime installed on this computer shows the ink frame with its own shape; one without a shape shows its initial', async () => {
     const acme = { ...runtimeDefinitions().runtimes[1], id: 'acme', name: 'Acme CLI', providers: ['acme'] } as unknown as Schemas['RuntimeDefinition']
     server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...withCodex().runtimes, acme] })))
-    const logo = (element: Element) => element.querySelector('img')?.getAttribute('data-logo')
+    const svgOf = (element: Element) => element.querySelector('svg')
     renderWithQuery(<><RuntimeMark runtime="claude-code" /><RuntimeMark runtime="codex" /><RuntimeMark runtime={'acme' as Schemas['AgentRuntime']} /><RuntimeBadge runtime="codex" /></>)
     await screen.findAllByTitle('Runtime: Codex on this computer')
-    expect(logo(screen.getByTitle('Runtime: Claude Code on this computer'))).toBe('claude')
-    for (const mark of screen.getAllByTitle('Runtime: Codex on this computer')) expect(logo(mark)).toBe('openai')
-    expect(screen.getByTitle('Runtime: Acme CLI on this computer').querySelector('text')).toHaveTextContent('A')
+    const claude = svgOf(screen.getByTitle('Runtime: Claude Code on this computer'))!
+    expect(claude).toHaveAttribute('data-logo', 'claude')
+    expect(claude.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+    for (const mark of screen.getAllByTitle('Runtime: Codex on this computer')) {
+      const svg = svgOf(mark)!
+      expect(svg).toHaveAttribute('data-logo', 'openai')
+      expect(svg.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+    }
+    const added = svgOf(screen.getByTitle('Runtime: Acme CLI on this computer'))!
+    expect(added.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+    expect(added.querySelector('text')).toHaveTextContent('A')
   })
-  it('the sidebar mark sits on a light tile at full strength, so a black logo reads on the blue sidebar', async () => {
+
+  it('the sidebar mark uses the 16 px ink frame directly, with no light square wrapper behind it', async () => {
     server.use(http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withCodex())))
     renderWithQuery(<RuntimeMark runtime="codex" />)
     const mark = await screen.findByTitle('Runtime: Codex on this computer')
-    expect(mark).toHaveClass('bg-paper-raised')
+    expect(mark).not.toHaveClass('bg-paper-raised')
     expect(mark).not.toHaveClass('opacity-75')
+    expect(mark.querySelector('svg')).toHaveClass('size-4')
+    expect(mark.querySelector('svg > rect')).toHaveAttribute('fill', 'var(--ink)')
   })
 })

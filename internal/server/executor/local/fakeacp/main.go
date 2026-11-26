@@ -28,6 +28,9 @@
 //	                  for the n commands that ended before that reply began, and ends the reply with usage_update.
 //	                  The word lost never reports its end; daemon starts a daemon command that never ends; now
 //	                  ends before the prompt does (its end comes within the prompt, as agy's for a quick command).
+//	                  <d1>+<d2> runs a command for d1, and the reply the agent gives by itself about it starts another
+//	                  command for d2 (as agy does in its own reply, with no prompt open), still running when that reply
+//	                  ends; its end brings another reply of the agent's own.
 //	                  FAKEACP_WAKE_DELAY (a duration) is how long such a reply takes to begin and to finish.
 //	                  session/cancel ends the session's commands still running, without a word.
 //	fake:bgtask <dur> <cmd>
@@ -180,6 +183,10 @@ type server struct {
 	running map[string]string
 	ended   map[string]int
 	waking  map[string]bool
+	// then is the command (its duration) a background command's own reply starts, by tool call id; next are those due
+	// in the session's next own reply.
+	then map[string]string
+	next map[string][]string
 	// tasks are Grok's background tasks still running, by task id; turns is held, per session, while a prompt (the
 	// client's or Grok's own) runs.
 	tasks map[string]*grokTask
@@ -332,9 +339,40 @@ func (s *server) commandEnded(sid, tid string) {
 	delete(s.running, tid)
 	s.update(sid, toolEnd(tid, "completed", "finished"))
 	s.ended[sid]++
+	if d, ok := s.then[tid]; ok {
+		delete(s.then, tid)
+		s.next[sid] = append(s.next[sid], d)
+	}
 	if !s.waking[sid] {
 		s.waking[sid] = true
 		go s.wake(sid)
+	}
+}
+
+// startCommand starts a command as agy's run_command (see fake:background) for the word w; then is the command the
+// agent's own reply about its end starts.
+func (s *server) startCommand(sid, w, then string) {
+	tid := newID()
+	input := map[string]any{"CommandLine": "sleep " + w, "WaitMsBeforeAsync": 500}
+	if w == "daemon" {
+		input["IsDaemon"] = true
+	}
+	s.update(sid, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": input["CommandLine"], "kind": "execute", "status": "in_progress", "rawInput": input})
+	if w == "now" {
+		s.update(sid, toolEnd(tid, "completed", "done now"))
+		return
+	}
+	if d, err := time.ParseDuration(w); err == nil {
+		s.mu.Lock()
+		s.running[tid] = sid
+		if then != "" {
+			s.then[tid] = then
+		}
+		s.mu.Unlock()
+		go func() {
+			time.Sleep(d)
+			s.commandEnded(sid, tid)
+		}()
 	}
 }
 
@@ -351,10 +389,15 @@ func (s *server) wake(sid string) {
 			s.mu.Unlock()
 			return
 		}
+		next := s.next[sid]
+		delete(s.next, sid)
 		s.mu.Unlock()
 		s.update(sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "\n\nreported "}})
 		time.Sleep(delay)
 		s.update(sid, map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": fmt.Sprint(n)}})
+		for _, w := range next {
+			s.startCommand(sid, w, "")
+		}
 		s.update(sid, usage())
 	}
 }
@@ -369,7 +412,7 @@ func models() map[string]any {
 
 func serve(args []string) {
 	s := &server{args: args, sessions: map[string]*session{}, waiting: map[string]chan json.RawMessage{}, cancels: map[string]chan struct{}{},
-		running: map[string]string{}, ended: map[string]int{}, waking: map[string]bool{}, tasks: map[string]*grokTask{}, turns: map[string]*sync.Mutex{}}
+		running: map[string]string{}, ended: map[string]int{}, waking: map[string]bool{}, then: map[string]string{}, next: map[string][]string{}, tasks: map[string]*grokTask{}, turns: map[string]*sync.Mutex{}}
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 64<<10), 64<<20)
 	for sc.Scan() {
@@ -606,25 +649,8 @@ func (s *server) prompt(id json.RawMessage, ss *session, p map[string]any, cance
 		reply("ran")
 	case "fake:background":
 		for _, w := range strings.Fields(arg) {
-			tid := newID()
-			input := map[string]any{"CommandLine": "sleep " + w, "WaitMsBeforeAsync": 500}
-			if w == "daemon" {
-				input["IsDaemon"] = true
-			}
-			s.update(ss.ID, map[string]any{"sessionUpdate": "tool_call", "toolCallId": tid, "title": input["CommandLine"], "kind": "execute", "status": "in_progress", "rawInput": input})
-			if w == "now" {
-				s.update(ss.ID, toolEnd(tid, "completed", "done now"))
-				continue
-			}
-			if d, err := time.ParseDuration(w); err == nil {
-				s.mu.Lock()
-				s.running[tid] = ss.ID
-				s.mu.Unlock()
-				go func() {
-					time.Sleep(d)
-					s.commandEnded(ss.ID, tid)
-				}()
-			}
+			w, then, _ := strings.Cut(w, "+")
+			s.startCommand(ss.ID, w, then)
 		}
 		reply("backgrounded")
 		s.update(ss.ID, usage())

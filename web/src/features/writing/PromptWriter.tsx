@@ -52,11 +52,7 @@ function WriterLine({ settings }: { settings: ReturnType<typeof useTextGeneratio
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] font-bold text-ink-700">
       <span className="inline-flex min-w-0 items-center gap-1.5">
-        {runtime && (
-          <span className="grid size-5 shrink-0 place-items-center rounded-[6px] border-[1.5px] border-ink bg-paper-raised text-ink shadow-[1.5px_1.5px_0_var(--riso-pink)]">
-            <RuntimeGlyph runtime={runtime} className="size-3" />
-          </span>
-        )}
+        {runtime && <RuntimeGlyph runtime={runtime} className="size-5" />}
         <span className="[overflow-wrap:anywhere]">{copy.by(writerName(writer, lookup))}</span>
       </span>
       {/* The dot goes with the link, so a narrow line never ends on a lone dot. */}

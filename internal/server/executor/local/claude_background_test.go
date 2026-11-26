@@ -203,3 +203,25 @@ func TestClaudeResumeSettlingStaleTasksKeepsTheReply(t *testing.T) {
 		t.Fatalf("a task this process never started was listed: %+v", r)
 	}
 }
+
+// A task Claude Code starts in a reply of its own is listed on that reply's run; when it ends inside that reply, the
+// reply Claude Code gives about it afterwards gets a follow-up run of its own.
+func TestClaudeTaskFromFollowUpIsListed(t *testing.T) {
+	h, obs, host := newClaudeBg(t)
+	id := h.claudeAgent(nil)
+	h.execRunWith(id, "fake:background 100ms then:50ms")
+	call := host.next(t)
+	if res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: call.run, Origin: executor.OriginBackground}, newSink()); err != nil || res.Text != "background done" {
+		t.Fatalf("the first own reply: %+v %v", res, err)
+	}
+	if end := waitEnded(t, obs, "b2"); end.RunID != call.run || end.Status != executor.BackgroundCompleted {
+		t.Fatalf("listed on the own reply's run: %+v", end)
+	}
+	next := host.next(t)
+	if len(next.triggers) != 1 || next.triggers[0].ID != "b2" {
+		t.Fatalf("a follow-up run for its end: %+v", next)
+	}
+	if res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: next.run, Origin: executor.OriginBackground}, newSink()); err != nil || res.Text != "background done" {
+		t.Fatalf("the next own reply: %+v %v", res, err)
+	}
+}

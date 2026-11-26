@@ -170,6 +170,15 @@ func (e *Executor) bgTakeEnded(p *proc) []executor.BackgroundTask {
 	return out
 }
 
+// bgUntold reports whether tasks have ended that the CLI has not told about yet (they ended since its last reply
+// began or the platform's last message), besides about: the task a reply it is giving is about, which may end just
+// after that reply began.
+func (e *Executor) bgUntold(p *proc, about string) bool {
+	p.bg.mu.Lock()
+	defer p.bg.mu.Unlock()
+	return slices.ContainsFunc(p.bg.ended, func(t executor.BackgroundTask) bool { return t.ID != about })
+}
+
 // backgroundStopper is a driver that can ask its runtime to stop background tasks (each by the runtime's id). It returns
 // once the request is made; the ends come as the runtime reports them.
 type backgroundStopper interface {
