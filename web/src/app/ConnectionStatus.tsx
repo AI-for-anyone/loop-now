@@ -39,7 +39,7 @@ export function ConnectionStatus({ className }: { className?: string }) {
     <div
       role="status"
       aria-label={t.settings.health}
-      className={cn('inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-full text-[12.5px] font-black', style.chip, className)}
+      className={cn('inline-flex h-7 max-w-full min-w-0 items-center gap-2 rounded-full text-[12.5px] font-black whitespace-nowrap', style.chip, className)}
     >
       <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', style.dot)} />
       <span className="shrink-0 whitespace-nowrap">{style.label}</span>

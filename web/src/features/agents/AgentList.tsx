@@ -149,7 +149,7 @@ export function AgentNavGroup({
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <div className={navGroupClass}>
-        <h2 id={headingId} className="min-w-0 truncate font-normal">
+        <h2 id={headingId} title={title} className="min-w-0 truncate font-normal">
           {title}
         </h2>
         <button type="button" aria-label={t.agents.create} disabled={!reachable || !scope} onClick={onCreate} className={navAddClass}>
