@@ -90,6 +90,24 @@ export function useTaskAction(taskId: string, projectId: string) {
     },
   })
 }
+// For a person: removes the worktree an ended task kept because removing it would lose work. 409 task_workspace_not_kept when the
+// task has not ended or the worktree is no longer kept.
+export function removeTaskWorkspace(taskId: string, actionId: string) {
+  return call(api.POST('/tasks/{taskId}/workspace/remove', { params: { path: { taskId } }, body: { actionId } }))
+}
+export function useRemoveTaskWorkspace(taskId: string, projectId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    retry: false,
+    mutationFn: (actionId: string) => removeTaskWorkspace(taskId, actionId),
+    onSuccess: (detail) => { client.setQueryData(taskKeys.detail(taskId), sleepProjections(client).task(detail)) },
+    // A 409 means the task changed meanwhile: reading it again shows the current state instead of an error.
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
+      void client.invalidateQueries({ queryKey: taskKeys.project(projectId) })
+    },
+  })
+}
 // Only platform-owned artifact paths are turned into links; credentials and host paths have no URL fallback.
 export function artifactUrl(artifact: Schemas['TaskArtifact']) {
   return `/tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${encodeURIComponent(artifact.id)}`

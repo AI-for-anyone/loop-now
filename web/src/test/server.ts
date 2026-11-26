@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { apiUrl, context, defaultProject, projectsUrl, unknownEndpointBody } from './api'
+import { apiUrl, context, defaultProject, errorBody, projectsUrl, unknownEndpointBody } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
 import { commandList } from './commands'
 import { runtimeDefinitions, runtimeList } from './runtimes'
@@ -42,6 +42,8 @@ export const server = setupServer(
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/background-tasks'), ({ params }) =>
     HttpResponse.json({ taskId: String(params.taskId), nodeRunId: String(params.nodeRunId), runtimeId: '00000000-0000-7000-8000-000000000000', tasks: [] }),
   ),
+  // Removing a kept worktree: by default nothing is kept, as the server answers before a worktree exists; tests that remove override it.
+  http.post(apiUrl('/tasks/:taskId/workspace/remove'), () => HttpResponse.json(errorBody('task_workspace_not_kept'), { status: 409 })),
   // Folders: by default an empty root with no Git pull history.
   http.get(apiUrl('/agents/:agentId/folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/projects/:projectId/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),

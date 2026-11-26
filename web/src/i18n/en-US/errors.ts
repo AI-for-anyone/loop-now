@@ -63,6 +63,7 @@ export const errors = {
     background_task_not_found: 'No such background task',
     background_task_ended: 'This background task has already ended',
     permission_request_answered: 'This request has already been answered',
+    task_workspace_not_kept: 'This worktree is no longer kept, or the task has not ended',
     internal_error: 'Internal server error',
   },
   unknown: 'Unknown error',
