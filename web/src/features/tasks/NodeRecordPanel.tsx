@@ -2,7 +2,7 @@ import { useTaskInboxMessages } from '@/api/task-inbox'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { TaskMessageBubble } from './TaskMessageBubble'
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { CircleAlertIcon, DownloadIcon, FileTextIcon, ScissorsIcon } from 'lucide-react'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { CutLine } from '@/components/CutLine'
@@ -22,7 +22,9 @@ import type { Schemas } from '@/api/client'
 import type { ImageDraft } from '@/features/images/image-drafts'
 import { DraftImagePreview } from '@/features/images/ImagePreview'
 import { useContextInfo } from '@/api/queries'
+import { folderRoots, taskNodeFolderContentURL, useTaskNodeFolderLocation } from '@/api/folders'
 import { messageImageLimits } from '@/api/message-images'
+import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from '@/features/chat/local-images'
 import { useTaskMessages, artifactUrl, taskKeys } from '@/api/tasks'
 import { stopTaskNodeRun, useTaskNodeQueue } from '@/api/task-node-queue'
 import { nodeConflictNotice, useStopReply } from '@/features/chat/queue-actions'
@@ -203,7 +205,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
             </div>
             <div className="min-h-[120px] flex-1 overflow-hidden">
               <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className={cn('relative h-full min-w-0 overflow-y-auto overscroll-contain pt-5 pb-3 outline-none focus-visible:shadow-focus', pad)} data-conversation-scroll>
-                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} requests={record.id === node.id ? permissionRequests : []} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
+                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} maxImageBytes={context.data?.limits.textEdit.maxBytes ?? DEFAULT_IMAGE_PREVIEW_MAX_BYTES} requests={record.id === node.id ? permissionRequests : []} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
               </div>
             </div>
             {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
@@ -309,9 +311,19 @@ function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onCo
 // A question the node raised is answerable only while the task still says so; other messages to you defer to the server.
 const answerableFor = (node: Node, message: Schemas['InboxMessage']) => node.question?.messageId === message.id ? node.question.status === 'open' && node.question.canAnswer : true
 // onReply: only the current record's questions can switch the node composer into reply mode.
-function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply, requests }: { detail: Schemas['TaskDetail']; node: Node; onMaterials: () => void; suppressInboxError: boolean; onReply?: (message: Schemas['InboxMessage']) => void; requests: Schemas['PermissionRequest'][] }) {
+function MessageSegment({ detail, node, maxImageBytes, onMaterials, suppressInboxError, onReply, requests }: { detail: Schemas['TaskDetail']; node: Node; maxImageBytes: number; onMaterials: () => void; suppressInboxError: boolean; onReply?: (message: Schemas['InboxMessage']) => void; requests: Schemas['PermissionRequest'][] }) {
   const messages = useTaskMessages(detail.task.id, node.id)
   const inbox = useTaskInboxMessages(detail.task.id, node.id, node.agentId, node.runtimeId)
+  const folderLocation = useTaskNodeFolderLocation(detail.task.id, node.id)
+  // Task instance folders have no Folder tab and are reclaimed once the task ends, so paths stay plain text and 404s show no thumbnail.
+  const replyFolder = useMemo<ReplyFolderContext>(
+    () => ({
+      roots: folderRoots(folderLocation.data),
+      contentURL: (path) => taskNodeFolderContentURL(detail.task.id, node.id, path),
+      maxBytes: maxImageBytes,
+    }),
+    [folderLocation.data, detail.task.id, node.id, maxImageBytes],
+  )
   // Like normal chat, a message still waiting in the node's queue is shown only in the queue tray; it joins the flow once it starts.
   // Cancelled or not-executed messages have left the queue and keep showing their final status here.
   const queue = useTaskNodeQueue(detail.task.id, node.id, node.id === detail.task.currentNodeRunId)
@@ -320,7 +332,7 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
   // both its prompt and its empty reply are hidden. A queued turn joins the flow once it starts.
   const workRows = [...new Map(messages.data?.retainedMessages.filter(m => m.nodeRunId === node.id && !m.voidReason && m.status !== 'queued').map(m => [m.id, m])).values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
   const rows = [
-    ...workRows.map(message => ({ key: `task:${message.id}`, at: message.createdAt, body: <TaskMessageBubble message={message} agent={{ id: node.agentId, name: node.agentName }} taskId={detail.task.id} nodeRunId={node.id} runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined} requests={message.role === 'assistant' ? requests.filter(request => request.runId === message.runId) : []} /> })),
+    ...workRows.map(message => ({ key: `task:${message.id}`, at: message.createdAt, body: <TaskMessageBubble message={message} agent={{ id: node.agentId, name: node.agentName }} taskId={detail.task.id} nodeRunId={node.id} runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined} folder={replyFolder} requests={message.role === 'assistant' ? requests.filter(request => request.runId === message.runId) : []} /> })),
     // An approval question is the request card in the reply that asked (and the run record keeps it), so it is not shown twice.
     ...(inbox.data?.items ?? []).filter(record => !queued.has(record.message.id) && record.message.question?.kind !== 'permission').map(record => {
       const extras = <>
@@ -329,7 +341,7 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
       </>
       // Messages this node's instance sent you show as “发给你” (For you) (with options when it asked a question); the rest keep the Inbox bubble.
       const body = record.message.from.kind === 'agent' && record.message.to.kind === 'console'
-        ? <div data-inbox-message-id={record.message.id}><ConsoleMessage message={record.message} agent={{ id: node.agentId, name: node.agentName }} answerable={answerableFor(node, record.message)} onReply={onReply} meta={<Badge tone="info">{record.message.inReplyTo ? inboxCopy.reply : inboxCopy.message}</Badge>}>{extras}</ConsoleMessage></div>
+        ? <div data-inbox-message-id={record.message.id}><ConsoleMessage message={record.message} agent={{ id: node.agentId, name: node.agentName }} folder={replyFolder} answerable={answerableFor(node, record.message)} onReply={onReply} meta={<Badge tone="info">{record.message.inReplyTo ? inboxCopy.reply : inboxCopy.message}</Badge>}>{extras}</ConsoleMessage></div>
         : <TaskInboxMessageBubble message={record.message}>{extras}</TaskInboxMessageBubble>
       return { key: `inbox:${record.message.id}`, at: record.message.createdAt, body }
     }),

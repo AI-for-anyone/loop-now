@@ -12,6 +12,7 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { handoffBefore, modelChangeBefore, type Turn } from './turns'
 import { HandoffRow, ModelChangeLine } from './HandoffRow'
+import type { ReplyFolderContext } from './local-images'
 import { Cursor, Markdown } from './Markdown'
 import { RunRecord } from './RunRecord'
 import { PermissionRequestCard } from '@/features/permissions/PermissionRequestCard'
@@ -65,7 +66,7 @@ function sleptBefore(previous: Turn | undefined, turn: Turn) {
 // Agent replies have no card: a top line with the avatar, name, time (the phase while in progress) and the outcome stamp, the body
 // directly below, and the run record last.
 // A reply that didn't complete normally keeps the text it produced, shown in the secondary text color.
-function ReplyBubble({ turn, agent, located, requests = [] }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean; requests?: Schemas['PermissionRequest'][] }) {
+function ReplyBubble({ turn, agent, located, requests = [], folder }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>; located: boolean; requests?: Schemas['PermissionRequest'][]; folder?: ReplyFolderContext }) {
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
@@ -81,7 +82,7 @@ function ReplyBubble({ turn, agent, located, requests = [] }: { turn: Turn; agen
       <FailureNote run={run} runtime={agent.runtime} />
       {reply && reply.text !== '' ? (
         <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
-          <Markdown text={reply.text} cursor={streaming} />
+          <Markdown text={reply.text} cursor={streaming} folder={folder} />
         </div>
       ) : command ? (
         (command.notices ?? []).length > 0 ? (
@@ -158,6 +159,8 @@ function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
 interface MessageListProps {
   // The current Agent, for the avatar and name above replies.
   agent: Pick<Schemas['Agent'], 'id' | 'name'> & Partial<Pick<Schemas['Agent'], 'runtime'>>
+  // Folder context used to render local image paths inside this Agent's folder as thumbnails and Folder-tab links.
+  folder?: ReplyFolderContext
   // Conversation turns that have started (see buildTurns). Queued messages show in the queue list above the input box, not here.
   turns: Turn[]
   // When there are queued messages, “还没有对话” (No conversation yet) isn't shown even if the conversation flow is empty.
@@ -227,6 +230,7 @@ function placeInserts(turns: Turn[], inserts: TimelineInsert[], hasOlder: boolea
 
 export function MessageList({
   agent,
+  folder,
   turns,
   hasQueued = false,
   hasOlder,
@@ -412,7 +416,7 @@ export function MessageList({
                     {/* The reply body follows the conversation column, up to 1100px on wide screens: no wasted space in a wide window,
                         and code blocks, tables and images widen with it. Narrow screens keep 760px. */}
                     <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
-                      <ReplyBubble turn={turn} agent={agent} located={isTarget} requests={permissionRequests.filter((request) => request.runId === turn.run.id)} />
+                      <ReplyBubble turn={turn} agent={agent} located={isTarget} folder={folder} requests={permissionRequests.filter((request) => request.runId === turn.run.id)} />
                     </div>
                   </div>
                 </div>
