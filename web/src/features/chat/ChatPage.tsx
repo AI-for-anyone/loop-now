@@ -27,7 +27,8 @@ import { useAgentConsoleMessages } from '@/api/console-inbox'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { CommandLine } from '@/features/plugins/ChatLines'
 import { useRuntimeLookup } from '@/lib/runtime'
-import { RestartNotice } from './BackgroundTasks'
+import { BackgroundTasksMark, RestartNotice, type BackgroundStopper } from './BackgroundTasks'
+import { stopAllBackgroundTasks, stopBackgroundTask } from '@/api/background-tasks'
 import { WaitingForApproval } from '@/features/permissions/WaitingForApproval'
 import type { Schemas } from '@/api/client'
 
@@ -134,20 +135,30 @@ export function ChatPage() {
   const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
-  // The numbers of the loaded replies that started a running background task, so the header's list can name them.
-  // The turns change with every streamed piece of text; the numbers only when one of them changes, so the header is not told every time.
-  const backgroundTasks = live.backgroundTasks
+  // The numbers of the loaded replies that started a running background task, so the list under the message box can name them.
+  // The turns change with every streamed piece of text; the numbers only when one of them changes.
   const numbered =
     turnsBefore === undefined
       ? ''
-      : turns.flatMap((turn, index) => (backgroundTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
+      : turns.flatMap((turn, index) => (runningTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
   const replyNumbers = useMemo(() => Object.fromEntries(numbered ? numbered.split(',').map((pair) => { const [runId, number] = pair.split('='); return [runId, Number(number)] }) : []), [numbered])
+  const background = (
+    <BackgroundTasksMark
+      tasks={runningTasks}
+      stopper={backgroundStopper(agent.id)}
+      // The reply that started a task: located in the conversation, named by its number when it is loaded, otherwise by its time.
+      origin={(task) => {
+        const number = replyNumbers[task.runId]
+        return { to: `${location.pathname}#run-${encodeURIComponent(task.runId)}`, label: number ? t.background.fromReply(number) : t.background.fromReplyAt(t.chat.time(task.startedAt)) }
+      }}
+    />
+  )
 
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.
   useEffect(() => {
-    if (synced) reportLiveStatus({ busy, phase, sleep, backgroundTasks, replyNumbers })
-  }, [synced, busy, phase, sleep, backgroundTasks, replyNumbers, reportLiveStatus])
+    if (synced) reportLiveStatus({ busy, phase, sleep })
+  }, [synced, busy, phase, sleep, reportLiveStatus])
   useEffect(() => () => reportLiveStatus(null), [reportLiveStatus])
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
@@ -230,6 +241,7 @@ export function ChatPage() {
             </>
           }
           runner={<RunnerChip agent={agent} />}
+          background={background}
           notice={
             <>
               {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} onLocate={(runId) => void navigate(`${location.pathname}#run-${encodeURIComponent(runId)}`)} />}
@@ -268,3 +280,8 @@ export function ChatPage() {
     </div>
   )
 }
+
+const backgroundStopper = (agentId: string): BackgroundStopper => ({
+  stop: (taskId, actionId) => stopBackgroundTask(agentId, taskId, actionId),
+  stopAll: (actionId) => stopAllBackgroundTasks(agentId, actionId),
+})

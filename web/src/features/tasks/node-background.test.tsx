@@ -134,6 +134,15 @@ describe('Background tasks of a task node', () => {
     expect(screen.queryByRole('list', { name: 'Tool calls' })).toBeNull()
     void runId
   })
+
+  it('the mark is in the node’s message box bar, not in its header', async () => {
+    setup([makeBackgroundTask({ label: 'cargo build' })])
+    const mark = await screen.findByRole('button', { name: '1 background task is running; open to see or stop them' })
+    expect(mark.closest('[data-node-status]')).toBeNull()
+    const composer = document.querySelector('[data-node-composer]')!.closest('.grid')!
+    expect(composer).toContainElement(mark)
+    expect(document.querySelectorAll('[data-background-mark]')).toHaveLength(1)
+  })
 })
 
 it('a task page whose test registers no background-task read still gets an empty list, not a failed request', async () => {

@@ -6,7 +6,7 @@ type Task = S['BackgroundTask']
 // Background tasks: work a CLI started in the background that keeps running after its reply ended (a build, a test run, a dev
 // server, a sub-agent).
 export const background = {
-  // The mark next to the Agent's state, and the panel it opens.
+  // The mark under the message box, and the panel it opens.
   mark: (count: number) => `后台任务 ${count}`,
   markLabel: (count: number) => `${count} 个后台任务在运行，点开查看或停止`,
   title: '后台任务',
