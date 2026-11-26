@@ -15210,6 +15210,7 @@ components:
         - status
         - currentNodeRunId
         - currentStepId
+        - currentStepTitle
         - currentAgentId
         - reason
         - createdAt
@@ -15240,6 +15241,11 @@ components:
             - 'null'
           format: uuid
         currentStepId:
+          type:
+            - string
+            - 'null'
+        currentStepTitle:
+          description: The title of the current step (currentStepId) in the task's frozen workflow, for showing to a person; null when there is no current step.
           type:
             - string
             - 'null'

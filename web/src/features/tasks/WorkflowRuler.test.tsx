@@ -25,6 +25,7 @@ describe('workflow ruler', () => {
     ruler(detail)
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
     const current = within(nav).getByRole('button', { name: /Quality check/ })
+    expect(current).toHaveAttribute('title', 'check')
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
     expect(current).toHaveTextContent('01Quality checktask-checker· Blocked×2')
@@ -34,6 +35,7 @@ describe('workflow ruler', () => {
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveTextContent('01')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('bg-riso-yellow')
     const todo = within(nav).getByRole('button', { name: /Submit report/ })
+    expect(todo).toHaveAttribute('title', 'finish')
     expect(todo).not.toHaveAttribute('aria-current')
     expect(todo).toHaveTextContent('· not yet')
     expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('border-dashed')
@@ -67,7 +69,7 @@ describe('workflow ruler', () => {
 
   it('once the task is completed there is no current step, and the bottom says “all steps done”', () => {
     const detail = makeTaskDetail('project')
-    detail.task = { ...detail.task, status: 'completed', currentStepId: null, currentNodeRunId: null }
+    detail.task = { ...detail.task, status: 'completed', currentStepId: null, currentStepTitle: null, currentNodeRunId: null }
     expect(workflowPosition(detail)).toEqual({ at: 2, total: 2, done: true })
     ruler(detail, { selected: null })
     expect(screen.getByText('all steps done')).toBeInTheDocument()
@@ -82,6 +84,8 @@ describe('small step tags on narrow screens', () => {
     render(<WorkflowChips detail={detail} selected="check" onSelect={onSelect} />)
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
     const [check, finish] = within(nav).getAllByRole('button')
+    expect(check).toHaveAttribute('title', 'check')
+    expect(finish).toHaveAttribute('title', 'finish')
     expect(check).toHaveAttribute('aria-current', 'step')
     expect(check).toHaveAttribute('aria-pressed', 'true')
     expect(check).toHaveClass('bg-riso-yellow')

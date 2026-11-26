@@ -470,7 +470,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 	}
 	node := freshNode(t.TaskID, step, inst, visit, 1)
 	m.Record.View.Nodes = append(m.Record.View.Nodes, node)
-	setCurrent(m.Record, node)
+	m.Record.SetCurrent(node)
 	if n.RuntimeID != node.RuntimeID {
 		// A queued reminder cancelled with the old node still represents unread mail.
 		// Rebind the notification to an unbound Inbox round, never to another node.
