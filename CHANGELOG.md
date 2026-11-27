@@ -4,6 +4,26 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
+## v0.3.6
+
+Each step of a new task starts from a clean conversation with a prompt of its own, so steps no longer drag in their Agent's chat history, and creating a task no longer waits for busy Agents. Replies read better: system fonts, plain bold, tool calls grouped onto one quiet line and a compact run log line; bold, italic and strikethrough next to Chinese punctuation now render. No database migrations this time.
+
+### Task steps start from a clean conversation, with a prompt per step (#117)
+
+- Each step of a new task starts from a clean conversation: its Agent gets its Prompt, its instruction files, its memory, the task request and the step's job, but not its regular chat history. Creating a task no longer waits for its Agents to finish their current replies.
+- A Manager can write a prompt for each step (up to 32 KiB). It goes into that step's system prompt and holds on every visit. The task page shows it under "Step prompt", collapsed by default.
+- A step that truly needs its Agent's chat can ask for it with `withConversation`; the task page marks such steps "With conversation". Tasks created before this change keep their old behavior.
+
+### CJK bold, italic and strikethrough next to punctuation (#116)
+
+- Bold, italic and strikethrough text that starts or ends with CJK punctuation followed directly by CJK characters (such as `**你：**如果` or `中文**“引号”**中文`) now renders formatted instead of showing literal `*` or `~` markers across replies, task pages, Inbox and folder previews.
+
+### Cleaner reply typography, grouped tool calls, and compact run log line (#115)
+
+- Agent replies in the default skin now use system UI fonts (SF Pro / PingFang SC on macOS, with Windows and Linux fallbacks), plain bold instead of gray lead-label boxes, quieter list spacing, and borderless inline code with a faint background.
+- Tool calls below a reply are grouped onto a single muted line (`execute ×9 · read · edit`, with failed groups in red and running calls keeping their spinner), instead of repeating one pill per call.
+- The run log toggle line uses the body font with tabular numbers and compact token counts (such as `3.1M tokens`), keeping the exact token count in the tooltip and screen-reader label; the classic Risograph (Plate) skin is unchanged.
+
 ## v0.3.5
 
 The console has a new look: one modern layout with a centered conversation column, a command palette (⌘K / Ctrl+K), a sidebar you can collapse and resize, and compact page headers. Appearance settings switch between light, dark, following the system, and the classic Risograph colors, and the desktop window and start screen follow the choice. The desktop app has a new icon. Everything added in v0.3.3 and v0.3.4 stays. No database migrations this time.
