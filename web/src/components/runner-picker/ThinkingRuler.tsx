@@ -37,12 +37,12 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange }: T
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <span
           id={labelId}
-          className="shrink-0 text-[12px] font-medium text-ink-500"
+          className="shrink-0 text-[12.5px] font-medium text-ink-500"
         >
           {copy.title}
         </span>
         {disabled ? (
-          hint && <p className="text-[12px] text-ink-500">{hint}</p>
+          hint && <p className="text-[12.5px] text-ink-500">{hint}</p>
         ) : (
           <RadioGroupPrimitive.Root
             aria-labelledby={labelId}
@@ -56,7 +56,7 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange }: T
                 key={mark.value}
                 value={mark.value}
                 className={cn(
-                  'inline-flex h-6 shrink-0 cursor-pointer items-center rounded-[5px] px-2.5 text-[12px] font-medium whitespace-nowrap text-ink-500 transition-[background-color,color,box-shadow] duration-150 outline-none hover:text-ink data-[state=checked]:bg-segment-active data-[state=checked]:text-ink data-[state=checked]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)]',
+                  'inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[5px] px-2.5 text-[12.5px] font-medium whitespace-nowrap text-ink-500 transition-[background-color,color,box-shadow] duration-150 outline-none hover:text-ink data-[state=checked]:bg-segment-active data-[state=checked]:text-ink data-[state=checked]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)]',
                 )}
               >
                 {mark.text}
@@ -65,7 +65,7 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange }: T
           </RadioGroupPrimitive.Root>
         )}
       </div>
-      {unavailable && <p className="text-[11.5px] leading-snug text-ink-500">{copy.unavailable(label(value))}</p>}
+      {unavailable && <p className="text-[12px] leading-snug text-ink-500">{copy.unavailable(label(value))}</p>}
     </div>
   )
 }

@@ -34,14 +34,14 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
   const docs = runtime.setup?.docsUrl
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="no-scrollbar grid max-h-[260px] min-h-0 content-start gap-2.5 overflow-y-auto py-3 pr-6 pl-3.5">
-        <h3 className="font-display text-[15px] leading-snug font-semibold tracking-tight text-ink">
+      <div ref={scrollRef} className="no-scrollbar grid max-h-[260px] min-h-0 flex-1 content-start gap-2.5 overflow-y-auto py-3 pr-6 pl-3.5 sm:max-h-none">
+        <h3 className="font-display text-[15.5px] leading-snug font-semibold tracking-tight text-ink">
           {copy.title(runtime.name)}
         </h3>
         {runtime.acpCommandId ? (
           <AddedCommandProblem commandId={runtime.acpCommandId} runtime={runtime} problem={problem} version={version} />
         ) : (
-          <p className="text-[12.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem, version)}</p>
+          <p className="text-[13.5px] leading-relaxed text-ink-700">{runtimeProblemText(runtime, problem, version)}</p>
         )}
         {step && (
           <div className="grid gap-1">

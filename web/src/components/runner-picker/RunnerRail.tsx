@@ -25,11 +25,11 @@ interface RunnerRailProps {
   tabId: (id: AgentRuntime) => string
   panelId: string
   onBrowse: (id: AgentRuntime) => void
-  // Down arrow leaves the horizontal tab bar for the model search or lead panel.
+  // Right arrow leaves the vertical rail for the model search or lead panel.
   onLeave: () => void
 }
 
-// Inline status cue inside a horizontal runtime tab pill: a green dot + muted version for a ready CLI, a subtle "Built in" pill for the
+// Inline status cue under a runtime's name: a green dot + muted version (or "Ready") for a ready CLI, a subtle "Built in" pill for the
 // bundled runtime (full explanation stays in aria-label), or a compact status pill for a CLI with a setup problem.
 export function RunnerState({ entry }: { entry: RailEntry }) {
   const copy = t.runtime.picker
@@ -42,7 +42,7 @@ export function RunnerState({ entry }: { entry: RailEntry }) {
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded-stamp px-1.5 py-0.5 text-[10.5px] leading-none font-medium whitespace-nowrap',
+          'inline-flex items-center rounded-stamp px-1.5 py-0.5 text-[11px] leading-none font-medium whitespace-nowrap',
           tone,
         )}
       >
@@ -51,34 +51,34 @@ export function RunnerState({ entry }: { entry: RailEntry }) {
     )
   }
   if (readiness.state !== 'ready') {
-    return <span className="text-[11px] font-normal text-ink-500">{readiness.state === 'checking' ? copy.checking : copy.unknown}</span>
+    return <span className="text-[11.5px] leading-tight font-normal text-ink-500">{readiness.state === 'checking' ? copy.checking : copy.unknown}</span>
   }
   if (definition.capabilities.bundled) {
     return (
-      <span className="rounded-stamp bg-surface-hover px-1.5 py-0.5 text-[10.5px] leading-none font-medium text-ink-500">
+      <span className="rounded-stamp bg-surface-hover px-1.5 py-0.5 text-[11px] leading-none font-medium text-ink-500">
         {copy.bundled}
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] leading-tight font-normal text-ink-500">
       <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green" />
-      {entry.version && <span className="font-mono text-[10.5px] font-normal text-ink-500">{entry.version}</span>}
+      <span className={cn('truncate', entry.version && 'font-mono')}>{entry.version ?? copy.ready}</span>
     </span>
   )
 }
 
-// Single-row horizontal runtime pill tab bar at the top of the picker. Choosing a tab shows its models (or setup guidance) below; the
-// model, not the tab, is what gets chosen.
+// Left vertical runtime list on desktop, wrapping into rows on narrow screens (never horizontally scrolling). Choosing a tab shows its
+// models (or setup guidance) on the right; the model, not the tab, is what gets chosen.
 export function RunnerRail({ entries, lead, browsed, current, tabId, panelId, onBrowse, onLeave }: RunnerRailProps) {
   const refs = useRef(new Map<string, HTMLButtonElement>())
   // Every tab in order, keyed by its element id: the first entry, then the runtimes.
   const tabs = [...(lead ? [{ id: lead.tabId, browse: lead.onBrowse }] : []), ...entries.map((entry) => ({ id: tabId(entry.definition.id), browse: () => onBrowse(entry.definition.id) }))]
   const move = (event: KeyboardEvent, index: number) => {
     const target =
-      event.key === 'ArrowLeft'
+      event.key === 'ArrowUp'
         ? index - 1
-        : event.key === 'ArrowRight'
+        : event.key === 'ArrowDown'
           ? index + 1
           : event.key === 'Home'
             ? 0
@@ -86,7 +86,7 @@ export function RunnerRail({ entries, lead, browsed, current, tabId, panelId, on
               ? tabs.length - 1
               : null
     if (target === null) {
-      if (event.key === 'ArrowDown') {
+      if (event.key === 'ArrowRight') {
         event.preventDefault()
         onLeave()
       }
@@ -103,12 +103,15 @@ export function RunnerRail({ entries, lead, browsed, current, tabId, panelId, on
   }
   const offset = lead ? 1 : 0
   return (
-    <div className="border-b border-hairline bg-surface-subtle/60 px-2.5 py-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-2 py-2 sm:py-2.5">
+      <p aria-hidden="true" className="hidden px-2 text-[11.5px] font-semibold text-ink-500 sm:block">
+        {t.runtime.picker.rail}
+      </p>
       <div
         role="tablist"
         aria-label={t.runtime.picker.rail}
-        aria-orientation="horizontal"
-        className="no-scrollbar flex items-center gap-1.5 overflow-x-auto"
+        aria-orientation="vertical"
+        className="no-scrollbar flex min-h-0 flex-1 flex-wrap gap-1 overflow-y-auto overscroll-contain sm:flex-col sm:flex-nowrap"
       >
         {lead && (
           <RailTab
@@ -139,7 +142,7 @@ export function RunnerRail({ entries, lead, browsed, current, tabId, panelId, on
               panelId={panelId}
               onClick={() => onBrowse(definition.id)}
               onKeyDown={(event) => move(event, index + offset)}
-              mark={<RuntimeMark runtime={definition} className="size-4 shrink-0" />}
+              mark={<RuntimeMark runtime={definition} className="size-6 shrink-0" />}
               name={definition.name}
               state={<RunnerState entry={entry} />}
             />
@@ -165,7 +168,7 @@ interface RailTabProps {
   state: ReactNode
 }
 
-// One horizontal pill tab in the runtime bar: mark, name, inline status cue, and an in-use dot cleanly inside the pill.
+// One runtime entry in the left rail: mark, name, inline in-use dot, and status cue cleanly stacked underneath.
 function RailTab({ id, register, label, selected, inUse, panelId, onClick, onKeyDown, mark, name, state }: RailTabProps) {
   return (
     <button
@@ -180,21 +183,25 @@ function RailTab({ id, register, label, selected, inUse, panelId, onClick, onKey
       onClick={onClick}
       onKeyDown={onKeyDown}
       className={cn(
-        'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-input border px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none',
+        'flex shrink-0 cursor-pointer items-center gap-2 rounded-input border px-2 py-1.5 text-left transition-colors outline-none focus-visible:shadow-focus sm:w-full',
         selected
           ? 'border-hairline-strong bg-surface-elevated font-semibold text-ink shadow-xs'
-          : 'border-transparent font-medium text-ink-500 hover:bg-surface-hover hover:text-ink',
+          : 'border-transparent font-medium text-ink-700 hover:bg-surface-hover hover:text-ink',
       )}
     >
-      <span className="inline-flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{mark}</span>
-      <span>{name}</span>
-      {state}
-      {inUse && (
-        <span
-          aria-hidden="true"
-          className="ml-0.5 size-1.5 shrink-0 rounded-full bg-ink"
-        />
-      )}
+      <span className="inline-flex size-6 shrink-0 items-center justify-center [&>svg]:size-6">{mark}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[13.5px] leading-tight text-ink">{name}</span>
+          {inUse && (
+            <span
+              aria-hidden="true"
+              className="ml-auto size-1.5 shrink-0 rounded-full bg-riso-blue"
+            />
+          )}
+        </span>
+        <span className="flex min-w-0 items-center">{state}</span>
+      </span>
     </button>
   )
 }

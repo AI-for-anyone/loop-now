@@ -69,13 +69,13 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       {/* Escape inside the Write with AI panel closes that panel, not the dialog with everything typed in it. */}
-      <DialogContent kind="create" className="sm:max-w-[560px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
+      <DialogContent kind="create" className="sm:max-w-[660px]" onEscapeKeyDown={(event) => event.target instanceof Element && event.target.closest('[data-prompt-writer]') && event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>
         <form className="grid gap-[18px]" onSubmit={(e) => void submit(e)} noValidate>
           <div className="grid gap-2">
-            <span id={runnerLabel} className="text-[13.5px] leading-snug font-semibold">{t.runtime.picker.label}</span>
+            <span id={runnerLabel} className="text-[14px] leading-snug font-semibold">{t.runtime.picker.label}</span>
             <RunnerPicker
               labelledBy={runnerLabel}
               newIn={scopeKey(scope)}

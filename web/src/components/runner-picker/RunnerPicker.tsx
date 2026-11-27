@@ -59,8 +59,8 @@ interface RunnerPickerProps {
 
 const MODEL_LIMIT = 200
 
-// Single-column command selector: top horizontal runtime tab bar (local CLIs first, bundled runtime last), seamless search and model tree
-// (or setup guidance when a runtime cannot run here), a compact single-line context strip, and a horizontal thinking-level pill bar.
+// Two-column selector on desktop (vertical runtime list on the left, model search/tree + context strip + thinking-level bar on the
+// right), collapsing to a wrapping multi-row runtime header above the models on narrow screens so the rail never scrolls horizontally.
 // Runtimes, capabilities and status are read only through lib/runtime.ts.
 export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange, agentId, newIn, variant = 'inline', labelledBy, invalid, offers, lead }: RunnerPickerProps) {
   const lookup = useRuntimeLookup()
@@ -193,16 +193,16 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
       aria-label={labelledBy ? undefined : t.runtime.picker.label}
       aria-invalid={invalid || undefined}
       className={cn(
-        'flex min-w-0 flex-col overflow-hidden bg-surface-elevated text-ink',
+        'grid min-w-0 grid-cols-1 overflow-hidden bg-surface-elevated text-ink sm:grid-cols-[204px_minmax(0,1fr)]',
         variant === 'inline' &&
-          'rounded-panel border border-hairline-strong shadow-surface aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red',
-        variant === 'popover' && 'min-h-0 flex-1',
+          'rounded-panel border border-hairline-strong shadow-surface aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red sm:h-[364px] sm:grid-rows-[minmax(0,1fr)]',
+        variant === 'popover' && 'min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)]',
       )}
     >
-      {/* Band 1: compact horizontal runtime tab bar */}
-      <div ref={railRef} className="shrink-0">
+      {/* Left rail on desktop (wrapping rows on narrow screens): local CLIs first, bundled runtime last. */}
+      <div ref={railRef} className="flex min-h-0 min-w-0 flex-col border-b border-hairline bg-surface-subtle/60 sm:border-r sm:border-b-0">
         {lookup.error ? (
-          <p className="border-b border-hairline px-3 py-2 text-[12.5px] font-medium text-red-text">{describeError(lookup.error)}</p>
+          <p className="px-3 py-2 text-[13px] font-medium text-red-text">{describeError(lookup.error)}</p>
         ) : (
           <RunnerRail
             entries={entries}
@@ -221,94 +221,96 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
             tabId={tabId}
             panelId={panelId}
             onBrowse={browse}
-            // Down arrow leaves the tab bar for the model search, or for the first control in the lead panel.
+            // Right arrow leaves the vertical rail for the model search, or for the first control in the lead panel.
             onLeave={() => (leading ? panelRef.current?.querySelector<HTMLElement>('button:not([disabled]), a[href], input, textarea')?.focus() : searchRef.current?.focus())}
           />
         )}
       </div>
 
-      {/* Band 2: seamless search + compact model tree (or setup guidance / lead panel) */}
-      <div
-        ref={panelRef}
-        id={panelId}
-        role="tabpanel"
-        aria-labelledby={leading ? leadTab : browsedId ? tabId(browsedId) : undefined}
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-      >
-        {lead && leading ? (
-          <div className="max-h-[260px] overflow-y-auto">{lead.panel}</div>
-        ) : catalog.isError ? (
-          <div className="grid gap-1 px-3 py-3 text-[12.5px] text-red-text">
-            <p className="font-semibold">{t.config.basic.catalogUnavailable}</p>
-            <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
-          </div>
-        ) : browsed && readiness?.state === 'problem' ? (
-          <RunnerSetup runtime={browsed.definition} problem={readiness.problem} version={browsed.version} />
-        ) : (
-          <ModelList
-            rows={rows}
-            hidden={hidden}
-            grouped={grouped}
-            query={query}
-            onQuery={setQuery}
-            active={activeKey}
-            onActive={setActive}
-            chosen={chosen}
-            loading={catalog.isLoading || reading.size > 0}
-            reading={reading}
-            failures={listedFailures}
-            reasonOf={reasonOf}
-            blocked={blocked}
-            onToggle={toggle}
-            onChoose={choose}
-            onRail={() => railRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus()}
-            onThinking={() => (thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ?? thinkingRef.current?.querySelector<HTMLElement>('[role="radio"]:not([disabled])'))?.focus()}
-            autoFocus={variant === 'popover'}
-            listMaxHeightClass={variant === 'popover' ? 'max-h-[240px]' : 'max-h-[220px]'}
-            searchRef={searchRef}
-          />
-        )}
-      </div>
-
-      {/* Band 3: subtle single-line context strip */}
-      {hasContextStrip && (
-        <div className="flex shrink-0 flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-[11.5px] leading-snug text-ink-500">
-          {showColophon && colophon && (
-            <p title={colophonTitle} className="flex min-w-0 items-center gap-1.5">
-              <span className="min-w-0 truncate">{colophon}</span>
-              {browsedStatus?.binaryPath && (
-                <span className="max-w-[38%] shrink-0 truncate font-mono text-[10.5px] text-ink-500/80">{browsedStatus.binaryPath}</span>
-              )}
-            </p>
-          )}
-          {note && (
-            <p role="note" title={note} className="truncate text-ink-700">
-              {note}
-            </p>
-          )}
-          {showCurrent && (
-            <p role="note" title={t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)} className="truncate text-ink-700">
-              {t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)}
-            </p>
-          )}
-          {showInUse && (
-            <p role="note" title={`${t.runtime.picker.inUse} ${value.provider} / ${value.modelId}`} className="truncate text-ink-700">
-              {`${t.runtime.picker.inUse} `}
-              <span className="font-mono">{`${value.provider} / ${value.modelId}`}</span>
-            </p>
+      {/* Right pane: model search + tree (or setup guidance / lead panel), context strip, and thinking-level bar. */}
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <div
+          ref={panelRef}
+          id={panelId}
+          role="tabpanel"
+          aria-labelledby={leading ? leadTab : browsedId ? tabId(browsedId) : undefined}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          {lead && leading ? (
+            <div className="max-h-[260px] min-h-0 flex-1 overflow-y-auto sm:max-h-none">{lead.panel}</div>
+          ) : catalog.isError ? (
+            <div className="grid gap-1 px-3.5 py-3 text-[13px] text-red-text">
+              <p className="font-semibold">{t.config.basic.catalogUnavailable}</p>
+              <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
+            </div>
+          ) : browsed && readiness?.state === 'problem' ? (
+            <RunnerSetup runtime={browsed.definition} problem={readiness.problem} version={browsed.version} />
+          ) : (
+            <ModelList
+              rows={rows}
+              hidden={hidden}
+              grouped={grouped}
+              query={query}
+              onQuery={setQuery}
+              active={activeKey}
+              onActive={setActive}
+              chosen={chosen}
+              loading={catalog.isLoading || reading.size > 0}
+              reading={reading}
+              failures={listedFailures}
+              reasonOf={reasonOf}
+              blocked={blocked}
+              onToggle={toggle}
+              onChoose={choose}
+              onRail={() => railRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus()}
+              onThinking={() => (thinkingRef.current?.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ?? thinkingRef.current?.querySelector<HTMLElement>('[role="radio"]:not([disabled])'))?.focus()}
+              autoFocus={variant === 'popover'}
+              listMaxHeightClass={variant === 'popover' ? 'max-h-[240px] sm:max-h-[296px]' : 'max-h-[220px] sm:max-h-none'}
+              searchRef={searchRef}
+            />
           )}
         </div>
-      )}
 
-      {/* Band 4: compact horizontal thinking pill bar */}
-      <div ref={thinkingRef} className="shrink-0">
-        <ThinkingRuler
-          value={thinkingLevel}
-          levels={levels}
-          defaultLevel={chosenModel?.defaultThinkingLevel}
-          hint={!value ? (lead?.thinkingNote ?? t.runtime.picker.noModel) : levels.length === 0 ? noLevelsNote : null}
-          onChange={onThinkingChange}
-        />
+        {/* Context strip */}
+        {hasContextStrip && (
+          <div className="flex shrink-0 flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-[12px] leading-snug text-ink-500">
+            {showColophon && colophon && (
+              <p title={colophonTitle} className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate">{colophon}</span>
+                {browsedStatus?.binaryPath && (
+                  <span className="max-w-[38%] shrink-0 truncate font-mono text-[11px] text-ink-500/80">{browsedStatus.binaryPath}</span>
+                )}
+              </p>
+            )}
+            {note && (
+              <p role="note" title={note} className="truncate text-ink-700">
+                {note}
+              </p>
+            )}
+            {showCurrent && (
+              <p role="note" title={t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)} className="truncate text-ink-700">
+                {t.runtime.picker.notInCatalog(`${value.provider} / ${value.modelId}`)}
+              </p>
+            )}
+            {showInUse && (
+              <p role="note" title={`${t.runtime.picker.inUse} ${value.provider} / ${value.modelId}`} className="truncate text-ink-700">
+                {`${t.runtime.picker.inUse} `}
+                <span className="font-mono">{`${value.provider} / ${value.modelId}`}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Compact horizontal thinking pill bar */}
+        <div ref={thinkingRef} className="shrink-0">
+          <ThinkingRuler
+            value={thinkingLevel}
+            levels={levels}
+            defaultLevel={chosenModel?.defaultThinkingLevel}
+            hint={!value ? (lead?.thinkingNote ?? t.runtime.picker.noModel) : levels.length === 0 ? noLevelsNote : null}
+            onChange={onThinkingChange}
+          />
+        </div>
       </div>
     </div>
   )

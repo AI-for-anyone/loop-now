@@ -153,7 +153,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
       </div>
 
       <div className="grid gap-1.5">
-        <span id={runnerLabel} className="text-[13px] leading-snug font-semibold text-ink">
+        <span id={runnerLabel} className="text-[14px] leading-snug font-semibold text-ink">
           {t.runtime.picker.label}
         </span>
         <PopoverPrimitive.Root open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -167,28 +167,28 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
               )}
             >
               {activeRuntime && <RuntimeMark runtime={activeRuntime} className="size-8 shrink-0" />}
-              <span id={summaryId} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13.5px]">
+              <span id={summaryId} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14.5px]">
                 <span className="font-semibold text-ink">{summaryLead}</span>
                 {modelDisplay && (
                   <>
                     <span aria-hidden="true" className="text-ink-500">·</span>
-                    <span className="min-w-0 truncate font-mono text-[13px] text-ink">{modelDisplay}</span>
+                    <span className="min-w-0 truncate font-mono text-[14px] text-ink">{modelDisplay}</span>
                   </>
                 )}
                 {thinkingSummary && (
                   <>
                     <span aria-hidden="true" className="text-ink-500">·</span>
-                    <span className="text-[12.5px] text-ink-700">{thinkingSummary}</span>
+                    <span className="text-[13px] text-ink-700">{thinkingSummary}</span>
                   </>
                 )}
                 {speedSummary && (
                   <>
                     <span aria-hidden="true" className="text-ink-500">·</span>
-                    <span className="text-[12.5px] text-ink-700">{speedSummary}</span>
+                    <span className="text-[13px] text-ink-700">{speedSummary}</span>
                   </>
                 )}
               </span>
-              <span className="ml-auto shrink-0 rounded-input border border-hairline-strong bg-surface-canvas px-2.5 py-1 text-[12.5px] font-medium text-ink group-hover:bg-surface-control">
+              <span className="ml-auto shrink-0 rounded-input border border-hairline-strong bg-surface-canvas px-2.5 py-1 text-[13px] font-medium text-ink group-hover:bg-surface-control">
                 {t.config.basic.changeRunner}
               </span>
             </button>
@@ -201,7 +201,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
               align="start"
               sideOffset={8}
               collisionPadding={12}
-              className="z-50 flex max-h-[min(520px,calc(100dvh-140px))] w-[min(460px,calc(100vw-32px))] flex-col overflow-hidden rounded-panel border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
+              className="z-50 flex max-h-[min(480px,var(--radix-popover-content-available-height,calc(100dvh-140px)))] w-[min(calc(100vw-32px),max(680px,var(--radix-popover-trigger-width)))] flex-col overflow-hidden rounded-panel border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
             >
               <div className="flex min-h-0 flex-1 flex-col">
                 <RunnerPicker
