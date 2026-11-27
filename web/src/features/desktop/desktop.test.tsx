@@ -139,6 +139,6 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     expect(bridge.onNavigate).toHaveBeenCalled()
     bridge.navigate?.('/settings')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
-    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Global settings' })).toBeInTheDocument()
   })
 })

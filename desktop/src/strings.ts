@@ -34,6 +34,12 @@ const zhCN = {
   cli: {
     moveFirst: '先把 Loop Now 移到"应用程序"文件夹',
     moveFirstDetail: '命令行工具链接到 app 里自带的 loopctl；app 留在下载目录或磁盘映像里时，这个链接会失效。',
+    firstPromptTitle: '在终端安装 loopctl 命令行工具？',
+    firstPromptDetail: (link: string) =>
+      `loopctl 让你在终端里，或通过 Claude Code、Codex 等其他 AI 工具管理 Loop Now。\n\n点击“安装”会在 ${link} 建立指向 Loop Now 自带 loopctl 的链接（需要输入一次管理员密码）。以后随时可以从菜单栏或全局设置再装。`,
+    firstPromptDetailWindows: (dir: string) =>
+      `loopctl 让你在终端里，或通过 Claude Code、Codex 等其他 AI 工具管理 Loop Now。\n\n点击“安装”会把 ${dir} 加进你的用户 PATH（不需要管理员密码，新开的终端里即可使用）。以后随时可以从托盘图标或全局设置再装。`,
+    later: '以后再说',
     confirm: '安装 loopctl 命令行工具？',
     confirmDetail: (link: string) => `会在 ${link} 建一个指向 Loop Now 自带 loopctl 的链接，需要输入管理员密码。`,
     replace: (link: string) => `${link} 已经存在`,
@@ -44,7 +50,7 @@ const zhCN = {
     done: '已安装 loopctl',
     already: 'loopctl 已经安装',
     failed: '没能安装 loopctl',
-    external: 'loopctl 以外部身份连接服务端的对外 TLS 端口；地址、证书与配置命令见菜单栏的"外部身份连接方式…"。',
+    external: '下一步：在终端里，loopctl 以外部身份连接 Loop Now。先在控制台的“外部身份”里创建身份并签发令牌，再点菜单栏（托盘）的“外部身份连接方式…”获取配置命令。',
     // Windows: add the bundled bin directory to the user PATH.
     pathConfirm: '把 loopctl 加进 PATH？',
     pathConfirmDetail: (dir: string) => `会把 ${dir} 加进你的用户 PATH（不需要管理员）。新开的终端里就能用 loopctl；已经开着的终端要重开。`,
@@ -144,6 +150,12 @@ const enUS: typeof zhCN = {
   cli: {
     moveFirst: 'Move Loop Now to the Applications folder first',
     moveFirstDetail: 'The command line tool links to the loopctl inside the app; while the app stays in Downloads or on a disk image, that link would break.',
+    firstPromptTitle: 'Install the loopctl command line tool?',
+    firstPromptDetail: (link) =>
+      `loopctl lets you manage Loop Now from a terminal or from another AI tool such as Claude Code or Codex.\n\nInstall creates ${link}, a link to the loopctl bundled with Loop Now (you will be asked for an administrator password once). You can also install it any time from the menu bar or Global settings.`,
+    firstPromptDetailWindows: (dir) =>
+      `loopctl lets you manage Loop Now from a terminal or from another AI tool such as Claude Code or Codex.\n\nInstall adds ${dir} to your user PATH (no administrator password needed; new terminals can run loopctl). You can also install it any time from the tray icon or Global settings.`,
+    later: 'Later',
     confirm: 'Install the loopctl command line tool?',
     confirmDetail: (link) => `This creates ${link}, a link to the loopctl that comes with Loop Now. You will be asked for an administrator password.`,
     replace: (link) => `${link} already exists`,
@@ -154,7 +166,7 @@ const enUS: typeof zhCN = {
     done: 'loopctl is installed',
     already: 'loopctl is already installed',
     failed: 'Could not install loopctl',
-    external: 'loopctl connects to the server’s external TLS port as an external identity; the address, certificate and setup command are under “External Identity Connection…” in the menu bar.',
+    external: 'Next step: in a terminal, loopctl talks to Loop Now as an external identity. Create one and issue a token under “External identities” in the console, then open “External Identity Connection…” from the menu bar (or tray) for the setup command.',
     pathConfirm: 'Add loopctl to PATH?',
     pathConfirmDetail: (dir) => `This adds ${dir} to your user PATH (no administrator needed). New terminals can run loopctl; terminals already open need to be reopened.`,
     pathAlready: 'loopctl is already on PATH',

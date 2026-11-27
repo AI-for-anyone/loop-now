@@ -18,6 +18,47 @@ export type DesktopAppearance = {
   resolvedTheme: 'light' | 'dark'
   backgroundColor: string
 }
+export type DesktopCliStatus =
+  | {
+      state: 'installed'
+      mode: 'symlink' | 'path'
+      location: string
+      target: string
+      externalAvailable: boolean
+    }
+  | {
+      state: 'not_installed'
+      mode: 'symlink' | 'path'
+      location: string
+      target: string
+      moveFirst?: boolean
+      externalAvailable: boolean
+    }
+  | {
+      state: 'other'
+      mode: 'symlink'
+      location: string
+      target: string
+      points?: string
+      moveFirst?: boolean
+      externalAvailable: boolean
+    }
+  | {
+      state: 'unavailable'
+      mode: 'symlink' | 'path'
+      reason: 'not_packaged' | 'error'
+      error?: string
+      externalAvailable: boolean
+    }
+export type DesktopCliInstallResult = {
+  outcome: 'installed' | 'already_installed' | 'cancelled' | 'move_first' | 'unavailable' | 'failed'
+  status: DesktopCliStatus
+  error?: string
+}
+export type DesktopCliBridge = {
+  status: () => Promise<DesktopCliStatus>
+  install: () => Promise<DesktopCliInstallResult>
+}
 export type DesktopBridge = {
   platform?: string
   notify: (notification: DesktopNotification) => void
@@ -28,6 +69,9 @@ export type DesktopBridge = {
   pickPath?: (request: PickPathRequest) => Promise<string | null>
   // Synchronizes the console's skin and color mode with the Electron shell (nativeTheme + window background). Absent in older shells.
   setAppearance?: (appearance: DesktopAppearance) => void
+  // Checks whether loopctl is installed for this user's terminal and installs it on demand. Absent in older shells and plain browsers.
+  cliStatus?: () => Promise<DesktopCliStatus>
+  installCli?: () => Promise<DesktopCliInstallResult>
 }
 
 declare global {
@@ -115,6 +159,13 @@ export const hasInsetTitleBar = () => {
 export function pathPicker(): ((request: PickPathRequest) => Promise<string | null>) | undefined {
   const bridge = window.loopNowDesktop
   return typeof bridge?.pickPath === 'function' ? (request) => bridge.pickPath!(request) : undefined
+}
+
+// The shell's loopctl installation bridge; undefined in plain browsers and in desktop shells older than these calls.
+export function desktopCli(): DesktopCliBridge | undefined {
+  const bridge = window.loopNowDesktop
+  if (typeof bridge?.cliStatus !== 'function' || typeof bridge?.installCli !== 'function') return undefined
+  return { status: () => bridge.cliStatus!(), install: () => bridge.installCli!() }
 }
 
 // A system notification was clicked: after showing the window, the desktop shell hands the path to the page, which navigates

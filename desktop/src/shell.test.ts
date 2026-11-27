@@ -3,7 +3,7 @@
 // The platform is injected as a parameter, so the same suite runs on any OS.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,7 +13,22 @@ import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider'
 import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider'
 import { badgePlan, dotBitmap } from './badge'
 import { parseBadge, parseNotification } from './bridge'
-import { addToUserPathScript, installScript, linkState, userPathHas } from './cli'
+import {
+  addToUserPathScript,
+  cliInstallHandler,
+  cliLink,
+  cliStatusHandler,
+  installLinkDirect,
+  installScript,
+  linkState,
+  maybePromptCliInstall,
+  readCliStatus,
+  resolveCliLocation,
+  runFirstShowChecks,
+  userPathHas,
+  type CliDialogMessage,
+  type CliLocation,
+} from './cli'
 import { externalCertPath, loopctlConfigCommand } from './external'
 import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
@@ -634,6 +649,599 @@ describe('Installing the command line tool', () => {
       installScript('/Applications/Loop "Now".app/x\\y'),
       'do shell script "mkdir -p " & quoted form of "/usr/local/bin" & " && ln -sfn " & quoted form of "/Applications/Loop \\"Now\\".app/x\\\\y" & " " & quoted form of "/usr/local/bin/loopctl" with administrator privileges',
     )
+  })
+
+  let cliSeq = 0
+  const freshSettings = (initial?: Record<string, unknown>) => {
+    const folder = join(dir, `cli-settings-${++cliSeq}`)
+    const file = join(folder, 'settings.json')
+    const sf = new SettingsFile(file)
+    if (initial) {
+      mkdirSync(folder, { recursive: true })
+      writeFileSync(file, JSON.stringify(initial, null, 2) + '\n')
+    }
+    return { file, sf }
+  }
+  const macPackaged: CliLocation = {
+    available: true,
+    devOverride: false,
+    mode: 'symlink',
+    link: cliLink,
+    target: '/Applications/Loop Now.app/Contents/Resources/bin/loopctl',
+    binDir: '/Applications/Loop Now.app/Contents/Resources/bin',
+  }
+  const winPackaged: CliLocation = {
+    available: true,
+    devOverride: false,
+    mode: 'path',
+    link: 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\bin',
+    target: 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\bin\\loopctl.exe',
+    binDir: 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\bin',
+  }
+  const enStrings = () => stringsFor('en-US')
+
+  test('Packaged builds ignore development override environment variables; dev enables CLI only with an absolute LOOP_NOW_DESKTOP_CLI_LINK', () => {
+    const env = {
+      LOOP_NOW_DESKTOP_CLI_LINK: '/tmp/override/loopctl',
+      LOOP_NOW_DESKTOP_CLI_TARGET: '/tmp/override/bin/loopctl',
+    }
+    assert.deepEqual(
+      resolveCliLocation({
+        packaged: true,
+        platform: 'darwin',
+        resourcesPath: '/Applications/Loop Now.app/Contents/Resources',
+        serverBin: '/tmp/other/loop-server',
+        env,
+      }),
+      macPackaged,
+    )
+    assert.deepEqual(
+      resolveCliLocation({
+        packaged: true,
+        platform: 'win32',
+        resourcesPath: 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources',
+        env,
+      }),
+      winPackaged,
+    )
+
+    assert.equal(resolveCliLocation({ packaged: false, platform: 'darwin', resourcesPath: '/dev/resources', serverBin: '/dev/bundle/loop-server', env: {} }).available, false)
+    assert.equal(
+      resolveCliLocation({
+        packaged: false,
+        platform: 'darwin',
+        resourcesPath: '/dev/resources',
+        serverBin: '/dev/bundle/loop-server',
+        env: { LOOP_NOW_DESKTOP_CLI_LINK: 'relative/loopctl' },
+      }).available,
+      false,
+    )
+    assert.deepEqual(
+      resolveCliLocation({
+        packaged: false,
+        platform: 'darwin',
+        resourcesPath: '/dev/resources',
+        serverBin: '/Applications/Loop Now.app/Contents/Resources/server/loop-server',
+        env: { LOOP_NOW_DESKTOP_CLI_LINK: '/tmp/verify-cli/loopctl' },
+        exists: (file) => file === '/Applications/Loop Now.app/Contents/Resources/bin/loopctl',
+      }),
+      {
+        available: true,
+        devOverride: true,
+        mode: 'symlink',
+        link: '/tmp/verify-cli/loopctl',
+        target: '/Applications/Loop Now.app/Contents/Resources/bin/loopctl',
+        binDir: '/Applications/Loop Now.app/Contents/Resources/bin',
+      },
+    )
+  })
+
+  test('Development direct symlink install creates and updates a symlink in a temporary folder without osascript', { skip: process.platform === 'win32' && 'macOS only' }, async () => {
+    const tempDir = join(dir, 'cli-direct-link')
+    const link = join(tempDir, 'bin', 'loopctl')
+    const target1 = join(tempDir, 'loopctl-v1')
+    const target2 = join(tempDir, 'loopctl-v2')
+    mkdirSync(tempDir, { recursive: true })
+    writeFileSync(target1, '#!/bin/sh\necho v1\n', { mode: 0o755 })
+    writeFileSync(target2, '#!/bin/sh\necho v2\n', { mode: 0o755 })
+
+    assert.equal(await installLinkDirect(target1, link), 'done')
+    assert.equal(lstatSync(link).isSymbolicLink(), true)
+    assert.equal(readlinkSync(link), target1)
+    assert.deepEqual(await linkState(link, target1), { state: 'ours' })
+
+    assert.equal(await installLinkDirect(target2, link), 'done')
+    assert.equal(readlinkSync(link), target2)
+    assert.deepEqual(await linkState(link, target2), { state: 'ours' })
+  })
+
+  test('Reports CLI status accurately on macOS (installed, not_installed, other, moveFirst, dev unavailable) and Windows (installed, not_installed, error)', async () => {
+    assert.deepEqual(
+      await readCliStatus({ location: macPackaged, inApplications: true, externalAvailable: true, checkLink: async () => ({ state: 'ours' }) }),
+      { state: 'installed', mode: 'symlink', location: cliLink, target: macPackaged.target, externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: macPackaged, inApplications: false, externalAvailable: true, checkLink: async () => ({ state: 'missing' }) }),
+      { state: 'not_installed', mode: 'symlink', location: cliLink, target: macPackaged.target, moveFirst: true, externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({
+        location: macPackaged,
+        inApplications: true,
+        externalAvailable: true,
+        checkLink: async () => ({ state: 'other', points: '/opt/homebrew/bin/loopctl' }),
+      }),
+      { state: 'other', mode: 'symlink', location: cliLink, target: macPackaged.target, points: '/opt/homebrew/bin/loopctl', externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: macPackaged, inApplications: true, externalAvailable: true, checkLink: async () => ({ state: 'other' }) }),
+      { state: 'other', mode: 'symlink', location: cliLink, target: macPackaged.target, externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: { ...macPackaged, available: false }, inApplications: false, externalAvailable: false }),
+      { state: 'unavailable', mode: 'symlink', reason: 'not_packaged', externalAvailable: false },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: winPackaged, inApplications: false, externalAvailable: true, readUserPath: async () => `C:\\Go\\bin;${winPackaged.binDir}\\` }),
+      { state: 'installed', mode: 'path', location: winPackaged.binDir, target: winPackaged.target, externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: winPackaged, inApplications: false, externalAvailable: true, readUserPath: async () => 'C:\\Go\\bin' }),
+      { state: 'not_installed', mode: 'path', location: winPackaged.binDir, target: winPackaged.target, externalAvailable: true },
+    )
+    assert.deepEqual(
+      await readCliStatus({ location: winPackaged, inApplications: false, externalAvailable: false, readUserPath: async () => new Error('powershell failed') }),
+      { state: 'unavailable', mode: 'path', reason: 'error', error: 'powershell failed', externalAvailable: false },
+    )
+  })
+
+  test('First-launch prompt: asks once, remembers Later across restarts, and never asks again', async () => {
+    const { file, sf } = freshSettings()
+    const shown: CliDialogMessage[] = []
+    const outcome = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      showDialog: async (options) => {
+        shown.push(options)
+        return { response: 1 }
+      },
+    })
+    assert.equal(outcome, 'later')
+    assert.equal(shown.length, 1)
+    assert.deepEqual(shown[0]?.buttons, ['Install', 'Later'])
+    assert.match(shown[0]!.detail, /Claude Code|Codex/)
+    assert.match(shown[0]!.detail, /administrator password/i)
+    assert.equal(sf.read().cliPrompted, true)
+
+    // Survives restart (new SettingsFile reading the same settings.json).
+    const second = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: new SettingsFile(file),
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      showDialog: async () => {
+        throw new Error('should not prompt again')
+      },
+    })
+    assert.equal(second, 'skipped_already_prompted')
+  })
+
+  test('First-launch prompt: quitting or closing the window while the prompt is open does not record cliPrompted, so the next launch asks again', async () => {
+    const { file, sf } = freshSettings()
+    let quitting = false
+    let shownCount = 0
+    const interrupted = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => !quitting,
+      showDialog: async () => {
+        shownCount++
+        // App starts quitting while the dialog is open, causing Electron to resolve showMessageBox with cancelId (1).
+        quitting = true
+        return { response: 1 }
+      },
+    })
+    assert.equal(interrupted, 'interrupted')
+    assert.equal(shownCount, 1)
+    assert.equal(new SettingsFile(file).read().cliPrompted, undefined)
+
+    // Next launch still asks, and choosing Later records cliPrompted.
+    const nextLaunch = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: new SettingsFile(file),
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => true,
+      showDialog: async () => {
+        shownCount++
+        return { response: 1 }
+      },
+    })
+    assert.equal(nextLaunch, 'later')
+    assert.equal(shownCount, 2)
+    assert.equal(new SettingsFile(file).read().cliPrompted, true)
+
+    // If quitting starts while checking linkState (before the dialog opens), neither dialog nor cliPrompted happens.
+    const preQuit = freshSettings()
+    const beforeOpen = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: preQuit.sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => false,
+      showDialog: async () => {
+        throw new Error('should not open dialog while quitting')
+      },
+    })
+    assert.equal(beforeOpen, 'interrupted')
+    assert.equal(preQuit.sf.read().cliPrompted, undefined)
+  })
+
+  test('First-launch prompt: choosing Install runs directly, shows the next-step done dialog, and does not ask again; cancelling password still records asked', async () => {
+    const { file, sf } = freshSettings()
+    const shown: CliDialogMessage[] = []
+    const installed: Array<{ target: string; link: string }> = []
+    const outcome = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      installLink: async (target, link) => {
+        installed.push({ target, link })
+        return 'done'
+      },
+      showDialog: async (options) => {
+        shown.push(options)
+        return { response: 0 }
+      },
+    })
+    assert.equal(outcome, 'installed')
+    assert.deepEqual(installed, [{ target: macPackaged.target, link: macPackaged.link }])
+    assert.equal(shown.length, 2)
+    assert.equal(shown[1]?.message, 'loopctl is installed')
+    assert.match(shown[1]!.detail, /external identity/i)
+    assert.match(shown[1]!.detail, /External Identity Connection…/)
+    assert.equal(new SettingsFile(file).read().cliPrompted, true)
+
+    const second = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: new SettingsFile(file),
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      showDialog: async () => {
+        throw new Error('should not prompt again')
+      },
+    })
+    assert.equal(second, 'skipped_already_prompted')
+
+    // Cancelling the macOS password prompt shows no error dialog and still remembers cliPrompted.
+    const cancelRun = freshSettings()
+    const cancelShown: CliDialogMessage[] = []
+    const cancelled = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: cancelRun.sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      installLink: async () => 'cancelled',
+      showDialog: async (options) => {
+        cancelShown.push(options)
+        return { response: 0 }
+      },
+    })
+    assert.equal(cancelled, 'cancelled')
+    assert.equal(cancelShown.length, 1)
+    assert.equal(cancelRun.sf.read().cliPrompted, true)
+  })
+
+  test('First-launch prompt: skipped when already installed, pointing elsewhere, or not yet in Applications (and asks once moved)', async () => {
+    for (const current of [{ state: 'ours' as const }, { state: 'other' as const, points: '/opt/homebrew/bin/loopctl' }, { state: 'other' as const }]) {
+      const { sf } = freshSettings()
+      const outcome = await maybePromptCliInstall({
+        location: macPackaged,
+        inApplications: true,
+        settings: sf,
+        strings: enStrings,
+        checkLink: async () => current,
+        showDialog: async () => {
+          throw new Error('should not prompt')
+        },
+      })
+      assert.equal(outcome, current.state === 'ours' ? 'skipped_already_installed' : 'skipped_points_elsewhere')
+    }
+
+    const { sf } = freshSettings()
+    assert.equal(
+      await maybePromptCliInstall({
+        location: macPackaged,
+        inApplications: false,
+        settings: sf,
+        strings: enStrings,
+        checkLink: async () => ({ state: 'missing' }),
+        showDialog: async () => {
+          throw new Error('should not prompt outside Applications')
+        },
+      }),
+      'skipped_not_in_applications',
+    )
+    assert.equal(sf.read().cliPrompted, undefined)
+
+    let prompted = 0
+    assert.equal(
+      await maybePromptCliInstall({
+        location: macPackaged,
+        inApplications: true,
+        settings: sf,
+        strings: enStrings,
+        checkLink: async () => ({ state: 'missing' }),
+        showDialog: async () => ({ response: (prompted++, 1) }),
+      }),
+      'later',
+    )
+    assert.equal(prompted, 1)
+  })
+
+  test('First-launch prompt: upgrade case asks once when missing (preserving existing settings) and skips when already installed', async () => {
+    const { file, sf } = freshSettings({ port: 8780, externalPort: 8781 })
+    assert.equal(
+      await maybePromptCliInstall({
+        location: macPackaged,
+        inApplications: true,
+        settings: sf,
+        strings: enStrings,
+        checkLink: async () => ({ state: 'missing' }),
+        showDialog: async () => ({ response: 1 }),
+      }),
+      'later',
+    )
+    assert.deepEqual(new SettingsFile(file).read(), { port: 8780, externalPort: 8781, cliPrompted: true })
+
+    const existingInstalled = freshSettings({ port: 8780, externalPort: 8781 })
+    assert.equal(
+      await maybePromptCliInstall({
+        location: macPackaged,
+        inApplications: true,
+        settings: existingInstalled.sf,
+        strings: enStrings,
+        checkLink: async () => ({ state: 'ours' }),
+        showDialog: async () => {
+          throw new Error('should not prompt')
+        },
+      }),
+      'skipped_already_installed',
+    )
+  })
+
+  test('First-launch prompt: Windows mode prompts once when not on PATH, adds to user PATH without admin, and skips when already present or unreadable', async () => {
+    const { file, sf } = freshSettings()
+    const shown: CliDialogMessage[] = []
+    const added: string[] = []
+    assert.equal(
+      await maybePromptCliInstall({
+        location: winPackaged,
+        inApplications: false,
+        settings: sf,
+        strings: enStrings,
+        readUserPath: async () => 'C:\\Go\\bin',
+        addToUserPath: async (targetDir) => {
+          added.push(targetDir)
+          return 'done'
+        },
+        showDialog: async (options) => {
+          shown.push(options)
+          return { response: 0 }
+        },
+      }),
+      'installed',
+    )
+    assert.deepEqual(added, [winPackaged.binDir])
+    assert.equal(shown.length, 2)
+    assert.match(shown[0]!.detail, /no administrator/i)
+    assert.equal(shown[1]?.message, 'loopctl was added to PATH')
+    assert.match(shown[1]!.detail, /External Identity Connection…/)
+    assert.equal(new SettingsFile(file).read().cliPrompted, true)
+
+    assert.equal(
+      await maybePromptCliInstall({
+        location: winPackaged,
+        inApplications: false,
+        settings: freshSettings().sf,
+        strings: enStrings,
+        readUserPath: async () => `C:\\Go\\bin;${winPackaged.binDir}`,
+        showDialog: async () => {
+          throw new Error('should not prompt')
+        },
+      }),
+      'skipped_already_installed',
+    )
+
+    const errored = freshSettings()
+    assert.equal(
+      await maybePromptCliInstall({
+        location: winPackaged,
+        inApplications: false,
+        settings: errored.sf,
+        strings: enStrings,
+        readUserPath: async () => new Error('access denied'),
+        showDialog: async () => {
+          throw new Error('should not prompt')
+        },
+      }),
+      'skipped_error',
+    )
+    assert.equal(errored.sf.read().cliPrompted, undefined)
+
+    // Chinese prompt copy carries the expected button labels and next-step hint.
+    const zhShown: CliDialogMessage[] = []
+    await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: freshSettings().sf,
+      strings: () => stringsFor('zh-CN'),
+      checkLink: async () => ({ state: 'missing' }),
+      installLink: async () => 'done',
+      showDialog: async (options) => {
+        zhShown.push(options)
+        return { response: 0 }
+      },
+    })
+    assert.deepEqual(zhShown[0]?.buttons, ['安装', '以后再说']) // check-english: zh (asserts Chinese prompt button labels)
+    assert.match(zhShown[1]!.detail, /外部身份连接方式…/) // check-english: zh (asserts Chinese next-step wording)
+  })
+
+  test('First-show ordering runs the git check to completion before loopctl so dialogs never stack', async () => {
+    const events: string[] = []
+    let finishGit!: () => void
+    const gitDone = new Promise<void>((resolve) => {
+      finishGit = resolve
+    })
+    const run = runFirstShowChecks({
+      checkGit: async () => {
+        events.push('git:start')
+        await gitDone
+        events.push('git:end')
+      },
+      checkCli: async () => {
+        events.push('cli:start')
+        events.push('cli:end')
+      },
+    })
+    await Promise.resolve()
+    assert.deepEqual(events, ['git:start'])
+    finishGit()
+    await run
+    assert.deepEqual(events, ['git:start', 'git:end', 'cli:start', 'cli:end'])
+
+    const closedEvents: string[] = []
+    let alive = true
+    await runFirstShowChecks({
+      checkGit: async () => {
+        closedEvents.push('git')
+        alive = false
+      },
+      checkCli: async () => {
+        closedEvents.push('cli')
+      },
+      isAlive: () => alive,
+    })
+    assert.deepEqual(closedEvents, ['git'])
+  })
+
+  test('IPC handlers reject untrusted callers, install directly when missing, confirm before replacing, and handle moveFirst/unavailable/failure/Windows', async () => {
+    let called = false
+    const untrustedStatus = cliStatusHandler({
+      trusted: () => false,
+      getStatus: async () => {
+        called = true
+        return { state: 'not_installed', mode: 'symlink', location: cliLink, target: macPackaged.target, externalAvailable: true }
+      },
+    })
+    const untrustedInstall = cliInstallHandler({
+      trusted: () => false,
+      location: macPackaged,
+      settings: freshSettings().sf,
+      strings: enStrings,
+      getStatus: async () => {
+        called = true
+        return { state: 'not_installed', mode: 'symlink', location: cliLink, target: macPackaged.target, externalAvailable: true }
+      },
+      confirmReplace: async () => ({ response: 0 }),
+    })
+    await assert.rejects(untrustedStatus({}))
+    await assert.rejects(untrustedInstall({}))
+    assert.equal(called, false)
+
+    const { sf } = freshSettings()
+    let currentState: { state: 'missing' } | { state: 'ours' } | { state: 'other'; points?: string } = { state: 'missing' }
+    let inApplications = true
+    const confirms: CliDialogMessage[] = []
+    const getStatus = () => readCliStatus({ location: macPackaged, inApplications, externalAvailable: true, checkLink: async () => currentState })
+
+    const install = cliInstallHandler({
+      trusted: () => true,
+      location: macPackaged,
+      settings: sf,
+      strings: enStrings,
+      getStatus,
+      confirmReplace: async (options) => {
+        confirms.push(options)
+        return { response: confirms.length === 1 ? 1 : 0 }
+      },
+      installLink: async () => {
+        currentState = { state: 'ours' }
+        return 'done'
+      },
+    })
+
+    // moveFirst refuses without installing.
+    inApplications = false
+    assert.equal((await install({})).outcome, 'move_first')
+    inApplications = true
+
+    // Missing installs directly with no confirmation dialog.
+    const installed = await install({})
+    assert.equal(installed.outcome, 'installed')
+    assert.equal(installed.status.state, 'installed')
+    assert.equal(confirms.length, 0)
+    assert.equal(sf.read().cliPrompted, true)
+
+    // Already installed does nothing.
+    assert.equal((await install({})).outcome, 'already_installed')
+
+    // Pointing elsewhere confirms first; first click cancels, second replaces.
+    currentState = { state: 'other', points: '/opt/homebrew/bin/loopctl' }
+    assert.equal((await install({})).outcome, 'cancelled')
+    assert.equal(confirms.length, 1)
+    assert.equal((await install({})).outcome, 'installed')
+    assert.equal(confirms.length, 2)
+
+    // Failure returns failed + error message.
+    currentState = { state: 'missing' }
+    const failing = cliInstallHandler({
+      trusted: () => true,
+      location: macPackaged,
+      settings: freshSettings().sf,
+      strings: enStrings,
+      getStatus,
+      confirmReplace: async () => ({ response: 0 }),
+      installLink: async () => new Error('permission denied'),
+    })
+    const failed = await failing({})
+    assert.equal(failed.outcome, 'failed')
+    assert.equal(failed.error, 'permission denied')
+
+    // Windows PATH install via IPC.
+    const winSettings = freshSettings()
+    let userPath = 'C:\\Go\\bin'
+    const winInstall = cliInstallHandler({
+      trusted: () => true,
+      location: winPackaged,
+      settings: winSettings.sf,
+      strings: enStrings,
+      getStatus: () => readCliStatus({ location: winPackaged, inApplications: false, externalAvailable: true, readUserPath: async () => userPath }),
+      confirmReplace: async () => {
+        throw new Error('Windows PATH install should not confirm replace')
+      },
+      addToUserPath: async (targetDir) => {
+        userPath = `${userPath};${targetDir}`
+        return 'done'
+      },
+    })
+    const winResult = await winInstall({})
+    assert.equal(winResult.outcome, 'installed')
+    assert.equal(winResult.status.state, 'installed')
+    assert.equal(winSettings.sf.read().cliPrompted, true)
   })
 })
 

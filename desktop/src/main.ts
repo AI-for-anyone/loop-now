@@ -13,10 +13,26 @@ import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
 import { choosePort, portOf } from './port'
-import { addToUserPath, cliLink, installLink, linkState, readUserPath, userPathHas } from './cli'
+import {
+  addToUserPath,
+  cliInstallChannel,
+  cliInstallHandler,
+  cliStatusChannel,
+  cliStatusHandler,
+  installLink,
+  installLinkDirect,
+  linkState,
+  maybePromptCliInstall,
+  readCliStatus,
+  readUserPath,
+  resolveCliLocation,
+  runFirstShowChecks,
+  userPathHas,
+  type CliDialogMessage,
+} from './cli'
 import { externalCertPath, loopctlConfigCommand } from './external'
 import { gitUsable, installGit } from './git'
-import { cliBinary, cliInstallMode, current as platform, serverBinary } from './platform'
+import { current as platform, serverBinary } from './platform'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
@@ -71,6 +87,14 @@ function run(): void {
   // with its own directory as cwd, so the path is made absolute).
   const devBin = process.env.LOOP_NOW_DESKTOP_SERVER
   const bin = app.isPackaged ? join(process.resourcesPath, 'server', serverBinary(platform)) : devBin ? resolve(devBin) : undefined
+  const cliLocation = resolveCliLocation({
+    packaged: app.isPackaged,
+    platform,
+    resourcesPath: process.resourcesPath,
+    serverBin: bin,
+    env: process.env,
+  })
+  const inApplications = () => (platform === 'darwin' ? app.isInApplicationsFolder() : true)
   // Cases where the server cannot be started (called after the app is ready, because the language is only known then). A missing profile
   // only happens in development when none was chosen.
   const blocked = (): StatusView | undefined => {
@@ -101,7 +125,23 @@ function run(): void {
     profile: profile?.label === defaultProfile ? undefined : profile?.label,
     background,
     appearance: resolveWindowAppearance(currentAppearance, nativeTheme.shouldUseDarkColors),
-    onFirstShow: (win) => void checkGit(win),
+    onFirstShow: (win) =>
+      void runFirstShowChecks({
+        checkGit: () => checkGit(win),
+        checkCli: async () => {
+          if (blocked()) return
+          await maybePromptCliInstall({
+            location: cliLocation,
+            inApplications: inApplications(),
+            settings,
+            strings,
+            showDialog: (options) => dialog.showMessageBox(win, options),
+            answered: () => !win.isDestroyed() && !quitting,
+            note,
+          })
+        },
+        isAlive: () => !win.isDestroyed() && !quitting,
+      }),
     quitting: () => quitting,
     note,
     onAction: (action) => (action === 'retry' ? void server.restart() : void shell.openPath(logDir)),
@@ -160,33 +200,35 @@ function run(): void {
   // Windows: add resources\bin (holding the copied loopctl.exe) to the user PATH (for the trade-offs see cliInstallMode in platform.ts).
   // Triggered by the user from the menu; both the confirmation dialog and the system's administrator password prompt appear at that point.
   async function installCli(): Promise<void> {
+    if (!cliLocation.available) return
     const s = strings().cli
     const info = (message: string, detail: string, type: 'info' | 'warning' = 'info') => dialog.showMessageBox({ type, message, detail })
-    if (cliInstallMode(platform) === 'path') return installCliOnPath(info)
-    if (!app.isInApplicationsFolder()) return void (await info(s.moveFirst, s.moveFirstDetail, 'warning'))
-    const target = join(process.resourcesPath, 'bin', cliBinary(platform))
-    const current = await linkState(cliLink, target)
-    if (current.state === 'ours') return void (await info(s.already, `${cliLink} → ${target}\n\n${s.external}`))
+    if (cliLocation.mode === 'path') return installCliOnPath(info)
+    if (!cliLocation.devOverride && !inApplications()) return void (await info(s.moveFirst, s.moveFirstDetail, 'warning'))
+    const { link, target } = cliLocation
+    const current = await linkState(link, target)
+    if (current.state === 'ours') return void (await info(s.already, `${link} → ${target}\n\n${s.external}`))
     const ask =
       current.state === 'other'
-        ? { message: s.replace(cliLink), detail: `${s.replaceDetail(current.points ?? cliLink)}\n\n${s.external}`, button: s.replaceButton }
-        : { message: s.confirm, detail: `${s.confirmDetail(cliLink)}\n\n${s.external}`, button: s.install }
+        ? { message: s.replace(link), detail: `${s.replaceDetail(current.points ?? link)}\n\n${s.external}`, button: s.replaceButton }
+        : { message: s.confirm, detail: `${s.confirmDetail(link)}\n\n${s.external}`, button: s.install }
     app.focus({ steal: true })
     const { response } = await dialog.showMessageBox({ type: 'question', message: ask.message, detail: ask.detail, buttons: [ask.button, s.cancel], defaultId: 0, cancelId: 1 })
     if (response !== 0) return
-    const result = await installLink(target)
+    const result = cliLocation.devOverride ? await installLinkDirect(target, link) : await installLink(target, link)
     if (result === 'cancelled') return
     if (result instanceof Error) {
       note(`Installing loopctl failed: ${result.message}`)
       return void (await info(s.failed, result.message, 'warning'))
     }
-    note(`Installed loopctl: ${cliLink} → ${target}`)
-    await info(s.done, `${cliLink} → ${target}\n\n${s.external}`)
+    settings.update({ cliPrompted: true })
+    note(`Installed loopctl: ${link} → ${target}`)
+    await info(s.done, `${link} → ${target}\n\n${s.external}`)
   }
 
   async function installCliOnPath(info: (message: string, detail: string, type?: 'info' | 'warning') => Promise<unknown>): Promise<void> {
     const s = strings().cli
-    const dir = join(process.resourcesPath, 'bin')
+    const dir = cliLocation.binDir
     const current = await readUserPath()
     if (current instanceof Error) {
       note(`Cannot read the user PATH: ${current.message}`)
@@ -201,6 +243,7 @@ function run(): void {
       note(`Adding loopctl to PATH failed: ${result.message}`)
       return void (await info(s.failed, errorText(result, strings()), 'warning'))
     }
+    settings.update({ cliPrompted: true })
     note(`Added ${dir} to the user PATH`)
     await info(s.pathDone, `${s.pathDoneDetail(dir)}\n\n${s.external}`)
   }
@@ -300,6 +343,28 @@ function run(): void {
     setAppMenu(() => void quit(true))
     handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path), badge: (count) => badge.set(count) })
     handlePathPicker({ trusted: (event) => window.trusts(event), window: () => window.browserWindow, platform })
+    const getCliStatus = () =>
+      readCliStatus({
+        location: cliLocation,
+        inApplications: inApplications(),
+        externalAvailable: (server.state === 'running' || server.state === 'degraded') && server.url !== undefined && server.externalUrl !== undefined,
+      })
+    ipcMain.handle(cliStatusChannel, cliStatusHandler({ trusted: (event) => window.trusts(event), getStatus: getCliStatus }))
+    ipcMain.handle(
+      cliInstallChannel,
+      cliInstallHandler({
+        trusted: (event) => window.trusts(event),
+        location: cliLocation,
+        settings,
+        strings,
+        getStatus: getCliStatus,
+        confirmReplace: (options: CliDialogMessage) => {
+          const win = window.browserWindow
+          return win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
+        },
+        note,
+      }),
+    )
     ipcMain.on('loop-now:appearance', (event, raw) => {
       if (!window.trusts(event)) return
       const appearance = parseAppearance(raw)
@@ -334,6 +399,8 @@ function run(): void {
       },
       profile,
       () => updates.available,
+      platform,
+      cliLocation.available,
     )
     tray.update(server.state, server.url, server.externalUrl)
     if (app.isPackaged) updates.start()
