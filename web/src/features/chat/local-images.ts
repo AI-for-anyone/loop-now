@@ -8,10 +8,16 @@ export const DEFAULT_IMAGE_PREVIEW_MAX_BYTES = 20 << 20
 export interface ReplyFolderContext {
   // Absolute path(s) of the Agent's (or task instance's) folder on this computer: FolderLocation.path and FolderLocation.realPath.
   roots: readonly string[]
+  // True once the folder location has resolved (or was provided statically); while false, absolute paths wait before marking outside.
+  rootsReady?: boolean
   // Folder content API URL for a validated folder-relative path (raw bytes, same checks as the Folder tab).
   contentURL: (relativePath: string) => string
-  // Console URL that opens the file in the Agent's Folder tab; omitted for task node conversations, which have no Folder tab.
+  // Sandboxed raw file URL for opening one file in a new browser tab.
+  rawURL?: (relativePath: string) => string
+  // Console URL that opens a directory in the Agent's Folder tab; omitted for task node conversations, which have no Folder tab.
   folderLink?: (relativePath: string) => string
+  // Check whether a folder-relative path is a directory; omitted when entries cannot be listed (e.g. task node folders).
+  checkDirectory?: (relativePath: string, signal?: AbortSignal) => Promise<'dir' | 'not-dir' | 'missing'>
   // Maximum file size in bytes allowed for preview (Context.limits.textEdit.maxBytes).
   maxBytes: number
 }
@@ -33,25 +39,39 @@ export function isReplyImagePath(path: string): boolean {
   return mimeTypeForImagePath(path) !== null
 }
 
-// Resolve a folder-relative path's . and .. segments; returns null when empty, containing NUL, or escaping above the root.
-export function normalizeRelativePath(raw: string): string | null {
+// Resolve a folder-relative path's . and .. segments; returns 'root' for '.' / './', a POSIX relative path when inside, or null
+// when empty, containing NUL, absolute, or escaping above the root.
+export function normalizeRelativeOrRoot(raw: string): string | 'root' | null {
   if (!raw || raw.includes('\0')) return null
   const unified = raw.replace(/\\/g, '/')
   if (unified.startsWith('/') || /^[a-zA-Z]:/.test(unified)) return null
   const stack: string[] = []
+  let sawDot = false
   for (const part of unified.split('/')) {
-    if (part === '' || part === '.') continue
+    if (part === '') continue
+    if (part === '.') {
+      sawDot = true
+      continue
+    }
     if (part === '..') {
       if (stack.length === 0) return null
       stack.pop()
+      sawDot = true
     } else {
       stack.push(part)
     }
   }
-  return stack.length > 0 ? stack.join('/') : null
+  if (stack.length > 0) return stack.join('/')
+  return sawDot ? 'root' : null
 }
 
-function decodePercent(value: string): string {
+// Resolve a folder-relative path's . and .. segments; returns null when empty, root, containing NUL, or escaping above the root.
+export function normalizeRelativePath(raw: string): string | null {
+  const result = normalizeRelativeOrRoot(raw)
+  return result && result !== 'root' ? result : null
+}
+
+export function decodePercent(value: string): string {
   try {
     return decodeURIComponent(value)
   } catch {
@@ -107,8 +127,9 @@ function normalizeAbsoluteForMatch(raw: string): NormalizedAbsolute | null {
   return { normalized: prefix + suffix, key: keyPrefix + suffix }
 }
 
-// If raw is an absolute path (or file:// URL) strictly inside one of roots, return its normalized folder-relative POSIX path; else null.
-export function resolveAbsoluteInsideRoots(raw: string, roots: readonly string[]): string | null {
+// If raw is an absolute path (or file:// URL) inside or equal to one of roots, return its normalized folder-relative POSIX path
+// (or 'root' when equal to a root itself); else null.
+export function resolveAbsoluteOrRoot(raw: string, roots: readonly string[]): string | 'root' | null {
   const trimmed = raw.trim()
   if (!trimmed || roots.length === 0) return null
   const unwrapped = stripFileUrl(trimmed) ?? trimmed
@@ -121,12 +142,19 @@ export function resolveAbsoluteInsideRoots(raw: string, roots: readonly string[]
     .sort((a, b) => b.key.length - a.key.length)
 
   for (const root of normalizedRoots) {
+    if (candidate.key === root.key) return 'root'
     if (!candidate.key.startsWith(`${root.key}/`)) continue
     const rel = candidate.normalized.slice(root.normalized.length + 1)
     const clean = normalizeRelativePath(rel)
     if (clean) return clean
   }
   return null
+}
+
+// If raw is an absolute path (or file:// URL) strictly inside one of roots, return its normalized folder-relative POSIX path; else null.
+export function resolveAbsoluteInsideRoots(raw: string, roots: readonly string[]): string | null {
+  const result = resolveAbsoluteOrRoot(raw, roots)
+  return result && result !== 'root' ? result : null
 }
 
 export function resolveAbsoluteLocalImage(raw: string, roots: readonly string[]): string | null {
@@ -169,7 +197,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function rootPattern(root: string): string | null {
+export function rootPattern(root: string): string | null {
   const norm = normalizeAbsoluteForMatch(root)
   if (!norm) return null
   const body = escapeRegExp(norm.normalized).replace(/\//g, '[/\\\\]').replace(/ /g, '(?: |%20)')
@@ -187,7 +215,7 @@ export type BareTextPart =
 
 // Full-width / CJK punctuation that terminates a bare path (matches remark-http-links.ts):
 // comma, period, semicolon, colon, exclamation, question, ideographic comma, brackets, quotes.
-const CJK_PUNCT = '\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\u3001\\uFF08\\uFF09\\u3010\\u3011\\u300A\\u300B\\u201C\\u201D\\u2018\\u2019'
+export const CJK_PUNCT = '\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\u3001\\uFF08\\uFF09\\u3010\\u3011\\u300A\\u300B\\u201C\\u201D\\u2018\\u2019'
 
 // Split a plain text node around bare absolute paths (or bare file:// paths) that point to supported image files inside roots.
 // Matching by the known folder roots supports spaces in the root directory itself (e.g. "Application Support/Loop Now") while

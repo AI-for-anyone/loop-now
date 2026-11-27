@@ -122,7 +122,7 @@ describe('Markdown rendering and safety', () => {
     expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Loop Now 3D-1', 'Loop Now 3D-2'])
   })
 
-  it('renders inline-code PNG and SVG list paths from the Agent folder with Chinese folder-link tooltip and lightbox labels', async () => {
+  it('renders local file links and inline-code image paths with Chinese tooltips and lightbox labels', async () => {
     const root = '/Users/Shared/loop-now-desktop/default/agents/01a217ac/workspace'
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="16"/></svg>'
@@ -133,11 +133,19 @@ describe('Markdown rendering and safety', () => {
         if (rel.endsWith('.svg')) return new HttpResponse(svg, { headers: { 'Content-Type': 'application/octet-stream' } })
         return new HttpResponse(null, { status: 404 })
       }),
+      http.head(apiUrl('/agents/a1/folder/raw/*'), ({ request }) => {
+        const rel = new URL(request.url).pathname.split('/folder/raw/')[1] ?? ''
+        if (rel.endsWith('.png') || rel.endsWith('.svg') || rel === 'pelican.html') return new HttpResponse(null, { status: 200 })
+        if (rel === 'assets') return new HttpResponse(null, { status: 422 })
+        return new HttpResponse(null, { status: 404 })
+      }),
     )
     const folder: ReplyFolderContext = {
       roots: [root],
       contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      rawURL: (rel) => apiUrl(`/agents/a1/folder/raw/${rel.split('/').map(encodeURIComponent).join('/')}`),
       folderLink: (rel) => `/p/loop-now/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      checkDirectory: async (rel) => (rel === 'assets' ? 'dir' : 'not-dir'),
       maxBytes: 20 << 20,
     }
     const reply = [
@@ -147,18 +155,28 @@ describe('Markdown rendering and safety', () => {
       `- **方案 2**：\`${root}/assets/mascot/svg-concepts/concept-2.svg\``,
       `- **方案 3**：\`${root}/assets/mascot/svg-concepts/concept-3.svg\``,
       `- **方案 4**：\`${root}/assets/mascot/svg-concepts/concept-4.svg\``,
+      '',
+      `[打开动画](${root}/pelican.html) · [资源目录](assets/) · [目录外](/etc/passwd) · [已删除](gone.html)`,
     ].join('\n')
 
     const user = userEvent.setup()
     const { container } = render(<Markdown folder={folder} text={reply} />)
 
-    const link = screen.getByRole('link', { name: `${root}/assets/mascot/svg-concepts/preview-2x2.png` })
-    expect(link).toHaveAttribute('title', '在文件夹中打开')
+    const link = await screen.findByRole('link', { name: `${root}/assets/mascot/svg-concepts/preview-2x2.png` })
+    expect(link).toHaveAttribute('title', '在新标签页打开')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(await screen.findByRole('link', { name: '打开动画' })).toHaveAttribute('title', '在新标签页打开')
+    expect(await screen.findByRole('link', { name: '资源目录' })).toHaveAttribute('title', '在文件夹中打开')
+    expect(screen.queryByRole('link', { name: '目录外' })).toBeNull()
+    expect(screen.getByText('目录外').closest('[title]')).toHaveAttribute('title', '路径不在文件夹内，不能打开')
+    await waitFor(() => expect(screen.getByText('已删除').closest('[title]')).toHaveAttribute('title', '文件夹里找不到这个文件，不能打开'))
+    expect(screen.queryByRole('link', { name: '已删除' })).toBeNull()
+
     expect(await screen.findByRole('button', { name: '放大图片：preview-2x2.png' })).toBeInTheDocument()
     await waitFor(() => expect(container.querySelector('[data-md-local-images] [data-md-image-row]')).toHaveAttribute('data-count', '4'))
 
     await user.click(screen.getByRole('button', { name: '放大图片：concept-1.svg' }))
     const dialog = await screen.findByRole('dialog', { name: 'concept-1.svg' })
-    expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', folder.contentURL('assets/mascot/svg-concepts/concept-1.svg'))
+    expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', folder.rawURL!('assets/mascot/svg-concepts/concept-1.svg'))
   })
 })
