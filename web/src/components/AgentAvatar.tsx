@@ -2,10 +2,6 @@ import { avatarPair, translucentAvatarPalette } from '@/lib/avatar'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/theme/store'
 
-// The Plate sidebar has a riso-blue background: the riso blue in the avatar is swapped for its light version, and the overprint only blends
-// colors inside the avatar, without multiplying with the background.
-const onBlue = (color: string) => (color === 'var(--riso-blue)' ? 'var(--riso-blue-soft)' : color)
-
 const MONO_SIZES = {
   sm: { box: 'h-4 w-[23px]', back: 'top-0 left-0 size-4', front: 'top-0 left-[7px] size-4' },
   md: { box: 'h-[30px] w-9', back: 'top-0.5 left-0 size-6', front: 'top-1 left-3 size-6' },
@@ -60,7 +56,7 @@ export function AgentAvatar({
   }
 
   if (size === 'sm') {
-    const [back, front] = avatarPair(id).map(onBlue)
+    const [back, front] = avatarPair(id)
     return (
       <span aria-hidden="true" className={cn('relative isolate inline-block h-4 w-[23px] shrink-0', sleeping && 'opacity-55', className)}>
         <span className="absolute top-0 left-0 size-4 rounded-full" style={{ background: back }} />

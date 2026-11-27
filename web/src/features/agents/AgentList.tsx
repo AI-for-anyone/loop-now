@@ -160,11 +160,11 @@ export function AgentNavGroup({
         <Skeleton />
       ) : (
         <>
-          {loading && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.common.loading}</p>}
-          {agents.isError && <ErrorAlert error={agents.error} className="text-[12.5px]" />}
-          {agents.isSuccess && list.length === 0 && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.agents.empty}</p>}
+          {loading && <p className="px-2.5 text-[13.5px] text-sidebar-muted">{t.common.loading}</p>}
+          {agents.isError && <ErrorAlert error={agents.error} className="text-[13.5px]" />}
+          {agents.isSuccess && list.length === 0 && <p className="px-2.5 text-[13.5px] text-sidebar-muted">{t.agents.empty}</p>}
           {list.length > 0 && shown.length === 0 && (
-            <p role="status" className="px-2.5 text-[12.5px] text-sidebar-muted">
+            <p role="status" className="px-2.5 text-[13.5px] text-sidebar-muted">
               {t.agents.search.noMatch}
             </p>
           )}

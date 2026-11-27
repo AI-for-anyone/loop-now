@@ -208,7 +208,7 @@ describe('Header bar and tabs', () => {
     const agent = makeAgent({ name: 'manager', isManager: true, runtime: 'claude-code', model: { provider: 'claude-code', modelId: 'opus' }, address: 'test-org/test-project/manager' })
     const { title, header } = await open(agent)
     expect(header).toHaveClass('nav:flex', 'nav:h-12', 'nav:items-center')
-    expect(title).toHaveClass('text-[14.5px]', 'font-semibold', 'text-ink')
+    expect(title).toHaveClass('text-[16px]', 'font-semibold', 'text-ink')
     expect(title).not.toHaveClass('font-display-cn')
     expect(title.className).not.toMatch(/text-shadow/)
     expect(within(header).getByTitle('Project Manager')).toHaveTextContent('Manager')
@@ -364,11 +364,11 @@ describe('Header bar and tabs', () => {
     expect(header.closest('[data-sheet]')).toBeNull()
   })
 
-  it('the conversation panel under the bar uses a centered 800px message column', async () => {
+  it('the conversation panel under the bar uses a centered 960px message column', async () => {
     const { header } = await open(makeAgent({ name: 'Agent A' }), 'chat')
     const sheet = header.nextElementSibling as HTMLElement
     const log = await within(sheet).findByRole('log', { name: 'Conversation' })
     const column = log.querySelector('[data-message-column]')!
-    expect(column).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]', 'px-4', 'pt-4', 'pb-6', 'sm:px-6')
+    expect(column).toHaveClass('mx-auto', 'w-full', 'max-w-[960px]', 'px-4', 'pt-4', 'pb-6', 'sm:px-6')
   })
 })

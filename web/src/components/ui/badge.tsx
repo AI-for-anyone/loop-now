@@ -10,9 +10,9 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        chip: "h-[22px] rounded-full border border-transparent px-2 text-[11.5px] leading-none font-medium tracking-[-0.005em]",
-        stamp: "rounded-full border border-current/25 bg-surface-subtle px-2 py-0.5 text-[11.5px] font-medium tracking-normal",
-        sticker: "size-[112px] flex-col rounded-full border border-hairline-strong px-3 text-center text-[14px] leading-tight font-semibold whitespace-normal",
+        chip: "h-6 rounded-full border border-transparent px-2 text-[12.5px] leading-none font-medium tracking-[-0.005em]",
+        stamp: "rounded-full border border-current/25 bg-surface-subtle px-2 py-0.5 text-[12.5px] font-medium tracking-normal",
+        sticker: "size-[112px] flex-col rounded-full border border-hairline-strong px-3 text-center text-[15px] leading-tight font-semibold whitespace-normal",
       },
       tone: {
         neutral: "",

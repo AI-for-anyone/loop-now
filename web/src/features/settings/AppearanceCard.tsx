@@ -14,10 +14,10 @@ function SkinThumbnail({ skinId, resolvedTheme }: { skinId: SkinId; resolvedThem
         aria-hidden="true"
         className="flex h-12 w-full overflow-hidden rounded-ticket border border-[#18265E]/30 bg-[#F3EFE6]"
       >
-        <span className="flex w-7 shrink-0 flex-col gap-1 bg-[#2443B5] p-1.5">
+        <span className="flex w-7 shrink-0 flex-col gap-1 border-r border-[#18265E]/15 bg-[#EAE4D6] p-1.5">
           <span className="h-1.5 w-3.5 rounded-xs bg-[#FFE14D]" />
-          <span className="h-1 w-4 rounded-xs bg-white/60" />
-          <span className="h-1 w-3 rounded-xs bg-white/40" />
+          <span className="h-1 w-4 rounded-xs bg-[#18265E]/40" />
+          <span className="h-1 w-3 rounded-xs bg-[#18265E]/25" />
         </span>
         <span className="flex flex-1 flex-col justify-between p-2">
           <span className="flex items-center gap-1.5">
@@ -105,8 +105,8 @@ export function AppearanceCard({ labelledBy }: { labelledBy: string }) {
               >
                 <SkinThumbnail skinId={id} resolvedTheme={resolvedTheme} />
                 <div className="grid gap-0.5">
-                  <span className="text-[13.5px] font-medium text-ink">{meta.name}</span>
-                  <span className="text-[12.5px] leading-snug text-ink-500">{meta.description}</span>
+                  <span className="text-[14.5px] font-medium text-ink">{meta.name}</span>
+                  <span className="text-[13.5px] leading-snug text-ink-500">{meta.description}</span>
                 </div>
               </button>
             )

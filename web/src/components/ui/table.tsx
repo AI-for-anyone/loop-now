@@ -16,7 +16,7 @@ function Table({ className, card = true, ...props }: React.ComponentProps<"table
           "rounded-card border border-hairline bg-surface-elevated shadow-surface"
       )}
     >
-      <table data-slot="table" className={cn("w-full border-collapse text-left text-[14px]", className)} {...props} />
+      <table data-slot="table" className={cn("w-full border-collapse text-left text-[15px]", className)} {...props} />
     </div>
   )
 }
@@ -50,7 +50,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "px-3.5 py-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink-500",
+        "px-3.5 py-2.5 text-[13.5px] font-semibold whitespace-nowrap text-ink-500",
         className
       )}
       {...props}

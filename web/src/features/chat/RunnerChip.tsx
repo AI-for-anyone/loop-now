@@ -26,7 +26,7 @@ const SAVED_MS = 4000
 const MODEL_LIMIT = 200
 
 const TRIGGER_CLASS =
-  'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[7px] border border-transparent bg-transparent px-2 text-[12px] font-medium whitespace-nowrap text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-hover aria-expanded:text-ink'
+  'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[7px] border border-transparent bg-transparent px-2 text-[13px] font-medium whitespace-nowrap text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-hover aria-expanded:text-ink'
 
 const POPOVER_CLASS =
   'z-50 flex flex-col overflow-hidden rounded-[11px] border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none'

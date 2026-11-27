@@ -659,7 +659,7 @@ describe('task list on the sheet', () => {
     expect(document.querySelector('[data-task-sleep]')).toBeInTheDocument()
   })
 
-  it('task node conversation uses the clean sheet and centered 800px message column matched by the composer bar', async () => {
+  it('task node conversation uses the clean sheet and centered 960px message column matched by the composer bar', async () => {
     await renderDetail()
     const scroll = document.querySelector<HTMLElement>('[data-conversation-scroll]')!
     const sheet = scroll.closest<HTMLElement>('[data-sheet]')!
@@ -667,10 +667,10 @@ describe('task list on the sheet', () => {
     expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
     expect(scroll).toHaveClass('px-4', 'sm:px-6', 'pt-3', 'pb-3')
     const messages = scroll.querySelector<HTMLElement>('[data-node-messages]')!
-    expect(messages).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]')
+    expect(messages).toHaveClass('mx-auto', 'w-full', 'max-w-[960px]')
     const draft = document.querySelector<HTMLElement>('[data-node-draft]')!
     expect(draft).toHaveClass('px-4', 'sm:px-5')
-    expect(draft.querySelector('[data-node-draft-inner]')).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]')
+    expect(draft.querySelector('[data-node-draft-inner]')).toHaveClass('mx-auto', 'w-full', 'max-w-[960px]')
   })
 
   it('shows each step prompt collapsed by default, expands it as Markdown, marks steps with conversation, and shows prompts on unvisited steps too', async () => {

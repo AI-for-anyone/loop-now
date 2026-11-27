@@ -42,7 +42,7 @@ export function NumberedSection({
         </HollowNumber>
         <h2
           id={titleId}
-          className="text-[14.5px] leading-snug font-semibold tracking-tight text-ink"
+          className="text-[16px] leading-snug font-semibold tracking-tight text-ink"
         >
           {title}
         </h2>

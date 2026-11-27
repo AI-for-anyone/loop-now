@@ -23,7 +23,7 @@ const copy = t.taskInbox
 
 // The border belongs to the shared container; the text area grows with its content and scrolls on its own once it hits the limit.
 const inputClass =
-  'min-h-9 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[7px] text-[14px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
+  'min-h-8 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-1.5 text-[15px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
 type Props = {
   taskId: string

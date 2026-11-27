@@ -24,10 +24,10 @@ describe('Page title', () => {
     expect(current).toHaveClass('text-ink')
   })
 
-  it('the title uses compact 14px bar typography', () => {
+  it('the title uses compact 15.5px bar typography', () => {
     renderHeader()
     const title = screen.getByRole('heading', { level: 1, name: 'Tasks' })
-    expect(title).toHaveClass('text-[14px]', 'font-semibold', 'tracking-[-0.01em]', 'text-ink', 'truncate')
+    expect(title).toHaveClass('text-[15.5px]', 'font-semibold', 'tracking-[-0.01em]', 'text-ink', 'truncate')
   })
 
   it('single-row 48px bar: meta and actions sit inline with title and note renders in a slim band below', () => {

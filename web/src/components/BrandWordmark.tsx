@@ -20,7 +20,7 @@ export function BrandWordmark({ className }: { className?: string }) {
     return (
       <span
         className={cn(
-          'font-display-latin text-[16px] leading-none font-extrabold tracking-[-0.3px] [text-shadow:1.5px_1.5px_0_var(--riso-pink)]',
+          'font-display-latin text-[17px] leading-none font-extrabold tracking-[-0.3px] text-ink [text-shadow:1.5px_1.5px_0_var(--riso-pink)]',
           className,
         )}
       >
@@ -61,7 +61,7 @@ export function BrandWordmark({ className }: { className?: string }) {
       style={sheenVars}
       onMouseEnter={triggerSweep}
       className={cn(
-        'brand-wordmark whitespace-pre font-sans text-[15px] leading-none font-extrabold tracking-[-0.03em] select-none',
+        'brand-wordmark whitespace-pre font-sans text-[16.5px] leading-none font-extrabold tracking-[-0.03em] select-none',
         className,
       )}
     >

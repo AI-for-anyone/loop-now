@@ -451,7 +451,7 @@ export function NodeRecordPanel({
             className="relative h-full min-w-0 overflow-y-auto overscroll-contain px-4 pt-3 pb-3 outline-none focus-visible:shadow-focus sm:px-6"
             data-conversation-scroll
           >
-            <div data-node-messages className="mx-auto w-full max-w-[800px]">
+            <div data-node-messages className="mx-auto w-full max-w-[960px]">
               {records.map((record) => (
                 <MessageSegment
                   key={record.id}
@@ -488,7 +488,7 @@ export function NodeRecordPanel({
           className="flex max-h-[42dvh] min-h-0 shrink-0 flex-col overflow-y-auto border-t border-hairline bg-surface-canvas px-4 py-2.5 sm:px-5"
           data-node-draft
         >
-          <div data-node-draft-inner className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-1.5">
+          <div data-node-draft-inner className="mx-auto flex w-full max-w-[960px] min-w-0 flex-col gap-1.5">
             {current && unsupported && (
               <p role="status" className="text-[12.5px] font-semibold">
                 {t.tasks.nodeMessagesUnsupported}

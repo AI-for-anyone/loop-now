@@ -55,18 +55,18 @@ export function SheetSection({ id, titleId, index, title, count, actions, meta, 
             id={titleId}
             tabIndex={-1}
             className={cn(
-              'riso-marker self-start text-[14.5px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus',
+              'riso-marker self-start text-[16px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus',
               danger && 'text-red-text',
             )}
           >
             {title}
             {count !== undefined && (
-              <span aria-hidden="true" className="ml-2 font-mono text-[12.5px] font-medium text-ink-500 tabular-nums">
+              <span aria-hidden="true" className="ml-2 font-mono text-[13.5px] font-medium text-ink-500 tabular-nums">
                 {count}
               </span>
             )}
           </h2>
-          {meta && <span className="text-[12.5px] text-ink-500">{meta}</span>}
+          {meta && <span className="text-[13.5px] text-ink-500">{meta}</span>}
           {actions && <div className="ml-auto flex flex-wrap gap-1.5">{actions}</div>}
         </div>
         <div

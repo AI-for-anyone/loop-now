@@ -353,7 +353,7 @@ describe('inline turn numbers', () => {
     expect(turnNumbers()).toEqual(['1', '2', '3', '4', '5', '6'])
     const number = turnBlock('Question 5').querySelector('[data-turn-number]')!
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('font-mono', 'text-[11px]', 'tabular-nums')
+    expect(number).toHaveClass('font-mono', 'text-[12px]', 'tabular-nums')
   })
 
   it('shows no numbers while the turn count is unknown', () => {
@@ -397,12 +397,12 @@ describe('tick names', () => {
   })
 })
 
-// Centered high-density 800px conversation stream without a 48px left number gutter.
+// Centered conversation stream without a 48px left number gutter.
 describe('centered conversation stream', () => {
-  it('centers the conversation stream in a max-w-[800px] column with full-column reply prose', () => {
+  it('centers the conversation stream in a max-w-[960px] column with full-column reply prose', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
     const column = screen.getByRole('log').querySelector('[data-message-column]')!
-    expect(column).toHaveClass('mx-auto', 'max-w-[800px]')
+    expect(column).toHaveClass('mx-auto', 'max-w-[960px]')
     const body = turnBlock('Question 1').querySelector('article')!.parentElement!
     expect(body).toHaveClass('min-w-0', 'w-full')
   })

@@ -12,14 +12,14 @@ import { cn } from '@/lib/utils'
 export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, images }: { images?: ReactNode; text: string; time: string; interrupted?: boolean; wakeSleepId?: string | null; wide?: boolean }) {
   return (
     <div className="flex flex-col items-end gap-1">
-      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500">
+      <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-500">
         <span>{t.chat.you}</span> {t.chat.metaSeparator} {time}
-        {interrupted && <span className="text-[11px] font-semibold text-pink-text">{t.chat.interruptTag}</span>}
+        {interrupted && <span className="text-[12px] font-semibold text-pink-text">{t.chat.interruptTag}</span>}
         {wakeSleepId && <EarlyWake sleepId={wakeSleepId} />}
       </span>
       <div
         className={cn(
-          'max-w-[82%] rounded-2xl px-4 py-2.5 text-[14px] leading-[1.6] font-normal whitespace-pre-wrap [overflow-wrap:anywhere]',
+          'max-w-[82%] rounded-2xl px-4 py-2.5 text-[16px] leading-[1.7] font-normal whitespace-pre-wrap [overflow-wrap:anywhere]',
           interrupted
             ? 'border border-pink-text/40 bg-tint-pink-2'
             : 'border border-hairline bg-surface-hover',
@@ -35,7 +35,7 @@ export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, i
 export function PlatformChatReminder({ text, at, wakeSleepId, label }: { text: string; at: string; wakeSleepId?: string | null; label?: ReactNode }) {
   return (
     <div role="note" className="riso-tilt max-w-[600px] self-center rounded-card px-5 py-3.5 [--tilt-bg:var(--surface-subtle)] [--tilt-shadow:0_0_0_1px_var(--hairline)]">
-      <span className="flex gap-2.5 text-[14.5px] leading-[1.75]">
+      <span className="flex gap-2.5 text-[15.5px] leading-[1.75]">
         <MailIcon aria-hidden="true" className="mt-1 size-4 shrink-0" strokeWidth={2.2} />
         <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
           <span className="mr-3 font-semibold">{label ?? t.chat.platformReminderAt(at)}</span>
@@ -93,16 +93,16 @@ export function AgentChatReply({
 }) {
   return (
     <article className="flex min-w-0 flex-col gap-2" aria-label={t.chat.agent}>
-      <div className="flex flex-wrap items-center gap-2 text-[12px] font-medium text-ink-500">
+      <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-ink-500">
         <AgentAvatar id={agent.id} name={agent.name} size="sm" />
-        <span className="text-[13px] font-semibold text-ink">{agent.name}</span>
+        <span className="text-[14.5px] font-semibold text-ink">{agent.name}</span>
         <span aria-hidden="true">{t.chat.metaSeparator}</span>
         {metadata}
         {showTurnNumber && (
           <span
             aria-hidden="true"
             data-turn-number
-            className="ml-auto font-mono text-[11px] font-medium text-ink-500 tabular-nums before:content-['#'] empty:hidden"
+            className="ml-auto font-mono text-[12px] font-medium text-ink-500 tabular-nums before:content-['#'] empty:hidden"
           >
             {turnNumber ?? ''}
           </span>

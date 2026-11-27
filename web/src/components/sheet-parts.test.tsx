@@ -86,7 +86,7 @@ describe('Index tabs', () => {
 
   it('the tabs scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
-    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('h-9', 'overflow-x-auto', 'no-scrollbar', 'px-4', 'sm:px-6')
+    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('h-10', 'overflow-x-auto', 'no-scrollbar', 'px-4', 'sm:px-6')
   })
 
   it('button-style tabs (status filters, categories) use the same styles', () => {
@@ -219,7 +219,7 @@ describe('Numbered section', () => {
     expect(number).toHaveClass('max-nav:hidden', 'tabular-nums', 'text-ink-500')
   })
 
-  it('a section is a region named by its title with a compact 14.5px semibold heading', () => {
+  it('a section is a region named by its title with a 16px semibold heading', () => {
     render(
       <NumberedSection number={3} title="Local directories">
         <p>Section content</p>
@@ -227,7 +227,7 @@ describe('Numbered section', () => {
     )
     const region = screen.getByRole('region', { name: 'Local directories' })
     expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass(
-      'text-[14.5px]',
+      'text-[16px]',
       'font-semibold',
     )
     const num = within(region).getByText('03')
