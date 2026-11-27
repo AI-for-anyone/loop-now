@@ -2871,6 +2871,13 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/TaskInputSource'
+        prompt:
+          description: "The node Agent's standing briefing for this step, written by the Manager when it creates the task: background, decisions already made, where the plan and the files are, what to watch out for. Plain text or Markdown. It goes into the Agent's system prompt after the Agent's own Prompt, so it holds on every visit of the step and after the conversation is compacted; the description stays the job of each visit, in the node message. Steps start from a clean conversation, without the Agent's chat history, so the prompt carries everything the step needs to know. At most 32768 bytes."
+          type: string
+          maxLength: 32768
+        withConversation:
+          description: "Start this step's Agent from a copy of its regular conversation as it is when the task starts, as tasks did before. Default false: the step starts from a clean conversation with the Agent's Prompt, its instruction files and its memory. Use it only for a step that truly needs the Agent's chat. A task has one instance per Agent, so it applies to every step of that Agent in the task, and preparing the task then waits for that Agent's current reply to end."
+          type: boolean
     TaskWorkflowEdge:
       type: object
       additionalProperties: false
