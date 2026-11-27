@@ -5,8 +5,10 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { isInProgress } from './live-state'
 import type { AgentRuntime } from '@/lib/runtime'
+import { cn } from '@/lib/utils'
+import { useSkin } from '@/theme/store'
 import { runStatusText, useRunRuntimeName } from './run-status-text'
-import type { UnfinishedTool } from './tool-state'
+import { groupTools, shownState, type ShownToolState, type UnfinishedTool } from './tool-state'
 
 type Run = Schemas['Run']
 
@@ -55,7 +57,7 @@ export function FailureNote({ run, runtime }: { run: Run; runtime?: AgentRuntime
 function ToolSpinner() {
   return (
     <>
-      <LoaderCircleIcon aria-hidden="true" data-slot="tool-spinner" className="riso-spin motion-reduce:hidden motion-reduce:animate-none" />
+      <LoaderCircleIcon aria-hidden="true" data-slot="tool-spinner" className="size-3 shrink-0 riso-spin motion-reduce:hidden motion-reduce:animate-none" />
       <span aria-hidden="true" data-slot="tool-static-mark" className="hidden motion-reduce:inline">
         {t.chat.toolStaticMark}
       </span>
@@ -63,47 +65,92 @@ function ToolSpinner() {
   )
 }
 
-// The state a tool shows: started and no_result follow the turn (see unfinishedTool); succeeded and failed are what the runtime reported.
-function shownState(state: Schemas['ToolState'], unfinished: UnfinishedTool): Schemas['ToolState'] | 'interrupted' {
-  if (state !== 'started' && state !== 'no_result') return state
-  if (unfinished === 'interrupted') return 'interrupted'
-  return state === 'no_result' || unfinished === 'no_result' ? 'no_result' : 'started'
+function stateText(state: ShownToolState): string {
+  return state === 'interrupted' ? t.chat.toolInterrupted : t.chat.tool[state]
 }
 
 // Tool calls show only their name and state, not arguments or output. Run.tools is a log of state changes,
 // so the same toolCallId may have several entries; they are merged in order of appearance and only the latest state is shown.
-// Interrupted tools turn gray with a dashed border; those with no result get a plain gray chip, told apart from running (blue, spinning),
-// succeeded (green) and failed (red).
+// In the default mono skin, calls with the same name and state are grouped onto one quiet muted line (`execute ×9 · read · edit`),
+// with failed groups in red, running with a spinner, and no-result/interrupted in gray; the Plate skin keeps individual pills.
 // exclude: tool calls shown another way (those that went on in the background); after: those, as list items of their own after the rest
 // (given only when there are some).
 export function ToolList({ tools: events, unfinished = 'running', exclude, after }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool; exclude?: ReadonlySet<string>; after?: ReactNode }) {
+  const skin = useSkin()
   const latest = new Map<string, Schemas['ToolEvent']>()
   for (const event of events) if (!exclude?.has(event.toolCallId)) latest.set(event.toolCallId, event)
   const tools = [...latest.values()]
   if (tools.length === 0 && !after) return null
+
+  if (skin === 'plate') {
+    return (
+      <ul className="flex flex-wrap gap-2" aria-label={t.chat.toolsLabel}>
+        {tools.map((tool) => {
+          const state = shownState(tool.state, unfinished)
+          return (
+            <li key={tool.toolCallId}>
+              {state === 'interrupted' ? (
+                <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500">
+                  <span className="font-mono">{tool.toolName}</span>
+                  <span>{t.chat.toolInterrupted}</span>
+                </Badge>
+              ) : state === 'no_result' ? (
+                <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700">
+                  <span className="font-mono text-ink">{tool.toolName}</span>
+                  <span>{t.chat.tool.no_result}</span>
+                </Badge>
+              ) : (
+                <Badge tone={state === 'failed' ? 'danger' : state === 'succeeded' ? 'success' : 'info'}>
+                  {state === 'started' && <ToolSpinner />}
+                  <span className="font-mono text-ink">{tool.toolName}</span>
+                  <span>{t.chat.tool[state]}</span>
+                </Badge>
+              )}
+            </li>
+          )
+        })}
+        {after}
+      </ul>
+    )
+  }
+
+  const groups = groupTools(events, unfinished, exclude)
   return (
-    <ul className="flex flex-wrap gap-2" aria-label={t.chat.toolsLabel}>
-      {tools.map((tool) => {
-        const state = shownState(tool.state, unfinished)
+    <ul
+      className="mt-1.5 -mb-1 flex flex-wrap items-center gap-y-1.5 text-[12.5px] leading-5 text-ink-500 [&>li:not([data-tool-group])]:ml-2 [&>li:first-child]:ml-0"
+      aria-label={t.chat.toolsLabel}
+    >
+      {groups.map((group, index) => {
+        const label = stateText(group.state)
         return (
-          <li key={tool.toolCallId}>
-            {state === 'interrupted' ? (
-              <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500">
-                <span className="font-mono">{tool.toolName}</span>
-                <span>{t.chat.toolInterrupted}</span>
-              </Badge>
-            ) : state === 'no_result' ? (
-              <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700">
-                <span className="font-mono text-ink">{tool.toolName}</span>
-                <span>{t.chat.tool.no_result}</span>
-              </Badge>
-            ) : (
-              <Badge tone={state === 'failed' ? 'danger' : state === 'succeeded' ? 'success' : 'info'}>
-                {state === 'started' && <ToolSpinner />}
-                <span className="font-mono text-ink">{tool.toolName}</span>
-                <span>{t.chat.tool[state]}</span>
-              </Badge>
+          <li key={group.key} data-tool-group="" data-state={group.state} className="inline-flex items-center">
+            {index > 0 && (
+              <span aria-hidden="true" className="mx-1.5 text-ink-500/45 select-none">
+                {t.chat.metaSeparator}
+              </span>
             )}
+            <span className="sr-only">{t.chat.toolGroupLabel(group.toolName, label, group.count)}</span>
+            <span
+              aria-hidden="true"
+              data-tool-visual=""
+              data-interrupted={group.state === 'interrupted' ? '' : undefined}
+              data-no-result={group.state === 'no_result' ? '' : undefined}
+              className={cn(
+                'inline-flex items-center gap-1',
+                group.state === 'failed' ? 'text-red-text' : 'text-ink-500',
+              )}
+            >
+              {group.state === 'started' && <ToolSpinner />}
+              <span className={cn('font-mono text-[12px] font-medium', group.state === 'succeeded' || group.state === 'started' ? 'text-ink-700' : undefined)}>
+                {group.toolName}
+              </span>
+              {group.state !== 'succeeded' && <span>{label}</span>}
+              {group.count > 1 && (
+                <span className={cn('tabular-nums', group.state === 'failed' ? 'text-red-text/75' : 'text-ink-500/70')}>
+                  ×{group.count}
+                </span>
+              )}
+            </span>
           </li>
         )
       })}

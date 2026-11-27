@@ -359,9 +359,10 @@ describe('how replies show', () => {
     ]
     const { container } = render(<List {...props} pages={{ pages: [makeMessagePage(messages)], pageParams: [null] }} onLoadOlder={() => {}} />)
     const tools = within(screen.getAllByRole('list', { name: 'Tool calls' })[0]).getAllByRole('listitem')
-    expect(tools[0]).toHaveTextContent('readSucceeded')
-    expect(tools[1]).toHaveTextContent('bashInterrupted')
-    expect(tools[1].querySelector('[data-interrupted]')).toHaveClass('border-dashed')
+    expect(tools[0].querySelector('[data-tool-visual]')).toHaveTextContent('read')
+    expect(tools[0].querySelector('.sr-only')).toHaveTextContent('read Succeeded')
+    expect(tools[1].querySelector('[data-tool-visual]')).toHaveTextContent('bashInterrupted')
+    expect(tools[1].querySelector('[data-interrupted]')).toHaveClass('text-ink-500')
     expect(container.querySelector('[data-slot="tool-spinner"]')).toBeNull()
     // It appears only once, after the turn that was interrupted; there is
     // none before an interrupting message whose previous turn ended normally.
@@ -393,25 +394,26 @@ describe('how replies show', () => {
   ] as const)('once the turn has ended (%s), a tool closed as no_result, or an old record still on started, shows a neutral “No result”', (_how, fields) => {
     const run = makeRun({ ...fields, startedAt: '2026-10-12T08:00:00Z', endedAt: '2026-10-12T08:01:35Z', tools: unfinishedTools })
     const { container } = render(<List {...props} pages={{ pages: [makeMessagePage([makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'Done', run })])], pageParams: [null] }} onLoadOlder={() => {}} />)
-    const [read, old, failed, closed] = toolRows()
-    expect(read).toHaveTextContent('readSucceeded')
-    expect(old).toHaveTextContent('executeNo result')
-    expect(failed).toHaveTextContent('executeFailed')
-    expect(closed).toHaveTextContent('executeNo result')
+    const [read, noResult, failed] = toolRows()
+    expect(read.querySelector('[data-tool-visual]')).toHaveTextContent('read')
+    expect(read.querySelector('.sr-only')).toHaveTextContent('read Succeeded')
+    expect(noResult.querySelector('[data-tool-visual]')).toHaveTextContent('executeNo result×2')
+    expect(noResult.querySelector('.sr-only')).toHaveTextContent('execute No result, 2 times')
+    expect(failed.querySelector('[data-tool-visual]')).toHaveTextContent('executeFailed')
     expect(container.querySelector('[data-slot="tool-spinner"]')).toBeNull()
-    // Told apart from success and failure, and from tools a person's interrupt cut off.
-    for (const row of [old, closed]) {
-      const mark = row.querySelector('[data-slot="badge"]')
-      expect(mark).toHaveAttribute('data-no-result')
-      expect(mark?.className).not.toMatch(/tint-green|tint-red|border-dashed/)
-    }
+    // Told apart from failure and from tools a person's interrupt cut off.
+    const mark = noResult.querySelector('[data-no-result]')
+    expect(mark).not.toBeNull()
+    expect(mark?.className).toContain('text-ink-500')
+    expect(mark?.className).not.toContain('text-red-text')
   })
 
   it('while the turn is still going, a tool without its end event shows running with a spinner', () => {
     // The server closes tools as no_result only when the turn ends, so a running turn has none.
     const run = makeRun({ status: 'running', startedAt: '2026-10-12T08:00:00Z', runningAt: '2026-10-12T08:00:00Z', endedAt: null, tools: unfinishedTools.filter((tool) => tool.toolCallId !== 'exec-3') })
     const { container } = render(<List {...props} pages={{ pages: [makeMessagePage([makeMessage({ text: 'Run the tests', run })])], pageParams: [null] }} onLoadOlder={() => {}} />)
-    expect(toolRows()[1]).toHaveTextContent('executeRunning')
+    expect(toolRows()[1].querySelector('[data-tool-visual]')).toHaveTextContent('executeRunning')
+    expect(toolRows()[1].querySelector('.sr-only')).toHaveTextContent('execute Running')
     expect(screen.queryByText('No result')).toBeNull()
     expect(container.querySelectorAll('[data-slot="tool-spinner"]')).toHaveLength(1)
   })

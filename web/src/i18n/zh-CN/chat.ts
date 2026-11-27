@@ -200,6 +200,8 @@ export const chat = {
   toolStaticMark: '…',
   // Tools that hadn't finished in an interrupted turn.
   toolInterrupted: '已打断',
+  // Screen-reader label for one grouped tool entry (name, state, and count when repeated).
+  toolGroupLabel: (name: string, state: string, count: number) => (count > 1 ? `${name} ${state} ${count} 次` : `${name} ${state}`),
   interruptDivider: '已打断，先处理这条',
   // Key hints under the input: Enter queues, ⌘/Ctrl+Enter sends as an interrupt.
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: '排队', interrupt: '立即打断', stopMark: '■', stop: '只停止当前回复' },

@@ -1,32 +1,68 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { withCodex } from '@/test/runtimes'
 import { server } from '@/test/server'
+import { resetThemeForTest, setSkin } from '@/theme/store'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
 
 const onClaudeCode: Schemas['RunSelection'] = { runtime: 'claude-code', provider: 'claude-code', modelId: 'haiku', thinkingLevel: null }
 
+const visualText = (item: HTMLElement) => item.querySelector('[data-tool-visual]')?.textContent ?? item.textContent
+const srText = (item: HTMLElement) => item.querySelector('.sr-only')?.textContent
+
 describe('ToolList', () => {
-  it('shows only the latest state of a tool call that changed state several times', () => {
+  afterEach(() => {
+    window.localStorage.clear()
+    resetThemeForTest()
+  })
+
+  it('groups calls by name and state in order of first appearance, omits “Succeeded” visually, and exposes full screen-reader text', () => {
     render(
       <ToolList
         tools={[
-          { toolCallId: 'call_1', toolName: 'bash', state: 'started', at: '2026-10-12T00:00:00Z' },
-          { toolCallId: 'call_2', toolName: 'read', state: 'started', at: '2026-10-12T00:00:01Z' },
-          { toolCallId: 'call_1', toolName: 'bash', state: 'succeeded', at: '2026-10-12T00:00:02Z' },
-          { toolCallId: 'call_2', toolName: 'read', state: 'failed', at: '2026-10-12T00:00:03Z' },
+          { toolCallId: 'c1', toolName: 'execute', state: 'started', at: '2026-10-12T00:00:00Z' },
+          { toolCallId: 'c1', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:01Z' },
+          { toolCallId: 'c2', toolName: 'read', state: 'succeeded', at: '2026-10-12T00:00:02Z' },
+          { toolCallId: 'c3', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:03Z' },
+          { toolCallId: 'c4', toolName: 'edit', state: 'succeeded', at: '2026-10-12T00:00:04Z' },
+          { toolCallId: 'c5', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:05Z' },
         ]}
       />,
     )
-    const items = screen.getAllByRole('listitem').map((li) => li.textContent)
-    expect(items).toEqual(['bashSucceeded', 'readFailed'])
+    const items = screen.getAllByRole('listitem')
+    expect(items).toHaveLength(3)
+    expect(items.map(visualText)).toEqual(['execute×3', 'read', 'edit'])
+    expect(items.map(srText)).toEqual(['execute Succeeded, 3 times', 'read Succeeded', 'edit Succeeded'])
+    expect(items[0].querySelector('[data-slot="badge"]')).toBeNull()
   })
 
-  it('in a turn a person interrupted, tools left open read “Interrupted”, whether still on started or closed by the server as no_result', () => {
+  it('shows failed groups in red with the state word and keeps running groups separate with spinner and state word', () => {
+    render(
+      <ToolList
+        tools={[
+          { toolCallId: 'c1', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:00Z' },
+          { toolCallId: 'c2', toolName: 'execute', state: 'failed', at: '2026-10-12T00:00:01Z' },
+          { toolCallId: 'c3', toolName: 'execute', state: 'failed', at: '2026-10-12T00:00:02Z' },
+          { toolCallId: 'c4', toolName: 'execute', state: 'started', at: '2026-10-12T00:00:03Z' },
+        ]}
+      />,
+    )
+    const [ok, failed, running] = screen.getAllByRole('listitem')
+    expect(visualText(ok)).toBe('execute')
+    expect(srText(ok)).toBe('execute Succeeded')
+    expect(visualText(failed)).toBe('executeFailed×2')
+    expect(srText(failed)).toBe('execute Failed, 2 times')
+    expect(failed.querySelector('[data-tool-visual]')?.className).toContain('text-red-text')
+    expect(visualText(running)).toContain('executeRunning')
+    expect(srText(running)).toBe('execute Running')
+    expect(running.querySelector('[data-slot="tool-spinner"]')).not.toBeNull()
+  })
+
+  it('in a turn a person interrupted, tools left open read “Interrupted” in gray, whether still on started or closed as no_result', () => {
     render(
       <ToolList
         unfinished="interrupted"
@@ -37,7 +73,46 @@ describe('ToolList', () => {
         ]}
       />,
     )
-    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['bashInterrupted', 'readInterrupted', 'grepSucceeded'])
+    const [bash, read, grep] = screen.getAllByRole('listitem')
+    expect(visualText(bash)).toBe('bashInterrupted')
+    expect(srText(bash)).toBe('bash Interrupted')
+    expect(bash.querySelector('[data-interrupted]')).not.toBeNull()
+    expect(visualText(read)).toBe('readInterrupted')
+    expect(srText(read)).toBe('read Interrupted')
+    expect(visualText(grep)).toBe('grep')
+    expect(srText(grep)).toBe('grep Succeeded')
+  })
+
+  it('keeps background items passed as after unchanged alongside grouped calls', () => {
+    render(
+      <ToolList
+        tools={[
+          { toolCallId: 'c1', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:00Z' },
+          { toolCallId: 'c2', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:01Z' },
+        ]}
+        after={<li data-testid="bg-item">bg chip</li>}
+      />,
+    )
+    const items = screen.getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(visualText(items[0])).toBe('execute×2')
+    expect(items[1]).toHaveAttribute('data-testid', 'bg-item')
+  })
+
+  it('keeps individual pills in Plate skin', () => {
+    setSkin('plate')
+    render(
+      <ToolList
+        tools={[
+          { toolCallId: 'c1', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:00Z' },
+          { toolCallId: 'c2', toolName: 'execute', state: 'succeeded', at: '2026-10-12T00:00:01Z' },
+          { toolCallId: 'c3', toolName: 'read', state: 'failed', at: '2026-10-12T00:00:02Z' },
+        ]}
+      />,
+    )
+    const items = screen.getAllByRole('listitem')
+    expect(items.map((li) => li.textContent)).toEqual(['executeSucceeded', 'executeSucceeded', 'readFailed'])
+    expect(items[0].querySelector('[data-slot="badge"]')).not.toBeNull()
   })
 
   it('spins the icon of a running tool; with reduced motion stops spinning and shows a static “…” instead', () => {
