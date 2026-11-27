@@ -4,7 +4,20 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
-## Unreleased
+## v0.3.4
+
+Pictures show up in replies: a picture an Agent puts in its reply, or names by its path, is a thumbnail you can open. The console wastes less room: page bodies use the whole window, the Agent page header is one thin bar, the sidebar can be dragged wider and keeps each Agent on one line, the task list takes one line per task, and every runtime mark is one color in one frame. The run record says what each tool did, files up to 20 MiB can be previewed, and a task step waits for all of its CLI's background work. No database migrations this time.
+
+### Quitting Loop Now waits for an Agent's CLI that is still being wound down (#112)
+
+- When an Agent's CLI process had just exited by itself, or was ending because its reply was stopped, quitting the server could finish while Loop Now was still writing that process's last records into the Agent's folder. Quitting now waits for that, within its usual time limit.
+
+### A change's notes live in its pull request description (#111)
+
+- A pull request no longer edits CHANGELOG.md, CHANGELOG.zh-CN.md or MAIN.md's change list, and adds no `changes/` file: what it changed goes into its description, under `## English` and `## 中文` (see `.github/pull_request_template.md`; `None` / `无` when nobody using Loop Now can see the change). Pull requests waiting together in the merge queue no longer conflict over shared notes.
+- When a release is cut, `scripts/release/collect-pr-notes.sh <version>` on the release branch reads the descriptions of the pull requests merged since the last release with `gh` and writes the version's section of both CHANGELOG files, newest first, each title followed by its pull request number. It checks every description before writing, lists pull requests without notes, and running it twice adds nothing twice. A pull request merged into main while a release is being prepared goes into the next release. `scripts/release/notes.sh Unreleased` previews the result.
+- CI fails a pull request that changes a CHANGELOG file, adds a file under `changes/` or adds an entry to MAIN.md's change list (release branches excepted).
+- The loopctl guide tells a step in a task with a git workspace to put the notes in the pull request description when the repository asks for that.
 
 ### Pictures an Agent names by path show in its reply
 

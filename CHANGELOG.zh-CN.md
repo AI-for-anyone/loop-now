@@ -4,7 +4,20 @@ English: [CHANGELOG.md](CHANGELOG.md)
 
 各版本面向使用者的变化。发布流水线先取 CHANGELOG.md 里对应版本的英文一节，再接上本文件里对应版本的中文一节，作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。改动不直接改这个文件，它的说明写在 PR 描述里（见 `.github/pull_request_template.md`），发布时由 `scripts/release/collect-pr-notes.sh` 写进这一版的一节。
 
-## 未发布
+## v0.3.4
+
+回复里能看到图片了：Agent 在回复里放的图片，或者写出路径的图片，都显示成小图，点开看大图。控制台更省地方：页面内容用满整个窗口，Agent 页顶部压成一条细栏，左边栏能拖宽、每个 Agent 只占一行，任务列表一个任务一行，运行时图标统一成一种颜色、一个框。运行记录里看得到每个工具干了什么，20 MiB 以内的文件都能预览，任务里的步骤会等它的 CLI 把后台的活都干完。这次没有数据库迁移。
+
+### 退出 Loop Now 时，会等正在收尾的 Agent CLI (#112)
+
+- 如果某个 Agent 的 CLI 进程刚好自己退出，或者因为回复被停止正在结束，退出服务器时可能在 Loop Now 还往这个 Agent 的文件夹里写最后几样记录时就结束了。现在退出会等这一步做完，最多等到原有的时限。
+
+### 改动的说明写在 PR 描述里 (#111)
+
+- PR 不再改 CHANGELOG.md、CHANGELOG.zh-CN.md 或 MAIN.md 的改动列表，也不再加 `changes/` 小文件：改了什么写在 PR 描述的 `## English` 和 `## 中文` 两节里（见 `.github/pull_request_template.md`；使用者看不到的改动写 `None`／`无`）。在合并队列里一起排队的 PR 不会再因为说明文件互相冲突。
+- 发版时在发版分支上运行 `scripts/release/collect-pr-notes.sh <版本>`：它用 `gh` 读上次发版以来合并的 PR 的描述，写出两个 CHANGELOG 文件里这一版的一节，最新的在上面，每个标题后面带 PR 编号。写之前先把所有描述检查一遍，没写说明的 PR 会列出来，运行两次也不会重复。准备发版期间合进主分支的 PR 会进下一版。`scripts/release/notes.sh Unreleased` 可以预览结果。
+- PR 如果改了 CHANGELOG 文件、在 `changes/` 下加了文件，或在 MAIN.md 的改动列表里加了条目，CI 会失败（发版分支除外）。
+- loopctl 指南告诉 git 工作区任务里的步骤：仓库要求把说明写在 PR 描述里时，就写在那里。
 
 ### Agent 在回复里写出的图片路径，直接显示成图
 
