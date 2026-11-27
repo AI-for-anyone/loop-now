@@ -60,6 +60,7 @@ export class StatusTray {
     // The new version number found by the update check; undefined when there is none.
     private readonly newVersion: () => string | undefined,
     platform: PlatformId = current,
+    private readonly cliAvailable: boolean = app.isPackaged,
   ) {
     // macOS: a file name ending in Template is tinted automatically for a light or dark menu bar, and the @2x file in the same directory is
     // used on high-resolution screens. Windows: .ico, and the system picks among its sizes by DPI.
@@ -75,7 +76,7 @@ export class StatusTray {
     this.tray.setToolTip(`Loop Now · ${profileName(this.profile, s)} — ${trayStatus(state, url, s)}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate(
-        trayItems(state, url, this.profile, s, app.isPackaged, this.newVersion(), externalUrl).map((item) => {
+        trayItems(state, url, this.profile, s, this.cliAvailable, this.newVersion(), externalUrl).map((item) => {
           if (item === 'separator') return { type: 'separator' }
           const action = item.action
           return { label: item.label, enabled: item.enabled, click: action ? this.actions[action] : undefined }

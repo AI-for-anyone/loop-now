@@ -11,6 +11,8 @@ export type Settings = {
   externalPort?: number
   // Last appearance reported by the console, used to initialize the window background without flashing.
   appearance?: DesktopAppearance
+  // Whether the first-launch prompt to install loopctl has already been shown, so it never nags again.
+  cliPrompted?: boolean
 }
 
 export class SettingsFile {
