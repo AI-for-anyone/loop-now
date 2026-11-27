@@ -96,17 +96,11 @@ type MarkdownLinkProps = ComponentProps<'a'> & ExtraProps & {
   'data-md-local-pending'?: string
 }
 
-function BlockedLocalLink({
-  reason,
-  fromLink,
-  maxBytes,
-  children,
-}: {
-  reason: 'outside' | 'missing' | 'too-large' | 'unavailable'
-  fromLink: boolean
-  maxBytes?: number
-  children: ReactNode
-}) {
+function blockedLinkProps(
+  reason: 'outside' | 'missing' | 'too-large' | 'unavailable',
+  fromLink: boolean,
+  maxBytes?: number,
+) {
   const title =
     reason === 'outside'
       ? t.folders.replyLinks.outside
@@ -115,15 +109,11 @@ function BlockedLocalLink({
         : reason === 'too-large' && maxBytes !== undefined
           ? t.folders.file.tooLarge(maxBytes)
           : t.folders.replyLinks.unavailable
-  return (
-    <span
-      title={title}
-      data-md-local-blocked={reason}
-      className={cn('cursor-help', fromLink && 'text-ink-500 underline decoration-dotted underline-offset-3')}
-    >
-      {children}
-    </span>
-  )
+  return {
+    title,
+    'data-md-local-blocked': reason,
+    className: cn('cursor-help', fromLink && 'text-ink-500 underline decoration-dotted underline-offset-3'),
+  }
 }
 
 function LocalDirLink({
@@ -140,7 +130,7 @@ function LocalDirLink({
   const folder = useContext(ReplyFolder)
   const inRouter = useInRouterContext()
   if (!folder?.folderLink) {
-    return fromLink ? <BlockedLocalLink reason="unavailable" fromLink>{children}</BlockedLocalLink> : <span>{children}</span>
+    return fromLink ? <span {...blockedLinkProps('unavailable', true)}>{children}</span> : <span>{children}</span>
   }
   const href = folder.folderLink(relativePath)
   const tooltip = title ?? t.folders.openInFolder
@@ -192,17 +182,13 @@ function LocalFileLink({
     if (folder?.folderLink) {
       return <LocalDirLink relativePath={relativePath} title={title} fromLink={fromLink}>{children}</LocalDirLink>
     }
-    return certain ? <BlockedLocalLink reason="unavailable" fromLink={fromLink}>{children}</BlockedLocalLink> : <>{children}</>
+    return certain ? <span {...blockedLinkProps('unavailable', fromLink)}>{children}</span> : <span>{children}</span>
   }
-  if (!certain) return <>{children}</>
+  if (!certain) return <span>{children}</span>
   return (
-    <BlockedLocalLink
-      reason={status.kind === 'file' ? 'unavailable' : status.kind}
-      fromLink={fromLink}
-      maxBytes={folder?.maxBytes}
-    >
+    <span {...blockedLinkProps(status.kind === 'file' ? 'unavailable' : status.kind, fromLink, folder?.maxBytes)}>
       {children}
-    </BlockedLocalLink>
+    </span>
   )
 }
 
@@ -227,7 +213,7 @@ function Link(allProps: MarkdownLinkProps) {
 
   if (localPending !== undefined) return <span>{children}</span>
   if (localOutside !== undefined) {
-    return <BlockedLocalLink reason="outside" fromLink={localOutside === 'link'}>{children}</BlockedLocalLink>
+    return <span {...blockedLinkProps('outside', localOutside === 'link')}>{children}</span>
   }
   if (localDir !== undefined) {
     return <LocalDirLink relativePath={localDir} title={props.title} fromLink={localOrigin === 'link'}>{children}</LocalDirLink>

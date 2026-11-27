@@ -4,6 +4,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import type { Schemas } from '@/api/client'
 import { useAgentInboxMessage, useIdentityInboxMessage } from '@/api/inbox'
 import { Markdown } from '@/features/chat/Markdown'
+import { useInboxMessageReplyFolder } from '@/features/chat/use-reply-folder'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DeletedMark } from './party'
@@ -28,6 +29,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   const agentFull = useAgentInboxMessage(owner.kind === 'agent' ? owner.agentId : '', message.id, open && owner.kind === 'agent')
   const identityFull = useIdentityInboxMessage(owner.kind === 'identity' ? owner.identityId : '', message.id, open && owner.kind === 'identity')
   const full = owner.kind === 'agent' ? agentFull : identityFull
+  const replyFolder = useInboxMessageReplyFolder(full.data, owner, open && Boolean(full.data))
 
   // In an external identity's inbox, messages whose recipient is this identity are received and the rest are sent; decided by
   // ID, because the address may be reused by a new identity.
@@ -53,7 +55,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   const unreadStyle = received ? 'bg-cta-bg text-cta-fg' : 'bg-tint-yellow text-ink'
   const body = open && (
     <div id={bodyId} className={cn('mb-4 rounded-input border border-hairline bg-surface-subtle px-4 py-3.5 text-[15px] leading-[1.85]', layout === 'row' ? 'mx-1' : 'mx-[18px] sm:ml-[39px]')}>
-      {full.data ? <><Markdown text={full.data.text} /><MessageImages images={full.data.images} />{full.data.question && <QuestionSummary question={full.data.question} />}{full.data.notice && <InboxNotice notice={full.data.notice} />}</> : full.isError ? <ErrorAlert error={full.error} /> : <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
+      {full.data ? <><Markdown text={full.data.text} folder={replyFolder} /><MessageImages images={full.data.images} />{full.data.question && <QuestionSummary question={full.data.question} />}{full.data.notice && <InboxNotice notice={full.data.notice} />}</> : full.isError ? <ErrorAlert error={full.error} /> : <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
     </div>
   )
 
