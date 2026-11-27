@@ -295,7 +295,8 @@ func TestRouteCoverage(t *testing.T) {
 		meta := contracttest.LoadOperations(t, file)
 		seen := map[string]bool{}
 		for _, r := range routes {
-			key := r.Method + " " + r.Pattern
+			// A path parameter spanning several segments ({path...}) is written {path} in the contract.
+			key := r.Method + " " + strings.ReplaceAll(r.Pattern, "...}", "}")
 			seen[key] = true
 			m, ok := meta[key]
 			if !ok {

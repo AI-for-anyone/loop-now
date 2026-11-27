@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useId, useRef, useState, type ComponentProps } from 'react'
+import { createContext, memo, useContext, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { ImageOffIcon } from 'lucide-react'
 import ReactMarkdown, { type ExtraProps } from 'react-markdown'
 import { Link as RouterLink, useInRouterContext } from 'react-router'
@@ -9,10 +9,11 @@ import remarkGfm from 'remark-gfm'
 import { ImagePreviewDialog } from '@/features/images/ImagePreview'
 import { cn } from '@/lib/utils'
 import { MermaidBlock } from './MermaidBlock'
+import { createLocalProbeStore, useLocalEntryStatus, type LocalProbeStore } from './local-files'
 import { useLocalFolderImage, useLocalFolderImages, type ReplyFolderContext } from './local-images'
 import { rehypeImageRows } from './rehype-image-rows'
 import { rehypeLeadLabel } from './rehype-lead-label'
-import { rehypeLocalImages } from './rehype-local-images'
+import { rehypeLocalFiles } from './rehype-local-files'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
@@ -28,6 +29,7 @@ function withoutNode<T extends ExtraProps>({ node, ...props }: T) {
 const MarkdownSource = createContext({ text: '', streaming: false })
 const InsideLink = createContext(false)
 const ReplyFolder = createContext<ReplyFolderContext | undefined>(undefined)
+const ProbeStore = createContext<LocalProbeStore | null>(null)
 
 function nodeText(node: ExtraProps['node']): string {
   return node?.children.map(child => child.type === 'text' ? child.value : child.type === 'element' ? nodeText(child) : '').join('') ?? ''
@@ -81,14 +83,155 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
   )
 }
 
-type MarkdownLinkProps = ComponentProps<'a'> & ExtraProps & { 'data-md-folder-link'?: string }
+type LocalOrigin = 'link' | 'code-certain' | 'code-maybe' | 'bare-certain' | 'bare-maybe'
+
+type MarkdownLinkProps = ComponentProps<'a'> & ExtraProps & {
+  'data-md-folder-link'?: string
+  'data-md-local-file'?: string
+  'data-md-local-dir'?: string
+  'data-md-local-origin'?: LocalOrigin
+  'data-md-local-trailing-slash'?: string
+  'data-md-local-suffix'?: string
+  'data-md-local-outside'?: string
+  'data-md-local-pending'?: string
+}
+
+function blockedLinkProps(
+  reason: 'outside' | 'missing' | 'too-large' | 'unavailable',
+  fromLink: boolean,
+  maxBytes?: number,
+) {
+  const title =
+    reason === 'outside'
+      ? t.folders.replyLinks.outside
+      : reason === 'missing'
+        ? t.folders.replyLinks.missing
+        : reason === 'too-large' && maxBytes !== undefined
+          ? t.folders.file.tooLarge(maxBytes)
+          : t.folders.replyLinks.unavailable
+  return {
+    title,
+    'data-md-local-blocked': reason,
+    className: cn('cursor-help', fromLink && 'text-ink-500 underline decoration-dotted underline-offset-3'),
+  }
+}
+
+function LocalDirLink({
+  relativePath,
+  title,
+  fromLink,
+  children,
+}: {
+  relativePath: string
+  title?: string
+  fromLink: boolean
+  children: ReactNode
+}) {
+  const folder = useContext(ReplyFolder)
+  const inRouter = useInRouterContext()
+  if (!folder?.folderLink) {
+    return fromLink ? <span {...blockedLinkProps('unavailable', true)}>{children}</span> : <span>{children}</span>
+  }
+  const href = folder.folderLink(relativePath)
+  const tooltip = title ?? t.folders.openInFolder
+  const body = <InsideLink.Provider value={true}>{children}</InsideLink.Provider>
+  if (inRouter) {
+    return <RouterLink to={href} title={tooltip} data-md-folder-link={relativePath}>{body}</RouterLink>
+  }
+  return <a href={href} title={tooltip} data-md-folder-link={relativePath}>{body}</a>
+}
+
+function LocalFileLink({
+  relativePath,
+  trailingSlash,
+  suffix,
+  origin,
+  title,
+  children,
+}: {
+  relativePath: string
+  trailingSlash: boolean
+  suffix: string
+  origin: LocalOrigin
+  title?: string
+  children: ReactNode
+}) {
+  const folder = useContext(ReplyFolder)
+  const { streaming } = useContext(MarkdownSource)
+  const store = useContext(ProbeStore)
+  const status = useLocalEntryStatus(folder, relativePath, trailingSlash, streaming, store)
+  const fromLink = origin === 'link'
+  const certain = origin === 'link' || origin === 'code-certain' || origin === 'bare-certain'
+
+  if (status === 'loading') return <span>{children}</span>
+  if (status.kind === 'file' && folder?.rawURL) {
+    const href = `${folder.rawURL(relativePath)}${suffix}`
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={title ?? t.folders.openInNewTab}
+        data-md-raw-link={relativePath}
+      >
+        <InsideLink.Provider value={true}>{children}</InsideLink.Provider>
+      </a>
+    )
+  }
+  if (status.kind === 'dir') {
+    if (folder?.folderLink) {
+      return <LocalDirLink relativePath={relativePath} title={title} fromLink={fromLink}>{children}</LocalDirLink>
+    }
+    return certain ? <span {...blockedLinkProps('unavailable', fromLink)}>{children}</span> : <span>{children}</span>
+  }
+  if (!certain) return <span>{children}</span>
+  return (
+    <span {...blockedLinkProps(status.kind === 'file' ? 'unavailable' : status.kind, fromLink, folder?.maxBytes)}>
+      {children}
+    </span>
+  )
+}
 
 // Links: once urlTransform has emptied a dangerous protocol, the link is shown as text; only absolute http(s) and mailto links open in
-// a new tab, while in-page anchors (e.g. footnotes) jump within the current page. Folder links navigate via React Router when inside
-// the console router so switching to the Agent's Folder tab stays in-app.
+// a new tab, while in-page anchors (e.g. footnotes) jump within the current page. Local folder files open the sandboxed raw view in a
+// new tab, directories navigate via React Router into the Folder tab, and outside/missing paths stay non-clickable text with a tooltip.
 function Link(allProps: MarkdownLinkProps) {
-  const { href, children, 'data-md-folder-link': folderLinkAttr, ...props } = withoutNode(allProps)
+  const {
+    href,
+    children,
+    'data-md-folder-link': folderLinkAttr,
+    'data-md-local-file': localFile,
+    'data-md-local-dir': localDir,
+    'data-md-local-origin': localOrigin,
+    'data-md-local-trailing-slash': trailingSlash,
+    'data-md-local-suffix': suffix,
+    'data-md-local-outside': localOutside,
+    'data-md-local-pending': localPending,
+    ...props
+  } = withoutNode(allProps)
   const inRouter = useInRouterContext()
+
+  if (localPending !== undefined) return <span>{children}</span>
+  if (localOutside !== undefined) {
+    return <span {...blockedLinkProps('outside', localOutside === 'link')}>{children}</span>
+  }
+  if (localDir !== undefined) {
+    return <LocalDirLink relativePath={localDir} title={props.title} fromLink={localOrigin === 'link'}>{children}</LocalDirLink>
+  }
+  if (localFile !== undefined) {
+    return (
+      <LocalFileLink
+        relativePath={localFile}
+        trailingSlash={trailingSlash !== undefined}
+        suffix={suffix ?? ''}
+        origin={localOrigin ?? 'link'}
+        title={props.title}
+      >
+        {children}
+      </LocalFileLink>
+    )
+  }
+
   if (!href) return <span title={props.title}>{children}</span>
   const body = <InsideLink.Provider value={true}>{children}</InsideLink.Provider>
   if (folderLinkAttr !== undefined) {
@@ -208,7 +351,7 @@ function LocalFolderImage({
       title={title}
       className={className}
       block={block}
-      originalHref={contentURL ?? undefined}
+      originalHref={folder?.rawURL?.(relativePath) ?? contentURL ?? undefined}
       onError={() => setBrokenSrc(src)}
     />
   )
@@ -241,7 +384,7 @@ function LocalImageStrip({ paths, inline }: { paths: string[]; inline: boolean }
         <ReplyImageThumbnail
           src={item.src}
           alt={item.alt}
-          originalHref={item.contentURL}
+          originalHref={folder?.rawURL?.(item.relativePath) ?? item.contentURL}
           onError={() => markBroken(item.src)}
         />
       </div>
@@ -256,7 +399,7 @@ function LocalImageStrip({ paths, inline }: { paths: string[]; inline: boolean }
             <ReplyImageThumbnail
               src={item.src}
               alt={item.alt}
-              originalHref={item.contentURL}
+              originalHref={folder?.rawURL?.(item.relativePath) ?? item.contentURL}
               onError={() => markBroken(item.src)}
             />
           </div>
@@ -414,9 +557,15 @@ export const Markdown = memo(function Markdown({
   const useLeadLabels = leadLabels && skin === 'plate'
   const prefix = `md-${useId().replace(/[^\w-]/g, '')}-`
   const localFolder = readme ? undefined : folder
+  const [probeStore] = useState<LocalProbeStore>(() => createLocalProbeStore())
+  useEffect(() => {
+    probeStore.activate()
+    return () => probeStore.abort()
+  }, [probeStore])
   return (
     <MarkdownSource.Provider value={{ text, streaming: cursor }}>
     <ReplyFolder.Provider value={localFolder}>
+    <ProbeStore.Provider value={probeStore}>
     <div className="markdown">
       <ReactMarkdown
         // remarkCjkFriendlyGfmStrikethrough must run after remarkGfm so it overrides GFM's strikethrough tokenizer.
@@ -426,12 +575,12 @@ export const Markdown = memo(function Markdown({
           footnoteLabel: t.chat.footnoteLabel,
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
-        // Local image resolution runs before image rows so local Markdown images participate in wrapping rows; image rows run before
-        // the cursor so streaming doesn't break a row; labels run after the cursor so the cursor stays at the end of the text.
+        // Local file and image resolution runs before image rows so local Markdown images participate in wrapping rows; image rows run
+        // before the cursor so streaming doesn't break a row; labels run after the cursor so the cursor stays at the end of the text.
         rehypePlugins={[
           [rehypeHighlight, { detect: false, ignore: ['mermaid'] }],
           [rehypePrefixFootnoteLabel, prefix],
-          ...(localFolder ? [[rehypeLocalImages, localFolder] as [typeof rehypeLocalImages, ReplyFolderContext]] : []),
+          ...(localFolder ? [[rehypeLocalFiles, localFolder] as [typeof rehypeLocalFiles, ReplyFolderContext]] : []),
           ...(readme ? [] : [rehypeImageRows]),
           ...(cursor ? [rehypeCursor] : []),
           ...(useLeadLabels ? [rehypeLeadLabel] : []),
@@ -441,6 +590,7 @@ export const Markdown = memo(function Markdown({
         {text}
       </ReactMarkdown>
     </div>
+    </ProbeStore.Provider>
     </ReplyFolder.Provider>
     </MarkdownSource.Provider>
   )

@@ -54,6 +54,8 @@ export const server = setupServer(
     return HttpResponse.json({ path, realPath: path })
   }),
   http.get(apiUrl('/agents/:agentId/folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
+  http.head(apiUrl('/agents/:agentId/folder/raw/*'), () => new HttpResponse(null, { status: 404 })),
+  http.head(apiUrl('/tasks/:taskId/nodes/:nodeRunId/folder/raw/*'), () => new HttpResponse(null, { status: 404 })),
   http.get(apiUrl('/projects/:projectId/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/agents/:agentId/folder/git-pulls'), () => HttpResponse.json({ pulls: [] })),

@@ -123,6 +123,17 @@ describe('Navigation', () => {
     assert.equal(classifyNavigation('http://127.0.0.1:8780/projects'), 'external')
   })
 
+  test("A file of an Agent or task node folder (the sandboxed raw view) always opens in the system browser, never in the window; nothing else on the server's origin does", () => {
+    const agentFile = 'http://127.0.0.1:8780/api/v1/agents/0192f1a2-0000-7000-8000-000000000001/folder/raw/site/index.html'
+    const nodeFile = 'http://127.0.0.1:8780/api/v1/tasks/0192f1a2-0000-7000-8000-000000000001/nodes/0192f1a2-0000-7000-8000-000000000002/folder/raw/page.html'
+    assert.equal(classifyNavigation(agentFile, origin), 'external')
+    assert.equal(classifyNavigation(nodeFile, origin), 'external')
+    assert.equal(classifyNavigation(agentFile), 'external')
+    assert.equal(classifyNavigation('http://127.0.0.1:8780/p/0192f1a2/agents/x/folder/raw/index.html', origin), 'app')
+    assert.equal(classifyNavigation('http://127.0.0.1:8780/api/v1/agents/0192f1a2/folder/content?path=a.html', origin), 'app')
+    assert.equal(classifyNavigation('http://127.0.0.1:8781/api/v1/agents/0192f1a2/folder/raw/a.html', origin), 'external')
+  })
+
   test('An authorization popup is handed off once: did-start-navigation and will-navigate of the same navigation open one page, and about:blank does not count', () => {
     const opened: string[] = []
     const handOff = handOffOnce((url) => opened.push(url))

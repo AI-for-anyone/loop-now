@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { stopAgentRun, useAgentQueue } from '@/api/agent-queue'
-import { agentFolderContentURL, folderRoots, useAgentFolderLocation } from '@/api/folders'
 import { useAgentStatus, useContextInfo, useMessages, useModels, useRunTimeline } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -16,7 +15,8 @@ import { useScope } from '@/features/projects/scope-context'
 import { CompactionNote } from './CompactionNote'
 import { Composer, type ComposerHandle } from './Composer'
 import { isBusy } from './live-state'
-import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from './local-images'
+import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES } from './local-images'
+import { useAgentReplyFolder } from './use-reply-folder'
 import { MessageList } from './MessageList'
 import { conflictNotice, useStopReply } from './queue-actions'
 import { QueueList, QueueMessages } from './QueueList'
@@ -61,19 +61,10 @@ export function ChatPage() {
   const notFound = hashRun !== null && aroundRun === null
   const status = useAgentStatus(agent.id)
   const context = useContextInfo()
-  const folderLocation = useAgentFolderLocation(agent.id)
   const maxImageBytes = context.data?.limits.textEdit.maxBytes ?? DEFAULT_IMAGE_PREVIEW_MAX_BYTES
   const folderTabPath = agentPath(scope, agent.id, 'folder')
   // Stable reference so memo(Markdown) skips completed turns while a reply streams.
-  const replyFolder = useMemo<ReplyFolderContext>(
-    () => ({
-      roots: folderRoots(folderLocation.data),
-      contentURL: (path) => agentFolderContentURL(agent.id, path),
-      folderLink: (path) => `${folderTabPath}?${new URLSearchParams({ path })}`,
-      maxBytes: maxImageBytes,
-    }),
-    [folderLocation.data, agent.id, folderTabPath, maxImageBytes],
-  )
+  const replyFolder = useAgentReplyFolder(agent.id, folderTabPath, maxImageBytes)
   // While locating, the history isn't loaded up to the latest yet, so new messages are only announced, not inserted into the
   // conversation flow.
   const atLatest = !messages.data?.pages[0]?.hasMoreAfter

@@ -269,6 +269,11 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
       const node = find(path)
       return node?.kind === 'file' && node.image ? node.image : `#download:${encodeURIComponent(path)}`
     },
+    ...(preset === 'workspace'
+      ? {
+          rawURL: (path: string) => `/api/v1/agents/${encodeURIComponent(key)}/folder/raw/${path.split('/').map(encodeURIComponent).join('/')}`,
+        }
+      : {}),
     ...(git ? {
       git: {
         async start({ url, branch, path }) {

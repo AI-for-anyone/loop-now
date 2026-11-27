@@ -1,10 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlertIcon, DownloadIcon, FileTextIcon, InfoIcon, ScissorsIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { stopAllTaskNodeBackgroundTasks, stopTaskNodeBackgroundTask, useTaskNodeBackgroundTasks } from '@/api/background-tasks'
 import type { Schemas } from '@/api/client'
-import { folderRoots, taskNodeFolderContentURL, useTaskNodeFolderLocation } from '@/api/folders'
 import { messageImageLimits } from '@/api/message-images'
 import { useTaskNodePermissionRequests } from '@/api/permissions'
 import { useContextInfo } from '@/api/queries'
@@ -23,6 +22,7 @@ import { config } from '@/config'
 import { BackgroundTasksMark, type BackgroundStopper } from '@/features/chat/BackgroundTasks'
 import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from '@/features/chat/local-images'
 import { Markdown } from '@/features/chat/Markdown'
+import { useTaskNodeReplyFolder } from '@/features/chat/use-reply-folder'
 import { QueueMessages } from '@/features/chat/QueueList'
 import { nodeConflictNotice, useStopReply } from '@/features/chat/queue-actions'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
@@ -47,7 +47,7 @@ const inboxCopy = t.taskInbox
 
 // The node's open question: the question itself sits in the node conversation as a "For you" message, where options are clicked
 // or a reply is written; this only states its status and can jump to it.
-export function PendingQuestion({ question }: { question: Schemas['TaskQuestionRef'] }) {
+export function PendingQuestion({ question, folder }: { question: Schemas['TaskQuestionRef']; folder?: ReplyFolderContext }) {
   const locate = () => document.querySelector(`[data-console-message-id="${question.messageId}"]`)?.scrollIntoView({ block: 'center' })
   return (
     <section className="mt-2 grid gap-2.5 rounded-card border border-hairline-strong bg-tint-yellow p-3.5">
@@ -55,7 +55,7 @@ export function PendingQuestion({ question }: { question: Schemas['TaskQuestionR
         <h3 className="font-semibold">{t.tasks.question}</h3>
         <Badge>{t.tasks.questionState[question.status]}</Badge>
       </div>
-      <Markdown text={question.text} />
+      <Markdown text={question.text} folder={folder} />
       {question.status === 'open' && question.canAnswer ? (
         <Button size="xs" className="justify-self-start" onClick={locate}>
           {t.consoleInbox.locateQuestion}
@@ -178,6 +178,7 @@ export function NodeRecordPanel({
     if (images.length) onImages?.([...(draft.images ?? []), ...images])
   }
   const statusReason = node.reason || node.question?.text || node.sleep?.reason
+  const questionFolder = useTaskNodeReplyFolder(node.question ? detail.task.id : undefined, node.question ? node.id : undefined)
 
   const capture = () => {
     const el = conversation.current
@@ -427,7 +428,7 @@ export function NodeRecordPanel({
                       <summary className="cursor-pointer font-semibold">
                         {t.tasks.question} · {t.tasks.questionState[node.question.status]}
                       </summary>
-                      <PendingQuestion question={node.question} />
+                      <PendingQuestion question={node.question} folder={questionFolder} />
                     </details>
                   )}
                 </div>
@@ -767,16 +768,9 @@ function MessageSegment({
 }) {
   const messages = useTaskMessages(detail.task.id, node.id)
   const inbox = useTaskInboxMessages(detail.task.id, node.id, node.agentId, node.runtimeId)
-  const folderLocation = useTaskNodeFolderLocation(detail.task.id, node.id)
-  // Task instance folders have no Folder tab and are reclaimed once the task ends, so paths stay plain text and 404s show no thumbnail.
-  const replyFolder = useMemo<ReplyFolderContext>(
-    () => ({
-      roots: folderRoots(folderLocation.data),
-      contentURL: (path) => taskNodeFolderContentURL(detail.task.id, node.id, path),
-      maxBytes: maxImageBytes,
-    }),
-    [folderLocation.data, detail.task.id, node.id, maxImageBytes],
-  )
+  // Task instance folders have no Folder tab and are reclaimed once the task ends; inside files open in a new sandboxed tab while
+  // the folder exists, and 404s turn into non-clickable text with a tooltip (and no thumbnail).
+  const replyFolder = useTaskNodeReplyFolder(detail.task.id, node.id, maxImageBytes)
   // Like normal chat, a message still waiting in the node's queue is shown only in the queue tray; it joins the flow once it starts.
   // Cancelled or not-executed messages have left the queue and keep showing their final status here.
   const queue = useTaskNodeQueue(detail.task.id, node.id, node.id === detail.task.currentNodeRunId)
@@ -845,7 +839,13 @@ function MessageSegment({
               </ConsoleMessage>
             </div>
           ) : (
-            <TaskInboxMessageBubble message={record.message}>{extras}</TaskInboxMessageBubble>
+            <TaskInboxMessageBubble
+              message={record.message}
+              folder={record.message.from.kind === 'agent' && record.message.from.id === node.agentId ? replyFolder : undefined}
+              nodeContext={{ nodeRunId: node.id, agentId: node.agentId }}
+            >
+              {extras}
+            </TaskInboxMessageBubble>
           )
         return { key: `inbox:${record.message.id}`, at: record.message.createdAt, body }
       }),

@@ -25,6 +25,12 @@ export const folders = {
   actions: (name: string) => `More actions for ${name}`,
   open: 'Open',
   openInFolder: 'Open in folder',
+  openInNewTab: 'Open in new tab',
+  replyLinks: {
+    outside: 'Outside this folder; cannot be opened',
+    missing: 'This file no longer exists in the folder',
+    unavailable: 'This path cannot be opened here',
+  },
   rename: 'Rename',
   move: 'Move to…',
   download: 'Download',

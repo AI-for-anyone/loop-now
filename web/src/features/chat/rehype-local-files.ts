@@ -1,7 +1,11 @@
 import {
+  classifyInlineCodePath,
+  classifyMarkdownLinkHref,
+  splitBareLocalPaths,
+} from './local-files'
+import {
   classifyMarkdownImageSource,
   resolveAbsoluteLocalImage,
-  splitBareLocalImagePaths,
   type ReplyFolderContext,
 } from './local-images'
 
@@ -17,14 +21,11 @@ function textOf(node: HastNode): string {
   return (node.children ?? []).map(textOf).join('')
 }
 
-function makeFolderLink(folder: ReplyFolderContext, relativePath: string, children: HastNode[]): HastNode {
+function makeMarkerLink(properties: Record<string, unknown>, children: HastNode[]): HastNode {
   return {
     type: 'element',
     tagName: 'a',
-    properties: {
-      href: folder.folderLink!(relativePath),
-      dataMdFolderLink: relativePath,
-    },
+    properties: { href: '', ...properties },
     children,
   }
 }
@@ -65,6 +66,7 @@ function transformInlineChildren(
   collected: InlineCollection,
   inLink: boolean,
 ): HastNode[] {
+  const rootsReady = folder.rootsReady ?? true
   const out: HastNode[] = []
   for (const child of children) {
     if (child.type === 'text') {
@@ -72,7 +74,7 @@ function transformInlineChildren(
         out.push(child)
         continue
       }
-      const parts = splitBareLocalImagePaths(child.value, folder.roots)
+      const parts = splitBareLocalPaths(child.value, folder.roots, rootsReady)
       if (parts.length === 1 && parts[0]!.kind === 'text') {
         out.push(child)
         continue
@@ -80,13 +82,31 @@ function transformInlineChildren(
       for (const part of parts) {
         if (part.kind === 'text') {
           out.push({ type: 'text', value: part.value })
+        } else if (part.kind === 'local') {
+          const imageRel = resolveAbsoluteLocalImage(part.raw, folder.roots)
+          if (imageRel) collected.textPaths.push(imageRel)
+          out.push(
+            makeMarkerLink(
+              {
+                dataMdLocalFile: part.relativePath,
+                dataMdLocalOrigin: part.certain ? 'bare-certain' : 'bare-maybe',
+                ...(part.trailingSlash ? { dataMdLocalTrailingSlash: '' } : {}),
+                ...(part.suffix ? { dataMdLocalSuffix: part.suffix } : {}),
+              },
+              [{ type: 'text', value: part.raw }],
+            ),
+          )
+        } else if (part.kind === 'local-dir') {
+          out.push(
+            makeMarkerLink(
+              { dataMdLocalDir: part.relativePath, dataMdLocalOrigin: 'bare-certain' },
+              [{ type: 'text', value: part.raw }],
+            ),
+          )
+        } else if (part.kind === 'outside') {
+          out.push(makeMarkerLink({ dataMdLocalOutside: 'text' }, [{ type: 'text', value: part.raw }]))
         } else {
-          collected.textPaths.push(part.relativePath)
-          if (folder.folderLink) {
-            out.push(makeFolderLink(folder, part.relativePath, [{ type: 'text', value: part.raw }]))
-          } else {
-            out.push({ type: 'text', value: part.raw })
-          }
+          out.push(makeMarkerLink({ dataMdLocalPending: '' }, [{ type: 'text', value: part.raw }]))
         }
       }
       continue
@@ -121,10 +141,33 @@ function transformInlineChildren(
 
     if (tag === 'code') {
       if (!inLink) {
-        const rel = resolveAbsoluteLocalImage(textOf(child), folder.roots)
-        if (rel) {
-          collected.textPaths.push(rel)
-          out.push(folder.folderLink ? makeFolderLink(folder, rel, [child]) : child)
+        const rawText = textOf(child)
+        const classified = classifyInlineCodePath(rawText, folder.roots, rootsReady)
+        if (classified.kind === 'local') {
+          const imageRel = resolveAbsoluteLocalImage(rawText, folder.roots)
+          if (imageRel) collected.textPaths.push(imageRel)
+          out.push(
+            makeMarkerLink(
+              {
+                dataMdLocalFile: classified.relativePath,
+                dataMdLocalOrigin: classified.certain ? 'code-certain' : 'code-maybe',
+                ...(classified.trailingSlash ? { dataMdLocalTrailingSlash: '' } : {}),
+              },
+              [child],
+            ),
+          )
+          continue
+        }
+        if (classified.kind === 'local-dir') {
+          out.push(makeMarkerLink({ dataMdLocalDir: classified.relativePath, dataMdLocalOrigin: 'code-certain' }, [child]))
+          continue
+        }
+        if (classified.kind === 'outside') {
+          out.push(makeMarkerLink({ dataMdLocalOutside: 'text' }, [child]))
+          continue
+        }
+        if (classified.kind === 'pending-root') {
+          out.push(makeMarkerLink({ dataMdLocalPending: '' }, [child]))
           continue
         }
       }
@@ -134,11 +177,27 @@ function transformInlineChildren(
 
     if (tag === 'a') {
       const href = typeof child.properties?.href === 'string' ? child.properties.href : ''
-      if (folder.folderLink && href) {
-        const rel = resolveAbsoluteLocalImage(href, folder.roots)
-        if (rel) {
-          child.properties = { ...(child.properties ?? {}), href: folder.folderLink(rel), dataMdFolderLink: rel }
+      const classified = classifyMarkdownLinkHref(href, folder.roots, rootsReady)
+      if (classified.kind === 'local') {
+        child.properties = {
+          ...(child.properties ?? {}),
+          href: '',
+          dataMdLocalFile: classified.relativePath,
+          dataMdLocalOrigin: 'link',
+          ...(classified.trailingSlash ? { dataMdLocalTrailingSlash: '' } : {}),
+          ...(classified.suffix ? { dataMdLocalSuffix: classified.suffix } : {}),
         }
+      } else if (classified.kind === 'local-dir') {
+        child.properties = {
+          ...(child.properties ?? {}),
+          href: '',
+          dataMdLocalDir: classified.relativePath,
+          dataMdLocalOrigin: 'link',
+        }
+      } else if (classified.kind === 'outside') {
+        child.properties = { ...(child.properties ?? {}), href: '', dataMdLocalOutside: 'link' }
+      } else if (classified.kind === 'pending-root') {
+        child.properties = { ...(child.properties ?? {}), href: '', dataMdLocalPending: '' }
       }
       if (child.children) {
         child.children = transformInlineChildren(child.children, folder, collected, true)
@@ -264,12 +323,12 @@ function transformBlockContainer(parent: HastNode, folder: ReplyFolderContext) {
   parent.children = out
 }
 
-// Resolve local folder image paths in an Agent or task node reply:
-// - Markdown images pointing inside the folder are marked for loading through the folder content endpoint (outside paths are stripped
-//   to plain alt text with no thumbnail and no request);
-// - Absolute paths inside the folder written in inline code or bare text become links to the Agent's Folder tab (when available) and
-//   emit a thumbnail strip right after the paragraph or list item (or one row right after a list when several items hold image paths).
-export function rehypeLocalImages(folder: ReplyFolderContext) {
+// Resolve local folder files, directories, and images in an Agent or task node reply:
+// - Markdown images pointing inside the folder load through the folder content endpoint (outside paths become plain alt text);
+// - Links, inline code, and bare paths inside the folder are marked for opening in the sandboxed raw view in a new tab (or the
+//   Folder tab for directories), while paths outside the folder become non-clickable text with a tooltip;
+// - Absolute image paths in inline code or bare text also emit trailing thumbnail strips right after the paragraph or list.
+export function rehypeLocalFiles(folder: ReplyFolderContext) {
   return (tree: HastNode) => {
     transformBlockContainer(tree, folder)
   }

@@ -62,6 +62,7 @@ describe('Folder on the sheet', () => {
     const toolbar = container.querySelector<HTMLElement>('[data-folder-toolbar]')!
     expect(within(toolbar).queryByRole('button', { name: 'New file' })).toBeNull()
     expect(await within(toolbar).findByRole('radiogroup', { name: 'View' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('link', { name: 'Open in new tab' })).toHaveClass('h-7')
     expect(within(toolbar).getByRole('button', { name: 'Edit' })).toHaveClass('h-7')
     expect(within(toolbar).getByRole('button', { name: 'Download' })).toHaveClass('h-7')
     // No duplicate file header toolbar inside the content pane.

@@ -755,14 +755,18 @@ describe('Local folder images in a reply', () => {
     return {
       roots: [ROOT, REAL_ROOT],
       contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      rawURL: (rel) => apiUrl(`/agents/a1/folder/raw/${rel.split('/').map(encodeURIComponent).join('/')}`),
       folderLink: (rel) => `/p/demo/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      checkDirectory: async () => 'not-dir',
       maxBytes: 1024,
       ...overrides,
     }
   }
 
-  function mockFolderFiles(files: Record<string, Uint8Array | string>) {
+  function mockFolderFiles(files: Record<string, Uint8Array | string>, options: { maxBytes?: number; dirs?: string[]; escaping?: string[] } = {}) {
     const requested: string[] = []
+    const dirs = new Set(options.dirs ?? [])
+    const escaping = new Set(options.escaping ?? [])
     server.use(
       http.get(apiUrl('/agents/a1/folder/content'), ({ request }) => {
         const rel = new URL(request.url).searchParams.get('path') ?? ''
@@ -770,6 +774,17 @@ describe('Local folder images in a reply', () => {
         const body = files[rel]
         if (body === undefined) return new HttpResponse(null, { status: 404 })
         return new HttpResponse(body, { headers: { 'Content-Type': 'application/octet-stream' } })
+      }),
+      http.head(apiUrl('/agents/a1/folder/raw/*'), ({ request }) => {
+        const encoded = new URL(request.url).pathname.split('/folder/raw/')[1] ?? ''
+        const rel = encoded.split('/').map(decodeURIComponent).join('/')
+        requested.push(rel)
+        if (dirs.has(rel) || escaping.has(rel)) return new HttpResponse(null, { status: 422 })
+        const body = files[rel]
+        if (body === undefined) return new HttpResponse(null, { status: 404 })
+        const size = typeof body === 'string' ? new TextEncoder().encode(body).byteLength : body.byteLength
+        if (options.maxBytes !== undefined && size > options.maxBytes) return new HttpResponse(null, { status: 413 })
+        return new HttpResponse(null, { status: 200 })
       }),
     )
     return requested
@@ -812,11 +827,11 @@ describe('Local folder images in a reply', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Real' })
     expect(within(dialog).getByRole('img', { name: 'Real' }).tagName).toBe('IMG')
     const original = within(dialog).getByRole('link', { name: 'Open original in new tab' })
-    expect(original.getAttribute('href')).toBe(folder.contentURL('assets/real.svg'))
+    expect(original.getAttribute('href')).toBe(folder.rawURL!('assets/real.svg'))
     expect(original.getAttribute('href')).not.toMatch(/^blob:/i)
   })
 
-  it('keeps inline-code and bare absolute paths as folder links and shows thumbnails right after the paragraph or as one row after a list', async () => {
+  it('opens inline-code and bare local image paths in a new sandboxed tab while keeping thumbnails after paragraphs and lists', async () => {
     mockFolderFiles({
       'assets/preview-2x2.png': PNG_BYTES,
       'assets/bare.jpg': PNG_BYTES,
@@ -834,12 +849,14 @@ describe('Local folder images in a reply', () => {
     ].join('\n')
 
     const { container } = render(<Markdown folder={folder} text={md} />)
-    // Every path text becomes a link to the Agent's Folder tab.
-    const inlineLink = screen.getByRole('link', { name: `${ROOT}/assets/preview-2x2.png` })
-    expect(inlineLink).toHaveAttribute('href', folder.folderLink!('assets/preview-2x2.png'))
-    expect(inlineLink).toHaveAttribute('title', 'Open in folder')
-    expect(screen.getByRole('link', { name: `${ROOT}/assets/bare.jpg` })).toHaveAttribute('href', folder.folderLink!('assets/bare.jpg'))
-    expect(screen.getByRole('link', { name: `${ROOT}/assets/a.svg` })).toHaveAttribute('href', folder.folderLink!('assets/a.svg'))
+    // Every existing file path opens the raw view in a new tab.
+    const inlineLink = await screen.findByRole('link', { name: `${ROOT}/assets/preview-2x2.png` })
+    expect(inlineLink).toHaveAttribute('href', folder.rawURL!('assets/preview-2x2.png'))
+    expect(inlineLink).toHaveAttribute('target', '_blank')
+    expect(inlineLink).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(inlineLink).toHaveAttribute('title', 'Open in new tab')
+    expect(await screen.findByRole('link', { name: `${ROOT}/assets/bare.jpg` })).toHaveAttribute('href', folder.rawURL!('assets/bare.jpg'))
+    expect(await screen.findByRole('link', { name: `${ROOT}/assets/a.svg` })).toHaveAttribute('href', folder.rawURL!('assets/a.svg'))
 
     // Both the paragraph thumbnails and the list thumbnails appear as rows directly after their blocks.
     await waitFor(() => expect(container.querySelectorAll('[data-md-local-images] [data-md-image-row]')).toHaveLength(2))
@@ -871,10 +888,13 @@ describe('Local folder images in a reply', () => {
   })
 
   it('shows no thumbnail and keeps text intact for outside paths, missing files, and files above the preview limit', async () => {
-    const requested = mockFolderFiles({
-      'assets/huge.png': new Uint8Array(2048),
-      'assets/ok.png': PNG_BYTES,
-    })
+    const requested = mockFolderFiles(
+      {
+        'assets/huge.png': new Uint8Array(2048),
+        'assets/ok.png': PNG_BYTES,
+      },
+      { maxBytes: 512 },
+    )
     const folder = makeFolder({ maxBytes: 512 })
     const md = [
       'Outside markdown: ![Outside](/etc/secret.png) ![Escape](../secret.png)',
@@ -893,15 +913,20 @@ describe('Local folder images in a reply', () => {
     ].join('\n')
 
     const { container } = render(<Markdown folder={folder} text={md} />)
-    // Wait until the valid image finishes loading so every missing/too-large fetch has settled too.
+    // Wait until the valid image and link finish loading so every missing/too-large check has settled too.
     expect(await screen.findByRole('img', { name: 'ok.png' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: `${ROOT}/assets/ok.png` })).toHaveAttribute('target', '_blank')
 
-    // Outside paths were never requested and never linked.
+    // Outside paths were never requested and never linked, and carry the outside-folder tooltip.
     expect(requested.every((path) => path.startsWith('assets/'))).toBe(true)
     expect(screen.queryByRole('link', { name: '/etc/secret.png' })).toBeNull()
     expect(screen.queryByRole('link', { name: '/tmp/other.jpg' })).toBeNull()
-    expect(container).toHaveTextContent('/etc/secret.png')
-    expect(container).toHaveTextContent('/tmp/other.jpg')
+    expect(screen.getByText('/etc/secret.png').closest('[title]')).toHaveAttribute('title', 'Outside this folder; cannot be opened')
+    expect(screen.getByText('/tmp/other.jpg').closest('[title]')).toHaveAttribute('title', 'Outside this folder; cannot be opened')
+    expect(screen.getByText(`${ROOT}/assets/missing.png`).closest('[title]')).toHaveAttribute('title', 'This file no longer exists in the folder')
+    expect(screen.getByText(`${ROOT}/assets/huge.png`).closest('[title]')).toHaveAttribute('title', "File is over 512 B; it can't be previewed or edited online.")
+    expect(screen.queryByRole('link', { name: `${ROOT}/assets/missing.png` })).toBeNull()
+    expect(screen.queryByRole('link', { name: `${ROOT}/assets/huge.png` })).toBeNull()
 
     // Only the single valid file produced a thumbnail; missing, too-large, and outside paths show no thumbnail or error box.
     expect(screen.getAllByRole('img')).toHaveLength(1)
@@ -911,12 +936,98 @@ describe('Local folder images in a reply', () => {
     expect(container).toHaveTextContent('Huge')
   })
 
-  it('renders thumbnails without folder links when folderLink is omitted (task node conversations)', async () => {
+  it('opens local files in a new tab even when folderLink is omitted (task node conversations)', async () => {
     mockFolderFiles({ 'assets/node.png': PNG_BYTES })
-    const folder = makeFolder({ folderLink: undefined })
+    const folder = makeFolder({ folderLink: undefined, checkDirectory: undefined })
     render(<Markdown folder={folder} text={`Saved to \`${ROOT}/assets/node.png\`.`} />)
     expect(await screen.findByRole('img', { name: 'node.png' })).toBeInTheDocument()
-    expect(screen.queryByRole('link')).toBeNull()
-    expect(screen.getByText(`${ROOT}/assets/node.png`)).toBeInTheDocument()
+    const link = await screen.findByRole('link', { name: `${ROOT}/assets/node.png` })
+    expect(link).toHaveAttribute('href', folder.rawURL!('assets/node.png'))
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('opens HTML and sibling files in a new tab across absolute, file://, relative, inline-code, and bare paths; keeps directories in the Folder tab and blocks outside/missing paths', async () => {
+    mockFolderFiles(
+      {
+        'pelican-night-ride.html': '<!doctype html><h1>Pelican</h1>',
+        'site/index.html': '<!doctype html><h1>Site</h1>',
+      },
+      { dirs: ['assets'], escaping: ['escape.html'] },
+    )
+    const folder = makeFolder({
+      checkDirectory: async (rel) => (rel === 'assets' ? 'dir' : 'not-dir'),
+    })
+    const md = [
+      `[Open absolute](${ROOT}/pelican-night-ride.html)`,
+      `[Open file url](file://${ROOT}/site/index.html#scene2)`,
+      '[Open relative](pelican-night-ride.html)',
+      `Inline abs: \`${ROOT}/pelican-night-ride.html\`, inline rel: \`site/index.html\`, ordinary code: \`console.log\`.`,
+      `Bare rel: ./pelican-night-ride.html.`,
+      `[Open dir](${ROOT}/assets) and [Open dir slash](assets/)`,
+      '[Outside abs](/etc/passwd) [Outside rel](../secret.html) [Missing](gone.html) [Escape](escape.html)',
+      '[External](https://example.com) [Email](mailto:a@example.com) [Anchor](#part) [Bad](javascript:alert(1))',
+    ].join('\n\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+
+    // Every inside file opens the raw view in a new tab with noopener noreferrer.
+    for (const [name, expectedHref] of [
+      ['Open absolute', folder.rawURL!('pelican-night-ride.html')],
+      ['Open file url', `${folder.rawURL!('site/index.html')}#scene2`],
+      ['Open relative', folder.rawURL!('pelican-night-ride.html')],
+      [`${ROOT}/pelican-night-ride.html`, folder.rawURL!('pelican-night-ride.html')],
+      ['site/index.html', folder.rawURL!('site/index.html')],
+      ['./pelican-night-ride.html', folder.rawURL!('pelican-night-ride.html')],
+    ] as const) {
+      const link = await screen.findByRole('link', { name })
+      expect(link, name).toHaveAttribute('href', expectedHref)
+      expect(link, name).toHaveAttribute('target', '_blank')
+      expect(link, name).toHaveAttribute('rel', 'noopener noreferrer')
+    }
+
+    // Directories keep going to the Folder tab (same tab, no target="_blank").
+    for (const name of ['Open dir', 'Open dir slash']) {
+      const dirLink = await screen.findByRole('link', { name })
+      expect(dirLink).toHaveAttribute('href', folder.folderLink!('assets'))
+      expect(dirLink).not.toHaveAttribute('target')
+      expect(dirLink).toHaveAttribute('title', 'Open in folder')
+    }
+
+    // Outside paths, missing files, and escaping symlinks are not links and explain why in a tooltip.
+    for (const [name, expectedTitle] of [
+      ['Outside abs', 'Outside this folder; cannot be opened'],
+      ['Outside rel', 'Outside this folder; cannot be opened'],
+      ['Missing', 'This file no longer exists in the folder'],
+      ['Escape', 'Outside this folder; cannot be opened'],
+    ] as const) {
+      expect(screen.queryByRole('link', { name }), name).toBeNull()
+      await waitFor(() => expect(screen.getByText(name).closest('[title]')).toHaveAttribute('title', expectedTitle))
+    }
+
+    // Ordinary inline code stays untouched without a link or missing-file tooltip.
+    const ordinaryCode = screen.getByText('console.log')
+    expect(ordinaryCode.closest('a')).toBeNull()
+    expect(ordinaryCode.closest('[title]')).toBeNull()
+
+    // External http(s)/mailto links, in-page anchors, and blocked javascript: links stay unchanged.
+    expect(screen.getByRole('link', { name: 'External' })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: 'Email' })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: 'Anchor' })).not.toHaveAttribute('target')
+    expect(screen.queryByRole('link', { name: 'Bad' })).toBeNull()
+    expect(container.querySelector('a[href="/etc/passwd"]')).toBeNull()
+  })
+
+  it('skips probing while streaming and activates local file links once the reply finishes', async () => {
+    const requested = mockFolderFiles({ 'pelican.html': '<h1>Hi</h1>' })
+    const folder = makeFolder()
+    const { rerender } = render(<Markdown folder={folder} cursor text="[Open](pelican.html)" />)
+    expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
+    expect(requested).toEqual([])
+
+    rerender(<Markdown folder={folder} cursor={false} text="[Open](pelican.html)" />)
+    const link = await screen.findByRole('link', { name: 'Open' })
+    expect(link).toHaveAttribute('href', folder.rawURL!('pelican.html'))
+    expect(link).toHaveAttribute('target', '_blank')
   })
 })

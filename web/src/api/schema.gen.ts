@@ -1146,6 +1146,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agentId}/folder/raw/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+                /**
+                 * @description Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+                 *     level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
+                 */
+                path: components["parameters"]["FolderRawPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Open a file of an Agent folder in a browser tab, sandboxed
+         * @description Serves one file as itself, for a browser tab: the bytes with a content type from the file extension (text types
+         *     in UTF-8; an unknown extension is `text/plain` when the file starts as UTF-8 text, otherwise
+         *     `application/octet-stream`). The file path is part of the URL path, one URL segment per folder level, each
+         *     segment percent-encoded, so relative URLs inside an HTML file (its CSS, scripts, images, other pages) resolve to
+         *     files beside it in the same folder. The same path rules as the other folder endpoints apply (inside the folder
+         *     only, no `..`, no way out through a symlink); a directory answers 422, a file larger than
+         *     `Context.limits.textEdit.maxBytes` 413. Supports Range and conditional requests.
+         *
+         *     The file may have been written by an Agent, so it must never act as the console. Every response of this
+         *     endpoint, errors included, carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups
+         *     allow-modals allow-downloads` (without `allow-same-origin` the page runs as an opaque origin: it cannot read the
+         *     console's storage, and its requests to this API carry `Origin: null`, which every route refuses),
+         *     `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. Requests with an `Origin` header that is not
+         *     the console's are refused here too, so module scripts, `fetch` and web fonts of such a page do not load; classic
+         *     scripts, style sheets, images, media and links to other files do.
+         */
+        get: operations["getAgentFolderRawFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agentId}/folder/directories": {
         parameters: {
             query?: never;
@@ -3326,6 +3367,51 @@ export interface paths {
          * @description Read only, with the same checks and Range support as getAgentFolderFileContent. 404 when the file or the folder does not exist, for example after the task ended and its folder was reclaimed.
          */
         get: operations["getTaskNodeFolderFileContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}/nodes/{nodeRunId}/folder/raw/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+                /**
+                 * @description Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+                 *     level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
+                 */
+                path: components["parameters"]["FolderRawPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Open a file of the folder of a node's task instance in a browser tab, sandboxed
+         * @description Serves one file as itself, for a browser tab: the bytes with a content type from the file extension (text types
+         *     in UTF-8; an unknown extension is `text/plain` when the file starts as UTF-8 text, otherwise
+         *     `application/octet-stream`). The file path is part of the URL path, one URL segment per folder level, each
+         *     segment percent-encoded, so relative URLs inside an HTML file (its CSS, scripts, images, other pages) resolve to
+         *     files beside it in the same folder. The same path rules as the other folder endpoints apply (inside the folder
+         *     only, no `..`, no way out through a symlink); a directory answers 422, a file larger than
+         *     `Context.limits.textEdit.maxBytes` 413. Supports Range and conditional requests.
+         *
+         *     The file may have been written by an Agent, so it must never act as the console. Every response of this
+         *     endpoint, errors included, carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups
+         *     allow-modals allow-downloads` (without `allow-same-origin` the page runs as an opaque origin: it cannot read the
+         *     console's storage, and its requests to this API carry `Origin: null`, which every route refuses),
+         *     `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. Requests with an `Origin` header that is not
+         *     the console's are refused here too, so module scripts, `fetch` and web fonts of such a page do not load; classic
+         *     scripts, style sheets, images, media and links to other files do.
+         *
+         *     Read only. 404 when the file or the folder does not exist, for example after the task ended and its folder was
+         *     reclaimed.
+         */
+        get: operations["getTaskNodeFolderRawFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9915,6 +10001,11 @@ export interface components {
         FolderPath: string;
         /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
         FolderEntryPath: string;
+        /**
+         * @description Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+         *     level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
+         */
+        FolderRawPath: string;
         SkillId: string;
         AgentSkillId: string;
         ProviderId: string;
@@ -9936,6 +10027,12 @@ export interface components {
         RequestId: string;
         /** @description Server version (from the version package shared with loopctl), which loopctl compares against its own; for cross-origin access it is listed in `Access-Control-Expose-Headers` together with `Loop-Now-Request-Id` and `ETag` */
         Version: string;
+        /** @description Runs the file as a sandboxed page with an opaque origin, never as the console */
+        RawFileSandbox: "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads";
+        /** @description The browser uses the declared content type and never guesses another one from the bytes */
+        RawFileNoSniff: "nosniff";
+        /** @description Links and requests from the page do not tell other sites the address of the file */
+        RawFileNoReferrer: "no-referrer";
     };
     pathItems: never;
 }
@@ -13030,6 +13127,69 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAgentFolderRawFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+                /**
+                 * @description Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+                 *     level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
+                 */
+                path: components["parameters"]["FolderRawPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description The requested byte range */
+            206: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Not modified since the time the client sent */
+            304: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
         };
@@ -17000,6 +17160,71 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getTaskNodeFolderRawFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                nodeRunId: string;
+                /**
+                 * @description Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+                 *     level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
+                 */
+                path: components["parameters"]["FolderRawPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description The requested byte range */
+            206: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Not modified since the time the client sent */
+            304: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    "Content-Security-Policy": components["headers"]["RawFileSandbox"];
+                    "X-Content-Type-Options": components["headers"]["RawFileNoSniff"];
+                    "Referrer-Policy": components["headers"]["RawFileNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
         };
     };

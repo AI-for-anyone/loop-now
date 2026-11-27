@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CircleAlertIcon, CircleCheckIcon, DownloadIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, PencilIcon, RefreshCwIcon, XIcon } from 'lucide-react'
+import { CircleAlertIcon, CircleCheckIcon, DownloadIcon, ExternalLinkIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, PencilIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import { DirView, FileView, Pending, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
 import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
-import { EntryBadge, EntryIcon, EntryMenu, ToolButton, UploadMenu, type EntryActions } from './FolderParts'
+import { EntryBadge, EntryIcon, EntryMenu, ToolButton, ToolLink, UploadMenu, type EntryActions } from './FolderParts'
 import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-uploads'
 
 interface FileManagerProps {
@@ -113,6 +113,10 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
   const activeFile = useFolderFile(source, selectedEntry?.path ?? '', fileReadable)
   const activeText = selectedEntry && activeFile.data?.kind === 'text' ? activeFile.data.text : null
   const activeEditable = !!selectedEntry && selectedEntry.type === 'file' && canEdit(selectedEntry.path, selectedEntry.size, limits) && activeText !== null
+  const activeOpenRawURL = selectedEntry && source.rawURL && (
+    (selectedEntry.type === 'file' && !fileTooLarge) ||
+    (selectedEntry.type === 'symlink' && activeFile.isSuccess)
+  ) ? source.rawURL(selectedEntry.path) : null
   const activeMarkdown = !!selectedEntry && isMarkdown(selectedEntry.path)
   const activeLines = activeText === null ? null : activeText.split('\n').length - (activeText.endsWith('\n') ? 1 : 0)
   const editingCurrent = selectedEntry && edit?.path === selectedEntry.path ? edit : null
@@ -335,6 +339,15 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
                       </button>
                     ))}
                   </div>
+                )}
+                {activeOpenRawURL && (
+                  <ToolLink
+                    pill={sheet}
+                    className="@max-[34rem]:px-1.5 @max-[34rem]:[&>span]:hidden"
+                    icon={<ExternalLinkIcon />}
+                    label={t.folders.openInNewTab}
+                    href={activeOpenRawURL}
+                  />
                 )}
                 {selectedEntry.type === 'file' && (
                   <ToolButton
