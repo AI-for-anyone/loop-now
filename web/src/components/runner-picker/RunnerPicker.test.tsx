@@ -208,7 +208,7 @@ describe('runner picker', () => {
     expect(screen.getAllByText('1 of 2 models')).toHaveLength(2)
   })
 
-  it('works from the keyboard: arrows through the list, Enter chooses, left goes back to the runtimes, left and right move between them, down returns to the list', async () => {
+  it('works from the keyboard: arrows through the list, Enter chooses, left goes back to the runtimes, up and down move between them, right returns to the list', async () => {
     useCatalog()
     const user = userEvent.setup()
     renderWithQuery(<Picker initial={{ provider: 'claude-code', modelId: 'opus' }} />)
@@ -218,12 +218,22 @@ describe('runner picker', () => {
     expect(shown()).toBe('claude-code/haiku default')
     await user.keyboard('{ArrowLeft}')
     expect(await runnerTab(document.body, 'Claude Code')).toHaveFocus()
-    await user.keyboard('{ArrowRight}')
+    await user.keyboard('{ArrowDown}')
     expect(await runnerTab(document.body, 'Pi')).toHaveFocus()
     expect(await runnerTab(document.body, 'Pi')).toHaveAttribute('aria-selected', 'true')
-    // Down goes on to the models' search box.
-    await user.keyboard('{ArrowDown}')
+    // Right goes on to the models' search box.
+    await user.keyboard('{ArrowRight}')
     expect(modelSearch(document.body)).toHaveFocus()
+  })
+
+  it('lays out runtimes as a vertical left rail with wrapping fallback and never scrolls horizontally', async () => {
+    useCatalog()
+    renderWithQuery(<Picker />)
+    const rail = await screen.findByRole('tablist', { name: 'Runtimes' })
+    expect(rail).toHaveAttribute('aria-orientation', 'vertical')
+    expect(rail.className).not.toContain('overflow-x-auto')
+    expect(rail.className).toContain('flex-wrap')
+    expect(rail.className).toContain('sm:flex-col')
   })
 
   it('right at the end of the search goes to the chosen thinking level, not to Default', async () => {
@@ -366,13 +376,13 @@ describe('runner picker', () => {
       renderWithQuery(<Picker offers={local} lead={automatic} />)
       const first = await runnerTab(document.body, 'Automatic')
       first.focus()
-      await user.keyboard('{ArrowRight}')
+      await user.keyboard('{ArrowDown}')
       expect(await runnerTab(document.body, 'Claude Code')).toHaveFocus()
       await chooseModel(user, document.body, 'haiku')
       expect(shown()).toBe('claude-code/haiku default')
       expect(await runnerTab(document.body, 'Automatic')).toHaveAccessibleName('Automatic, Claude Code now')
       expect(await runnerTab(document.body, 'Claude Code')).toHaveAccessibleName('Claude Code, Ready, Current')
-      await user.keyboard('{ArrowLeft}')
+      await user.keyboard('{ArrowUp}')
       expect(await runnerTab(document.body, 'Automatic')).toHaveFocus()
       await user.click(screen.getByRole('button', { name: 'Use automatic' }))
       expect(shown()).toBe('none')
@@ -380,14 +390,14 @@ describe('runner picker', () => {
       expect(await runnerTab(document.body, 'Automatic')).toHaveAttribute('aria-selected', 'true')
     })
 
-    it('Down arrow on the first entry goes into its panel', async () => {
+    it('Right arrow on the first entry goes into its panel', async () => {
       useCatalog()
       const user = userEvent.setup()
       renderWithQuery(<Picker offers={local} lead={automatic} initial={{ provider: 'claude-code', modelId: 'opus' }} />)
       await vi.waitFor(async () => expect(await runnerTab(document.body, 'Claude Code')).toHaveAttribute('aria-selected', 'true'))
       const first = await runnerTab(document.body, 'Automatic')
       await user.click(first)
-      await user.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowRight}')
       expect(screen.getByRole('button', { name: 'Use automatic' })).toHaveFocus()
     })
 

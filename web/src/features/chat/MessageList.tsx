@@ -387,14 +387,14 @@ export function MessageList({
         role="log"
         aria-label={t.chat.messagesLabel}
       >
-        <div ref={content} data-message-column className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-5 px-4 pt-4 pb-6 sm:px-6">
-          {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
+        <div ref={content} data-message-column className="mx-auto flex w-full max-w-[960px] min-w-0 flex-col gap-5 px-4 pt-4 pb-6 sm:px-6">
+          {loadingOlder && <p className="text-center text-[13.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
           {hasOlder && !loadingOlder && (
             <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
               {t.chat.loadOlder}
             </Button>
           )}
-          {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[14px] text-ink-500">{t.chat.noMessages}</p>}
+          {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[15px] text-ink-500">{t.chat.noMessages}</p>}
           {placed.get(-1)?.map((item) => <Insert key={item.key}>{item.node}</Insert>)}
           {turns.map((turn, index) => {
             const isTarget = turn.run.id === targetRunId

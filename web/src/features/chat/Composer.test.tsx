@@ -87,12 +87,12 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
 // Unified floating composer card centered with the conversation stream.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('the composer dock floats cleanly on surface-canvas centered in a max-w-[800px] column', () => {
+it('the composer dock floats cleanly on surface-canvas centered in a max-w-[960px] column', () => {
   mountBar()
   const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')
   expect(bar).toHaveClass('bg-surface-canvas')
   expect(bar).not.toHaveClass('border-t')
-  expect(bar?.querySelector('[data-chat-bar-inner]')).toHaveClass('mx-auto', 'max-w-[800px]')
+  expect(bar?.querySelector('[data-chat-bar-inner]')).toHaveClass('mx-auto', 'max-w-[960px]')
 })
 
 it('the unified card uses surface-elevated with hairline-strong border and subtle focus-within; the send button uses CTA tokens', () => {
@@ -228,7 +228,24 @@ it('the key hints used elsewhere (the task node input) stay centered with second
   expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')
 })
 
-it('the input text is 14px on desktop and 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
+it('the input text is 15.5px on desktop and 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
   mountBar()
-  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[14px]', 'max-nav:text-base')
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[15.5px]', 'max-nav:text-base')
+})
+
+it('keeps the single-line editor compact without leaking Textarea default py-3 and caps auto-resize height', async () => {
+  const prevInnerHeight = window.innerHeight
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 500 })
+  try {
+    mountBar()
+    const editor = screen.getByRole('textbox', { name: 'Message' })
+    expect(editor).toHaveClass('min-h-[32px]', 'pt-2', 'pb-0.5')
+    expect(editor).not.toHaveClass('py-3', 'min-h-16')
+    // Simulate tall content and confirm height stays capped to 26% of a 500px viewport (130px).
+    Object.defineProperty(editor, 'scrollHeight', { configurable: true, value: 400 })
+    await userEvent.type(editor, 'a')
+    expect(editor.style.height).toBe('130px')
+  } finally {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: prevInnerHeight })
+  }
 })

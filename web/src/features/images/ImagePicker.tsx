@@ -41,24 +41,24 @@ export function ImagePicker({ images, onChange, limits, disabled, refused, uploa
   // The thumbnail strip scrolls horizontally inside the composer, so it doesn't widen the page even on narrow screens; the ×
   // sits on the thumbnail's corner and is always visible.
   const strip = images.length > 0 ? <div className="relative min-w-0">
-    <ul aria-label={t.images.preview} className="flex min-w-0 gap-2 overflow-x-auto px-1 pt-1 pb-2">{images.map((image, index) => {
+    <ul aria-label={t.images.preview} className="flex min-w-0 gap-2 overflow-x-auto px-0.5 py-0.5">{images.map((image, index) => {
       const upload = uploads?.[image.id]
-      return <li key={image.id} className="relative size-[60px] shrink-0">
+      return <li key={image.id} className="relative size-11 shrink-0">
         <DraftImagePreview file={image.file} thumb />
         {upload === 'uploading' && (
           <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-ticket bg-surface-canvas/70">
-            <LoaderCircleIcon aria-hidden="true" className="riso-spin size-5 text-ink motion-reduce:animate-none" strokeWidth={2.4} />
+            <LoaderCircleIcon aria-hidden="true" className="riso-spin size-4 text-ink motion-reduce:animate-none" strokeWidth={2.4} />
             <span className="sr-only">{t.images.uploading}</span>
           </span>
         )}
         {upload === 'failed' && (
           <span className="pointer-events-none absolute inset-0 flex items-end rounded-ticket ring-2 ring-red ring-inset">
-            <span className="w-full rounded-b-ticket bg-red py-px text-center text-[11px] leading-4 font-semibold text-white">{t.images.uploadFailed}</span>
+            <span className="w-full rounded-b-ticket bg-red py-px text-center text-[10px] leading-3.5 font-semibold text-white">{t.images.uploadFailed}</span>
           </span>
         )}
         <button
           type="button"
-          className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-cta-bg/85 text-cta-fg outline-none hover:bg-cta-bg focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-cta-bg/85"
+          className="absolute top-0.5 right-0.5 grid size-4 cursor-pointer place-items-center rounded-full bg-cta-bg/85 text-cta-fg outline-none hover:bg-cta-bg focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-cta-bg/85"
           disabled={disabled}
           aria-label={t.images.remove(index + 1)}
           title={t.images.remove(index + 1)}
@@ -67,7 +67,7 @@ export function ImagePicker({ images, onChange, limits, disabled, refused, uploa
             setError('')
           }}
         >
-          <XIcon aria-hidden="true" className="size-3" strokeWidth={3} />
+          <XIcon aria-hidden="true" className="size-2.5" strokeWidth={3} />
         </button>
       </li>
     })}</ul>

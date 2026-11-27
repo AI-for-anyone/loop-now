@@ -91,9 +91,14 @@ type CommandList = Schemas['AgentCommandList']
 // Names of the built-in platform commands listed by the server; null while the list hasn't been fetched yet.
 const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
 
+const COMPOSER_MAX_HEIGHT = 160
+const COMPOSER_MIN_CAP_HEIGHT = 88
+const COMPOSER_VIEWPORT_RATIO = 0.26
+
 // The border belongs to the unified floating composer card; the text area grows with its content and scrolls past the maximum.
+// Reset py-0 explicitly before pt/pb so Textarea's default py-3 is stripped by tailwind-merge.
 const inputClass =
-  'field-sizing-fixed min-h-[42px] max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-[14px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
+  'field-sizing-fixed min-h-[32px] max-h-[min(160px,26dvh)] w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-3.5 py-0 pt-2 pb-0.5 text-[15.5px] leading-[1.45] shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
 export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, background, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
@@ -224,7 +229,12 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     if (!editor) return
     const resize = () => {
       editor.style.height = 'auto'
-      editor.style.height = `${Math.min(editor.scrollHeight, 240)}px`
+      const viewportCap =
+        typeof window !== 'undefined' && window.innerHeight > 0
+          ? Math.max(COMPOSER_MIN_CAP_HEIGHT, Math.floor(window.innerHeight * COMPOSER_VIEWPORT_RATIO))
+          : COMPOSER_MAX_HEIGHT
+      const maxHeight = Math.min(COMPOSER_MAX_HEIGHT, viewportCap)
+      editor.style.height = `${Math.min(editor.scrollHeight, maxHeight)}px`
     }
     resize()
     if (typeof ResizeObserver === 'undefined') return
@@ -372,8 +382,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const showInterrupt = busy && !submitDisabled && hasDraft && !reply
   const showSend = !showStop || hasDraft || reply !== undefined
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
+  const hasTopStrip = Boolean(reply || images.length > 0)
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
-    onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
+    onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={cn(inputClass, hasTopStrip && 'pt-1')}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // Unified floating composer card: upper region holds ReplyChip, attached image thumbnails and the borderless auto-sizing editor;
   // integrated bottom toolbar holds image attach + RunnerChip + BackgroundTasksMark + busy status on the left,
@@ -398,7 +409,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         className="flex min-w-0 flex-col rounded-2xl border border-hairline-strong bg-surface-elevated shadow-surface transition-colors focus-within:border-riso-blue/50"
       >
         {(reply || strip) && (
-          <div className="flex min-w-0 flex-col gap-1.5 px-3 pt-2.5">
+          <div className="flex min-w-0 flex-col gap-1 px-2.5 pt-2">
             {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
             {strip}
           </div>
@@ -406,7 +417,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         {editor}
         <div
           data-chat-toolbar
-          className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1.5 px-2 pt-1 pb-2"
+          className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1 px-2 pt-0.5 pb-1.5"
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {addButton}
@@ -468,9 +479,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     </SlashCommandMenu>
   )
   return (
-    // Centered floating composer dock aligned with the 800px conversation stream.
-    <div data-chat-bar className="shrink-0 bg-surface-canvas px-4 pt-1 pb-3 sm:px-6">
-      <div data-chat-bar-inner className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-2">
+    // Centered floating composer dock aligned with the 960px conversation stream.
+    <div data-chat-bar className="shrink-0 bg-surface-canvas px-4 pt-1 pb-2 sm:px-6">
+      <div data-chat-bar-inner className="mx-auto flex w-full max-w-[960px] min-w-0 flex-col gap-2">
         {localError && (
           <p role="alert" className="text-[13px] font-semibold text-red-text">
             {localError}

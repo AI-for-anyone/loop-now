@@ -168,21 +168,21 @@ export function ChatPage() {
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
   return (
-    // The whole page sits in the sheet: above is the centered 800px message stream (with the floating PrecisionRuler overlay on the right),
+    // The whole page sits in the sheet: above is the centered 960px message stream (with the floating PrecisionRuler overlay on the right),
     // below is the floating unified composer card.
     // On narrow screens (below nav: 901px) the conversation gets a fixed viewport height and scrolls with the whole page;
     // at nav: and wider it locks cleanly to the viewport height matching AppLayout's nav:h-screen.
     <div className="flex h-full min-h-0 flex-col nav:overflow-hidden">
       <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink">
         {/* Notice bars sit above the message area, centered with the conversation column. */}
-        <div className="mx-auto flex w-full max-w-[800px] shrink-0 flex-col px-4 sm:px-6 empty:hidden">
+        <div className="mx-auto flex w-full max-w-[960px] shrink-0 flex-col px-4 sm:px-6 empty:hidden">
           {notFound && (
             <Alert variant="warning" className="mt-4">
               <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
             </Alert>
           )}
           {aroundRun !== null && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13px] font-semibold">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[14px] font-semibold">
               <span>{t.timeline.locate.viewing}</span>
               <span role="status" aria-live="polite">
                 {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
@@ -195,7 +195,7 @@ export function ChatPage() {
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           {messages.isError && !(aroundRun !== null && isNotFound(messages.error)) ? (
-            <ErrorAlert error={messages.error} className="mx-auto mt-6 w-full max-w-[800px] px-4 sm:px-6" />
+            <ErrorAlert error={messages.error} className="mx-auto mt-6 w-full max-w-[960px] px-4 sm:px-6" />
           ) : (
             <MessageList
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.

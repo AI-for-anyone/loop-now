@@ -380,14 +380,14 @@ describe('sidebar and page structure', () => {
 
     const projectsList = await within(sidebar()).findByRole('list', { name: 'Projects' })
     const projectRow = await within(projectsList).findByRole('link', { name: longProject.name })
-    expect(projectRow).toHaveClass('h-8')
+    expect(projectRow).toHaveClass('h-[34px]')
     expect(projectRow).not.toHaveClass('flex-wrap')
     const projectLabel = within(projectRow).getByText(longProject.name)
     expect(projectLabel).toHaveClass('min-w-0', 'flex-1', 'truncate')
     expect(projectLabel).toHaveAttribute('title', longProject.name)
 
     const globalEntry = within(sidebar()).getByRole('link', { name: 'External identities' })
-    expect(globalEntry).toHaveClass('h-[30px]')
+    expect(globalEntry).toHaveClass('h-[34px]')
     expect(within(globalEntry).getByText('External identities')).toHaveClass('min-w-0', 'flex-1', 'truncate')
     expect(within(globalEntry).getByText('External identities')).toHaveAttribute('title', 'External identities')
 
@@ -396,7 +396,7 @@ describe('sidebar and page structure', () => {
     expect(within(sidebar()).getByRole('button', { name: 'New Agent' })).toHaveClass('shrink-0')
 
     const switcher = scopeSwitcher('Global')
-    expect(switcher).toHaveClass('h-8')
+    expect(switcher).toHaveClass('h-9')
     await user.click(switcher)
     const option = within(await screen.findByRole('listbox', { name: 'Scopes' })).getByRole('option', { name: new RegExp(longProject.name) })
     expect(option).toHaveClass('h-[38px]')

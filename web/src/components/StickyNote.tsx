@@ -8,7 +8,7 @@ export function StickyNote({ tone = 'yellow', className, children, ...props }: {
     <div
       role="note"
       className={cn(
-        'flex items-center gap-2.5 self-start rounded-card border py-2 pr-4 pl-3 text-[13.5px] leading-[1.7] font-medium',
+        'flex items-center gap-2.5 self-start rounded-card border py-2 pr-4 pl-3 text-[14.5px] leading-[1.7] font-medium',
         tone === 'red'
           ? 'border-red-text/25 bg-tint-red text-red-text'
           : 'border-hairline bg-surface-subtle text-ink-700',

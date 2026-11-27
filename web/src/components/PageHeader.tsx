@@ -77,7 +77,7 @@ export function PageHeader({
         <div className="flex min-w-0 items-center gap-2">
           <SidebarExpandButton />
           <nav aria-label={t.shell.breadcrumb} className="min-w-0 shrink-0">
-            <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12.5px] font-medium text-ink-500 nav:leading-4">
+            <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[13.5px] font-medium text-ink-500 nav:leading-4">
               {crumbs.map((crumb, index) => (
                 <Fragment key={index}>
                   <li className="min-w-0 shrink-0 [overflow-wrap:anywhere]">
@@ -110,7 +110,7 @@ export function PageHeader({
             heading
           )}
           {children && (
-            <div data-page-meta className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[12px] text-ink-500">
+            <div data-page-meta className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-ink-500">
               {children}
             </div>
           )}
@@ -124,7 +124,7 @@ export function PageHeader({
       {note && (
         <div
           data-page-note
-          className="relative border-b border-hairline bg-surface-subtle/50 px-4 py-2 text-[12.5px] text-ink-700 [overflow-wrap:anywhere] sm:px-6"
+          className="relative border-b border-hairline bg-surface-subtle/50 px-4 py-2 text-[13.5px] text-ink-700 [overflow-wrap:anywhere] sm:px-6"
         >
           {note}
         </div>
@@ -142,7 +142,7 @@ export function LiveDot({ state, label }: { state: 'connecting' | 'open' | 'reco
     <span
       role="status"
       aria-live="polite"
-      className={cn('inline-flex items-center gap-1.5 text-[12px] font-medium', open ? 'text-green-text' : 'text-red-text')}
+      className={cn('inline-flex items-center gap-1.5 text-[13px] font-medium', open ? 'text-green-text' : 'text-red-text')}
     >
       <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', open ? 'bg-green' : 'bg-red')} />
       {open ? label : t.chat.connection.reconnecting}

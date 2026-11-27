@@ -62,7 +62,7 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
       data-tone={step.tone}
       className="grid grid-cols-[minmax(0,78px)_14px_minmax(0,1fr)_max-content] gap-x-2"
     >
-      <span className="pt-[2px] font-mono text-[10.5px] tabular-nums text-ink-500/85">
+      <span className="pt-[2px] font-mono text-[11.5px] tabular-nums text-ink-500/85">
         {t.timeline.clock(step.at)}
       </span>
       <span aria-hidden="true" className="flex flex-col items-center">
@@ -86,17 +86,17 @@ function Step({ step, last }: { step: TimelineStep; last: boolean }) {
             data-step-label
             className={cn(
               'font-medium text-ink',
-              step.sub ? 'text-[11.5px]' : 'text-[12px]',
+              step.sub ? 'text-[12.5px]' : 'text-[13px]',
             )}
           >
             {step.label}
           </span>
-          {step.field && <span className="font-mono text-[10.5px] text-ink-500/85">{step.field}</span>}
+          {step.field && <span className="font-mono text-[11.5px] text-ink-500/85">{step.field}</span>}
         </span>
         {code && <StepCode text={code} />}
-        {step.detail && <span className="text-[11.5px] text-ink-500 [overflow-wrap:anywhere]">{step.detail}</span>}
+        {step.detail && <span className="text-[12.5px] text-ink-500 [overflow-wrap:anywhere]">{step.detail}</span>}
         {step.lines.length > 0 && (
-          <ul className="text-[11.5px] text-ink-500 [overflow-wrap:anywhere]">
+          <ul className="text-[12.5px] text-ink-500 [overflow-wrap:anywhere]">
             {step.lines.map((line, index) => (
               <li key={index}>{line}</li>
             ))}

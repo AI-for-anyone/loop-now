@@ -49,6 +49,6 @@ describe('BrandWordmark', () => {
     setSkin('plate')
     const { container } = render(<BrandWordmark />)
     expect(container.querySelector('[data-brand-wordmark]')).toBeNull()
-    expect(screen.getByText('LOOP NOW')).toBeInTheDocument()
+    expect(screen.getByText('LOOP NOW')).toHaveClass('text-ink')
   })
 })

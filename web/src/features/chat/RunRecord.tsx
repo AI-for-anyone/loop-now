@@ -43,13 +43,13 @@ function Result({ run }: { run: Run }) {
         ? t.timeline.result.endReasonField(run.endReason)
         : t.timeline.result.statusField(run.status)
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-hairline px-3 py-2 text-[11.5px]">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-hairline px-3 py-2 text-[12.5px]">
       <span className={cn('inline-flex items-center gap-1.5 font-medium', style.labelColor)}>
         <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', style.dot)} />
         {style.label}
       </span>
-      <span className="font-mono text-[10.5px] text-ink-500/85 [overflow-wrap:anywhere]">{field}</span>
-      <span className="text-[11.5px] text-ink-500 [overflow-wrap:anywhere]">
+      <span className="font-mono text-[11.5px] text-ink-500/85 [overflow-wrap:anywhere]">{field}</span>
+      <span className="text-[12.5px] text-ink-500 [overflow-wrap:anywhere]">
         {runStatusText(run, runtimeName(run)) ?? t.timeline.detail.completed}
       </span>
     </div>
@@ -123,7 +123,7 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         onClick={() => setOpen((value) => !value)}
         className={cn(
           'inline-flex max-w-full flex-wrap items-center gap-x-1.5 self-start rounded-stamp py-0.5 transition-colors outline-none hover:text-ink-700 focus-visible:shadow-focus',
-          plate ? 'mt-0.5 text-[11.5px] leading-5 text-ink-500' : 'text-[12.5px] leading-5 text-ink-500/80',
+          plate ? 'mt-0.5 text-[12.5px] leading-5 text-ink-500' : 'text-[12.5px] leading-5 text-ink-500/80',
         )}
       >
         <span className="sr-only">{label}</span>

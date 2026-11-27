@@ -7,12 +7,12 @@ export const navRowClass = (current: boolean, kind: 'nav' | 'agent' | 'compact' 
     'flex min-w-0 items-center border border-transparent px-2 transition-colors outline-none focus-visible:shadow-focus',
     kind === 'agent' ? 'gap-2' : 'gap-2.5',
     kind === 'compact'
-      ? 'h-[30px] rounded-ticket text-[13px]'
+      ? 'h-[34px] rounded-ticket text-[14px]'
       : kind === 'agent'
         ? current
-          ? 'h-9 rounded-input text-[13px]'
-          : 'h-8 rounded-ticket text-[13px]'
-        : 'h-8 rounded-ticket text-[13px]',
+          ? 'h-[38px] rounded-input text-[14.5px]'
+          : 'h-[34px] rounded-ticket text-[14.5px]'
+        : 'h-[34px] rounded-ticket text-[14.5px]',
     current
       ? 'bg-sidebar-active-bg font-semibold text-sidebar-active-fg shadow-surface'
       : 'font-medium text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg',
@@ -20,7 +20,7 @@ export const navRowClass = (current: boolean, kind: 'nav' | 'agent' | 'compact' 
 
 // Group headings (Agents, Projects): uppercase semantic label; a create button can sit on the right.
 export const navGroupClass =
-  'mt-2 flex h-[26px] min-w-0 items-center gap-2 pr-1 pl-2.5 font-display-latin text-[11.5px] font-semibold tracking-[0.08em] text-sidebar-group uppercase'
+  'mt-2 flex h-[26px] min-w-0 items-center gap-2 pr-1 pl-2.5 font-display-latin text-[12px] font-semibold tracking-[0.08em] text-sidebar-group uppercase'
 
 // The "+" on the right of a group heading: borderless ghost icon button matching sidebar controls.
 export const navAddClass =

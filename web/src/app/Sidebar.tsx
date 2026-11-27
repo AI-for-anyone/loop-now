@@ -84,10 +84,10 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
           {text.groups.projects}
         </span>
       </h2>
-      {!projects && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.common.loading}</p>}
-      {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{text.noProjects}</p>}
+      {!projects && <p className="px-2.5 text-[13.5px] text-sidebar-muted">{t.common.loading}</p>}
+      {projects?.length === 0 && <p className="px-2.5 text-[13.5px] text-sidebar-muted">{text.noProjects}</p>}
       {projects && projects.length > 0 && shown.length === 0 && (
-        <p role="status" className="px-2.5 text-[12.5px] text-sidebar-muted">
+        <p role="status" className="px-2.5 text-[13.5px] text-sidebar-muted">
           {text.scope.noMatch}
         </p>
       )}
@@ -203,7 +203,7 @@ export function Sidebar({
   return (
     <nav
       aria-label={text.nav}
-      className="riso-halftone flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar-bg text-sidebar-fg"
+      className="flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar-bg text-sidebar-fg"
     >
       {/* Top 48px bar: on macOS inset title bar, place the collapse/close toggle + brand immediately to the right of the traffic lights. */}
       <div
@@ -229,7 +229,7 @@ export function Sidebar({
 
       {/* Compact inline sidebar filter with quick command-palette trigger */}
       <div className="shrink-0 px-3 pb-2.5">
-        <div className="flex h-[32px] items-center gap-2 rounded-ticket border border-sidebar-border bg-sidebar-control-bg px-2.5 text-sidebar-control-fg transition-colors focus-within:border-hairline-strong">
+        <div className="flex h-[34px] items-center gap-2 rounded-ticket border border-sidebar-border bg-sidebar-control-bg px-2.5 text-sidebar-control-fg transition-colors focus-within:border-hairline-strong">
           <NavIcon name="search" className="size-3.5 shrink-0 text-sidebar-muted" />
           <input
             ref={searchRef}
@@ -238,7 +238,7 @@ export function Sidebar({
             placeholder={text.search.placeholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-control-fg outline-none placeholder:text-sidebar-muted"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-sidebar-control-fg outline-none placeholder:text-sidebar-muted"
           />
           {onOpenPalette ? (
             <button
@@ -246,14 +246,14 @@ export function Sidebar({
               aria-label={text.palette.open}
               title={`${text.palette.title} (${paletteShortcut})`}
               onClick={onOpenPalette}
-              className="shrink-0 cursor-pointer rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted transition-colors outline-none hover:text-sidebar-fg focus-visible:shadow-focus"
+              className="shrink-0 cursor-pointer rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11.5px] leading-4 text-sidebar-muted transition-colors outline-none hover:text-sidebar-fg focus-visible:shadow-focus"
             >
               <kbd className="font-sans">{paletteShortcut}</kbd>
             </button>
           ) : (
             <kbd
               aria-hidden="true"
-              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted"
+              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11.5px] leading-4 text-sidebar-muted"
             >
               {paletteShortcut}
             </kbd>
@@ -328,7 +328,7 @@ export function Sidebar({
               aria-expanded={platformExpanded}
               aria-controls={platformPanelId}
               onClick={togglePlatform}
-              className="flex w-full items-center gap-1.5 rounded-ticket px-2 py-1.5 text-[11px] font-medium tracking-wider text-sidebar-group uppercase transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus"
+              className="flex w-full items-center gap-1.5 rounded-ticket px-2 py-1.5 text-[12px] font-medium tracking-wider text-sidebar-group uppercase transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus"
             >
               <ChevronRight
                 className={cn('size-3.5 shrink-0 transition-transform duration-150', platformExpanded && 'rotate-90')}
@@ -336,7 +336,7 @@ export function Sidebar({
               />
               <span className="flex-1 truncate text-left">{text.groups.platform}</span>
               {!platformExpanded && (
-                <span className="text-[10.5px] font-normal text-sidebar-muted tabular-nums">
+                <span className="text-[11.5px] font-normal text-sidebar-muted tabular-nums">
                   {platformEntries.length}
                 </span>
               )}

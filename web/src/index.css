@@ -138,7 +138,7 @@
     -webkit-font-smoothing: antialiased;
   }
   body {
-    @apply bg-surface-canvas text-ink text-[13.5px] leading-[1.55];
+    @apply bg-surface-canvas text-ink text-[15px] leading-[1.65];
   }
   :focus-visible {
     outline: none;
@@ -274,16 +274,16 @@
 /* Markdown styles for Agent replies */
 @layer components {
   .markdown {
-    @apply text-[14px] leading-[1.65] break-words;
+    @apply text-[16px] leading-[1.75] break-words;
   }
   .markdown > * + * {
     @apply mt-3;
   }
   .markdown h1 {
-    @apply text-xl font-semibold tracking-tight;
+    @apply text-[22px] font-semibold tracking-tight;
   }
   .markdown h2 {
-    @apply text-lg font-semibold tracking-tight;
+    @apply text-[18.5px] font-semibold tracking-tight;
   }
   .markdown h3,
   .markdown h4 {
@@ -306,7 +306,7 @@
   }
   /* Default (mono) skin: clean reading typography — plain inline bold, quiet list rhythm, borderless inline code. */
   :root:not([data-skin="plate"]) .markdown {
-    @apply text-[15px] leading-[1.75] tracking-[0.01em];
+    @apply text-[16px] leading-[1.75] tracking-[0.01em];
   }
   :root:not([data-skin="plate"]) .markdown strong {
     font-weight: 600;
@@ -341,7 +341,7 @@
   }
   /* A bold word at the start of a list item (marked by rehype-lead-label, Plate skin only). */
   :root[data-skin="plate"] .markdown .md-lead {
-    @apply mr-2.5 inline-block rounded-stamp border border-hairline bg-surface-subtle px-2 text-[13px] leading-6 font-semibold;
+    @apply mr-2.5 inline-block rounded-stamp border border-hairline bg-surface-subtle px-2 text-[14px] leading-6 font-semibold;
   }
   :root[data-skin="plate"] .markdown ul.md-lead-list {
     @apply list-none;
@@ -362,7 +362,7 @@
     @apply mt-1.5;
   }
   .markdown pre {
-    @apply overflow-x-auto px-4 pt-2 pb-4 font-mono text-[13px] leading-[1.7];
+    @apply overflow-x-auto px-4 pt-2 pb-4 font-mono text-[14px] leading-[1.7];
   }
   .markdown pre code.hljs {
     @apply bg-transparent p-0;
@@ -406,7 +406,7 @@
     @apply max-w-full;
   }
   .markdown .md-image-caption {
-    @apply w-full text-[13.5px] leading-[1.5] text-ink-700 [overflow-wrap:anywhere];
+    @apply w-full text-[14.5px] leading-[1.55] text-ink-700 [overflow-wrap:anywhere];
   }
   .markdown .md-image-caption strong {
     @apply text-ink;

@@ -242,7 +242,7 @@ describe('Sidebar styling', () => {
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
     expect(row).toHaveClass('bg-sidebar-active-bg', 'font-semibold', 'text-sidebar-active-fg')
     const card = within(sidebar()).getByRole('button', { name: /^Switch scope/ })
-    expect(card).toHaveClass('h-8', 'border-0', 'bg-transparent')
+    expect(card).toHaveClass('h-9', 'border-0', 'bg-transparent')
     const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
     expect(unselected).not.toHaveClass('bg-sidebar-active-bg')
   })
@@ -315,7 +315,7 @@ describe('Sidebar styling', () => {
     setup([longBusy, longIdle], defaultAgentPath(longBusy.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /^loop-now-publicity/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(row).toHaveClass('h-9')
+    expect(row).toHaveClass('h-[38px]')
     expect(row).not.toHaveClass('flex-wrap')
     expect(row.querySelector('.flex-wrap')).toBeNull()
     const name = within(row).getByText(longBusy.name)
@@ -326,7 +326,7 @@ describe('Sidebar styling', () => {
     expect(marks).not.toContainElement(name)
     // Unselected rows use the same single-line layout.
     const unselected = within(sidebar()).getByRole('link', { name: longIdle.name })
-    expect(unselected).toHaveClass('h-8')
+    expect(unselected).toHaveClass('h-[34px]')
     expect(unselected.querySelector('.flex-wrap')).toBeNull()
     expect(within(unselected).getByText(longIdle.name)).toHaveAttribute('title', longIdle.name)
     expect(within(unselected).getByText(longIdle.name)).toHaveClass('min-w-0', 'flex-1', 'truncate')
@@ -339,11 +339,11 @@ describe('Sidebar styling', () => {
     expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:var(--hairline-strong)_transparent]')
   })
 
-  it('the search box is 32px tall; the shortcut hint has a thin border', async () => {
+  it('the search box is 34px tall; the shortcut hint has a thin border', async () => {
     setup([manager])
     const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
     const box = search.parentElement!
-    expect(box).toHaveClass('h-[32px]', 'border-sidebar-border', 'bg-sidebar-control-bg')
+    expect(box).toHaveClass('h-[34px]', 'border-sidebar-border', 'bg-sidebar-control-bg')
     const kbd = box.querySelector('kbd')!
     const shortcut = kbd.closest('button') ?? kbd
     expect(shortcut).toHaveClass('border', 'border-sidebar-border')

@@ -46,6 +46,8 @@ it('puts attached thumbnails inside the composer card, above the text row', asyn
   const card = screen.getByRole('textbox').closest('[data-chat-input]') as HTMLElement, list = within(card).getByRole('list', { name: 'Images to send' })
   expect(card.firstElementChild).toContainElement(list)
   expect(list.compareDocumentPosition(screen.getByRole('textbox')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(within(list).getAllByRole('listitem')[0]).toHaveClass('size-11')
+  expect(screen.getByRole('textbox')).toHaveClass('pt-1')
   expect(card).toHaveClass('rounded-2xl')
   expect(await within(list).findByAltText('two.png')).toBeInTheDocument()
   await userEvent.click(within(list).getByRole('button', { name: 'Remove image 1' }))

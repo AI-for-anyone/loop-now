@@ -33,7 +33,7 @@ function StatusDot({ state }: { state: AgentStickerState }) {
       data-agent-status
       data-tone={tone}
       className={cn(
-        'inline-flex min-w-0 shrink items-center gap-1.5 text-[12px] leading-5 font-semibold whitespace-nowrap',
+        'inline-flex min-w-0 shrink items-center gap-1.5 text-[13px] leading-5 font-semibold whitespace-nowrap',
         tone === 'busy' ? 'text-pink-text' : 'text-green-text',
       )}
     >
@@ -47,7 +47,7 @@ function StatusDot({ state }: { state: AgentStickerState }) {
 // Compact segmented view switcher tabs in the header bar.
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'inline-flex h-7 shrink-0 items-center rounded-ticket px-2.5 text-[12.5px] leading-none whitespace-nowrap no-underline transition-colors outline-none focus-visible:shadow-focus',
+    'inline-flex h-7 shrink-0 items-center rounded-ticket px-2.5 text-[13.5px] leading-none whitespace-nowrap no-underline transition-colors outline-none focus-visible:shadow-focus',
     isActive
       ? 'bg-surface-elevated font-semibold text-ink shadow-surface'
       : 'font-medium text-ink-500 hover:text-ink',
@@ -167,7 +167,7 @@ function AgentDetailView({
         <div data-agent-identity className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 nav:flex-1">
           <SidebarExpandButton />
           <RuntimeMark runtime={agent.runtime} />
-          <h1 title={agent.name} className="min-w-0 truncate text-[14.5px] leading-6 font-semibold tracking-[-0.01em] text-ink">
+          <h1 title={agent.name} className="min-w-0 truncate text-[16px] leading-6 font-semibold tracking-[-0.01em] text-ink">
             {agent.name}
           </h1>
           {agent.isManager && <ManagerBadge size="sm" className="shrink-0" />}

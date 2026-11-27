@@ -224,7 +224,7 @@ export function AppLayout() {
         >
           <header
             className={cn(
-              'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden',
+              'sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden',
               desktop && 'window-drag pl-[84px]',
             )}
           >

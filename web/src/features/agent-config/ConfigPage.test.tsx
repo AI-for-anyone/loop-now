@@ -157,7 +157,7 @@ describe('Sub-tab navigation and deep links', () => {
     await renderConfig()
     const basic = region('Basics')
     expect(basic).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
-    expect(within(basic).getByRole('heading', { level: 2, name: 'Basics' })).toHaveClass('text-[14.5px]', 'font-semibold')
+    expect(within(basic).getByRole('heading', { level: 2, name: 'Basics' })).toHaveClass('text-[16px]', 'font-semibold')
     expect(basic.querySelector('[data-section-number]')).toBeNull()
     expect(within(basic).getByLabelText('Display name').closest('.grid')!.parentElement).toHaveClass('sm:items-start')
 

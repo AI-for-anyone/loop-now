@@ -133,6 +133,7 @@ const monoPairs: [string, string, string][] = [
   ['Meta on elevated surface', 'ink-500', 'surface-elevated'],
   ['Sidebar primary', 'sidebar-fg', 'sidebar-bg'],
   ['Sidebar muted', 'sidebar-muted', 'sidebar-bg'],
+  ['Sidebar group heading', 'sidebar-group', 'sidebar-bg'],
   ['Sidebar active row', 'sidebar-active-fg', 'sidebar-active-bg'],
   ['Sidebar control', 'sidebar-control-fg', 'sidebar-control-bg'],
   ['Primary CTA', 'cta-fg', 'cta-bg'],
@@ -187,6 +188,12 @@ describe('Design token contrast — Plate skin', () => {
   it('fluorescent pink and yellow do not reach body text contrast on paper, so they cannot be text colors', () => {
     expect(contrastFrom(plateTokens, 'riso-pink', 'paper')).toBeLessThan(4.5)
     expect(contrastFrom(plateTokens, 'riso-yellow', 'paper')).toBeLessThan(4.5)
+  })
+
+  it('sidebar uses a light warm-paper surface with dark ink instead of bright riso blue', () => {
+    expect(plateTokens['sidebar-bg']).not.toBe(plateTokens['riso-blue'])
+    expect(luminance(plateTokens['sidebar-bg'])).toBeGreaterThanOrEqual(0.7)
+    expect(plateTokens['sidebar-fg']).toBe(plateTokens.ink)
   })
 })
 

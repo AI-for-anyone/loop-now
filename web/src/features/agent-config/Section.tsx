@@ -30,7 +30,7 @@ export function Section({ id, title, count, actions, meta, tone = 'default', chi
           id={sectionTitleId(id)}
           tabIndex={-1}
           className={cn(
-            'riso-marker self-start text-[14.5px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus',
+            'riso-marker self-start text-[16px] leading-snug font-semibold tracking-tight outline-none focus-visible:shadow-focus',
             danger && 'text-red-text',
           )}
         >

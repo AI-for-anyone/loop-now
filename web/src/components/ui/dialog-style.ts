@@ -8,7 +8,7 @@ export type DialogKind = 'create' | 'danger' | 'confirm' | 'edit' | 'view' | 'to
 
 // The outer layer only handles position and width (the caller's className goes here, e.g. sm:max-w-[560px]).
 export const dialogContentClass =
-  'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col text-[14.5px] text-ink outline-none'
+  'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col text-[15px] text-ink outline-none'
 
 // Outer non-scrolling dialog container: holds the fixed topbar (kind badge + close button) above the independently scrolling body.
 export const dialogPaperClass =
