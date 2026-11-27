@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiUrl } from '@/test/api'
 import { server } from '@/test/server'
+import { resetThemeForTest, setSkin } from '@/theme/store'
 import type { ReplyFolderContext } from './local-images'
 import { Markdown } from './Markdown'
 
@@ -183,9 +184,42 @@ describe('Markdown rendering and safety', () => {
   })
 })
 
-// "Printed sheet" redesign: a bold word at the start of a list item becomes a small yellow label.
-describe('A bold word at the start of a list item', () => {
+describe('A bold word at the start of a list item (default mono skin)', () => {
+  it('stays plain inline bold with no boxed label and keeps colons intact', () => {
+    const { container } = render(
+      <Markdown text={'- **导出**：大文件导出到一半会停。\n- **Address**: see `search.go`.\n- **Done** no colon'} />, // check-english: zh (a Chinese reply with a full-width colon after leading bold)
+    )
+    const list = container.querySelector('ul')!
+    expect(list).not.toHaveClass('md-lead-list')
+    expect(container.querySelector('.md-lead')).toBeNull()
+    expect(container.querySelector('.md-lead-item')).toBeNull()
+    expect(container.querySelector('.md-lead-text')).toBeNull()
+    const [first, second, third] = [...container.querySelectorAll('li')]
+    expect(first.textContent).toBe('导出：大文件导出到一半会停。') // check-english: zh (a Chinese reply with a full-width colon after leading bold)
+    expect(first.querySelector('strong')).toHaveTextContent('导出') // check-english: zh (a Chinese reply with a full-width colon after leading bold)
+    expect(second.textContent).toBe('Address: see search.go.')
+    expect(second.querySelector('code')).toHaveTextContent('search.go')
+    expect(third.textContent).toBe('Done no colon')
+  })
+
+  it('keeps the output cursor inside the list item while streaming', () => {
+    const { container } = render(<Markdown cursor text={'- **Export**: large files\n- **Search**: word spl'} />)
+    const last = [...container.querySelectorAll('li')][1]
+    const cursor = container.querySelector('.riso-cursor')!
+    expect(last).not.toHaveClass('md-lead-item')
+    expect(last).toContainElement(cursor as HTMLElement)
+  })
+})
+
+// Plate (Risograph) skin keeps the boxed lead labels for list items.
+describe('A bold word at the start of a list item (Plate skin)', () => {
   const items = (container: HTMLElement) => [...container.querySelectorAll('li')]
+
+  beforeEach(() => setSkin('plate'))
+  afterEach(() => {
+    window.localStorage.clear()
+    resetThemeForTest()
+  })
 
   it('in an unordered list a leading bold word is a label with the following text to its right, and a colon right after the label is no longer shown', () => {
     const { container } = render(<Markdown text={'归好了：\n\n- **导出** 大文件导出到一半会停。\n- **搜索**：中文分词不准，见 `search.go`。\n- **通知**: 同一件事提醒两次。'} />) // check-english: zh (a Chinese reply with a full-width colon after the label)
@@ -298,14 +332,20 @@ describe('A bold word at the start of a list item', () => {
   })
 })
 
-it('a leading bold word in documents (plugin READMEs, Markdown files in folders) is not made a label', () => {
-  const text = '- **Export** large file exports stop halfway.'
-  const readme = render(<Markdown readme text={text} />)
-  expect(readme.container.querySelector('.md-lead')).toBeNull()
-  readme.unmount()
-  const file = render(<Markdown leadLabels={false} text={text} />)
-  expect(file.container.querySelector('.md-lead')).toBeNull()
-  expect(file.container.querySelector('strong')).toHaveTextContent('Export')
+it('a leading bold word in documents (plugin READMEs, Markdown files in folders) is not made a label even in Plate skin', () => {
+  setSkin('plate')
+  try {
+    const text = '- **Export** large file exports stop halfway.'
+    const readme = render(<Markdown readme text={text} />)
+    expect(readme.container.querySelector('.md-lead')).toBeNull()
+    readme.unmount()
+    const file = render(<Markdown leadLabels={false} text={text} />)
+    expect(file.container.querySelector('.md-lead')).toBeNull()
+    expect(file.container.querySelector('strong')).toHaveTextContent('Export')
+  } finally {
+    window.localStorage.clear()
+    resetThemeForTest()
+  }
 })
 
 describe('Markdown images in a reply', () => {
@@ -710,9 +750,9 @@ describe('Local folder images in a reply', () => {
     expect(rows[1]).toHaveAttribute('data-count', '3')
     expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['a.svg', 'b.svg', 'c.svg'])
 
-    // The list itself kept lead-label formatting because the thumbnail row sits after the <ul>.
+    // The thumbnail row sits directly after the <ul>; default mono skin keeps plain list items without lead-label classes.
     const list = container.querySelector('ul')!
-    expect(list).toHaveClass('md-lead-list')
+    expect(list).not.toHaveClass('md-lead-list')
     expect(list.nextElementSibling).toHaveAttribute('data-md-local-images')
   })
 

@@ -211,3 +211,35 @@ describe('Design token contrast — Mono skin (dark)', () => {
     for (const color of monoDarkHljsColors) expect(contrastFrom(monoDarkTokens, color, 'code-bg'), color).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+describe('Skin typography and inline-code tokens', () => {
+  const monoLightBlock = extractBlock(monoCss, ':root,\n:root[data-skin="mono"] {')
+  const monoDarkBlock = extractBlock(monoCss, ':root[data-skin="mono"][data-theme="dark"],')
+  const plateBlock = extractBlock(plateCss, ':root[data-skin="plate"] {')
+
+  it('default mono skin uses system UI sans and system monospace with CJK fallback, keeping Noto Sans SC as last fallback', () => {
+    const sans = /--skin-font-sans:\s*([^;]+);/.exec(monoLightBlock)?.[1] ?? ''
+    const mono = /--skin-font-mono:\s*([^;]+);/.exec(monoLightBlock)?.[1] ?? ''
+    expect(sans).toMatch(/^-apple-system,/)
+    expect(sans).toContain('"PingFang SC"')
+    expect(sans).toContain('"Microsoft YaHei"')
+    expect(sans.indexOf('"PingFang SC"')).toBeLessThan(sans.indexOf('"Noto Sans SC"'))
+    expect(mono).toMatch(/^ui-monospace,/)
+    expect(mono).toContain('"SF Mono"')
+    expect(mono).toContain('"PingFang SC"')
+    expect(mono.indexOf('"PingFang SC"')).toBeLessThan(mono.lastIndexOf('monospace'))
+  })
+
+  it('plate skin keeps Noto Sans SC, JetBrains Mono, and display fonts', () => {
+    expect(plateBlock).toMatch(/--skin-font-sans:\s*'Noto Sans SC'/)
+    expect(plateBlock).toMatch(/--skin-font-mono:\s*'JetBrains Mono'/)
+    expect(plateBlock).toMatch(/--skin-display-cn:\s*'ZCOOL QingKe HuangYou'/)
+  })
+
+  it('inline code wash and muted marker tokens exist in both mono light and dark', () => {
+    expect(monoLightBlock).toContain('--inline-code-bg:')
+    expect(monoDarkBlock).toContain('--inline-code-bg:')
+    expect(monoLightBlock).toContain('--ink-faint:')
+    expect(monoDarkBlock).toContain('--ink-faint:')
+  })
+})

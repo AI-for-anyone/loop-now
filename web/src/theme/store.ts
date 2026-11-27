@@ -194,6 +194,11 @@ export function useTheme(): ThemeSnapshot & {
   return { ...current, setSkin, setThemeMode }
 }
 
+// Subscribe only to the active skin id so toggling light/dark does not re-render skin-dependent trees.
+export function useSkin(): SkinId {
+  return useSyncExternalStore(subscribeTheme, () => getThemeSnapshot().skin, () => getThemeSnapshot().skin)
+}
+
 // Reset module state between unit tests after localStorage/URL changes.
 export function resetThemeForTest(): void {
   mediaCleanup?.()

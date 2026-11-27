@@ -66,6 +66,8 @@
   --code-fg: #FFFFFF;
   --code-border: transparent;
   --code-muted: var(--riso-yellow);
+  --inline-code-bg: var(--surface-subtle);
+  --ink-faint: var(--ink-500);
 
   /* Stats charts: series take blue, pink and ochre in a fixed order, with "Other" in neutral gray; reply outcomes use the three state
      colors for completed, interrupted and failed; grid lines recede. */
@@ -98,7 +100,9 @@
   --skin-radius-bubble: 20px;
   --skin-radius-dialog: 22px;
 
-  /* Plate display fonts */
+  /* Plate fonts: keep Noto Sans SC, JetBrains Mono, and display headings */
+  --skin-font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  --skin-font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --skin-display-cn: 'ZCOOL QingKe HuangYou', 'Noto Sans SC', 'PingFang SC', sans-serif;
   --skin-display-latin: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
 
