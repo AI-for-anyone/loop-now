@@ -8,6 +8,7 @@ import { describeError, requestIdOf } from '@/lib/errors'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
+import { useSkin } from '@/theme/store'
 import { isVoidedRun, runStatusText, useRunRuntimeName } from './run-status-text'
 import { buildSteps, runDurationMs } from './timeline-steps'
 import { TimelineSteps, UsageBlock } from './TimelineBody'
@@ -93,6 +94,8 @@ interface RunRecordProps {
 
 // The run record below a reply: when collapsed it renders as a compact single-line metadata row; expanding it requests the timeline.
 export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps) {
+  const skin = useSkin()
+  const plate = skin === 'plate'
   const [open, setOpen] = useState(defaultOpen)
   const panelId = useId()
   const ended = ENDED.has(run.status)
@@ -102,9 +105,12 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
   const done = ended && duration !== null
   const elapsed = t.overview.elapsed(now - Date.parse(run.queuedAt))
   const label = !done ? t.timeline.toggleRunning(elapsed) : run.usageReported ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total)) : t.timeline.toggleNoUsage(t.timeline.duration(duration))
-  // The parts after the name: once ended, the duration and token count (or that the runtime reported none); while in progress, only the
-  // elapsed time.
-  const parts = done ? [t.timeline.duration(duration), run.usageReported ? t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total)) : t.timeline.toggleParts.noUsage] : [t.timeline.toggleParts.running(elapsed)]
+  // The parts after the name: once ended, the duration and token count (compact in mono skin, exact in Plate skin, or that the runtime
+  // reported none); while in progress, only the elapsed time.
+  const tokenPart = plate
+    ? t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total))
+    : t.timeline.toggleParts.compactTokens(run.usage.total)
+  const parts = done ? [t.timeline.duration(duration), run.usageReported ? tokenPart : t.timeline.toggleParts.noUsage] : [t.timeline.toggleParts.running(elapsed)]
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -113,8 +119,12 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         type="button"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        title={!plate && done && run.usageReported ? label : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="mt-0.5 inline-flex max-w-full flex-wrap items-center gap-x-1.5 self-start rounded-stamp py-0.5 text-[11.5px] leading-5 text-ink-500 transition-colors outline-none hover:text-ink-700 focus-visible:shadow-focus"
+        className={cn(
+          'inline-flex max-w-full flex-wrap items-center gap-x-1.5 self-start rounded-stamp py-0.5 leading-5 transition-colors outline-none hover:text-ink-700 focus-visible:shadow-focus',
+          plate ? 'mt-0.5 text-[11.5px] text-ink-500' : 'text-[12.5px] text-ink-500/80',
+        )}
       >
         <span className="sr-only">{label}</span>
         <span aria-hidden="true" data-receipt-part className="font-normal whitespace-nowrap">
@@ -123,7 +133,11 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         {parts.map((part, index) => (
           <span key={index} aria-hidden="true" className="inline-flex items-center gap-x-1.5">
             <span className="text-ink-500/45 select-none">{t.chat.metaSeparator}</span>
-            <span data-receipt-part aria-hidden="true" className="font-mono font-normal tabular-nums whitespace-nowrap">
+            <span
+              data-receipt-part
+              aria-hidden="true"
+              className={cn('font-normal tabular-nums whitespace-nowrap', plate && 'font-mono')}
+            >
               {part}
             </span>
           </span>
