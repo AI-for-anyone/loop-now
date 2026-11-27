@@ -172,8 +172,8 @@ func TestEncodingStoresPlaintextAndSafeDiagnostics(t *testing.T) {
 	if err = json.Unmarshal(b, &wire); err != nil {
 		t.Fatal(err)
 	}
-	if string(wire["schemaVersion"]) != "10" || wire["sourceVersion"] != nil || !bytes.Contains(wire["credentials"], []byte(secretSentinel)) {
-		t.Fatal("new capture is not a plaintext v10 snapshot without sourceVersion")
+	if string(wire["schemaVersion"]) != "11" || wire["sourceVersion"] != nil || !bytes.Contains(wire["credentials"], []byte(secretSentinel)) {
+		t.Fatal("new capture is not a plaintext v11 snapshot without sourceVersion")
 	}
 	restored, err := Decode(b)
 	if err != nil {

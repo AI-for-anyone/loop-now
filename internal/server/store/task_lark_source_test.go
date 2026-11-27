@@ -8,6 +8,7 @@ import (
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/taskruntime"
+	"loop-now/internal/server/workflow"
 	"sync"
 	"testing"
 	"time"
@@ -90,6 +91,19 @@ func TestTaskLarkSourceLatePrepareCannotPublishAcrossOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The follow-up Agent gets a step that asks for its conversation, so preparing it pauses the Agent to fork the
+	// regular conversation: that pause is the barrier.
+	if _, err = s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
+		m.Record.View.Workflow.Steps = append(m.Record.View.Workflow.Steps, workflow.Step{ID: "followup", Title: "Follow-up", AgentID: inst.AgentID, WithConversation: true})
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := s.GetTask(ctx, in.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.ExpectedTaskVersion = changed.View.Task.Version
 	started, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	// Deterministic normal-fork callbacks are a test barrier, not fake native

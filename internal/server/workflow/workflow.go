@@ -77,6 +77,7 @@ func (d Definition) Step(id string) (Step, bool) {
 	}
 	return Step{}, false
 }
+
 // WithConversation reports whether any step done by the Agent asks to start from the Agent's regular conversation.
 func (d Definition) WithConversation(agentID uuid.UUID) bool {
 	for _, n := range d.Steps {

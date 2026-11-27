@@ -298,9 +298,6 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 	if inst.Prepared {
 		return nil
 	}
-	if s.PauseNormal == nil || s.FreezeNormal == nil || s.MaxSessionBytes <= 0 {
-		return errors.New("the task fork preparer is not configured")
-	}
 	snapshot, err := taskruntime.Decode(inst.Snapshot)
 	if err != nil {
 		return err
@@ -316,62 +313,23 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 	if err != nil || prepared {
 		return err
 	}
-	release, err := s.PauseNormal(ctx, inst.AgentID)
+	forks, err := s.forksConversation(ctx, inst, snapshot)
 	if err != nil {
 		return err
 	}
 	var base *string
-	err = func() error {
-		defer release()
-		if err := s.FreezeNormal(ctx, inst.AgentID); err != nil {
-			return err
-		}
-		session, err := s.Store.GetAgentSession(ctx, inst.AgentID)
-		if err != nil {
-			return err
-		}
-		if session.State == "missing" {
-			return errors.New("the regular session file is missing; cannot create the task fork")
-		}
-		rt := agentruntime.ForProvider(snapshot.Configuration().Provider)
-		if !rt.Capabilities.TaskFork {
-			// The runtime cannot copy the regular session: the instance starts a new session whose first message
-			// carries the regular conversation as it is now.
-			data, err := s.taskStartHandoff(ctx, inst.AgentID, rt)
-			if err != nil || data == nil {
-				return err
-			}
-			path, err := s.writeBaseline(inst, data)
-			if err != nil {
-				return err
-			}
-			base = &path
-		} else if session.State == "active" && session.SessionFile != "" {
-			if s.ForkBaseline == nil {
-				return errors.New("task forks of a session are not configured")
-			}
-			runtime := agentruntime.ForProvider(snapshot.Configuration().Provider).ID
-			data, err := s.ForkBaseline(ctx, runtime, inst.AgentID, session.SessionFile, s.MaxSessionBytes)
-			if err != nil {
-				return err
-			}
-			path, err := s.writeBaseline(inst, data)
-			if err != nil {
-				return err
-			}
-			base = &path
-		} else if capture, err := s.importedCapture(ctx, inst, session, rt); err != nil {
-			return err
-		} else if capture != "" {
-			base = &capture
-		}
-		// From snapshot v9 on: copy the base Agent's whole folder within the same window (at that point its Pi has
-		// stopped and new dispatches are paused), so the folder and the session fork are taken at the same moment.
-		if snapshot.CopiesAgentFolder() {
-			return s.copyWorkspace(inst)
-		}
-		return nil
-	}()
+	switch {
+	case forks:
+		base, err = s.prepareFork(ctx, inst, snapshot)
+	case snapshot.CopiesAgentFolder():
+		// A clean start takes nothing from the regular conversation, so the base Agent is neither paused nor waited
+		// for: its folder is copied while its regular conversation may be running. A file being written at that
+		// moment can be copied half-written (on APFS the tree is cloned in one call, so only that file is affected).
+		// That is accepted: the copy is the task's own, the regular folder stays whole, and the folder holds the
+		// Agent's notes and context files, which a reply rarely rewrites. Without cloning, a file deleted during the
+		// copy fails it; the task then blocks with the message and a retry copies again.
+		err = s.copyWorkspace(inst)
+	}
 	if err != nil {
 		return err
 	}
@@ -390,6 +348,86 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 		return err
 	}
 	return s.commitTaskPreparation(ctx, inst, revision, base, sources)
+}
+
+// forksConversation reports whether the instance starts from its Agent's regular conversation: always for tasks from
+// before clean starts (snapshot schema 10 and earlier), otherwise only when a step done by the Agent asks for it.
+func (s *Source) forksConversation(ctx context.Context, inst store.TaskInstance, snapshot *taskruntime.Snapshot) (bool, error) {
+	if !snapshot.StartsClean() {
+		return true, nil
+	}
+	r, err := s.Store.GetTask(ctx, inst.TaskID)
+	if err != nil {
+		return false, err
+	}
+	return r.View.Workflow.WithConversation(inst.AgentID), nil
+}
+
+// prepareFork takes the instance's copy of its Agent's regular conversation (a session fork, or a handoff for a runtime
+// that cannot fork) and copies the Agent's folder, while the Agent is paused and frozen so both are taken at the same
+// moment; it waits for the Agent's reply in progress to end. It returns the baseline the instance starts from, nil when
+// there is no conversation yet.
+func (s *Source) prepareFork(ctx context.Context, inst store.TaskInstance, snapshot *taskruntime.Snapshot) (*string, error) {
+	if s.PauseNormal == nil || s.FreezeNormal == nil || s.MaxSessionBytes <= 0 {
+		return nil, errors.New("the task fork preparer is not configured")
+	}
+	release, err := s.PauseNormal(ctx, inst.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if err := s.FreezeNormal(ctx, inst.AgentID); err != nil {
+		return nil, err
+	}
+	session, err := s.Store.GetAgentSession(ctx, inst.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	if session.State == "missing" {
+		return nil, errors.New("the regular session file is missing; cannot create the task fork")
+	}
+	var base *string
+	rt := agentruntime.ForProvider(snapshot.Configuration().Provider)
+	if !rt.Capabilities.TaskFork {
+		// The runtime cannot copy the regular session: the instance starts a new session whose first message carries
+		// the regular conversation as it is now.
+		data, err := s.taskStartHandoff(ctx, inst.AgentID, rt)
+		if err != nil {
+			return nil, err
+		}
+		if data != nil {
+			path, err := s.writeBaseline(inst, data)
+			if err != nil {
+				return nil, err
+			}
+			base = &path
+		}
+	} else if session.State == "active" && session.SessionFile != "" {
+		if s.ForkBaseline == nil {
+			return nil, errors.New("task forks of a session are not configured")
+		}
+		data, err := s.ForkBaseline(ctx, rt.ID, inst.AgentID, session.SessionFile, s.MaxSessionBytes)
+		if err != nil {
+			return nil, err
+		}
+		path, err := s.writeBaseline(inst, data)
+		if err != nil {
+			return nil, err
+		}
+		base = &path
+	} else if capture, err := s.importedCapture(ctx, inst, session, rt); err != nil {
+		return nil, err
+	} else if capture != "" {
+		base = &capture
+	}
+	// From snapshot v9 on: copy the base Agent's whole folder within the same window (at that point its runtime has
+	// stopped and new dispatches are paused), so the folder and the session fork are taken at the same moment.
+	if snapshot.CopiesAgentFolder() {
+		if err := s.copyWorkspace(inst); err != nil {
+			return nil, err
+		}
+	}
+	return base, nil
 }
 
 // importedCapture is the copy taken when the Agent was imported, for a step of a task with a worktree whose Agent has
