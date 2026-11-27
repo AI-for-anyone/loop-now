@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -131,4 +132,19 @@ func TestOldSchemaTaskStillForks(t *testing.T) {
 	if got.ForkSource == nil || calls.Load() != 3 {
 		t.Fatalf("an old task must keep forking: fork=%v calls=%d", got.ForkSource, calls.Load())
 	}
+}
+
+// A step's prompt is at most 32768 bytes: characters that take two bytes count twice.
+func TestStepPromptLimit(t *testing.T) {
+	_, manager, d := taskEnv(t)
+	create := func(prompt string) map[string]any {
+		return map[string]any{"actionId": uuid.New(), "title": "Prompt limit", "request": map[string]any{}, "workflow": map[string]any{"startStepId": "work", "edges": []any{},
+			"steps": []any{map[string]any{"id": "work", "title": "Handle", "description": "Do the work", "agentId": d.Nodes[0].AgentID, "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}, "prompt": prompt}}}}
+	}
+	created := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", create(strings.Repeat("é", 16384))))
+	if s, ok := created.Workflow.Step("work"); !ok || len(s.Prompt) != 32768 {
+		t.Fatal("the prompt is kept with the workflow")
+	}
+	// Within the contract's 32768 characters, but over 32768 bytes: the server refuses it.
+	manager.expectError(422, "validation_failed", "POST", "/tasks", create(strings.Repeat("é", 16385)))
 }
