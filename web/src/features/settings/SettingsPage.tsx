@@ -20,6 +20,7 @@ import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { ContextFolderBody } from '@/features/folders/FolderSections'
 import { AppearanceCard } from '@/features/settings/AppearanceCard'
+import { CliToolRow } from '@/features/settings/CliToolRow'
 import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
 import { RuntimesCard } from '@/features/settings/RuntimesCard'
 import { WritingSettings } from '@/features/writing/WritingSettings'
@@ -257,6 +258,9 @@ export function SettingsPage() {
                     <Link to="/import">{t.importing.entry.open}</Link>
                   </Button>
                 </div>
+              </SheetSection>
+              <SheetSection id="settings-cli" titleId="settings-cli-title" index={4} title={t.settings.cli.title}>
+                <CliToolRow version={version} />
               </SheetSection>
             </PageBody>
           )}
