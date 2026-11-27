@@ -25,6 +25,12 @@ export const folders = {
   actions: (name: string) => `${name} 的更多操作`,
   open: '打开',
   openInFolder: '在文件夹中打开',
+  openInNewTab: '在新标签页打开',
+  replyLinks: {
+    outside: '路径不在文件夹内，不能打开',
+    missing: '文件夹里找不到这个文件，不能打开',
+    unavailable: '这个路径不能在这里打开',
+  },
   rename: '重命名',
   move: '移动到…',
   download: '下载',

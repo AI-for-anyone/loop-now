@@ -97,6 +97,15 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
 const controlClass =
   'border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover disabled:hover:bg-surface-control'
 
+const toolClass = (showLabel: boolean, pill: boolean, active?: boolean, className?: string) =>
+  cn(
+    'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-ticket text-[12px] font-medium whitespace-nowrap text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent [&_svg]:size-3.5 [&_svg]:shrink-0',
+    showLabel ? 'px-2.5' : 'w-7 justify-center',
+    pill && controlClass,
+    active && 'bg-surface-active text-ink',
+    className,
+  )
+
 // Compact 28px buttons for the unified toolbar: icon plus optional text; accessible name is always present.
 export function ToolButton({ icon, label, showLabel = true, onClick, disabled, active, pill = false, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; onClick?: () => void; disabled?: boolean; active?: boolean; pill?: boolean; className?: string } & Omit<ComponentProps<'button'>, 'onClick'>) {
   return (
@@ -106,18 +115,30 @@ export function ToolButton({ icon, label, showLabel = true, onClick, disabled, a
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={cn(
-        'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-ticket text-[12px] font-medium whitespace-nowrap text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent [&_svg]:size-3.5 [&_svg]:shrink-0',
-        showLabel ? 'px-2.5' : 'w-7 justify-center',
-        pill && controlClass,
-        active && 'bg-surface-active text-ink',
-        className,
-      )}
+      className={toolClass(showLabel, pill, active, className)}
       {...rest}
     >
       {icon}
       {showLabel && <span>{label}</span>}
     </button>
+  )
+}
+
+// Compact 28px external link styled like ToolButton for opening a file preview in a new sandboxed tab.
+export function ToolLink({ icon, label, showLabel = true, href, pill = false, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; href: string; pill?: boolean; className?: string } & Omit<ComponentProps<'a'>, 'href'>) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      title={label}
+      className={cn(toolClass(showLabel, pill, false, className), 'no-underline')}
+      {...rest}
+    >
+      {icon}
+      {showLabel && <span>{label}</span>}
+    </a>
   )
 }
 

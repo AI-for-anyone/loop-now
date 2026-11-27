@@ -32,6 +32,8 @@ export interface FolderSource {
   upload: (target: string, item: UploadItem, onProgress: (loaded: number) => void) => Promise<void>
   // URL of the file's content, used for downloads and image previews.
   contentURL: (path: string) => string
+  // Sandboxed URL that opens a file as itself in a new browser tab; only Agent folders have a raw view.
+  rawURL?: (path: string) => string
   // Only an Agent's folder can pull from Git. list returns the recent pulls, newest first.
   git?: {
     start: (input: GitPullInput) => Promise<GitPull>

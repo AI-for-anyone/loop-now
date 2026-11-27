@@ -2,7 +2,7 @@ import { waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from './client'
-import { agentFolderContentURL, folderRoots, folderSource, taskNodeFolderContentURL, useAgentFolderLocation, useTaskNodeFolderLocation } from './folders'
+import { agentFolderContentURL, agentFolderRawURL, checkAgentFolderDirectory, folderRoots, folderSource, taskNodeFolderContentURL, taskNodeFolderRawURL, useAgentFolderLocation, useTaskNodeFolderLocation } from './folders'
 import { apiUrl, errorBody } from '@/test/api'
 import { renderHookWithQuery } from '@/test/render'
 import { server } from '@/test/server'
@@ -104,5 +104,24 @@ describe('folder API', () => {
     expect(folderRoots(undefined)).toEqual([])
     expect(agentFolderContentURL('a1', 'assets/preview.png')).toMatch(/\/agents\/a1\/folder\/content\?path=assets%2Fpreview\.png$/)
     expect(taskNodeFolderContentURL('t1', 'n1', 'assets/preview.svg')).toMatch(/\/tasks\/t1\/nodes\/n1\/folder\/content\?path=assets%2Fpreview\.svg$/)
+    expect(agentFolderRawURL('a1', 'my site/page 1.html')).toMatch(/\/agents\/a1\/folder\/raw\/my%20site\/page%201\.html$/)
+    expect(taskNodeFolderRawURL('t1', 'n1', 'site/pelican.html')).toMatch(/\/tasks\/t1\/nodes\/n1\/folder\/raw\/site\/pelican\.html$/)
+    expect(folderSource({ kind: 'agent', agentId: 'a1' }).rawURL?.('site/index.html')).toMatch(/\/agents\/a1\/folder\/raw\/site\/index\.html$/)
+    expect(folderSource({ kind: 'project', projectId: 'p1' }).rawURL).toBeUndefined()
+    expect(folderSource({ kind: 'global' }).rawURL).toBeUndefined()
+  })
+
+  it('checks whether an Agent folder path is a directory, a non-directory, or missing', async () => {
+    server.use(
+      http.get(apiUrl('/agents/a1/folder/entries'), ({ request }) => {
+        const path = new URL(request.url).searchParams.get('path')
+        if (path === 'assets') return HttpResponse.json({ path: 'assets', entries: [], nextCursor: null })
+        if (path === 'missing') return new HttpResponse(null, { status: 404 })
+        return new HttpResponse(null, { status: 422 })
+      }),
+    )
+    expect(await checkAgentFolderDirectory('a1', 'assets')).toBe('dir')
+    expect(await checkAgentFolderDirectory('a1', 'missing')).toBe('missing')
+    expect(await checkAgentFolderDirectory('a1', 'escape.txt')).toBe('not-dir')
   })
 })

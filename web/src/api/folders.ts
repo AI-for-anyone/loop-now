@@ -15,11 +15,37 @@ const prefixOf = (scope: FolderScope) =>
 const contentURL = (scope: FolderScope, path: string, create?: boolean) =>
   `${config.apiBase}${prefixOf(scope)}/content?${new URLSearchParams({ path, ...(create === undefined ? {} : { create: String(create) }) })}`
 
+// Encode each path segment separately so '/' stays a path separator and relative URLs in HTML resolve beside the file.
+const encodeRawPath = (path: string) => path.split('/').map(encodeURIComponent).join('/')
+
 export const agentFolderContentURL = (agentId: string, path: string) =>
   contentURL({ kind: 'agent', agentId }, path)
 
+export const agentFolderRawURL = (agentId: string, path: string) =>
+  `${config.apiBase}/agents/${encodeURIComponent(agentId)}/folder/raw/${encodeRawPath(path)}`
+
 export const taskNodeFolderContentURL = (taskId: string, nodeRunId: string, path: string) =>
   `${config.apiBase}/tasks/${encodeURIComponent(taskId)}/nodes/${encodeURIComponent(nodeRunId)}/folder/content?${new URLSearchParams({ path })}`
+
+export const taskNodeFolderRawURL = (taskId: string, nodeRunId: string, path: string) =>
+  `${config.apiBase}/tasks/${encodeURIComponent(taskId)}/nodes/${encodeURIComponent(nodeRunId)}/folder/raw/${encodeRawPath(path)}`
+
+// Check whether a folder-relative path is a directory inside an Agent's folder.
+export async function checkAgentFolderDirectory(
+  agentId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<'dir' | 'not-dir' | 'missing'> {
+  const url = `${config.apiBase}/agents/${encodeURIComponent(agentId)}/folder/entries?${new URLSearchParams({ path, limit: '1' })}`
+  try {
+    const response = await fetch(url, { signal })
+    if (response.ok) return 'dir'
+    if (response.status === 404) return 'missing'
+    return 'not-dir'
+  } catch {
+    return 'not-dir'
+  }
+}
 
 // Both forms the Agent or its CLI may write: the path from the system prompt, and its symlink-resolved realPath.
 export const folderRoots = (location: Schemas['FolderLocation'] | undefined): string[] =>
@@ -106,6 +132,7 @@ export function folderSource(scope: FolderScope): FolderSource {
     contentURL: (path) => contentURL(scope, path),
     ...(scope.kind === 'agent'
       ? {
+          rawURL: (path: string) => agentFolderRawURL(scope.agentId, path),
           git: {
             start: (input) => call(api.POST('/agents/{agentId}/folder/git-pulls', { params: { path: { agentId: scope.agentId } }, body: { actionId: crypto.randomUUID(), ...input } })),
             list: async () => (await call(api.GET('/agents/{agentId}/folder/git-pulls', { params: { path: { agentId: scope.agentId }, query: { limit: 20 } } }))).pulls,

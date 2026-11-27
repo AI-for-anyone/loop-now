@@ -246,4 +246,44 @@ describe('File manager', () => {
     await waitFor(() => expect(within(location).getByText('mascot').closest('[aria-current="page"]')).not.toBeNull())
     expect(await screen.findByRole('button', { name: 'concept.svg' })).toBeInTheDocument()
   })
+
+  it('offers an open-in-new-tab raw view link for readable Agent files, and omits it for oversized files, escaping symlinks, and shared folders', async () => {
+    const source = createMockFolder({ key: 'agent-1', preset: 'workspace', latency: 0 })
+    await source.write('site/pelican.html', '<h1>Hi</h1>', true)
+    const list = source.list.bind(source), read = source.read.bind(source)
+    const outside = { name: 'outside.html', path: 'outside.html', type: 'symlink' as const, size: null, modifiedAt: '2026-10-25T08:00:00Z', symlinkTarget: '/etc/hosts' }
+    vi.spyOn(source, 'list').mockImplementation(async (path, cursor) => { const page = await list(path, cursor); return path === '' ? { ...page, entries: [...page.entries, outside] } : page })
+    vi.spyOn(source, 'read').mockImplementation((path) => (path === 'outside.html' ? Promise.reject(new ApiError({ status: 422, code: 'validation_failed' })) : read(path)))
+
+    const { user, unmount } = setup('workspace', { source })
+    await user.click(await findRow('site'))
+    await user.click(await findRow('site/pelican.html'))
+    const rawLink = await screen.findByRole('link', { name: 'Open in new tab' })
+    expect(rawLink).toHaveAttribute('href', source.rawURL!('site/pelican.html'))
+    expect(rawLink).toHaveAttribute('target', '_blank')
+    expect(rawLink).toHaveAttribute('rel', 'noopener noreferrer')
+
+    // In-folder symlink that resolves cleanly also gets the open-in-new-tab link.
+    await user.click(await findRow('current-notes.md'))
+    await screen.findByText('The budget ledger write order is done; the tests still need a run.')
+    expect(screen.getByRole('link', { name: 'Open in new tab' })).toHaveAttribute('href', source.rawURL!('current-notes.md'))
+
+    // Oversized file and symlink pointing outside do not offer the raw view link.
+    await user.click(await findRow('logs'))
+    await user.click(await findRow('logs/server.log'))
+    await screen.findByText('File is over 1.0 MiB; it can\'t be previewed or edited online.')
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull()
+
+    await user.click(await findRow('outside.html'))
+    await screen.findByText('This symlink points outside the folder and can\'t be opened.')
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull()
+    unmount()
+
+    // Shared folders have no raw view endpoint, so no open-in-new-tab action is shown.
+    const sharedSource = createMockFolder({ key: 'shared', preset: 'global', latency: 0 })
+    const sharedSetup = setup('project', { source: sharedSource })
+    await sharedSetup.user.click(await findRow('AGENTS.md'))
+    await screen.findByText('Every Agent reads this.')
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull()
+  })
 })
