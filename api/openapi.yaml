@@ -2748,6 +2748,58 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /agents/{agentId}/folder/raw/{path}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/FolderRawPath"
+    get:
+      tags: [folders]
+      operationId: getAgentFolderRawFile
+      x-access: console
+      summary: Open a file of an Agent folder in a browser tab, sandboxed
+      description: |
+        Serves one file as itself, for a browser tab: the bytes with a content type from the file extension (text types
+        in UTF-8; an unknown extension is `text/plain` when the file starts as UTF-8 text, otherwise
+        `application/octet-stream`). The file path is part of the URL path, one URL segment per folder level, each
+        segment percent-encoded, so relative URLs inside an HTML file (its CSS, scripts, images, other pages) resolve to
+        files beside it in the same folder. The same path rules as the other folder endpoints apply (inside the folder
+        only, no `..`, no way out through a symlink); a directory answers 422, a file larger than
+        `Context.limits.textEdit.maxBytes` 413. Supports Range and conditional requests.
+
+        The file may have been written by an Agent, so it must never act as the console. Every response of this
+        endpoint, errors included, carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups
+        allow-modals allow-downloads` (without `allow-same-origin` the page runs as an opaque origin: it cannot read the
+        console's storage, and its requests to this API carry `Origin: null`, which every route refuses),
+        `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. Requests with an `Origin` header that is not
+        the console's are refused here too, so module scripts, `fetch` and web fonts of such a page do not load; classic
+        scripts, style sheets, images, media and links to other files do.
+      responses:
+        "200":
+          description: The file
+          headers: &rawHeaders
+            Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }
+            Loop-Now-Version: { $ref: "#/components/headers/Version" }
+            Content-Security-Policy: { $ref: "#/components/headers/RawFileSandbox" }
+            X-Content-Type-Options: { $ref: "#/components/headers/RawFileNoSniff" }
+            Referrer-Policy: { $ref: "#/components/headers/RawFileNoReferrer" }
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range
+          headers: *rawHeaders
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified since the time the client sent
+          headers: *rawHeaders
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /agents/{agentId}/folder/directories:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -6514,6 +6566,62 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /tasks/{taskId}/nodes/{nodeRunId}/folder/raw/{path}:
+    parameters:
+      - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: nodeRunId, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: "#/components/parameters/FolderRawPath"
+    get:
+      tags: [folders]
+      operationId: getTaskNodeFolderRawFile
+      x-access: console
+      summary: Open a file of the folder of a node's task instance in a browser tab, sandboxed
+      description: |
+        Serves one file as itself, for a browser tab: the bytes with a content type from the file extension (text types
+        in UTF-8; an unknown extension is `text/plain` when the file starts as UTF-8 text, otherwise
+        `application/octet-stream`). The file path is part of the URL path, one URL segment per folder level, each
+        segment percent-encoded, so relative URLs inside an HTML file (its CSS, scripts, images, other pages) resolve to
+        files beside it in the same folder. The same path rules as the other folder endpoints apply (inside the folder
+        only, no `..`, no way out through a symlink); a directory answers 422, a file larger than
+        `Context.limits.textEdit.maxBytes` 413. Supports Range and conditional requests.
+
+        The file may have been written by an Agent, so it must never act as the console. Every response of this
+        endpoint, errors included, carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups
+        allow-modals allow-downloads` (without `allow-same-origin` the page runs as an opaque origin: it cannot read the
+        console's storage, and its requests to this API carry `Origin: null`, which every route refuses),
+        `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. Requests with an `Origin` header that is not
+        the console's are refused here too, so module scripts, `fetch` and web fonts of such a page do not load; classic
+        scripts, style sheets, images, media and links to other files do.
+
+        Read only. 404 when the file or the folder does not exist, for example after the task ended and its folder was
+        reclaimed.
+      responses:
+        "200":
+          description: The file
+          headers: &taskRawHeaders
+            Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }
+            Loop-Now-Version: { $ref: "#/components/headers/Version" }
+            Content-Security-Policy: { $ref: "#/components/headers/RawFileSandbox" }
+            X-Content-Type-Options: { $ref: "#/components/headers/RawFileNoSniff" }
+            Referrer-Policy: { $ref: "#/components/headers/RawFileNoReferrer" }
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range
+          headers: *taskRawHeaders
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified since the time the client sent
+          headers: *taskRawHeaders
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
   /tasks/{taskId}/retry:
     post:
@@ -10557,6 +10665,18 @@ components:
       description: Server version (from the version package shared with loopctl), which loopctl compares against its own; for cross-origin access it is listed in `Access-Control-Expose-Headers` together with `Loop-Now-Request-Id` and `ETag`
       required: true
       schema: { type: string, minLength: 1 }
+    RawFileSandbox:
+      description: Runs the file as a sandboxed page with an opaque origin, never as the console
+      required: true
+      schema: { type: string, enum: ["sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads"] }
+    RawFileNoSniff:
+      description: The browser uses the declared content type and never guesses another one from the bytes
+      required: true
+      schema: { type: string, enum: [nosniff] }
+    RawFileNoReferrer:
+      description: Links and requests from the page do not tell other sites the address of the file
+      required: true
+      schema: { type: string, enum: [no-referrer] }
 
   parameters:
     AgentId:
@@ -10620,6 +10740,14 @@ components:
       in: query
       required: true
       description: Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/`
+      schema: { type: string, minLength: 1 }
+    FolderRawPath:
+      name: path
+      in: path
+      required: true
+      description: |
+        Relative path within the folder, such as `site/index.html`. It may span several URL segments (one per folder
+        level, each percent-encoded); it must not be empty, contain `..` or start with `/`.
       schema: { type: string, minLength: 1 }
     SkillId:
       name: skillId

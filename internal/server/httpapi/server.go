@@ -233,6 +233,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/messages", "listTaskNodeMessages", ConsoleOnly, s.listTaskNodeMessages},
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/folder", "getTaskNodeFolder", ConsoleOnly, s.folderLocation(s.taskNodeFolder)},
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/folder/content", "getTaskNodeFolderFileContent", ConsoleOnly, s.downloadFolderFile(s.taskNodeFolder)},
+		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/folder/raw/{path...}", "getTaskNodeFolderRawFile", ConsoleOnly, s.rawFolderFile(s.taskNodeFolder)},
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/message-capability", "getTaskNodeMessageCapability", ConsoleOnly, s.getTaskNodeMessageCapability},
 		{"POST", "/tasks/{taskId}/nodes/{nodeRunId}/messages", "sendTaskNodeMessage", ConsoleOnly, s.sendTaskNodeMessage},
 		{"POST", "/tasks/{taskId}/nodes/{nodeRunId}/inbox-messages", "sendTaskNodeInboxMessage", ConsoleOnly, s.sendTaskNodeInboxMessage},
@@ -284,6 +285,7 @@ func (s *Server) Routes() []Route {
 		{"DELETE", "/agents/{agentId}/folder/entries", "deleteAgentFolderEntry", ConsoleOnly, s.deleteFolderEntry(s.agentFolder)},
 		{"GET", "/agents/{agentId}/folder/content", "getAgentFolderFileContent", ConsoleOnly, s.downloadFolderFile(s.agentFolder)},
 		{"PUT", "/agents/{agentId}/folder/content", "putAgentFolderFileContent", ConsoleOnly, s.putFolderFile(s.agentFolder)},
+		{"GET", "/agents/{agentId}/folder/raw/{path...}", "getAgentFolderRawFile", ConsoleOnly, s.rawFolderFile(s.agentFolder)},
 		{"POST", "/agents/{agentId}/folder/directories", "createAgentFolderDirectory", ConsoleOnly, s.mkdirFolder(s.agentFolder)},
 		{"POST", "/agents/{agentId}/folder/move", "moveAgentFolderEntry", ConsoleOnly, s.moveFolderEntry(s.agentFolder)},
 		{"GET", "/agents/{agentId}/folder/git-pulls", "listAgentFolderGitPulls", ConsoleOnly, s.listGitPulls},
@@ -405,7 +407,7 @@ func (s *Server) AgentRoutes() []Route {
 // every other path goes to the console's static files.
 func (s *Server) Handler() http.Handler {
 	root := http.NewServeMux()
-	root.Handle("/api/v1/", s.cors(s.consoleAuth(s.newMux("/api/v1", s.Routes()))))
+	root.Handle("/api/v1/", rawHeaders(s.cors(s.consoleAuth(s.newMux("/api/v1", s.Routes())))))
 	ingress := s.cors(s.consoleAuth(s.pluginIngress("console")))
 	root.Handle("/api/v1/plugins/{pluginId}/http", ingress)
 	root.Handle("/api/v1/plugins/{pluginId}/http/{path...}", ingress)
@@ -456,7 +458,9 @@ func (s *Server) checkHost(next http.Handler) http.Handler {
 }
 
 // cors sends CORS headers only for allowlisted origins; a request with an Origin not on the allowlist is always
-// rejected, and no write is performed. Same-origin requests (the console served by the server itself) need no
+// rejected, and no write is performed. This holds for reads too: a page from an Agent folder (the raw file endpoints) runs
+// sandboxed as an opaque origin and its requests carry "Origin: null", which is never same-origin and can never be on the
+// allowlist (the configuration accepts only http(s) origins), so it cannot act as the console. Same-origin requests (the console served by the server itself) need no
 // allowlist: browsers also send Origin on same-origin write requests, and it equals this request's scheme://Host, while
 // Host has already passed the checkHost allowlist.
 func (s *Server) cors(next http.Handler) http.Handler {
