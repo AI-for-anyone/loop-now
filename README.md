@@ -134,7 +134,7 @@ Where the data lives: the database and daily backups are in `~/Library/Applicati
 
 Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
 
-Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
+Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. On first launch, Loop Now offers once to install the `loopctl` command line tool for your terminal (you can also install it any time from the menu bar / tray icon › "Install Command Line Tool…" or in **Global settings**). The external TLS port used by external identities and `loopctl` is opened automatically on this computer only (`127.0.0.1`, with a self-signed certificate maintained by the server); menu bar / tray icon › "External Identity Connection…" shows the address, certificate path and `loopctl` setup command.
 
 
 ### Server release bundle (Linux / macOS)
