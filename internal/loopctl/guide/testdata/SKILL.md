@@ -296,6 +296,8 @@ You can read and write two layers of context: your own folder (which is your wor
 
 To show a picture in a reply, write it as a Markdown image of a file in your own folder, with the path relative to your folder or absolute, for example `![Preview](assets/preview.png)`; the console shows png, jpg, gif, webp and svg files as pictures. Files outside your folder are not shown.
 
+To give the person another file you made (an HTML page, a report, a data file), link it by its path in your folder, relative or absolute, for example `[Open the page](site/index.html)`. A click opens it in a new browser tab: an HTML page is shown as a page (its scripts run, and its CSS, images and other pages load by relative paths beside it), other files as themselves. The page runs sandboxed: it cannot use the console or Loop Now's API, and it cannot load files with `fetch`, module scripts or web fonts, so put what it needs in plain `<script src>`, `<link>` and `<img>`. Paths outside your folder are not links.
+
 When to write (your own judgment):
 - a person corrected you or gave you a lasting requirement;
 - you made a decision that constrains later work;
