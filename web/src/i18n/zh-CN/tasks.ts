@@ -27,6 +27,7 @@ export const tasks = {
   },
   task: '任务', state: '状态', currentNode: '当前节点', responsible: '责任 Agent', none: '—', more: '加载更多',
   wrongProject: '这个任务不属于当前项目。', missing: '找不到这个任务。', workflow: '固定流程',
+  stepPrompt: '节点 Prompt', withConversation: '带聊天记录', withConversationHint: '从该 Agent 常规对话的副本开始，而不是从干净对话开始。',
   targetChanged: '发送目标与当前能力不一致，草稿保留，请核对原节点。', receiptMismatch: '发送回执目标不一致，草稿保留，请核对原执行记录。', sendUnknown: '上次发送结果未知，草稿保留。重试只核对原消息，不自动改投或发送新草稿。', sendAccepted: '上次消息已接收并进入队列。', sending: '正在发送…', retryOriginalMessage: '重试确认原消息', targetDetails: '目标详情', instance: '任务实例', conversationTab: '对话', materials: '节点资料', execution: '执行分界', incomplete: '本次执行还有消息未加载。', newMessages: '有新消息', details: '展开详情', draft: '消息草稿', draftPlaceholder: (name: string) => `给 ${name} 发消息`, draftTarget: '任务内发送目标', draftChanged: '原执行状态已变化，草稿保留在原节点；另发请手动复制。', copyDraft: '复制草稿', nodeMessagesUnsupported: '当前服务尚未启用节点消息',
   record: '节点记录', selectRecord: '访问与重试记录', selectNode: '选择一个节点查看记录', noRecord: '这个节点尚未被访问。', invalidRecord: '找不到指定记录，请重新选择节点。',
   visit: (visit: number, attempt: number) => `第 ${visit} 次访问 · 第 ${attempt} 次尝试`,
