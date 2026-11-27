@@ -30,7 +30,7 @@ type Reload = () => Promise<Listing | undefined>
 // Same as maxItems in the contract.
 const MAX_DIRECTORIES = 50
 const copy = t.localMode.directories
-const linkClass = 'font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2'
+const linkClass = 'font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700'
 
 const toInput = (entry: Directory): DirectoryInput => ({ path: entry.path, note: entry.note })
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 412
@@ -106,7 +106,7 @@ export function AgentLocalDirectoriesSection({ agent }: { agent: Schemas['Agent'
         {(data) => (
           <>
             {project && data.projectId === project.id && <InheritedDirectories projectName={project.name} entries={data.inherited} compact />}
-            {project && <h3 className="text-[13.5px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{copy.own}</h3>}
+            {project && <h3 className="text-[13.5px] font-semibold text-ink-700">{copy.own}</h3>}
             <DirectoryEditor
               listing={data}
               save={put.mutateAsync}
@@ -127,7 +127,7 @@ function CompactCautions() {
   return (
     <div
       role="note"
-      className="flex items-start gap-2 rounded-input border border-hairline bg-tint-yellow/60 px-3 py-2 text-[12.5px] leading-snug text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow"
+      className="flex items-start gap-2 rounded-input border border-hairline bg-tint-yellow/60 px-3 py-2 text-[12.5px] leading-snug text-ink-700"
     >
       <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-pink-text" />
       <p className="min-w-0">
@@ -194,9 +194,9 @@ function InheritedDirectories({ projectName, entries, compact = false }: { proje
   const title = copy.inherited.title(projectName)
   if (compact) {
     return (
-      <div role="region" aria-label={title} className="grid min-w-0 gap-2 rounded-card border border-hairline bg-surface-subtle px-3.5 py-2.5 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+      <div role="region" aria-label={title} className="grid min-w-0 gap-2 rounded-card border border-hairline bg-surface-subtle px-3.5 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{title}</h3>
+          <h3 className="text-[13px] font-semibold [overflow-wrap:anywhere]">{title}</h3>
           <Link to={projectSettingsPath({ name: projectName }, 'context')} className={`text-[12.5px] ${linkClass}`}>
             {copy.inherited.edit}
           </Link>
@@ -206,8 +206,8 @@ function InheritedDirectories({ projectName, entries, compact = false }: { proje
     )
   }
   return (
-    <div role="region" aria-label={title} className="grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-      <h3 className="text-[15px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{title}</h3>
+    <div role="region" aria-label={title} className="grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-4">
+      <h3 className="text-[15px] font-semibold [overflow-wrap:anywhere]">{title}</h3>
       <p className="-mt-1 text-[12.5px] text-ink-700">{copy.inherited.hint}</p>
       {entries.length > 0 ? <DirectoryRows label={title} entries={entries} /> : <p className="text-[13.5px] text-ink-500">{copy.inherited.empty}</p>}
       <Link to={projectSettingsPath({ name: projectName }, 'context')} className={`justify-self-start text-[13.5px] ${linkClass}`}>
@@ -223,7 +223,7 @@ function DirectoryRows({ label, entries, actions, compact = false }: { label: st
       aria-label={label}
       className={
         compact
-          ? 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+          ? 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control'
           : 'grid gap-2'
       }
     >
@@ -244,11 +244,11 @@ function DirectoryRow({ entry, actions, compact = false }: { entry: Directory; a
       className={
         compact
           ? 'flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2'
-          : 'flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card border border-hairline bg-surface-control px-4 py-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+          : 'flex flex-wrap items-start gap-x-3 gap-y-2 rounded-card border border-hairline bg-surface-control px-4 py-3'
       }
     >
       <div className="grid min-w-0 flex-[1_1_240px] gap-0.5">
-        <span className="font-mono text-[13px] font-semibold break-all [[data-skin=plate]_&]:font-bold">{entry.path}</span>
+        <span className="font-mono text-[13px] font-semibold break-all">{entry.path}</span>
         {entry.note && <span className="text-[12.5px] text-ink-700 [overflow-wrap:anywhere]">{entry.note}</span>}
         {problem && (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-700">

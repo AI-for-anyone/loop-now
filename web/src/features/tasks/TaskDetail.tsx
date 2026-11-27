@@ -16,6 +16,7 @@ import { narrowQuery, useMediaQuery } from '@/lib/use-media-query'
 import { NodeRecordPanel, type NodeDraft, type NodePanelTab } from './NodeRecordPanel'
 import { TaskActions } from './TaskActions'
 import { TaskBadge } from './TaskBadge'
+import { TaskWorkspace } from './TaskWorkspace'
 import { useTaskLive } from './useTaskLive'
 import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
 
@@ -119,7 +120,7 @@ export function TaskDetail() {
           <span
             aria-hidden="true"
             data-task-number
-            className="shrink-0 font-mono text-[15px] leading-none font-semibold tracking-tight text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[34px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:tracking-[-0.02em] [[data-skin=plate]_&]:text-transparent [[data-skin=plate]_&]:[-webkit-text-stroke:1.6px_var(--riso-blue)] [[data-skin=plate]_&]:nav:text-[40px] [[data-skin=plate]_&]:nav:[-webkit-text-stroke:1.8px_var(--riso-blue)]"
+            className="shrink-0 font-mono text-[15px] leading-none font-semibold tracking-tight text-ink-500 tabular-nums"
           >
             {t.tasks.numberLabel(detail.task.number)}
           </span>
@@ -135,7 +136,7 @@ export function TaskDetail() {
         <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
         <span
           title={metaTooltip}
-          className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[11.5px] leading-4 font-medium text-ink-500 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-tab [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700"
+          className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[11.5px] leading-4 font-medium text-ink-500"
         >
           {t.tasks.cleanup[detail.cleanup]}
         </span>
@@ -143,11 +144,14 @@ export function TaskDetail() {
           {t.tasks.updatedAt(detail.task.updatedAt)}
         </time>
       </PageHeader>
-      <ErrorAlert error={task.error} />
+      <div className="flex shrink-0 flex-col px-4 pt-2.5 sm:px-6 empty:hidden">
+        <ErrorAlert error={task.error} />
+        <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} />
+      </div>
       {activeSleep?.wakeAt && (
         <div
           data-task-sleep
-          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline bg-surface-subtle/60 px-4 py-2 text-[12px] sm:px-6 [[data-skin=plate]_&]:mb-2 [[data-skin=plate]_&]:rounded-card [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue"
+          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline bg-surface-subtle/60 px-4 py-2 text-[12px] sm:px-6"
         >
           <SleepUntil compact at={activeSleep.wakeAt} reason={activeSleep.reason} />
         </div>
@@ -223,7 +227,7 @@ export function TaskDetail() {
 // Right-pane empty state when the selected step has not been visited yet or the requested record does not exist.
 function EmptyPane({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-center p-8 text-center text-[14.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[26px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
+    <div className="flex min-w-0 flex-1 items-center justify-center p-8 text-center text-[14.5px] font-medium text-ink-500">
       {children}
     </div>
   )

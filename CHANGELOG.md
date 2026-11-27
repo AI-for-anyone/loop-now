@@ -2,11 +2,141 @@
 
 中文：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)
 
-User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
+User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
+
+## v0.3.4
+
+Pictures show up in replies: a picture an Agent puts in its reply, or names by its path, is a thumbnail you can open. The console wastes less room: page bodies use the whole window, the Agent page header is one thin bar, the sidebar can be dragged wider and keeps each Agent on one line, the task list takes one line per task, and every runtime mark is one color in one frame. The run record says what each tool did, files up to 20 MiB can be previewed, and a task step waits for all of its CLI's background work. No database migrations this time.
+
+### Quitting Loop Now waits for an Agent's CLI that is still being wound down (#112)
+
+- When an Agent's CLI process had just exited by itself, or was ending because its reply was stopped, quitting the server could finish while Loop Now was still writing that process's last records into the Agent's folder. Quitting now waits for that, within its usual time limit.
+
+### A change's notes live in its pull request description (#111)
+
+- A pull request no longer edits CHANGELOG.md, CHANGELOG.zh-CN.md or MAIN.md's change list, and adds no `changes/` file: what it changed goes into its description, under `## English` and `## 中文` (see `.github/pull_request_template.md`; `None` / `无` when nobody using Loop Now can see the change). Pull requests waiting together in the merge queue no longer conflict over shared notes.
+- When a release is cut, `scripts/release/collect-pr-notes.sh <version>` on the release branch reads the descriptions of the pull requests merged since the last release with `gh` and writes the version's section of both CHANGELOG files, newest first, each title followed by its pull request number. It checks every description before writing, lists pull requests without notes, and running it twice adds nothing twice. A pull request merged into main while a release is being prepared goes into the next release. `scripts/release/notes.sh Unreleased` previews the result.
+- CI fails a pull request that changes a CHANGELOG file, adds a file under `changes/` or adds an entry to MAIN.md's change list (release branches excepted).
+- The loopctl guide tells a step in a task with a git workspace to put the notes in the pull request description when the repository asks for that.
+
+### Pictures an Agent names by path show in its reply
+
+- When an Agent's reply names a picture in its own folder (png, jpg, gif, webp, svg), the picture is shown as a thumbnail: a Markdown image with a relative, absolute or `file://` path, and an absolute path written in code or as plain text (the text stays; the thumbnails follow the paragraph or list item, several in one row). A click opens it large; in a regular conversation the path is a link that opens the file in the Agent's Folder tab.
+- This works in task node conversations too, for the task's copy of the Agent's folder, while the task runs; after the task ends and its copy is reclaimed, only the text (or the image's alt text) is shown.
+- Only files inside the Agent's own folder are shown, read through the folder's content endpoint with the same checks as the Folder tab; a path outside it, a missing file or one above the preview limit stays plain text. SVG is shown as a picture and never run: a script inside it does nothing.
+- The Folder tab can open a given file (`?path=`) and previews SVG files.
+- The loopctl guide tells Agents to show a picture by writing a Markdown image of a file in their own folder.
+- API: `GET /agents/{agentId}/folder` and `GET /tasks/{taskId}/nodes/{nodeRunId}/folder` (`FolderLocation`: `path`, `realPath`), `GET /tasks/{taskId}/nodes/{nodeRunId}/folder/content`.
+
+### A message sent as Claude Code starts a turn of its own gets its own reply
+
+- A message sent at the very moment Claude Code begins a turn by itself (after background work ended) could get that turn's text as its reply, and the turn was recorded empty. The message now waits for that turn and gets its own reply.
+
+### Sidebar Agent rows stay on one line
+
+- An Agent row in the sidebar is always one line: a long name ends with an ellipsis (the full name is in the tooltip) instead of pushing the runtime mark and the status onto a second line.
+- The status is a small symbol instead of a word: a pulsing pink dot while replying, a yellow pill with a shell glyph and the count while background work runs, a moon while sleeping, a flag for the project's Manager. The words are in the tooltip and for screen readers; without motion the dot does not pulse.
+- The other sidebar rows (projects, groups, the project switcher, the connection line) stay on one line too, with tooltips for cut text.
+
+### The page body uses the whole window
+
+- The body of every console page (an Agent's four tabs, a task, the task list, overview, settings, stats, plugins, Skills, identities, import) no longer sits on an inset sheet with a thick border, rounded corners and a drop shadow: it meets the header, the sidebar and the window edges, with a thin ink line under the header and between the sidebar and the page.
+- A conversation uses the width up to the turn ruler (24 px gutters, up to 1600 px); tables and code blocks use all of it, and the message box lines up with the messages. On a 1920 px window the space left of the ruler went from about 360 px to about 37 px. The turn ruler is 40 px wide, and there is less space above the first message and above the message box.
+- Task node conversations get the same width; phones keep their layout with 14 px gutters.
+
+### The run record says what each tool did
+
+- A tool in a reply's run record now shows what it did, on the line under its name: the command a shell tool ran on every runtime (Claude Code Bash, Codex shell, Antigravity and local ACP commands, Pi bash), the file a read, write or edit tool worked on (relative to the working folder when inside it), and the pattern or query of a search tool. Before, only Pi's commands were shown and every other tool showed just its name. Long text is one line with "…"; a click shows it all.
+- Commands and searches that contain credentials stay hidden. No file contents and no other arguments are recorded.
+- Commands Claude Code and Pi ran before this version show up too; Codex's and Antigravity's older commands were not recorded, so their rows stay as they were.
+- API: `TimelineTool.command` is no longer limited to bash, and `TimelineTool.target` is new.
+
+### Runtime marks: one color, one frame
+
+- Every runtime's mark is now the same object: a rounded square in the console's ink with the product's shape inside in paper color (Claude's burst, OpenAI's knot, Grok's mark, Antigravity's arch, Pi's pixel mark). A local ACP command you added shows its initial in the same frame. v0.3.3 showed each product's full-color logo on a light tile, which did not fit the console.
+- The same mark is used in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands, at every size.
+
+### The Agent page header is one thin bar
+
+- The top of an Agent page (breadcrumb, large title, runtime and model tags, address box and the four folder tabs, about 200 px) is now one bar of 48 px shared by Chat, Config, Folder and Inbox, as in ChatGPT: the runtime mark, the Agent's name, the Manager chip and the status on the left, the four tabs as small text tabs, and a "⋯" menu on the right. The conversation starts right under it.
+- The "⋯" menu holds the Agent's address (with Copy), the runtime and model in words, and the way back to the project. The breadcrumb, the separate runtime badge and the model tag are gone from the header: the sidebar shows where you are, and the message box shows the runtime, model and level.
+- On a phone the bar takes two short lines (name and status; tabs below, scrolling sideways). A sleeping Agent's wake time shows in a thin strip at the top of the page.
+
+### A compact task list that names the step
+
+- The task list shows each task on one line: number, title, then its branch or "Folder copy" on the same line, state, current step, responsible Agent and time. A long title ends in an ellipsis with the whole title in its tooltip; the title keeps its room first, and the branch or the label gives way. On a phone each task takes two short lines.
+- "Current node" shows the step's title as the Manager wrote it ("检查结果", "Second pass") instead of its id; the id is in the tooltip. The task page shows step ids only in tooltips too.
+- The responsible Agent column is wider, so names such as loop-now-main are no longer cut.
+- API: `TaskSummary.currentStepTitle`.
+
+### Files up to 20 MiB can be previewed
+
+- The folder pages (an Agent's folder, the project and global context folders) preview and edit files up to 20 MiB instead of 1 MiB, images included: a 3.5 MiB or 15 MiB picture is shown, a 5 MiB text file opens and can be edited and saved. A larger file shows the notice and Download as before, with the limit in the text.
+- `LOOP_NOW_TEXT_EDIT_MAX` still changes the limit; it is now checked against `LOOP_NOW_MAX_FOLDER_UPLOAD` (1 GiB by default, the limit for one file written to these folders) instead of `LOOP_NOW_MAX_UPLOAD_FILE`, so a server that sets `LOOP_NOW_MAX_FOLDER_UPLOAD` below 20 MiB must also set `LOOP_NOW_TEXT_EDIT_MAX`.
+- A Markdown file that is one very long list (thousands of items) can take a long time to preview at these sizes.
+
+### The sidebar's width can be dragged
+
+- Drag the right edge of the sidebar to make it wider or narrower: from 200 to 420 pixels, and never more than 40% of the window. The width is remembered in this browser (and in the desktop app) and comes back after a reload; a narrower window shrinks the sidebar for the moment and gives the remembered width back when it widens again. Double-click the edge for the default width (248). With the keyboard, focus the edge and use the arrow keys (16 pixels a step), Home and End.
+- At every width long Agent, project and menu names end in an ellipsis, and the marks, badges and the "+" button stay whole. On a phone the sidebar is still the drawer, without a handle.
+
+### A task step waits for all of its CLI's background work
+
+- A task step no longer ends, and blocks the task with "ended without submitting a result", while its CLI is still working. Antigravity: a command agy starts in a reply of its own, after an earlier command ended, is now background work of the step like the first one; the step waits for it and for agy's reply about it. For a regular Agent such a command now shows in the "Background N" mark and its end brings a follow-up reply. Claude Code: when a background task starts and ends inside Claude Code's own reply (a watcher that fails at once), the step now waits for the reply Claude Code gives about it afterwards.
+
+### The heading above a CLI's own follow-up is one short line
+
+- When a CLI replies by itself after background work ended, the line above that reply no longer prints the whole command (a long shell command used to fill several lines). It reads "After background work ended, Claude Code went on:" followed by the same small chips a reply shows for its tools ("Bash Finished in the background", "Bash Failed in the background"), and the time. A click on a chip shows the command, how long it ran or how it ended, and its last output.
+- When several tasks ended, two chips are shown and "+N" opens the rest.
+
+### Pictures in a reply are thumbnails you can open
+
+- A picture an Agent puts in its reply with Markdown (`![…](url)`) is a thumbnail now, at most 240 px high and 360 px wide, instead of filling the whole column. A click (or Enter) opens it large, with a link to the original in a new tab; Escape or a click outside closes it.
+- Pictures that follow each other sit side by side in a row: four 1:1 pictures fit on one line on a wide screen, two on a phone. A short caption above each picture (up to three lines, for example "2D-1: …" and a "local file" line) stays with its picture in the row; a heading or a rule starts a new row.
+- A picture after a line of text starts on its own line under it, not next to the text. A picture that cannot be loaded shows its description in a small box instead of an empty frame.
+- Pictures in a plugin's README still show their description only.
+
+## v0.3.3
+
+Tasks can work on a folder of yours: a folder in a git repository gets its own worktree and branch, and any other folder is copied and only read, so several tasks can run on one project at once and leave nothing behind. A reply cut off by a quit or crash is remembered, the bar under the message box shows background work, each runtime shows its own logo, and loopctl can set an Agent's folder, configuration, permission mode and levels.
+
+### A reply cut off in the middle is remembered
+
+- When Loop Now quits, crashes or is stopped while an Agent is replying, the Agent now remembers that reply the next time: what it had done, which commands it ran, and where it stopped. Before, the conversation was saved only when a reply ended, so a reply that never ended was lost; for an Agent's very first reply (an imported Agent's included) the whole conversation started over, and an imported Agent went back to the moment of import.
+- Loop Now now notes the conversation as soon as the CLI has saved it, while the reply runs, and once more before it stops the CLI. This applies to Claude Code, Codex, Grok, Antigravity, local ACP commands and Pi.
+
+### Background tasks live in the message box bar
+
+- While a CLI's background work runs, the bar under the message box shows a shell mark with the count, right after the runner chip (as Claude Code's status line does). A click opens the list: what runs, which reply started it, for how long, Stop and Stop all. The mark is gone when nothing runs. A task step's message box has the same mark for that step's work.
+- The Agent header no longer shows a background mark; the sidebar, the overview and the project's Agent list keep theirs.
+- In a reply, a tool that went on in the background is a small chip like the other tools: "Bash Running in the background" with a spinner, then how it ended (finished, failed, stopped, outcome unknown). A click shows the command, how long it has run or how it ended, and its last output. The large card with a live clock is gone.
+
+### loopctl sets an Agent's folder, configuration, mode and levels
+
+- `loopctl agent create` and `agent update` take `--working-dir`, `--use-local-config true|false`, `--permission-mode supervised|accept_edits|auto|full`, `--thinking-level` and `--service-tier`, so an Agent can be set up completely from the command line instead of on its config page. `agent update` sends only what is given and can go back to the defaults with `--clear-working-dir`, `--clear-thinking-level` and `--clear-service-tier`.
+- Values with a fixed list are checked by loopctl before anything is sent; the rest (an absolute folder, a level the model supports, a service tier only for Codex models in Pi, no working folder on Pi) is checked by the server, whose message is shown as it is.
+
+### Each runtime shows its own logo
+
+- Claude Code, Codex, Grok, Antigravity and the bundled Pi are shown with their products' own marks (Claude, OpenAI, Grok, Google Antigravity, Pi's pixel mark) in their own colors, instead of the drawn marks: in "who runs it", the message box, the handoff row, the sidebar, the Agent header, Write with AI and the ACP commands. A local ACP command you added keeps a neutral mark with its initial.
+
+### Tasks with a workspace: a git worktree, or a copy of any folder
+
+- A task can carry a workspace: the Manager names a folder on this computer when it creates the task, and every step of the task works there instead of in a copy of the Agent's own folder. A step works like the Agent's regular conversation: with "Use my CLI configuration" on, it has your settings, skills, plugins, MCP servers and logins, and on Claude Code the same memory. Every runtime can take part, the bundled Pi included. Several tasks can run on the same folder at once without touching each other or the folder itself.
+- A folder inside a git repository gets a git worktree on one new branch: from the remote's default branch, fetched fresh, named `task/<number>-<title>` unless the Manager names the branch. The Agents commit, push and open the pull request themselves. When the task ends or is cancelled, the worktree is removed if nothing would be lost (no uncommitted changes, every commit merged or pushed); the local branch is deleted only when it is merged.
+- Any other folder, which needs no version control at all, is copied for the task (instantly on macOS) and only read: the original is never changed and nothing is put back. Results are saved as the task's artifacts, and the copy is deleted when the task completes. Links that point outside the folder are not in the copy. The Manager can also ask for a copy of a repository it only needs to read.
+- Git is used only when a working one is on this computer. Without one (on macOS: without the developer tools, and the "install developer tools" dialog is never opened), a repository is copied too, and the task page says why.
+- A cancelled task whose worktree or copy holds work that would be lost keeps it; the task page says why (files with uncommitted changes, commits that exist only there, files added or changed in the copy) with a button for you to remove it.
+- The task page shows the workspace (worktree: repository, branch, where it started; copy: the folder it copies, how many files); the task list shows the branch or "Folder copy".
+- Loop Now only touches worktrees and copies it created, in its own data folder. It never runs `git worktree prune`, never switches branches in or cleans your checkout, never deletes a remote branch and never closes a pull request.
+- The loopctl guide has a new part, "Tasks with a workspace", for Managers and the Agents in such a task: show the flow before creating the task, one Agent writes at a time, the verifier wrote none of the code, loops have limits, one pull request, ask before merging, save results as artifacts in a copy, clean up at the end.
+- Tasks without a workspace are unchanged.
+- API: `TaskCreateInput.workspace` (`folder`, `mode` auto / git / copy, `branch`, `baseBranch`), `TaskWorkspace` on the task (`workspace`: `mode`, `git`, `copy`, `state`, `kept`, `modeNote`), `TaskSummary.branch` and `TaskSummary.workspaceMode`, `POST /tasks/{taskId}/workspace/remove`, error code `task_workspace_not_kept`.
+
 
 ## v0.3.2
 
-Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16 and 17 once.
+Import your Claude Code and Codex conversations and continue them in Loop Now, and give every Agent a permission mode as in T3 Code (Supervised, Auto-accept edits, Auto or Full access; Full access stays the default). Work a CLI moves to the background stays visible and can be stopped. Antigravity, Grok and local ACP commands now count their tokens, and "Choose…" also works when the console is opened in a browser on the Mac. Upgrading runs migrations 16, 17 and 18 once.
 
 ### Import your Claude Code and Codex conversations
 
@@ -21,7 +151,7 @@ Import your Claude Code and Codex conversations and continue them in Loop Now, a
 - A request to approve appears in the reply that asked, with Approve, Reject and a reason; also in the Inbox and as a desktop notification, since Agents also run when nobody is watching. Stop rejects pending requests. Claude Code receives the reason.
 - Claude Code and Codex ask for every action their mode does not allow. Grok, Antigravity and local ACP commands decide by their own permission rules and settings, so some commands run without asking; the page says so. Pi has Full access only.
 - A step of a multi-step task uses its Agent's mode as it was when the task started, and shows its requests in the step's chat.
-- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migration 17.
+- API: `POST /conversation-scans`, `POST /conversation-imports`, Agent `workingDirectory` / `useLocalConfig` / `permissionMode` / `importedFrom`, `/permission-settings`, permission requests with answer endpoints and events, `RuntimeCapabilities.permissionModes` / `permissionAsksByOwnRules`. Migrations 17 and 18.
 
 ### Background tasks you can see and stop
 

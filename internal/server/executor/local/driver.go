@@ -85,6 +85,10 @@ type driver interface {
 	// where the runtime keeps it. A driver that can only tell by continuing the session returns true here and reports a
 	// missing session when it continues it (see startSpec.runID).
 	sessionSaved(ref string) bool
+	// savedSession is the session reference of p's process once the runtime has saved its session, or "" while it has
+	// not (or when the runtime reports it only at the end of a turn, as Pi reports it when the process is ready). It is
+	// asked while a turn runs and before the process is stopped, so it must be safe to call from another goroutine.
+	savedSession(p *proc) string
 }
 
 // fileSessions is sessionSaved for runtimes whose session reference is the path of a file the runtime writes.

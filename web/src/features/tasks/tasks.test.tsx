@@ -11,7 +11,7 @@ import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
 import { makeSleep } from '@/test/sleep'
-import { makeTaskDetail, makeTaskMessage, nodeId, oldNodeId, taskId } from '@/test/tasks'
+import { makeTaskDetail, makeTaskMessage, makeTaskWorkspace, nodeId, oldNodeId, taskId } from '@/test/tasks'
 import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
 import type { Schemas } from '@/api/client'
@@ -70,23 +70,20 @@ describe('project tasks', () => {
     await screen.findByRole('link', { name: 'General task acceptance' })
     expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name))
   })
-  it('task detail header: a hollow “#12” before the title (not part of the title), the breadcrumb project›Tasks›#12, the status stamp and archive state beside it, and a red-outlined “Cancel task” on the right', async () => {
+  it('task detail header: a monospace “#12” before the title (not part of the title), the breadcrumb project›Tasks›#12, the status badge and archive state beside it, and a red-outlined “Cancel task” on the right', async () => {
     setup(); renderRoutes(routes, detailPath())
     const heading = await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
     const number = heading.previousElementSibling!
     expect(number).toHaveTextContent(/^#12$/)
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('font-mono', 'text-ink-500', '[[data-skin=plate]_&]:font-display-latin', '[[data-skin=plate]_&]:text-transparent')
+    expect(number).toHaveClass('font-mono', 'text-ink-500')
     const header = heading.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Tasks›#12`)
     expect(within(header).getByRole('link', { name: 'Tasks' })).toHaveAttribute('href', tasksPath(defaultProject.name))
-    expect(within(header).getByText('Blocked')).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(header).getByText('Blocked')).toHaveClass('bg-tint-red', 'text-red-text')
     expect(within(header).getByText('Not archived yet')).toBeInTheDocument()
-    expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass(
-      'border-red-text/30',
-      'text-red-text',
-      '[[data-skin=plate]_&]:border-red-text',
-    )
+    expect(within(header).getByRole('button', { name: 'Cancel task' })).toHaveClass('border-red-text/30', 'text-red-text')
+    expect(screen.getByRole('heading', { level: 2, name: 'Quality check' })).toHaveAttribute('title', 'check')
   })
   it('a task of another project does not show its details', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
@@ -159,8 +156,20 @@ describe('node records and updates', () => {
     const d = makeTaskDetail(defaultProject.id); d.cleanup = 'archived'; d.task.status = 'cancelled'; d.nodes[1].question = { id: nodeId, threadId: taskId, messageId: oldNodeId, text: 'Confirm the result?', status: 'closed', canAnswer: false }
     setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: 'General task acceptance' }); await userEvent.click(screen.getByText('Open question · Closed')); expect(screen.getByText('Confirm the result?')).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
-    expect(screen.getByText('Records archived; copies reclaimed')).toBeVisible()
+    expect(screen.getByText('Records archived; Agent copies reclaimed')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); await userEvent.click(screen.getByText('Visit 1 · attempt 1')); expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
+  })
+  it('a task without a worktree has no worktree block; one with a worktree shows it under the header', async () => {
+    setup(); const first = renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
+    expect(screen.queryByRole('region', { name: 'Worktree' })).not.toBeInTheDocument()
+    first.unmount()
+    const workspace = makeTaskWorkspace()
+    const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+    setup({ ...detail, task: { ...detail.task, branch: workspace.git!.branch }, workspace }); renderRoutes(routes, detailPath())
+    const block = await screen.findByRole('region', { name: 'Worktree' })
+    expect(within(block).getByText(workspace.git!.branch)).toBeVisible()
+    expect(block.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
   })
   it('an invalid selected record is stated plainly instead of silently switching to another one', async () => {
     setup(); renderRoutes(routes, detailPath() + '?record=missing')
@@ -284,15 +293,14 @@ it('node materials: the visit being viewed is an expanded ticket and the others 
   expect(viewing.open).toBe(true)
   expect(older.open).toBe(false)
   expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:bg-ink')
-  // The yellow highlighter marks on the three subheadings Input, Output and Artifacts cover only the text.
-  for (const name of ['Inputs', 'Output', 'Artifacts']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
+  expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-cta-bg', 'text-cta-fg')
+  for (const name of ['Inputs', 'Output', 'Artifacts']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('inline-block', 'font-semibold')
   expect(within(viewing).getByRole('note')).toHaveTextContent('for inspection only and is not passed downstream as a success')
   expect(within(viewing).getByRole('link', { name: '01 Quality check · output of visit 1' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
   await user.click(within(older).getByText('Visit 1 · attempt 1'))
   const download = within(older).getByRole('link', { name: 'Download' })
   expect(download).toHaveAccessibleDescription('saved-report.txt')
-  expect(download.closest('li')).toHaveClass('border', 'border-hairline', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+  expect(download.closest('li')).toHaveClass('border', 'border-hairline', 'bg-surface-control')
   await user.click(within(viewing).getByRole('button', { name: 'Back to this conversation' }))
   expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
 })
@@ -427,7 +435,7 @@ it('two run segments each load more than 50 messages without sharing cursors or 
 it('a source link across steps locates the original record while keeping all segments of that step, and the latest failed group is expanded by default', async () => {
   const env = setup(), thirdId = '00000000-0000-7000-8000-000000000903'
   const third = { ...env.detail.nodes[1], id: thirdId, stepId: 'finish', visit: 1, attempt: 1, inputVersions: [{ input: 'review', nodeRunId: oldNodeId }] }
-  env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentNodeRunId: thirdId } }
+  env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentStepTitle: 'Submit report', currentNodeRunId: thirdId } }
   const { router } = renderRoutes(routes, detailPath())
   await screen.findByRole('heading', { name: 'General task acceptance' })
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
@@ -519,11 +527,11 @@ describe('task list on the sheet', () => {
     const env = setup()
     const base = env.detail
     const tasks = [
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: 'Sort user feedback for this week', status: 'running', reason: null, currentStepId: 'triage' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: 'Export timeout fix plan', status: 'blocked', reason: 'Continues once you confirm the timeout limit', currentStepId: 'review' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: 'Weekly report draft', status: 'completed', reason: null, currentStepId: 'publish' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: 'Task waiting for a user answer', status: 'waiting', reason: 'Waiting for an answer', currentStepId: null }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: 'Cancelled task', status: 'cancelled', reason: null, currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: 'Sort user feedback for this week', status: 'running', reason: null, currentStepId: 'triage', currentStepTitle: 'Triage' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: 'Export timeout fix plan', status: 'blocked', reason: 'Continues once you confirm the timeout limit', currentStepId: 'review', currentStepTitle: 'Review' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: 'Weekly report draft', status: 'completed', reason: null, currentStepId: 'publish', currentStepTitle: 'Publish' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: 'Task waiting for a user answer', status: 'waiting', reason: 'Waiting for an answer', currentStepId: null, currentStepTitle: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: 'Cancelled task', status: 'cancelled', reason: null, currentStepId: null, currentStepTitle: null }),
     ]
     server.use(
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
@@ -559,7 +567,7 @@ describe('task list on the sheet', () => {
     // In progress and Blocked use the server's counts (unfinished tasks); Completed and All count the tasks read so far.
     expect(buttons.map((button) => button.textContent)).toEqual(['All5', 'In progress2', 'Blocked1', 'Completed1'])
     expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
-    expect(buttons[0]).toHaveClass('h-7', 'bg-surface-control', 'font-semibold', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(buttons[0]).toHaveClass('h-7', 'bg-surface-control', 'font-semibold')
     expect(buttons[1]).toHaveClass('h-7', 'text-ink-500')
     expect(within(list).getAllByRole('listitem')).toHaveLength(5)
     await user.click(buttons[1])
@@ -576,12 +584,14 @@ describe('task list on the sheet', () => {
     await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['All5+', 'In progress2', 'Blocked1', 'Completed1+']))
   })
 
-  it('one row per task: a title with a truncated reason tooltip, status pill, current node in monospace, responsible Agent, and update time in monospace', async () => {
+  it('one row per task: a title with a truncated reason tooltip, status pill, current step title with id in the tooltip, responsible Agent, and update time in monospace', async () => {
     await renderList()
     const running = rowOf('Sort user feedback for this week')
-    expect(running).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
-    expect(within(running).getByText('Running')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:text-ink')
-    expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
+    expect(running).toHaveClass('border-b', 'border-hairline')
+    expect(within(running).getByText('Running')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full')
+    const step = within(running).getByText('Triage')
+    expect(step).toHaveClass('bg-surface-subtle')
+    expect(step).toHaveAttribute('title', 'triage')
     expect(running.querySelector('time')).toHaveClass('font-mono')
     const blocked = rowOf('Export timeout fix plan')
     const reason = within(blocked).getByText('Continues once you confirm the timeout limit')
@@ -589,7 +599,7 @@ describe('task list on the sheet', () => {
     expect(reason).toHaveAttribute('title', 'Continues once you confirm the timeout limit')
     const stamp = within(blocked).getByText('Blocked').closest('[data-task-state]')!
     expect(stamp).toHaveAttribute('data-task-state', 'blocked')
-    expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
+    expect(stamp).toHaveClass('bg-tint-red', 'text-red-text')
     expect(within(rowOf('Weekly report draft')).getByText('Completed')).toHaveClass('bg-tint-green', 'text-green-text')
     // The responsible Agent has an avatar (decorative).
     expect(within(running).getByText('task-checker').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
@@ -608,7 +618,7 @@ describe('task list on the sheet', () => {
     expect(group).toContainElement(within(running).getByRole('link', { name: 'Sort user feedback for this week' }))
     const number = group.firstElementChild!
     expect(number).toHaveTextContent(/^No\.#12$/)
-    expect(number).toHaveClass('font-mono', 'text-[12px]', 'font-medium', 'text-ink-500', '[[data-skin=plate]_&]:font-bold')
+    expect(number).toHaveClass('font-mono', 'text-[12px]', 'font-medium', 'text-ink-500')
     expect(within(number as HTMLElement).getByText('No.')).toHaveClass('sr-only')
     expect(within(list).getAllByRole('listitem').map((row) => row.firstElementChild!.firstElementChild!.textContent)).toEqual(['No.#12', 'No.#11', 'No.#10', 'No.#9', 'No.#8'])
   })
@@ -647,5 +657,19 @@ describe('task list on the sheet', () => {
     await screen.findByRole('heading', { name: 'General task acceptance' })
     expect(screen.getAllByRole('region', { name: 'Sleeping' })).toHaveLength(1)
     expect(document.querySelector('[data-task-sleep]')).toBeInTheDocument()
+  })
+
+  it('task node conversation uses the clean sheet and centered 800px message column matched by the composer bar', async () => {
+    await renderDetail()
+    const scroll = document.querySelector<HTMLElement>('[data-conversation-scroll]')!
+    const sheet = scroll.closest<HTMLElement>('[data-sheet]')!
+    expect(sheet).toHaveClass('bg-surface-canvas', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
+    expect(scroll).toHaveClass('px-4', 'sm:px-6', 'pt-3', 'pb-3')
+    const messages = scroll.querySelector<HTMLElement>('[data-node-messages]')!
+    expect(messages).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]')
+    const draft = document.querySelector<HTMLElement>('[data-node-draft]')!
+    expect(draft).toHaveClass('px-4', 'sm:px-5')
+    expect(draft.querySelector('[data-node-draft-inner]')).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]')
   })
 })

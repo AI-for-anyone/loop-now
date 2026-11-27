@@ -45,7 +45,7 @@ function BuiltinCard({
       <CardBand index={index} />
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-4 pt-3.5 pb-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="font-display-cn text-[16px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+          <h3 className="font-display-cn text-[16px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere]">
             {installedPlugin ? (
               <Link to={pluginPath(source.id)} className="outline-none hover:underline focus-visible:shadow-focus">
                 {localizedText(source.displayName)}
@@ -62,7 +62,7 @@ function BuiltinCard({
             {installedPlugin ? text.installed(installedPlugin.version) : `v${source.version}`}
           </span>
           {installedPlugin ? (
-            <span className="text-[12.5px] font-semibold text-green-text [[data-skin=plate]_&]:font-bold">{text.upToDate}</span>
+            <span className="text-[12.5px] font-semibold text-green-text">{text.upToDate}</span>
           ) : (
             <Button
               size="xs"
@@ -93,7 +93,7 @@ function EntryCard({ market, entry, installer, index }: { market: Market; entry:
       <CardBand index={index} />
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-4 pt-3.5 pb-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="font-display-cn text-[16px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+          <h3 className="font-display-cn text-[16px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere]">
             {entry.installedVersion ? (
               <Link to={pluginPath(entry.id)} className="outline-none hover:underline focus-visible:shadow-focus">
                 {localizedText(entry.displayName)}
@@ -105,7 +105,7 @@ function EntryCard({ market, entry, installer, index }: { market: Market; entry:
           {market.official ? (
             <SourceBadge source={{ kind: 'builtin' }} />
           ) : (
-            <span className={cn('rounded-stamp px-1.5 py-px text-[11.5px] leading-4 font-semibold [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:font-black', entry.verified ? 'bg-tint-green text-green-text' : 'bg-tint-yellow text-ink')}>
+            <span className={cn('rounded-stamp px-1.5 py-px text-[11.5px] leading-4 font-semibold', entry.verified ? 'bg-tint-green text-green-text' : 'bg-tint-yellow text-ink')}>
               {entry.verified ? text.verified : text.unverified}
             </span>
           )}
@@ -128,7 +128,7 @@ function EntryCard({ market, entry, installer, index }: { market: Market; entry:
               {installer.pending === key ? t.plugins.installEntry.reading : text.updateTo(entry.version)}
             </Button>
           ) : (
-            <span className="text-[12.5px] font-semibold text-green-text [[data-skin=plate]_&]:font-bold">{text.upToDate}</span>
+            <span className="text-[12.5px] font-semibold text-green-text">{text.upToDate}</span>
           )}
         </div>
         <ErrorAlert error={installer.errorFor(key)} />
@@ -142,13 +142,13 @@ function MarketSection({ market, installer, titled }: { market: Market; installe
   return (
     <section aria-label={name} className="flex min-w-0 flex-col gap-3">
       {titled && (
-        <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 text-[14px] font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
-          <span className="riso-marker [[data-skin=plate]_&]:px-1.5">{name}</span>
+        <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 text-[14px] font-semibold tracking-tight text-ink">
+          <span className="riso-marker">{name}</span>
           <span className="min-w-0 truncate font-mono text-[11.5px] font-normal text-ink-500">{market.url}</span>
         </h2>
       )}
       {market.error ? (
-        <p role="alert" className="rounded-input border border-red/20 bg-tint-red px-3.5 py-2.5 text-[13px] font-semibold text-red-text [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">
+        <p role="alert" className="rounded-input border border-red/20 bg-tint-red px-3.5 py-2.5 text-[13px] font-semibold text-red-text [overflow-wrap:anywhere]">
           {text.failed(name, market.error)}
         </p>
       ) : market.plugins.length === 0 ? (
@@ -193,7 +193,7 @@ function MarketSettings() {
       {markets.length > 0 && (
         <ul className="grid min-w-0 gap-1.5">
           {markets.map((market) => (
-            <li key={market} className="flex min-w-0 items-center gap-3 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04]">
+            <li key={market} className="flex min-w-0 items-center gap-3 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px]">
               <span className="min-w-0 flex-1 truncate font-mono" title={market}>
                 {market}
               </span>
@@ -321,7 +321,7 @@ export function DiscoverCatalog({
         <div className="flex min-w-0 flex-col gap-6">
           {visibleBuiltin.length > 0 && (
             <section aria-label={t.plugins.builtinTitle} className="flex min-w-0 flex-col gap-3">
-              <h2 className="riso-marker self-start text-[14px] font-semibold tracking-tight text-ink [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+              <h2 className="riso-marker self-start text-[14px] font-semibold tracking-tight text-ink">
                 {t.plugins.builtinTitle}
               </h2>
               <ul className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">

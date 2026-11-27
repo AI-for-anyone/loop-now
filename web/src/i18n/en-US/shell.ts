@@ -38,12 +38,13 @@ export const shell = {
   },
   chips: {
     busy: 'Replying',
-    sleep: 'zZ sleep',
   },
   noProjects: 'No projects yet',
   menu: 'Open navigation',
   closeMenu: 'Close navigation',
-  settingsShortcut: '⌘,',
+  settingsShortcut: (mac: boolean) => (mac ? '⌘,' : 'Ctrl+,'),
+  sidebarShortcut: (mac: boolean) => (mac ? '⌘B' : 'Ctrl+B'),
+  paletteShortcut: (mac: boolean) => (mac ? '⌘K' : 'Ctrl+K'),
   routeError: {
     title: 'Something went wrong',
     hint: 'This page ran into an unexpected error. You can return to Overview or reload.',
@@ -69,6 +70,7 @@ export const shell = {
       current: 'Current',
     },
   },
+  resizeSidebar: 'Resize sidebar',
   breadcrumb: 'Breadcrumb',
   agentCrumb: 'Agent',
   platformAgentCrumb: 'Platform Agent',

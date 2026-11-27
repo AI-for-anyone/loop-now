@@ -28,10 +28,10 @@ export function MermaidBlock({ source, pending }: { source: string; pending: boo
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-  return <section className="min-w-0 overflow-hidden rounded-card border border-code-border bg-code-bg [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised" aria-label={t.chat.mermaid.diagram}>
-    <div className="flex items-center justify-between gap-3 border-b border-code-border px-4 py-2 [[data-skin=plate]_&]:border-b-0">
-      <span className="font-mono text-xs text-code-muted [[data-skin=plate]_&]:text-ink">mermaid</span>
-      <button type="button" className="inline-flex min-h-7 shrink-0 cursor-pointer items-center rounded-stamp border border-hairline-strong bg-surface-control px-2.5 text-xs font-medium text-ink hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-riso-yellow" onClick={() => void copy()}>{copied ? t.common.copied : t.chat.copyCode}</button>
+  return <section className="min-w-0 overflow-hidden rounded-card border border-code-border bg-code-bg" aria-label={t.chat.mermaid.diagram}>
+    <div className="flex items-center justify-between gap-3 border-b border-code-border px-4 py-2">
+      <span className="font-mono text-xs text-code-muted">mermaid</span>
+      <button type="button" className="inline-flex min-h-7 shrink-0 cursor-pointer items-center rounded-stamp border border-hairline-strong bg-surface-control px-2.5 text-xs font-medium text-ink hover:bg-surface-hover focus-visible:shadow-focus" onClick={() => void copy()}>{copied ? t.common.copied : t.chat.copyCode}</button>
     </div>
     {current?.svg
       ? <div className="overflow-x-auto p-3 [&>svg]:mx-auto [&>svg]:h-auto [&>svg]:max-w-full" data-mermaid-diagram dangerouslySetInnerHTML={{ __html: current.svg }} />

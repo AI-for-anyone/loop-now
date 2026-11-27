@@ -16,6 +16,7 @@ import { overviewPath } from '@/lib/scope'
 import { segmentedClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { TaskBadge } from './TaskBadge'
+import { branchParts } from './branch-name'
 import { useTaskLive } from './useTaskLive'
 
 type Task = Schemas['TaskSummary']
@@ -69,32 +70,32 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
         {tasks.isSuccess && (
           <div data-tasks-summary aria-label={t.tasks.progress.title} className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-ink-500">
             <span className="inline-flex items-baseline gap-1">
-              <span className="font-mono font-semibold text-ink tabular-nums [[data-skin=plate]_&]:font-extrabold">{amount.active}</span>
+              <span className="font-mono font-semibold text-ink tabular-nums">{amount.active}</span>
               <span>{t.tasks.progress.active}</span>
             </span>
             <span aria-hidden="true" className="text-ink-500/50">·</span>
             <span className="inline-flex items-baseline gap-1">
-              <span className={cn('font-mono font-semibold tabular-nums [[data-skin=plate]_&]:font-extrabold', blockedCount > 0 ? 'text-red-text' : 'text-ink-700')}>
+              <span className={cn('font-mono font-semibold tabular-nums', blockedCount > 0 ? 'text-red-text' : 'text-ink-700')}>
                 {amount.blocked}
               </span>
               <span>{t.tasks.progress.blocked}</span>
             </span>
             <span aria-hidden="true" className="text-ink-500/50">·</span>
             <span className="inline-flex items-baseline gap-1">
-              <span className="font-mono font-semibold text-green-text tabular-nums [[data-skin=plate]_&]:font-extrabold">{amount.completed}</span>
+              <span className="font-mono font-semibold text-green-text tabular-nums">{amount.completed}</span>
               <span>{t.tasks.progress.completed}</span>
             </span>
           </div>
         )}
         <LiveDot state={connection === 'open' ? 'open' : connection === 'connecting' ? 'connecting' : 'reconnecting'} label={t.tasks.updating} />
       </PageHeader>
-      <div className="flex min-h-10 shrink-0 items-center gap-3 overflow-x-auto border-b border-hairline bg-surface-canvas px-4 py-1.5 no-scrollbar sm:px-6 [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:px-0 [[data-skin=plate]_&]:pb-2">
+      <div className="flex min-h-10 shrink-0 items-center gap-3 overflow-x-auto border-b border-hairline bg-surface-canvas px-4 py-1.5 no-scrollbar sm:px-6">
         <div
           role="group"
           aria-label={t.tasks.filters.label}
           className={cn(
             segmentedClass,
-            'inline-flex h-8 shrink-0 items-center gap-0.5 rounded-input border-hairline bg-surface-subtle p-0.5 [[data-skin=plate]_&]:gap-0 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:p-0',
+            'inline-flex h-8 shrink-0 items-center gap-0.5 rounded-input border-hairline bg-surface-subtle p-0.5',
           )}
         >
           {FILTERS.map((item) => {
@@ -106,14 +107,14 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
                 aria-pressed={active}
                 onClick={() => setFilter(item)}
                 className={cn(
-                  'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[calc(var(--skin-radius-input)-2px)] px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:h-full [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:not-first:border-l-2 [[data-skin=plate]_&]:not-first:border-ink',
+                  'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[calc(var(--skin-radius-input)-2px)] px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus',
                   active
-                    ? 'bg-surface-control font-semibold text-ink shadow-surface [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-none'
-                    : 'font-medium text-ink-500 hover:text-ink [[data-skin=plate]_&]:text-ink-700',
+                    ? 'bg-surface-control font-semibold text-ink shadow-surface'
+                    : 'font-medium text-ink-500 hover:text-ink',
                 )}
               >
                 {t.tasks.filters[item]}
-                <span className={cn('font-mono text-[11px] tabular-nums [[data-skin=plate]_&]:font-extrabold', active ? 'text-ink-700' : 'text-ink-500')}>
+                <span className={cn('font-mono text-[11px] tabular-nums', active ? 'text-ink-700' : 'text-ink-500')}>
                   {amount[item]}
                 </span>
               </button>
@@ -157,7 +158,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
               <div
                 aria-hidden="true"
                 className={cn(
-                  'hidden border-b border-hairline px-2 pb-2 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black',
+                  'hidden border-b border-hairline px-2 pb-2 text-[11.5px] font-medium text-ink-500',
                   TASK_GRID,
                 )}
               >
@@ -187,6 +188,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
 }
 
 // One row per task: shared 6-track CSS Grid on sm+ and compact 2-row stack on narrow screens.
+// Title wins width first; inline branch or Folder copy badge occupies remaining space and yields before the title truncates.
 function TaskRow({
   task,
   projectName,
@@ -198,29 +200,42 @@ function TaskRow({
   agentName: (id: string) => string
   pending?: Parameters<typeof PendingBadge>[0]['counts']
 }) {
+  const title = task.title || task.id
+  const stepLabel = task.currentStepTitle || task.currentStepId
+  const hasWorkspaceTag = Boolean(task.branch) || task.workspaceMode === 'copy'
   return (
     <li
       className={cn(
-        'flex flex-col gap-1.5 border-b border-hairline px-2 py-2.5 transition-colors hover:bg-surface-hover/50 [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-transparent',
+        'flex flex-col gap-1.5 border-b border-hairline px-2 py-2.5 transition-colors hover:bg-surface-hover/50',
         TASK_GRID,
       )}
     >
       {/* Mobile row 1: number + title/reason stay paired; dissolves into grid tracks 1 & 2 on sm+. */}
       <span className="flex min-w-0 items-baseline gap-2.5 sm:contents">
-        <span className="w-10 shrink-0 font-mono text-[12px] font-medium text-ink-500 tabular-nums sm:w-auto [[data-skin=plate]_&]:font-bold">
+        <span className="w-10 shrink-0 font-mono text-[12px] font-medium text-ink-500 tabular-nums sm:w-auto">
           <span className="sr-only">{t.tasks.number}</span>
           {t.tasks.numberLabel(task.number)}
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-[1.4]">
-          <span className="flex min-w-0 items-center gap-2">
-            <Link
-              className="min-w-0 truncate text-[13.5px] font-semibold text-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-ink [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-ink/30 [[data-skin=plate]_&]:hover:text-riso-blue [[data-skin=plate]_&]:hover:decoration-riso-blue"
-              to={`${tasksPath(projectName)}/${task.id}`}
-              title={task.title || task.id}
-            >
-              {task.title || task.id}
-            </Link>
-            <PendingBadge counts={pending} />
+          <span className={cn('min-w-0 items-center', hasWorkspaceTag ? 'grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)]' : 'flex gap-2')}>
+            <span className="flex min-w-0 items-center gap-2">
+              <Link
+                className="min-w-0 truncate text-[13.5px] font-semibold text-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-ink"
+                to={`${tasksPath(projectName)}/${task.id}`}
+                title={title}
+              >
+                {title}
+              </Link>
+              <PendingBadge counts={pending} />
+            </span>
+            {task.branch && <Branch name={task.branch} />}
+            {task.workspaceMode === 'copy' && (
+              <span className="@container flex min-w-0 items-center overflow-hidden">
+                <span className="ml-2 rounded-stamp border border-hairline bg-tint-blue px-1.5 text-[11px] leading-[18px] font-medium whitespace-nowrap text-riso-blue @max-[84px]:hidden">
+                  {t.tasks.workspace.copyLabel}
+                </span>
+              </span>
+            )}
           </span>
           {task.reason && (
             <span title={task.reason} className={cn('truncate text-[12px]', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>
@@ -237,18 +252,21 @@ function TaskRow({
         </span>
         <span className="min-w-0">
           <span className="sr-only">{t.tasks.currentNode}</span>
-          {task.currentStepId ? (
+          {stepLabel ? (
             <span
-              title={task.currentStepId}
-              className="inline-block max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 font-mono text-[11.5px] leading-[20px] text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:text-ink"
+              title={task.currentStepId ?? undefined}
+              className={cn(
+                'inline-block max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 text-[11.5px] leading-[20px] font-medium text-ink-700',
+                !task.currentStepTitle && 'font-mono font-normal',
+              )}
             >
-              {task.currentStepId}
+              {stepLabel}
             </span>
           ) : (
             <span className="text-[12px] text-ink-500">{t.tasks.none}</span>
           )}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
+        <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700">
           <span className="sr-only">{t.tasks.responsible}</span>
           {task.currentAgentId ? (
             <>
@@ -266,5 +284,27 @@ function TaskRow({
         </time>
       </span>
     </li>
+  )
+}
+
+// The branch of a task with a worktree, inline in the remaining space after the title: small, muted monospace, middle-truncated down to a
+// short stub and hidden visually when too narrow for a readable stub so the title always wins the row width first (the full name stays in
+// the hover title and for screen readers).
+function Branch({ name }: { name: string }) {
+  const { head, tail } = branchParts(name)
+  return (
+    <span data-testid="task-branch" title={name} className="@container min-w-0 overflow-hidden font-mono text-[11.5px] leading-[18px] text-ink-500">
+      <span className="sr-only">{t.tasks.branchLabel(name)}</span>
+      {head ? (
+        <span aria-hidden="true" className="flex min-w-0 pl-2 @max-[108px]:hidden">
+          <span className="min-w-0 truncate">{head}</span>
+          <span className="shrink-0 whitespace-pre">{tail}</span>
+        </span>
+      ) : (
+        <span aria-hidden="true" className="block min-w-0 truncate pl-2 @max-[56px]:hidden">
+          {tail}
+        </span>
+      )}
+    </span>
   )
 }

@@ -34,7 +34,7 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   return <Section id="model-credential" title={t.credentials.agentSelection.title}>
     {runtime && <p className="text-[13px] text-ink-700">{runtime.capabilities.accounts === 'local' ? t.runtime.account(runtime.name) : t.credentials.agentSelection.intro}</p>}
     <ErrorAlert error={result.error ?? lookup.error} />
-    {!synchronized && result.data && <p role="status" className="text-[13px] font-medium [[data-skin=plate]_&]:font-bold">{t.credentials.agentSelection.modelOutOfSync}</p>}
+    {!synchronized && result.data && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.modelOutOfSync}</p>}
     {!result.data && !result.isError && <p role="status" className="text-[13px] text-ink-500">{t.credentials.agentSelection.loading}</p>}
     {result.data && providers.map(provider => {
       if (lookup.forProvider(provider)?.capabilities.accounts !== 'managed') return null
@@ -53,7 +53,7 @@ export function LegacyProjectCliSelection({ agentId, configVersion, cli, embedde
   const result = useCredentialSelections(agentId)
   const synchronized = useSelectionSynchronization(agentId, configVersion, result.data?.configVersion)
   const selection = result.data?.selections.find(item => item.purpose === 'cli' && item.cli === cli)
-  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-medium [[data-skin=plate]_&]:font-bold">{t.credentials.agentSelection.cliOutOfSync}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} embedded={embedded} /> : <p className="text-[13px] text-ink-500">{t.credentials.agentSelection.cliLoading}</p>}</>
+  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.cliOutOfSync}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} embedded={embedded} /> : <p className="text-[13px] text-ink-500">{t.credentials.agentSelection.cliLoading}</p>}</>
 }
 
 function useSelectionSynchronization(agentId: string, agentVersion: number, selectionVersion: number | undefined) {
@@ -100,7 +100,7 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
     client.setQueryData(credentialKeys.selections(agentId), latest)
   }, onSaved })
   return <div className="grid min-w-0 gap-2.5">
-    {!current && <p role="status" className="text-[13px] font-medium [[data-skin=plate]_&]:font-bold">{t.credentials.agentSelection.switched(slot)}</p>}
+    {!current && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.switched(slot)}</p>}
     <AccountSelectionField
       label={t.credentials.agentSelection.fieldLabel(slot)}
       description={selectionDescription(selection)}

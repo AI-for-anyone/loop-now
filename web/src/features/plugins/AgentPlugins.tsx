@@ -21,11 +21,11 @@ import { PluginActionButtons } from './PluginActions'
 type AgentPlugin = Schemas['AgentPlugin']
 const text = t.plugins.agent
 
-const listClass = 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control @container [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+const listClass = 'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control @container'
 // When wide, the name takes a fixed column and the summaries line up in one column; when narrow, the name and the expand marker are on
 // top and the summary fills the next row. Row height stays within 48–52px either way.
 const rowGrid = 'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-1.5 text-left @min-[36rem]:h-12 @min-[36rem]:grid-cols-[11rem_minmax(0,1fr)_auto] @min-[36rem]:py-0'
-const rowName = 'col-start-1 row-start-1 truncate text-[14.5px]/[20px] font-semibold [[data-skin=plate]_&]:font-bold'
+const rowName = 'col-start-1 row-start-1 truncate text-[14.5px]/[20px] font-semibold'
 const rowSummary = 'col-span-2 col-start-1 row-start-2 flex min-w-0 items-center text-[13px]/[18px] @min-[36rem]:col-span-1 @min-[36rem]:col-start-2 @min-[36rem]:row-start-1'
 const rowTrail = 'col-start-2 row-start-1 flex items-center gap-2 @min-[36rem]:col-start-3'
 
@@ -82,8 +82,8 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
   const notEnabled = save.error instanceof ApiError && save.error.code === 'plugin_not_enabled'
   return (
     <form className="grid min-w-0 gap-3.5" onSubmit={submit}>
-      <label className="inline-flex items-center gap-2 text-[14px] font-medium [[data-skin=plate]_&]:font-bold">
-        <input type="checkbox" checked={granted} disabled={save.isPending} onChange={(event) => setGranted(event.target.checked)} className="size-4 accent-ink [[data-skin=plate]_&]:accent-riso-blue" />
+      <label className="inline-flex items-center gap-2 text-[14px] font-medium">
+        <input type="checkbox" checked={granted} disabled={save.isPending} onChange={(event) => setGranted(event.target.checked)} className="size-4 accent-ink" />
         {text.grant(localizedText(plugin.displayName))}
       </label>
       {usesAccounts(agent, plugin) &&
@@ -91,18 +91,18 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
           const mine = (accounts.data?.accounts ?? []).filter((account) => account.kind === kind.kind)
           return (
             <fieldset key={kind.kind} className="grid min-w-0 gap-1.5" disabled={!granted || save.isPending}>
-              <legend className="mb-1 text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{text.accounts(localizedText(kind.label))}</legend>
+              <legend className="mb-1 text-[13px] font-semibold text-ink-700">{text.accounts(localizedText(kind.label))}</legend>
               <ErrorAlert error={accounts.error} />
               {accounts.isSuccess && mine.length === 0 && <Quiet>{text.noAccounts}</Quiet>}
               <div className="flex flex-wrap gap-2">
                 {mine.map((account) => (
-                  <label key={account.id} className="inline-flex min-h-9 items-center gap-2 rounded-full border border-hairline-strong bg-surface-control px-3.5 text-[13.5px] font-medium has-[:checked]:border-ink has-[:checked]:bg-surface-active has-[:disabled]:opacity-50 [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink/30 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:has-[:checked]:border-riso-blue [[data-skin=plate]_&]:has-[:checked]:bg-tint-blue">
+                  <label key={account.id} className="inline-flex min-h-9 items-center gap-2 rounded-full border border-hairline-strong bg-surface-control px-3.5 text-[13.5px] font-medium has-[:checked]:border-ink has-[:checked]:bg-surface-active has-[:disabled]:opacity-50">
                     <input
                       type={kind.multiple ? 'checkbox' : 'radio'}
                       name={`${id}-${kind.kind}`}
                       checked={accountIds.includes(account.id)}
                       onChange={(event) => toggle(kind, account.id, event.target.checked)}
-                      className="accent-ink [[data-skin=plate]_&]:accent-riso-blue"
+                      className="accent-ink"
                     />
                     {account.name}
                   </label>
@@ -128,7 +128,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
 function AgentActions({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const detail = usePlugin(plugin.pluginId)
   if (!detail.data) return null
-  return <PluginActionButtons plugin={{ id: plugin.pluginId, displayName: localizedText(plugin.displayName) }} actions={detail.data.manifest.components.actions} page="agent" where={{ agentId: agent.id }} className="border-t border-hairline pt-3 [[data-skin=plate]_&]:border-ink/10" />
+  return <PluginActionButtons plugin={{ id: plugin.pluginId, displayName: localizedText(plugin.displayName) }} actions={detail.data.manifest.components.actions} page="agent" where={{ agentId: agent.id }} className="border-t border-hairline pt-3" />
 }
 
 // Only one plugin is expanded at a time; if the open form has unsaved changes, collapsing it or switching to another plugin asks for
@@ -192,7 +192,7 @@ function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent:
     onDone(didSave)
   }
   return (
-    <li className={cn('min-w-0', open && 'shadow-[inset_2px_0_0_var(--ink)] [[data-skin=plate]_&]:shadow-[inset_3px_0_0_var(--riso-blue)]')}>
+    <li className={cn('min-w-0', open && 'shadow-[inset_2px_0_0_var(--ink)]')}>
       <h3>
         <button
           ref={header}
@@ -202,8 +202,8 @@ function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent:
           onClick={onToggle}
           className={cn(
             rowGrid,
-            'cursor-pointer outline-none hover:bg-surface-hover focus-visible:shadow-[inset_0_0_0_2px_var(--ink)] [[data-skin=plate]_&]:hover:bg-ink/[0.03] [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]',
-            open && 'bg-surface-subtle hover:bg-surface-subtle [[data-skin=plate]_&]:bg-tint-blue/40 [[data-skin=plate]_&]:hover:bg-tint-blue/40',
+            'cursor-pointer outline-none hover:bg-surface-hover focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]',
+            open && 'bg-surface-subtle hover:bg-surface-subtle',
           )}
         >
           <span id={`${id}-name`} className={rowName} title={localizedText(plugin.displayName)}>
@@ -217,7 +217,7 @@ function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent:
         </button>
       </h3>
       {open && (
-        <div id={`${id}-body`} role="region" aria-labelledby={`${id}-name`} className="grid min-w-0 gap-3 border-t border-hairline px-4 pt-3.5 pb-4 [[data-skin=plate]_&]:border-ink/10">
+        <div id={`${id}-body`} role="region" aria-labelledby={`${id}-name`} className="grid min-w-0 gap-3 border-t border-hairline px-4 pt-3.5 pb-4">
           <GrantForm agent={agent} plugin={plugin} onSaved={() => done(true)} onCancel={() => done(false)} onDirty={onDirty} />
           <AgentActions agent={agent} plugin={plugin} />
         </div>

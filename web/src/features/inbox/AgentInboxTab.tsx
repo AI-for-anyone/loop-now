@@ -28,12 +28,12 @@ export function AgentInboxTab() {
     <div className="relative flex h-full min-h-0 flex-col">
       <PageBody width="wide" innerClassName="flex flex-col gap-3.5">
         {/* Top bar: filter pills with embedded counts, compact Read-only badge with tooltip, and live status. */}
-        <div data-inbox-bar className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-hairline pb-3 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+        <div data-inbox-bar className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-hairline pb-3">
           <ToggleGroup aria-label={t.agentInbox.filter} className="gap-2 bg-transparent p-0" value={unreadOnly ? 'unread' : 'all'} onValueChange={(value) => setUnreadOnly(value === 'unread')}>
             <ToggleGroupItem className={pillClass} value="all">
               <span>{t.agentInbox.all}</span>
               {all.isSuccess && (
-                <span data-count="all" className="ml-1.5 font-mono text-[11.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-ink">
+                <span data-count="all" className="ml-1.5 font-mono text-[11.5px] font-medium text-ink-500 tabular-nums">
                   {`${allMessages.length}${more}`}
                 </span>
               )}
@@ -44,8 +44,8 @@ export function AgentInboxTab() {
                 <span
                   data-count="unread"
                   className={cn(
-                    'ml-1.5 font-mono text-[11.5px] font-medium tabular-nums [[data-skin=plate]_&]:font-extrabold',
-                    unreadCount > 0 ? 'text-pink-text' : 'text-ink-500 [[data-skin=plate]_&]:text-ink',
+                    'ml-1.5 font-mono text-[11.5px] font-medium tabular-nums',
+                    unreadCount > 0 ? 'text-pink-text' : 'text-ink-500',
                   )}
                 >
                   {`${unreadCount}${more}`}
@@ -57,7 +57,7 @@ export function AgentInboxTab() {
             <Badge variant="chip" tone="neutral" title={t.agentInbox.readonly} aria-label={t.agentInbox.readonly}>
               {t.agentInbox.readonlyBadge}
             </Badge>
-            <InboxLiveStatus className="text-[12px] font-semibold [[data-skin=plate]_&]:font-black" />
+            <InboxLiveStatus className="text-[12px] font-semibold" />
           </div>
         </div>
         {inbox.isPending && <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
@@ -82,6 +82,5 @@ export function AgentInboxTab() {
   )
 }
 
-// Filter pills: crisp hairline active state in mono skin; yellow with a navy outline and navy shadow in Plate skin.
 const pillClass =
-  'h-[34px] min-h-0 border border-transparent px-3.5 font-medium text-ink-700 hover:bg-surface-hover data-[state=on]:border-hairline-strong data-[state=on]:bg-surface-active data-[state=on]:font-semibold data-[state=on]:text-ink [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:px-4 [[data-skin=plate]_&]:data-[state=on]:mr-[3px] [[data-skin=plate]_&]:data-[state=on]:border-ink [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:px-[18px] [[data-skin=plate]_&]:data-[state=on]:shadow-[3px_3px_0_var(--ink)]'
+  'h-[34px] min-h-0 border border-transparent px-3.5 font-medium text-ink-700 hover:bg-surface-hover data-[state=on]:border-hairline-strong data-[state=on]:bg-surface-active data-[state=on]:font-semibold data-[state=on]:text-ink'

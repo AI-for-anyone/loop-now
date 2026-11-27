@@ -15,7 +15,7 @@ export function TaskLarkSwitchRecovery({ taskId, currentBlocked, showUnavailable
   if ((!currentBlocked || !showUnavailable) && !locator.id) return null
   const receipt = action.data
   const missing = action.error instanceof ApiError && action.error.status === 404
-  return <section aria-label={copy.switch} className="mt-3 grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-sm [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+  return <section aria-label={copy.switch} className="mt-3 grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-sm [overflow-wrap:anywhere]">
     {showUnavailable && <Button type="button" variant="secondary" disabled>{copy.switch}</Button>}
     {showUnavailable && <p role="status">{copy.switchUnavailable}</p>}
     {!locator.valid && <p role="alert">{copy.invalidLocator}</p>}

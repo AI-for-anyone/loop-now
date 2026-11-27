@@ -315,11 +315,13 @@ describe('floating PrecisionRuler in chat', () => {
     expect(document.querySelector('[data-precision-ruler]')).toBe(nav())
   })
 
-  it('keeps native scrollbars hidden globally on the chat log container', () => {
-    render(<List pages={pagesOf(['One', 'Two'])} />)
+  it('hides the native scrollbar on desktop only when a turn ruler is mounted', () => {
+    const { rerender } = render(<List pages={pagesOf(['Only one'])} />)
     const log = screen.getByRole('log')
     expect(log).toHaveClass('overflow-y-auto')
-    expect(log).not.toHaveClass('riso-scrollbar')
+    expect(log).not.toHaveClass('nav:no-scrollbar')
+    rerender(<List pages={pagesOf(['One', 'Two'])} />)
+    expect(log).toHaveClass('nav:no-scrollbar')
   })
 
   it('clicking the ruler bottom/latest control jumps to the true bottom and re-enables auto-follow', async () => {
@@ -399,15 +401,15 @@ describe('tick names', () => {
 describe('centered conversation stream', () => {
   it('centers the conversation stream in a max-w-[800px] column with full-column reply prose', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    const column = screen.getByRole('log').firstElementChild!
+    const column = screen.getByRole('log').querySelector('[data-message-column]')!
     expect(column).toHaveClass('mx-auto', 'max-w-[800px]')
     const body = turnBlock('Question 1').querySelector('article')!.parentElement!
     expect(body).toHaveClass('min-w-0', 'w-full')
   })
 
-  it('caps user bubbles at 82% in mono skin and preserves Plate wide styling', () => {
+  it('caps user bubbles at 82% inside the centered column', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    expect(screen.getByText('Question 1')).toHaveClass('max-w-[82%]', '[[data-skin=plate]_&]:nav:max-w-[min(88%,1100px)]')
+    expect(screen.getByText('Question 1')).toHaveClass('max-w-[82%]')
   })
 
   it('aligns inserted flow items directly with the centered conversation column without a left gutter shift', () => {

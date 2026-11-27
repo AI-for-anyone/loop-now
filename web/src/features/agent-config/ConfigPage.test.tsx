@@ -166,15 +166,11 @@ describe('Sub-tab navigation and deep links', () => {
     expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
   })
 
-  it('the internal ID sits in a subtle hairline box in mono skin and a dashed box with a yellow navy-outlined copy button in Plate skin', async () => {
+  it('the internal ID sits in a subtle hairline box with a copy button', async () => {
     const { agent } = await renderConfig()
     const id = within(region('Basics')).getByText(agent.id)
-    expect(id.parentElement).toHaveClass('rounded-input', 'border', 'border-hairline', '[[data-skin=plate]_&]:border-dashed')
-    expect(within(region('Basics')).getByRole('button', { name: 'Copy' })).toHaveClass(
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:bg-riso-yellow',
-    )
+    expect(id.parentElement).toHaveClass('rounded-input', 'border', 'border-hairline')
+    expect(within(region('Basics')).getByRole('button', { name: 'Copy' })).toBeInTheDocument()
   })
 
   it('floating PageRuler tracks the visible section in the active tab and jumps on click', async () => {

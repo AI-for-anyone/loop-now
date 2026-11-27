@@ -83,6 +83,10 @@ type Options struct {
 	Hostname                  string
 	// StderrTailBytes is how much of the end of Pi's stderr goes into error messages and run records; 0 means 1000.
 	StderrTailBytes int
+	// SessionCheckInterval is how often, while a turn runs, the executor asks whether the runtime has saved the session
+	// yet, to record it before the turn ends (so a turn that never ends, for example when the app quits, is not
+	// forgotten); 0 means one second.
+	SessionCheckInterval time.Duration
 	// Observer receives run records; nil means they are discarded.
 	Observer executor.Observer
 	// Tokens issues an Agent token for every Pi process started; nil means no token is injected (for tests).
@@ -200,6 +204,9 @@ type proc struct {
 	stopDone            chan struct{}
 	stopErr             error
 	bg                  procBackground // the background tasks its CLI started
+	// commandsRead is closed once the reading and saving of its command list has ended (nil when its runtime has
+	// none): stopping waits for it, so nothing writes in the Agent's folder for a process that has stopped.
+	commandsRead chan struct{}
 	// replyStopping: a reply on it is being stopped; if the process ends meanwhile, its background tasks were stopped
 	// with the reply.
 	replyStopping atomic.Bool
@@ -391,13 +398,15 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	if req.Origin == executor.OriginConsoleCompact {
 		return e.compact(ctx, p, r, req, snap), nil
 	}
-	adapter := sinkAdapter{s: sink, command: func(id, name, command string) { e.toolCommand(snap.AgentID, runID, id, name, command) },
+	adapter := sinkAdapter{s: sink, cwd: p.cwd, command: func(id, name, command string) { e.toolCommand(snap.AgentID, runID, id, name, command) },
 		event: func(typ string, data map[string]any) { e.event(snap.AgentID, &runID, typ, data) }}
 	// Replies the CLI began by itself and no run has taken came before this message: they go first in this reply. The
 	// tasks that ended so far are the CLI's to tell about in this reply.
 	before := e.absorbFollowUps(ctx, p, runID, adapter)
 	e.bgTakeEnded(p)
+	stopWatch := e.watchSession(p)
 	tr, err := p.rt.Prompt(ctx, req.Message, adapter, req.Images...)
+	stopWatch()
 	if before != "" && err == nil {
 		tr.Text = before + "\n\n" + tr.Text
 	}
@@ -464,9 +473,10 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	return res, nil
 }
 
-// toolCommand records the command of a tool call (bash and the like) on the run, in its safe display form.
+// toolCommand records the command of a shell tool call (Bash, shell, execute, bash) on the run, in its safe display
+// form.
 func (e *Executor) toolCommand(agentID, runID uuid.UUID, id, name, command string) {
-	if command = toolcommand.Display(name, command); command != "" {
+	if command = toolcommand.Display(command); command != "" {
 		e.event(agentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
 	}
 }
@@ -478,6 +488,8 @@ func failed(code, msg string, version int64) executor.Result {
 type sinkAdapter struct {
 	s       executor.Sink
 	command func(string, string, string)
+	// cwd is where the CLI works; file targets inside it are recorded relative to it.
+	cwd string
 	// event records a run event of this turn.
 	event func(typ string, data map[string]any)
 }
@@ -485,6 +497,22 @@ type sinkAdapter struct {
 func (a sinkAdapter) ToolCommand(id, name, command string) {
 	if a.command != nil {
 		a.command(id, name, command)
+	}
+}
+
+// ToolFiles records the files a file tool (read, edit, write) worked on, in their display form.
+func (a sinkAdapter) ToolFiles(id, name string, paths []string) {
+	a.toolTarget(id, name, "files", toolcommand.Files(a.cwd, paths))
+}
+
+// ToolQuery records the pattern or query of a search tool, in its display form.
+func (a sinkAdapter) ToolQuery(id, name, query string) {
+	a.toolTarget(id, name, "query", toolcommand.Query(query))
+}
+
+func (a sinkAdapter) toolTarget(id, name, kind, target string) {
+	if target != "" && a.event != nil {
+		a.event("tool.target", map[string]any{"toolCallId": id, "toolName": name, "kind": kind, "target": target})
 	}
 }
 
@@ -767,7 +795,11 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, err
 	}
 	if nc, ok := drv.(nativeCommander); ok {
-		go e.cacheCommands(p, nc)
+		p.commandsRead = make(chan struct{})
+		go func() {
+			defer close(p.commandsRead)
+			e.cacheCommands(p, nc)
+		}()
 	}
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
@@ -893,6 +925,49 @@ func (e *Executor) recordSession(p *proc) error {
 	return nil
 }
 
+// noteSession takes the session reference the runtime has saved so far, if it reports one, and records it.
+func (e *Executor) noteSession(p *proc) error {
+	if ref := p.drv.savedSession(p); ref != "" {
+		p.sessMu.Lock()
+		p.sessionFile = ref
+		p.sessMu.Unlock()
+	}
+	return e.recordSession(p)
+}
+
+// watchSession records the session while a turn runs, as soon as the runtime has saved it, checking every
+// SessionCheckInterval until it is recorded or the returned function is called (when the turn ends).
+func (e *Executor) watchSession(p *proc) (stop func()) {
+	every := e.o.SessionCheckInterval
+	if every <= 0 {
+		every = time.Second
+	}
+	done, finished := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(finished)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if e.noteSession(p) == nil && e.sessionRecorded(p) {
+					return
+				}
+			}
+		}
+	}()
+	return func() { close(done); <-finished }
+}
+
+// sessionRecorded reports whether the process's session reference is the one recorded.
+func (e *Executor) sessionRecorded(p *proc) bool {
+	p.sessMu.Lock()
+	defer p.sessMu.Unlock()
+	return p.sessionFile != "" && p.sessionFile == p.recorded
+}
+
 func (e *Executor) idleExpired(p *proc) {
 	e.mu.Lock()
 	if e.procs[p.agentID] != p || p.busy || e.handoffs[p.agentID] != nil {
@@ -978,7 +1053,8 @@ func (e *Executor) stop(p *proc, why stopCause) {
 		if p.idleTimer != nil {
 			p.idleTimer.Stop()
 		}
-		e.recordSession(p)
+		// Record the session before the process ends, also when the turn that saved it never finished.
+		e.noteSession(p)
 		_ = p.rt.CloseStdin()
 		if !waitDone(p, e.o.StopGrace) {
 			_ = procgroup.Terminate(p.rt.Pid())
@@ -987,6 +1063,13 @@ func (e *Executor) stop(p *proc, why stopCause) {
 				if !waitDone(p, e.o.StopGrace) {
 					p.stopErr = ErrRuntimeStopUnconfirmed
 				}
+			}
+		}
+		if p.commandsRead != nil {
+			select {
+			case <-p.rt.Done():
+				<-p.commandsRead // the process has ended, so the read has its answer or its error by now
+			default: // it did not end: the read gives up at its own timeout
 			}
 		}
 		e.removeProcPidFile(p)
@@ -1261,7 +1344,9 @@ func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {
 	return executor.ProcessInfo{State: executor.ProcessStopped}
 }
 
-// Shutdown implements executor.Executor: it ends all processes.
+// Shutdown implements executor.Executor: it ends all processes. It also waits for the processes already taken out of
+// the table and being stopped elsewhere (one that exited by itself and is wrapped up by watch, one retired after its
+// reply was stopped): that wrap-up still writes in the Agent's folder, so Shutdown must not return before it ends.
 func (e *Executor) Shutdown(ctx context.Context) error {
 	e.mu.Lock()
 	if !e.closed {
@@ -1273,6 +1358,10 @@ func (e *Executor) Shutdown(ctx context.Context) error {
 		procs = append(procs, p)
 		delete(e.procs, id)
 	}
+	live := make([]*proc, 0, len(e.live))
+	for p := range e.live {
+		live = append(live, p)
+	}
 	for _, r := range e.runs {
 		r.cancel()
 	}
@@ -1282,7 +1371,13 @@ func (e *Executor) Shutdown(ctx context.Context) error {
 		wg.Go(func() { e.stop(p, stopCause{reason: stopShutdown}) })
 	}
 	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
+	go func() {
+		wg.Wait()
+		for _, p := range live {
+			<-p.stopDone
+		}
+		close(done)
+	}()
 	select {
 	case <-done:
 		return nil

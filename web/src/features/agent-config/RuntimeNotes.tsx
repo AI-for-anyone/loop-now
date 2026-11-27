@@ -20,8 +20,8 @@ export function RuntimeDifferences({ runtime, className, brief = false }: { runt
   if (items.length === 0) return null
   const title = copy.title(runtime.name)
   return (
-    <section aria-label={title} className={cn('grid min-w-0 gap-1 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13.5px] [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue', className)}>
-      <h3 className="font-semibold [[data-skin=plate]_&]:font-black">{title}</h3>
+    <section aria-label={title} className={cn('grid min-w-0 gap-1 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]', className)}>
+      <h3 className="font-semibold">{title}</h3>
       <ul className="grid list-disc gap-0.5 pl-5">
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>

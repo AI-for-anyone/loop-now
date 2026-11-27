@@ -76,20 +76,20 @@ function MetricStrip({ label, items }: { label: string; items: MetricItem[] }) {
   return (
     <section
       aria-label={label}
-      className="grid grid-cols-1 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0 [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]"
+      className="grid grid-cols-1 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0"
     >
       {items.map((item) => (
         <div key={item.label} className="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+            <span className="truncate text-[11.5px] font-medium text-ink-500">
               {item.label}
             </span>
             {item.spark && <Spark values={item.spark} className="h-[16px] w-14 shrink-0" />}
           </div>
-          <span className="font-display-latin text-[22px] leading-[1.15] font-semibold text-ink tabular-nums [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[26px] [[data-skin=plate]_&]:font-extrabold">
+          <span className="font-display-latin text-[22px] leading-[1.15] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]">
             {item.value}
           </span>
-          <span className={cn('truncate text-[11.5px] leading-snug', item.bad ? 'font-medium text-red-text [[data-skin=plate]_&]:font-bold' : 'text-ink-500')}>
+          <span className={cn('truncate text-[11.5px] leading-snug', item.bad ?'font-medium text-red-text':'text-ink-500')}>
             {item.delta}
           </span>
         </div>
@@ -224,7 +224,6 @@ export function StatsPage() {
       >
         <span className="font-mono text-[12px] text-ink-500">{eyebrow}</span>
       </PageHeader>
-
       {overview.query ? (
         <StatsWorkspace
           key={overview.key}
@@ -277,7 +276,7 @@ function StatsWorkspace({
             label: text.tabs.reliability,
             badge:
               reliabilityAlerts > 0 ? (
-                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-tint-red px-1.5 font-mono text-[10.5px] leading-[16px] font-semibold text-red-text tabular-nums [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink">
+                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-tint-red px-1.5 font-mono text-[10.5px] leading-[16px] font-semibold text-red-text tabular-nums">
                   {reliabilityAlerts}
                 </span>
               ) : undefined,
@@ -330,7 +329,7 @@ function StatsBody({
     return (
       <p
         role="status"
-        className="rounded-card border border-hairline-strong bg-surface-subtle px-5 py-8 text-center text-[14px] font-medium text-ink-700 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:font-bold"
+        className="rounded-card border border-hairline-strong bg-surface-subtle px-5 py-8 text-center text-[14px] font-medium text-ink-700"
       >
         {text.empty}
       </p>

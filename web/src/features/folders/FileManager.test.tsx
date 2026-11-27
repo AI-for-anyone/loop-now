@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
@@ -174,6 +174,35 @@ describe('File manager', () => {
     expect(await screen.findByText('The budget ledger write order is done; the tests still need a run.')).toBeInTheDocument()
   })
 
+  it('with the default 20 MiB limit, previews a 3.7 MiB image and a 5 MiB text file and saves it after an edit; a 21 MiB file can only be downloaded', async () => {
+    const source = createMockFolder({ key: 'w', preset: 'workspace', latency: 0 })
+    await source.write('shots/large.png', new Blob([new Uint8Array(3_700_000)], { type: 'image/png' }), true)
+    await source.write('shots/huge.png', new Blob([new Uint8Array(21 << 20)], { type: 'image/png' }), true)
+    // About 5,000 lines of 1 KiB: the test DOM is slow at many lines, a real browser much less so.
+    const line = 'A line of a large text file, long enough to count. '.repeat(20) + '\n'
+    const big = line.repeat(Math.ceil((5 << 20) / line.length))
+    await source.write('big.txt', big, true)
+    const write = vi.spyOn(source, 'write')
+    const user = userEvent.setup()
+    renderWithQuery(<FileManager source={source} rootLabel="server's folder" limits={{ maxBytes: 20 << 20, extensions: ['.txt'] }} className="h-[600px]" />)
+
+    await user.click(await findRow('shots'))
+    await user.click(await findRow('shots/large.png'))
+    expect(await screen.findByRole('img', { name: 'large.png' })).toHaveAttribute('src', source.contentURL('shots/large.png'))
+    await user.click(await findRow('shots/huge.png'))
+    expect(await screen.findByText('File is over 20.0 MiB; it can\'t be previewed or edited online.')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'huge.png' })).toBeNull()
+
+    await user.click(await findRow('big.txt'))
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    const editor = await screen.findByRole('textbox', { name: 'big.txt' })
+    expect((editor as HTMLTextAreaElement).value).toHaveLength(big.length)
+    fireEvent.change(editor, { target: { value: big + 'One more line.\n' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(write).toHaveBeenCalledWith('big.txt', big + 'One more line.\n', false))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'big.txt' })).toBeNull())
+  }, 30_000)
+
   it('symlink pointing outside the folder: when the server refuses to read it, says why instead of showing the generic validation error', async () => {
     const source = createMockFolder({ key: 'w', preset: 'workspace', latency: 0 })
     const list = source.list.bind(source), read = source.read.bind(source)
@@ -185,5 +214,36 @@ describe('File manager', () => {
     expect(await screen.findByText('This symlink points outside the folder and can\'t be opened.')).toBeInTheDocument()
     expect(screen.getByText('Symlink to /etc/hosts')).toBeInTheDocument()
     expect(screen.queryByText(/The submitted content didn't pass validation/)).toBeNull()
+  })
+
+  it('opens a nested file right away via initialPath, renders SVG as <img> (never inlined), and falls back to the parent folder when missing', async () => {
+    const source = createMockFolder({ key: 'init', preset: 'workspace', latency: 0 })
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><script>window.__svgRan=true</script><circle cx="20" cy="20" r="15"/></svg>'
+    await source.write('assets/mascot/concept.svg', new Blob([svg], { type: 'application/octet-stream' }), true)
+    const user = userEvent.setup()
+    const view = renderWithQuery(
+      <FileManager source={source} initialPath="assets/mascot/concept.svg" rootLabel="server's folder" limits={limits} className="h-[600px]" />,
+    )
+
+    const img = await screen.findByRole('img', { name: 'concept.svg' })
+    expect(img.tagName).toBe('IMG')
+    expect(img.getAttribute('src')).toMatch(/^(?:data:image\/svg\+xml|blob:)/)
+    expect(view.container.querySelector('svg script')).toBeNull()
+    expect(await findRow('assets/mascot/concept.svg')).toHaveAttribute('aria-selected', 'true')
+
+    // Navigating to another file overrides initialPath without snapping back.
+    await user.click(await findRow('AGENTS.md'))
+    await waitFor(() => expect(row('AGENTS.md')).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.queryByRole('img', { name: 'concept.svg' })).toBeNull()
+    view.unmount()
+
+    // Missing file under an existing directory falls back to showing that directory.
+    renderWithQuery(
+      <FileManager source={source} initialPath="assets/mascot/missing.png" rootLabel="server's folder" limits={limits} className="h-[600px]" />,
+      createTestQueryClient(),
+    )
+    const location = await screen.findByRole('navigation', { name: 'Location' })
+    await waitFor(() => expect(within(location).getByText('mascot').closest('[aria-current="page"]')).not.toBeNull())
+    expect(await screen.findByRole('button', { name: 'concept.svg' })).toBeInTheDocument()
   })
 })

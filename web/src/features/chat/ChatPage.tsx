@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { stopAgentRun, useAgentQueue } from '@/api/agent-queue'
+import { agentFolderContentURL, folderRoots, useAgentFolderLocation } from '@/api/folders'
 import { useAgentStatus, useContextInfo, useMessages, useModels, useRunTimeline } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -8,11 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
+import { agentPath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { useAgentContext } from '@/features/agents/agent-context'
+import { useScope } from '@/features/projects/scope-context'
 import { CompactionNote } from './CompactionNote'
 import { Composer, type ComposerHandle } from './Composer'
 import { isBusy } from './live-state'
+import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from './local-images'
 import { MessageList } from './MessageList'
 import { conflictNotice, useStopReply } from './queue-actions'
 import { QueueList, QueueMessages } from './QueueList'
@@ -27,7 +31,8 @@ import { useAgentConsoleMessages } from '@/api/console-inbox'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { CommandLine } from '@/features/plugins/ChatLines'
 import { useRuntimeLookup } from '@/lib/runtime'
-import { RestartNotice } from './BackgroundTasks'
+import { BackgroundTasksMark, RestartNotice, type BackgroundStopper } from './BackgroundTasks'
+import { stopAllBackgroundTasks, stopBackgroundTask } from '@/api/background-tasks'
 import { WaitingForApproval } from '@/features/permissions/WaitingForApproval'
 import type { Schemas } from '@/api/client'
 
@@ -40,6 +45,7 @@ function runFromHash(hash: string): string | null {
 
 export function ChatPage() {
   const { agent, reportLiveStatus } = useAgentContext()
+  const scope = useScope()
   const location = useLocation()
   const navigate = useNavigate()
   const { live, recordSent, recordQueueAction } = useAgentLive(agent.id)
@@ -55,6 +61,19 @@ export function ChatPage() {
   const notFound = hashRun !== null && aroundRun === null
   const status = useAgentStatus(agent.id)
   const context = useContextInfo()
+  const folderLocation = useAgentFolderLocation(agent.id)
+  const maxImageBytes = context.data?.limits.textEdit.maxBytes ?? DEFAULT_IMAGE_PREVIEW_MAX_BYTES
+  const folderTabPath = agentPath(scope, agent.id, 'folder')
+  // Stable reference so memo(Markdown) skips completed turns while a reply streams.
+  const replyFolder = useMemo<ReplyFolderContext>(
+    () => ({
+      roots: folderRoots(folderLocation.data),
+      contentURL: (path) => agentFolderContentURL(agent.id, path),
+      folderLink: (path) => `${folderTabPath}?${new URLSearchParams({ path })}`,
+      maxBytes: maxImageBytes,
+    }),
+    [folderLocation.data, agent.id, folderTabPath, maxImageBytes],
+  )
   // While locating, the history isn't loaded up to the latest yet, so new messages are only announced, not inserted into the
   // conversation flow.
   const atLatest = !messages.data?.pages[0]?.hasMoreAfter
@@ -70,24 +89,17 @@ export function ChatPage() {
   const turnsBefore = messages.data?.pages.at(-1)?.turnsBefore
   // Total turn count at the bottom of the ruler. When loaded up to the latest, use the number of loaded turns: newly sent messages and
   // newly arrived replies keep counting locally without waiting for a refetch.
-  // While locating, the history isn't loaded up to the latest and later turns aren't in the conversation flow, so use the total from
-  // the API (pages are fetched at different times; take the largest);
-  // turns that start in the meantime only show a new-messages notice and are not added to the total. Some of them are already
-  // counted in the API's total and there's no telling which, so adding them would overcount.
   const turnsTotal =
     turnsBefore === undefined ? undefined : atLatest ? turnsBefore + turns.length : Math.max(...messages.data!.pages.map((page) => page.turnsTotal))
 
   // The located run isn't in the fetched page: it may be a manual compaction (/compact), which has no messages and is not a turn
   // (contract Anomaly.compaction).
-  // In that case fetch the run through the run record API; if it is a manual compaction, show a note where it started.
   const locatedMissing = aroundRun !== null && messages.isSuccess && !turns.some((turn) => turn.run.id === aroundRun)
   const locatedRun = useRunTimeline(agent.id, aroundRun ?? '', locatedMissing, true)
   const compactionRun = locatedMissing && locatedRun.data?.run.compaction ? locatedRun.data.run : null
 
   // Messages and questions the Agent sent you are placed into the conversation by time; the ones you sent it show up as its platform
   // reminder line and aren't repeated.
-  // When replying to a question, remember the original question; once it no longer awaits an answer (answered, expired or closed),
-  // the input box leaves reply mode.
   const consoleMessages = useAgentConsoleMessages(agent.id)
   // An approval question (kind permission) is the request card in the reply that asked, so it is not shown a second time here.
   const toYou = useMemo(() => (consoleMessages.data ?? []).filter((m) => m.from.kind === 'agent' && m.to.kind === 'console' && m.question?.kind !== 'permission'), [consoleMessages.data])
@@ -101,7 +113,7 @@ export function ChatPage() {
     ...toYou.map((message) => ({
       key: `console:${message.id}`,
       at: message.createdAt,
-      node: <ConsoleMessage message={message} agent={agent} onReply={(m) => setReplying({ agentId: agent.id, messageId: m.id })} />,
+      node: <ConsoleMessage message={message} agent={agent} folder={replyFolder} onReply={(m) => setReplying({ agentId: agent.id, messageId: m.id })} />,
     })),
     ...commands
       .filter((item) => item.agentId === agent.id)
@@ -115,15 +127,10 @@ export function ChatPage() {
   const initialQueue = useAgentQueue(agent.id, !synced)
   const queueItems = synced ? live.queueItems : initialQueue.data?.agentId === agent.id ? initialQueue.data.items : []
   const currentRunId = synced ? live.current?.run.id : status.data?.currentRun?.id
-  // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none. Unknown
-  // while its provider's models are being read, and then images are offered as before.
+  // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none.
   const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
   const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
   const phase = live.current ? runPhaseText(live.current.run) : null
-  // Background tasks the next message, or stopping this reply, would stop: the next message restarts the CLI after a settings change;
-  // on some runtimes stopping a reply ends the process.
-  // The runtimes are the ones running now: the tasks' own, and the current reply's (the Agent's runtime may already be set to another for
-  // the next message).
   const runtimes = useRuntimeLookup()
   const runningTasks = synced ? live.backgroundTasks : (status.data?.backgroundTasks ?? [])
   const running = runningTasks.length
@@ -134,39 +141,48 @@ export function ChatPage() {
   const stopAlso = runtimes.get(replyRuntime)?.capabilities.stopEndsBackgroundTasks ? running : 0
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
-  // The numbers of the loaded replies that started a running background task, so the header's list can name them.
-  // The turns change with every streamed piece of text; the numbers only when one of them changes, so the header is not told every time.
-  const backgroundTasks = live.backgroundTasks
+  // The numbers of the loaded replies that started a running background task, so the list under the message box can name them.
   const numbered =
     turnsBefore === undefined
       ? ''
-      : turns.flatMap((turn, index) => (backgroundTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
+      : turns.flatMap((turn, index) => (runningTasks.some((task) => task.runId === turn.run.id) ? [`${turn.run.id}=${turnsBefore + index + 1}`] : [])).join(',')
   const replyNumbers = useMemo(() => Object.fromEntries(numbered ? numbered.split(',').map((pair) => { const [runId, number] = pair.split('='); return [runId, Number(number)] }) : []), [numbered])
+  const background = (
+    <BackgroundTasksMark
+      tasks={runningTasks}
+      stopper={backgroundStopper(agent.id)}
+      // The reply that started a task: located in the conversation, named by its number when it is loaded, otherwise by its time.
+      origin={(task) => {
+        const number = replyNumbers[task.runId]
+        return { to: `${location.pathname}#run-${encodeURIComponent(task.runId)}`, label: number ? t.background.fromReply(number) : t.background.fromReplyAt(t.chat.time(task.startedAt)) }
+      }}
+    />
+  )
 
   // Once a snapshot has arrived, hand the live status to the header sticker; clear it when leaving the chat page so the header goes back
   // to the polled status.
   useEffect(() => {
-    if (synced) reportLiveStatus({ busy, phase, sleep, backgroundTasks, replyNumbers })
-  }, [synced, busy, phase, sleep, backgroundTasks, replyNumbers, reportLiveStatus])
+    if (synced) reportLiveStatus({ busy, phase, sleep })
+  }, [synced, busy, phase, sleep, reportLiveStatus])
   useEffect(() => () => reportLiveStatus(null), [reportLiveStatus])
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
   return (
-    // The whole page sits in the sheet: above is the centered message stream (with the floating PrecisionRuler overlay on the right),
+    // The whole page sits in the sheet: above is the centered 800px message stream (with the floating PrecisionRuler overlay on the right),
     // below is the floating unified composer card.
     // On narrow screens (below nav: 901px) the conversation gets a fixed viewport height and scrolls with the whole page;
     // at nav: and wider it locks cleanly to the viewport height matching AppLayout's nav:h-screen.
     <div className="flex h-full min-h-0 flex-col nav:overflow-hidden">
       <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink">
         {/* Notice bars sit above the message area, centered with the conversation column. */}
-        <div className="mx-auto flex w-full max-w-[800px] shrink-0 flex-col px-4 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[800px] shrink-0 flex-col px-4 sm:px-6 empty:hidden">
           {notFound && (
             <Alert variant="warning" className="mt-4">
               <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
             </Alert>
           )}
           {aroundRun !== null && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13px] font-semibold [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-bold">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13px] font-semibold">
               <span>{t.timeline.locate.viewing}</span>
               <span role="status" aria-live="polite">
                 {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
@@ -185,6 +201,7 @@ export function ChatPage() {
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.
               key={`${agent.id}:${aroundRun ?? 'latest'}`}
               agent={agent}
+              folder={replyFolder}
               turns={turns}
               hasQueued={queuedTurns.length > 0 || queueItems.length > 0}
               hasOlder={messages.hasNextPage}
@@ -231,6 +248,7 @@ export function ChatPage() {
             </>
           }
           runner={<RunnerChip agent={agent} />}
+          background={background}
           notice={
             <>
               {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} onLocate={(runId) => void navigate(`${location.pathname}#run-${encodeURIComponent(runId)}`)} />}
@@ -240,11 +258,9 @@ export function ChatPage() {
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
-            // Visually hidden in mono skin (header badge + composer placeholder + stop button already convey busy state without crowding the
-            // 4 inline menus); kept accessible via role="status" and shown visibly in classic Plate skin.
+            // Visually quiet (header status + composer placeholder + stop button already convey busy state); kept accessible via role="status".
             busy && (
-              <span role="status" className="sr-only [[data-skin=plate]_&]:not-sr-only [[data-skin=plate]_&]:inline-flex [[data-skin=plate]_&]:items-center [[data-skin=plate]_&]:gap-1.5 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink">
-                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
+              <span role="status" className="sr-only">
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
             )
@@ -256,7 +272,7 @@ export function ChatPage() {
                 role="status"
                 aria-live="polite"
                 className={cn(
-                  'inline-flex items-center gap-1.5 text-[11.5px] font-semibold [[data-skin=plate]_&]:font-black',
+                  'inline-flex items-center gap-1.5 text-[11.5px] font-semibold',
                   connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
                 )}
               >
@@ -273,3 +289,8 @@ export function ChatPage() {
     </div>
   )
 }
+
+const backgroundStopper = (agentId: string): BackgroundStopper => ({
+  stop: (taskId, actionId) => stopBackgroundTask(agentId, taskId, actionId),
+  stopAll: (actionId) => stopAllBackgroundTasks(agentId, actionId),
+})

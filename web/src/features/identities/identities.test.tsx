@@ -230,10 +230,10 @@ describe('Issue token', () => {
     const box = await screen.findByRole('dialog', { name: 'Token issued' })
     const result = within(box)
     expect(box.querySelector('[data-dialog-tab]')).toHaveTextContent('Token')
-    expect(result.getByRole('alert')).toHaveClass('riso-tilt')
+    expect(result.getByRole('alert')).toHaveClass('rounded-card', 'border')
     const copy = result.getByRole('button', { name: 'Copy' })
-    expect(copy).toHaveClass('[[data-skin=plate]_&]:bg-riso-yellow')
-    expect(copy.parentElement).toHaveClass('bg-code-bg', 'border', 'border-code-border', '[[data-skin=plate]_&]:border-dashed')
+    expect(copy).toHaveAttribute('data-slot', 'button')
+    expect(copy.parentElement).toHaveClass('bg-code-bg', 'border', 'border-code-border')
     await user.click(result.getByRole('button', { name: 'Close' }))
     expect(await screen.findByRole('alertdialog', { name: 'Have you saved the token?' })).toBeInTheDocument()
     expect(box).toBeInTheDocument()
@@ -335,12 +335,7 @@ describe('External identities on the sheet', () => {
     const header = screen.getByRole('heading', { level: 1, name: 'External identities' }).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›External identities')
     expect(await within(header).findByText('1 identity')).toBeInTheDocument()
-    expect(within(header).getByRole('button', { name: 'New' })).toHaveClass(
-      'bg-surface-control',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:bg-riso-pink',
-    )
+    expect(within(header).getByRole('button', { name: 'New' })).toHaveClass('bg-surface-control')
   })
 
   it('list and details sit on one sheet and switching identities preserves the active tab', async () => {
@@ -356,9 +351,6 @@ describe('External identities on the sheet', () => {
     expect(list().getByRole('link', { name: /ci-bot/ })).toHaveClass(
       'bg-surface-active',
       'border-hairline-strong',
-      '[[data-skin=plate]_&]:bg-riso-yellow',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
     )
     expect(list().getByRole('link', { name: /release-bot/ })).not.toHaveClass('bg-surface-active')
 
@@ -367,20 +359,18 @@ describe('External identities on the sheet', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'release-bot' })).toBeInTheDocument()
   })
 
-  it('preserves mono and Plate styling on the identity header, sticky token risk note and Danger Zone button', async () => {
+  it('uses unified semantic styling on the identity header, token risk note and Danger Zone button', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}/tokens`)
     const name = await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
     expect(name).toHaveClass('riso-marker', 'font-display-cn')
     expect(screen.getByText(ciBot.address)).toHaveClass('font-mono')
-    expect(await screen.findByRole('note')).toHaveClass('riso-tilt')
+    expect(await screen.findByRole('note')).toHaveClass('rounded-card', 'border')
 
     await user.click(screen.getByRole('link', { name: 'Settings' }))
     expect(await screen.findByRole('button', { name: 'Delete external identity' })).toHaveClass(
       'border',
       'text-red-text',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-red-text',
     )
   })
 })

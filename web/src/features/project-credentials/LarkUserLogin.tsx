@@ -79,8 +79,8 @@ function LarkLoginForm(props: LarkUserLoginProps) {
     try { await callback() } catch (error) { setLocalError(error); setReadMissing(originalRead && error instanceof ApiError && error.status === 404) }
     finally { guard.current = false; setPending(false) }
   }
-  return <section aria-label={copy.title} className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-subtle p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-    <h3 className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.title}</h3><p className="text-sm">{copy.boundary}</p><p className="text-sm">{copy.scopes}</p>
+  return <section aria-label={copy.title} className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-subtle p-4">
+    <h3 className="font-semibold">{copy.title}</h3><p className="text-sm">{copy.boundary}</p><p className="text-sm">{copy.scopes}</p>
     {!available && <p role="status">{copy.unsupported}</p>}
     {!target && !active && <><Label htmlFor={id}>{copy.application}</Label>
     <select id={id} className={selectClass} value={selected?.id ?? ''} disabled={!available || props.disabled || locked} onChange={event => { setSelected(scoped.find(a => a.id === event.target.value) ?? null); setLocalError(null) }}>

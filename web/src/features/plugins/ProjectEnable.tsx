@@ -22,9 +22,9 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
   const fields = fieldsOf(schema, 'project')
   const first = item && fields.find((field) => (item.config.values as Record<string, unknown>)[field.name] !== undefined)
   return (
-    <li className="grid min-w-0 gap-1 border-b border-hairline px-1 py-2 last:border-b-0 [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
+    <li className="grid min-w-0 gap-1 border-b border-hairline px-1 py-2 last:border-b-0">
       <div className="flex min-w-0 items-center gap-2.5">
-        <Link to={projectPluginsPath(project)} className="min-w-0 truncate text-[13.5px] font-semibold outline-none hover:underline focus-visible:shadow-focus [[data-skin=plate]_&]:font-black">
+        <Link to={projectPluginsPath(project)} className="min-w-0 truncate text-[13.5px] font-semibold outline-none hover:underline focus-visible:shadow-focus">
           {project.name}
         </Link>
         {overrides > 0 && <span className="shrink-0 text-[12px] text-ink-500">{text.overrides(overrides)}</span>}
@@ -32,7 +32,7 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
           {item?.enabled && (
             <Link
               to={pluginPath(pluginId, 'config')}
-              className="text-[12px] font-medium text-ink-700 underline-offset-3 outline-none hover:text-ink hover:underline focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue"
+              className="text-[12px] font-medium text-ink-700 underline-offset-3 outline-none hover:text-ink hover:underline focus-visible:shadow-focus"
             >
               {text.configure} ›
             </Link>
@@ -63,7 +63,7 @@ export function ProjectEnableList({ pluginId, schema }: { pluginId: string; sche
   if (projects.isPending) return <Quiet>{t.common.loading}</Quiet>
   if (!list.length) return <Quiet>{text.noProjects}</Quiet>
   return (
-    <ul className="grid min-w-0 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink">
+    <ul className="grid min-w-0 border-t border-hairline">
       {list.map((project) => (
         <EnableRow key={project.id} project={project} pluginId={pluginId} schema={schema} />
       ))}

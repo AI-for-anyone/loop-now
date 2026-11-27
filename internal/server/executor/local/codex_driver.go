@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,8 +43,10 @@ type codexProcess struct {
 	binary, version string
 	// threadID is the thread this process runs; model and effort are sent with every turn.
 	threadID, model, effort string
-	// started reports whether a turn of this process has started (Codex then has the thread saved).
-	started bool
+	// resumed reports that the process continues a recorded thread (saved before it started).
+	resumed bool
+	// noted is set once the thread has been noted for archiving later.
+	noted atomic.Bool
 }
 
 func codexOf(p *proc) *codexProcess {
@@ -53,11 +56,7 @@ func codexOf(p *proc) *codexProcess {
 
 // Prompt sends one message as a turn of the process's thread.
 func (cp *codexProcess) Prompt(ctx context.Context, text string, sink runturn.Sink, images ...messageimage.Content) (runturn.Result, error) {
-	r, err := cp.Turn(ctx, text, codexapp.TurnOptions{ThreadID: cp.threadID, Model: cp.model, Effort: cp.effort, Images: images}, sink)
-	if err == nil && cp.LastTurnStarted() {
-		cp.started = true
-	}
-	return r, err
+	return cp.Turn(ctx, text, codexapp.TurnOptions{ThreadID: cp.threadID, Model: cp.model, Effort: cp.effort, Images: images}, sink)
 }
 
 // Abort stops the turn in progress; the process stays.
@@ -280,7 +279,7 @@ func (cd codexDriver) ready(ctx context.Context, p *proc, spec startSpec) error 
 		if err != nil {
 			return cd.startFailure(p, err)
 		}
-		cp.threadID, cp.started = spec.sessionFile, true
+		cp.threadID, cp.resumed = spec.sessionFile, true
 	case snap.ForkSessionFile != "":
 		var base codexBaseline
 		b, err := os.ReadFile(snap.ForkSessionFile)
@@ -353,6 +352,19 @@ func codexMCPConfig(servers map[string]json.RawMessage) map[string]any {
 
 func (codexDriver) beforeTurn(context.Context, *proc, agentconfig.Snapshot) error { return nil }
 
+// savedSession is the thread once a turn of it has started (Codex saves a thread only then), during that turn too; the
+// first time, the thread is noted for archiving when the Agent is deleted.
+func (cd codexDriver) savedSession(p *proc) string {
+	cp := codexOf(p)
+	if cp == nil || cp.threadID == "" || (!cp.resumed && !cp.ThreadSaved()) {
+		return ""
+	}
+	if !cp.noted.Swap(true) {
+		cd.e.noteCodexThread(p.dirs, cp.threadID, p.log)
+	}
+	return cp.threadID
+}
+
 // afterTurn records the thread once a turn of it has started (Codex saves a thread only then) and words a missing or
 // revoked login.
 func (cd codexDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
@@ -360,14 +372,10 @@ func (cd codexDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	if cp == nil {
 		return tr
 	}
-	if cp.started {
+	if id := cd.savedSession(p); id != "" {
 		p.sessMu.Lock()
-		first := p.sessionFile != cp.threadID
-		p.sessionFile = cp.threadID
+		p.sessionFile = id
 		p.sessMu.Unlock()
-		if first {
-			cd.e.noteCodexThread(p.dirs, cp.threadID, p.log)
-		}
 	}
 	if tr.ErrorCode == executor.ErrRuntimeLoginRequired {
 		tr.ErrorMessage = "Codex on this computer is not logged in, or its login was revoked. Run codex login on this computer and try again."

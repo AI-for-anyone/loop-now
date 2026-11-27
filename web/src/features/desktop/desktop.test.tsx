@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
@@ -9,7 +9,6 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
-import { BoardingSplash } from './BoardingSplash'
 import type { DesktopBridge } from './desktop'
 
 // Inside the desktop shell's window: inbox events are handed to the shell to show the Dock unread count and system notifications, and
@@ -120,7 +119,7 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     const nav = screen.getByRole('navigation', { name: 'Main navigation' })
     expect(nav.firstElementChild).toHaveClass('window-drag', 'pl-[84px]')
     expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).toHaveClass('window-drag')
-    expect(document.querySelector('[data-agent-title-row]')).toHaveClass('window-drag')
+    expect(document.querySelector('[data-agent-header]')).toHaveClass('window-drag')
     unmount()
 
     delete window.loopNowDesktop
@@ -129,7 +128,7 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     await screen.findByRole('heading', { name: 'Reviewer', level: 1 })
     expect(screen.getByRole('navigation', { name: 'Main navigation' }).firstElementChild).not.toHaveClass('window-drag')
     expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).not.toHaveClass('window-drag')
-    expect(document.querySelector('[data-agent-title-row]')).not.toHaveClass('window-drag')
+    expect(document.querySelector('[data-agent-header]')).not.toHaveClass('window-drag')
     expect(document.querySelector('.window-drag')).toBeNull()
   })
 
@@ -141,68 +140,5 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     bridge.navigate?.('/settings')
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
-  })
-})
-
-describe('Desktop boarding splash', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('shows a logo-only boarding splash on desktop mount and replays it when the window is reopened, with no text', () => {
-    vi.useFakeTimers()
-    let reopen: (() => void) | undefined
-    window.loopNowDesktop = {
-      platform: 'darwin',
-      notify: vi.fn(),
-      setBadge: vi.fn(),
-      onNavigate: () => () => undefined,
-      onBoarding: (listener) => {
-        reopen = listener
-        return () => {
-          reopen = undefined
-        }
-      },
-    }
-
-    render(<BoardingSplash />)
-    const initial = screen.getByRole('status', { name: 'Loop Now' })
-    expect(initial).toHaveAttribute('data-desktop-boarding', 'hold')
-    expect(initial.textContent).toBe('')
-    expect(initial.querySelector('.boarding-gold-square')).not.toBeNull()
-
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-    expect(screen.getByRole('status', { name: 'Loop Now' })).toHaveAttribute('data-desktop-boarding', 'fade')
-
-    act(() => {
-      vi.advanceTimersByTime(240)
-    })
-    expect(screen.queryByRole('status', { name: 'Loop Now' })).toBeNull()
-
-    // Reopening the desktop window replays the boarding splash and clears it cleanly.
-    act(() => {
-      reopen?.()
-    })
-    const reopened = screen.getByRole('status', { name: 'Loop Now' })
-    expect(reopened).toHaveAttribute('data-desktop-boarding', 'hold')
-    expect(reopened.textContent).toBe('')
-
-    act(() => {
-      vi.advanceTimersByTime(900)
-    })
-    expect(screen.getByRole('status', { name: 'Loop Now' })).toHaveAttribute('data-desktop-boarding', 'fade')
-
-    act(() => {
-      vi.advanceTimersByTime(250)
-    })
-    expect(screen.queryByRole('status', { name: 'Loop Now' })).toBeNull()
-  })
-
-  it('does not render in a regular browser', () => {
-    delete window.loopNowDesktop
-    const { container } = render(<BoardingSplash />)
-    expect(container.firstChild).toBeNull()
   })
 })

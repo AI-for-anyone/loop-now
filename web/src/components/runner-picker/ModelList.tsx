@@ -1,12 +1,9 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type RefObject } from 'react'
 import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
-import { BrandIcon } from '@/components/BrandIcon'
 import { ScrollRuler } from '@/components/PrecisionRuler'
 import { t } from '@/i18n'
-import { providerBrandIcon } from '@/lib/brand-icons'
 import { describeError } from '@/lib/errors'
-import { shortModelName } from '@/lib/model-name'
 import { cn } from '@/lib/utils'
 import { pluginName, type Unavailable } from './provider-access'
 import type { Row } from './runner-rows'
@@ -171,8 +168,6 @@ export function ModelList(props: ModelListProps) {
   const modelRow = (row: Extract<Row, { kind: 'model' }>) => {
     const isChosen = row.key === chosen, isActive = row.key === active, locked = blocked(row.provider)
     const figure = contextFigure(row.model.contextWindow)
-    const displayName = shortModelName(row.model)
-    const providerIcon = !row.grouped ? providerBrandIcon(row.provider.id) : null
     return (
       <li
         key={row.key}
@@ -187,39 +182,30 @@ export function ModelList(props: ModelListProps) {
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => !locked && onChoose(row.provider, row.model)}
         className={cn(
-          'relative flex min-h-8 cursor-pointer items-center gap-2 rounded-ticket py-1.5 pr-2.5 text-[13px] transition-colors [[data-skin=plate]_&]:rounded-[10px]',
+          'relative flex min-h-8 cursor-pointer items-center gap-2 rounded-ticket py-1.5 pr-2.5 text-[13px] transition-colors',
           row.grouped ? 'pl-6' : 'pl-2.5',
-          isChosen && 'bg-surface-active/80 [[data-skin=plate]_&]:bg-transparent',
+          isChosen && 'bg-surface-active/80',
           // The keyboard's row highlights while the search box has focus; the mouse gets a clean hover.
           isActive &&
             cn(
-              'group-focus-within/list:bg-surface-hover [[data-skin=plate]_&]:group-focus-within/list:bg-tint-blue [[data-skin=plate]_&]:group-focus-within/list:shadow-[inset_0_0_0_2px_var(--ink)]',
+              'group-focus-within/list:bg-surface-hover',
               isChosen && 'group-focus-within/list:bg-surface-active',
             ),
-          !locked && !isChosen && 'hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-tint-blue/70',
-          !locked && isChosen && '[[data-skin=plate]_&]:hover:bg-tint-blue/70',
+          !locked && !isChosen && 'hover:bg-surface-hover',
           locked && 'cursor-not-allowed opacity-45',
         )}
       >
-        {providerIcon && <BrandIcon name={providerIcon} className="size-3.5 shrink-0 [[data-skin=plate]_&]:hidden" />}
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className={cn('relative min-w-0 truncate text-ink [[data-skin=plate]_&]:font-black', isChosen ? 'font-semibold' : 'font-medium')}>
-            {isChosen && (
-              <span
-                aria-hidden="true"
-                className="hidden [[data-skin=plate]_&]:absolute [[data-skin=plate]_&]:inset-x-[-4px] [[data-skin=plate]_&]:top-[45%] [[data-skin=plate]_&]:bottom-[-1px] [[data-skin=plate]_&]:block [[data-skin=plate]_&]:-rotate-[1deg] [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:mix-blend-multiply"
-              />
-            )}
-            <span className="relative [[data-skin=plate]_&]:hidden">{displayName}</span>
-            <span className="relative hidden [[data-skin=plate]_&]:inline">{row.model.name}</span>
+          <span className={cn('relative min-w-0 truncate text-ink', isChosen ? 'font-semibold' : 'font-medium')}>
+            {row.model.name}
           </span>
           {row.model.name !== row.model.id && (
-            <span className="hidden min-w-0 truncate font-mono text-[11px] text-ink-500 [[data-skin=plate]_&]:inline">{row.model.id}</span>
+            <span className="min-w-0 truncate font-mono text-[11px] text-ink-500">{row.model.id}</span>
           )}
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {figure && <span className="font-mono text-[11px] font-normal text-ink-500 tabular-nums">{figure}</span>}
-          {isChosen && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue [[data-skin=plate]_&]:text-riso-pink" strokeWidth={2.5} />}
+          {isChosen && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue" strokeWidth={2.5} />}
         </span>
       </li>
     )
@@ -227,7 +213,7 @@ export function ModelList(props: ModelListProps) {
 
   return (
     <div className="group/list flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-hairline px-3 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-white">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-hairline px-3">
         <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-500" />
         <input
           ref={searchRef}
@@ -263,13 +249,13 @@ export function ModelList(props: ModelListProps) {
                   key={block.section.key}
                   role="none"
                   className={cn(
-                    'flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:tracking-[0.04em]',
+                    'flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold text-ink-500',
                     blockIndex > 0 ? 'pt-2.5' : 'pt-0.5',
                   )}
                 >
-                  {block.section.usable && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green [[data-skin=plate]_&]:ring-1 [[data-skin=plate]_&]:ring-ink" />}
+                  {block.section.usable && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green" />}
                   <span className="shrink-0">{copy.usable[String(block.section.usable) as 'true' | 'false']}</span>
-                  <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/20" />
+                  <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline" />
                 </li>
               )
             }
@@ -293,30 +279,25 @@ export function ModelList(props: ModelListProps) {
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onToggle(provider.id)}
                   className={cn(
-                    'sticky top-0 z-[1] flex min-h-8 cursor-pointer items-center gap-1.5 rounded-ticket bg-surface-elevated px-2 py-1 text-[12.5px] transition-colors [[data-skin=plate]_&]:rounded-[10px] [[data-skin=plate]_&]:bg-paper-raised',
-                    active === key
-                      ? 'group-focus-within/list:bg-surface-hover [[data-skin=plate]_&]:group-focus-within/list:bg-tint-blue [[data-skin=plate]_&]:group-focus-within/list:shadow-[inset_0_0_0_2px_var(--ink)]'
-                      : 'hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-tint-blue/70',
+                    'sticky top-0 z-[1] flex min-h-8 cursor-pointer items-center gap-1.5 rounded-ticket bg-surface-elevated px-2 py-1 text-[12.5px] transition-colors',
+                    active === key ? 'group-focus-within/list:bg-surface-hover' : 'hover:bg-surface-hover',
                     locked && 'opacity-60',
                   )}
                 >
-                  <ChevronRightIcon aria-hidden="true" className={cn('size-3.5 shrink-0 text-ink-500 transition-transform motion-reduce:transition-none [[data-skin=plate]_&]:text-ink', expanded && 'rotate-90')} />
-                  {providerBrandIcon(provider.id) && (
-                    <BrandIcon name={providerBrandIcon(provider.id)!} className="size-3.5 shrink-0 [[data-skin=plate]_&]:hidden" />
-                  )}
+                  <ChevronRightIcon aria-hidden="true" className={cn('size-3.5 shrink-0 text-ink-500 transition-transform motion-reduce:transition-none', expanded && 'rotate-90')} />
                   <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                    <span className="font-mono text-[12.5px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">{provider.id}</span>
-                    {provider.source === 'plugin' && <span className="min-w-0 truncate text-[11.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{[provider.name, pluginName(provider)].filter(Boolean).join(' · ')}</span>}
-                    {reason && <span className={cn('text-[11.5px] font-medium [[data-skin=plate]_&]:font-bold', locked ? 'text-red-text' : 'text-ink-500')}>{t.config.basic.pluginUnavailable[reason]}</span>}
+                    <span className="font-mono text-[12.5px] font-semibold text-ink">{provider.id}</span>
+                    {provider.source === 'plugin' && <span className="min-w-0 truncate text-[11.5px] font-medium text-ink-700">{[provider.name, pluginName(provider)].filter(Boolean).join(' · ')}</span>}
+                    {reason && <span className={cn('text-[11.5px] font-medium', locked ? 'text-red-text' : 'text-ink-500')}>{t.config.basic.pluginUnavailable[reason]}</span>}
                   </span>
-                  <span className="shrink-0 rounded-stamp bg-surface-subtle px-1.5 py-0.5 font-mono text-[10.5px] leading-none font-normal text-ink-500 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700">
+                  <span className="shrink-0 rounded-stamp bg-surface-subtle px-1.5 py-0.5 font-mono text-[10.5px] leading-none font-normal text-ink-500">
                     {matched === null ? copy.modelCount(provider.modelCount) : copy.matchCount(matched, provider.modelCount)}
                   </span>
                 </div>
                 {expanded && (
                   <ul role="group">
                     {block.models.map(modelRow)}
-                    {reading.has(provider.id) && <li role="none" className="py-1.5 pl-6 text-[12px] text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.loading}</li>}
+                    {reading.has(provider.id) && <li role="none" className="py-1.5 pl-6 text-[12px] text-ink-500">{copy.loading}</li>}
                     {failures.has(provider.id) && <Failure error={failures.get(provider.id)} />}
                   </ul>
                 )}
@@ -324,9 +305,9 @@ export function ModelList(props: ModelListProps) {
             )
           })}
           {!grouped && [...failures.values()].slice(0, 1).map((error, index) => <Failure key={index} error={error} />)}
-          {loading && rows.length === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.loading}</li>}
-          {!loading && rows.length === 0 && failures.size === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.empty}</li>}
-          {hidden > 0 && <li role="none" className="px-2.5 pt-1.5 pb-1 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.more(hidden)}</li>}
+          {loading && rows.length === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500">{copy.loading}</li>}
+          {!loading && rows.length === 0 && failures.size === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500">{copy.empty}</li>}
+          {hidden > 0 && <li role="none" className="px-2.5 pt-1.5 pb-1 text-[11.5px] text-ink-500">{copy.more(hidden)}</li>}
         </ul>
         <ScrollRuler targetRef={listRef} label={copy.models} tickCount={11} className="inset-y-2 right-1" />
       </div>
@@ -338,7 +319,7 @@ export function ModelList(props: ModelListProps) {
 function Failure({ error }: { error: unknown }) {
   return (
     <li role="none" className="grid gap-0.5 py-1.5 pr-2 pl-6 text-[12px] text-red-text">
-      <span className="font-semibold [[data-skin=plate]_&]:font-bold">{t.config.basic.catalogUnavailable}</span>
+      <span className="font-semibold">{t.config.basic.catalogUnavailable}</span>
       <span>{t.config.basic.catalogReason(describeError(error))}</span>
     </li>
   )

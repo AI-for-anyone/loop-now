@@ -39,12 +39,13 @@ export const shell = {
   },
   chips: {
     busy: '回复中',
-    sleep: 'zZ sleep',
   },
   noProjects: '还没有项目',
   menu: '打开导航',
   closeMenu: '关闭导航',
-  settingsShortcut: '⌘,',
+  settingsShortcut: (mac: boolean) => (mac ? '⌘,' : 'Ctrl+,'),
+  sidebarShortcut: (mac: boolean) => (mac ? '⌘B' : 'Ctrl+B'),
+  paletteShortcut: (mac: boolean) => (mac ? '⌘K' : 'Ctrl+K'),
   routeError: {
     title: '页面加载出错',
     hint: '当前页面遇到了未预期的错误，你可以返回概览或重新加载。',
@@ -70,6 +71,7 @@ export const shell = {
       current: '当前',
     },
   },
+  resizeSidebar: '调整侧边栏宽度',
   // Location trail in the main-area page header: project › Agent › name.
   breadcrumb: '页面位置',
   agentCrumb: 'Agent',

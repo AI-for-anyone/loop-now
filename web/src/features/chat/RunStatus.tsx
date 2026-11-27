@@ -1,4 +1,5 @@
 import { CircleAlertIcon, LoaderCircleIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
@@ -73,12 +74,13 @@ function shownState(state: Schemas['ToolState'], unfinished: UnfinishedTool): Sc
 // so the same toolCallId may have several entries; they are merged in order of appearance and only the latest state is shown.
 // Interrupted tools turn gray with a dashed border; those with no result get a plain gray chip, told apart from running (blue, spinning),
 // succeeded (green) and failed (red).
-// exclude: tool calls shown another way (those that went on in the background).
-export function ToolList({ tools: events, unfinished = 'running', exclude }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool; exclude?: ReadonlySet<string> }) {
+// exclude: tool calls shown another way (those that went on in the background); after: those, as list items of their own after the rest
+// (given only when there are some).
+export function ToolList({ tools: events, unfinished = 'running', exclude, after }: { tools: Schemas['ToolEvent'][]; unfinished?: UnfinishedTool; exclude?: ReadonlySet<string>; after?: ReactNode }) {
   const latest = new Map<string, Schemas['ToolEvent']>()
   for (const event of events) if (!exclude?.has(event.toolCallId)) latest.set(event.toolCallId, event)
   const tools = [...latest.values()]
-  if (tools.length === 0) return null
+  if (tools.length === 0 && !after) return null
   return (
     <ul className="flex flex-wrap gap-2" aria-label={t.chat.toolsLabel}>
       {tools.map((tool) => {
@@ -86,12 +88,12 @@ export function ToolList({ tools: events, unfinished = 'running', exclude }: { t
         return (
           <li key={tool.toolCallId}>
             {state === 'interrupted' ? (
-              <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500 [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink/30 [[data-skin=plate]_&]:bg-paper-raised">
+              <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500">
                 <span className="font-mono">{tool.toolName}</span>
                 <span>{t.chat.toolInterrupted}</span>
               </Badge>
             ) : state === 'no_result' ? (
-              <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.07]">
+              <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700">
                 <span className="font-mono text-ink">{tool.toolName}</span>
                 <span>{t.chat.tool.no_result}</span>
               </Badge>
@@ -105,6 +107,7 @@ export function ToolList({ tools: events, unfinished = 'running', exclude }: { t
           </li>
         )
       })}
+      {after}
     </ul>
   )
 }

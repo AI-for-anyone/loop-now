@@ -113,7 +113,7 @@ describe('Background tasks of a task node', () => {
     expect(screen.queryByText('Stop the current reply only')).toBeNull()
   })
 
-  it('the node’s reply shows its backgrounded tools as cards from its record: running, then how they ended', async () => {
+  it('the node’s reply shows its backgrounded tools as chips from its record: running, then how they ended, details on click', async () => {
     const running = makeBackgroundTask({ id: 'bg-run', label: 'cargo test', startedAt: '2026-10-14T08:01:00Z' })
     const entries: Schemas['TimelineEntry'][] = [
       { type: 'tool', at: '2026-10-14T08:00:00Z', toolCallId: 'call_1', toolName: 'bash', command: 'cargo test', state: 'succeeded', endedAt: '2026-10-14T08:00:01Z', durationMs: 1000 },
@@ -122,17 +122,31 @@ describe('Background tasks of a task node', () => {
       { type: 'background_task_started', at: '2026-10-14T08:00:03Z', taskId: 'bg-fmt', kind: 'command', label: 'cargo fmt --check', toolCallId: 'call_2' },
       { type: 'background_task_ended', at: '2026-10-14T08:00:13Z', taskId: 'bg-fmt', status: 'failed', exitCode: 1, stopReason: null, output: 'Diff in src/main.rs' },
     ]
-    setup([running], entries)
-    const testCard = (await screen.findByText('cargo test', { selector: '[data-background-tool] span' })).closest('[data-background-tool]') as HTMLElement
-    // The live list's start time drives the clock.
-    expect(testCard).toHaveTextContent('Running in the background · 1:00')
-    const fmtCard = screen.getByText('cargo fmt --check', { selector: '[data-background-tool] span' }).closest('[data-background-tool]') as HTMLElement
-    expect(within(fmtCard).getByRole('status')).toHaveTextContent('Failed in the background')
-    expect(fmtCard).toHaveTextContent('exit code 1')
-    expect(fmtCard).toHaveTextContent('Output (the last part)')
-    // Both are cards, not chips.
-    expect(screen.queryByRole('list', { name: 'Tool calls' })).toBeNull()
+    const { user } = setup([running], entries)
+    const tools = await screen.findByRole('list', { name: 'Tool calls' })
+    const test = within(tools).getByRole('button', { name: 'bash Running in the background: cargo test' })
+    expect(test.querySelector('[data-slot="tool-spinner"]')).not.toBeNull()
+    const fmt = within(tools).getByRole('button', { name: 'bash Failed in the background: cargo fmt --check' })
+    // The backgrounded tools are not plain chips as well.
+    expect(within(tools).getAllByRole('listitem')).toHaveLength(2)
+    // The live list's start time drives the clock in the details.
+    await user.click(test)
+    expect(await screen.findByRole('dialog', { name: 'Background task' })).toHaveTextContent('Running for 1:00')
+    await user.keyboard('{Escape}')
+    await user.click(fmt)
+    const details = await screen.findByRole('dialog', { name: 'Background task' })
+    expect(details).toHaveTextContent('exit code 1')
+    expect(details).toHaveTextContent('Diff in src/main.rs')
     void runId
+  })
+
+  it('the mark is in the node’s message box bar, not in its header', async () => {
+    setup([makeBackgroundTask({ label: 'cargo build' })])
+    const mark = await screen.findByRole('button', { name: '1 background task is running; open to see or stop them' })
+    expect(mark.closest('[data-node-status]')).toBeNull()
+    const composer = document.querySelector('[data-node-composer]')!.closest('.grid')!
+    expect(composer).toContainElement(mark)
+    expect(document.querySelectorAll('[data-background-mark]')).toHaveLength(1)
   })
 })
 

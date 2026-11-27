@@ -184,6 +184,13 @@ func (c *Client) selfTurn(m wireLine) *turn {
 		return nt
 	}
 	start := begins && hook != nil
+	var opening chan struct{}
+	if start {
+		// This line is Claude Code's own turn: a message sent while its place is made is read only after it, so the
+		// message waits (see Prompt) instead of taking this turn's output for its reply.
+		opening = make(chan struct{})
+		c.selfOpening = opening
+	}
 	c.mu.Unlock()
 	if !start {
 		return t
@@ -192,14 +199,9 @@ func (c *Client) selfTurn(m wireLine) *turn {
 	nt := newTurn(st)
 	nt.self, nt.end, nt.activity = true, st.End, make(chan struct{}, 1)
 	c.mu.Lock()
-	if c.turn != nil {
-		// A message was sent meanwhile: what follows is its turn.
-		t := c.turn
-		c.mu.Unlock()
-		st.End(runturn.Result{Outcome: runturn.OutcomeCompleted})
-		return t
-	}
 	c.turn = nt
+	c.selfOpening = nil
+	close(opening)
 	c.mu.Unlock()
 	go c.watchSelfTurn(nt)
 	return nt
@@ -395,6 +397,9 @@ func (c *Client) handleLine(line []byte) {
 					t.sink.ToolStarted(b.ID, b.Name)
 				}
 			}
+			if active {
+				toolTarget(t.sink, b.ID, b.Name, b.Input)
+			}
 			if b.Name != "Bash" {
 				continue
 			}
@@ -543,4 +548,26 @@ func blocks(raw json.RawMessage) []wireBlock {
 		return nil
 	}
 	return out
+}
+
+// toolTarget reports what a file or search tool of Claude Code works on: the file of Read, Edit, Write, MultiEdit and
+// NotebookEdit, the pattern of Grep and Glob, the query of WebSearch. Nothing else of the input goes out.
+func toolTarget(sink any, id, name string, input json.RawMessage) {
+	var in struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+		Pattern      string `json:"pattern"`
+		Query        string `json:"query"`
+	}
+	if json.Unmarshal(input, &in) != nil {
+		return
+	}
+	switch name {
+	case "Read", "Edit", "Write", "MultiEdit", "NotebookEdit":
+		runturn.ToolFiles(sink, id, name, in.FilePath, in.NotebookPath)
+	case "Grep", "Glob":
+		runturn.ToolQuery(sink, id, name, in.Pattern)
+	case "WebSearch":
+		runturn.ToolQuery(sink, id, name, in.Query)
+	}
 }

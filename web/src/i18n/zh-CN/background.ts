@@ -6,7 +6,7 @@ type Task = S['BackgroundTask']
 // Background tasks: work a CLI started in the background that keeps running after its reply ended (a build, a test run, a dev
 // server, a sub-agent).
 export const background = {
-  // The mark next to the Agent's state, and the panel it opens.
+  // The mark under the message box, and the panel it opens.
   mark: (count: number) => `后台任务 ${count}`,
   markLabel: (count: number) => `${count} 个后台任务在运行，点开查看或停止`,
   title: '后台任务',
@@ -30,10 +30,8 @@ export const background = {
   // A backgrounded tool in a reply, and how it ended.
   card: {
     label: '后台任务',
-    listLabel: '转到后台的工具',
-    runningFor: (clock: string) => `在后台运行 · ${clock}`,
-    stopping: (clock: string) => `正在停止 · ${clock}`,
-    status: { running: '在后台运行', completed: '后台已完成', failed: '后台出错', stopped: '后台已停止', unknown: '后台结果未知' } satisfies Record<Task['status'], string>,
+    chipLabel: (tool: string, status: string, label: string) => `${tool} ${status}：${label}`,
+    status: { running: '后台运行中', completed: '后台已完成', failed: '后台出错', stopped: '后台已停止', unknown: '后台结果未知' } satisfies Record<Task['status'], string>,
     exitCode: (code: number) => `退出码 ${code}`,
     took: (duration: string) => `用时 ${duration}`,
     output: '输出',
@@ -52,16 +50,16 @@ export const background = {
     unknownHint: 'CLI 意外退出或 Loop Now 重启过，不知道它最后怎样了',
   },
   // The heading of a reply the CLI wrote by itself after background work ended (no person's message above it).
-  // The task's label sits between before and after, in its own type.
+  // The ended tasks follow as compact chips; when there are more than two, “+N” opens the rest.
   followUp: {
-    before: '后台任务「',
-    after: (runtime: string) => `」结束后，${runtime} 接着说：`,
-    afterMany: (others: number, runtime: string) => `」等 ${others + 1} 个结束后，${runtime} 接着说：`,
+    heading: (runtime: string) => `后台任务结束后，${runtime} 接着说：`,
     unknown: (runtime: string) => `后台任务结束后，${runtime} 接着说：`,
+    more: (count: number) => `+${count}`,
+    moreLabel: (count: number) => `查看另外 ${count} 个已结束的后台任务`,
+    moreTitle: (count: number) => `另外 ${count} 个后台任务`,
     ruler: '后台任务结束后',
   },
   // Lists (sidebar, overview, project Agents).
-  listTag: (count: number) => `后台 ${count}`,
   listTitle: (count: number) => `空闲，${count} 个后台任务还在运行`,
   // Above the message box, and next to Stop.
   restartWarning: (runtime: string, count: number) => `设置已改：下一条消息会重启 ${runtime}，正在运行的 ${count} 个后台任务会被停掉。`,

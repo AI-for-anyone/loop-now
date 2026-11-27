@@ -83,24 +83,24 @@ function ModelSettingsEditor({ initial, fullHeight }: { initial: PromptText; ful
       {state.readFailed && <><p className="text-[13px] font-bold text-red-text">{copy.readFailed}</p><ErrorAlert error={readError} /><Button variant="secondary" className="justify-self-start" onClick={() => void review()}>{copy.readAgain}</Button></>}
       {state.review && <>
         <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{copy.serverVersion(state.review.version)}</p><pre className="max-h-80 overflow-auto rounded-card border border-code-border bg-code-bg p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:text-ink">{state.review.text || copy.empty}</pre></div>
-          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{copy.draft}</p><pre className="max-h-80 overflow-auto rounded-card border border-hairline-strong bg-surface-subtle p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow">{state.draft || copy.empty}</pre></div>
+          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold">{copy.serverVersion(state.review.version)}</p><pre className="max-h-80 overflow-auto rounded-card border border-code-border bg-code-bg p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere]">{state.review.text || copy.empty}</pre></div>
+          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold">{copy.draft}</p><pre className="max-h-80 overflow-auto rounded-card border border-hairline-strong bg-surface-subtle p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">{state.draft || copy.empty}</pre></div>
         </div>
-        {state.latest.version > state.review.version && <p className="text-[13px] font-medium [[data-skin=plate]_&]:font-bold">{copy.newerThanReview}</p>}
+        {state.latest.version > state.review.version && <p className="text-[13px] font-medium">{copy.newerThanReview}</p>}
         <Button variant="secondary" className="h-auto min-h-11 max-w-full justify-self-start py-2 text-left whitespace-normal" onClick={() => { dispatch({ type: 'adopt' }); setError(null) }}>{copy.adopt(state.review.version)}</Button>
       </>}
     </div>}
     {error !== null && <Alert variant="error" role="alert" className="shrink-0"><AlertDescription className="grid gap-2 text-[13.5px] text-ink">
-      <p className="font-semibold text-red-text [[data-skin=plate]_&]:font-black">{copy.saveFailed}</p>
+      <p className="font-semibold text-red-text">{copy.saveFailed}</p>
       <details className="grid gap-2">
-        <summary className="flex w-fit cursor-pointer items-center gap-1.5 font-medium [[data-skin=plate]_&]:font-bold">{copy.errorDetails}<ChevronDownIcon className="size-4" /></summary>
-        <pre className="max-h-56 overflow-auto rounded-card border border-code-border bg-code-bg p-3 font-mono text-[12.5px] whitespace-pre-wrap text-code-fg [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white/70 [[data-skin=plate]_&]:text-ink">{[describeError(error), ...(error instanceof ApiError ? error.fields.map(field => t.errors.field(field.field, field.message)) : [])].join('\n')}</pre>
+        <summary className="flex w-fit cursor-pointer items-center gap-1.5 font-medium">{copy.errorDetails}<ChevronDownIcon className="size-4" /></summary>
+        <pre className="max-h-56 overflow-auto rounded-card border border-code-border bg-code-bg p-3 font-mono text-[12.5px] whitespace-pre-wrap text-code-fg">{[describeError(error), ...(error instanceof ApiError ? error.fields.map(field => t.errors.field(field.field, field.message)) : [])].join('\n')}</pre>
       </details>
     </AlertDescription></Alert>}
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
-      {inserted && <p role="status" className="mr-auto text-[13px] font-medium text-green-text [[data-skin=plate]_&]:font-bold">{inserted}</p>}
-      {promptDirty(state) && !inserted && <p role="status" className="mr-auto rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[13px] font-semibold [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black">{t.common.unsaved}</p>}
-      {saved && !promptDirty(state) && <p role="status" className="mr-auto text-[13px] font-medium text-green-text [[data-skin=plate]_&]:font-bold">{t.common.saved}</p>}
+      {inserted && <p role="status" className="mr-auto text-[13px] font-medium text-green-text">{inserted}</p>}
+      {promptDirty(state) && !inserted && <p role="status" className="mr-auto rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[13px] font-semibold">{t.common.unsaved}</p>}
+      {saved && !promptDirty(state) && <p role="status" className="mr-auto text-[13px] font-medium text-green-text">{t.common.saved}</p>}
       <Button size="lg" disabled={!promptDirty(state) || state.pending || state.conflict || diagnostics.length > 0} onClick={() => void submit()}>{state.pending ? t.common.saving : copy.save}</Button>
     </div>
     <ModelExamplesSheet open={examplesOpen} draft={state.draft} onOpenChange={setExamplesOpen} onInsert={(text, title) => { edit(text); setInserted(copy.inserted(title)) }} />

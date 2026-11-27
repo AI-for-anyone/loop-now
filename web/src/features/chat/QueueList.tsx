@@ -50,12 +50,12 @@ export function QueuePanel({ count, rows, collapse, showHint = collapse === unde
     <section
       aria-label={t.chat.queueList.region}
       className={cn(
-        'mx-4 -mb-0.5 flex min-w-0 flex-col rounded-t-xl border border-b-0 border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:border-ink/28 [[data-skin=plate]_&]:bg-paper-raised',
+        'mx-4 -mb-0.5 flex min-w-0 flex-col rounded-t-xl border border-b-0 border-hairline-strong bg-surface-subtle',
         collapsed ? 'py-0.5 pr-1.5 pl-2.5' : 'px-1.5 pt-1 pb-1.5',
       )}
     >
       <div className={cn('flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-500', collapsed ? 'min-h-7' : 'min-h-6 px-1.5')}>
-        <h2 className="shrink-0 text-[11.5px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{t.chat.queueList.title(count)}</h2>
+        <h2 className="shrink-0 text-[11.5px] font-semibold text-ink-700">{t.chat.queueList.title(count)}</h2>
         {!collapsed && showHint && (
           <>
             <span aria-hidden="true">·</span>
@@ -82,7 +82,7 @@ export function QueuePanel({ count, rows, collapse, showHint = collapse === unde
             aria-expanded={collapse.expanded}
             aria-controls={listId}
             onClick={collapse.onToggle}
-            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:hover:bg-tint-blue"
+            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus"
           >
             {collapse.expanded ? t.chat.queueList.collapse : t.chat.queueList.expand}
             {collapse.expanded ? <ChevronDownIcon aria-hidden="true" className="size-3" strokeWidth={2.6} /> : <ChevronUpIcon aria-hidden="true" className="size-3" strokeWidth={2.6} />}
@@ -173,7 +173,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
       title={t.chat.queueList.promoteTitle}
       disabled={pending || disabled}
       onClick={onClick}
-      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-hairline-strong bg-surface-control px-2 text-xs font-semibold whitespace-nowrap text-ink hover:bg-surface-hover focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50 [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-pink-2"
+      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-hairline-strong bg-surface-control px-2 text-xs font-semibold whitespace-nowrap text-ink hover:bg-surface-hover focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50"
     >
       <ZapIcon aria-hidden="true" className="size-3 text-pink-text" strokeWidth={2.6} />
       {pending ? t.chat.queueList.promoting : label}
@@ -181,7 +181,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
   )
 }
 
-const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50 [[data-skin=plate]_&]:hover:bg-tint-blue'
+const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50'
 
 // Edit (✎, only for your own messages) and cancel (×) at the end of a row: edit withdraws this message and puts its text and images back
 // into the input box.

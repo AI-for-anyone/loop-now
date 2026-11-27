@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 )
 
 // Start reconciles the persistent queue; on restart, turns that were running are only blocked, and tools are never
@@ -213,11 +214,23 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 					return s.blockTask(ctx, id, "Could not prepare the task fork or its directories.")
 				}
 			}
+			created, e := s.prepareWorkspace(ctx, r)
+			if e != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				what := "Could not create the task's worktree: "
+				if w := r.View.Workspace; w != nil && w.Mode == taskmodel.WorkspaceModeCopy {
+					what = "Could not copy the task's folder: "
+				}
+				return s.blockTask(ctx, id, what+e.Error())
+			}
 			_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 				if m.Record.Ended() || m.Record.View.Task.Status != "preparing" {
 					m.Unchanged()
 					return nil, nil
 				}
+				activateWorkspace(m.Record, created)
 				m.Record.View.Task.Status = "running"
 				return nil, s.prepareNode(ctx, m, "")
 			})
@@ -457,7 +470,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 	}
 	node := freshNode(t.TaskID, step, inst, visit, 1)
 	m.Record.View.Nodes = append(m.Record.View.Nodes, node)
-	setCurrent(m.Record, node)
+	m.Record.SetCurrent(node)
 	if n.RuntimeID != node.RuntimeID {
 		// A queued reminder cancelled with the old node still represents unread mail.
 		// Rebind the notification to an unbound Inbox round, never to another node.

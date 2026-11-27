@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"loop-now/internal/loopctl/clitest"
+	"loop-now/internal/loopctl/commands"
 	"loop-now/internal/loopctl/output"
 )
 
@@ -96,6 +97,86 @@ func TestAgentCreateAndUpdate(t *testing.T) {
 	}
 	e.run("agent", "update", agentUUID, "--provider", "anthropic").fails(t, output.CodeInvalidArgument, 2)
 	e.run("agent", "update", agentUUID).fails(t, output.CodeMissingArgument, 2)
+}
+
+// The folder, local configuration, permission mode and levels reach the body under their contract names; update sends
+// only what is given, and the clear flags send null.
+func TestAgentFolderConfigModeAndLevels(t *testing.T) {
+	s, e := stub(t)
+	s.On("POST /projects/{projectId}/agents", clitest.Sample{Status: 201, Body: agentDetail()})
+	s.On("PATCH /agents/{agentId}", clitest.Sample{Status: 200, Body: agentDetail()})
+	model := map[string]any{"provider": "openai-codex", "modelId": "gpt-x"}
+	e.run("agent", "create", "--project", projectUUID, "--name", "dev", "--provider", "openai-codex", "--model", "gpt-x",
+		"--working-dir", "/code/app", "--use-local-config", "true", "--permission-mode", "accept_edits",
+		"--thinking-level", "high", "--service-tier", "priority").ok(t)
+	if b := lastBody(t, s); !reflect.DeepEqual(b, map[string]any{"name": "dev", "model": model, "workingDirectory": "/code/app",
+		"useLocalConfig": true, "permissionMode": "accept_edits", "thinkingLevel": "high", "serviceTier": "priority"}) {
+		t.Fatalf("create request body %v", b)
+	}
+	for _, c := range []struct {
+		args []string
+		want map[string]any
+	}{
+		{[]string{"--working-dir", "/code/other"}, map[string]any{"workingDirectory": "/code/other"}},
+		{[]string{"--clear-working-dir"}, map[string]any{"workingDirectory": nil}},
+		{[]string{"--use-local-config", "false"}, map[string]any{"useLocalConfig": false}},
+		{[]string{"--permission-mode", "full"}, map[string]any{"permissionMode": "full"}},
+		{[]string{"--thinking-level", "off"}, map[string]any{"thinkingLevel": "off"}},
+		{[]string{"--clear-thinking-level"}, map[string]any{"thinkingLevel": nil}},
+		{[]string{"--service-tier", "ultrafast"}, map[string]any{"serviceTier": "ultrafast"}},
+		{[]string{"--clear-service-tier"}, map[string]any{"serviceTier": nil}},
+		{[]string{"--name", "dev2"}, map[string]any{"name": "dev2"}},
+	} {
+		e.run(append([]string{"agent", "update", agentUUID}, c.args...)...).ok(t)
+		if b := lastBody(t, s); !reflect.DeepEqual(b, c.want) {
+			t.Fatalf("update %v: request body %v, want %v", c.args, b, c.want)
+		}
+	}
+	// Enumerated values are checked before any request; a folder and its clear cannot go together.
+	n := len(s.Requests())
+	for _, args := range [][]string{
+		{"agent", "update", agentUUID, "--permission-mode", "yolo"},
+		{"agent", "update", agentUUID, "--thinking-level", "huge"},
+		{"agent", "update", agentUUID, "--service-tier", "fast"},
+		{"agent", "update", agentUUID, "--use-local-config", "yes"},
+		{"agent", "update", agentUUID, "--working-dir", "/a", "--clear-working-dir"},
+		{"agent", "update", agentUUID, "--thinking-level", "low", "--clear-thinking-level"},
+		{"agent", "update", agentUUID, "--service-tier", "default", "--clear-service-tier"},
+		{"agent", "create", "--project", projectUUID, "--name", "x", "--provider", "p", "--model", "m", "--permission-mode", "all"},
+	} {
+		e.run(args...).fails(t, output.CodeInvalidArgument, 2)
+	}
+	if len(s.Requests()) != n {
+		t.Fatal("a usage error must not reach the server")
+	}
+	// The server's own check is passed through.
+	s.On("PATCH /agents/{agentId}", clitest.Sample{Status: 422, Body: apiError("validation_failed", "workingDirectory must be an absolute path")})
+	r := e.run("agent", "update", agentUUID, "--working-dir", "relative/path")
+	r.fails(t, "validation_failed", 9)
+	if r.Env.Error.HTTPStatus != 422 {
+		t.Fatalf("%+v", r.Env.Error)
+	}
+}
+
+// The values the setting options accept are the contract's enumerations, so a new value in the API is not refused
+// locally without notice.
+func TestAgentSettingValuesMatchContract(t *testing.T) {
+	doc := clitest.Load(t, "openapi.yaml")
+	for _, path := range [][]string{{"agent", "create"}, {"agent", "update"}} {
+		values := map[string][]string{}
+		for _, f := range commands.Registry().Find(path...).Flags {
+			values[f.Name] = f.Values
+		}
+		for flag, name := range map[string]string{"permission-mode": "PermissionMode", "thinking-level": "ThinkingLevel", "service-tier": "CodexServiceTier"} {
+			var want []string
+			for _, v := range doc.Components.Schemas[name].Value.Enum {
+				want = append(want, v.(string))
+			}
+			if !reflect.DeepEqual(values[flag], want) {
+				t.Errorf("%v --%s accepts %v, the contract's %s has %v", path, flag, values[flag], name, want)
+			}
+		}
+	}
 }
 
 func TestAgentDeleteAndSessionReset(t *testing.T) {

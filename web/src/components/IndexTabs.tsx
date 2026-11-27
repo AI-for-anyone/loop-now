@@ -3,8 +3,7 @@ import { NavLink, type NavLinkProps } from 'react-router'
 import { indexTabClass, indexTabsClass } from '@/lib/index-tab'
 import { cn } from '@/lib/utils'
 
-// A row of index tabs sitting right below the page header: flush 36px hairline bar in mono skin; physical folder tabs indented 26px
-// in Plate skin. Scrolls horizontally when narrow without widening the page.
+// A row of index tabs sitting right below the page header. Scrolls horizontally when narrow without widening the page.
 export function IndexTabs({ className, ...props }: ComponentProps<'nav'>) {
   return (
     <nav
@@ -75,7 +74,7 @@ function SubNavItemMeta({ count, badge }: { count?: number | string; badge?: Rea
   return (
     <>
       {count !== undefined && (
-        <span className="font-mono text-[11px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-inherit">
+        <span className="font-mono text-[11px] font-medium text-ink-500 tabular-nums">
           {count}
         </span>
       )}

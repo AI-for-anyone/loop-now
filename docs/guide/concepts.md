@@ -38,6 +38,8 @@ A task is a fixed **workflow** of nodes executed by agents. Workflows support:
 
 The workflow and captured configuration are **frozen** when the task starts. Ordinary retries do not refresh credentials.
 
+A task that works on code can carry a **workspace**: the Manager names a git repository on this computer, and the platform creates one worktree on one new branch for the task. Every step works in it, as the Agent does in its regular conversation, so several tasks can run on one repository at once. When the task ends, the worktree is removed if nothing would be lost; otherwise it is kept and the task page says why.
+
 ## Accounts and permissions
 
 The project stores **model and CLI accounts** centrally; agents take them according to permission and selection rules. Connecting a provider account is an explicit action with a verification step, and tool integrations are granted per agent.

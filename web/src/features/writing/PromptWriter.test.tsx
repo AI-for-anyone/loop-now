@@ -54,6 +54,16 @@ describe('Write with AI beside a Prompt', () => {
     expect(open()).toHaveFocus()
   })
 
+  it('the writer line shows the runtime’s ink frame directly, with no extra box around it', async () => {
+    const { user } = setup()
+    await user.click(open())
+    const line = (await within(panel()).findByText('By Claude Code · Claude Haiku (latest)')).closest('p')!
+    const svg = line.querySelector('svg[data-logo="claude"]')!
+    expect(svg).toHaveClass('size-5')
+    expect(svg.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+    expect(svg.parentElement).not.toHaveClass('bg-paper-raised')
+  })
+
   it('sends the request with the text in the box and what it is for, replaces the text, and Undo puts the old text back', async () => {
     const { user, state } = setup({ initial: 'Answer questions.' })
     await user.click(open())

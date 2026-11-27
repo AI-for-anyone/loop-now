@@ -61,13 +61,13 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
   }
   return (
     <section aria-labelledby={`${id}-title`} className="flex min-w-0 flex-col gap-3.5">
-      <h3 id={`${id}-title`} className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">
+      <h3 id={`${id}-title`} className="text-[15px] leading-[1.3] font-semibold">
         {text.title}
       </h3>
       <p className="text-[13.5px] text-ink-700">{text.intro}</p>
       {current && (
-        <p role="status" className={cn('rounded-input px-3.5 py-2.5 text-[13.5px]', active && active.status !== 'active' ? 'border border-red/20 bg-tint-red text-red-text [[data-skin=plate]_&]:border-0' : 'border border-hairline bg-surface-subtle text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue')}>
-          <span className="font-semibold [[data-skin=plate]_&]:font-black">{text.current(active ? `${active.pluginName} · ${active.channelLabel}` : `${current.pluginId} · ${current.channelId}`)}</span>
+        <p role="status" className={cn('rounded-input px-3.5 py-2.5 text-[13.5px]', active && active.status !== 'active' ? 'border border-red/20 bg-tint-red text-red-text' : 'border border-hairline bg-surface-subtle text-ink')}>
+          <span className="font-semibold">{text.current(active ? `${active.pluginName} · ${active.channelLabel}` : `${current.pluginId} · ${current.channelId}`)}</span>
           {active && active.status !== 'active' && <> · {text.notRunning(t.plugins.status[active.status])}</>}
           {active && (
             <>

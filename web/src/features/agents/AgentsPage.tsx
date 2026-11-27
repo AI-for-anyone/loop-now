@@ -110,23 +110,16 @@ function FirstUse({ scope, onCreate }: { scope: Scope; onCreate: () => void }) {
     <div className="flex h-full flex-col">
       <CollapsedBar />
       <section aria-labelledby={titleId} className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-[22px] overflow-y-auto p-6 text-center">
-      {/* Plate-only overprint illustration: a halftone blue circle, a fluorescent pink (green for the platform) circle and a yellow circle;
-          where they overlap they blend with multiply. Hidden in mono skin. */}
-      <span aria-hidden="true" className="relative hidden h-40 w-[220px] shrink-0 [[data-skin=plate]_&]:block">
-        <span className="riso-halftone absolute top-2.5 left-2.5 size-[140px] rounded-full bg-riso-blue" />
-        <span className={cn('absolute top-0 left-[76px] size-[140px] rounded-full [[data-skin=plate]_&]:mix-blend-multiply', platform ? 'bg-green' : 'bg-riso-pink')} />
-        <span className="absolute top-[92px] left-[150px] size-14 rounded-full bg-riso-yellow [[data-skin=plate]_&]:mix-blend-multiply" />
-      </span>
-      <div className="flex flex-col items-center gap-2">
-        <h1 id={titleId} className="riso-misreg text-[22px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[56px] [[data-skin=plate]_&]:leading-[1.1] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue">
-          {platform ? t.projects.empty.platformTitle : t.agents.empty}
-        </h1>
-        <p className="text-[14.5px] text-ink-700">{platform ? t.projects.empty.platformNote : t.projects.empty.projectNote}</p>
-      </div>
-      <Button size="lg" className="h-12 px-[26px] text-base [[data-skin=plate]_&]:shadow-print-pink" disabled={!reachable} onClick={onCreate}>
-        <PlusIcon strokeWidth={3} />
-        {t.agents.create}
-      </Button>
+        <div className="flex flex-col items-center gap-2">
+          <h1 id={titleId} className="riso-misreg text-[22px] leading-snug font-semibold tracking-tight text-ink">
+            {platform ? t.projects.empty.platformTitle : t.agents.empty}
+          </h1>
+          <p className="text-[14.5px] text-ink-700">{platform ? t.projects.empty.platformNote : t.projects.empty.projectNote}</p>
+        </div>
+        <Button size="lg" className="h-12 px-[26px] text-base" disabled={!reachable} onClick={onCreate}>
+          <PlusIcon strokeWidth={3} />
+          {t.agents.create}
+        </Button>
       </section>
     </div>
   )

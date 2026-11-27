@@ -33,30 +33,30 @@ export function ThinkingRuler({ value, levels, defaultLevel, hint, onChange }: T
     ...scale.map((level) => ({ value: level, text: label(level) })),
   ]
   return (
-    <div className="flex min-w-0 flex-col gap-1 border-t border-hairline bg-surface-subtle/40 px-3 py-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-paper-tab/60">
+    <div className="flex min-w-0 flex-col gap-1 border-t border-hairline bg-surface-subtle/40 px-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <span
           id={labelId}
-          className="shrink-0 text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink"
+          className="shrink-0 text-[12px] font-medium text-ink-500"
         >
           {copy.title}
         </span>
         {disabled ? (
-          hint && <p className="text-[12px] text-ink-500 [[data-skin=plate]_&]:font-bold">{hint}</p>
+          hint && <p className="text-[12px] text-ink-500">{hint}</p>
         ) : (
           <RadioGroupPrimitive.Root
             aria-labelledby={labelId}
             orientation="horizontal"
             value={value === null ? DEFAULT : unavailable ? '' : value}
             onValueChange={(next) => onChange(next === DEFAULT ? null : (levels.find((level) => level === next) ?? null))}
-            className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised"
+            className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px]"
           >
             {marks.map((mark) => (
               <RadioGroupPrimitive.Item
                 key={mark.value}
                 value={mark.value}
                 className={cn(
-                  'inline-flex h-6 shrink-0 cursor-pointer items-center rounded-[5px] px-2.5 text-[12px] font-medium whitespace-nowrap text-ink-500 transition-[background-color,color,box-shadow] duration-150 outline-none hover:text-ink data-[state=checked]:bg-segment-active data-[state=checked]:text-ink data-[state=checked]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)] [[data-skin=plate]_&]:h-6.5 [[data-skin=plate]_&]:rounded-ticket [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:focus-visible:shadow-focus [[data-skin=plate]_&]:data-[state=checked]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=checked]:font-black [[data-skin=plate]_&]:data-[state=checked]:text-ink [[data-skin=plate]_&]:data-[state=checked]:shadow-[inset_0_0_0_1.5px_var(--ink)]',
+                  'inline-flex h-6 shrink-0 cursor-pointer items-center rounded-[5px] px-2.5 text-[12px] font-medium whitespace-nowrap text-ink-500 transition-[background-color,color,box-shadow] duration-150 outline-none hover:text-ink data-[state=checked]:bg-segment-active data-[state=checked]:text-ink data-[state=checked]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)]',
                 )}
               >
                 {mark.text}

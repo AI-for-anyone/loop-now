@@ -1,4 +1,4 @@
-import { BotIcon, ChevronDownIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
+import { BotIcon, CircleDashedIcon, LoaderCircleIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Popover as PopoverPrimitive } from 'radix-ui'
@@ -42,7 +42,7 @@ export type BackgroundStopControl = ReturnType<typeof useBackgroundStop>
 
 function useBackgroundStop(stopper: BackgroundStopper) {
   const actions = useQueueActions()
-  // Tasks whose stop was accepted; they show “正在停止…” (Stopping…) until the running list drops them.
+  // Tasks whose stop was accepted; they show "Stopping..." until the running list drops them.
   const [requested, setRequested] = useState<ReadonlySet<string>>(() => new Set())
   const [errors, setErrors] = useState<Record<string, unknown>>({})
   const settle = (key: string, ids: string[], result: Awaited<ReturnType<typeof actions.run>>) => {
@@ -61,13 +61,13 @@ function useBackgroundStop(stopper: BackgroundStopper) {
 }
 
 // The running background tasks of an Agent (or of a task's node): what each one is, which reply started it, how long it has run, and Stop;
-// Stop all below when there are several. Shown in the panel of the header mark, and in a task node's header.
+// Stop all below when there are several. Shown in the panel of the mark under the message box (an Agent's, or a task node's).
 // control: the stop state, when it must outlive the list (the panel closes and opens again); otherwise the list keeps its own.
 export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control: shared }: { tasks: Task[]; stopper: BackgroundStopper; origin?: (task: Task) => TaskOrigin | null; onNavigate?: () => void; control?: BackgroundStopControl }) {
   const now = useNow(1000, tasks.length > 0)
   const own = useBackgroundStop(stopper)
   const control = shared ?? own
-  if (tasks.length === 0) return <p role="status" className="px-4 py-3 text-[13.5px] font-bold text-ink-500">{t.background.allEnded}</p>
+  if (tasks.length === 0) return <p role="status" className="px-4 py-3 text-[13.5px] font-semibold text-ink-500">{t.background.allEnded}</p>
   const allError = control.error('all')
   return (
     <div className="flex min-w-0 flex-col">
@@ -78,33 +78,33 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
           const error = control.error(task.id)
           const clock = elapsedClock(now - Date.parse(task.startedAt))
           return (
-            <li key={task.id} data-background-task={task.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hairline px-4 py-3 last:border-b-0 [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
-              <span aria-hidden="true" className="mt-0.5 grid size-8 place-items-center rounded-[9px] border border-hairline bg-surface-subtle text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-riso-yellow [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]">
+            <li key={task.id} data-background-task={task.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hairline px-4 py-3 last:border-b-0">
+              <span aria-hidden="true" className="mt-0.5 grid size-8 place-items-center rounded-[9px] border border-hairline bg-surface-subtle text-ink">
                 <BackgroundKindIcon kind={task.kind} className="size-[17px]" />
               </span>
               <div className="flex min-w-0 flex-col gap-1">
-                <p title={task.label} className="line-clamp-2 font-mono text-[13px] leading-[1.45] font-semibold [overflow-wrap:anywhere] text-ink [[data-skin=plate]_&]:font-bold">
+                <p title={task.label} className="line-clamp-2 font-mono text-[13px] leading-[1.45] font-semibold [overflow-wrap:anywhere] text-ink">
                   {task.label}
                 </p>
                 <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-5 text-ink-500">
-                  <span className="font-medium [[data-skin=plate]_&]:font-bold">{t.background.kind[task.kind]}</span>
+                  <span className="font-medium">{t.background.kind[task.kind]}</span>
                   {from && (
                     <>
                       <span aria-hidden="true">{t.chat.metaSeparator}</span>
-                      <Link to={from.to} onClick={onNavigate} aria-label={t.background.fromReplyLabel(from.label)} className="font-medium text-riso-blue underline decoration-[1.5px] underline-offset-[3px] hover:decoration-ink [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:decoration-riso-pink">
+                      <Link to={from.to} onClick={onNavigate} aria-label={t.background.fromReplyLabel(from.label)} className="font-medium text-riso-blue underline decoration-[1.5px] underline-offset-[3px] hover:decoration-ink">
                         {from.label}
                       </Link>
                     </>
                   )}
                 </p>
                 {error !== undefined && (
-                  <p role="alert" className="text-[12.5px] font-semibold text-red-text [[data-skin=plate]_&]:font-bold">
+                  <p role="alert" className="text-[12.5px] font-semibold text-red-text">
                     {describeError(error)}
                   </p>
                 )}
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <span className="inline-flex items-center gap-1.5 font-mono text-[14px] leading-5 font-semibold tabular-nums text-ink [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-black" title={t.background.elapsedLabel(clock)}>
+                <span className="inline-flex items-center gap-1.5 font-mono text-[14px] leading-5 font-semibold tabular-nums text-ink" title={t.background.elapsedLabel(clock)}>
                   <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 text-pink-text motion-reduce:animate-none" strokeWidth={2.6} />
                   <span className="sr-only">{t.background.elapsedLabel(clock)}</span>
                   <span aria-hidden="true">{clock}</span>
@@ -128,7 +128,7 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
         })}
       </ul>
       {tasks.length > 1 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-hairline bg-tint-red/60 px-4 py-2.5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-red/40">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-hairline bg-tint-red/60 px-4 py-2.5">
           <Button type="button" size="xs" variant="destructive" className="h-8" disabled={tasks.every(control.stopping)} onClick={() => void control.stopAll(tasks.map((task) => task.id))}>
             {control.retry('all') ? t.background.retryStop : t.background.stopAll(tasks.length)}
           </Button>
@@ -140,8 +140,8 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
   )
 }
 
-// The mark next to the Agent's state while background tasks run: “后台任务 N” (Background N), a subtle pill in mono skin (yellow tilted
-// pill in Plate skin) with a spinning mark, so an idle Agent with work still going does not look finished. It opens the list.
+// The mark in the composer bar right after the runner chip while background tasks run: a shell glyph and the count,
+// opening the running task list above it.
 // hint: what the list is about (by default, that the reply has ended and these still run).
 // While the list is open it stays when the last task ends (it says they all ended, and focus is not lost); closed, the mark goes. Stopping
 // is kept here, so a retry after an unknown outcome still repeats its actionId after the list was closed and opened again.
@@ -155,28 +155,31 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
     if (ended && (document.activeElement === null || document.activeElement === document.body)) trigger.current?.focus()
   }, [ended])
   if (tasks.length === 0 && !open) return null
+  const label = tasks.length > 0 ? t.background.markLabel(tasks.length) : t.background.allEnded
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger
         ref={trigger}
+        type="button"
         data-background-mark
-        aria-label={tasks.length > 0 ? t.background.markLabel(tasks.length) : t.background.allEnded}
+        aria-label={label}
+        title={label}
         className={cn(
-          'riso-tilt inline-flex min-h-[26px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-semibold whitespace-nowrap text-ink outline-none [--tilt-bg:var(--tint-yellow)] [--tilt-shadow:inset_0_0_0_1px_var(--hairline-strong)] focus-visible:shadow-focus [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:[--tilt-bg:var(--riso-yellow)] [[data-skin=plate]_&]:[--tilt-shadow:inset_0_0_0_2px_var(--ink),2px_2px_0_var(--ink)] [[data-skin=plate]_&]:[--tilt:2deg]',
+          'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-active px-2.5 font-mono text-[12px] font-semibold whitespace-nowrap text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus aria-expanded:border-cta-bg aria-expanded:bg-cta-bg aria-expanded:text-cta-fg',
           className,
         )}
       >
-        <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" strokeWidth={2.8} />
-        <span>{t.background.mark(tasks.length)}</span>
-        <ChevronDownIcon aria-hidden="true" className={cn('size-3.5 transition-transform motion-reduce:transition-none', open && 'rotate-180')} strokeWidth={2.8} />
+        <SquareTerminalIcon aria-hidden="true" className="size-3.5" strokeWidth={2.2} />
+        <span className="tabular-nums">{tasks.length}</span>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
+          side="top"
           align="start"
           sideOffset={10}
           collisionPadding={12}
           aria-label={t.background.title}
-          className="z-50 flex max-h-[min(520px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)]"
+          className="z-50 flex max-h-[min(520px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
         >
           <BackgroundPanelHead count={tasks.length} hint={hint} />
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -190,10 +193,10 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
 
 export function BackgroundPanelHead({ count, hint = t.background.hint, children }: { count: number; hint?: string; children?: ReactNode }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-b border-hairline bg-surface-subtle px-4 py-2.5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow">
-      <span className="font-display-cn text-[16px] leading-tight font-semibold [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:font-normal">{t.background.title}</span>
-      <span className="rounded-full bg-cta-bg px-2 text-[12px] leading-5 font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-yellow">{t.background.running(count)}</span>
-      <span className="basis-full text-[12.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700">{hint}</span>
+    <div className="flex shrink-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-b border-hairline bg-surface-subtle px-4 py-2.5">
+      <span className="font-display-cn text-[16px] leading-tight font-semibold">{t.background.title}</span>
+      <span className="rounded-full bg-cta-bg px-2 text-[12px] leading-5 font-semibold text-cta-fg">{t.background.running(count)}</span>
+      <span className="basis-full text-[12.5px] font-medium text-ink-500">{hint}</span>
       {children}
     </div>
   )
@@ -203,7 +206,7 @@ export function BackgroundPanelHead({ count, hint = t.background.hint, children 
 // background tasks: said before the person sends it.
 export function RestartNotice({ runtimeName, count }: { runtimeName: string; count: number }) {
   return (
-    <p role="status" data-restart-notice className="flex min-w-0 items-start gap-2 rounded-ticket border border-red-text/30 bg-tint-red px-3 py-1.5 text-[13px] leading-snug font-medium text-red-text [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-red-text/60 [[data-skin=plate]_&]:font-bold">
+    <p role="status" data-restart-notice className="flex min-w-0 items-start gap-2 rounded-ticket border border-red-text/30 bg-tint-red px-3 py-1.5 text-[13px] leading-snug font-medium text-red-text">
       <RotateCwIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.5} />
       <span className="min-w-0">{t.background.restartWarning(runtimeName, count)}</span>
     </p>
@@ -211,12 +214,12 @@ export function RestartNotice({ runtimeName, count }: { runtimeName: string; cou
 }
 
 // The mark in lists (overview, project Agents) on an idle Agent whose background tasks still run: a small tag
-// “后台任务 N” (Background N) with the spinner, next to its idle state.
+// with the spinner, next to its idle state.
 export function BackgroundCountTag({ count, className }: { count: number; className?: string }) {
   if (count <= 0) return null
   return (
-    <span data-background-count={count} title={t.background.listTitle(count)} className={cn('relative inline-flex min-h-6 shrink-0 items-center px-[10px] text-[12px] font-semibold whitespace-nowrap text-ink [[data-skin=plate]_&]:font-black', className)}>
-      <span aria-hidden="true" className="absolute inset-0 rounded-full border border-hairline-strong bg-tint-yellow [[data-skin=plate]_&]:rotate-[2deg] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]" />
+    <span data-background-count={count} title={t.background.listTitle(count)} className={cn('relative inline-flex min-h-6 shrink-0 items-center px-[10px] text-[12px] font-semibold whitespace-nowrap text-ink', className)}>
+      <span aria-hidden="true" className="absolute inset-0 rounded-full border border-hairline-strong bg-tint-yellow" />
       <span className="relative inline-flex items-center gap-1.5">
         <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3 motion-reduce:animate-none" strokeWidth={2.8} />
         {t.background.mark(count)}

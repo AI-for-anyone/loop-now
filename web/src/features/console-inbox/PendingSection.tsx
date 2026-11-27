@@ -39,23 +39,23 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
     <section
       aria-labelledby={titleId}
       data-pending
-      className="flex flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3.5 py-2.5 [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink"
+      className="flex flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3.5 py-2.5"
     >
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <h2
           id={titleId}
-          className="text-[13.5px] leading-snug font-semibold text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal"
+          className="text-[13.5px] leading-snug font-semibold text-ink"
         >
           {text.pendingTitle}
         </h2>
-        <span className="font-mono text-[11.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-bold">
+        <span className="font-mono text-[11.5px] font-medium text-ink-500 tabular-nums">
           {text.pendingCount(items.length)}
         </span>
         {items.length > DEFAULT_VISIBLE && (
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="ml-auto cursor-pointer rounded-stamp px-2 py-0.5 text-[12px] font-medium text-ink-700 outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue"
+            className="ml-auto cursor-pointer rounded-stamp px-2 py-0.5 text-[12px] font-medium text-ink-700 outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus"
           >
             {expanded ? t.overview.pendingLess : t.overview.pendingMore(hiddenCount)}
           </button>
@@ -71,14 +71,14 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
 }
 
 const rowClass =
-  'grid min-h-9 grid-cols-[minmax(52px,76px)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-hairline px-1 py-1.5 text-ink hover:bg-surface-hover sm:grid-cols-[76px_minmax(0,1fr)_max-content] [[data-skin=plate]_&]:border-t-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-white/60'
+  'grid min-h-9 grid-cols-[minmax(52px,76px)_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-hairline px-1 py-1.5 text-ink hover:bg-surface-hover sm:grid-cols-[76px_minmax(0,1fr)_max-content]'
 
 function PendingRow({ item }: { item: Item }) {
   const { message } = item
   const body = (target: string | null, field?: string) => (
     <>
       <span className="flex items-baseline gap-1.5 sm:flex-col sm:gap-0">
-        <span className="font-mono text-[12px] leading-tight font-semibold tabular-nums [[data-skin=plate]_&]:font-bold">
+        <span className="font-mono text-[12px] leading-tight font-semibold tabular-nums">
           {t.overview.anomalies.time(message.createdAt)}
         </span>
         <span className="text-[11px] leading-tight text-ink-500">{dayLabel(message.createdAt)}</span>
@@ -90,7 +90,7 @@ function PendingRow({ item }: { item: Item }) {
         {message.from.kind === 'plugin' ? (
           <PluginSenderChip participant={message.from} />
         ) : (
-          <span className="shrink-0 text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">
+          <span className="shrink-0 text-[13px] font-semibold [overflow-wrap:anywhere]">
             {partyName(message.from)}
           </span>
         )}
@@ -99,7 +99,7 @@ function PendingRow({ item }: { item: Item }) {
         <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">{message.preview}</span>
       </span>
       {target && (
-        <span className="col-start-2 inline-flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap sm:col-start-auto [[data-skin=plate]_&]:font-black">
+        <span className="col-start-2 inline-flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap sm:col-start-auto">
           {item.kind === 'question' ? text.answer : text.view}
           <ArrowRightIcon aria-hidden="true" className="size-3" strokeWidth={2.4} />
         </span>

@@ -20,15 +20,15 @@ export function RequestId({ id }: { id: string }) {
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <span id={labelId} className="font-medium text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+      <span id={labelId} className="font-medium text-ink-700">
         {t.overview.requestId}
       </span>
-      <code className="rounded-stamp border border-hairline bg-surface-control px-2.5 py-px font-mono text-[13px] [overflow-wrap:anywhere] select-all [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">{id}</code>
+      <code className="rounded-stamp border border-hairline bg-surface-control px-2.5 py-px font-mono text-[13px] [overflow-wrap:anywhere] select-all">{id}</code>
       <Button
         type="button"
         size="xs"
         variant="secondary"
-        className="h-[30px] px-3 text-[12.5px] [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white"
+        className="h-[30px] px-3 text-[12.5px]"
         aria-describedby={labelId}
         onClick={() => void copy()}
       >
@@ -46,15 +46,15 @@ export function SectionError({ title, error, onRetry, className }: { title: stri
     <div
       role="alert"
       className={cn(
-        'riso-halftone-red flex flex-wrap items-center gap-x-5 gap-y-3 rounded-card border border-red-text/25 bg-tint-red px-5 py-4 text-ink [[data-skin=plate]_&]:rounded-panel [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:px-[22px] [[data-skin=plate]_&]:py-[18px] [[data-skin=plate]_&]:shadow-print-ink',
+        'riso-halftone-red flex flex-wrap items-center gap-x-5 gap-y-3 rounded-card border border-red-text/25 bg-tint-red px-5 py-4 text-ink',
         className,
       )}
     >
-      <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-1.5 text-[14px] leading-relaxed [[data-skin=plate]_&]:text-[14.5px] [[data-skin=plate]_&]:leading-[1.75]">
-        <span className="text-[16px] leading-snug font-semibold text-red-text [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[28px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal">
+      <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-1.5 text-[14px] leading-relaxed">
+        <span className="text-[16px] leading-snug font-semibold text-red-text">
           {t.overview.sectionFailed(title)}
         </span>
-        <span className="text-ink-700 [[data-skin=plate]_&]:text-ink">{t.overview.sectionFailedBody(describeError(error))}</span>
+        <span className="text-ink-700">{t.overview.sectionFailedBody(describeError(error))}</span>
         {requestId && <RequestId id={requestId} />}
       </div>
       <Button variant="ink" size="lg" onClick={onRetry}>

@@ -401,32 +401,24 @@ describe('runner picker', () => {
   })
 
   describe('runtime mark skin rendering', () => {
-    it('renders crisp monochrome marks without multiply blend in mono skin, and preserves Risograph overprint in plate skin', () => {
+    it('renders unified ink-framed runtime logos across mono and plate themes', () => {
       const definitions = runtimeDefinitions().runtimes
       const bundled = definitions.find((item) => item.capabilities.bundled)!
       const localCli = definitions.find((item) => !item.capabilities.bundled)!
       try {
-        setSkin('mono')
-        const mono = renderWithQuery(
-          <>
-            <RuntimeMark runtime={bundled} />
-            <RuntimeMark runtime={localCli} />
-          </>,
-        )
-        expect(mono.container.innerHTML).not.toContain('mix-blend-mode: multiply')
-        expect(mono.container.querySelector('[data-brand-icon="pi"]')).not.toBeNull()
-        expect(mono.container.querySelector('[data-brand-icon="claudecode"]')).not.toBeNull()
-        mono.unmount()
-
-        setSkin('plate')
-        const plate = renderWithQuery(
-          <>
-            <RuntimeMark runtime={bundled} />
-            <RuntimeMark runtime={localCli} />
-          </>,
-        )
-        expect(plate.container.innerHTML).toContain('mix-blend-mode: multiply')
-        expect(plate.container.innerHTML).toContain('var(--riso-pink)')
+        for (const skin of ['mono', 'plate'] as const) {
+          setSkin(skin)
+          const view = renderWithQuery(
+            <>
+              <RuntimeMark runtime={bundled} />
+              <RuntimeMark runtime={localCli} />
+            </>,
+          )
+          expect(view.container.innerHTML).not.toContain('mix-blend-mode: multiply')
+          expect(view.container.querySelector('[data-logo="pi"]')).not.toBeNull()
+          expect(view.container.querySelector('[data-logo="claude"]')).not.toBeNull()
+          view.unmount()
+        }
       } finally {
         window.localStorage.clear()
         resetThemeForTest()

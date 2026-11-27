@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useSearchParams } from 'react-router'
 import { folderSource } from '@/api/folders'
 import { useContextInfo } from '@/api/queries'
 import { useAgentContext } from '@/features/agents/agent-context'
@@ -7,6 +8,7 @@ import { Sheet } from '@/components/Sheet'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { overviewPath } from '@/lib/scope'
 import { t } from '@/i18n'
+import { folderPath } from './folder-source'
 import { FileManager } from './FileManager'
 
 // The Agent's Folder tab: its one and only folder, both its working directory and its own context. Rendered as a full-bleed
@@ -15,11 +17,15 @@ import { FileManager } from './FileManager'
 export function AgentFolderTab() {
   const { agent } = useAgentContext()
   const context = useContextInfo()
+  const [searchParams] = useSearchParams()
+  const initialPath = folderPath(searchParams.get('path') ?? '') || undefined
   const source = useMemo(() => folderSource({ kind: 'agent', agentId: agent.id }), [agent.id])
   return (
     <FileManager
+      key={initialPath ?? ''}
       variant="sheet"
       source={source}
+      initialPath={initialPath}
       rootLabel={t.folders.rootLabel.agent(agent.name)}
       note={t.folders.agent.intro(agent.name)}
       limits={context.data?.limits.textEdit}
@@ -64,7 +70,7 @@ export function ProjectFolderPage() {
       <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.folders.project.title}>
         <span>{t.folders.project.intro}</span>
       </PageHeader>
-      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink [[data-skin=plate]_&]:mt-2">
+      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink">
         <FileManager
           key={projectId}
           variant="sheet"

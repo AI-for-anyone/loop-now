@@ -21,13 +21,13 @@ export function GitPullHint({ pull }: { pull: Pick<Schemas['FolderGitPull'], 'er
   const enableGit = httpAuth && settings.data?.git === false
   if (!hostKey && !enableGit) return null
   return (
-    <p role="note" className="shrink-0 border-t border-hairline bg-tint-yellow px-3 py-1.5 text-[12px] leading-[1.5] text-ink [[data-skin=plate]_&]:border-ink/10">
+    <p role="note" className="shrink-0 border-t border-hairline bg-tint-yellow px-3 py-1.5 text-[12px] leading-[1.5] text-ink">
       {hostKey ? (
         hints.hostKey
       ) : (
         <>
           {hints.enableGit}{' '}
-          <Link to={localModeSettingsPath} className="font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2">
+          <Link to={localModeSettingsPath} className="font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700">
             {hints.openSettings}
           </Link>
         </>

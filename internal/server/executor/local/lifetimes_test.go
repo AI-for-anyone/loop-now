@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/store"
 )
 
 // startTask registers a running background task on the Agent's live process, as started by a run of its.
@@ -163,6 +165,87 @@ func TestResetSwitchDeleteShutdownStopTasks(t *testing.T) {
 				return
 			}
 			wantStopped(t, obs, "a", c.reason)
+		})
+	}
+}
+
+// holdObs holds the wrap-up of a process at the first record hold matches, until release is closed.
+type holdObs struct {
+	bgObs
+	hold    func(e *executor.Event, t *executor.BackgroundTask) bool
+	once    sync.Once
+	held    chan struct{}
+	release chan struct{}
+}
+
+func (o *holdObs) wait(match bool) {
+	if match {
+		o.once.Do(func() {
+			close(o.held)
+			<-o.release
+		})
+	}
+}
+
+func (o *holdObs) Event(agentID uuid.UUID, runID *uuid.UUID, e executor.Event) {
+	o.bgObs.Event(agentID, runID, e)
+	o.wait(o.hold(&e, nil))
+}
+
+func (o *holdObs) BackgroundTask(agentID uuid.UUID, t executor.BackgroundTask) {
+	o.bgObs.BackgroundTask(agentID, t)
+	o.wait(o.hold(nil, &t))
+}
+
+// Shutdown returns only after the wrap-up of a process that was already taken out of the process table and is being
+// stopped elsewhere has ended, since that wrap-up still writes in the Agent's folder; within its context, as for the
+// processes it stops itself. Such a process exited by itself (watch wraps it up) or had its reply stopped (retire).
+func TestShutdownWaitsForProcessesStoppedElsewhere(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		hold func(e *executor.Event, t *executor.BackgroundTask) bool
+		do   func(h *harness, p *proc)
+	}{
+		{"exited by itself", func(e *executor.Event, _ *executor.BackgroundTask) bool {
+			return e != nil && e.Type == store.EventPiExited
+		},
+			func(_ *harness, p *proc) { _ = p.rt.CloseStdin() }},
+		{"reply stopped", func(_ *executor.Event, t *executor.BackgroundTask) bool {
+			return t != nil && t.StopReason == executor.StopReplyStopped
+		}, func(h *harness, p *proc) { h.e.retire(p) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			obs := &holdObs{hold: c.hold, held: make(chan struct{}), release: make(chan struct{})}
+			h := newHarness(t, func(o *Options) { o.Observer = obs }, "")
+			id := h.agent(nil)
+			h.exec(id, "hi")
+			p := startTask(t, h, id, "a")
+			c.do(h, p)
+			select {
+			case <-obs.held:
+			case <-time.After(10 * time.Second):
+				close(obs.release)
+				t.Fatal("the wrap-up did not start")
+			}
+			if h.pid(id) != 0 {
+				close(obs.release)
+				t.Fatal("the process should be out of the table while it is wrapped up")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			err := h.e.Shutdown(ctx)
+			cancel()
+			close(obs.release)
+			if err == nil {
+				t.Fatal("Shutdown returned while the process was still being wrapped up")
+			}
+			if err := h.e.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-p.stopDone:
+			default:
+				t.Fatal("Shutdown returned before the wrap-up ended")
+			}
 		})
 	}
 }

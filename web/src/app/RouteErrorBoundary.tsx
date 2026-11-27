@@ -13,7 +13,7 @@ export function RouteErrorBoundary() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-canvas p-6 text-ink">
-      <div className="flex w-full max-w-[440px] flex-col gap-4 rounded-panel border border-hairline-strong bg-surface-elevated p-6 shadow-floating [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-print-dialog">
+      <div className="flex w-full max-w-[440px] flex-col gap-4 rounded-panel border border-hairline-strong bg-surface-elevated p-6 shadow-floating">
         <div className="grid gap-1.5">
           <h1 className="text-[18px] font-semibold text-ink">{t.shell.routeError.title}</h1>
           <p className="text-[13.5px] text-ink-700">{t.shell.routeError.hint}</p>

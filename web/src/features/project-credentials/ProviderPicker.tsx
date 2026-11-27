@@ -66,27 +66,27 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
   return <div className="grid min-w-0 gap-2" onKeyDown={event => { if (open && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false) } }}>
     <Label id={labelId} htmlFor={`${id}-trigger`}>{label}</Label>
     {selected && !open
-      ? <div role="group" aria-labelledby={labelId} className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-input border border-hairline-strong bg-surface-subtle px-3.5 py-3 text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]">
+      ? <div role="group" aria-labelledby={labelId} className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-input border border-hairline-strong bg-surface-subtle px-3.5 py-3 text-ink">
         <ProviderAvatar entry={selected} />
-        <span className="font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{selected.name}</span>
+        <span className="font-semibold [overflow-wrap:anywhere]">{selected.name}</span>
         {selected.name !== value && <span className="font-mono text-[12px] [overflow-wrap:anywhere]">{value}</span>}
         {selected.plugin !== null && <PluginBadge name={selected.plugin} />}
-        {selected.options.length > 1 && <ToggleGroup aria-label={text.region} value={value} onValueChange={onChange} className="[[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
-          {selected.options.map(option => <ToggleGroupItem key={option.id} value={option.id} className="[[data-skin=plate]_&]:min-h-[30px] [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:data-[state=on]:bg-ink [[data-skin=plate]_&]:data-[state=on]:text-white">{option.label}</ToggleGroupItem>)}
+        {selected.options.length > 1 && <ToggleGroup aria-label={text.region} value={value} onValueChange={onChange}>
+          {selected.options.map(option => <ToggleGroupItem key={option.id} value={option.id}>{option.label}</ToggleGroupItem>)}
         </ToggleGroup>}
-        <button ref={change} type="button" disabled={disabled} onClick={() => setOpen(true)} className="ml-auto rounded-ticket px-1 font-medium underline outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold">{text.change}</button>
+        <button ref={change} type="button" disabled={disabled} onClick={() => setOpen(true)} className="ml-auto rounded-ticket px-1 font-medium underline outline-none focus-visible:shadow-focus">{text.change}</button>
       </div>
-      : <button ref={trigger} id={`${id}-trigger`} type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? `${id}-panel` : undefined} disabled={disabled} onClick={() => setOpen(!open)} className={cn(fieldClass, 'flex h-12 items-center gap-2.5 text-left aria-expanded:border-hairline-strong aria-expanded:shadow-focus [[data-skin=plate]_&]:aria-expanded:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]')}>
+      : <button ref={trigger} id={`${id}-trigger`} type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? `${id}-panel` : undefined} disabled={disabled} onClick={() => setOpen(!open)} className={cn(fieldClass, 'flex h-12 items-center gap-2.5 text-left aria-expanded:border-hairline-strong aria-expanded:shadow-focus')}>
         <span className="min-w-0 flex-1 truncate text-ink-500">{text.trigger}</span>
         <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0" />
       </button>}
-    {open && <div id={`${id}-panel`} className="grid min-w-0 overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-pink)]">
-      <div className="flex items-center gap-2 border-b border-hairline px-3 py-2.5 [[data-skin=plate]_&]:border-ink/10">
+    {open && <div id={`${id}-panel`} className="grid min-w-0 overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating">
+      <div className="flex items-center gap-2 border-b border-hairline px-3 py-2.5">
         <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-ink-500" />
-        <input ref={search} type="search" autoComplete="off" aria-label={text.search} placeholder={text.searchPlaceholder} aria-controls={listId} aria-activedescendant={visible[active] ? optionId(visible[active]) : undefined} value={query} onChange={event => { setQuery(event.target.value); setActive(-1) }} onKeyDown={onKeyDown} className="h-[38px] min-w-0 flex-1 rounded-input border border-hairline bg-surface-subtle px-3.5 text-[14px] text-ink outline-none placeholder:text-ink-500 focus-visible:border-hairline-strong focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_2px_var(--ink)]" />
+        <input ref={search} type="search" autoComplete="off" aria-label={text.search} placeholder={text.searchPlaceholder} aria-controls={listId} aria-activedescendant={visible[active] ? optionId(visible[active]) : undefined} value={query} onChange={event => { setQuery(event.target.value); setActive(-1) }} onKeyDown={onKeyDown} className="h-[38px] min-w-0 flex-1 rounded-input border border-hairline bg-surface-subtle px-3.5 text-[14px] text-ink outline-none placeholder:text-ink-500 focus-visible:border-hairline-strong focus-visible:shadow-focus" />
       </div>
       {chips.length > 0 && <div role="group" aria-label={text.recommended} className="flex flex-wrap gap-1.5 px-3 pt-2.5 pb-1">
-        {chips.map(entry => <button key={entry.key} type="button" onClick={() => pick(entry)} className="inline-flex min-h-[28px] items-center gap-1 rounded-full border border-hairline bg-surface-control px-2.5 text-[13px] font-medium text-ink outline-none hover:border-hairline-strong hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:shadow-[inset_0_0_0_1px_rgb(24_38_94/.18)] [[data-skin=plate]_&]:hover:bg-paper [[data-skin=plate]_&]:hover:shadow-[inset_0_0_0_1px_var(--riso-blue)]">
+        {chips.map(entry => <button key={entry.key} type="button" onClick={() => pick(entry)} className="inline-flex min-h-[28px] items-center gap-1 rounded-full border border-hairline bg-surface-control px-2.5 text-[13px] font-medium text-ink outline-none hover:border-hairline-strong hover:bg-surface-hover focus-visible:shadow-focus">
           {existing(entry) > 0 && <CheckIcon aria-hidden="true" className="size-3.5" />}{entry.name}
         </button>)}
       </div>}
@@ -95,14 +95,14 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
           const items = visible.filter(entry => entry.group === group)
           if (!items.length) return null
           return <div key={group} role="group" aria-labelledby={`${id}-group-${group}`}>
-            <div id={`${id}-group-${group}`} className="px-2 pt-2.5 pb-1 text-[12px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black">{text.groups[group]}</div>
+            <div id={`${id}-group-${group}`} className="px-2 pt-2.5 pb-1 text-[12px] font-semibold text-ink-500">{text.groups[group]}</div>
             {items.map(entry => {
               const index = visible.indexOf(entry), count = existing(entry), first = entry.options[0].id
-              return <div key={entry.key} id={optionId(entry)} role="option" aria-selected={index === active} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(entry)} className="grid cursor-pointer grid-cols-[30px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 rounded-ticket px-2 py-2 aria-selected:bg-surface-hover sm:grid-cols-[30px_minmax(0,1fr)_auto] [[data-skin=plate]_&]:aria-selected:bg-tint-blue">
+              return <div key={entry.key} id={optionId(entry)} role="option" aria-selected={index === active} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(entry)} className="grid cursor-pointer grid-cols-[30px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 rounded-ticket px-2 py-2 aria-selected:bg-surface-hover sm:grid-cols-[30px_minmax(0,1fr)_auto]">
                 <ProviderAvatar entry={entry} />
-                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className="font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{entry.name}</span>{entry.name !== first && <span className="font-mono text-[12px] text-ink-500 [overflow-wrap:anywhere]">{entry.options.length > 1 ? `${first} +${entry.options.length - 1}` : first}</span>}{entry.plugin !== null && <PluginBadge name={entry.plugin} />}</span>
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className="font-semibold [overflow-wrap:anywhere]">{entry.name}</span>{entry.name !== first && <span className="font-mono text-[12px] text-ink-500 [overflow-wrap:anywhere]">{entry.options.length > 1 ? `${first} +${entry.options.length - 1}` : first}</span>}{entry.plugin !== null && <PluginBadge name={entry.plugin} />}</span>
                 <span className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-3 sm:justify-end">
-                  {count > 0 && <Badge className="border border-hairline bg-surface-subtle text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-pink [[data-skin=plate]_&]:text-pink-text">{text.existing(count)}</Badge>}
+                  {count > 0 && <Badge className="border border-hairline bg-surface-subtle text-ink-700">{text.existing(count)}</Badge>}
                   <AuthBadges methods={entry.authMethods} />
                   <span className="font-mono text-[12px] whitespace-nowrap text-ink-500 tabular-nums">{text.models(entry.modelCount)}</span>
                 </span>

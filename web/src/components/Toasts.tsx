@@ -19,7 +19,7 @@ export function Toasts() {
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) toastStore.resume(toast.id)
           }}
-          className="pointer-events-auto flex min-w-0 items-start gap-3 rounded-card border border-hairline-strong bg-surface-elevated px-4 py-3 text-[13.5px] leading-snug text-ink shadow-floating [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
+          className="pointer-events-auto flex min-w-0 items-start gap-3 rounded-card border border-hairline-strong bg-surface-elevated px-4 py-3 text-[13.5px] leading-snug text-ink shadow-floating"
         >
           <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
             {toast.text}
@@ -30,7 +30,7 @@ export function Toasts() {
                   href={toast.link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-semibold text-ink underline underline-offset-2 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-yellow"
+                  className="font-semibold text-ink underline underline-offset-2"
                 >
                   {toast.link.label}
                 </a>
@@ -41,7 +41,7 @@ export function Toasts() {
             type="button"
             aria-label={t.common.close}
             onClick={() => toastStore.dismiss(toast.id)}
-            className="shrink-0 cursor-pointer rounded-ticket p-0.5 text-ink-500 outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:bg-white/15 [[data-skin=plate]_&]:hover:text-white"
+            className="shrink-0 cursor-pointer rounded-ticket p-0.5 text-ink-500 outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus"
           >
             <XIcon aria-hidden="true" className="size-4" />
           </button>

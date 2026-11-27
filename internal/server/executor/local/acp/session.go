@@ -218,8 +218,10 @@ const ownReply = "own reply"
 // (see Background.Holds); command is its command line.
 type openTool struct {
 	id, name, command string
+	kind              string // the ACP tool kind (read, edit, execute, search, …)
 	seq               int
 	holds             bool
+	targeted          bool // its target (file or search) was reported
 }
 
 // Prompt sends one message (session/prompt) and waits for its stop reason, streaming text and tool calls to sink; the
@@ -337,6 +339,14 @@ func (c *Client) InPrompt() bool {
 	return c.turn != nil
 }
 
+// Answered reports whether the agent has begun to answer a prompt of the session (sent text, thoughts, a tool call or
+// a plan for it), during the prompt or after it.
+func (c *Client) Answered(sessionID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.answered[sessionID]
+}
+
 // sessionUpdate is what the client uses of one session/update notification.
 type sessionUpdate struct {
 	SessionID, Kind, ToolCallID, Title, ToolKind, Status string
@@ -344,6 +354,8 @@ type sessionUpdate struct {
 	// ToolCallContent, which the client does not use).
 	Text                string
 	RawInput, RawOutput json.RawMessage
+	// Locations are the paths of the files a tool call works on.
+	Locations []string
 }
 
 // parseUpdate reads a session/update notification field by field: a field of an unexpected type or shape (a tool
@@ -364,6 +376,16 @@ func parseUpdate(params json.RawMessage) (sessionUpdate, bool) {
 	}
 	u := sessionUpdate{SessionID: str(p.SessionID), Kind: str(p.Update["sessionUpdate"]), ToolCallID: str(p.Update["toolCallId"]),
 		Title: str(p.Update["title"]), ToolKind: str(p.Update["kind"]), Status: str(p.Update["status"]), RawInput: p.Update["rawInput"], RawOutput: p.Update["rawOutput"]}
+	var locations []struct {
+		Path string `json:"path"`
+	}
+	if json.Unmarshal(p.Update["locations"], &locations) == nil {
+		for _, l := range locations {
+			if l.Path != "" {
+				u.Locations = append(u.Locations, l.Path)
+			}
+		}
+	}
 	switch u.Kind {
 	case "agent_message_chunk", "agent_thought_chunk", "user_message_chunk":
 		var block map[string]json.RawMessage
@@ -397,6 +419,15 @@ func (c *Client) update(params json.RawMessage) {
 	t := c.ownReply(u)
 	if t == nil || t.sessionID != u.SessionID || t.sink == nil {
 		return
+	}
+	switch u.Kind {
+	case "agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update", "plan":
+		c.mu.Lock()
+		if c.answered == nil {
+			c.answered = map[string]bool{}
+		}
+		c.answered[u.SessionID] = true
+		c.mu.Unlock()
 	}
 	t.mu.Lock()
 	if t.finished {
@@ -443,12 +474,13 @@ func (c *Client) update(params json.RawMessage) {
 		_, seen := t.tools[u.ToolCallID]
 		if !seen {
 			t.seq++
-			t.tools[u.ToolCallID] = openTool{id: u.ToolCallID, name: name, seq: t.seq, holds: holds, command: command}
+			t.tools[u.ToolCallID] = openTool{id: u.ToolCallID, name: name, kind: u.ToolKind, seq: t.seq, holds: holds, command: command}
 		}
 		t.mu.Unlock()
 		if !seen {
 			t.sink.ToolStarted(u.ToolCallID, name)
-			if command := commandText(in.Command); command != "" {
+			// Antigravity gives its command as CommandLine.
+			if command != "" {
 				if s, ok := t.sink.(interface {
 					ToolCommand(id, name, command string)
 				}); ok {
@@ -456,10 +488,12 @@ func (c *Client) update(params json.RawMessage) {
 				}
 			}
 		}
+		t.target(u)
 		if u.Status == "completed" || u.Status == "failed" {
 			t.toolEnded(u.ToolCallID, u.Status == "failed")
 		}
 	case "tool_call_update":
+		t.target(u) // the locations may come only with an update
 		if u.Status == "completed" || u.Status == "failed" {
 			t.toolEnded(u.ToolCallID, u.Status == "failed")
 		}
@@ -562,4 +596,68 @@ func rpcMessage(err error) string {
 		return e.Message
 	}
 	return err.Error()
+}
+
+// target reports, once per open tool, what a file or search tool works on: the files of a read or edit (its locations,
+// else the path in its input), the pattern or query of a search. Contents and other input never go out.
+func (t *turn) target(u sessionUpdate) {
+	t.mu.Lock()
+	tool, ok := t.tools[u.ToolCallID]
+	if !ok || tool.targeted {
+		t.mu.Unlock()
+		return
+	}
+	kind := tool.kind
+	if u.ToolKind != "" {
+		kind = u.ToolKind
+	}
+	var in map[string]any
+	_ = json.Unmarshal(u.RawInput, &in)
+	first := func(keys ...string) string {
+		for _, k := range keys {
+			if v := unquote(in[k]); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	var paths []string
+	query := ""
+	switch kind {
+	case "read", "edit":
+		paths = u.Locations
+		if len(paths) == 0 {
+			// Antigravity names the file Path, AbsolutePath or TargetFile.
+			if p := first("path", "file_path", "filePath", "Path", "AbsolutePath", "TargetFile"); p != "" {
+				paths = []string{p}
+			}
+		}
+	case "search":
+		query = first("query", "pattern", "Query", "Pattern")
+	}
+	if len(paths) == 0 && query == "" {
+		t.mu.Unlock()
+		return
+	}
+	tool.targeted = true
+	t.tools[u.ToolCallID] = tool
+	t.mu.Unlock()
+	if len(paths) > 0 {
+		runturn.ToolFiles(t.sink, u.ToolCallID, tool.name, paths...)
+	} else {
+		runturn.ToolQuery(t.sink, u.ToolCallID, tool.name, query)
+	}
+}
+
+// unquote gives a string input value; Antigravity may send one as a quoted JSON string.
+func unquote(v any) string {
+	s, _ := v.(string)
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		var inner string
+		if json.Unmarshal([]byte(s), &inner) == nil {
+			return inner
+		}
+	}
+	return s
 }

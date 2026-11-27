@@ -76,7 +76,7 @@ export function AppearanceCard({ labelledBy }: { labelledBy: string }) {
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        <span id={skinLabelId} className="text-[12.5px] leading-4 font-medium text-ink-700 [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:font-semibold">
+        <span id={skinLabelId} className="text-[12.5px] leading-4 font-medium text-ink-700">
           {copy.skinLabel}
         </span>
         <div
@@ -99,13 +99,13 @@ export function AppearanceCard({ labelledBy }: { labelledBy: string }) {
                 className={cn(
                   'flex cursor-pointer flex-col items-start gap-2.5 rounded-card border p-3 text-left transition-[background-color,border-color,box-shadow] duration-150 outline-none focus-visible:shadow-focus',
                   active
-                    ? 'border-riso-blue bg-tint-blue/40 shadow-[0_0_0_1px_var(--riso-blue)] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]'
+                    ? 'border-riso-blue bg-tint-blue/40 shadow-[0_0_0_1px_var(--riso-blue)]'
                     : 'border-hairline bg-surface-control hover:border-hairline-strong hover:bg-surface-subtle',
                 )}
               >
                 <SkinThumbnail skinId={id} resolvedTheme={resolvedTheme} />
                 <div className="grid gap-0.5">
-                  <span className="text-[13.5px] font-medium text-ink [[data-skin=plate]_&]:font-black">{meta.name}</span>
+                  <span className="text-[13.5px] font-medium text-ink">{meta.name}</span>
                   <span className="text-[12.5px] leading-snug text-ink-500">{meta.description}</span>
                 </div>
               </button>
@@ -115,7 +115,7 @@ export function AppearanceCard({ labelledBy }: { labelledBy: string }) {
       </div>
 
       <div className="grid gap-2">
-        <span id={modeLabelId} className="text-[12.5px] leading-4 font-medium text-ink-700 [[data-skin=plate]_&]:text-[13px] [[data-skin=plate]_&]:font-semibold">
+        <span id={modeLabelId} className="text-[12.5px] leading-4 font-medium text-ink-700">
           {copy.modeLabel}
         </span>
         <div className="flex flex-wrap items-center gap-3">

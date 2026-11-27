@@ -22,6 +22,8 @@
   --sidebar-active-bg: #EBF3FE;
   --sidebar-active-fg: #0058C4;
   --sidebar-group: #666E7C;
+  --sidebar-control-bg: #FFFFFF;
+  --sidebar-control-fg: #171717;
 
   /* Hairlines and Geist micro-elevation shadows (light) */
   --hairline: rgb(0 0 0 / 0.08);
@@ -79,6 +81,7 @@
   --status-done: #0D9488;
   --status-interrupt: #D97706;
   --status-fail: #DC2626;
+  --status-busy: #0066DB;
 
   /* Shadows and focus ring (light) */
   --print-rest: none;
@@ -86,7 +89,7 @@
   --print-blue: none;
   --print-ink: none;
   --print-dialog: none;
-  --focus-ring: none;
+  --focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 4px #0066DB;
 
   /* Crisp geometric radii */
   --skin-radius-stamp: 5px;
@@ -145,6 +148,8 @@
   --sidebar-active-bg: #10213A;
   --sidebar-active-fg: #7CC0FF;
   --sidebar-group: #8A919E;
+  --sidebar-control-bg: #111216;
+  --sidebar-control-fg: #EDEDED;
 
   /* Hairlines and edge-lit shadows (dark) */
   --hairline: rgb(255 255 255 / 0.09);
@@ -202,9 +207,10 @@
   --status-done: #2DD4BF;
   --status-interrupt: #FBBF24;
   --status-fail: #F87171;
+  --status-busy: #52A8FF;
 
   /* Focus ring (dark) */
-  --focus-ring: none;
+  --focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 4px #52A8FF;
 
   /* shadcn semantic variables */
   --background: var(--surface-canvas);

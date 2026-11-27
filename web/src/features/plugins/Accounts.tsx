@@ -58,7 +58,7 @@ function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId
   }
   const conflict = mutation.error instanceof ApiError && mutation.error.status === 412
   return (
-    <form className="grid min-w-0 gap-3.5 rounded-input border border-hairline bg-surface-subtle p-3.5 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue/40" onSubmit={submit} noValidate>
+    <form className="grid min-w-0 gap-3.5 rounded-input border border-hairline bg-surface-subtle p-3.5" onSubmit={submit} noValidate>
       <div className="grid gap-1.5">
         <Label htmlFor={`${id}-name`}>{text.name}</Label>
         <Input id={`${id}-name`} value={name} aria-invalid={nameError ? true : undefined} onChange={(event) => setName(event.target.value)} autoComplete="off" />
@@ -97,9 +97,9 @@ export function AccountsManager({ projectId, pluginId, kinds }: { projectId: str
         const full = !kind.multiple && mine.length > 0
         return (
           <section key={kind.kind} aria-label={text.title(localizedText(kind.label))} className="grid min-w-0 gap-2">
-            <h3 className="text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">
+            <h3 className="text-[13px] font-semibold text-ink-700">
               {text.title(localizedText(kind.label))}
-              {!kind.multiple && <span className="ml-2 font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{text.single}</span>}
+              {!kind.multiple && <span className="ml-2 font-medium text-ink-500">{text.single}</span>}
             </h3>
             {accounts.isSuccess && mine.length === 0 && editing !== `new:${kind.kind}` && <Quiet>{text.empty}</Quiet>}
             <ul className="grid min-w-0 gap-1.5">
@@ -109,8 +109,8 @@ export function AccountsManager({ projectId, pluginId, kinds }: { projectId: str
                     <AccountForm projectId={projectId} pluginId={pluginId} kind={kind} account={account} onDone={() => setEditing(null)} />
                   </li>
                 ) : (
-                  <li key={account.id} className="flex min-w-0 items-center gap-3 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04]">
-                    <span className="min-w-0 truncate font-semibold [[data-skin=plate]_&]:font-black">{account.name}</span>
+                  <li key={account.id} className="flex min-w-0 items-center gap-3 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px]">
+                    <span className="min-w-0 truncate font-semibold">{account.name}</span>
                     {preview(account) && <span className="min-w-0 truncate font-mono text-[12px] text-ink-500">{preview(account)}</span>}
                     <span className="ml-auto flex shrink-0 gap-3">
                       <button type="button" className="cursor-pointer font-bold text-riso-blue underline outline-none focus-visible:shadow-focus" aria-label={`${text.edit} ${account.name}`} onClick={() => setEditing(account.id)}>

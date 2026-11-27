@@ -11,20 +11,24 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// workDir is where the Agent's CLI works: the working folder a regular Agent was given, when its runtime can work in a
-// folder the person picks; otherwise, and always for a task step (which keeps its own copy of the Agent's folder), the
-// Agent's own folder.
+// workDir is where the Agent's CLI works: the task's worktree for a step of a task that has one (every runtime); the
+// working folder a regular Agent was given, when its runtime can work in a folder the person picks; otherwise, and for
+// a task step without a worktree (which keeps its own copy of the Agent's folder), the Agent's own folder.
 func workDir(snap agentconfig.Snapshot, d agentDirs) string {
+	if snap.TaskWorkspace != "" && snap.TaskID != uuid.Nil {
+		return snap.TaskWorkspace
+	}
 	if snap.WorkingDirectory != "" && snap.TaskID == uuid.Nil && capabilities(snap).WorkingDirectory {
 		return snap.WorkingDirectory
 	}
 	return d.workspace
 }
 
-// localConfig reports whether the runtime loads the person's own CLI configuration, as in their terminal: a regular
-// Agent that chose it, on a runtime that can (task steps keep today's limits).
+// localConfig reports whether the runtime loads the person's own CLI configuration, as in their terminal: an Agent
+// that chose it, on a runtime that can, in its regular conversation or in a step of a task with a worktree (other task
+// steps keep today's limits).
 func localConfig(snap agentconfig.Snapshot) bool {
-	return snap.UseLocalConfig && snap.TaskID == uuid.Nil && capabilities(snap).LocalConfig
+	return snap.UseLocalConfig && (snap.TaskID == uuid.Nil || snap.TaskWorkspace != "") && capabilities(snap).LocalConfig
 }
 
 // checkWorkDir fails a start whose working folder is not a folder on this computer any more.
@@ -33,7 +37,9 @@ func checkWorkDir(snap agentconfig.Snapshot, d agentDirs) error {
 	if dir == d.workspace {
 		return nil
 	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+	if info, err := os.Stat(dir); (err != nil || !info.IsDir()) && dir == snap.TaskWorkspace {
+		return fail(executor.ErrRuntimeStartFailed, "The task's worktree %s is not a folder on this computer any more.", dir)
+	} else if err != nil || !info.IsDir() {
 		return fail(executor.ErrRuntimeStartFailed, "The Agent's working folder %s is not a folder on this computer any more. Pick another one on the Agent's settings page.", dir)
 	}
 	return nil

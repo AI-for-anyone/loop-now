@@ -4,7 +4,7 @@
 @import "./styles/skins/mono.css";
 @import "./styles/skins/plate.css";
 
-/* Skin-driven design tokens: "mono" (default, light/dark) and "plate" (classic Risograph print, light only). */
+/* Theme-driven design tokens: "mono" (default, light/dark/system) and "plate" (Risograph palette, light only). */
 
 @theme inline {
     --font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
@@ -31,6 +31,8 @@
     --color-sidebar-active-bg: var(--sidebar-active-bg);
     --color-sidebar-active-fg: var(--sidebar-active-fg);
     --color-sidebar-group: var(--sidebar-group);
+    --color-sidebar-control-bg: var(--sidebar-control-bg);
+    --color-sidebar-control-fg: var(--sidebar-control-fg);
     --color-hairline: var(--hairline);
     --color-hairline-strong: var(--hairline-strong);
     --color-cta-bg: var(--cta-bg);
@@ -44,7 +46,7 @@
     --color-code-border: var(--code-border);
     --color-code-muted: var(--code-muted);
 
-    /* Legacy paper/ink/riso tokens preserved for Plate and shared components */
+    /* Shared paper/ink/status tokens */
     --color-paper: var(--paper);
     --color-paper-raised: var(--paper-raised);
     --color-paper-tab: var(--paper-tab);
@@ -67,6 +69,7 @@
     --color-tint-red: var(--tint-red);
     --color-tint-yellow: var(--tint-yellow);
     --color-error-field: var(--error-field);
+    --color-status-busy: var(--status-busy);
 
     --color-success: var(--tint-green);
     --color-success-foreground: var(--green-text);
@@ -129,13 +132,6 @@
 @layer base {
   * {
     @apply border-border;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-  }
-  *::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
   }
   html {
     @apply font-sans;
@@ -144,14 +140,8 @@
   body {
     @apply bg-surface-canvas text-ink text-[13.5px] leading-[1.55];
   }
-  [data-skin="plate"] body {
-    font-size: 15px;
-    line-height: 1.65;
-  }
   :focus-visible {
     outline: none;
-  }
-  [data-skin="plate"] :focus-visible {
     box-shadow: var(--focus-ring);
   }
 }
@@ -160,9 +150,10 @@
   .riso-paper {
     background-color: var(--surface-canvas);
   }
-  /* Scrollbars are always hidden across all scrollable surfaces. */
+  /* Thin translucent scrollbars inside the sheet; :where adds zero specificity so .no-scrollbar can hide them where a ruler replaces them. */
   :where(.riso-scrollbar, .riso-scrollbar *) {
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink) 26%, transparent) transparent;
   }
   /* Window drag strip in the desktop shell window (macOS hiddenInset); interactive controls remain clickable. */
   .window-drag {
@@ -188,21 +179,6 @@
     border-radius: inherit;
     background: var(--tilt-bg, var(--surface-elevated));
     box-shadow: var(--tilt-shadow, var(--surface-shadow));
-  }
-  /* The decoration slot below the sidebar list in Plate skin: shown only when the height fits. */
-  .sidebar-deco-slot {
-    position: relative;
-    flex: 1 1 0;
-    min-height: 0;
-    container-type: size;
-  }
-  .sidebar-deco {
-    display: none;
-  }
-  @container (min-height: 204px) {
-    .sidebar-deco {
-      display: block;
-    }
   }
   .riso-cursor {
     animation: riso-blink 1s steps(2, start) infinite;
@@ -286,37 +262,6 @@
   }
 }
 
-@keyframes boarding-gold-turn {
-  0% {
-    transform: rotate(0deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  19%,
-  25% {
-    transform: rotate(90deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  44%,
-  50% {
-    transform: rotate(180deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  69%,
-  75% {
-    transform: rotate(270deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  94%,
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.boarding-gold-square {
-  transform-origin: 45px 19px;
-  animation: boarding-gold-turn 4.6s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -387,33 +332,50 @@
   .markdown pre code.hljs {
     @apply bg-transparent p-0;
   }
-}
-
-/* Plate skin keeps its bolder editorial Markdown accents. */
-:root[data-skin="plate"] .markdown {
-  font-size: 15px;
-  line-height: 1.7;
-}
-:root[data-skin="plate"] .markdown h1,
-:root[data-skin="plate"] .markdown h2 {
-  font-weight: 900;
-}
-:root[data-skin="plate"] .markdown a {
-  font-weight: 700;
-  text-decoration-thickness: 2px;
-}
-:root[data-skin="plate"] .markdown blockquote {
-  border-left-width: 4px;
-  border-left-color: var(--riso-pink);
-}
-:root[data-skin="plate"] .markdown :not(pre) > code {
-  border-color: transparent;
-  background-color: var(--tint-blue);
-}
-:root[data-skin="plate"] .markdown .md-lead {
-  border-color: transparent;
-  background-color: var(--riso-yellow);
-  font-weight: 900;
+  /* Consecutive Markdown images in replies sit side by side in a wrapping row (grouped by rehype-image-rows):
+     2 per row on narrow columns (e.g. 390px), up to 3 on medium columns, and up to 4 on wide columns (e.g. 1440px).
+     2- and 3-image rows keep fewer columns so each thumbnail can still grow up to 360px wide. */
+  .markdown .md-image-row-wrap {
+    container-type: inline-size;
+    width: 100%;
+  }
+  .markdown .md-image-row {
+    --md-row-gap: 0.75rem;
+    --md-cols: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--md-row-gap);
+  }
+  @container (min-width: 520px) {
+    .markdown .md-image-row:not([data-count='2']) {
+      --md-cols: 3;
+    }
+  }
+  @container (min-width: 720px) {
+    .markdown .md-image-row:not([data-count='2']):not([data-count='3']) {
+      --md-cols: 4;
+    }
+  }
+  .markdown .md-image-row > .md-image-item {
+    max-width: min(360px, calc((100% - (var(--md-cols) - 1) * var(--md-row-gap) - 1px) / var(--md-cols)));
+    min-width: 0;
+  }
+  .markdown .md-image-row > figure.md-image-item {
+    @apply m-0 flex flex-col items-start gap-1.5;
+  }
+  .markdown .md-image-row > .md-image-item > [data-md-image] {
+    @apply block max-w-full;
+  }
+  .markdown .md-image-row > .md-image-item > [data-md-image-error] {
+    @apply max-w-full;
+  }
+  .markdown .md-image-caption {
+    @apply w-full text-[13.5px] leading-[1.5] text-ink-700 [overflow-wrap:anywhere];
+  }
+  .markdown .md-image-caption strong {
+    @apply text-ink;
+  }
 }
 
 .hljs-emphasis {

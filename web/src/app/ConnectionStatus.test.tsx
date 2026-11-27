@@ -48,6 +48,17 @@ describe('top bar connection status', () => {
     expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
   })
 
+  it('stays on one line and truncates the host with a tooltip when the sidebar is narrow', async () => {
+    server.use(http.get(apiUrl('/health'), degraded), ...baseHandlers([]))
+    renderRoutes(routes, defaultAgentsPath)
+    await within(topStatus()).findByText('Database unavailable')
+    expect(topStatus()).toHaveClass('h-7', 'max-w-full', 'min-w-0', 'whitespace-nowrap')
+    expect(within(topStatus()).getByText('Database unavailable')).toHaveClass('shrink-0')
+    const host = within(topStatus()).getByText('127.0.0.1:8780')
+    expect(host).toHaveClass('min-w-0', 'truncate')
+    expect(host).toHaveAttribute('title', '127.0.0.1:8780')
+  })
+
   it('shows Database unavailable when the health check reports the database is unavailable, without the global unreachable notice', async () => {
     server.use(http.get(apiUrl('/health'), degraded), ...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)

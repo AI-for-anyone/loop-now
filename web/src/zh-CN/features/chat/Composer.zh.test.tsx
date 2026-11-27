@@ -16,7 +16,7 @@ it('when busy, Stop stays available even with a draft, and explicit Interrupt an
   mountBar(true)
   expect(screen.queryByText('换行')).toBeNull()
   const stop = screen.getByRole('button', { name: '停止当前回复' })
-  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white')
   expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
 
   await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '新的指示')
@@ -31,7 +31,7 @@ it('the key hints used elsewhere (the task node input) stay centered with second
   renderWithQuery(<KeyHint />)
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
-  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono', '[[data-skin=plate]_&]:bg-white', '[[data-skin=plate]_&]:border-ink/25')
+  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono')
   // The key names are also written as before.
   expect(hint).toHaveTextContent('Enter排队·Ctrl Enter立即打断')
   expect(hint).not.toHaveTextContent('回车')

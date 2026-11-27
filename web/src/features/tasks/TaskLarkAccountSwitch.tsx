@@ -84,7 +84,7 @@ function SwitchForm(props: TaskLarkAccountSwitchProps) {
       finally { guard.current = false; setPending(false) }
     }}>
       <dl className="grid min-w-0 gap-2 text-sm [overflow-wrap:anywhere]"><div><dt className="font-bold">{copy.task}</dt><dd>{task.title} · {task.id}</dd></div><div><dt className="font-bold">{copy.currentNode}</dt><dd>{node.stepId} · {node.agentName} · {node.id}</dd></div></dl>
-      <div className="grid min-w-0 gap-3" aria-label={copy.members}>{members.map(member => <div key={member.identity.runtimeId} className="rounded-input border border-hairline bg-surface-subtle p-3 text-sm [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue"><strong>{member.title} · {member.identity.agentName}</strong><p>{member.identity.agentId} · {member.identity.runtimeId}</p><p>{copy.permission} · {member.originalPermission}</p><p>{copy.oldBinding} · {member.oldBinding}</p></div>)}</div>
+      <div className="grid min-w-0 gap-3" aria-label={copy.members}>{members.map(member => <div key={member.identity.runtimeId} className="rounded-input border border-hairline bg-surface-subtle p-3 text-sm [overflow-wrap:anywhere]"><strong>{member.title} · {member.identity.agentName}</strong><p>{member.identity.agentId} · {member.identity.runtimeId}</p><p>{copy.permission} · {member.originalPermission}</p><p>{copy.oldBinding} · {member.oldBinding}</p></div>)}</div>
       <Label htmlFor={id}>{copy.target}</Label>
       <select id={id} className={selectClass} value={selected?.id ?? ''} disabled={locked} onChange={event => setSelected(accounts.find(a => a.id === event.target.value) ?? null)}>
         <option value="">{copy.explicit}</option>

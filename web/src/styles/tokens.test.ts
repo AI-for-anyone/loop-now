@@ -16,7 +16,27 @@ function extractBlock(source: string, selector: string): string {
 }
 
 function parseHexTokens(block: string): Record<string, string> {
-  return Object.fromEntries([...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});/g)].map(([, name, hex]) => [name, hex]))
+  const raw = Object.fromEntries(
+    [...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\));/g)].map(([, name, value]) => [name, value]),
+  )
+  const resolved: Record<string, string> = {}
+  const resolveToken = (name: string, seen = new Set<string>()): string | undefined => {
+    if (resolved[name]) return resolved[name]
+    const value = raw[name]
+    if (!value || seen.has(name)) return undefined
+    if (value.startsWith('#')) {
+      resolved[name] = value
+      return value
+    }
+    const target = /^var\(--([a-z0-9-]+)\)$/.exec(value)?.[1]
+    if (!target) return undefined
+    seen.add(name)
+    const hex = resolveToken(target, seen)
+    if (hex) resolved[name] = hex
+    return hex
+  }
+  for (const name of Object.keys(raw)) resolveToken(name)
+  return resolved
 }
 
 function luminance(hex: string): number {
@@ -114,6 +134,7 @@ const monoPairs: [string, string, string][] = [
   ['Sidebar primary', 'sidebar-fg', 'sidebar-bg'],
   ['Sidebar muted', 'sidebar-muted', 'sidebar-bg'],
   ['Sidebar active row', 'sidebar-active-fg', 'sidebar-active-bg'],
+  ['Sidebar control', 'sidebar-control-fg', 'sidebar-control-bg'],
   ['Primary CTA', 'cta-fg', 'cta-bg'],
   ['Tooltip text', 'tooltip-fg', 'tooltip-bg'],
   ['Tooltip muted', 'tooltip-muted', 'tooltip-bg'],
@@ -141,6 +162,10 @@ const monoDarkHljsColors = [
 
 describe('Design token contrast — Plate skin', () => {
   it.each(platePairs)('%s: at least 4.5:1', (_name, foreground, background) => {
+    expect(contrastFrom(plateTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(monoPairs)('Semantic pair — %s: at least 4.5:1', (_name, foreground, background) => {
     expect(contrastFrom(plateTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
   })
 

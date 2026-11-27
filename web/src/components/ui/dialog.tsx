@@ -94,7 +94,7 @@ function DialogContent({
         {...focusHandlers}
         {...props}
       >
-        <div data-dialog-paper className={dialogPaperClass(kind)}>
+        <div data-dialog-paper className={dialogPaperClass}>
           <div data-dialog-topbar className={dialogTopbarClass}>
             <DialogTab kind={kind} />
             {showCloseButton && (
@@ -155,7 +155,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "text-[19px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:[text-shadow:2.5px_2.5px_0_var(--riso-pink)]",
+        "text-[19px] leading-snug font-semibold tracking-tight text-ink",
         className
       )}
       {...props}

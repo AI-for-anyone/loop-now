@@ -50,7 +50,7 @@ export function CreateProjectDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setName(e.target.value)}
             />
             {nameError && (
-              <p role="alert" className="text-[12.5px] leading-snug font-medium text-red-text [[data-skin=plate]_&]:font-bold">
+              <p role="alert" className="text-[12.5px] leading-snug font-medium text-red-text">
                 {nameError}
               </p>
             )}

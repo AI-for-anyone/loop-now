@@ -1,13 +1,14 @@
-import { useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { BookOpenTextIcon, DownloadIcon, LoaderCircleIcon, PencilIcon } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ScrollRuler } from '@/components/PrecisionRuler'
 import { Markdown } from '@/features/chat/Markdown'
+import { blobToImageUrl } from '@/features/images/blob-url'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { ENTRY_FILE, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
+import { ENTRY_FILE, extensionOf, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
 import { useFolderFile, useFolderList } from './folder-queries'
 import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions } from './FolderParts'
 import { highlightCode } from './highlight'
@@ -38,21 +39,21 @@ export function DirView({ source, path, actions, onCreateEntry, onEditEntry }: D
         {entries.length > 0 && (
           <table className="w-full table-fixed border-collapse text-[13px]">
             {/* Crisp 1px hairlines in mono; 2px solid header line and 1.5px dashed row dividers in Plate. */}
-            <thead className="sticky top-0 z-10 bg-surface-canvas/95 text-[11.5px] font-medium text-ink-500 backdrop-blur-sm [[data-skin=plate]_&]:bg-paper-raised/95 [[data-skin=plate]_&]:font-black">
-              <tr className="border-b border-hairline-strong [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
-                <th className="py-1.5 pl-3 text-left font-medium [[data-skin=plate]_&]:font-black">{t.folders.columns.name}</th>
-                <th className="w-24 pr-3 text-right font-medium @max-[34rem]:hidden [[data-skin=plate]_&]:font-black">{t.folders.columns.size}</th>
-                <th className="w-28 pr-2 text-right font-medium @max-[34rem]:hidden [[data-skin=plate]_&]:font-black">{t.folders.columns.modified}</th>
+            <thead className="sticky top-0 z-10 bg-surface-canvas/95 text-[11.5px] font-medium text-ink-500 backdrop-blur-sm">
+              <tr className="border-b border-hairline-strong">
+                <th className="py-1.5 pl-3 text-left font-medium">{t.folders.columns.name}</th>
+                <th className="w-24 pr-3 text-right font-medium @max-[34rem]:hidden">{t.folders.columns.size}</th>
+                <th className="w-28 pr-2 text-right font-medium @max-[34rem]:hidden">{t.folders.columns.modified}</th>
                 <th className="w-9"><span className="sr-only">{t.folders.actions('')}</span></th>
               </tr>
             </thead>
             <tbody>
               {[...entries].sort((a, b) => Number(isEntryFile(b.path)) - Number(isEntryFile(a.path))).map((item) => (
-                <tr key={item.path} className="group h-9 border-b border-hairline hover:bg-surface-hover [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-tint-yellow/60">
+                <tr key={item.path} className="group h-9 border-b border-hairline hover:bg-surface-hover">
                   <td className="py-0 pl-3">
-                    <button type="button" onClick={() => actions.open(item)} className={cn('flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 text-left text-[13px] font-medium outline-none focus-visible:underline [[data-skin=plate]_&]:font-bold', item.type === 'other' && 'text-ink-500')}>
+                    <button type="button" onClick={() => actions.open(item)} className={cn('flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 text-left text-[13px] font-medium outline-none focus-visible:underline', item.type === 'other' && 'text-ink-500')}>
                       <EntryIcon path={item.path} type={item.type} />
-                      <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-semibold [[data-skin=plate]_&]:font-black')}>{item.name}</span>
+                      <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-semibold')}>{item.name}</span>
                       {item.symlinkTarget && <span className="min-w-0 truncate text-[11.5px] text-ink-500">→ {item.symlinkTarget}</span>}
                       {isEntryFile(item.path) && <EntryBadge />}
                     </button>
@@ -66,7 +67,7 @@ export function DirView({ source, path, actions, onCreateEntry, onEditEntry }: D
           </table>
         )}
         {list.hasNextPage && (
-          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className="mx-3 my-2 self-start text-[12.5px] font-medium text-ink hover:underline [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue">
+          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className="mx-3 my-2 self-start text-[12.5px] font-medium text-ink hover:underline">
             {list.isFetchingNextPage ? t.folders.loading : t.folders.showMore}
           </button>
         )}
@@ -77,7 +78,7 @@ export function DirView({ source, path, actions, onCreateEntry, onEditEntry }: D
   )
 }
 
-function Pending() {
+export function Pending() {
   return (
     <p className="flex items-center gap-2 px-4 py-6 text-[13px] text-ink-500">
       <LoaderCircleIcon aria-hidden="true" className="riso-spin size-4 motion-reduce:animate-none" />
@@ -89,10 +90,10 @@ function Pending() {
 // The root has no AGENTS.md yet: compact single-row banner offering one-click creation.
 function EntryMissing({ onCreate }: { onCreate: () => void }) {
   return (
-    <div role="note" className="mx-3 mt-3 mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3 py-2 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-print-pink">
+    <div role="note" className="mx-3 mt-3 mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-card border border-hairline-strong bg-surface-subtle px-3 py-2 shadow-surface">
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12.5px]">
-        <span className="shrink-0 font-semibold text-ink [[data-skin=plate]_&]:font-black">{t.folders.entry.missingTitle}</span>
-        <span className="min-w-0 text-ink-500 [[data-skin=plate]_&]:text-ink-700">{t.folders.entry.missingBody}</span>
+        <span className="shrink-0 font-semibold text-ink">{t.folders.entry.missingTitle}</span>
+        <span className="min-w-0 text-ink-500">{t.folders.entry.missingBody}</span>
       </div>
       <Button size="xs" className="h-7 shrink-0" onClick={onCreate}>{t.folders.entry.create}</Button>
     </div>
@@ -103,10 +104,10 @@ function EntryMissing({ onCreate }: { onCreate: () => void }) {
 function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: FolderEntry; onEdit: () => void }) {
   const file = useFolderFile(source, entry.path)
   return (
-    <section aria-label={ENTRY_FILE} className="mx-3 my-3 rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-ink/12 [[data-skin=plate]_&]:bg-white">
-      <header className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline px-3 py-1 [[data-skin=plate]_&]:border-ink/10">
+    <section aria-label={ENTRY_FILE} className="mx-3 my-3 rounded-card border border-hairline bg-surface-control">
+      <header className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline px-3 py-1">
         <BookOpenTextIcon aria-hidden="true" className="size-4 text-pink-text" strokeWidth={2} />
-        <span className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{ENTRY_FILE}</span>
+        <span className="text-[13px] font-semibold">{ENTRY_FILE}</span>
         <EntryBadge />
         <span className="text-[12px] text-ink-500">{t.folders.entry.hint}</span>
         <ToolButton className="ml-auto" icon={<PencilIcon />} label={t.folders.file.edit} onClick={onEdit} />
@@ -144,7 +145,7 @@ interface FileViewProps {
 
 export function FileView({ source, entry, limits, actions, file, edit, mode, onDraft, onSave }: FileViewProps) {
   const path = entry.path
-  const maxBytes = limits?.maxBytes ?? 1 << 20
+  const maxBytes = limits?.maxBytes ?? 20 << 20 // the server default (LOOP_NOW_TEXT_EDIT_MAX) until the limits load
   const tooLarge = entry.size !== null && entry.size > maxBytes
   const text = file.data?.kind === 'text' ? file.data.text : null
   const markdown = isMarkdown(path)
@@ -156,8 +157,12 @@ export function FileView({ source, entry, limits, actions, file, edit, mode, onD
   else if (tooLarge) body = <Notice download={() => actions.download(entry)}>{t.folders.file.tooLarge(maxBytes)}</Notice>
   else if (entry.type === 'file' && isImage(path)) {
     body = (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--surface-subtle)_0_25%,var(--surface-control)_0_50%)] bg-[length:16px_16px] p-6 [[data-skin=plate]_&]:bg-[repeating-conic-gradient(var(--paper)_0_25%,#fff_0_50%)]">
-        <img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-surface [[data-skin=plate]_&]:shadow-print-rest" />
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[repeating-conic-gradient(var(--surface-subtle)_0_25%,var(--surface-control)_0_50%)] bg-[length:16px_16px] p-6">
+        {extensionOf(nameOf(path)) === 'svg' ? (
+          <FolderSvgImage source={source} path={path} alt={entry.name} />
+        ) : (
+          <img src={source.contentURL(path)} alt={entry.name} className="max-h-full max-w-full rounded-stamp shadow-surface" />
+        )}
       </div>
     )
   } else if (file.isPending) body = <Pending />
@@ -174,6 +179,42 @@ export function FileView({ source, entry, limits, actions, file, edit, mode, onD
       {body}
     </div>
   )
+}
+
+// Folder file downloads answer application/octet-stream, which browsers do not sniff as SVG inside <img>. Wrap the bytes in an
+// image/svg+xml Blob URL so SVG files render as <img> (never inlined, so embedded scripts cannot run).
+function FolderSvgImage({ source, path, alt }: { source: FolderSource; path: string; alt: string }) {
+  const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null)
+  const [failedKey, setFailedKey] = useState<string | null>(null)
+  const key = `${source.key}:${path}`
+
+  useEffect(() => {
+    let active = true
+    let revoke: (() => void) | null = null
+    void source
+      .read(path)
+      .then((blob) => blob.arrayBuffer())
+      .then((buffer) => blobToImageUrl(new Blob([buffer], { type: 'image/svg+xml' })))
+      .then((result) => {
+        if (!active) {
+          result.revoke()
+          return
+        }
+        revoke = result.revoke
+        setLoaded({ key, url: result.url })
+      })
+      .catch(() => {
+        if (active) setFailedKey(key)
+      })
+    return () => {
+      active = false
+      revoke?.()
+    }
+  }, [source, path, key])
+
+  if (failedKey === key) return <Notice>{t.folders.file.binary}</Notice>
+  if (loaded?.key !== key) return <Pending />
+  return <img src={loaded.url} alt={alt} className="max-h-full max-w-full rounded-stamp shadow-print-rest" />
 }
 
 function Notice({ children, download }: { children: ReactNode; download?: () => void }) {
@@ -204,8 +245,8 @@ function CodeView({ path, text }: { path: string; text: string }) {
   const count = Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0))
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
-      <div ref={scrollRef} className="code-view flex min-h-0 flex-1 overflow-auto bg-surface-control font-mono text-[12.5px] leading-5 [[data-skin=plate]_&]:bg-white">
-        <div aria-hidden="true" className="sticky left-0 shrink-0 border-r border-hairline bg-surface-subtle py-3 pr-3 pl-4 text-right text-ink-500/70 tabular-nums select-none [[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-paper-raised">
+      <div ref={scrollRef} className="code-view flex min-h-0 flex-1 overflow-auto bg-surface-control font-mono text-[12.5px] leading-5">
+        <div aria-hidden="true" className="sticky left-0 shrink-0 border-r border-hairline bg-surface-subtle py-3 pr-3 pl-4 text-right text-ink-500/70 tabular-nums select-none">
           {Array.from({ length: count }, (_, index) => <div key={index}>{index + 1}</div>)}
         </div>
         <pre className="min-w-0 flex-1 py-3 pr-6 pl-4"><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>
@@ -237,7 +278,7 @@ function Editor({ value, onChange, onSave, label }: { value: string; onChange: (
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
-        className="min-h-0 flex-1 resize-none border-0 bg-surface-control px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none [[data-skin=plate]_&]:bg-white"
+        className="min-h-0 flex-1 resize-none border-0 bg-surface-control px-5 py-3 font-mono text-[12.5px] leading-5 text-ink outline-none [tab-size:4] focus-visible:shadow-none"
       />
       <ScrollRuler targetRef={scrollRef} />
     </div>

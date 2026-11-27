@@ -121,31 +121,34 @@ describe("Each Agent's inbox is read-only", () => {
 describe('Showing the Agent address', () => {
   it('copy address: the clipboard holds the full address', async () => {
     const { user } = await renderAgentInbox(received().slice(0, 1))
-    await user.click(screen.getByRole('button', { name: 'Address' }))
-    expect(await screen.findByText('test-org/test-project/Code review assistant', { selector: 'span.font-mono' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'CopyAddress' }))
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('test-org/test-project/Code review assistant')).toBeInTheDocument()
+    await user.click(within(menu).getByRole('button', { name: 'Copy address' }))
     await expect(navigator.clipboard.readText()).resolves.toBe('test-org/test-project/Code review assistant')
-    expect(await screen.findByRole('button', { name: 'CopyAddress' })).toHaveTextContent('Copied')
+    expect(await within(menu).findByRole('button', { name: 'Copy address' })).toHaveTextContent('Copied')
   })
 
   it("a platform Agent's address is its name itself", async () => {
     const watcher = makeAgent({ name: 'Integration patrol', scope: 'platform', projectId: null, address: 'Integration patrol' })
-    const user = userEvent.setup()
     server.use(http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(watcher)] })), ...baseHandlers([watcher]))
+    const user = userEvent.setup()
     renderRoutes(routes, `/platform/agents/${watcher.id}/config`)
-    await user.click(await screen.findByRole('button', { name: 'Address' }))
-    expect(await screen.findByText('Integration patrol', { selector: 'span.font-mono' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'CopyAddress' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('Integration patrol', { selector: 'span' })).toBeInTheDocument()
+    expect(within(menu).getByRole('button', { name: 'Copy address' })).toBeInTheDocument()
   })
 
   it('no address when the name does not meet the rules: a note says to rename it first and to use the internal ID when sending messages', async () => {
     const legacy = makeAgent({ name: 'old/bot', address: null })
-    const user = userEvent.setup()
     server.use(...baseHandlers([legacy]))
+    const user = userEvent.setup()
     renderRoutes(routes, `${defaultAgentsPath}/${legacy.id}/config`)
-    await user.click(await screen.findByRole('button', { name: 'Address' }))
-    expect(await screen.findByText(/This Agent has no address yet.*Rename it to get one.*use its internal ID/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'CopyAddress' })).toBeNull()
+    await user.click(await screen.findByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText(/This Agent has no address yet.*Rename it to get one.*use its internal ID/)).toBeInTheDocument()
+    expect(within(menu).queryByRole('button', { name: 'Copy address' })).toBeNull()
   })
 })
 
@@ -155,21 +158,15 @@ describe('The inbox on the sheet', () => {
     expect(screen.queryByRole('complementary', { name: 'Mail' })).toBeNull()
     const all = screen.getByRole('radio', { name: /^All/ })
     const unread = screen.getByRole('radio', { name: /^Unread only/ })
-    for (const pill of [all, unread]) expect(pill).toHaveClass('rounded-[5px]', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:rounded-full')
+    for (const pill of [all, unread]) expect(pill).toHaveClass('rounded-[5px]')
     expect(all).toHaveAttribute('aria-checked', 'true')
-    expect(all).toHaveClass(
-      'data-[state=on]:bg-surface-active',
-      'data-[state=on]:border-hairline-strong',
-      '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow',
-      '[[data-skin=plate]_&]:data-[state=on]:border-ink',
-      '[[data-skin=plate]_&]:data-[state=on]:shadow-[3px_3px_0_var(--ink)]',
-    )
+    expect(all).toHaveClass('data-[state=on]:bg-surface-active', 'data-[state=on]:border-hairline-strong')
     expect(all.querySelector('[data-count="all"]')).toHaveTextContent(/^2$/)
     expect(unread.querySelector('[data-count="unread"]')).toHaveTextContent(/^1$/)
     expect(unread.querySelector('[data-count="unread"]')).toHaveClass('text-pink-text')
 
     const bar = all.closest('[data-inbox-bar]') as HTMLElement
-    expect(bar).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-2', '[[data-skin=plate]_&]:border-ink')
+    expect(bar).toHaveClass('border-b', 'border-hairline')
     expect(within(bar).getByLabelText("Read-only view: opening a message doesn't mark it read")).toHaveTextContent('Read-only')
   })
 
@@ -177,16 +174,16 @@ describe('The inbox on the sheet', () => {
     const [first, second] = received()
     const { list } = await renderAgentInbox([second, first])
     const [read, fresh] = list.getAllByRole('listitem')
-    for (const item of [read, fresh]) expect(item).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+    for (const item of [read, fresh]) expect(item).toHaveClass('border-b', 'border-hairline')
     expect(within(fresh).getByText('test-org/test-project/Testing assistant')).toHaveClass('font-mono', 'truncate')
-    expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-semibold', '[[data-skin=plate]_&]:font-bold')
+    expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-semibold')
     expect(fresh.querySelector('time')).toHaveClass('font-mono')
     const stamp = within(fresh).getByText('Unread').closest('[data-read-state]')!
     expect(stamp).toHaveAttribute('data-read-state', 'unread')
     expect(stamp).toHaveClass('riso-tilt', 'text-pink-text')
     const pill = within(read).getByText(/^Read /).closest('[data-read-state]')!
     expect(pill).toHaveAttribute('data-read-state', 'read')
-    expect(pill).toHaveClass('rounded-full', 'bg-surface-subtle', '[[data-skin=plate]_&]:bg-tint-blue')
+    expect(pill).toHaveClass('rounded-full', 'bg-surface-subtle')
     expect(within(read).getByText('Please review the naming package')).not.toHaveClass('font-bold')
   })
 

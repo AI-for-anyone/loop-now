@@ -39,14 +39,14 @@ export function Card({ title, unit, aside, children, className }: { title: strin
     <section
       aria-labelledby={titleId}
       className={cn(
-        'flex min-w-0 flex-col gap-3 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:mb-1 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]',
+        'flex min-w-0 flex-col gap-3 rounded-card border border-hairline bg-surface-control p-4',
         className,
       )}
     >
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
         <h2
           id={titleId}
-          className="text-[13.5px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-normal"
+          className="text-[13.5px] leading-snug font-semibold tracking-tight text-ink"
         >
           {title}
         </h2>
@@ -120,14 +120,14 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
               <li
                 key={wake.agentId}
                 className={cn(
-                  'flex flex-col gap-1 rounded-ticket border border-hairline px-2.5 py-1.5 [[data-skin=plate]_&]:border-0',
-                  i === 0 ? 'bg-tint-pink-2' : 'bg-surface-subtle [[data-skin=plate]_&]:bg-paper/60',
+                  'flex flex-col gap-1 rounded-ticket border border-hairline px-2.5 py-1.5',
+                  i === 0 ? 'bg-tint-pink-2' : 'bg-surface-subtle',
                 )}
               >
                 <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{wake.name}</span>
+                  <span className="truncate text-[13px] font-semibold">{wake.name}</span>
                   <span className="min-w-0 truncate text-[11.5px] text-ink-700">{text.wakes.row(cadence(wake), text.wan(wake.avgTokens))}</span>
-                  <span className="ml-auto shrink-0 font-mono text-[12.5px] font-semibold tabular-nums [[data-skin=plate]_&]:font-bold">
+                  <span className="ml-auto shrink-0 font-mono text-[12.5px] font-semibold tabular-nums">
                     {text.wan(wake.tokens)}
                   </span>
                 </span>
@@ -138,7 +138,7 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
           <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-700">
             <span
               aria-hidden="true"
-              className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-semibold text-[#111111] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink"
+              className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-semibold text-[#111111]"
             >
               !
             </span>
@@ -146,7 +146,7 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
             {topScope && (
               <Link
                 to={`${agentPath(topScope, top.agentId, 'config')}#${sectionId('prompt')}`}
-                className="rounded-sm font-semibold whitespace-nowrap text-ink underline underline-offset-2 outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue"
+                className="rounded-sm font-semibold whitespace-nowrap text-ink underline underline-offset-2 outline-none focus-visible:shadow-focus"
               >
                 {text.wakes.prompt}
               </Link>
@@ -173,9 +173,9 @@ export function ContextCard({ report }: { report: Report }) {
               key={agent.agentId}
               className="grid grid-cols-[minmax(48px,120px)_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 text-[12.5px] sm:grid-cols-[minmax(48px,120px)_minmax(0,1fr)_54px_118px]"
             >
-              <span className="truncate font-medium [[data-skin=plate]_&]:font-bold">{agent.name}</span>
+              <span className="truncate font-medium">{agent.name}</span>
               <Bar value={agent.avgInputPerCall} max={max} color={COLOR.blue} />
-              <span className="text-right font-mono text-[12px] font-medium tabular-nums [[data-skin=plate]_&]:font-bold">
+              <span className="text-right font-mono text-[12px] font-medium tabular-nums">
                 {text.wan(agent.avgInputPerCall)}
               </span>
               <span className="col-span-3 flex items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-700 sm:col-span-1">
@@ -183,7 +183,7 @@ export function ContextCard({ report }: { report: Report }) {
                 {agent.avgInputPerCall > REOPEN_CONTEXT && (
                   <span
                     title={text.context.reopenTitle}
-                    className="rounded-stamp bg-[var(--status-interrupt)] px-1.5 text-[10.5px] font-semibold text-[#111111] [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink"
+                    className="rounded-stamp bg-[var(--status-interrupt)] px-1.5 text-[10.5px] font-semibold text-[#111111]"
                   >
                     {text.context.reopen}
                   </span>
@@ -245,17 +245,17 @@ export function ModelCostCard({ report }: { report: Report }) {
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0 [[data-skin=plate]_&]:border-ink/10"
+            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0"
           >
             <dt className="text-[12.5px] text-ink-700">{row.label}</dt>
-            <dd className="ml-auto font-display-latin text-[17px] font-semibold text-ink tabular-nums [[data-skin=plate]_&]:font-bold">{row.value}</dd>
+            <dd className="ml-auto font-display-latin text-[17px] font-semibold text-ink tabular-nums">{row.value}</dd>
             {row.note && <dd className="w-full text-[11.5px] text-ink-500">{row.note}</dd>}
             {row.extra && <dd className="w-full text-[11.5px] text-ink-500">{row.extra}</dd>}
           </div>
         ))}
       </dl>
       {topModels.length > 0 && (
-        <ul className="flex flex-col gap-1.5 border-t border-hairline pt-2.5 [[data-skin=plate]_&]:border-ink/10">
+        <ul className="flex flex-col gap-1.5 border-t border-hairline pt-2.5">
           {topModels.map((row) => {
             const label = row.provider && row.model ? `${row.provider} / ${row.model}` : row.model || text.none
             return (
@@ -287,23 +287,23 @@ export function QuestionsCard({ report, scopeOf }: { report: Report; scopeOf: Sc
             const scope = scopeOf(question.projectId)
             const body = (
               <>
-                <span className="rounded-stamp bg-surface-active px-1.5 text-[11px] font-medium text-ink [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:font-black">
+                <span className="rounded-stamp bg-surface-active px-1.5 text-[11px] font-medium text-ink">
                   {question.name}
                 </span>
                 <span className="truncate text-[12.5px]">{question.text}</span>
-                <span className="text-[11.5px] font-medium whitespace-nowrap text-red-text [[data-skin=plate]_&]:font-bold">
+                <span className="text-[11.5px] font-medium whitespace-nowrap text-red-text">
                   {text.questions.waited(text.minutes(Math.max(0, (now - Date.parse(question.askedAt)) / 1000)))}
                 </span>
               </>
             )
             const row =
-              'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline-strong bg-surface-subtle px-2.5 py-1.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'
+              'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline-strong bg-surface-subtle px-2.5 py-1.5'
             return (
               <li key={question.messageId}>
                 {scope ? (
                   <Link
                     to={agentPath(scope, question.agentId, 'chat')}
-                    className={cn(row, 'outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:hover:bg-tint-yellow')}
+                    className={cn(row, 'outline-none hover:bg-surface-hover focus-visible:shadow-focus')}
                   >
                     {body}
                   </Link>
@@ -406,12 +406,12 @@ export function ReasonsCard({ report }: { report: Report }) {
           {reasons.slice(0, 6).map((reason) => (
             <li
               key={`${reason.kind}:${reason.code}`}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline bg-surface-subtle px-2.5 py-1.5 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper/60"
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline bg-surface-subtle px-2.5 py-1.5"
             >
               <span className="flex min-w-0 items-center gap-[7px]">
                 <span
                   className={cn(
-                    'shrink-0 rounded-stamp px-1.5 text-[11px] font-semibold [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:font-black',
+                    'shrink-0 rounded-stamp px-1.5 text-[11px] font-semibold',
                     reason.kind === 'failed' ? 'bg-tint-red text-red-text' : 'bg-tint-yellow text-ink',
                   )}
                 >
@@ -421,7 +421,7 @@ export function ReasonsCard({ report }: { report: Report }) {
                   {reasonText(reason)}
                 </span>
               </span>
-              <span className="text-right font-mono text-[12.5px] font-medium tabular-nums [[data-skin=plate]_&]:font-bold">{reason.count}</span>
+              <span className="text-right font-mono text-[12.5px] font-medium tabular-nums">{reason.count}</span>
             </li>
           ))}
         </ul>
@@ -445,8 +445,8 @@ export function HealthCard({ report, scopeOf }: { report: Report; scopeOf: Scope
         <div className="-mx-1 overflow-x-auto px-1 no-scrollbar">
           <table aria-label={text.health.label} className="w-full min-w-[780px] border-collapse text-[12.5px] tabular-nums">
             <thead>
-              <tr className="border-b border-hairline-strong text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:font-bold">
-                <th scope="col" className="px-2 py-1.5 text-left font-medium [[data-skin=plate]_&]:font-bold">
+              <tr className="border-b border-hairline-strong text-[11.5px] font-medium text-ink-500">
+                <th scope="col" className="px-2 py-1.5 text-left font-medium">
                   {columns.name}
                 </th>
                 {[
@@ -461,7 +461,7 @@ export function HealthCard({ report, scopeOf }: { report: Report; scopeOf: Scope
                   columns.tokens,
                   columns.cache,
                 ].map((name) => (
-                  <th key={name} scope="col" className="px-2 py-1.5 text-right font-medium [[data-skin=plate]_&]:font-bold">
+                  <th key={name} scope="col" className="px-2 py-1.5 text-right font-medium">
                     {name}
                   </th>
                 ))}
@@ -471,12 +471,12 @@ export function HealthCard({ report, scopeOf }: { report: Report; scopeOf: Scope
               {report.agents.map((agent) => {
                 const scope = scopeOf(agent.projectId)
                 return (
-                  <tr key={agent.agentId} className="border-t border-hairline hover:bg-surface-hover/50 [[data-skin=plate]_&]:border-ink/10">
-                    <th scope="row" className="max-w-[160px] truncate px-2 py-1.5 text-left font-medium [[data-skin=plate]_&]:font-bold">
+                  <tr key={agent.agentId} className="border-t border-hairline hover:bg-surface-hover/50">
+                    <th scope="row" className="max-w-[160px] truncate px-2 py-1.5 text-left font-medium">
                       {scope ? (
                         <Link
                           to={agentPath(scope, agent.agentId, 'chat')}
-                          className="rounded-sm text-ink underline-offset-2 outline-none hover:underline focus-visible:shadow-focus [[data-skin=plate]_&]:hover:text-riso-blue"
+                          className="rounded-sm text-ink underline-offset-2 outline-none hover:underline focus-visible:shadow-focus"
                         >
                           {agent.name}
                         </Link>
@@ -488,7 +488,7 @@ export function HealthCard({ report, scopeOf }: { report: Report; scopeOf: Scope
                     <td
                       className={cn(
                         cell,
-                        'font-medium [[data-skin=plate]_&]:font-bold',
+                        'font-medium',
                         agent.completionRate === null ? '' : agent.completionRate >= 0.95 ? 'text-green-text' : 'text-red-text',
                       )}
                     >
@@ -528,7 +528,7 @@ export function ToolsCard({ report }: { report: Report }) {
             const rate = tool.calls ? text.percent(tool.failures / tool.calls) : text.none
             return (
               <li key={tool.name} className="grid grid-cols-[minmax(44px,max-content)_minmax(0,1fr)_auto_44px] items-center gap-2">
-                <code className="max-w-[110px] truncate font-mono text-[12px] font-medium [[data-skin=plate]_&]:font-bold">{tool.name}</code>
+                <code className="max-w-[110px] truncate font-mono text-[12px] font-medium">{tool.name}</code>
                 <Bar value={tool.calls} max={max} color={COLOR.blue} height="h-2.5" />
                 <b className="text-right font-mono text-[12px] tabular-nums">{text.number(tool.calls)}</b>
                 <span title={text.tools.failureRate(tool.name, rate)} className="text-right font-mono text-[11.5px] text-ink-700 tabular-nums">
@@ -564,10 +564,10 @@ export function ProcessCard({ report }: { report: Report }) {
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0 [[data-skin=plate]_&]:border-ink/10"
+            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0"
           >
             <dt className="text-[12.5px] text-ink-700">{row.label}</dt>
-            <dd className="ml-auto font-display-latin text-[16px] font-semibold tabular-nums [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-bold">
+            <dd className="ml-auto font-display-latin text-[16px] font-semibold tabular-nums">
               {row.value}
             </dd>
             {row.note && <dd className="w-full text-[11.5px] text-ink-500">{row.note}</dd>}

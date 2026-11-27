@@ -102,7 +102,7 @@ function OverviewTab({ detail }: { detail: Detail }) {
           )}
           {showProviders && (
             <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-700">
-              <span className="font-medium text-ink [[data-skin=plate]_&]:font-bold">{text.providers.title}:</span>
+              <span className="font-medium text-ink">{text.providers.title}:</span>
               {detail.providersError !== null ? (
                 <span className="font-medium text-red-text">{text.providers.failed(detail.providersError)}</span>
               ) : detail.providers.length > 0 ? (
@@ -113,19 +113,19 @@ function OverviewTab({ detail }: { detail: Detail }) {
             </div>
           )}
           {manifest.failClosed && (
-            <p className="text-[12.5px] font-semibold text-red-text [[data-skin=plate]_&]:font-bold">{text.confirm.failClosed}</p>
+            <p className="text-[12.5px] font-semibold text-red-text">{text.confirm.failClosed}</p>
           )}
-          <details open={hasProviderErrors || undefined} className="group border-t border-hairline pt-2.5 [[data-skin=plate]_&]:border-ink/20">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black">
+          <details open={hasProviderErrors || undefined} className="group border-t border-hairline pt-2.5">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus">
               <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
               <span>{copy.inspectManifest}</span>
             </summary>
             <div className="mt-3 flex min-w-0 flex-col gap-4">
               <ManifestSummary manifest={manifest} columns={false} layout="table" />
               {showProviders && (
-                <section aria-label={text.providers.title} className="flex min-w-0 flex-col gap-2 border-t border-hairline pt-3.5 [[data-skin=plate]_&]:border-ink/20">
+                <section aria-label={text.providers.title} className="flex min-w-0 flex-col gap-2 border-t border-hairline pt-3.5">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <h3 className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.providers.title}</h3>
+                    <h3 className="text-[13.5px] font-semibold">{text.providers.title}</h3>
                     <span className="text-[12px] text-ink-500">{text.providers.hint}</span>
                   </div>
                   <PluginProviders detail={detail} />
@@ -139,11 +139,11 @@ function OverviewTab({ detail }: { detail: Detail }) {
       {showReadme && (
         <section aria-label={t.plugins.readme.title} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 rounded-card px-5 py-4')}>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[15px] font-semibold tracking-tight [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[22px] [[data-skin=plate]_&]:font-normal">
+            <h2 className="text-[15px] font-semibold tracking-tight">
               {t.plugins.readme.title}
             </h2>
             {readme.data?.file && (
-              <span className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[11.5px] text-ink-700 [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+              <span className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[11.5px] text-ink-700">
                 {readme.data.file}
               </span>
             )}
@@ -189,7 +189,7 @@ function ProjectConfigRow({
       <div className="flex min-h-[48px] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 py-2.5">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-[13.5px] font-semibold text-ink [[data-skin=plate]_&]:font-black">{project.name}</span>
+            <span className="truncate text-[13.5px] font-semibold text-ink">{project.name}</span>
             {hasProjectFields && (
               <span className="text-[12px] text-ink-500">
                 {overriddenFields.length ? text.config.overridden(overriddenFields.length) : text.config.useGlobal}
@@ -216,10 +216,10 @@ function ProjectConfigRow({
         </Button>
       </div>
       {expanded && (
-        <div className="flex min-w-0 flex-col gap-5 border-t border-hairline bg-surface-subtle/35 px-4 py-4 [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-transparent">
+        <div className="flex min-w-0 flex-col gap-5 border-t border-hairline bg-surface-subtle/35 px-4 py-4">
           {hasProjectFields && globalConfig && (
             <section aria-label={t.plugins.project.config} className="grid min-w-0 gap-2.5">
-              <h3 className="text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{t.plugins.project.config}</h3>
+              <h3 className="text-[13px] font-semibold text-ink-700">{t.plugins.project.config}</h3>
               <ConfigForm
                 formId={`plugin-detail-project:${project.id}:${detail.plugin.id}`}
                 schema={detail.manifest.configSchema}
@@ -328,13 +328,13 @@ function ConfigTab({ detail, expandProjects }: { detail: Detail; expandProjects:
         </section>
       )}
 
-      <details className="group rounded-card border border-hairline bg-surface-subtle/50 px-4 py-2.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-transparent">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:font-black">
+      <details className="group rounded-card border border-hairline bg-surface-subtle/50 px-4 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold text-ink-700 outline-none hover:text-ink focus-visible:shadow-focus">
           <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
           <span>{text.config.env}</span>
         </summary>
         <section aria-label={text.config.env} className="mt-2.5">
-          <pre className="overflow-x-auto no-scrollbar rounded-input border border-code-border bg-code-bg px-3 py-2.5 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04] [[data-skin=plate]_&]:text-ink">
+          <pre className="overflow-x-auto no-scrollbar rounded-input border border-code-border bg-code-bg px-3 py-2.5 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere]">
             {[
               `LOOP_NOW_PLUGIN_ROOT=${detail.installDir}`,
               `LOOP_NOW_PLUGIN_DATA=${detail.dataDir}`,
@@ -402,7 +402,7 @@ export function PluginDetailPage() {
             ) : (
               <SectionError title={copy.crumb} error={query.error} onRetry={() => void query.refetch()} />
             )}
-            <Link to="/plugins" className="self-start text-[13px] font-medium text-riso-blue underline outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-bold">
+            <Link to="/plugins" className="self-start text-[13px] font-medium text-riso-blue underline outline-none focus-visible:shadow-focus">
               {copy.back}
             </Link>
           </PageBody>
@@ -423,14 +423,6 @@ export function PluginDetailPage() {
           crumbs={[{ label: t.shell.global }, { label: copy.crumb, to: '/plugins' }]}
           current={plugin.id}
           title={name}
-          lead={
-            <span
-              aria-hidden="true"
-              className="hidden shrink-0 items-center justify-center self-center font-display-latin leading-none text-ink [[data-skin=plate]_&]:flex [[data-skin=plate]_&]:size-[46px] [[data-skin=plate]_&]:rounded-[12px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
-            >
-              {name.slice(0, 1).toUpperCase()}
-            </span>
-          }
           actions={
             <>
               <PluginActionButtons plugin={{ id: plugin.id, displayName: name }} actions={manifest.components.actions} page="global" where={{}} />
@@ -456,7 +448,6 @@ export function PluginDetailPage() {
           <IdVersion id={plugin.id} version={plugin.version} />
           <StatusLabel status={plugin.status} />
         </PageHeader>
-
         <IndexTabs aria-label={name}>
           {DETAIL_TABS.map((value) => (
             <Link
@@ -471,15 +462,10 @@ export function PluginDetailPage() {
         </IndexTabs>
 
         <Sheet className="flex-1">
-          <span
-            aria-hidden="true"
-            data-sheet-band
-            className="hidden h-3.5 shrink-0 bg-size-[8px_8px] [[data-skin=plate]_&]:block [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]"
-          />
           <PageBody width="default" innerClassName="flex flex-col gap-5 pb-12">
             <ErrorAlert error={installer.errorFor('update')} />
             {plugin.status === 'error' && plugin.lastError && (
-              <p role="alert" className="rounded-input border border-red/20 bg-tint-red px-3.5 py-2.5 text-[13.5px] font-medium text-red-text [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">
+              <p role="alert" className="rounded-input border border-red/20 bg-tint-red px-3.5 py-2.5 text-[13.5px] font-medium text-red-text [overflow-wrap:anywhere]">
                 {plugin.lastError}
               </p>
             )}

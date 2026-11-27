@@ -78,16 +78,32 @@ func TestTaskStepPermissionRequestOnNode(t *testing.T) {
 	go func() {
 		answer <- svc.AskPermission(ctx, executor.PermissionAsk{AgentID: p.RuntimeID, RunID: tt.ID, Runtime: "claude-code", Kind: "command", Title: "Run make deploy"})
 	}()
-	console := auth.Principal{Kind: auth.KindConsole}
-	var list apitypes.TaskNodePermissionRequests
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		var err error
-		if list, err = s.NodePermissionRequests(ctx, console, id, tt.NodeRunID); err != nil {
+	// The request is in the database before its event is on the stream (Changed runs after it is saved), so wait for
+	// the event, as the console does, before answering: answering earlier makes that event carry an empty list.
+	nodeEvents := func() []int {
+		t.Helper()
+		events, err := s.Store.TaskEvents(ctx, &id, nil, 0, 1000)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if len(list.Requests) == 1 {
-			break
+		var sizes []int
+		for _, e := range events {
+			if e.Type == EventNodePermissionRequests {
+				var v apitypes.TaskNodePermissionRequests
+				if err := json.Unmarshal(e.Data, &v); err != nil {
+					t.Fatal(err)
+				}
+				sizes = append(sizes, len(v.Requests))
+			}
 		}
+		return sizes
+	}
+	for deadline := time.Now().Add(5 * time.Second); len(nodeEvents()) == 0 && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	list, err := s.NodePermissionRequests(ctx, auth.Principal{Kind: auth.KindConsole}, id, tt.NodeRunID)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(list.Requests) != 1 || list.RuntimeID != p.RuntimeID {
 		t.Fatalf("node list: %+v", list)
@@ -107,20 +123,8 @@ func TestTaskStepPermissionRequestOnNode(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the step got no answer")
 	}
-	events, err := s.Store.TaskEvents(ctx, &id, nil, 0, 1000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sizes []int
-	for _, e := range events {
-		if e.Type == EventNodePermissionRequests {
-			var v apitypes.TaskNodePermissionRequests
-			if err := json.Unmarshal(e.Data, &v); err != nil {
-				t.Fatal(err)
-			}
-			sizes = append(sizes, len(v.Requests))
-		}
-	}
+	// The answer's event is on the stream before the step gets the answer (Changed runs before AskPermission returns).
+	sizes := nodeEvents()
 	if len(sizes) < 2 || sizes[0] != 1 || sizes[len(sizes)-1] != 0 {
 		t.Fatalf("node events: %v", sizes)
 	}

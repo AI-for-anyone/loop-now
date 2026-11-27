@@ -3,6 +3,8 @@ package app_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -173,6 +175,19 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(base, "AGENTS.md")); string(b) != "Worker's notes" {
 		t.Fatal("changing the copy should not affect the base Agent's folder")
 	}
+
+	// The console reads the instance's folder (not the base Agent's) through its node, read only.
+	nodeFolder := "/tasks/" + task.Task.ID.String() + "/nodes/" + task.Nodes[0].ID.String() + "/folder"
+	if loc := decode[apitypes.FolderLocation](t, s.must(200, "GET", nodeFolder, nil)); loc.Path != copyDir || loc.RealPath != real(t, copyDir) {
+		t.Fatalf("node folder location: %+v, want %s (%s)", loc, copyDir, real(t, copyDir))
+	}
+	if b := s.must(200, "GET", nodeFolder+"/content?path=AGENTS.md", nil); string(b) != "changed in the task" {
+		t.Fatalf("node folder content should come from the instance's copy: %q", b)
+	}
+	s.must(404, "GET", nodeFolder+"/content?path=missing.png", nil)
+	s.must(422, "GET", nodeFolder+"/content?path=../"+worker.ID.String()+"/workspace/AGENTS.md", nil)
+	s.must(404, "GET", "/tasks/"+task.Task.ID.String()+"/nodes/"+uuid.NewString()+"/folder", nil)
+	s.must(404, "PUT", nodeFolder+"/content?path=AGENTS.md", []byte("x")) // read only: there is no write endpoint
 	var snapshot []byte
 	var sources string
 	if err := s.a.Store.Pool.QueryRow(ctx, `SELECT snapshot, sources FROM task_instances WHERE id=$1`, runtime).Scan(&snapshot, &sources); err != nil {
@@ -186,5 +201,19 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "copied the task working directory") || !strings.Contains(logs.String(), "clonefile") {
 		t.Fatalf("the copy method should be logged (APFS clone): %s", logs.String())
+	}
+
+	// Once the task ended its folder is reclaimed: the content answers 404 and reading does not make the folder again.
+	s.must(200, "POST", "/tasks/"+task.Task.ID.String()+"/cancel", map[string]any{"actionId": uuid.New()})
+	waitFor(t, "instance folder reclaimed", func() bool {
+		_, err := os.Stat(filepath.Join(w.cfg.WorkRoot, "agents", runtime.String()))
+		return errors.Is(err, fs.ErrNotExist)
+	})
+	s.must(404, "GET", nodeFolder+"/content?path=AGENTS.md", nil)
+	if _, err := os.Stat(copyDir); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("reading a reclaimed folder should not create it: %v", err)
+	}
+	if loc := decode[apitypes.FolderLocation](t, s.must(200, "GET", nodeFolder, nil)); loc.Path != copyDir {
+		t.Fatalf("the location is still given after the folder is gone: %+v", loc)
 	}
 }

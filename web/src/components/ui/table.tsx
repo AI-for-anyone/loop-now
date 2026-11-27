@@ -13,7 +13,7 @@ function Table({ className, card = true, ...props }: React.ComponentProps<"table
       className={cn(
         "relative w-full max-w-full overflow-x-auto",
         card &&
-          "rounded-card border border-hairline bg-surface-elevated shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-surface-control [[data-skin=plate]_&]:shadow-print-rest"
+          "rounded-card border border-hairline bg-surface-elevated shadow-surface"
       )}
     >
       <table data-slot="table" className={cn("w-full border-collapse text-left text-[14px]", className)} {...props} />
@@ -25,7 +25,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("border-b border-hairline bg-surface-subtle [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-tint-blue", className)}
+      className={cn("border-b border-hairline bg-surface-subtle", className)}
       {...props}
     />
   )
@@ -39,7 +39,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
-      className={cn("border-b border-hairline last:border-b-0 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/15", className)}
+      className={cn("border-b border-hairline last:border-b-0", className)}
       {...props}
     />
   )
@@ -50,7 +50,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "px-3.5 py-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink-500 [[data-skin=plate]_&]:py-2 [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink",
+        "px-3.5 py-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink-500",
         className
       )}
       {...props}
@@ -59,7 +59,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 }
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
-  return <td data-slot="table-cell" className={cn("px-3.5 py-2.5 align-top [[data-skin=plate]_&]:py-2", className)} {...props} />
+  return <td data-slot="table-cell" className={cn("px-3.5 py-2.5 align-top", className)} {...props} />
 }
 
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow }

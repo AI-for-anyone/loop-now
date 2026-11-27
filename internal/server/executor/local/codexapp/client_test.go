@@ -22,6 +22,7 @@ type sink struct {
 	text     strings.Builder
 	tools    []string
 	commands []string
+	targets  []string
 }
 
 func (s *sink) TextDelta(d string) { s.mu.Lock(); s.text.WriteString(d); s.mu.Unlock() }
@@ -42,6 +43,16 @@ func (s *sink) ToolEnded(id, name string, isError bool) {
 func (s *sink) ToolCommand(id, name, command string) {
 	s.mu.Lock()
 	s.commands = append(s.commands, command)
+	s.mu.Unlock()
+}
+func (s *sink) ToolFiles(id, name string, paths []string) {
+	s.mu.Lock()
+	s.targets = append(s.targets, name+":"+strings.Join(paths, "+"))
+	s.mu.Unlock()
+}
+func (s *sink) ToolQuery(id, name, query string) {
+	s.mu.Lock()
+	s.targets = append(s.targets, name+":"+query)
 	s.mu.Unlock()
 }
 
@@ -122,6 +133,11 @@ func TestTurnStreamsTextAndTools(t *testing.T) {
 	r := turn(t, c, thread, "hello", s)
 	if r.Outcome != runturn.OutcomeCompleted || r.Text != "echo: hello" || s.text.String() != "echo: hello" {
 		t.Fatalf("echo: %+v %q", r, s.text.String())
+	}
+	s = &sink{}
+	r = turn(t, c, thread, "fake:files", s)
+	if r.Text != "files" || strings.Join(s.targets, ",") != "apply_patch:/w/a.go+/w/b.go,web_search:go 1.27 release" {
+		t.Fatalf("targets: %+v %v", r, s.targets)
 	}
 	s = &sink{}
 	r = turn(t, c, thread, "fake:tool ls -la", s)

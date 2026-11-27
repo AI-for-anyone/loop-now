@@ -193,16 +193,16 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
       aria-label={labelledBy ? undefined : t.runtime.picker.label}
       aria-invalid={invalid || undefined}
       className={cn(
-        'flex min-w-0 flex-col overflow-hidden bg-surface-elevated text-ink [[data-skin=plate]_&]:bg-paper-raised',
+        'flex min-w-0 flex-col overflow-hidden bg-surface-elevated text-ink',
         variant === 'inline' &&
-          'rounded-panel border border-hairline-strong shadow-surface aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red [[data-skin=plate]_&]:rounded-card [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)] [[data-skin=plate]_&]:aria-invalid:border-red [[data-skin=plate]_&]:aria-invalid:ring-0 [[data-skin=plate]_&]:aria-invalid:shadow-[4px_4px_0_var(--red)]',
+          'rounded-panel border border-hairline-strong shadow-surface aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red',
         variant === 'popover' && 'min-h-0 flex-1',
       )}
     >
       {/* Band 1: compact horizontal runtime tab bar */}
       <div ref={railRef} className="shrink-0">
         {lookup.error ? (
-          <p className="border-b border-hairline px-3 py-2 text-[12.5px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{describeError(lookup.error)}</p>
+          <p className="border-b border-hairline px-3 py-2 text-[12.5px] font-medium text-red-text">{describeError(lookup.error)}</p>
         ) : (
           <RunnerRail
             entries={entries}
@@ -239,7 +239,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
           <div className="max-h-[260px] overflow-y-auto">{lead.panel}</div>
         ) : catalog.isError ? (
           <div className="grid gap-1 px-3 py-3 text-[12.5px] text-red-text">
-            <p className="font-semibold [[data-skin=plate]_&]:font-bold">{t.config.basic.catalogUnavailable}</p>
+            <p className="font-semibold">{t.config.basic.catalogUnavailable}</p>
             <p>{t.config.basic.catalogReason(describeError(catalog.error))}</p>
           </div>
         ) : browsed && readiness?.state === 'problem' ? (
@@ -272,7 +272,7 @@ export function RunnerPicker({ value, thinkingLevel, onChoose, onThinkingChange,
 
       {/* Band 3: subtle single-line context strip */}
       {hasContextStrip && (
-        <div className="flex shrink-0 flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-[11.5px] leading-snug text-ink-500 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700">
+        <div className="flex shrink-0 flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-[11.5px] leading-snug text-ink-500">
           {showColophon && colophon && (
             <p title={colophonTitle} className="flex min-w-0 items-center gap-1.5">
               <span className="min-w-0 truncate">{colophon}</span>

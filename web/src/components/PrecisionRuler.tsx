@@ -98,14 +98,14 @@ function tickColorClass(tone: PrecisionRulerItem['tone'], active: boolean, major
     return 'bg-green group-hover:bg-green group-focus-visible:bg-green'
   }
   if (highlighted) {
-    return 'bg-riso-blue [[data-skin=plate]_&]:bg-riso-pink'
+    return 'bg-riso-blue'
   }
   if (tone === 'accent' || active) {
-    return 'bg-riso-blue group-hover:bg-riso-blue group-focus-visible:bg-riso-blue [[data-skin=plate]_&]:group-hover:bg-riso-pink [[data-skin=plate]_&]:group-focus-visible:bg-riso-pink'
+    return 'bg-riso-blue group-hover:bg-riso-blue group-focus-visible:bg-riso-blue'
   }
   return cn(
     major ? 'bg-ink/45' : 'bg-ink/25',
-    'group-hover:bg-riso-blue group-focus-visible:bg-riso-blue [[data-skin=plate]_&]:group-hover:bg-riso-pink [[data-skin=plate]_&]:group-focus-visible:bg-riso-pink',
+    'group-hover:bg-riso-blue group-focus-visible:bg-riso-blue',
   )
 }
 
@@ -193,7 +193,7 @@ export function PrecisionRuler({
         <ol
           ref={listRef}
           onScroll={reposition}
-          className="no-scrollbar relative flex min-h-0 w-full flex-col overflow-x-hidden overflow-y-auto border-r border-hairline/70 py-1 pr-0.5 [[data-skin=plate]_&]:border-ink/35"
+          className="no-scrollbar relative flex min-h-0 w-full flex-col overflow-x-hidden overflow-y-auto border-r border-hairline/70 py-1 pr-0.5"
         >
           {items.map((item, index) => {
             const active = activeSet.has(item.id)
@@ -207,7 +207,7 @@ export function PrecisionRuler({
                     data-ruler-range
                     data-count={rangeCount}
                     style={{ height: `calc(${(rangeCount - 1) * 100}% + 8px)` }}
-                    className="pointer-events-none absolute top-[calc(50%-4px)] right-0 z-10 w-[2px] rounded-full bg-ink/60 [[data-skin=plate]_&]:bg-riso-yellow"
+                    className="pointer-events-none absolute top-[calc(50%-4px)] right-0 z-10 w-[2px] rounded-full bg-ink/60"
                   />
                 )}
                 <button
@@ -258,7 +258,7 @@ export function PrecisionRuler({
                 aria-label={bottomButtonLabel}
                 title={bottomButtonLabel}
                 onClick={onJumpBottom}
-                className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border border-hairline-strong bg-surface-elevated text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink/40 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-riso-yellow"
+                className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border border-hairline-strong bg-surface-elevated text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus"
               >
                 <ArrowDownIcon aria-hidden="true" className="size-3" strokeWidth={2.2} />
               </button>
@@ -304,12 +304,12 @@ export function PrecisionRuler({
           aria-hidden="true"
           data-ruler-preview
           style={{ top: hint.top }}
-          className="pointer-events-none absolute right-full z-30 mr-2 flex w-max max-w-[min(320px,55vw)] -translate-y-1/2 items-center gap-2 rounded-lg border border-hairline-strong bg-surface-elevated/95 px-2.5 py-1 text-[12px] leading-4 text-ink shadow-floating backdrop-blur-md [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tooltip-bg [[data-skin=plate]_&]:text-tooltip-fg"
+          className="pointer-events-none absolute right-full z-30 mr-2 flex w-max max-w-[min(320px,55vw)] -translate-y-1/2 items-center gap-2 rounded-lg border border-hairline-strong bg-surface-elevated/95 px-2.5 py-1 text-[12px] leading-4 text-ink shadow-floating backdrop-blur-md"
         >
           {hintItem.badge && (
             <span
               data-ruler-preview-badge
-              className="shrink-0 font-mono text-[10.5px] text-ink-500 tabular-nums [[data-skin=plate]_&]:text-tooltip-muted"
+              className="shrink-0 font-mono text-[10.5px] text-ink-500 tabular-nums"
             >
               {hintItem.badge}
             </span>
@@ -318,7 +318,7 @@ export function PrecisionRuler({
           {hintItem.sublabel && (
             <span
               data-ruler-preview-sublabel
-              className="shrink-0 text-[11px] text-ink-500 [[data-skin=plate]_&]:text-tooltip-muted"
+              className="shrink-0 text-[11px] text-ink-500"
             >
               {hintItem.sublabel}
             </span>
@@ -481,24 +481,33 @@ export function ScrollRuler({ targetRef, label, tickCount = 17, className }: Scr
     const el = targetRef.current
     if (!el) return
 
+    let frameId: number | null = null
     const update = () => {
       const next = measureScroll(el)
       setMetrics((prev) => (sameScrollMetrics(prev, next) ? prev : next))
     }
+    const scheduleUpdate = () => {
+      if (frameId !== null) return
+      frameId = requestAnimationFrame(() => {
+        frameId = null
+        update()
+      })
+    }
 
     update()
     el.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update, { passive: true })
+    window.addEventListener('resize', scheduleUpdate, { passive: true })
 
-    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleUpdate)
     resizeObserver?.observe(el)
 
-    const mutationObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(update)
+    const mutationObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(scheduleUpdate)
     mutationObserver?.observe(el, { childList: true, subtree: true })
 
     return () => {
+      if (frameId !== null) cancelAnimationFrame(frameId)
       el.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
+      window.removeEventListener('resize', scheduleUpdate)
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
     }
@@ -619,7 +628,7 @@ export function ScrollRuler({ targetRef, label, tickCount = 17, className }: Scr
         onPointerLeave={handlePointerLeave}
         onKeyDown={handleKeyDown}
         className={cn(
-          'pointer-events-auto relative flex cursor-pointer touch-none flex-col items-end justify-between gap-1.5 border-r border-hairline/60 py-1 pr-0.5 opacity-60 transition-opacity duration-150 outline-none select-none hover:opacity-100 focus-visible:opacity-100 focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink/35',
+          'pointer-events-auto relative flex cursor-pointer touch-none flex-col items-end justify-between gap-1.5 border-r border-hairline/60 py-1 pr-0.5 opacity-60 transition-opacity duration-150 outline-none select-none hover:opacity-100 focus-visible:opacity-100 focus-visible:shadow-focus',
           dragging && 'opacity-100',
         )}
       >
@@ -651,7 +660,7 @@ export function ScrollRuler({ targetRef, label, tickCount = 17, className }: Scr
           aria-hidden="true"
           data-scroll-ruler-preview
           style={{ top: hoverTop }}
-          className="pointer-events-none absolute right-full z-30 mr-2 -translate-y-1/2 rounded-md border border-hairline-strong bg-surface-elevated/95 px-1.5 py-0.5 font-mono text-[10.5px] leading-4 font-medium text-ink tabular-nums shadow-floating backdrop-blur-md [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tooltip-bg [[data-skin=plate]_&]:text-tooltip-fg"
+          className="pointer-events-none absolute right-full z-30 mr-2 -translate-y-1/2 rounded-md border border-hairline-strong bg-surface-elevated/95 px-1.5 py-0.5 font-mono text-[10.5px] leading-4 font-medium text-ink tabular-nums shadow-floating backdrop-blur-md"
         >
           {metrics.percent}%
         </div>

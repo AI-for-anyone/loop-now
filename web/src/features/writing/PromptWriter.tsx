@@ -29,18 +29,18 @@ interface Written {
 // The longest request the server takes (PromptDraftRequest.request).
 const MAX_REQUEST = 4000
 
-const linkClass = 'font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2 [[data-skin=plate]_&]:hover:text-riso-blue'
+const linkClass = 'font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700'
 
 // Who writes, at the foot of the panel; read only while the panel is open.
 function WriterLine({ settings }: { settings: ReturnType<typeof useTextGenerationSettings> }) {
   const copy = t.prompts.ai
   const lookup = useRuntimeLookup()
-  if (settings.isPending) return <p className="text-[12.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.checking}</p>
-  if (!settings.data) return <p className="text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{copy.unknownWriter}</p>
+  if (settings.isPending) return <p className="text-[12.5px] font-medium text-ink-500">{copy.checking}</p>
+  if (!settings.data) return <p className="text-[12.5px] font-medium text-ink-700">{copy.unknownWriter}</p>
   const { writer } = settings.data
   if (!writer) {
     return (
-      <p className="text-[12.5px] leading-snug font-medium text-red-text [[data-skin=plate]_&]:font-bold">
+      <p className="text-[12.5px] leading-snug font-medium text-red-text">
         {copy.noWriter}{' '}
         <Link to={writingSettingsPath} className={linkClass}>
           {copy.setUp}
@@ -50,13 +50,9 @@ function WriterLine({ settings }: { settings: ReturnType<typeof useTextGeneratio
   }
   const runtime = lookup.get(writer.runtime)
   return (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
+    <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] font-medium text-ink-700">
       <span className="inline-flex min-w-0 items-center gap-1.5">
-        {runtime && (
-          <span className="grid size-5 shrink-0 place-items-center rounded-[6px] border border-hairline bg-surface-control text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:text-paper-raised [[data-skin=plate]_&]:shadow-[1.5px_1.5px_0_var(--riso-pink)]">
-            <RuntimeGlyph runtime={runtime} className="size-3" />
-          </span>
-        )}
+        {runtime && <RuntimeGlyph runtime={runtime} className="size-5" />}
         <span className="[overflow-wrap:anywhere]">{copy.by(writerName(writer, lookup))}</span>
       </span>
       {/* The dot goes with the link, so a narrow line never ends on a lone dot. */}
@@ -160,11 +156,11 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
         </Button>
       </div>
       {open && (
-        <section id={panelId} aria-labelledby={titleId} data-prompt-writer onKeyDown={onPanelKeyDown} className="relative mt-1.5 mb-1 grid min-w-0 gap-3 rounded-card border border-hairline-strong bg-surface-elevated px-4 pt-3.5 pb-3 shadow-floating [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--riso-pink)]">
+        <section id={panelId} aria-labelledby={titleId} data-prompt-writer onKeyDown={onPanelKeyDown} className="relative mt-1.5 mb-1 grid min-w-0 gap-3 rounded-card border border-hairline-strong bg-surface-elevated px-4 pt-3.5 pb-3 shadow-floating">
           {/* A tab pointing up at the button that opened the panel. */}
-          <span aria-hidden="true" className="absolute -top-[7px] right-9 size-3.5 rotate-45 rounded-tl-[2px] border-t border-l border-hairline-strong bg-surface-elevated [[data-skin=plate]_&]:-top-[9px] [[data-skin=plate]_&]:size-4 [[data-skin=plate]_&]:rounded-tl-[3px] [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-l-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow" />
-          <h3 id={titleId} className="flex items-center gap-2 font-display-cn text-[17px] leading-none font-semibold text-ink [[data-skin=plate]_&]:text-[21px] [[data-skin=plate]_&]:font-normal">
-            <Spark className="size-4 text-ink [[data-skin=plate]_&]:size-5 [[data-skin=plate]_&]:text-riso-pink" />
+          <span aria-hidden="true" className="absolute -top-[7px] right-9 size-3.5 rotate-45 rounded-tl-[2px] border-t border-l border-hairline-strong bg-surface-elevated" />
+          <h3 id={titleId} className="flex items-center gap-2 font-display-cn text-[17px] leading-none font-semibold text-ink">
+            <Spark className="size-4 text-ink" />
             {copy.title}
           </h3>
           <div className="grid min-w-0 gap-1.5">
@@ -174,7 +170,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
               rows={2}
               autoFocus
               maxLength={MAX_REQUEST}
-              className="min-h-[68px] bg-surface-control text-[14px] read-only:text-ink-500 [[data-skin=plate]_&]:bg-paper-raised"
+              className="min-h-[68px] bg-surface-control text-[14px] read-only:text-ink-500"
               placeholder={example}
               value={request}
               readOnly={writing}
@@ -187,14 +183,13 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
             </p>
           </div>
           <ErrorAlert error={error} />
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2.5 border-t border-hairline pt-3 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/30">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2.5 border-t border-hairline pt-3">
             <div className="mr-auto min-w-0">
               <WriterLine settings={settings} />
             </div>
             {writing ? (
               <>
-                {/* In progress pill: neutral active surface in mono, fluorescent pink capsule in Plate. */}
-                <p role="status" className="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-active px-3 py-1 text-[13px] font-semibold text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:font-black">
+                <p role="status" className="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-active px-3 py-1 text-[13px] font-semibold text-ink">
                   <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" strokeWidth={3} />
                   {copy.writing}
                   {/* Ticks every second, so it stays out of what screen readers announce. */}
@@ -203,7 +198,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
                   </span>
                 </p>
                 {/* Stop takes the place of Write: the second click of a double click on Write must not stop the draft it started. */}
-                <Button type="button" variant="secondary" size="xs" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" onClick={(event) => event.detail < 2 && controller.current?.abort()}>
+                <Button type="button" variant="secondary" size="xs" onClick={(event) => event.detail < 2 && controller.current?.abort()}>
                   {copy.stop}
                 </Button>
               </>
@@ -222,7 +217,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
       )}
       {undoable && (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 py-0.5">
-          <p role="status" className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-tint-green px-2.5 py-0.5 text-[12.5px] font-medium text-green-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black">
+          <p role="status" className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-tint-green px-2.5 py-0.5 text-[12.5px] font-medium text-green-text">
             <Spark className="size-3.5" />
             {written.before.trim() ? copy.replaced : copy.filled}
           </p>
@@ -240,7 +235,7 @@ export function PromptWriter({ label, text, onReplace, ask, children }: { label:
             {copy.undo}
           </Button>
           {written.fellBack && (
-            <p role="status" className="basis-full text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
+            <p role="status" className="basis-full text-[12.5px] font-medium text-ink-700">
               {written.fellBack}
             </p>
           )}

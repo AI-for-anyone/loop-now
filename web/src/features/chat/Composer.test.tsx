@@ -87,19 +87,19 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
 // Unified floating composer card centered with the conversation stream.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('the composer dock floats cleanly on surface-canvas in mono skin and preserves Plate yellow bar styling', () => {
+it('the composer dock floats cleanly on surface-canvas centered in a max-w-[800px] column', () => {
   mountBar()
   const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')
-  expect(bar).toHaveClass('bg-surface-canvas', '[[data-skin=plate]_&]:bg-tint-yellow', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-ink')
+  expect(bar).toHaveClass('bg-surface-canvas')
   expect(bar).not.toHaveClass('border-t')
-  expect(bar?.firstElementChild).toHaveClass('mx-auto', 'max-w-[800px]')
+  expect(bar?.querySelector('[data-chat-bar-inner]')).toHaveClass('mx-auto', 'max-w-[800px]')
 })
 
-it('the unified card uses surface-elevated with hairline-strong border and subtle focus-within; the send button uses CTA tokens and preserves Plate styling', () => {
+it('the unified card uses surface-elevated with hairline-strong border and subtle focus-within; the send button uses CTA tokens', () => {
   mountBar()
   const editor = screen.getByRole('textbox', { name: 'Message' })
-  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-elevated', 'border', 'border-hairline-strong', 'rounded-2xl', 'focus-within:border-riso-blue/50', '[[data-skin=plate]_&]:bg-paper-raised', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
-  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-7', 'rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:size-9', '[[data-skin=plate]_&]:bg-riso-pink')
+  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-elevated', 'border', 'border-hairline-strong', 'rounded-2xl', 'focus-within:border-riso-blue/50')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-7', 'rounded-full', 'bg-cta-bg', 'text-cta-fg')
 })
 
 it('when idle the placeholder is “Message <Agent>” and keyboard hints stay in button tooltips instead of a permanent footer strip', () => {
@@ -113,7 +113,7 @@ it('when busy with an empty input, shows the compact Stop button inside the tool
   mountBar(true)
   expect(screen.queryByText('new line')).toBeNull()
   const stop = screen.getByRole('button', { name: 'Stop the current reply' })
-  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white')
   expect(screen.queryByRole('button', { name: 'Queue' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Interrupt and send' })).toBeNull()
 })
@@ -187,11 +187,42 @@ it('the queue tray docks directly on top of the unified composer card with no ha
   expect(slot.nextElementSibling).toContainElement(screen.getByRole('textbox', { name: 'Message' }))
 })
 
+it('switching Agents while a send is in flight clears only the sending Agent draft and keeps the new Agent draft intact', async () => {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.post(apiUrl('/agents/agent-a/messages'), async ({ request }) => {
+      const body = (await request.json()) as Schemas['SendMessageInput']
+      await held
+      const run = makeRun({ status: 'starting', endedAt: null })
+      return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
+    }),
+  )
+  const view = renderWithQuery(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Sending for A')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+  // Switch to Agent B while Agent A's send request is still pending.
+  view.rerender(<Composer agentId="agent-b" agentName="beta" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Draft for B')
+
+  release()
+  await waitFor(() => {
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft for B')
+  })
+
+  // Switching back to Agent A confirms its sent draft was cleared.
+  view.rerender(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('')
+})
+
 it('the key hints used elsewhere (the task node input) stay centered with secondary text and semantic surface-control keys', () => {
   renderWithQuery(<KeyHint />)
   const hint = screen.getByText('to queue', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
-  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono', '[[data-skin=plate]_&]:bg-white', '[[data-skin=plate]_&]:border-ink/25')
+  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono')
   // The key names are also written as before (that they differ from the input area's Chinese “回车” (Enter) is checked in
   // src/zh-CN/features/chat/Composer.zh.test.tsx).
   expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')

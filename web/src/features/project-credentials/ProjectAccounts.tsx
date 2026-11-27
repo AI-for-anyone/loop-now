@@ -73,7 +73,7 @@ function CredentialSettingsBody({ projectId, embedded, cliRecovery }: { projectI
   return <ProjectCredentialsAvailable value={available}><AccountsLayout.Provider value={embedded}>
     {!available && <AccountCard title={t.credentials.accounts.title} merged={embedded}>
       {projectCredentialsUnsupported(accounts.error)
-        ? <p role="alert" className="text-[13.5px] font-medium [[data-skin=plate]_&]:font-bold">{t.credentials.accounts.unsupported}</p>
+        ? <p role="alert" className="text-[13.5px] font-medium">{t.credentials.accounts.unsupported}</p>
         : accounts.error ? <ErrorAlert error={accounts.error} /> : <p role="status">{t.credentials.accounts.loading}</p>}
       <div className="flex flex-wrap gap-2"><Button disabled>{t.credentials.accounts.browserLogin}</Button><Button disabled>{t.credentials.accounts.addAccount}</Button>{accounts.error && <Button variant="secondary" disabled={accounts.isFetching} onClick={() => void accounts.refetch()}>{t.credentials.accounts.reload}</Button>}</div>
     </AccountCard>}
@@ -162,7 +162,7 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '', recoveryPa
       return <AccountRow key={account.id} account={account} missing={!live.some(item => item.id === account.id)} hasRecoveryLocator={hasRowRecovery} onEditing={editing => setRetained(previous => { const next = { ...previous }; if (editing) next[account.id] = account; else delete next[account.id]; return next })} template={templates.data?.templates.find(item => item.name === account.cli)} provider={providers.data?.providers.find(item => item.id === account.provider)} />
     })}</ul>
     {purpose === 'cli' && !cli && <LocalCLIImport projectId={projectId} />}
-    <div className="grid min-w-0 gap-3 border-t border-hairline pt-4 [[data-skin=plate]_&]:border-ink/10">
+    <div className="grid min-w-0 gap-3 border-t border-hairline pt-4">
       {purpose === 'model'
         ? <ProviderPicker label={t.credentials.accounts.addModelLabel} entries={entries} accounts={live} value={slot} open={picking} onOpenChange={setPicking} onChange={pick} />
         : <><Label htmlFor={id}>{t.credentials.accounts.addCliLabel}</Label>
@@ -176,7 +176,7 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '', recoveryPa
       {purpose === 'model' && provider?.authMethods.includes('oauth') && <ProjectLogin key={slot} projectId={projectId} provider={provider} />}
       {purpose === 'cli' && slot === 'gcloud' && template && <GoogleLogin key={`${projectId}:gcloud:new`} projectId={projectId} />}
       {purpose === 'cli' && slot === 'lark-cli' && template && <ProjectLarkUserLogin projectId={projectId} applicationSetup={<Button type="button" variant="secondary" disabled={creating} onClick={() => setCreating(true)}>{t.credentials.lark.prepareApplication}</Button>} />}
-      {purpose === 'cli' && slot === 'gh' && template && <><p className="text-[13px]">{t.credentials.github.purpose}</p><GitHubLogin projectId={projectId} /><p className="text-[13px]">{t.credentials.github.patDescription}</p><a className="text-[13px] font-medium text-ink underline [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue" href="https://cli.github.com/manual/gh_auth_login" target="_blank" rel="noopener noreferrer">{t.credentials.github.patHelp}</a></>}
+      {purpose === 'cli' && slot === 'gh' && template && <><p className="text-[13px]">{t.credentials.github.purpose}</p><GitHubLogin projectId={projectId} /><p className="text-[13px]">{t.credentials.github.patDescription}</p><a className="text-[13px] font-medium text-ink underline" href="https://cli.github.com/manual/gh_auth_login" target="_blank" rel="noopener noreferrer">{t.credentials.github.patHelp}</a></>}
       {!creating && (purpose === 'model' ? provider?.authMethods.includes('api_key') : !!template) && <Button type="button" variant="secondary" className="justify-self-start" onClick={() => setCreating(true)}>{purpose === 'model' ? t.credentials.accounts.enterApiKey : slot === 'gcloud' ? t.credentials.accounts.enterServiceAccount : slot === 'gh' ? t.credentials.github.pat : slot === 'lark-cli' ? t.credentials.lark.botCreate : t.credentials.accounts.enterTemplate}</Button>}
       {creating && <CredentialEditor key={`${purpose}:${entry?.key ?? slot}`} id={`new:${projectId}:${purpose}:${entry?.key ?? slot}`} mode={purpose === 'model' ? 'create-key' : 'create-cli'} template={template} revision={0} summary={t.credentials.accounts.newAccount} readLatest={async () => ({ revision: 0, summary: t.credentials.accounts.newUnknown })} onSave={saveNew} onClose={closeNew} />}
       </div>
@@ -187,8 +187,8 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '', recoveryPa
 export function AccountImpact({ projectId, purpose, slot, accountId }: { projectId: string; purpose: Schemas['ProjectCredentialPurpose']; slot: string; accountId?: string }) {
   const available = useProjectCredentialsAvailable()
   const impact = useCredentialImpact(projectId, purpose, slot, accountId, available)
-  return <div className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-    <p className="font-semibold [[data-skin=plate]_&]:font-bold">{t.credentials.accounts.impactTitle}</p>
+  return <div className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px]">
+    <p className="font-semibold">{t.credentials.accounts.impactTitle}</p>
     <ErrorAlert error={impact.error} />
     {!impact.data && !impact.isError && <p>{t.credentials.accounts.impactLoading}</p>}
     {impact.data && <><p>{impact.data.agents.length ? impact.data.agents.map(agent => t.credentials.accounts.impactAgent(agent.name, agent.mode === 'connection_set' ? t.credentials.accounts.modeConnectionSet : agent.mode === 'explicit' ? t.credentials.accounts.modeExplicit : agent.mode === 'automatic' ? t.credentials.accounts.modeAutomatic : t.credentials.accounts.modeUnknown)).join(t.credentials.accounts.listSeparator) : t.credentials.accounts.noUsers}{t.credentials.accounts.revisionPrefix}{impact.data.credentialsRevision}</p><p>{accountId ? t.credentials.accounts.replaceImpact : t.credentials.accounts.addImpact}</p></>}
@@ -246,11 +246,11 @@ function AccountRow({ account, template, provider, missing, hasRecoveryLocator, 
     else await replaceProjectAccount(account.projectId, account.id, account.purpose === 'model' ? { type: 'api_key', key: input.key } : { type: 'cli', fields: input.fields }, revision)
     await invalidateProjectCredentials(client, account.projectId)
   }
-  return <li className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
-    {missing && <p role="status" className="text-[13px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{t.credentials.accounts.missingFromList}</p>}
-    <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 flex-[1_1_160px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{account.name}</h3><Badge tone={account.status === 'saved' || account.status === 'logged_in' ? 'success' : 'danger'}>{accountStatus[account.status]}</Badge></div>
+  return <li className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4">
+    {missing && <p role="status" className="text-[13px] font-medium text-red-text">{t.credentials.accounts.missingFromList}</p>}
+    <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 flex-[1_1_160px] font-semibold [overflow-wrap:anywhere]">{account.name}</h3><Badge tone={account.status === 'saved' || account.status === 'logged_in' ? 'success' : 'danger'}>{accountStatus[account.status]}</Badge></div>
     {account.purpose === 'model'
-      ? <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] [overflow-wrap:anywhere]"><span className="font-semibold [[data-skin=plate]_&]:font-bold">{providerName(slot, provider)}</span>{providerName(slot, provider) !== slot && <span className="font-mono text-[12px] text-ink-500">{slot}</span>}<AuthBadges methods={[account.authMethod]} />{account.accountLabel && <span>{account.accountLabel}</span>}<span>{t.credentials.accounts.updated}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></span></p>
+      ? <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] [overflow-wrap:anywhere]"><span className="font-semibold">{providerName(slot, provider)}</span>{providerName(slot, provider) !== slot && <span className="font-mono text-[12px] text-ink-500">{slot}</span>}<AuthBadges methods={[account.authMethod]} />{account.accountLabel && <span>{account.accountLabel}</span>}<span>{t.credentials.accounts.updated}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></span></p>
       : <p className="text-[13px] [overflow-wrap:anywhere]">{slot} · {account.authMethod === 'oauth' ? account.cli === 'gcloud' ? t.credentials.accounts.methodGoogleBrowser : t.credentials.accounts.methodBrowser : account.cli === 'gcloud' ? t.credentials.accounts.methodServiceAccount : t.credentials.accounts.methodTemplate}{account.accountLabel ? ` · ${account.accountLabel}` : ''}{t.credentials.accounts.updatedPrefix}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></p>}
     {account.cli === 'gh' && <GitHubIdentity account={account} />}
     {account.cli === 'lark-cli' && <LarkAccountDetails account={account} showName={false} />}
@@ -297,6 +297,6 @@ function AccountCard({ title, children, merged = false }: { title: string; child
   const id = useId()
   const embedded = useContext(AccountsLayout)
   if (merged) return <div className="grid min-w-0 gap-4">{children}</div>
-  if (embedded) return <section aria-labelledby={id} className="grid min-w-0 gap-3.5 text-ink"><h3 id={id} className="text-[17px] leading-[1.3] font-semibold [[data-skin=plate]_&]:font-black">{title}</h3>{children}</section>
-  return <section aria-labelledby={id} className="grid min-w-0 gap-4 rounded-panel border border-hairline bg-surface-elevated px-6 py-[22px] text-ink shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-print-rest"><h2 id={id} className="font-display-cn text-[24px] leading-[1.2] font-semibold [[data-skin=plate]_&]:text-[30px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal">{title}</h2>{children}</section>
+  if (embedded) return <section aria-labelledby={id} className="grid min-w-0 gap-3.5 text-ink"><h3 id={id} className="text-[17px] leading-[1.3] font-semibold">{title}</h3>{children}</section>
+  return <section aria-labelledby={id} className="grid min-w-0 gap-4 rounded-panel border border-hairline bg-surface-elevated px-6 py-[22px] text-ink shadow-surface"><h2 id={id} className="font-display-cn text-[24px] leading-[1.2] font-semibold">{title}</h2>{children}</section>
 }

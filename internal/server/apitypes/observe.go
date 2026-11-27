@@ -264,6 +264,7 @@ type TimelineToolEntry struct {
 	ToolCallID string     `json:"toolCallId"`
 	ToolName   string     `json:"toolName"`
 	Command    *string    `json:"command,omitempty"`
+	Target     *string    `json:"target,omitempty"`
 	State      string     `json:"state"`
 	EndedAt    *time.Time `json:"endedAt"`
 	DurationMs *int64     `json:"durationMs"`

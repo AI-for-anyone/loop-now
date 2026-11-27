@@ -214,7 +214,6 @@ describe('Stats layout & styling', () => {
       'h-8',
       'border-hairline-strong',
       'bg-surface-control',
-      '[[data-skin=plate]_&]:border-dashed',
     )
     expect(within(actions as HTMLElement).getByRole('radiogroup', { name: 'Time range' })).toHaveClass(
       'h-8',
@@ -222,9 +221,6 @@ describe('Stats layout & styling', () => {
       'border',
       'border-hairline',
       'bg-segment-track',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:rounded-full',
     )
   })
 

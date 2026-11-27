@@ -40,12 +40,14 @@
 
   --sidebar-bg: var(--riso-blue);
   --sidebar-fg: #FFFFFF;
-  --sidebar-muted: rgb(255 255 255 / 0.78);
+  --sidebar-muted: #D8DFF5;
   --sidebar-border: rgb(255 255 255 / 0.35);
-  --sidebar-hover: rgb(255 255 255 / 0.10);
+  --sidebar-hover: rgb(255 255 255 / 0.12);
   --sidebar-active-bg: var(--riso-yellow);
   --sidebar-active-fg: var(--ink);
   --sidebar-group: var(--riso-yellow);
+  --sidebar-control-bg: #1F3790;
+  --sidebar-control-fg: #FFFFFF;
 
   --hairline: rgb(24 38 94 / 0.18);
   --hairline-strong: var(--ink);
@@ -58,7 +60,7 @@
   --cta-hover: #1D3799;
   --tooltip-bg: var(--ink);
   --tooltip-fg: #FFFFFF;
-  --tooltip-muted: rgb(255 255 255 / 0.75);
+  --tooltip-muted: #C9D2F2;
 
   --code-bg: var(--riso-blue);
   --code-fg: #FFFFFF;
@@ -77,6 +79,7 @@
   --status-done: #0CA30C;
   --status-interrupt: #FAB219;
   --status-fail: #D03B3B;
+  --status-busy: var(--riso-pink);
 
   /* Print shadows: solid offset only, no blur */
   --print-rest: 2px 2px 0 rgb(24 38 94 / 0.12);

@@ -23,7 +23,7 @@ export function DangerZone({ agent, idle }: { agent: Schemas['Agent']; idle: boo
         <Button variant="destructive" disabled={!idle} onClick={() => setConfirming(true)}>
           {t.config.danger.action}
         </Button>
-        {!idle && <p className="text-[13.5px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{t.config.danger.notIdle}</p>}
+        {!idle && <p className="text-[13.5px] font-medium text-red-text">{t.config.danger.notIdle}</p>}
       </div>
       <ConfirmDialog
         open={confirming}
@@ -34,7 +34,7 @@ export function DangerZone({ agent, idle }: { agent: Schemas['Agent']; idle: boo
             <>
               <span className="block">{body}</span>
               {/* When the Agent is the project Manager, add an extra highlighted note. */}
-              <span className="mt-2 block rounded-input border border-hairline bg-surface-subtle px-3 py-2 font-semibold text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-black">{t.config.danger.managerNote}</span>
+              <span className="mt-2 block rounded-input border border-hairline bg-surface-subtle px-3 py-2 font-semibold text-ink">{t.config.danger.managerNote}</span>
             </>
           ) : (
             body

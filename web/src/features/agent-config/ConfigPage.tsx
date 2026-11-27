@@ -67,12 +67,12 @@ export function ConfigPage() {
   return (
     <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}>
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 border-b border-hairline bg-surface-canvas px-4 sm:px-6 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:pt-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 border-b border-hairline bg-surface-canvas px-4 sm:px-6">
           <SubNav
             aria-label={t.config.tabs.label}
             value={activeTab}
             onChange={selectTab}
-            className="min-w-0 border-b-0 bg-transparent px-0 sm:px-0 [[data-skin=plate]_&]:pl-0"
+            className="min-w-0 border-b-0 bg-transparent px-0 sm:px-0"
             items={[
               { key: 'general', label: t.config.tabs.general, controls: tabPanelId('general') },
               { key: 'workspace', label: t.config.tabs.workspace, controls: tabPanelId('workspace') },
@@ -88,13 +88,13 @@ export function ConfigPage() {
             role="note"
             title={stale ? `${t.config.effectNotice} ${t.config.staleRunNotice}` : t.config.effectNotice}
             className={cn(
-              'my-1 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold',
+              'my-1 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap',
               stale
-                ? 'border-pink-text/30 bg-tint-yellow text-ink [[data-skin=plate]_&]:bg-riso-yellow'
-                : 'border-hairline bg-surface-subtle text-ink-500 [[data-skin=plate]_&]:bg-ink/[0.06] [[data-skin=plate]_&]:text-ink-700',
+                ? 'border-pink-text/30 bg-tint-yellow text-ink'
+                : 'border-hairline bg-surface-subtle text-ink-500',
             )}
           >
-            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', stale ? 'bg-riso-pink' : 'bg-ink-500/60')} />
+            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', stale ? 'bg-status-busy' : 'bg-ink-500/60')} />
             <span>{stale ? t.config.staleRunNotice : t.config.effectShort}</span>
             <span className="sr-only">{t.config.effectNotice}</span>
           </div>

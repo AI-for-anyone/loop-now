@@ -66,21 +66,21 @@ function ConnectionForm({ data, synchronized, embedded, onDirty, onSaved }: { da
       className={
         embedded
           ? 'grid min-w-0 gap-2.5 text-[13px]'
-          : 'grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-3.5 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue'
+          : 'grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-3.5 text-[13px]'
       }
     >
-      <p className="font-semibold [[data-skin=plate]_&]:font-bold">{t.credentials.dbConnections.setTitle(data.cli)}</p>
-      {data.mode === 'explicit_set' && data.accountIds.length > 0 && data.status !== 'resolved' && <p role="status" className="rounded-input border border-red/25 bg-tint-red p-2.5 font-medium text-red-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">{t.credentials.dbConnections.setBroken}</p>}
+      <p className="font-semibold">{t.credentials.dbConnections.setTitle(data.cli)}</p>
+      {data.mode === 'explicit_set' && data.accountIds.length > 0 && data.status !== 'resolved' && <p role="status" className="rounded-input border border-red/25 bg-tint-red p-2.5 font-medium text-red-text">{t.credentials.dbConnections.setBroken}</p>}
       <p className="text-ink-700">{t.credentials.dbConnections.intro}</p>
       <ErrorAlert error={accounts.error} />
       {!accounts.data && !accounts.isError && <p className="text-ink-500">{t.credentials.dbConnections.loadingCandidates}</p>}
-      <fieldset disabled={disabled} className="grid min-w-0 gap-1.5"><legend className="mb-1.5 font-semibold [[data-skin=plate]_&]:font-bold">{t.credentials.dbConnections.chooseLegend}</legend>
+      <fieldset disabled={disabled} className="grid min-w-0 gap-1.5"><legend className="mb-1.5 font-semibold">{t.credentials.dbConnections.chooseLegend}</legend>
         {ids.length === 0 && accounts.data && <p className="text-ink-500">{t.credentials.dbConnections.noCandidates}</p>}
         {ids.map(id => {
           const candidate = candidates.find(item => item.id === id), connection = data.connections.find(item => item.accountId === id)
-          return <label key={id} className={`flex min-w-0 items-start gap-2.5 rounded-input p-2.5 ${connection && connection.status !== 'resolved' ? 'border border-red/25 bg-tint-red [[data-skin=plate]_&]:border-0' : 'border border-hairline bg-surface-control [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'}`}>
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-ink [[data-skin=plate]_&]:accent-riso-blue" checked={form.draft.ids.includes(id)} onChange={event => form.setDraft({ action: 'set', ids: (event.target.checked ? [...form.draft.ids, id] : form.draft.ids.filter(item => item !== id)).sort() })} />
-            <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-semibold [[data-skin=plate]_&]:font-bold">{candidate?.name ?? connection?.name ?? t.credentials.dbConnections.selectedUnavailable}</span><span className="block font-mono text-xs text-ink-500">{id}</span><span className="block text-[12.5px] text-ink-700">{connection ? statusText[connection.status] : candidate ? t.credentials.dbConnections.candidateNotGranted(accountStatus[candidate.status]) : t.credentials.dbConnections.missingAccount}</span></span>
+          return <label key={id} className={`flex min-w-0 items-start gap-2.5 rounded-input p-2.5 ${connection && connection.status !== 'resolved' ? 'border border-red/25 bg-tint-red' : 'border border-hairline bg-surface-control'}`}>
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-ink" checked={form.draft.ids.includes(id)} onChange={event => form.setDraft({ action: 'set', ids: (event.target.checked ? [...form.draft.ids, id] : form.draft.ids.filter(item => item !== id)).sort() })} />
+            <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-semibold">{candidate?.name ?? connection?.name ?? t.credentials.dbConnections.selectedUnavailable}</span><span className="block font-mono text-xs text-ink-500">{id}</span><span className="block text-[12.5px] text-ink-700">{connection ? statusText[connection.status] : candidate ? t.credentials.dbConnections.candidateNotGranted(accountStatus[candidate.status]) : t.credentials.dbConnections.missingAccount}</span></span>
           </label>
         })}
       </fieldset>
@@ -90,7 +90,7 @@ function ConnectionForm({ data, synchronized, embedded, onDirty, onSaved }: { da
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" disabled={disabled || (data.mode === 'explicit_set' && !form.dirty)} onClick={() => void form.submit()}>{form.pending ? t.credentials.dbConnections.saving : form.draft.action === 'legacy' ? t.credentials.dbConnections.confirmLegacy : form.draft.ids.length ? t.credentials.dbConnections.saveSet : t.credentials.dbConnections.saveEmpty}</Button>
         {data.mode === 'explicit_set' && <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={() => { const draft: Draft = { action: 'legacy', ids: form.draft.ids }; form.setDraft(draft); void form.submit(draft) }}>{t.credentials.dbConnections.deleteSet}</Button>}
-        {scope.kind === 'project' && <Link to={projectSettingsPath(scope.project, 'credentials')} className="inline-flex min-h-8 items-center text-[12.5px] font-medium underline underline-offset-4 [[data-skin=plate]_&]:font-bold">{t.credentials.dbConnections.manageInSettings}</Link>}
+        {scope.kind === 'project' && <Link to={projectSettingsPath(scope.project, 'credentials')} className="inline-flex min-h-8 items-center text-[12.5px] font-medium underline underline-offset-4">{t.credentials.dbConnections.manageInSettings}</Link>}
       </div>
       <p className="text-[12.5px] text-ink-700">{t.credentials.dbConnections.deleteSetNote}</p>
     </div>

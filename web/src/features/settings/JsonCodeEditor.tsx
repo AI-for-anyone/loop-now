@@ -149,7 +149,7 @@ export function JsonCodeEditor({ id, label, value, disabled = false, fill = fals
   }
 
   return <div className={fill ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2' : 'grid min-w-0 gap-2'}>
-    <div ref={hostRef} className={cn(fill ? 'min-h-[380px] flex-1' : 'h-[clamp(360px,55vh,680px)]', 'min-w-0 overflow-hidden rounded-card border border-hairline-strong bg-surface-control transition-colors focus-within:border-ink/35 [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-inner [[data-skin=plate]_&]:focus-within:border-riso-blue', disabled && 'opacity-60')} />
+    <div ref={hostRef} className={cn(fill ? 'min-h-[380px] flex-1' : 'h-[clamp(360px,55vh,680px)]', 'min-w-0 overflow-hidden rounded-card border border-hairline-strong bg-surface-control transition-colors focus-within:border-ink/35', disabled && 'opacity-60')} />
     {diagnostics.length > 0 && <div className="grid shrink-0 gap-1.5 rounded-card bg-tint-red/45 px-3 py-2.5" role="alert" aria-label={t.settings.models.syntaxErrors}>
       <p className="text-[13px] font-black text-red-text">{t.settings.models.syntaxErrors}</p>
       {diagnostics.map((diagnostic, index) => <button key={`${diagnostic.from}-${index}`} type="button" className="w-fit rounded text-left text-[13px] font-bold text-red-text underline decoration-red/40 underline-offset-2 outline-none hover:decoration-red focus-visible:shadow-focus" onClick={() => locate(diagnostic)}>

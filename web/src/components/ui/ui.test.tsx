@@ -17,7 +17,7 @@ import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from './sheet
 import { Table, TableBody, TableCell, TableRow } from './table'
 
 describe('Button', () => {
-  it('renders by variant and size, uses the print focus ring, and drops the shadow when disabled', () => {
+  it('renders by variant and size, uses the focus ring, and drops the shadow when disabled', () => {
     render(
       <>
         <Button variant="interrupt">Interrupt</Button>
@@ -29,10 +29,10 @@ describe('Button', () => {
     )
     const interrupt = screen.getByRole('button', { name: 'Interrupt' })
     expect(interrupt).toHaveAttribute('data-variant', 'interrupt')
-    expect(interrupt.className).toContain('bg-riso-pink')
+    expect(interrupt).toHaveClass('border-hairline-strong', 'bg-surface-control')
     expect(interrupt.className).toContain('focus-visible:shadow-focus')
-    // Ghost actions inside lists are 36px tall.
-    expect(screen.getByRole('button', { name: 'Remove' }).className).toContain('h-9')
+    // Ghost actions inside lists are 32px tall.
+    expect(screen.getByRole('button', { name: 'Remove' }).className).toContain('h-8')
     const disabled = screen.getByRole('button', { name: 'Save' })
     expect(disabled).toBeDisabled()
     expect(disabled.className).toContain('disabled:shadow-none')
@@ -260,8 +260,8 @@ describe('Table', () => {
   })
 })
 
-// Form controls use semantic surface and hairline borders in mono skin and preserve the 2px ink inner border in Plate skin.
-it('form controls use semantic control tokens and preserve Plate inner ink borders', () => {
+// Form controls use semantic surface and hairline borders across all themes.
+it('form controls use semantic control tokens', () => {
   render(<><input aria-label="x" className={fieldClass} /><Input aria-label="Name" /><Textarea aria-label="About" /></>)
   for (const name of ['Name', 'About']) {
     expect(screen.getByLabelText(name)).toHaveClass(
@@ -269,11 +269,10 @@ it('form controls use semantic control tokens and preserve Plate inner ink borde
       'border',
       'border-hairline-strong',
       'bg-surface-control',
-      '[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]',
     )
   }
   expect(selectClass).toContain('bg-surface-control')
-  expect(selectClass).toContain('[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]')
+  expect(selectClass).toContain('border-hairline-strong')
 })
 
 describe('Toasts', () => {

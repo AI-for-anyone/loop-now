@@ -264,35 +264,28 @@ describe('Skills library on the sheet', () => {
     const header = (await screen.findByRole('heading', { level: 1, name: 'Skills library' })).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Skills library')
     expect(await within(header).findByText('0 templates')).toBeInTheDocument()
-    expect(within(header).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control', '[[data-skin=plate]_&]:bg-riso-pink')
+    expect(within(header).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control')
   })
 
-  it('the empty state preserves mono and Plate styling on the sheet', async () => {
+  it('the empty state uses unified sheet styling', async () => {
     setup('/skills')
     const title = await screen.findByText('No templates in the Skills library yet.')
     expect(title).toHaveClass('riso-marker', 'font-display-cn')
     const empty = title.closest('[data-empty-library]') as HTMLElement
     expect(empty.closest('[data-sheet]')).not.toBeNull()
-    expect(empty.querySelector('[data-empty-art]')).toHaveAttribute('aria-hidden', 'true')
     for (const name of ['Upload folder', 'Upload zip']) {
       const button = within(empty).getByRole('button', { name })
-      expect(button).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:bg-white')
-      expect(button).not.toHaveClass('[[data-skin=plate]_&]:bg-riso-pink')
+      expect(button).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control')
     }
-    expect(within(empty).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control', '[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(within(empty).getByRole('link', { name: 'Create online' })).toHaveClass('bg-surface-control')
   })
 
-  it('selected rail row uses surface-active in mono skin and yellow with ink outline and shadow in Plate skin', async () => {
+  it('selected rail row uses surface-active token', async () => {
     setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', 'Work with PDF files'), summary('sk-2', 'csv-tools', 'Work with CSV files')])
     const list = await screen.findByRole('list', { name: 'Skills library' })
     const [open, other] = within(list).getAllByRole('link')
     expect(open).toHaveAttribute('aria-current', 'page')
-    expect(open).toHaveClass(
-      'bg-surface-active',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:bg-riso-yellow',
-      '[[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]',
-    )
+    expect(open).toHaveClass('bg-surface-active')
     expect(other.closest('[data-sheet]')).not.toBeNull()
   })
 })

@@ -17,9 +17,4 @@ contextBridge.exposeInMainWorld('loopNowDesktop', {
     ipcRenderer.on('loop-now:navigate', handler)
     return () => void ipcRenderer.removeListener('loop-now:navigate', handler)
   },
-  onBoarding: (listener: () => void) => {
-    const handler = () => listener()
-    ipcRenderer.on('loop-now:boarding', handler)
-    return () => void ipcRenderer.removeListener('loop-now:boarding', handler)
-  },
 })

@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlertIcon, DownloadIcon, FileTextIcon, InfoIcon, ScissorsIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { stopAllTaskNodeBackgroundTasks, stopTaskNodeBackgroundTask, useTaskNodeBackgroundTasks } from '@/api/background-tasks'
 import type { Schemas } from '@/api/client'
+import { folderRoots, taskNodeFolderContentURL, useTaskNodeFolderLocation } from '@/api/folders'
 import { messageImageLimits } from '@/api/message-images'
 import { useTaskNodePermissionRequests } from '@/api/permissions'
 import { useContextInfo } from '@/api/queries'
@@ -20,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { BackgroundTasksMark, type BackgroundStopper } from '@/features/chat/BackgroundTasks'
+import { DEFAULT_IMAGE_PREVIEW_MAX_BYTES, type ReplyFolderContext } from '@/features/chat/local-images'
 import { Markdown } from '@/features/chat/Markdown'
 import { QueueMessages } from '@/features/chat/QueueList'
 import { nodeConflictNotice, useStopReply } from '@/features/chat/queue-actions'
@@ -47,9 +49,9 @@ const inboxCopy = t.taskInbox
 export function PendingQuestion({ question }: { question: Schemas['TaskQuestionRef'] }) {
   const locate = () => document.querySelector(`[data-console-message-id="${question.messageId}"]`)?.scrollIntoView({ block: 'center' })
   return (
-    <section className="mt-2 grid gap-2.5 rounded-card border border-hairline-strong bg-tint-yellow p-3.5 [[data-skin=plate]_&]:border-0">
+    <section className="mt-2 grid gap-2.5 rounded-card border border-hairline-strong bg-tint-yellow p-3.5">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-semibold [[data-skin=plate]_&]:font-bold">{t.tasks.question}</h3>
+        <h3 className="font-semibold">{t.tasks.question}</h3>
         <Badge>{t.tasks.questionState[question.status]}</Badge>
       </div>
       <Markdown text={question.text} />
@@ -242,10 +244,9 @@ export function NodeRecordPanel({
       if (el && target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top
     })
   }
-
   const oldDrafts = drafts.filter((d) => d.nodeRunId !== draft.nodeRunId && (d.text || d.images?.length))
   const stepIndex = detail.workflow.steps.findIndex((s) => s.id === node.stepId)
-  const stepTitle = detail.workflow.steps[stepIndex]?.title
+  const stepTitle = detail.workflow.steps[stepIndex]?.title || node.stepId
   const number = stepNumber(stepIndex)
   const [reasonHead, ...reasonRest] = (statusReason ?? '').split('\n')
 
@@ -264,7 +265,7 @@ export function NodeRecordPanel({
   const showRetryAction = current && detail.task.status === 'blocked' && Boolean(detail.task.currentNodeRunId)
   const showLarkAction = detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
   const hasActionRow = Boolean(statusReason || showRetryAction || showLarkAction)
-  const targetPlaceholder = `${t.tasks.draftPlaceholder(draft.agentName)} · ${number} ${stepTitle ?? node.stepId} (${t.tasks.page.version(node.visit, node.attempt)})`
+  const targetPlaceholder = `${t.tasks.draftPlaceholder(draft.agentName)} · ${number} ${stepTitle} (${t.tasks.page.version(node.visit, node.attempt)})`
   const targetDetailsToggle = (
     <details className="text-[11.5px] text-ink-500">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-ink-500 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -285,15 +286,15 @@ export function NodeRecordPanel({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* Compact 44px node header + lifted status/history/retry/Lark strip shared above both Conversation and Materials tabs. */}
       <div data-node-status className="flex shrink-0 flex-col">
-        <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-hairline bg-surface-canvas px-4 py-1.5 sm:px-5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+        <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-hairline bg-surface-canvas px-4 py-1.5 sm:px-5">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue">
+            <span className="shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">
               {number}
             </span>
-            <h2 className="min-w-0 truncate text-[14px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:riso-marker [[data-skin=plate]_&]:px-1 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+            <h2 title={node.stepId} className="min-w-0 truncate text-[14px] leading-snug font-semibold tracking-tight text-ink">
               {stepTitle}
             </h2>
-            <span className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700">
               <AgentAvatar size="sm" id={node.agentId} />
               <span className="max-w-[140px] truncate">{node.agentName}</span>
             </span>
@@ -302,7 +303,7 @@ export function NodeRecordPanel({
                 aria-label={t.tasks.selectRecord}
                 value={node.id}
                 onChange={(event) => onSelectRecord(node.stepId, event.target.value)}
-                className="h-6 max-w-[148px] cursor-pointer rounded-stamp border border-hairline-strong bg-surface-control px-1.5 font-mono text-[11px] font-medium text-ink-700 outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-bold"
+                className="h-6 max-w-[148px] cursor-pointer rounded-stamp border border-hairline-strong bg-surface-control px-1.5 font-mono text-[11px] font-medium text-ink-700 outline-none hover:bg-surface-hover focus-visible:shadow-focus"
               >
                 {records.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -313,21 +314,20 @@ export function NodeRecordPanel({
             ) : (
               <span
                 title={t.tasks.visit(node.visit, node.attempt)}
-                className="shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] leading-4 font-medium text-ink-500 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-tab [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700"
+                className="shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] leading-4 font-medium text-ink-500"
               >
                 {t.tasks.page.version(node.visit, node.attempt)}
               </span>
             )}
             {current ? (
-              <span className="shrink-0 rounded-stamp bg-cta-bg px-1.5 py-0.5 text-[11px] leading-4 font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">
+              <span className="shrink-0 rounded-stamp bg-cta-bg px-1.5 py-0.5 text-[11px] leading-4 font-semibold text-cta-fg">
                 {t.tasks.currentNode}
               </span>
             ) : (
-              <span className="shrink-0 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.tasks.readonly}</span>
+              <span className="shrink-0 text-[11.5px] font-medium text-ink-500">{t.tasks.readonly}</span>
             )}
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-            <BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />
             <TaskBadge status={node.status} />
             {/* Scoped Conversation | Materials segmented toggle inside the node pane header; Left/Right arrows switch tabs. */}
             <div
@@ -343,7 +343,7 @@ export function NodeRecordPanel({
               }}
               className={cn(
                 segmentedClass,
-                'inline-flex h-7 shrink-0 items-center gap-0.5 rounded-input border-hairline bg-surface-subtle p-0.5 [[data-skin=plate]_&]:h-8 [[data-skin=plate]_&]:gap-0 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:p-0',
+                'inline-flex h-7 shrink-0 items-center gap-0.5 rounded-input border-hairline bg-surface-subtle p-0.5',
               )}
             >
               {(['conversation', 'materials'] as const).map((value) => {
@@ -359,10 +359,10 @@ export function NodeRecordPanel({
                     tabIndex={active ? 0 : -1}
                     onClick={() => setTab(value)}
                     className={cn(
-                      'inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-[calc(var(--skin-radius-input)-2px)] px-2.5 text-[12px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:h-full [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:not-first:border-l-2 [[data-skin=plate]_&]:not-first:border-ink',
+                      'inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-[calc(var(--skin-radius-input)-2px)] px-2.5 text-[12px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus',
                       active
-                        ? 'bg-surface-control font-semibold text-ink shadow-surface [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-none'
-                        : 'font-medium text-ink-500 hover:text-ink [[data-skin=plate]_&]:text-ink-700',
+                        ? 'bg-surface-control font-semibold text-ink shadow-surface'
+                        : 'font-medium text-ink-500 hover:text-ink',
                     )}
                   >
                     <span>{value === 'conversation' ? t.tasks.conversationTab : t.tasks.materials}</span>
@@ -380,7 +380,7 @@ export function NodeRecordPanel({
 
         {isHistory && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline bg-surface-subtle/50 px-4 py-1.5 text-[12px] text-ink-700 sm:px-5">
-            <span className="font-medium [[data-skin=plate]_&]:font-bold">{t.tasks.history}</span>
+            <span className="font-medium">{t.tasks.history}</span>
             {onSelectRecord && detail.task.currentStepId && detail.task.currentNodeRunId && (
               <Button variant="secondary" size="xs" className="h-6 px-2.5 text-[12px]" onClick={() => onSelectRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>
                 {t.tasks.currentChanged}
@@ -393,7 +393,7 @@ export function NodeRecordPanel({
           {(lark) => (
             <>
               {(hasActionRow || node.question) && (
-                <div className="flex max-h-[38vh] min-h-0 flex-col gap-2 overflow-y-auto border-b border-hairline bg-surface-subtle/30 px-4 py-2.5 sm:px-5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+                <div className="flex max-h-[38vh] min-h-0 flex-col gap-2 overflow-y-auto border-b border-hairline bg-surface-subtle/30 px-4 py-2.5 sm:px-5">
                   {hasActionRow && (
                     <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                       {statusReason && (
@@ -401,10 +401,10 @@ export function NodeRecordPanel({
                           tone={node.status === 'blocked' ? 'red' : 'yellow'}
                           className="min-w-0 flex-[1_1_320px] items-start py-2 text-[13px] leading-[1.55] font-normal [&>svg]:mt-[3px]"
                         >
-                          <strong className="block font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{reasonHead}</strong>
+                          <strong className="block font-semibold [overflow-wrap:anywhere]">{reasonHead}</strong>
                           {reasonRest.length > 0 && <span className="line-clamp-2 text-ink [overflow-wrap:anywhere]">{reasonRest.join('\n')}</span>}
                           <details className="mt-0.5">
-                            <summary className="cursor-pointer font-semibold underline underline-offset-3 [[data-skin=plate]_&]:font-black">{t.tasks.details}</summary>
+                            <summary className="cursor-pointer font-semibold underline underline-offset-3">{t.tasks.details}</summary>
                             <p className="mt-1 whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">{statusReason}</p>
                           </details>
                         </StickyNote>
@@ -419,7 +419,7 @@ export function NodeRecordPanel({
                   )}
                   {node.question && (
                     <details className="text-[12.5px]">
-                      <summary className="cursor-pointer font-semibold [[data-skin=plate]_&]:font-bold">
+                      <summary className="cursor-pointer font-semibold">
                         {t.tasks.question} · {t.tasks.questionState[node.question.status]}
                       </summary>
                       <PendingQuestion question={node.question} />
@@ -443,20 +443,23 @@ export function NodeRecordPanel({
             tabIndex={0}
             onScroll={capture}
             aria-label={t.tasks.conversation}
-            className="relative h-full min-w-0 overflow-y-auto overscroll-contain px-4 pt-5 pb-3 outline-none focus-visible:shadow-focus sm:px-6"
+            className="relative h-full min-w-0 overflow-y-auto overscroll-contain px-4 pt-3 pb-3 outline-none focus-visible:shadow-focus sm:px-6"
             data-conversation-scroll
           >
-            {records.map((record) => (
-              <MessageSegment
-                key={record.id}
-                detail={detail}
-                node={record}
-                requests={record.id === node.id ? permissionRequests : []}
-                suppressInboxError={current && record.id === node.id}
-                onMaterials={() => showMaterials(record.id)}
-                onReply={current && record.id === node.id ? (message) => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined}
-              />
-            ))}
+            <div data-node-messages className="mx-auto w-full max-w-[800px]">
+              {records.map((record) => (
+                <MessageSegment
+                  key={record.id}
+                  detail={detail}
+                  node={record}
+                  maxImageBytes={context.data?.limits.textEdit.maxBytes ?? DEFAULT_IMAGE_PREVIEW_MAX_BYTES}
+                  requests={record.id === node.id ? permissionRequests : []}
+                  suppressInboxError={current && record.id === node.id}
+                  onMaterials={() => showMaterials(record.id)}
+                  onReply={current && record.id === node.id ? (message) => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined}
+                />
+              ))}
+            </div>
           </div>
           <ScrollRuler targetRef={conversation} label={t.tasks.conversation} />
         </div>
@@ -477,87 +480,90 @@ export function NodeRecordPanel({
         )}
         {/* Input area: streamlined composer bar without the redundant "To:" banner; target lives in placeholder + compact details toggle. */}
         <div
-          className="flex max-h-[42dvh] min-h-0 shrink-0 flex-col gap-1.5 overflow-y-auto border-t border-hairline bg-surface-canvas px-4 py-2.5 sm:px-5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-yellow"
+          className="flex max-h-[42dvh] min-h-0 shrink-0 flex-col overflow-y-auto border-t border-hairline bg-surface-canvas px-4 py-2.5 sm:px-5"
           data-node-draft
         >
-          {current && unsupported && (
-            <p role="status" className="text-[12.5px] font-semibold">
-              {t.tasks.nodeMessagesUnsupported}
-            </p>
-          )}
-          {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
-          {current && capability.data && !capability.data.canSend && (
-            <p role="status" className="text-[12.5px] font-semibold">
-              {capability.data.reason} · {capability.data.handlingHint}
-            </p>
-          )}
-          {!current && (draft.text || !!draft.images?.length) && (
-            <p role="status" className="text-[12.5px] font-semibold">
-              {t.tasks.draftChanged}
-            </p>
-          )}
-          {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
-          <NodeMessageComposer
-            key={node.id}
-            taskId={detail.task.id}
-            draft={draft}
-            current={current}
-            disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching}
-            capability={capability.data}
-            text={draft.text}
-            onChange={onDraft}
-            onImages={onImages}
-            imageLimits={messageImageLimits(context.data?.limits)}
-            onAccepted={onAccepted}
-            onAction={onAction}
-            placeholder={targetPlaceholder}
-            details={targetDetailsToggle}
-            queue={
-              <>
-                <QueueMessages notice={stop.notice} error={stop.error} />
-                {current && !unsupported && (
-                  <NodeQueueList
-                    key={node.id}
-                    taskId={detail.task.id}
-                    nodeRunId={node.id}
-                    agentId={node.agentId}
-                    runtimeId={node.runtimeId}
-                    disabled={disabled}
-                    onEdit={refill}
-                  />
-                )}
-              </>
-            }
-            stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
-            stopAlso={backgroundTasks.length}
-            reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined}
-          />
-          {draft.text && !current && (
-            <Button size="xs" variant="secondary" className="self-start" onClick={() => void copyText(draft.text)}>
-              {t.tasks.copyDraft}
-            </Button>
-          )}
-          {oldDrafts.length > 0 && (
-            <details className="text-[12.5px]">
-              <summary className="cursor-pointer font-semibold">{t.tasks.draftChanged}</summary>
-              {oldDrafts.map((d) => (
-                <div key={d.nodeRunId} className="mt-2">
-                  <p className="break-all">
-                    {d.agentName} · {d.nodeRunId}
-                  </p>
-                  <pre className="whitespace-pre-wrap break-words">{d.text}</pre>
-                  <div className="flex flex-wrap gap-2">
-                    {d.images?.map((image) => (
-                      <DraftImagePreview key={image.id} file={image.file} />
-                    ))}
+          <div data-node-draft-inner className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-1.5">
+            {current && unsupported && (
+              <p role="status" className="text-[12.5px] font-semibold">
+                {t.tasks.nodeMessagesUnsupported}
+              </p>
+            )}
+            {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
+            {current && capability.data && !capability.data.canSend && (
+              <p role="status" className="text-[12.5px] font-semibold">
+                {capability.data.reason} · {capability.data.handlingHint}
+              </p>
+            )}
+            {!current && (draft.text || !!draft.images?.length) && (
+              <p role="status" className="text-[12.5px] font-semibold">
+                {t.tasks.draftChanged}
+              </p>
+            )}
+            {permissionRequests.length > 0 && <WaitingForApproval requests={permissionRequests} />}
+            <NodeMessageComposer
+              key={node.id}
+              taskId={detail.task.id}
+              draft={draft}
+              current={current}
+              disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching}
+              capability={capability.data}
+              text={draft.text}
+              onChange={onDraft}
+              onImages={onImages}
+              imageLimits={messageImageLimits(context.data?.limits)}
+              onAccepted={onAccepted}
+              onAction={onAction}
+              placeholder={targetPlaceholder}
+              details={targetDetailsToggle}
+              queue={
+                <>
+                  <QueueMessages notice={stop.notice} error={stop.error} />
+                  {current && !unsupported && (
+                    <NodeQueueList
+                      key={node.id}
+                      taskId={detail.task.id}
+                      nodeRunId={node.id}
+                      agentId={node.agentId}
+                      runtimeId={node.runtimeId}
+                      disabled={disabled}
+                      onEdit={refill}
+                    />
+                  )}
+                </>
+              }
+              stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
+              stopAlso={backgroundTasks.length}
+              background={<BackgroundTasksMark tasks={backgroundTasks} stopper={backgroundStopper} hint={t.background.nodeHint} />}
+              reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined}
+            />
+            {draft.text && !current && (
+              <Button size="xs" variant="secondary" className="self-start" onClick={() => void copyText(draft.text)}>
+                {t.tasks.copyDraft}
+              </Button>
+            )}
+            {oldDrafts.length > 0 && (
+              <details className="text-[12.5px]">
+                <summary className="cursor-pointer font-semibold">{t.tasks.draftChanged}</summary>
+                {oldDrafts.map((d) => (
+                  <div key={d.nodeRunId} className="mt-2">
+                    <p className="break-all">
+                      {d.agentName} · {d.nodeRunId}
+                    </p>
+                    <pre className="whitespace-pre-wrap break-words">{d.text}</pre>
+                    <div className="flex flex-wrap gap-2">
+                      {d.images?.map((image) => (
+                        <DraftImagePreview key={image.id} file={image.file} />
+                      ))}
+                    </div>
+                    <Button size="xs" variant="secondary" onClick={() => void copyText(d.text)}>
+                      {t.tasks.copyDraft}
+                    </Button>
                   </div>
-                  <Button size="xs" variant="secondary" onClick={() => void copyText(d.text)}>
-                    {t.tasks.copyDraft}
-                  </Button>
-                </div>
-              ))}
-            </details>
-          )}
+                ))}
+              </details>
+            )}
+          </div>
         </div>
       </div>
 
@@ -637,26 +643,24 @@ function MaterialRecord({
       onToggle={(event) => onToggle(event.currentTarget.open)}
       className={cn(
         'group min-w-0',
-        divided && 'border-t border-hairline pt-4 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/40',
+        divided && 'border-t border-hairline pt-4',
       )}
     >
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 [&::-webkit-details-marker]:hidden">
         <span
           className={cn(
-            'rounded-[4px] px-2 font-mono text-[11.5px] leading-[22px] font-semibold [[data-skin=plate]_&]:font-bold',
-            viewing
-              ? 'bg-cta-bg text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white'
-              : 'border border-hairline bg-surface-subtle text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-tab',
+            'rounded-[4px] px-2 font-mono text-[11.5px] leading-[22px] font-semibold',
+            viewing ? 'bg-cta-bg text-cta-fg' : 'border border-hairline bg-surface-subtle text-ink-700',
           )}
         >
           {t.tasks.page.version(record.visit, record.attempt)}
         </span>
-        <span className="text-[14px] font-semibold [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-black">
+        <span className="text-[14px] font-semibold">
           {t.tasks.visit(record.visit, record.attempt)}
         </span>
         <TaskBadge status={record.status} />
         {record.startedAt && <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.ran(record.startedAt, record.endedAt)}</span>}
-        <span className="ml-auto text-[12.5px] font-medium text-ink-700 hover:text-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue">
+        <span className="ml-auto text-[12.5px] font-medium text-ink-700 hover:text-ink">
           {open ? t.tasks.page.collapse : t.tasks.page.expand}
           <span aria-hidden="true"> {open ? '▴' : '▾'}</span>
         </span>
@@ -666,7 +670,7 @@ function MaterialRecord({
           {record.status === 'blocked' && record.output && (
             <p
               role="note"
-              className="flex min-w-0 flex-[1_1_320px] items-center gap-2 rounded-ticket border border-red-text/25 bg-tint-red px-3.5 py-2 text-[13px] font-semibold text-red-text [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black"
+              className="flex min-w-0 flex-[1_1_320px] items-center gap-2 rounded-ticket border border-red-text/25 bg-tint-red px-3.5 py-2 text-[13px] font-semibold text-red-text"
             >
               <CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" strokeWidth={2.4} />
               {t.tasks.inspectOnly}
@@ -674,7 +678,7 @@ function MaterialRecord({
           )}
           <button
             type="button"
-            className="shrink-0 cursor-pointer text-[12.5px] font-medium text-ink-700 underline underline-offset-3 hover:text-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue"
+            className="shrink-0 cursor-pointer text-[12.5px] font-medium text-ink-700 underline underline-offset-3 hover:text-ink"
             onClick={onConversation}
           >
             {t.tasks.page.backToConversation}
@@ -683,26 +687,26 @@ function MaterialRecord({
         {record.reason && record.status !== 'blocked' && <p className="text-[13.5px] [overflow-wrap:anywhere]">{record.reason}</p>}
         <div className="grid min-w-0 gap-x-7 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <section className="min-w-0">
-            <h3 className="riso-marker mb-2 inline-block text-[14px] leading-snug font-semibold [[data-skin=plate]_&]:px-1 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-[1.3] [[data-skin=plate]_&]:font-normal">
+            <h3 className="mb-2 inline-block text-[14px] leading-snug font-semibold">
               {t.tasks.page.inputs}
             </h3>
             {keys.length === 0 ? (
               <p className="text-[13.5px] text-ink-500">{t.tasks.none}</p>
             ) : (
-              <dl className="grid grid-cols-[minmax(72px,auto)_minmax(0,1fr)] border-t border-hairline text-[13.5px] [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink">
+              <dl className="grid grid-cols-[minmax(72px,auto)_minmax(0,1fr)] border-t border-hairline text-[13.5px]">
                 {keys.map((key) => {
                   const version = versions.get(key),
                     value = record.inputs[key],
                     origin = version ? source(version) : null
                   return (
                     <div key={key} className="contents">
-                      <dt className="border-b border-hairline py-2.5 pr-4 pl-0.5 font-mono text-[12.5px] text-ink-700 [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
+                      <dt className="border-b border-hairline py-2.5 pr-4 pl-0.5 font-mono text-[12.5px] text-ink-700 [overflow-wrap:anywhere]">
                         {key}
                       </dt>
-                      <dd className="flex min-w-0 flex-col gap-1 border-b border-hairline py-2.5 [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
+                      <dd className="flex min-w-0 flex-col gap-1 border-b border-hairline py-2.5 [overflow-wrap:anywhere]">
                         {version && (
                           <Link
-                            className="font-semibold text-riso-blue underline underline-offset-3 [[data-skin=plate]_&]:font-black"
+                            className="font-semibold text-riso-blue underline underline-offset-3"
                             to={`?${new URLSearchParams({ step: origin?.from?.stepId ?? '', record: version })}`}
                           >
                             {origin?.from ? t.tasks.page.versionLink(stepNumber(origin.index), detail.workflow.steps[origin.index]?.title ?? '', origin.from.visit) : `${t.tasks.source(key)} · ${version}`}
@@ -717,13 +721,13 @@ function MaterialRecord({
             )}
           </section>
           <section className="min-w-0">
-            <h3 className="riso-marker mb-2 inline-block text-[14px] leading-snug font-semibold [[data-skin=plate]_&]:px-1 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-[1.3] [[data-skin=plate]_&]:font-normal">
+            <h3 className="mb-2 inline-block text-[14px] leading-snug font-semibold">
               {t.tasks.output}
             </h3>
             {record.output === null ? (
               <p className="text-[13.5px] text-ink-500">{t.tasks.noOutput}</p>
             ) : (
-              <pre className="max-w-full overflow-x-auto rounded-card border border-code-border bg-code-bg px-[18px] py-3.5 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap break-all text-code-fg [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:text-ink">
+              <pre className="max-w-full overflow-x-auto rounded-card border border-code-border bg-code-bg px-[18px] py-3.5 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap break-all text-code-fg">
                 {JSON.stringify(record.output, null, 2)}
               </pre>
             )}
@@ -742,6 +746,7 @@ const answerableFor = (node: Node, message: Schemas['InboxMessage']) => (node.qu
 function MessageSegment({
   detail,
   node,
+  maxImageBytes,
   onMaterials,
   suppressInboxError,
   onReply,
@@ -749,6 +754,7 @@ function MessageSegment({
 }: {
   detail: Schemas['TaskDetail']
   node: Node
+  maxImageBytes: number
   onMaterials: () => void
   suppressInboxError: boolean
   onReply?: (message: Schemas['InboxMessage']) => void
@@ -756,6 +762,16 @@ function MessageSegment({
 }) {
   const messages = useTaskMessages(detail.task.id, node.id)
   const inbox = useTaskInboxMessages(detail.task.id, node.id, node.agentId, node.runtimeId)
+  const folderLocation = useTaskNodeFolderLocation(detail.task.id, node.id)
+  // Task instance folders have no Folder tab and are reclaimed once the task ends, so paths stay plain text and 404s show no thumbnail.
+  const replyFolder = useMemo<ReplyFolderContext>(
+    () => ({
+      roots: folderRoots(folderLocation.data),
+      contentURL: (path) => taskNodeFolderContentURL(detail.task.id, node.id, path),
+      maxBytes: maxImageBytes,
+    }),
+    [folderLocation.data, detail.task.id, node.id, maxImageBytes],
+  )
   // Like normal chat, a message still waiting in the node's queue is shown only in the queue tray; it joins the flow once it starts.
   // Cancelled or not-executed messages have left the queue and keep showing their final status here.
   const queue = useTaskNodeQueue(detail.task.id, node.id, node.id === detail.task.currentNodeRunId)
@@ -778,6 +794,7 @@ function MessageSegment({
           taskId={detail.task.id}
           nodeRunId={node.id}
           runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined}
+          folder={replyFolder}
           requests={message.role === 'assistant' ? requests.filter((request) => request.runId === message.runId) : []}
         />
       ),
@@ -789,7 +806,7 @@ function MessageSegment({
         const extras = (
           <>
             {record.notExecuted && (
-              <p role="status" className="rounded-input border border-hairline bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0">
+              <p role="status" className="rounded-input border border-hairline bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere]">
                 {inboxCopy.notExecuted} · {inboxCopy.targetReasons[record.notExecuted.reason] ?? record.notExecuted.reason}
               </p>
             )}
@@ -814,6 +831,7 @@ function MessageSegment({
               <ConsoleMessage
                 message={record.message}
                 agent={{ id: node.agentId, name: node.agentName }}
+                folder={replyFolder}
                 answerable={answerableFor(node, record.message)}
                 onReply={onReply}
                 meta={<Badge tone="info">{record.message.inReplyTo ? inboxCopy.reply : inboxCopy.message}</Badge>}
@@ -829,13 +847,13 @@ function MessageSegment({
   ].sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key))
   const cutLabel = `${t.tasks.visit(node.visit, node.attempt)} · ${t.tasks.nodeStatuses[node.status]} · ${t.tasks.page.seeMaterials}`
   return (
-    <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-7 min-w-0">
+    <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-7 min-w-0 last:mb-0">
       {/* Between visits of the same node is a scissors cut line; clicking the label opens this visit's node materials. */}
       <div className="mb-[18px]">
         <CutLine icon={ScissorsIcon} label={t.tasks.execution}>
           <button
             type="button"
-            className="min-w-0 cursor-pointer text-center text-[12.5px] font-semibold text-ink underline decoration-dotted underline-offset-4 [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black"
+            className="min-w-0 cursor-pointer text-center text-[12.5px] font-semibold text-ink underline decoration-dotted underline-offset-4 [overflow-wrap:anywhere]"
             aria-label={`${t.tasks.execution} · ${cutLabel}`}
             onClick={onMaterials}
           >
@@ -847,7 +865,7 @@ function MessageSegment({
       {(messages.isPending || inbox.isPending) && <p>{t.common.loading}</p>}
       {messages.isSuccess && inbox.isSuccess && rows.length === 0 && <p>{t.tasks.noMessages}</p>}
       {!suppressInboxError && !nodeMessagesUnsupported(inbox.error) && <ErrorAlert error={inbox.error} />}
-      <ol className="flex min-w-0 flex-col gap-7 pr-2 pb-2">
+      <ol className="flex min-w-0 flex-col gap-6 pr-1 pb-1">
         {rows.map((row) => (
           <li key={row.key} data-message-id={row.key} data-reading-anchor={`message:${row.key}`} className="min-w-0">
             {row.body}
@@ -878,7 +896,7 @@ function MessageSegment({
 export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] }) {
   return (
     <section className="min-w-0">
-      <h3 className="riso-marker mb-3 inline-block text-[14px] leading-snug font-semibold [[data-skin=plate]_&]:px-1 [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-[1.3] [[data-skin=plate]_&]:font-normal">
+      <h3 className="mb-3 inline-block text-[14px] leading-snug font-semibold">
         {t.tasks.page.artifacts}
       </h3>
       {artifacts.length === 0 && <p className="text-[13.5px] text-ink-500">{t.tasks.noArtifacts}</p>}
@@ -886,11 +904,11 @@ export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] 
         {artifacts.map((a) => (
           <li
             key={a.id}
-            className="mr-1 flex min-w-0 items-center gap-3 rounded-card border border-hairline bg-surface-control px-3.5 py-3 shadow-surface [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]"
+            className="mr-1 flex min-w-0 items-center gap-3 rounded-card border border-hairline bg-surface-control px-3.5 py-3 shadow-surface"
           >
             <span
               aria-hidden="true"
-              className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow"
+              className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline-strong bg-surface-subtle"
             >
               <FileTextIcon className="size-4" strokeWidth={2.4} />
             </span>
@@ -907,7 +925,7 @@ export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] 
               aria-label={t.tasks.download}
               aria-describedby={`artifact-${a.id}`}
               title={t.tasks.download}
-              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline-strong bg-surface-control text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-riso-yellow"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline-strong bg-surface-control text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus"
             >
               <DownloadIcon aria-hidden="true" className="size-4" strokeWidth={2.4} />
             </a>

@@ -45,19 +45,19 @@ export function CompactionNote({ agentId, run, className }: { agentId: string; r
   const command = compaction.instructions ? `/compact ${compaction.instructions}` : '/compact'
   const at = runStartedAt(run)
   return (
-    <div data-run-id={run.id} data-located data-compaction-run className={cn('flex flex-col items-start gap-2.5 rounded-panel border border-hairline bg-surface-subtle p-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow', className)}>
+    <div data-run-id={run.id} data-located data-compaction-run className={cn('flex flex-col items-start gap-2.5 rounded-panel border border-hairline bg-surface-subtle p-4', className)}>
       <span className="sr-only">{text.target}</span>
       <div className={receiptClass}>
         <span className="inline-flex min-w-0 items-center gap-1.5 px-[11px]">
           <TerminalIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.2} />
-          <code className="min-w-0 truncate font-mono font-semibold [[data-skin=plate]_&]:font-bold">{command}</code>
+          <code className="min-w-0 truncate font-mono font-semibold">{command}</code>
         </span>
         <span className={receiptPartClass}>{text.title}</span>
         <time dateTime={at} className={cn(receiptPartClass, 'font-mono')}>
           {t.chat.time(at)}
         </time>
       </div>
-      <div className="ml-1 flex flex-col gap-1.5 border-l border-hairline-strong py-0.5 pl-3 text-[13.5px] leading-[1.6] text-ink-700 [[data-skin=plate]_&]:border-l-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/40">
+      <div className="ml-1 flex flex-col gap-1.5 border-l border-hairline-strong py-0.5 pl-3 text-[13.5px] leading-[1.6] text-ink-700">
         <Outcome run={run} compaction={compaction} />
         <p className="text-[12.5px] text-ink-500">{text.notATurn}</p>
       </div>

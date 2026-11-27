@@ -29,24 +29,25 @@ export function shortModelName(model: { id: string; name?: string | null } | str
     return `${tier} ${claudeLegacy[1].replace(/-/g, '.')}`
   }
 
-  // OpenAI GPT / Codex / o-series: "gpt-5.4-codex" -> "GPT-5.4", "gpt-5-codex-mini" -> "GPT-5 Mini", "gpt-4.1-mini" -> "GPT-4.1 Mini"
-  const gpt = lower.match(/^gpt[-_\s]?(\d+(?:\.\d+)?[a-z]?)(?:[-_\s]+codex)?(?:[-_\s]+(mini|nano|pro|turbo|max))?$/)
+  // OpenAI GPT / Codex / o-series: keep "Codex" distinct from non-Codex variants (e.g. "gpt-5.4" vs "gpt-5.4-codex").
+  const gpt = lower.match(/^gpt[-_\s]?(\d+(?:\.\d+)?[a-z]?)(?:[-_\s]+(codex))?(?:[-_\s]+(mini|nano|pro|turbo|max))?$/)
   if (gpt) {
-    const base = `GPT-${gpt[1]}`
-    const suffix = gpt[2] ? ` ${gpt[2][0].toUpperCase() + gpt[2].slice(1)}` : ''
-    return `${base}${suffix}`
+    const parts = [`GPT-${gpt[1]}`]
+    if (gpt[2]) parts.push('Codex')
+    if (gpt[3]) parts.push(gpt[3][0].toUpperCase() + gpt[3].slice(1))
+    return parts.join(' ')
   }
   const oSeries = lower.match(/^(o\d+)(?:[-_\s]+(mini|pro|high))?$/)
   if (oSeries) {
     return oSeries[2] ? `${oSeries[1]}-${oSeries[2]}` : oSeries[1]
   }
 
-  // Google Gemini family: "gemini-2.5-pro" -> "Gemini 2.5 Pro", "gemini-2.5-flash-lite" -> "Gemini 2.5 Flash Lite"
+  // Google Gemini family: "gemini-2.5-pro" -> "Gemini 2.5 Pro", "gemini-2.5-flash-thinking" -> "Gemini 2.5 Flash Thinking"
   const gemini = lower.match(/^gemini[-_\s]+(\d+(?:\.\d+)?)[-_\s]+(.+)$/)
   if (gemini) {
     const variant = gemini[2]
       .split(/[-_\s]+/)
-      .filter((part) => part && part !== 'exp' && part !== 'thinking')
+      .filter((part) => part && part !== 'exp')
       .map((part) => part[0].toUpperCase() + part.slice(1))
       .join(' ')
     return variant ? `Gemini ${gemini[1]} ${variant}` : `Gemini ${gemini[1]}`
@@ -63,10 +64,12 @@ export function shortModelName(model: { id: string; name?: string | null } | str
     return `Kimi ${kimi[1].toUpperCase()}${tag}`
   }
 
-  // Qwen family: "qwen3-coder-plus" -> "Qwen3 Coder"
+  // Qwen family: keep variant suffixes distinct ("qwen3-coder-plus" vs "qwen3-coder-thinking").
   const qwen = lower.match(/^qwen(\d+(?:\.\d+)?)[-_\s]+(coder|max|plus|turbo|vl)(?:[-_\s]+(plus|instruct|thinking))?$/)
   if (qwen) {
-    return `Qwen${qwen[1]} ${qwen[2][0].toUpperCase() + qwen[2].slice(1)}`
+    const parts = [`Qwen${qwen[1]}`, qwen[2][0].toUpperCase() + qwen[2].slice(1)]
+    if (qwen[3]) parts.push(qwen[3][0].toUpperCase() + qwen[3].slice(1))
+    return parts.join(' ')
   }
 
   // GLM / Zhipu: "glm-4.7" -> "GLM-4.7"

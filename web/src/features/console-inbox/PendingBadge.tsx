@@ -18,10 +18,10 @@ export function PendingBadge({ counts, sticker = false, className }: { counts: P
       <span
         aria-hidden="true"
         className={cn(
-          'inline-flex items-center justify-center rounded-full font-semibold tabular-nums [[data-skin=plate]_&]:font-black',
+          'inline-flex items-center justify-center rounded-full font-semibold tabular-nums',
           sticker
-            ? 'riso-tilt h-5 min-w-5 px-1.5 text-[11px] leading-none text-cta-fg [--tilt-bg:var(--cta-bg)] [--tilt-shadow:none] [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:[--tilt-bg:var(--riso-pink)] [[data-skin=plate]_&]:[--tilt-shadow:inset_0_0_0_1.5px_var(--ink)] [[data-skin=plate]_&]:[--tilt:-6deg]'
-            : 'h-[21px] min-w-[21px] bg-cta-bg px-1.5 text-[12px] text-cta-fg [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink',
+            ? 'riso-tilt h-5 min-w-5 px-1.5 text-[11px] leading-none text-cta-fg [--tilt-bg:var(--cta-bg)] [--tilt-shadow:none]'
+            : 'h-[21px] min-w-[21px] bg-cta-bg px-1.5 text-[12px] text-cta-fg',
         )}
       >
         {total}

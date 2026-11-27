@@ -16,15 +16,15 @@ export function ConnectionStatus({ className, compact = false }: { className?: s
       aria-label={t.settings.health}
       className={cn(
         quiet
-          ? 'sr-only'
-          : 'inline-flex min-h-7 items-center gap-2 rounded-stamp text-[12px] font-medium [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-black',
+          ? 'sr-only min-w-0'
+          : 'inline-flex h-7 max-w-full min-w-0 items-center gap-2 rounded-stamp text-[12px] font-medium whitespace-nowrap',
         !quiet && style.chip,
         !quiet && className,
       )}
     >
-      <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full [[data-skin=plate]_&]:size-[9px]', style.dot)} />
-      <span>{style.label}</span>
-      <span className="font-mono text-[11px] font-normal opacity-80 [[data-skin=plate]_&]:text-[11.5px] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:opacity-100">
+      <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', style.dot)} />
+      <span className="shrink-0 whitespace-nowrap">{style.label}</span>
+      <span title={host} className="min-w-0 truncate font-mono text-[11px] font-normal opacity-80">
         {host}
       </span>
     </div>

@@ -4,14 +4,15 @@ import { ChevronRight, PanelLeftClose, Settings } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { useInboxPending, type PendingCounts } from '@/api/console-inbox'
 import { tasksPath, useProjectTaskCounts } from '@/api/tasks'
-import { RunningTaskBadge } from '@/features/tasks/RunningTaskBadge'
 import { BrandWordmark } from '@/components/BrandWordmark'
 import { NavIcon, type NavIconName } from '@/components/NavIcon'
 import { AgentNavGroup } from '@/features/agents/AgentList'
 import { CreateAgentDialog } from '@/features/agents/CreateAgentDialog'
+import { mac } from '@/features/chat/composer-style'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
 import { hasInsetTitleBar } from '@/features/desktop/desktop'
 import { ProjectAvatar, ScopeSwitcher } from '@/features/projects/ScopeSwitcher'
+import { RunningTaskBadge } from '@/features/tasks/RunningTaskBadge'
 import { t } from '@/i18n'
 import { navGroupClass, navRowClass } from '@/lib/nav-row'
 import { lastScope, overviewPath, projectBase, type ResolvedShellScope, type Scope } from '@/lib/scope'
@@ -52,7 +53,7 @@ function NavItem({ to, icon, label, current, badge, onClick, compact = false }: 
   return (
     <Link to={to} onClick={onClick} aria-current={current ? 'page' : undefined} className={navRowClass(current, compact ? 'compact' : 'nav')}>
       <NavIcon name={icon} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span title={label} className="min-w-0 flex-1 truncate">{label}</span>
       {badge}
     </Link>
   )
@@ -71,7 +72,7 @@ function place(pathname: string) {
   }
 }
 
-// The “项目” (Projects) group in the global scope: clicking a project switches to its scope (opens its overview).
+// The Projects group in the global scope: clicking a project switches to its scope (opens its overview).
 function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | undefined; search: string }) {
   const headingId = useId()
   const keyword = search.trim().toLowerCase()
@@ -79,7 +80,9 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <h2 id={headingId} className={navGroupClass}>
-        {text.groups.projects}
+        <span title={text.groups.projects} className="min-w-0 truncate">
+          {text.groups.projects}
+        </span>
       </h2>
       {!projects && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{t.common.loading}</p>}
       {projects?.length === 0 && <p className="px-2.5 text-[12.5px] text-sidebar-muted">{text.noProjects}</p>}
@@ -97,7 +100,7 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
               className={navRowClass(false, 'nav')}
             >
               <ProjectAvatar id={project.id} name={project.name} size="xs" />
-              <span className="min-w-0 flex-1 truncate">{project.name}</span>
+              <span title={project.name} className="min-w-0 flex-1 truncate">{project.name}</span>
             </Link>
           </li>
         ))}
@@ -111,23 +114,8 @@ const sum = (rows: PendingCounts[]): PendingCounts => ({
   unread: rows.reduce((total, row) => total + row.unread, 0),
 })
 
-// Decoration in the empty space below the list in Plate skin: a halftone-dot circle sticking out past the left edge, with two small dots
-// beside it, one pink and one yellow. Hidden in mono skin and whenever the remaining height cannot fit the whole decoration.
-function SidebarDeco() {
-  return (
-    <div className="sidebar-deco-slot hidden [[data-skin=plate]_&]:block">
-      <div aria-hidden="true" data-sidebar-deco className="sidebar-deco pointer-events-none absolute bottom-3 left-0 h-[178px] w-full max-nav:hidden">
-        <span className="absolute bottom-0 -left-[72px] size-[178px] rounded-full bg-[radial-gradient(rgb(255_255_255/.36)_2.2px,transparent_2.6px)] bg-size-[11px_11px]" />
-        <span className="absolute bottom-[126px] left-[108px] size-[34px] rounded-full border-2 border-ink bg-riso-pink" />
-        <span className="absolute bottom-[108px] left-[132px] size-5 rounded-full border-2 border-ink bg-riso-yellow" />
-      </div>
-    </div>
-  )
-}
-
-// The sidebar: semantic chrome tokens in mono, brand-blue halftone in Plate.
-// - Top: 48px header bar (on macOS inset title bar, collapse toggle + brand sit directly right of traffic lights so the toggle never shifts
-//   when collapsing/expanding) + compact search / ⌘K bar.
+// The sidebar: themed via semantic sidebar tokens.
+// - Top: 48px header bar (on macOS inset title bar, collapse toggle + brand sit directly right of traffic lights) + compact filter / ⌘K bar.
 // - Middle (scrollable): current scope entries, Agents list, and a collapsible Platform group (Plugins, Skills, Stats, Identities).
 // - Bottom (fixed single-row dock): upward-opening ScopeSwitcher (carrying the live connection dot) and Settings button,
 //   plus an expanded connection status pill whenever degraded or unreachable.
@@ -165,6 +153,7 @@ export function Sidebar({
   const running = useProjectTaskCounts(project?.id).data?.running
   const searchLabel = scope.kind === 'project' ? text.search.project : text.search.global
   const desktop = hasInsetTitleBar()
+  const paletteShortcut = text.paletteShortcut(mac)
 
   const keyword = search.trim().toLowerCase()
   const matchingPlatform = keyword ? platformEntries.filter((entry) => entry.label.toLowerCase().includes(keyword)) : platformEntries
@@ -192,9 +181,9 @@ export function Sidebar({
     <button
       type="button"
       aria-label={text.collapseNav}
-      title={`${text.collapseNav} (⌘B)`}
+      title={`${text.collapseNav} (${text.sidebarShortcut(mac)})`}
       onClick={onCollapse}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket text-sidebar-muted transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus [[data-skin=plate]_&]:text-white/85 [[data-skin=plate]_&]:hover:bg-white/15 [[data-skin=plate]_&]:hover:text-white"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket text-sidebar-muted transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus"
     >
       <PanelLeftClose className="size-4" strokeWidth={1.8} />
     </button>
@@ -205,7 +194,7 @@ export function Sidebar({
       type="button"
       aria-label={text.closeMenu}
       onClick={onClose}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket border border-sidebar-border bg-sidebar-control-bg text-sidebar-control-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus"
     >
       <NavIcon name="close" className="size-3.5 [stroke-width:2.6]" />
     </button>
@@ -214,7 +203,7 @@ export function Sidebar({
   return (
     <nav
       aria-label={text.nav}
-      className="riso-halftone flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar-bg text-sidebar-fg [[data-skin=plate]_&]:border-r-0"
+      className="riso-halftone flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar-bg text-sidebar-fg"
     >
       {/* Top 48px bar: on macOS inset title bar, place the collapse/close toggle + brand immediately to the right of the traffic lights. */}
       <div
@@ -238,10 +227,10 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Compact search / ⌘K trigger */}
+      {/* Compact inline sidebar filter with quick command-palette trigger */}
       <div className="shrink-0 px-3 pb-2.5">
-        <div className="flex h-[32px] items-center gap-2 rounded-ticket border border-sidebar-border bg-surface-control px-2.5 text-sidebar-fg transition-colors focus-within:border-ink/30 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.42] [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:focus-within:shadow-focus">
-          <NavIcon name="search" className="size-3.5 text-sidebar-muted [[data-skin=plate]_&]:text-white" />
+        <div className="flex h-[32px] items-center gap-2 rounded-ticket border border-sidebar-border bg-sidebar-control-bg px-2.5 text-sidebar-control-fg transition-colors focus-within:border-hairline-strong">
+          <NavIcon name="search" className="size-3.5 shrink-0 text-sidebar-muted" />
           <input
             ref={searchRef}
             type="search"
@@ -249,24 +238,24 @@ export function Sidebar({
             placeholder={text.search.placeholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-fg outline-none placeholder:text-sidebar-muted [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:placeholder:text-white/80"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-control-fg outline-none placeholder:text-sidebar-muted"
           />
           {onOpenPalette ? (
             <button
               type="button"
               aria-label={text.palette.open}
-              title={`${text.palette.title} (${text.search.shortcut})`}
+              title={`${text.palette.title} (${paletteShortcut})`}
               onClick={onOpenPalette}
-              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted transition-colors outline-none hover:text-sidebar-fg focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/45 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:text-white"
+              className="shrink-0 cursor-pointer rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted transition-colors outline-none hover:text-sidebar-fg focus-visible:shadow-focus"
             >
-              <kbd className="font-sans">{text.search.shortcut}</kbd>
+              <kbd className="font-sans">{paletteShortcut}</kbd>
             </button>
           ) : (
             <kbd
               aria-hidden="true"
-              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted [[data-skin=plate]_&]:border-white/45 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:text-white"
+              className="shrink-0 rounded-stamp border border-sidebar-border bg-sidebar-hover px-[5px] font-sans text-[11px] leading-4 text-sidebar-muted"
             >
-              {text.search.shortcut}
+              {paletteShortcut}
             </kbd>
           )}
         </div>
@@ -274,7 +263,7 @@ export function Sidebar({
 
       {/* Scrollable main navigation: current scope entries, Agents, and collapsible Platform group. The container is positioned so sr-only
           descriptions inside "needs you" badges scroll with the list instead of stretching the page. */}
-      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3 pt-0.5 pb-3 [scrollbar-color:var(--hairline-strong)_transparent] [scrollbar-width:thin] [[data-skin=plate]_&]:[scrollbar-color:rgb(255_255_255/.45)_transparent]">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3 pt-0.5 pb-3 [scrollbar-color:var(--hairline-strong)_transparent] [scrollbar-width:thin]">
         <NavItem
           to={overviewPath(scope)}
           icon="overview"
@@ -290,7 +279,7 @@ export function Sidebar({
               label={text.items.tasks}
               current={here.section === 'tasks'}
               badge={
-                // The running count comes first and the “待你回复” (Needs your reply) sticker after it; when neither is present the container
+                // The running count comes first and the "Needs your reply" sticker after it; when neither is present the container
                 // takes no space.
                 <span className="flex shrink-0 items-center gap-1.5 empty:hidden">
                   <RunningTaskBadge count={running} />
@@ -331,17 +320,15 @@ export function Sidebar({
           </>
         )}
 
-        <SidebarDeco />
-
         {/* Collapsible Platform section pinned to the bottom of the scroll area, expanded by default. */}
         <section className="mt-auto pt-3">
-          <div className="border-t border-sidebar-border pt-2 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-white/30">
+          <div className="border-t border-sidebar-border pt-2">
             <button
               type="button"
               aria-expanded={platformExpanded}
               aria-controls={platformPanelId}
               onClick={togglePlatform}
-              className="flex w-full items-center gap-1.5 rounded-ticket px-2 py-1.5 text-[11px] font-medium tracking-wider text-sidebar-group uppercase transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus [[data-skin=plate]_&]:text-[11.5px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white/85 [[data-skin=plate]_&]:hover:bg-white/12 [[data-skin=plate]_&]:hover:text-white"
+              className="flex w-full items-center gap-1.5 rounded-ticket px-2 py-1.5 text-[11px] font-medium tracking-wider text-sidebar-group uppercase transition-colors outline-none hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:shadow-focus"
             >
               <ChevronRight
                 className={cn('size-3.5 shrink-0 transition-transform duration-150', platformExpanded && 'rotate-90')}
@@ -349,7 +336,7 @@ export function Sidebar({
               />
               <span className="flex-1 truncate text-left">{text.groups.platform}</span>
               {!platformExpanded && (
-                <span className="text-[10.5px] font-normal text-sidebar-muted tabular-nums [[data-skin=plate]_&]:text-white/75">
+                <span className="text-[10.5px] font-normal text-sidebar-muted tabular-nums">
                   {platformEntries.length}
                 </span>
               )}
@@ -373,9 +360,9 @@ export function Sidebar({
       </div>
 
       {/* Fixed single-row bottom dock: upward-opening scope switcher (with live connection dot) + Settings gear. */}
-      <div className="flex shrink-0 flex-col gap-1.5 border-t border-sidebar-border px-3 py-2.5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-white/35">
+      <div className="flex min-w-0 shrink-0 flex-col gap-1.5 border-t border-sidebar-border px-3 py-2.5">
         <ConnectionStatus compact className="w-full" />
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <ScopeSwitcher
             scope={scope}
             projects={projects}
@@ -388,12 +375,12 @@ export function Sidebar({
             to="/settings"
             aria-current={here.global === 'settings' ? 'page' : undefined}
             aria-label={text.items.settings}
-            title={`${text.items.settings} (${text.settingsShortcut})`}
+            title={`${text.items.settings} (${text.settingsShortcut(mac)})`}
             className={cn(
-              'inline-flex size-8 shrink-0 items-center justify-center rounded-ticket border-0 transition-colors outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:size-10 [[data-skin=plate]_&]:border',
+              'inline-flex size-8 shrink-0 items-center justify-center rounded-ticket border-0 transition-colors outline-none focus-visible:shadow-focus',
               here.global === 'settings'
-                ? 'bg-sidebar-active-bg text-sidebar-active-fg [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'
-                : 'bg-transparent text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg [[data-skin=plate]_&]:border-white/30 [[data-skin=plate]_&]:bg-white/10 [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:bg-white/18',
+                ? 'bg-sidebar-active-bg text-sidebar-active-fg shadow-surface'
+                : 'bg-transparent text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg',
             )}
           >
             <Settings className="size-4" strokeWidth={1.8} />

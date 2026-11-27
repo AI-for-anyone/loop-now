@@ -434,6 +434,8 @@ func TestLeavesOutScratchAndLoopNowFolders(t *testing.T) {
 		filepath.Join(tmp, "build"),
 		"/Users/Shared/loop-now-desktop/default/agents/0199a6a2-1111-7111-8111-111111111111/workspace",
 		"/elsewhere/trial/agents/0199a6a2-2222-7222-8222-222222222222/workspace/sub",
+		"/Users/Shared/loop-now-desktop/default/worktrees/0199a6a2-4444-7444-8444-444444444444/loop-now",
+		"/elsewhere/trial/worktrees/0199a6a2-5555-7555-8555-555555555555/app/web/src",
 	} {
 		f.claude(fmt.Sprintf("t%07d-1111-4111-8111-111111111111", i), dir, time.Hour, "hello")
 	}

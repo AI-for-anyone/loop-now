@@ -90,6 +90,12 @@ func (s *Service) AgentFolder(ctx context.Context, agentID uuid.UUID) (Folder, e
 	return Folder{Dir: AgentWorkspace(s.O.WorkRoot, agentID), Trash: filepath.Join(AgentRoot(s.O.WorkRoot, agentID), ".trash")}, nil
 }
 
+// TaskInstanceFolder returns the folder of a task instance (the copy of its Agent's folder), for reading only: it has
+// no trash, is never created by a read, and is gone once the task ended and it was reclaimed.
+func (s *Service) TaskInstanceFolder(runtimeID uuid.UUID) Folder {
+	return Folder{Dir: AgentWorkspace(s.O.WorkRoot, runtimeID), Existing: true}
+}
+
 // ProjectContextFolder returns the context folder of a project that is not deleted (created on first use if it does not
 // exist).
 func (s *Service) ProjectContextFolder(ctx context.Context, projectID uuid.UUID) (Folder, error) {

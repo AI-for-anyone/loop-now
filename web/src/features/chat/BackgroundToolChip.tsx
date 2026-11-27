@@ -1,0 +1,161 @@
+import { LoaderCircleIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Popover as PopoverPrimitive } from 'radix-ui'
+import type { Schemas } from '@/api/client'
+import { badgeVariants } from '@/components/ui/badge'
+import { t } from '@/i18n'
+import { useNow } from '@/lib/use-now'
+import { cn } from '@/lib/utils'
+import { BackgroundKindIcon } from './BackgroundTasks'
+import { elapsedClock } from './time'
+
+type Task = Schemas['BackgroundTask']
+
+// The chip's colors by how the task stands, as the other tool chips: running blue, finished green, failed red, stopped or unknown grey.
+const TONE: Record<Task['status'], string> = {
+  running: 'bg-tint-blue text-ink',
+  completed: 'bg-tint-green text-green-text',
+  failed: 'bg-tint-red text-red-text',
+  stopped: 'bg-surface-subtle text-ink-700',
+  unknown: 'bg-surface-subtle text-ink-700',
+}
+
+// What else is known about an ended task: its exit code, how long it took, and why it was stopped. An unknown end has none of these
+// (its end time is only when Loop Now found it gone); it says why instead.
+function endFacts(task: Task): string[] {
+  const card = t.background.card
+  if (task.status === 'unknown') return [card.unknownHint]
+  const took = task.endedAt ? Date.parse(task.endedAt) - Date.parse(task.startedAt) : NaN
+  return [
+    task.exitCode !== null ? card.exitCode(task.exitCode) : null,
+    Number.isFinite(took) && took >= 0 ? card.took(t.overview.elapsed(took)) : null,
+    task.stopReason ? card.stopReason[task.stopReason] : null,
+  ].filter((fact): fact is string => fact !== null)
+}
+
+const statusText = (task: Task) => (task.status === 'running' && task.stopRequestedAt ? t.background.stopping : t.background.card.status[task.status])
+
+// While it runs, the details say for how long; this is the only clock (the chip has none), and it ticks only while they are open.
+function RunningFor({ task }: { task: Task }) {
+  const now = useNow(1000)
+  return <span className="tabular-nums">{t.background.elapsedLabel(elapsedClock(now - Date.parse(task.startedAt)))}</span>
+}
+
+// Header line of a background task's details: its kind icon, tool name (or kind), and status pill.
+export function BackgroundTaskHead({ task, name }: { task: Task; name: string }) {
+  return (
+    <>
+      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px] border border-hairline bg-surface-elevated text-ink">
+        <BackgroundKindIcon kind={task.kind} className="size-3.5" />
+      </span>
+      <span className="font-mono text-[13px] font-semibold">{name}</span>
+      <span className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status])}>{statusText(task)}</span>
+    </>
+  )
+}
+
+// Body of a background task's details: what it runs, how long it has run or how it ended, and its last output.
+export function BackgroundTaskBody({ task }: { task: Task }) {
+  const facts = task.status === 'running' ? [] : endFacts(task)
+  return (
+    <>
+      <p className="font-mono text-[13px] leading-[1.5] font-medium [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">{task.label}</p>
+      {(task.status === 'running' || facts.length > 0) && (
+        <p className="flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 font-medium text-ink-500">
+          {task.status === 'running' ? (
+            <RunningFor task={task} />
+          ) : (
+            facts.map((fact, index) => (
+              <span key={index} className="inline-flex gap-x-1.5">
+                {fact}
+                {index < facts.length - 1 && <span aria-hidden="true">{t.chat.metaSeparator}</span>}
+              </span>
+            ))
+          )}
+        </p>
+      )}
+      {task.status !== 'running' && task.output && (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[12.5px] font-semibold text-ink">{t.background.card.outputTail}</span>
+          <pre className="riso-halftone max-h-64 min-w-0 overflow-auto rounded-input border border-code-border bg-code-bg px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere]">
+            {task.output}
+          </pre>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Popover frame shared by a single task chip and the "+N" overflow chip in follow-up headings.
+export function BackgroundTaskPopover({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+        aria-label={label}
+        className="z-50 flex max-h-[min(460px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
+      >
+        {children}
+      </PopoverPrimitive.Content>
+    </PopoverPrimitive.Portal>
+  )
+}
+
+// The details of a background tool, opened from its chip: what it runs, how long it has run or how it ended, and its last output.
+function Details({ task, name }: { task: Task; name: string }) {
+  return (
+    <>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface-subtle px-4 py-2.5">
+        <BackgroundTaskHead task={task} name={name} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
+        <BackgroundTaskBody task={task} />
+      </div>
+    </>
+  )
+}
+
+// One tool of a reply that went on in the background (a command, a sub-agent), as a chip among the reply's other tools:
+// with a spinner while it runs, then how it ended. The details are behind a click.
+export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string }) {
+  const name = toolName ?? t.background.kind[task.kind]
+  const status = statusText(task)
+  return (
+    <PopoverPrimitive.Root>
+      <PopoverPrimitive.Trigger
+        type="button"
+        data-background-tool={task.id}
+        data-status={task.status}
+        aria-label={t.background.card.chipLabel(name, status, task.label)}
+        title={task.label}
+        className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status], 'cursor-pointer outline-none hover:border-hairline-strong focus-visible:shadow-focus aria-expanded:border-ink')}
+      >
+        {task.status === 'running' && (
+          <>
+            <LoaderCircleIcon aria-hidden="true" data-slot="tool-spinner" className="riso-spin motion-reduce:hidden motion-reduce:animate-none" />
+            <span aria-hidden="true" className="hidden motion-reduce:inline">{t.chat.toolStaticMark}</span>
+          </>
+        )}
+        {/* The chip lines up with the reply's other tool chips by its text, not by the spinner in front of it. */}
+        <span className="self-baseline font-mono text-ink">{name}</span>
+        <span>{status}</span>
+      </PopoverPrimitive.Trigger>
+      <BackgroundTaskPopover label={t.background.card.label}>
+        <Details task={task} name={name} />
+      </BackgroundTaskPopover>
+    </PopoverPrimitive.Root>
+  )
+}
+
+// The background tools of a reply, in the order they started, as items of the reply's tool list.
+export function BackgroundToolChips({ tasks, toolNames }: { tasks: Task[]; toolNames?: ReadonlyMap<string, string> }) {
+  const ordered = [...tasks].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+  return ordered.map((task) => (
+    <li key={task.id}>
+      <BackgroundToolChip task={task} toolName={task.toolCallId ? toolNames?.get(task.toolCallId) : undefined} />
+    </li>
+  ))
+}

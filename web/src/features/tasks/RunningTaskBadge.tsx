@@ -14,7 +14,7 @@ export function RunningTaskBadge({ count, className }: { count: number | undefin
       <span className="sr-only">{label}</span>
       <span
         aria-hidden="true"
-        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-hairline-strong bg-surface-control px-1.5 text-[11px] leading-none font-semibold text-ink tabular-nums [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]"
+        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-hairline-strong bg-surface-control px-1.5 text-[11px] leading-none font-semibold text-ink tabular-nums"
       >
         {count}
       </span>

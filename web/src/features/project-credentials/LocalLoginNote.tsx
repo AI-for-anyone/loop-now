@@ -8,9 +8,9 @@ import { t } from '@/i18n'
 // for a platform Agent, its own login); if there isn't, warn prominently that starting will fail, and link to the local mode settings.
 export function LocalLoginNote({ state, owner = 'project' }: { state: NonNullable<Schemas['ModelAuthState']['localLogin']>; owner?: 'project' | 'agent' }) {
   const copy = t.credentials.agentSelection.localLogin
-  if (state === 'active') return <p role="note" className="min-w-0 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13.5px] [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">{owner === 'agent' ? copy.activeOwn : copy.active}</p>
-  return <div role="alert" className="grid min-w-0 gap-1.5 rounded-input border border-red/25 bg-tint-red px-3 py-2 text-[13.5px] font-medium text-red-text [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">
+  if (state === 'active') return <p role="note" className="min-w-0 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{owner === 'agent' ? copy.activeOwn : copy.active}</p>
+  return <div role="alert" className="grid min-w-0 gap-1.5 rounded-input border border-red/25 bg-tint-red px-3 py-2 text-[13.5px] font-medium text-red-text [overflow-wrap:anywhere]">
     <p>{copy.missing}</p>
-    <Link to={localModeSettingsPath} className="justify-self-start text-ink underline outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:text-riso-blue">{copy.settings}</Link>
+    <Link to={localModeSettingsPath} className="justify-self-start text-ink underline outline-none focus-visible:shadow-focus">{copy.settings}</Link>
   </div>
 }

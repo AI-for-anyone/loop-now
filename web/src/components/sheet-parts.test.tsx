@@ -11,21 +11,13 @@ import { StickyNote } from './StickyNote'
 
 // Shared parts of the "printed sheet" redesign: sheet, page body, index tab / sub-nav, stub and ruler, numbered section heading, yellow sticky note.
 describe('Sheet', () => {
-  it('uses clean borderless canvas in mono skin while preserving the paper sheet and shadow in Plate skin', () => {
+  it('uses a clean full-bleed canvas with no outer margin, thick border, rounded corners or drop shadow', () => {
     render(<Sheet data-testid="sheet">Body</Sheet>)
     const sheet = screen.getByTestId('sheet')
     expect(sheet).toHaveTextContent('Body')
     expect(sheet).toHaveAttribute('data-sheet')
     expect(sheet).toHaveClass('relative', 'flex', 'min-h-0', 'flex-1', 'flex-col', 'bg-surface-canvas', 'overflow-hidden', 'riso-grain')
-    expect(sheet).not.toHaveClass('border-t')
-    expect(sheet).toHaveClass(
-      '[[data-skin=plate]_&]:bg-paper-raised',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:rounded-panel',
-      '[[data-skin=plate]_&]:shadow-print-dialog',
-      '[[data-skin=plate]_&]:mr-1.5',
-    )
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
   })
 
   it('scrollbars in the sheet use riso-scrollbar', () => {
@@ -84,29 +76,23 @@ describe('Index tabs', () => {
     expect(within(nav).getByRole('link', { name: 'Chat' })).not.toHaveAttribute('aria-current')
   })
 
-  it('uses hairline bottom-border underline tabs in mono skin and preserves physical yellow/beige folder tabs in Plate skin', () => {
+  it('uses hairline bottom-border underline tabs with primary ink for the active tab', () => {
     tabs('/chat')
     const current = screen.getByRole('link', { name: 'Chat' })
     const other = screen.getByRole('link', { name: 'Config' })
     expect(current).toHaveClass('border-b-2', 'border-ink', 'font-semibold', 'text-ink')
-    expect(current).toHaveClass('[[data-skin=plate]_&]:h-10', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-b-0')
     expect(other).toHaveClass('border-b-2', 'border-transparent', 'text-ink-500')
-    expect(other).toHaveClass('[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-b-0')
   })
 
   it('the tabs scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
     expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('h-9', 'overflow-x-auto', 'no-scrollbar', 'px-4', 'sm:px-6')
-    expect(screen.getByRole('link', { name: 'Chat' })).toHaveClass('[[data-skin=plate]_&]:max-sm:px-2.5')
-    expect(screen.getByRole('link', { name: 'Config' })).toHaveClass('[[data-skin=plate]_&]:max-sm:px-2.5')
   })
 
   it('button-style tabs (status filters, categories) use the same styles', () => {
     expect(indexTabClass(true)).toContain('border-ink')
-    expect(indexTabClass(true)).toContain('[[data-skin=plate]_&]:bg-riso-yellow')
     expect(indexTabClass(false)).toContain('border-transparent')
-    expect(indexTabClass(false)).toContain('[[data-skin=plate]_&]:bg-paper-tab')
-    expect(indexTabClass(true)).not.toContain('bg-paper-tab')
+    expect(indexTabClass(true)).not.toContain('border-transparent')
   })
 
   it('SubNav supports route links with counts', () => {
@@ -178,7 +164,7 @@ describe('Index tabs', () => {
 })
 
 describe('Stub and ruler', () => {
-  it('the stub has a hairline separator in mono skin (dashed in Plate skin) and is hidden on narrow screens', () => {
+  it('the stub has a hairline separator and is hidden on narrow screens', () => {
     render(
       <Stub label="Overview" data-testid="stub">
         <span>4 files</span>
@@ -186,7 +172,7 @@ describe('Stub and ruler', () => {
     )
     const stub = screen.getByTestId('stub')
     expect(stub).toHaveTextContent('Overview4 files')
-    expect(stub).toHaveClass('border-l', 'border-hairline', 'max-nav:hidden', '[[data-skin=plate]_&]:border-l-2', '[[data-skin=plate]_&]:border-dashed')
+    expect(stub).toHaveClass('border-l', 'border-hairline', 'max-nav:hidden')
     expect(screen.getByText('Overview')).not.toHaveAttribute('aria-hidden')
   })
 
@@ -201,7 +187,12 @@ describe('Stub and ruler', () => {
     expect(within(nav).getByRole('button', { name: 'Turn 1' })).toBeInTheDocument()
   })
 
-  it('the ruler ticks and mark are decoration; mix-blend-multiply is scoped to Plate skin only', () => {
+  it('the stub accepts labelClassName for narrow rulers such as the 40px turn ruler', () => {
+    render(<Stub label="TURNS" labelClassName="text-[9px] indent-0" className="w-10" />)
+    expect(screen.getByText('TURNS')).toHaveClass('text-[9px]', 'indent-0')
+  })
+
+  it('the ruler ticks and mark are decoration, hidden from screen readers', () => {
     render(
       <>
         <RulerTicks data-testid="ticks" />
@@ -213,22 +204,22 @@ describe('Stub and ruler', () => {
     expect(mark).toHaveAttribute('aria-hidden', 'true')
     expect(mark).toHaveStyle({ top: '12px', height: '40px' })
     const band = mark.querySelector('[data-ruler-band]')!
-    expect(band).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow', '[[data-skin=plate]_&]:mix-blend-multiply')
+    expect(band).toHaveClass('bg-surface-active')
     expect(band).not.toHaveClass('mix-blend-multiply')
-    expect(mark.querySelector('[data-ruler-arrow]')).toHaveClass('bg-ink', '[[data-skin=plate]_&]:border-l-riso-pink')
+    expect(mark.querySelector('[data-ruler-arrow]')).toHaveClass('bg-ink')
   })
 })
 
 describe('Numbered section', () => {
-  it('the section number is decorative tabular mono in mono skin and stroked outline in Plate skin', () => {
+  it('the section number is decorative tabular mono', () => {
     render(<HollowNumber data-testid="number">25</HollowNumber>)
     const number = screen.getByTestId('number')
     expect(number).toHaveTextContent('25')
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('max-nav:hidden', 'tabular-nums', 'text-ink-500', '[[data-skin=plate]_&]:text-transparent')
+    expect(number).toHaveClass('max-nav:hidden', 'tabular-nums', 'text-ink-500')
   })
 
-  it('a section is a region named by its title: number hidden in mono skin for clean edge alignment, compact 14.5px semibold heading', () => {
+  it('a section is a region named by its title with a compact 14.5px semibold heading', () => {
     render(
       <NumberedSection number={3} title="Local directories">
         <p>Section content</p>
@@ -238,12 +229,10 @@ describe('Numbered section', () => {
     expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass(
       'text-[14.5px]',
       'font-semibold',
-      'riso-marker',
-      '[[data-skin=plate]_&]:font-display-cn',
     )
     const num = within(region).getByText('03')
     expect(num).toHaveAttribute('aria-hidden', 'true')
-    expect(num).toHaveClass('hidden', '[[data-skin=plate]_&]:block')
+    expect(num).toHaveClass('hidden')
     expect(region).toHaveTextContent('Section content')
   })
 
@@ -264,21 +253,16 @@ describe('Numbered section', () => {
         <p>Section content</p>
       </NumberedSection>,
     )
-    expect(screen.getByRole('region', { name: 'Usage' })).toHaveClass(
-      'border-t',
-      'border-hairline',
-      '[[data-skin=plate]_&]:border-t-2',
-      '[[data-skin=plate]_&]:border-dashed',
-    )
+    expect(screen.getByRole('region', { name: 'Usage' })).toHaveClass('border-t', 'border-hairline')
   })
 })
 
 describe('Sticky note', () => {
-  it('is a note (role=note) with clean hairline callout styling in mono skin and riso-tilt preserved for Plate skin', () => {
+  it('is a note (role=note) with clean hairline callout styling', () => {
     render(<StickyNote>Changes take effect from the next message.</StickyNote>)
     const note = screen.getByRole('note')
     expect(note).toHaveTextContent('Changes take effect from the next message.')
-    expect(note).toHaveClass('border', 'border-hairline', 'bg-surface-subtle', 'rounded-card', 'riso-tilt')
+    expect(note).toHaveClass('border', 'border-hairline', 'bg-surface-subtle', 'rounded-card')
     expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 })

@@ -44,7 +44,7 @@ const LEGACY_HASH_REDIRECT: Record<string, string> = {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{label}</dt>
+      <dt className="font-medium text-ink-500">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </>
   )
@@ -96,7 +96,7 @@ function RuntimesAndModelsTab({ hash }: { hash: string }) {
 
   return (
     <>
-      <div className="flex shrink-0 items-center border-b border-hairline px-4 py-2 sm:px-6 [[data-skin=plate]_&]:border-ink/15">
+      <div className="flex shrink-0 items-center border-b border-hairline px-4 py-2 sm:px-6">
         <ToggleGroup
           aria-label={t.settings.runtimesViews.label}
           className={cn(segmentedClass, 'h-8')}
@@ -150,7 +150,7 @@ function WorkspaceAndLocalModeTab({ hash }: { hash: string }) {
 
   return (
     <>
-      <div className="flex shrink-0 items-center border-b border-hairline px-4 py-2 sm:px-6 [[data-skin=plate]_&]:border-ink/15">
+      <div className="flex shrink-0 items-center border-b border-hairline px-4 py-2 sm:px-6">
         <ToggleGroup
           aria-label={t.settings.workspaceViews.label}
           className={cn(segmentedClass, 'h-8')}
@@ -176,7 +176,7 @@ function WorkspaceAndLocalModeTab({ hash }: { hash: string }) {
           <section
             id="settings-folder"
             aria-label={t.folders.global.title}
-            className="flex min-h-0 flex-1 flex-col [&>p]:shrink-0 [&>p]:border-b [&>p]:border-hairline [&>p]:px-4 [&>p]:py-2.5 [&>p]:sm:px-6 [[data-skin=plate]_&>p]:border-ink/15 [&>[data-file-manager]]:!h-auto [&>[data-file-manager]]:min-h-0 [&>[data-file-manager]]:flex-1 [&>[data-file-manager]]:!rounded-none [&>[data-file-manager]]:!border-0"
+            className="flex min-h-0 flex-1 flex-col [&>p]:shrink-0 [&>p]:border-b [&>p]:border-hairline [&>p]:px-4 [&>p]:py-2.5 [&>p]:sm:px-6 [&>[data-file-manager]]:!h-auto [&>[data-file-manager]]:min-h-0 [&>[data-file-manager]]:flex-1 [&>[data-file-manager]]:!rounded-none [&>[data-file-manager]]:!border-0"
           >
             <ContextFolderBody scope={{ kind: 'global' }} />
           </section>
@@ -230,7 +230,7 @@ export function SettingsPage() {
         <PageHeader crumbs={[{ label: t.shell.global }]} title={t.settings.title}>
           {version && <span className="font-mono text-[12px] text-ink-700">{t.settings.product(version)}</span>}
           {health.data && (
-            <span className={cn('inline-flex items-center gap-1.5 text-[12px] font-medium [[data-skin=plate]_&]:font-black', health.data.ok ? 'text-green-text' : 'text-red-text')}>
+            <span className={cn('inline-flex items-center gap-1.5 text-[12px] font-medium', health.data.ok ?'text-green-text':'text-red-text')}>
               <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', health.data.ok ? 'bg-green' : 'bg-red')} />
               {health.data.ok ? t.settings.serverStatus.ok : t.settings.serverStatus.degraded}
             </span>
@@ -268,10 +268,10 @@ export function SettingsPage() {
               <SheetSection id="settings-server" titleId="settings-server-title" index={0} title={t.settings.server}>
                 <dl className="grid grid-cols-[minmax(110px,140px)_minmax(0,1fr)] gap-x-[18px] gap-y-3.5 text-[14.5px]">
                   <Row label={t.settings.organization}>
-                    <span className="font-medium [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{context.data?.organization.name ?? '—'}</span>
+                    <span className="font-medium [overflow-wrap:anywhere]">{context.data?.organization.name ?? '—'}</span>
                   </Row>
                   <Row label={t.settings.project}>
-                    <span className="font-medium [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{context.data?.project.name ?? '—'}</span>
+                    <span className="font-medium [overflow-wrap:anywhere]">{context.data?.project.name ?? '—'}</span>
                   </Row>
                   <Row label={t.settings.apiBase}>
                     <span className="font-mono text-[13.5px] break-all">{absoluteApiBase()}</span>
@@ -302,11 +302,11 @@ export function SettingsPage() {
               <SheetSection id="settings-cli-templates" titleId="settings-cli-templates-title" index={1} title={t.settings.cliTemplates}>
                 {templates.isError && <ErrorAlert error={templates.error} />}
                 {/* One row per template: crisp hairline rules in mono skin, solid top + dashed rows in Plate skin. */}
-                <div className="flex flex-col border-t border-hairline-strong [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink">
+                <div className="flex flex-col border-t border-hairline-strong">
                   {templates.data?.templates.map((template) => (
-                    <section key={template.name} className="flex flex-col gap-2.5 border-b border-hairline px-1 py-3 [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25" aria-label={template.name}>
+                    <section key={template.name} className="flex flex-col gap-2.5 border-b border-hairline px-1 py-3" aria-label={template.name}>
                       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-                        <span className="font-mono text-[14px] font-semibold [[data-skin=plate]_&]:text-[14.5px] [[data-skin=plate]_&]:font-bold">{template.name}</span>
+                        <span className="font-mono text-[14px] font-semibold">{template.name}</span>
                         <span className="text-[12.5px] text-ink-700">
                           {t.settings.version} <span className="font-mono text-ink">{template.version}</span>
                         </span>

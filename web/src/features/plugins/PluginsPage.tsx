@@ -55,13 +55,13 @@ function HostStrip({
   return (
     <section
       aria-label={text.host.label}
-      className="flex min-w-0 items-center gap-2.5 rounded-ticket border border-hairline-strong bg-surface-subtle px-2.5 py-1 text-[12px] [[data-skin=plate]_&]:rounded-[4px] [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/45 [[data-skin=plate]_&]:bg-transparent"
+      className="flex min-w-0 items-center gap-2.5 rounded-ticket border border-hairline-strong bg-surface-subtle px-2.5 py-1 text-[12px]"
     >
       {data ? (
         <span
           role="status"
           title={hoverDetails || undefined}
-          className="inline-flex items-center gap-1.5 font-semibold text-ink [[data-skin=plate]_&]:font-black"
+          className="inline-flex items-center gap-1.5 font-semibold text-ink"
         >
           <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', hostDot[data.state])} />
           <span>{data.configured ? text.host.state[data.state] : text.host.notConfigured}</span>
@@ -72,9 +72,9 @@ function HostStrip({
       ) : (
         <span className="text-ink-500">{host.isError ? null : t.common.loading}</span>
       )}
-      <span aria-hidden="true" className="h-3.5 w-px bg-hairline-strong [[data-skin=plate]_&]:bg-ink/25" />
+      <span aria-hidden="true" className="h-3.5 w-px bg-hairline-strong" />
       <label
-        className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-ink [[data-skin=plate]_&]:font-black"
+        className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-ink"
         title={text.host.killSwitchHint}
       >
         <Switch
@@ -131,7 +131,7 @@ function HostCrashBanner({
 }
 
 const summaryChipClass =
-  'rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[11.5px] leading-4 font-medium text-ink-700 [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.06] [[data-skin=plate]_&]:font-bold'
+  'rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 text-[11.5px] leading-4 font-medium text-ink-700'
 
 // Compact installed plugin row inside the single-surface divide-y list: renders purely from the list payload (zero N+1 detail fetches).
 function InstalledRow({
@@ -149,7 +149,7 @@ function InstalledRow({
     <li className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="text-[14.5px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+          <h3 className="text-[14.5px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere]">
             <Link to={pluginPath(plugin.id)} className="outline-none hover:underline focus-visible:shadow-focus">
               {localizedText(plugin.displayName)}
             </Link>
@@ -165,7 +165,7 @@ function InstalledRow({
           </span>
         </div>
         {plugin.status === 'error' && plugin.lastError && (
-          <p className="text-[12.5px] leading-snug font-medium text-red-text [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">
+          <p className="text-[12.5px] leading-snug font-medium text-red-text [overflow-wrap:anywhere]">
             {plugin.lastError}
           </p>
         )}
@@ -231,7 +231,6 @@ export function PluginsPage() {
             <Button
               variant="default"
               size="xs"
-              className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]"
               onClick={() => setInstalling(true)}
             >
               <PlusIcon aria-hidden="true" className="size-3.5" />
@@ -249,7 +248,7 @@ export function PluginsPage() {
         >
           <span>{text.tabs.installedLabel}</span>
           {plugins.data && (
-            <span className="font-mono text-[11px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-inherit">
+            <span className="font-mono text-[11px] font-medium text-ink-500 tabular-nums">
               {list.length}
             </span>
           )}

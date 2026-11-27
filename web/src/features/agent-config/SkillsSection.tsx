@@ -12,7 +12,7 @@ import { t } from '@/i18n'
 import { Section } from './Section'
 
 const listClass =
-  'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+  'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control'
 
 export function SkillsSection({ agentId }: { agentId: string }) {
   const skills = useAgentSkills(agentId)
@@ -59,7 +59,7 @@ function SkillItem({ agentId, skill, sourceName }: { agentId: string; skill: Sch
     <li className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5" aria-label={skill.name}>
       <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-mono text-[13.5px] font-semibold [[data-skin=plate]_&]:font-bold">{skill.name}</span>
+          <span className="font-mono text-[13.5px] font-semibold">{skill.name}</span>
           {sourceDeleted ? (
             <Badge tone="neutral" className="bg-tint-yellow">
               {t.config.skills.sourceDeleted}
@@ -120,14 +120,14 @@ function AddSkillDialog({ agentId, onClose }: { agentId: string; onClose: () => 
         {library.isPending && <p className="text-[13.5px] text-ink-500">{t.common.loading}</p>}
         {library.isError && <ErrorAlert error={library.error} />}
         {library.data?.skills.length === 0 && <p className="text-[13.5px] text-ink-500">{t.config.skills.libraryEmpty}</p>}
-        <ul className="grid max-h-80 divide-y divide-hairline overflow-y-auto rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
+        <ul className="grid max-h-80 divide-y divide-hairline overflow-y-auto rounded-card border border-hairline bg-surface-control">
           {library.data?.skills.map((template) => (
             <li key={template.id} className="flex items-center gap-3 px-3.5 py-2.5" aria-label={template.name}>
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="font-mono text-[13.5px] font-semibold [[data-skin=plate]_&]:font-bold">{template.name}</span>
+                <span className="font-mono text-[13.5px] font-semibold">{template.name}</span>
                 <span className="text-[12.5px] text-ink-700">{template.description}</span>
               </div>
-              <Button size="xs" className="[[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]" disabled={add.isPending} onClick={() => void add.mutateAsync(template.id).then(onClose, () => {})}>
+              <Button size="xs" disabled={add.isPending} onClick={() => void add.mutateAsync(template.id).then(onClose, () => {})}>
                 {t.common.add}
               </Button>
             </li>

@@ -16,6 +16,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |
 | `LOOP_NOW_PI_IDLE_TIMEOUT` | Idle Pi process timeout; `10m` |
 | `LOOP_NOW_CONSOLE_ORIGINS` | Cross-origin browser origins allowed to call the API, for the Vite dev server; local port 5173 by default, `none` allows none. The console the server serves itself is same-origin and needs no entry |
+| `LOOP_NOW_TEXT_EDIT_MAX` | Largest file the console previews (images included) or edits online in Agent and context folders; `20MiB`. Must not be greater than `LOOP_NOW_MAX_FOLDER_UPLOAD` (`1GiB`), the limit for one file written to these folders |
 | `LOOP_NOW_LARK_USER_BUNDLE_DIR` | Optional verified Lark user CLI bundle |
 
 ## Data directory and backups

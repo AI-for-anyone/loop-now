@@ -257,7 +257,7 @@ type acpProcess struct {
 	binary, version string
 	sessionID       string
 	// started reports whether a prompt of this session has run (the agent then has the session saved).
-	started bool
+	started atomic.Bool
 	// instructions is the platform prompt block that goes with the next message (empty when the session has it);
 	// instructionsSum is its fingerprint, recorded in instructionsFile once a message carried it.
 	instructions, instructionsSum, instructionsFile string
@@ -285,7 +285,7 @@ func (ap *acpProcess) Prompt(ctx context.Context, text string, sink runturn.Sink
 	if err != nil || (r.Outcome == runturn.OutcomeFailed && r.Text == "") {
 		return r, err
 	}
-	ap.started = true
+	ap.started.Store(true)
 	if ap.handoff != nil {
 		ap.handoffSent = true
 	}
@@ -364,6 +364,16 @@ func (acpDriver) modelCredentials(agentconfig.Snapshot, agentDirs, string) error
 
 // sessionSaved: a session id can only be checked by loading it; ready reports a missing session.
 func (acpDriver) sessionSaved(string) bool { return true }
+
+// savedSession is the session once a prompt of it has run, or once the agent has begun to answer one (the agent has it
+// saved by then).
+func (acpDriver) savedSession(p *proc) string {
+	ap := acpOf(p)
+	if ap == nil || ap.sessionID == "" || (!ap.started.Load() && !ap.Answered(ap.sessionID)) {
+		return ""
+	}
+	return ap.sessionID
+}
 
 // keepsSessions: the runtime keeps its sessions itself, under the real HOME.
 func (acpDriver) keepsSessions() bool { return true }
@@ -651,7 +661,8 @@ func (ad acpDriver) ready(ctx context.Context, p *proc, spec startSpec) error {
 			}
 			return fail(executor.ErrSessionMissing, "The recorded %s session %s no longer exists; the next message starts a new session with the saved conversation.", ad.name(), spec.sessionFile)
 		}
-		ap.sessionID, ap.started = spec.sessionFile, true
+		ap.sessionID = spec.sessionFile
+		ap.started.Store(true)
 	} else {
 		s, err := ap.NewSession(ctx, workDir(snap, d), mcp)
 		if err != nil {
@@ -807,9 +818,9 @@ func (ad acpDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 			"fromRuntime": h.FromRuntime, "toRuntime": h.ToRuntime, "includedMessages": h.IncludedMessages, "omittedMessages": h.OmittedMessages,
 			"images": h.Images, "bytes": h.Bytes, "budgetBytes": h.BudgetBytes})
 	}
-	if ap.started {
+	if id := ad.savedSession(p); id != "" {
 		p.sessMu.Lock()
-		p.sessionFile = ap.sessionID
+		p.sessionFile = id
 		p.sessMu.Unlock()
 	}
 	switch {

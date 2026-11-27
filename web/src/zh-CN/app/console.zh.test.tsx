@@ -1,10 +1,12 @@
 import { act, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { tasksPath } from '@/api/tasks'
 import { routes } from '@/app/routes'
 import { locale } from '@/i18n/locale'
-import { apiUrl, context, defaultAgentPath, defaultProject, makeAgent, makeProject, projectsUrl } from '@/test/api'
+import { agentsUrl, apiUrl, context, defaultAgentPath, defaultProject, makeAgent, makeProject, projectsUrl, toListItem } from '@/test/api'
+import { makeSleep } from '@/test/sleep'
 import { FakeEventSource } from '@/test/fake-event-source'
 import { projectBackend } from '@/test/projects'
 import { emptyStatsFixture } from '@/test/stats-fixture'
@@ -45,6 +47,31 @@ describe('Chinese console', () => {
       '全局设置',
     ])
     expect(within(sidebar()).getByRole('button', { name: '切换范围，当前：test-project' })).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: '调整侧边栏宽度' })).toBeInTheDocument()
+  })
+
+  it('sidebar Agent status symbols use Chinese tooltips and screen-reader text', async () => {
+    const busy = makeAgent({ name: 'a-busy', busy: true })
+    const bg = makeAgent({ name: 'b-bg', backgroundTaskCount: 2 })
+    const sleeping = makeAgent({ name: 'c-sleep' })
+    const manager = makeAgent({ name: 'd-mgr', isManager: true })
+    const sleep = makeSleep({ agentId: sleeping.id, reason: '等待确认', wakeAt: new Date(Date.now() + 120_000).toISOString() })
+    server.use(
+      http.get(agentsUrl, () =>
+        HttpResponse.json({
+          agents: [toListItem(busy), toListItem(bg), { ...toListItem(sleeping), sleep, sleepRevision: sleep.revision }, toListItem(manager)],
+        }),
+      ),
+      ...baseHandlers([busy, bg, sleeping, manager]),
+    )
+    renderRoutes(routes, defaultAgentPath(busy.id, 'config'))
+    const list = await within(sidebar()).findByRole('list', { name: 'Agent' })
+    expect(within(await within(list).findByRole('link', { name: /^a-busy/ })).getByTitle('回复中')).toHaveTextContent('回复中')
+    expect(within(within(list).getByRole('link', { name: /^b-bg/ })).getByTitle('空闲，2 个后台任务还在运行')).toHaveTextContent('空闲，2 个后台任务还在运行')
+    const sleepMark = within(list).getByRole('link', { name: /^c-sleep/ }).querySelector<HTMLElement>('[data-status="sleeping"]')!
+    expect(sleepMark.getAttribute('title')).toMatch(/^sleep 至 .+ · 等待确认$/)
+    expect(sleepMark.querySelector('.sr-only')?.textContent).toBe(sleepMark.getAttribute('title'))
+    expect(within(within(list).getByRole('link', { name: /^d-mgr/ })).getByTitle('项目 Manager')).toHaveTextContent('项目 Manager')
   })
 
   it('overview sections and run status summary', async () => {
@@ -66,6 +93,20 @@ describe('Chinese console', () => {
     expect(box).toHaveAttribute('placeholder', '给 dev-helper 发消息')
     // The Chinese UI writes Enter as “回车” in the send button tooltip.
     expect(screen.getByRole('button', { name: '发送' })).toHaveAttribute('title', '发送 (回车)')
+  })
+
+  it('Agent header bar and More menu', async () => {
+    const agent = makeAgent({ name: 'dev-helper', address: 'test-org/test-project/dev-helper' })
+    server.use(...baseHandlers([agent]))
+    const user = userEvent.setup()
+    renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
+    const tabs = await screen.findByRole('navigation', { name: 'dev-helper' })
+    expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['对话', '配置', '文件夹', '收件箱'])
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent 信息' })
+    expect(within(menu).getByText('Pi（内置）')).toBeInTheDocument()
+    expect(within(menu).getByRole('button', { name: '复制地址' })).toBeInTheDocument()
+    expect(within(menu).getByRole('link', { name: '返回项目 test-project' })).toBeInTheDocument()
   })
 
   it('Agent config sections', async () => {
@@ -91,6 +132,7 @@ describe('Chinese console', () => {
   })
   it('tasks', async () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+    detail.task = { ...detail.task, currentStepId: 'verify', currentStepTitle: '验证' }
     server.use(
       ...baseHandlers([]),
       http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
@@ -100,7 +142,9 @@ describe('Chinese console', () => {
     act(() => FakeEventSource.instances.forEach((es) => es.open()))
     expect(await screen.findByRole('heading', { name: '任务', level: 1 })).toBeInTheDocument()
     await screen.findByRole('link', { name: detail.task.title })
-    expect(within(screen.getByRole('list', { name: '任务' })).getByText('阻塞')).toBeVisible()
+    const list = screen.getByRole('list', { name: '任务' })
+    expect(within(list).getByText('阻塞')).toBeVisible()
+    expect(within(list).getByText('验证')).toHaveAttribute('title', 'verify')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['任务'])
   })
 

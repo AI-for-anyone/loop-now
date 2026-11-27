@@ -64,17 +64,17 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pr-12">
             <span>{update ? confirmText.update(localizedText(manifest.displayName)) : confirmText.install(localizedText(manifest.displayName))}</span>
-            <code className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[12.5px] font-medium [[data-skin=plate]_&]:rounded-[6px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.06] [[data-skin=plate]_&]:font-bold">
+            <code className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[12.5px] font-medium">
               {update && !same ? `${manifest.id} · ${confirmText.versionChange(preview.installedVersion!, manifest.version)}` : t.plugins.idVersion(manifest.id, manifest.version)}
             </code>
           </DialogTitle>
           <DialogDescription>{localizedText(manifest.description)}</DialogDescription>
         </DialogHeader>
         {untrusted && (
-          <div role="note" className="flex gap-3 rounded-card border border-hairline bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal [[data-skin=plate]_&]:border-0">
+          <div role="note" className="flex gap-3 rounded-card border border-hairline bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal">
             <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink" />
             <div className="min-w-0 [overflow-wrap:anywhere]">
-              <p className="font-semibold [[data-skin=plate]_&]:font-black">{confirmText.unverifiedTitle(t.plugins.from[preview.source.kind])}</p>
+              <p className="font-semibold">{confirmText.unverifiedTitle(t.plugins.from[preview.source.kind])}</p>
               <p>
                 {sourceLine(preview.source)} · {confirmText.unverifiedBody}
               </p>
@@ -142,7 +142,7 @@ function BuiltinSourceList({
   const sources = builtin.data?.sources ?? []
   return (
     <fieldset className="grid gap-2">
-      <legend className="mb-1 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.builtin}</legend>
+      <legend className="mb-1 text-[13.5px] font-semibold">{text.builtin}</legend>
       <ErrorAlert error={builtin.error} />
       {builtin.isPending && <p role="status">{t.plugins.loading}</p>}
       {builtin.isSuccess && sources.length === 0 && <p className="text-[13.5px] text-ink-700">{t.plugins.builtinEmpty}</p>}
@@ -153,7 +153,7 @@ function BuiltinSourceList({
             <li key={source.id}>
               <label
                 className={cn(
-                  'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input border border-hairline-strong bg-surface-control px-3 py-2.5 has-[:checked]:border-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)] [[data-skin=plate]_&]:has-[:checked]:shadow-[inset_0_0_0_2px_var(--ink)]',
+                  'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-input border border-hairline-strong bg-surface-control px-3 py-2.5 has-[:checked]:border-ink',
                   done && 'cursor-default opacity-60',
                 )}
               >
@@ -164,13 +164,13 @@ function BuiltinSourceList({
                   disabled={done}
                   checked={builtinId === source.id}
                   onChange={() => onSelect(source.id)}
-                  className="mt-1 accent-ink [[data-skin=plate]_&]:accent-riso-blue"
+                  className="mt-1 accent-ink"
                 />
                 <span className="grid min-w-0 gap-0.5">
-                  <span className="text-[14px] font-semibold [[data-skin=plate]_&]:font-black">
+                  <span className="text-[14px] font-semibold">
                     {localizedText(source.displayName)}{' '}
-                    <span className="font-mono text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.plugins.idVersion(source.id, source.version)}</span>
-                    {done && <span className="ml-2 text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.plugins.installedBadge}</span>}
+                    <span className="font-mono text-[12px] font-medium text-ink-500">{t.plugins.idVersion(source.id, source.version)}</span>
+                    {done && <span className="ml-2 text-[12px] font-medium text-ink-500">{t.plugins.installedBadge}</span>}
                   </span>
                   <span className="text-[13px] text-ink-700">{localizedText(source.description)}</span>
                 </span>
@@ -235,16 +235,16 @@ export function InstallSourceDialog({
           </DialogHeader>
           <form className="grid min-w-0 gap-4" onSubmit={(event) => void submit(event)} noValidate>
             <fieldset className="grid gap-2">
-              <legend className="mb-2 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{text.source}</legend>
+              <legend className="mb-2 text-[13.5px] font-semibold">{text.source}</legend>
               <div role="radiogroup" className="flex flex-wrap gap-2">
                 {(['git', 'local', 'builtin'] as const).map((value) => (
                   <label
                     key={value}
                     className={cn(
-                      'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-[13.5px] font-semibold has-[:focus-visible]:shadow-focus [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:font-bold',
+                      'inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-[13.5px] font-semibold has-[:focus-visible]:shadow-focus',
                       kind === value
-                        ? 'border-ink bg-surface-active text-ink [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow'
-                        : 'border-hairline-strong bg-surface-control text-ink-700 hover:bg-surface-hover [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:text-ink',
+                        ? 'border-ink bg-surface-active text-ink'
+                        : 'border-hairline-strong bg-surface-control text-ink-700 hover:bg-surface-hover',
                     )}
                   >
                     <input

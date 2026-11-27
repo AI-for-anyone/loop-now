@@ -24,12 +24,12 @@ const stateText: Record<StepState, string> = {
 
 // Each step's compact status label: a visited step shows the status of its latest visit; one not reached yet says "not yet".
 function StepStatus({ view }: { view: StepView }) {
-  if (!view.latest) return <span className="text-[11px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">· {t.tasks.ruler.todo}</span>
+  if (!view.latest) return <span className="text-[11px] font-medium text-ink-500">· {t.tasks.ruler.todo}</span>
   const status = view.latest.status
   return (
     <span
       className={cn(
-        'text-[11px] font-semibold [[data-skin=plate]_&]:font-black',
+        'text-[11px] font-semibold',
         status === 'blocked'
           ? 'text-red-text'
           : status === 'completed'
@@ -53,7 +53,7 @@ function StepDot({ view }: { view: StepView }) {
         data-step-dot={view.index}
         aria-hidden="true"
         className={cn(
-          'absolute top-[9px] left-1 flex size-4 items-center justify-center rounded-full border-[1.5px] bg-tint-yellow [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[1.5px_1.5px_0_var(--riso-pink)]',
+          'absolute top-[9px] left-1 flex size-4 items-center justify-center rounded-full border-[1.5px] bg-tint-yellow',
           blocked ? 'border-red-text bg-tint-red' : 'border-ink',
         )}
       >
@@ -66,12 +66,12 @@ function StepDot({ view }: { view: StepView }) {
       data-step-dot={view.index}
       aria-hidden="true"
       className={cn(
-        'absolute top-[9px] left-1 flex size-4 items-center justify-center rounded-full border [[data-skin=plate]_&]:border-[1.5px]',
+        'absolute top-[9px] left-1 flex size-4 items-center justify-center rounded-full border',
         view.state === 'done'
-          ? 'border-transparent bg-cta-bg text-cta-fg [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white'
+          ? 'border-transparent bg-cta-bg text-cta-fg'
           : view.state === 'visited'
-            ? 'border-hairline-strong bg-surface-elevated [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised'
-            : 'border-hairline-strong bg-surface-canvas [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink-500 [[data-skin=plate]_&]:bg-paper-raised',
+            ? 'border-hairline-strong bg-surface-elevated'
+            : 'border-hairline-strong bg-surface-canvas',
       )}
     >
       {view.state === 'done' && <CheckIcon className="size-2.5" strokeWidth={3} />}
@@ -138,17 +138,17 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
     <nav
       aria-label={t.tasks.workflow}
       data-workflow-rail
-      className="flex w-[216px] shrink-0 flex-col border-r border-hairline bg-surface-subtle/30 max-lg:hidden [[data-skin=plate]_&]:border-r-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/40 [[data-skin=plate]_&]:bg-paper-raised"
+      className="flex w-[216px] shrink-0 flex-col border-r border-hairline bg-surface-subtle/30 max-lg:hidden"
     >
-      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-hairline px-3 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
-        <span aria-hidden="true" className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-500 [[data-skin=plate]_&]:font-black">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
+        <span aria-hidden="true" className="text-[11px] font-semibold tracking-[0.06em] uppercase text-ink-500">
           {t.tasks.workflow}
         </span>
         <span className="flex items-baseline gap-1.5">
           <span
             data-step-counter
             title={positionLabel}
-            className="font-mono text-[11.5px] font-semibold text-ink tabular-nums [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-riso-blue"
+            className="font-mono text-[11.5px] font-semibold text-ink tabular-nums"
           >
             {position.at} / {position.total}
           </span>
@@ -165,7 +165,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                   x2={lineX}
                   y1={geometry.dots[0]}
                   y2={geometry.dots[reached]}
-                  className="stroke-ink/45 [stroke-width:1.5] [[data-skin=plate]_&]:stroke-ink [[data-skin=plate]_&]:[stroke-width:2]"
+                  className="stroke-ink/45 [stroke-width:1.5]"
                 />
               )}
               {reached < views.length - 1 && (
@@ -175,7 +175,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                   y1={geometry.dots[reached]}
                   y2={geometry.dots[views.length - 1]}
                   strokeDasharray="3 3"
-                  className="stroke-hairline-strong [stroke-width:1.5] [[data-skin=plate]_&]:stroke-ink-500 [[data-skin=plate]_&]:[stroke-width:2]"
+                  className="stroke-hairline-strong [stroke-width:1.5]"
                 />
               )}
             </svg>
@@ -183,33 +183,33 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
           {views.map((view) => {
             const isSelected = selected === view.step.id
             const name = view.latest?.agentName ?? agentName(view.step.agentId)
+            const title = view.step.title || view.step.id
             return (
               <Fragment key={view.step.id}>
                 <div data-ruler-step={view.step.id} className="relative">
                   <button
                     type="button"
+                    title={view.step.id}
                     aria-pressed={isSelected}
                     aria-current={view.state === 'current' ? 'step' : undefined}
                     onClick={() => onSelect(view.step.id)}
                     className={cn(
                       'relative flex w-full cursor-pointer flex-col gap-0.5 rounded-ticket py-1.5 pr-2 pl-7 text-left transition-colors outline-none focus-visible:shadow-focus',
-                      isSelected
-                        ? 'bg-surface-active text-ink [[data-skin=plate]_&]:bg-riso-yellow/75'
-                        : 'hover:bg-surface-hover/70 [[data-skin=plate]_&]:hover:bg-paper-tab/60',
+                      isSelected ? 'bg-surface-active text-ink' : 'hover:bg-surface-hover/70',
                     )}
                   >
                     <span className="flex min-w-0 items-baseline gap-1.5">
-                      <span className="shrink-0 font-mono text-[10.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-bold">
+                      <span className="shrink-0 font-mono text-[10.5px] font-medium text-ink-500 tabular-nums">
                         {view.number}
                       </span>
                       <span
-                        title={view.step.title}
+                        title={title}
                         className={cn(
-                          'min-w-0 truncate text-[12.5px] leading-[1.35] [[data-skin=plate]_&]:font-black',
+                          'min-w-0 truncate text-[12.5px] leading-[1.35]',
                           isSelected ? 'font-semibold text-ink' : cn('font-medium', stateText[view.state]),
                         )}
                       >
-                        {view.step.title}
+                        {title}
                       </span>
                     </span>
                     <span className="flex min-w-0 items-center gap-1 text-[11px] leading-[1.35] text-ink-500">
@@ -237,14 +237,14 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                             className={cn(
                               'flex w-full cursor-pointer items-center gap-1.5 rounded-stamp px-2 py-1 text-left text-[11.5px] leading-[1.35] transition-colors outline-none focus-visible:shadow-focus',
                               here
-                                ? 'border border-hairline bg-surface-control font-semibold text-ink shadow-surface [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black'
-                                : 'font-medium text-ink-500 hover:bg-surface-hover/60 hover:text-ink [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700',
+                                ? 'border border-hairline bg-surface-control font-semibold text-ink shadow-surface'
+                                : 'font-medium text-ink-500 hover:bg-surface-hover/60 hover:text-ink',
                             )}
                           >
                             <span className="min-w-0 flex-1 truncate">
                               {t.tasks.ruler.visit(item.visit, item.attempt)} · {t.tasks.nodeStatuses[item.status]}
                               {here && (
-                                <span className="text-[10.5px] font-semibold whitespace-nowrap text-pink-text [[data-skin=plate]_&]:font-black">
+                                <span className="text-[10.5px] font-semibold whitespace-nowrap text-pink-text">
                                   {' '}
                                   · {t.tasks.ruler.here}
                                 </span>
@@ -263,8 +263,8 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                       key={jump.edge.id}
                       title={jumpText}
                       className={cn(
-                        'relative my-0.5 ml-7 inline-flex max-w-[calc(100%-1.75rem)] items-center gap-1 rounded-stamp px-1.5 py-0.5 text-[10.5px] font-semibold [[data-skin=plate]_&]:font-black',
-                        jump.back ? 'bg-tint-pink/45 text-pink-text [[data-skin=plate]_&]:bg-transparent' : 'bg-surface-subtle text-ink-500',
+                        'relative my-0.5 ml-7 inline-flex max-w-[calc(100%-1.75rem)] items-center gap-1 rounded-stamp px-1.5 py-0.5 text-[10.5px] font-semibold',
+                        jump.back ? 'bg-tint-pink/45 text-pink-text' : 'bg-surface-subtle text-ink-500',
                       )}
                     >
                       <Undo2Icon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.2} />
@@ -275,7 +275,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                 {view.index < views.length - 1 && view.next.length > 0 && (
                   <p
                     title={view.next.map((edge) => edge.label + (edge.maxTraversals ? ` · ${t.tasks.ruler.used(edgeUses(detail, edge.id), edge.maxTraversals)}` : '')).join(' / ')}
-                    className="relative ml-7 truncate py-0.5 pr-2 text-[10.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold"
+                    className="relative ml-7 truncate py-0.5 pr-2 text-[10.5px] font-medium text-ink-500"
                   >
                     ↓ {view.next.map((edge) => edge.label + (edge.maxTraversals ? ` · ${t.tasks.ruler.used(edgeUses(detail, edge.id), edge.maxTraversals)}` : '')).join(' / ')}
                   </p>
@@ -310,7 +310,7 @@ export function WorkflowChips({
   }, [selected])
 
   return (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-hairline bg-surface-subtle/30 px-3 py-2 lg:hidden [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:px-0 [[data-skin=plate]_&]:py-1">
+    <div className="flex shrink-0 flex-col gap-1.5 border-b border-hairline bg-surface-subtle/30 px-3 py-2 lg:hidden">
       <nav ref={row} aria-label={t.tasks.workflow} data-workflow-chips className="flex shrink-0 items-center gap-1.5 overflow-x-auto no-scrollbar">
         {views.map((view) => {
           const isSelected = selected === view.step.id
@@ -318,27 +318,22 @@ export function WorkflowChips({
             <button
               key={view.step.id}
               type="button"
+              title={view.step.id}
               aria-pressed={isSelected}
               aria-current={view.state === 'current' ? 'step' : undefined}
               onClick={() => onSelect(view.step.id)}
               className={cn(
-                'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium whitespace-nowrap outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:h-8 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:font-black',
-                view.state === 'done' && 'border-transparent bg-cta-bg text-cta-fg [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white',
-                view.state === 'current' &&
-                  'border-hairline-strong bg-tint-yellow font-semibold text-ink [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]',
-                view.state === 'visited' && 'border-hairline-strong bg-surface-elevated text-ink [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised',
-                view.state === 'todo' && 'border-hairline text-ink-500 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink-500',
+                'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium whitespace-nowrap outline-none focus-visible:shadow-focus',
+                view.state === 'done' && 'border-transparent bg-cta-bg text-cta-fg',
+                view.state === 'current' && 'border-hairline-strong bg-tint-yellow font-semibold text-ink',
+                view.state === 'visited' && 'border-hairline-strong bg-surface-elevated text-ink',
+                view.state === 'todo' && 'border-hairline text-ink-500',
               )}
             >
-              {isSelected && (
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 rounded-full bg-current [[data-skin=plate]_&]:size-0 [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:border-y-[5px] [[data-skin=plate]_&]:border-l-[7px] [[data-skin=plate]_&]:border-y-transparent [[data-skin=plate]_&]:border-l-riso-pink [[data-skin=plate]_&]:bg-transparent"
-                />
-              )}
+              {isSelected && <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
               {view.state === 'done' && <CheckIcon aria-hidden="true" className="size-3" strokeWidth={3} />}
               <span className="font-mono text-[11px]">{view.number}</span>
-              {view.step.title}
+              {view.step.title || view.step.id}
               {view.records.length > 1 && <span className="font-mono text-[10.5px] opacity-70">×{view.records.length}</span>}
             </button>
           )
@@ -357,7 +352,7 @@ export function WorkflowChips({
                   className={cn(
                     'inline-flex h-6 cursor-pointer items-center gap-1 rounded-stamp border px-2 text-[11.5px] whitespace-nowrap transition-colors outline-none focus-visible:shadow-focus',
                     here
-                      ? 'border-hairline-strong bg-surface-control font-semibold text-ink shadow-surface [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black'
+                      ? 'border-hairline-strong bg-surface-control font-semibold text-ink shadow-surface'
                       : 'border-transparent bg-transparent font-medium text-ink-500 hover:bg-surface-hover hover:text-ink',
                   )}
                 >

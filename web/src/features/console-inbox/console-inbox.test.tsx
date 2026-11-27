@@ -193,10 +193,6 @@ describe('Needs you', () => {
       'border',
       'border-hairline-strong',
       'bg-surface-subtle',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:bg-tint-pink-2',
-      '[[data-skin=plate]_&]:shadow-print-pink',
     )
     expect(within(pending).getAllByRole('link')).toHaveLength(3)
     const expand = within(pending).getByRole('button', { name: 'Show 2 more' })

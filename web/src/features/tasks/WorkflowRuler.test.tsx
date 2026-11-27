@@ -26,17 +26,19 @@ describe('workflow ruler', () => {
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
     expect(nav).toHaveClass('w-[216px]', 'border-r', 'max-lg:hidden')
     const current = within(nav).getByRole('button', { name: /Quality check/ })
+    expect(current).toHaveAttribute('title', 'check')
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
     expect(current).toHaveTextContent('01Quality checktask-checker· Blocked×2')
     // The status and the visit count stay together as one non-wrapping unit.
     expect(current.querySelector('[data-step-state]')).toHaveTextContent('· Blocked×2')
     expect(current.querySelector('[data-step-state]')).toHaveClass('whitespace-nowrap')
-    expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('size-4', 'border-red-text', 'bg-tint-red', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('size-4', 'border-red-text', 'bg-tint-red')
     const todo = within(nav).getByRole('button', { name: /Submit report/ })
+    expect(todo).toHaveAttribute('title', 'finish')
     expect(todo).not.toHaveAttribute('aria-current')
     expect(todo).toHaveTextContent('· not yet')
-    expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('size-4', 'border-hairline-strong', '[[data-skin=plate]_&]:border-dashed')
+    expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('size-4', 'border-hairline-strong')
     // Between steps, the edge condition is written out; the rail header shows the step counter and screen-reader position.
     expect(within(nav).getByText('↓ Pass')).toBeInTheDocument()
     expect(within(nav).getByText('1 / 2')).toHaveAttribute('title', 'at step 1')
@@ -68,7 +70,7 @@ describe('workflow ruler', () => {
 
   it('once the task is completed there is no current step, and the rail header reports all steps done', () => {
     const detail = makeTaskDetail('project')
-    detail.task = { ...detail.task, status: 'completed', currentStepId: null, currentNodeRunId: null }
+    detail.task = { ...detail.task, status: 'completed', currentStepId: null, currentStepTitle: null, currentNodeRunId: null }
     expect(workflowPosition(detail)).toEqual({ at: 2, total: 2, done: true })
     ruler(detail, { selected: null })
     expect(screen.getByText('2 / 2')).toHaveAttribute('title', 'all steps done')
@@ -85,10 +87,12 @@ describe('small step tags on narrow screens', () => {
     render(<WorkflowChips detail={detail} selected="check" record={nodeId} onSelect={onSelect} onRecord={onRecord} />)
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
     const [check, finish] = within(nav).getAllByRole('button')
+    expect(check).toHaveAttribute('title', 'check')
+    expect(finish).toHaveAttribute('title', 'finish')
     expect(check).toHaveAttribute('aria-current', 'step')
     expect(check).toHaveAttribute('aria-pressed', 'true')
-    expect(check).toHaveClass('bg-tint-yellow', '[[data-skin=plate]_&]:bg-riso-yellow')
-    expect(finish).toHaveClass('border-hairline-strong', 'bg-surface-elevated', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:bg-paper-raised')
+    expect(check).toHaveClass('bg-tint-yellow')
+    expect(finish).toHaveClass('border-hairline-strong', 'bg-surface-elevated')
     const visits = screen.getByRole('list', { name: 'Visits and retries' })
     const visitButtons = within(visits).getAllByRole('button')
     expect(visitButtons).toHaveLength(2)

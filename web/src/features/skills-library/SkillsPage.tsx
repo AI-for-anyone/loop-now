@@ -27,12 +27,8 @@ import { cn } from '@/lib/utils'
 import { SkillUpload } from './SkillUpload'
 import { useSkillMdEditor } from './use-skill-md-editor'
 
-// Upload folder and Upload zip: crisp secondary controls in mono skin; white pills with a navy outline and shadow in Plate skin.
-const uploadButtonClass =
-  '[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-paper-raised'
-
 const editorClass =
-  'h-full min-h-0 w-full flex-1 resize-none rounded-none border-0 bg-surface-canvas px-5 py-4 font-mono text-[13px] leading-[1.7] field-sizing-fixed [field-sizing:fixed] focus-visible:shadow-none [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-none'
+  'h-full min-h-0 w-full flex-1 resize-none rounded-none border-0 bg-surface-canvas px-5 py-4 font-mono text-[13px] leading-[1.7] field-sizing-fixed [field-sizing:fixed] focus-visible:shadow-none'
 
 // Master-detail Skills Library workspace: left searchable rail of templates and inline right workspace pane for creating or editing
 // SKILL.md and inspecting files, driven directly by /skills, /skills/new and /skills/:skillId.
@@ -57,7 +53,7 @@ export function SkillsPage() {
   }, [list, normalizedQuery])
 
   const headerNewLink = (
-    <Button size="xs" variant="interrupt" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" asChild>
+    <Button size="xs" variant="interrupt" asChild>
       <Link to="/skills/new">
         <PlusIcon aria-hidden="true" />
         {t.skills.create}
@@ -69,7 +65,6 @@ export function SkillsPage() {
     <SkillUpload
       size="xs"
       secondarySize="sm"
-      buttonClassName={uploadButtonClass}
       onArchive={async (archive) => navigate(`/skills/${(await create.mutateAsync(archive)).id}`)}
     >
       {({ actions, secondaryActions, feedback }) => (
@@ -87,16 +82,16 @@ export function SkillsPage() {
             {skills.isSuccess && <span>{t.skills.count(list.length)}</span>}
           </PageHeader>
           {feedback && (
-            <div className="shrink-0 border-b border-hairline bg-surface-canvas px-4 py-2.5 sm:px-6 [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:px-0 [[data-skin=plate]_&]:pt-2">
+            <div className="shrink-0 border-b border-hairline bg-surface-canvas px-4 py-2.5 sm:px-6">
               {feedback}
             </div>
           )}
-          <PaperSheet className="flex-1 flex-row [[data-skin=plate]_&]:mt-2">
+          <PaperSheet className="flex-1 flex-row">
             {empty && !hasDetail ? (
               <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4">
                 <EmptyLibrary>
                   {secondaryActions}
-                  <Button size="sm" variant="interrupt" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" asChild>
+                  <Button size="sm" variant="interrupt" asChild>
                     <Link to="/skills/new">
                       <PlusIcon aria-hidden="true" />
                       {t.skills.create}
@@ -110,11 +105,11 @@ export function SkillsPage() {
                   <aside
                     aria-label={t.skills.title}
                     className={cn(
-                      'flex min-h-0 w-full shrink-0 flex-col border-hairline nav:w-[272px] nav:border-r lg:w-[296px] [[data-skin=plate]_&]:nav:border-r-2 [[data-skin=plate]_&]:nav:border-dashed [[data-skin=plate]_&]:nav:border-ink/40',
+                      'flex min-h-0 w-full shrink-0 flex-col border-hairline nav:w-[272px] nav:border-r lg:w-[296px]',
                       hasDetail && 'max-nav:hidden',
                     )}
                   >
-                    <div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b border-hairline bg-surface-canvas px-3 py-2 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/30 [[data-skin=plate]_&]:bg-paper-raised">
+                    <div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b border-hairline bg-surface-canvas px-3 py-2">
                       <div className="relative min-w-0 flex-1">
                         <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-500" />
                         <Input
@@ -157,7 +152,7 @@ export function SkillsPage() {
                         {filtered.length > 0 && (
                           <ul
                             aria-label={t.skills.title}
-                            className="flex flex-col divide-y divide-hairline/70 [[data-skin=plate]_&]:gap-1.5 [[data-skin=plate]_&]:divide-y-0 [[data-skin=plate]_&]:p-2.5"
+                            className="flex flex-col divide-y divide-hairline/70"
                           >
                             {filtered.map((skill) => (
                               <li key={skill.id} className="min-w-0">
@@ -200,35 +195,29 @@ function TemplateRow({ skill }: { skill: Schemas['SkillTemplateSummary'] }) {
       to={`/skills/${skill.id}`}
       className={({ isActive }) =>
         cn(
-          'flex min-h-[52px] w-full flex-col justify-center gap-0.5 px-3 py-2 text-ink no-underline outline-none transition-colors focus-visible:shadow-focus [[data-skin=plate]_&]:rounded-card [[data-skin=plate]_&]:border-2',
+          'flex min-h-[52px] w-full flex-col justify-center gap-0.5 px-3 py-2 text-ink no-underline outline-none transition-colors focus-visible:shadow-focus',
           isActive
-            ? 'bg-surface-active text-ink [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]'
-            : 'hover:bg-surface-hover [[data-skin=plate]_&]:border-transparent [[data-skin=plate]_&]:hover:bg-tint-yellow/70',
+            ? 'bg-surface-active text-ink'
+            : 'hover:bg-surface-hover',
         )
       }
     >
       <span className="flex w-full min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold [[data-skin=plate]_&]:font-bold">{skill.name}</span>
-        <span className="shrink-0 font-mono text-[11px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-bold">
+        <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold">{skill.name}</span>
+        <span className="shrink-0 font-mono text-[11px] font-medium text-ink-500 tabular-nums">
           {t.skills.files(skill.fileCount)}
         </span>
       </span>
-      <span className="truncate text-[12px] leading-[1.45] text-ink-500 [[data-skin=plate]_&]:text-ink-700">{skill.description}</span>
+      <span className="truncate text-[12px] leading-[1.45] text-ink-500">{skill.description}</span>
     </NavLink>
   )
 }
 
-// Empty state: compact centered prompt in mono skin; overprinted Risograph illustration with yellow highlighter-mark title in Plate skin.
+// Empty state: compact centered prompt.
 function EmptyLibrary({ children }: { children: ReactNode }) {
   return (
     <div data-empty-library className="flex flex-col items-center gap-5 px-6 py-8 text-center">
-      <span aria-hidden="true" data-empty-art className="relative hidden h-[190px] w-[290px] max-w-full [[data-skin=plate]_&]:block">
-        <span className="absolute top-[52px] left-0 h-[112px] w-[96px] bg-[radial-gradient(var(--ink)_1.5px,transparent_1.9px)] bg-size-[9px_9px] opacity-55" />
-        <span className="absolute top-[36px] left-[66px] h-[140px] w-[106px] rotate-[-8deg] rounded-[12px] bg-riso-blue bg-[radial-gradient(rgb(24_38_94/.45)_1.3px,transparent_1.7px)] bg-size-[8px_8px]" />
-        <span className="absolute top-[18px] left-[124px] h-[140px] w-[106px] rotate-[6deg] rounded-[12px] bg-riso-pink mix-blend-multiply" />
-        <span className="absolute top-0 left-[194px] size-[84px] rounded-full bg-riso-yellow mix-blend-multiply" />
-      </span>
-      <p className="riso-marker font-display-cn text-[18px] leading-snug font-semibold tracking-tight [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:text-[32px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+      <p className="riso-marker font-display-cn text-[18px] leading-snug font-semibold tracking-tight">
         {t.skills.empty}
       </p>
       <div className="flex flex-wrap justify-center gap-2.5">{children}</div>
@@ -241,7 +230,7 @@ function MobileBackLink() {
     <Link
       to="/skills"
       aria-label={t.skills.backToList}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket border border-hairline text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus nav:hidden [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-white"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-ticket border border-hairline text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus nav:hidden"
     >
       <ArrowLeftIcon className="size-3.5" aria-hidden="true" />
     </Link>
@@ -267,10 +256,10 @@ export function NewSkillSheet() {
 
   return (
     <section aria-label={t.skills.newTitle} className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-hairline px-5 py-2.5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-hairline px-5 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <MobileBackLink />
-          <h2 className="font-display-cn text-[15px] leading-snug font-semibold tracking-tight [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+          <h2 className="font-display-cn text-[15px] leading-snug font-semibold tracking-tight">
             {t.skills.newTitle}
           </h2>
         </div>
@@ -323,9 +312,9 @@ export function SkillDetailSheet() {
 
   return (
     <section aria-label={t.skills.detailTitle} className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-5 py-2.5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+      <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-5 py-2.5">
         <MobileBackLink />
-        <h2 className="font-display-cn text-[15px] leading-snug font-semibold tracking-tight [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+        <h2 className="font-display-cn text-[15px] leading-snug font-semibold tracking-tight">
           {t.skills.detailTitle}
         </h2>
       </div>
@@ -362,16 +351,16 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
   })
 
   return (
-    <SkillUpload size="xs" buttonClassName={uploadButtonClass} onArchive={async (archive) => setReplacement(archive)}>
+    <SkillUpload size="xs" onArchive={async (archive) => setReplacement(archive)}>
       {({ actions, secondaryActions, feedback }) => (
         <>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-5 py-2.5 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-5 py-2.5">
             <div className="flex min-w-0 flex-1 items-start gap-2.5">
               <MobileBackLink />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                  <h2 className="truncate font-mono text-[14.5px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">{data.name}</h2>
-                  <span className="shrink-0 text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.skills.updated(data.updatedAt)}</span>
+                  <h2 className="truncate font-mono text-[14.5px] font-semibold text-ink">{data.name}</h2>
+                  <span className="shrink-0 text-[12px] font-medium text-ink-500">{t.skills.updated(data.updatedAt)}</span>
                 </div>
                 <p className="truncate text-[12.5px] text-ink-700">{data.description}</p>
               </div>
@@ -401,7 +390,7 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
               {
                 key: 'skillMd' as const,
                 label: t.skills.skillMd,
-                badge: editor.isDirty ? <span aria-hidden="true" className="size-1.5 rounded-full bg-ink [[data-skin=plate]_&]:bg-riso-pink" /> : undefined,
+                badge: editor.isDirty ? <span aria-hidden="true" className="size-1.5 rounded-full bg-ink" /> : undefined,
               },
               {
                 key: 'files' as const,
@@ -436,11 +425,11 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
               <div ref={filesRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 <table aria-label={t.skills.fileList} className="w-full border-collapse text-[13px]">
                   <thead>
-                    <tr className="border-b border-hairline-strong text-left text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:font-black">
-                      <th scope="col" className="py-1.5 pr-4 font-medium [[data-skin=plate]_&]:font-black">
+                    <tr className="border-b border-hairline-strong text-left text-[11.5px] font-medium text-ink-500">
+                      <th scope="col" className="py-1.5 pr-4 font-medium">
                         {t.skills.columns.path}
                       </th>
-                      <th scope="col" className="w-28 py-1.5 text-right font-medium [[data-skin=plate]_&]:font-black">
+                      <th scope="col" className="w-28 py-1.5 text-right font-medium">
                         {t.skills.columns.size}
                       </th>
                     </tr>
@@ -449,7 +438,7 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
                     {data.files.map((file) => (
                       <tr
                         key={file.path}
-                        className="border-b border-hairline [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25"
+                        className="border-b border-hairline"
                       >
                         <td className="py-1.5 pr-4 font-mono text-[12.5px] [overflow-wrap:anywhere]">{file.path}</td>
                         <td className="py-1.5 text-right font-mono text-[12px] text-ink-500 tabular-nums">{t.common.bytes(file.size)}</td>
@@ -457,10 +446,10 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
                     ))}
                   </tbody>
                 </table>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-hairline bg-surface-subtle px-4 py-3 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-hairline bg-surface-subtle px-4 py-3">
                   <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[13px] font-semibold text-ink [[data-skin=plate]_&]:font-black">{t.skills.replace}</span>
-                    <span className="text-[12px] text-ink-500 [[data-skin=plate]_&]:text-ink-700">{t.skills.replaceHint}</span>
+                    <span className="text-[13px] font-semibold text-ink">{t.skills.replace}</span>
+                    <span className="text-[12px] text-ink-500">{t.skills.replaceHint}</span>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {secondaryActions}

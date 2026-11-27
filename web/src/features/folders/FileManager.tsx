@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlertIcon, CircleCheckIcon, DownloadIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, PencilIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -10,7 +10,7 @@ import { pickedFiles } from '@/lib/upload'
 import { cn } from '@/lib/utils'
 import { ancestorsOf, canEdit, encodeText, ENTRY_FILE, folderKeys, isEntryFile, isImage, isMarkdown, joinPath, nameOf, parentOf, PLAIN_TEXT, segmentsOf, within, type FolderEntry, type FolderSource, type GitPull, type TextEditLimits, type TextFormat, type UploadItem } from './folder-source'
 import { refreshDirs, useFolderFile, useFolderList, useGitPulls, type FileText, type Selection } from './folder-queries'
-import { DirView, FileView, type EditState } from './FolderContent'
+import { DirView, FileView, Pending, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
 import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
@@ -19,6 +19,8 @@ import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-upl
 
 interface FileManagerProps {
   source: FolderSource
+  // Relative path to open right away (e.g. from a chat link into the Agent's Folder tab); ancestors are expanded in the tree.
+  initialPath?: string
   // The root's name in the tree and the path bar, e.g. "server's folder".
   rootLabel: string
   // Context.limits.textEdit: the extensions and size limit for online editing.
@@ -45,11 +47,12 @@ const INTERNAL = 'application/x-loop-now-path'
 
 // File manager: full-bleed 2-pane IDE split with a collapsible file tree on the left, folder/file content on the right, a single
 // 40px contextual toolbar at the top, and a 28px status strip at the bottom.
-export function FileManager({ source, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
+export function FileManager({ source, initialPath, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
   const sheet = variant !== 'card'
   const client = useQueryClient()
-  const [selection, setSelection] = useState<Selection>(ROOT)
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  // User navigation overrides initialPath once clicked; while waiting to resolve initialPath we look it up in its parent directory.
+  const [navSelection, setNavSelection] = useState<{ forInitial: string | undefined; value: Selection } | null>(null)
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(initialPath ? ancestorsOf(initialPath) : []))
   const [naming, setNaming] = useState<Naming | null>(null)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
@@ -63,11 +66,45 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
   const fileInput = useRef<HTMLInputElement>(null), folderInput = useRef<HTMLInputElement>(null), uploadTarget = useRef('')
   const uploads = useFolderUploads(source, maxUpload, useCallback((dirs: string[]) => void refreshDirs(client, source, ...dirs), [client, source]))
   const pulls = useGitPulls(source)
+
+  const hasNav = navSelection !== null && navSelection.forInitial === initialPath
+  const locating = !hasNav && Boolean(initialPath)
+  const targetParent = locating && initialPath ? parentOf(initialPath) : ''
+  const targetList = useFolderList(source, targetParent, locating)
+  const targetFound = locating && initialPath ? targetList.data?.pages.flatMap((page) => page.entries).find((entry) => entry.path === initialPath) : undefined
+  // If the target wasn't on the first page of a large parent folder, fetch subsequent pages until found or exhausted.
+  useEffect(() => {
+    if (locating && targetList.isSuccess && !targetFound && targetList.hasNextPage && !targetList.isFetchingNextPage) {
+      void targetList.fetchNextPage()
+    }
+  }, [locating, targetFound, targetList])
+  const locatingPending = locating && !targetFound && !targetList.isError && (!targetList.isSuccess || targetList.hasNextPage)
+  const selection: Selection = hasNav
+    ? navSelection.value
+    : !initialPath
+      ? ROOT
+      : targetFound
+        ? { path: targetFound.path, type: targetFound.type, entry: targetFound }
+        : targetList.isSuccess && !targetList.hasNextPage
+          ? (targetParent ? { path: targetParent, type: 'dir', entry: null } : ROOT)
+          : ROOT
+  const setSelection = (next: Selection | ((old: Selection) => Selection)) =>
+    setNavSelection((prev) => {
+      const current = prev && prev.forInitial === initialPath ? prev.value : selection
+      return { forInitial: initialPath, value: typeof next === 'function' ? next(current) : next }
+    })
+  const effectiveExpanded = useMemo(() => {
+    if (!locating || !initialPath) return expanded
+    const extra = [...ancestorsOf(initialPath), ...(targetFound?.type === 'dir' ? [targetFound.path] : [])]
+    return extra.every((item) => expanded.has(item)) ? expanded : new Set([...expanded, ...extra])
+  }, [expanded, locating, initialPath, targetFound])
+  const displayError = error ?? (locating && targetList.isError ? targetList.error : null)
+
   const currentDir = selection.type === 'dir' ? selection.path : parentOf(selection.path)
   const dirty = !!edit && edit.text !== edit.original
 
   const selectedEntry = selection.type !== 'dir' ? selection.entry : null
-  const maxBytes = limits?.maxBytes ?? 1 << 20
+  const maxBytes = limits?.maxBytes ?? 20 << 20
   const fileTooLarge = !!selectedEntry && selectedEntry.size !== null && selectedEntry.size > maxBytes
   const fileReadable = !!selectedEntry && (
     (selectedEntry.type === 'file' && !fileTooLarge && !isImage(selectedEntry.path)) ||
@@ -196,7 +233,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
     <FileTree
       rootLabel={rootLabel}
       source={source}
-      expanded={expanded}
+      expanded={effectiveExpanded}
       selected={selection.path}
       naming={naming}
       dropTarget={dropTarget}
@@ -237,8 +274,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
         variant === 'sheet'
           ? cn('min-w-0 flex-1', className)
           : variant === 'panel'
-            ? cn('rounded-card border border-hairline-strong bg-surface-canvas [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised', className)
-            : cn('rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-white', className),
+            ? cn('rounded-card border border-hairline-strong bg-surface-canvas', className)
+            : cn('rounded-card border border-hairline bg-surface-control', className),
       )}
       onDragOver={(event) => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(INTERNAL)) { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDraggingFiles(true) } }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) { setDraggingFiles(false); setDropTarget(null) } }}
@@ -252,10 +289,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
         data-folder-toolbar
         className={cn(
           'flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3',
-          sheet
-            ? 'bg-surface-canvas [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised'
-            : 'bg-surface-subtle [[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-paper-raised',
-          editingCurrent && 'bg-tint-yellow/50 [[data-skin=plate]_&]:bg-tint-yellow/50',
+          sheet ? 'bg-surface-canvas' : 'bg-surface-subtle',
+          editingCurrent && 'bg-tint-yellow/50',
         )}
       >
         <ToolButton className="@min-[40rem]:hidden" icon={<PanelLeftIcon />} label={treeOpen ? t.folders.hideTree : t.folders.showTree} showLabel={false} aria-expanded={treeOpen} onClick={() => setTreeOpen((value) => !value)} />
@@ -264,26 +299,26 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
           {selectedEntry ? (
             editingCurrent ? (
               <>
-                <span className="mr-1 inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap text-ink-700 @max-[32rem]:hidden [[data-skin=plate]_&]:font-bold">
+                <span className="mr-1 inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap text-ink-700 @max-[32rem]:hidden">
                   {t.folders.file.editing}
                 </span>
                 {dirty && (
-                  <span className="mr-1 inline-flex items-center gap-1 text-[12px] font-medium whitespace-nowrap text-pink-text [[data-skin=plate]_&]:font-bold">
-                    <span aria-hidden="true" className="size-1.5 rounded-full bg-pink-text [[data-skin=plate]_&]:bg-riso-pink" />
+                  <span className="mr-1 inline-flex items-center gap-1 text-[12px] font-medium whitespace-nowrap text-pink-text">
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-pink-text" />
                     {t.folders.file.unsaved}
                   </span>
                 )}
                 <Button size="xs" variant="ghost" className="h-7 no-underline" onClick={() => (dirty ? setDialog({ type: 'discard', next: null }) : setEdit(null))} disabled={editingCurrent.saving}>
                   {t.folders.file.cancel}
                 </Button>
-                <Button size="xs" className="h-7 px-3 [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--riso-pink)]" onClick={() => void save()} disabled={editingCurrent.saving || !dirty} title={t.folders.file.saveKey}>
+                <Button size="xs" className="h-7 px-3" onClick={() => void save()} disabled={editingCurrent.saving || !dirty} title={t.folders.file.saveKey}>
                   {editingCurrent.saving ? t.folders.file.saving : t.folders.file.save}
                 </Button>
               </>
             ) : (
               <>
                 {activeMarkdown && activeText !== null && (
-                  <div role="radiogroup" aria-label={t.folders.file.view} className="mr-1 inline-flex h-7 items-center rounded-ticket border border-hairline-strong bg-surface-subtle p-0.5 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-paper-raised">
+                  <div role="radiogroup" aria-label={t.folders.file.view} className="mr-1 inline-flex h-7 items-center rounded-ticket border border-hairline-strong bg-surface-subtle p-0.5">
                     {(['preview', 'source'] as const).map((value) => (
                       <button
                         key={value}
@@ -292,8 +327,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
                         aria-checked={mode === value}
                         onClick={() => setMode(value)}
                         className={cn(
-                          'h-[22px] cursor-pointer rounded-[4px] px-2 text-[11.5px] font-medium text-ink-700 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:font-bold',
-                          mode === value && 'bg-surface-control text-ink shadow-xs [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:shadow-none',
+                          'h-[22px] cursor-pointer rounded-[4px] px-2 text-[11.5px] font-medium text-ink-700',
+                          mode === value && 'bg-surface-control text-ink shadow-xs',
                         )}
                       >
                         {value === 'preview' ? t.folders.file.preview : t.folders.file.source}
@@ -335,22 +370,22 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
           aria-label={t.folders.tree}
           className={cn(
             'hidden w-[220px] shrink-0 overflow-y-auto border-r border-hairline @min-[40rem]:block',
-            sheet
-              ? 'bg-surface-subtle/30 [[data-skin=plate]_&]:border-r-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-transparent'
-              : 'bg-surface-subtle [[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-paper-raised/60',
+            sheet ? 'bg-surface-subtle/30' : 'bg-surface-subtle',
           )}
         >
           {tree}
         </aside>
         {treeOpen && (
           <div className="absolute inset-0 z-20 flex @min-[40rem]:hidden">
-            <aside aria-label={t.folders.tree} className="w-[min(18rem,85%)] overflow-y-auto border-r border-hairline-strong bg-surface-elevated shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[4px_0_0_rgb(24_38_94/.08)]">{tree}</aside>
-            <button type="button" aria-label={t.folders.hideTree} className="flex-1 cursor-default bg-black/40 [[data-skin=plate]_&]:bg-ink/20" onClick={() => setTreeOpen(false)} />
+            <aside aria-label={t.folders.tree} className="w-[min(18rem,85%)] overflow-y-auto border-r border-hairline-strong bg-surface-elevated shadow-floating">{tree}</aside>
+            <button type="button" aria-label={t.folders.hideTree} className="flex-1 cursor-default bg-black/40" onClick={() => setTreeOpen(false)} />
           </div>
         )}
         <section data-folder-content className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label={t.folders.label}>
-          {error != null && <ErrorAlert error={error} className="mx-3 mt-3 w-auto" />}
-          {selection.type === 'dir' ? (
+          {displayError != null && <ErrorAlert error={displayError} className="mx-3 mt-3 w-auto" />}
+          {locatingPending ? (
+            <Pending />
+          ) : selection.type === 'dir' ? (
             <DirView
               key={selection.path}
               source={source}
@@ -381,16 +416,11 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
 
       {pull?.status === 'failed' && <GitPullHint pull={pull} />}
       {pull?.status === 'failed' && pullDetails && pull.errorMessage && (
-        <pre className="max-h-32 shrink-0 overflow-auto border-t border-hairline bg-tint-red/40 px-3 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text [[data-skin=plate]_&]:border-ink/10">{pull.errorMessage}</pre>
+        <pre className="max-h-32 shrink-0 overflow-auto border-t border-hairline bg-tint-red/40 px-3 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
       )}
       <div
         data-folder-footer
-        className={cn(
-          'flex h-7 shrink-0 items-center justify-between gap-3 border-t border-hairline bg-surface-subtle/50 px-3 text-[11.5px] text-ink-500',
-          sheet
-            ? '[[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22] [[data-skin=plate]_&]:bg-paper-raised'
-            : '[[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-paper-raised',
-        )}
+        className="flex h-7 shrink-0 items-center justify-between gap-3 border-t border-hairline bg-surface-subtle/50 px-3 text-[11.5px] text-ink-500"
       >
         {/* Narrow screens can't fit both parts: when there is a pull status, show only the status. */}
         <span className={cn('flex min-w-0 items-center gap-1.5 tabular-nums', pull && '@max-[40rem]:hidden')}>
@@ -405,8 +435,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
 
       {uploads.rows.length > 0 && <UploadPanel rows={uploads.rows} onClose={uploads.clear} />}
       {draggingFiles && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-1.5 z-30 flex items-center justify-center rounded-[12px] border border-dashed border-hairline-strong bg-surface-hover/85 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-riso-blue [[data-skin=plate]_&]:bg-tint-blue/70">
-          <span className="rounded-full bg-surface-elevated px-4 py-2 text-[13.5px] font-semibold text-ink shadow-floating [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:shadow-print-rest">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-1.5 z-30 flex items-center justify-center rounded-[12px] border border-dashed border-hairline-strong bg-surface-hover/85">
+          <span className="rounded-full bg-surface-elevated px-4 py-2 text-[13.5px] font-semibold text-ink shadow-floating">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
         </div>
       )}
 
@@ -455,7 +485,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
 function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { pull: GitPull; details: boolean; onDetails: () => void; onShow: () => void; onRetry: () => void; onDismiss: () => void }) {
   const ended = pull.status === 'succeeded' || pull.status === 'failed'
   return (
-    <span role="status" className={cn('ml-auto flex min-w-0 shrink-0 items-center gap-1.5 font-medium [[data-skin=plate]_&]:font-bold', pull.status === 'failed' ? 'text-red-text' : pull.status === 'succeeded' ? 'text-green-text' : 'text-ink-700')}>
+    <span role="status" className={cn('ml-auto flex min-w-0 shrink-0 items-center gap-1.5 font-medium', pull.status === 'failed' ? 'text-red-text' : pull.status === 'succeeded' ? 'text-green-text' : 'text-ink-700')}>
       {pull.status === 'failed' ? <CircleAlertIcon aria-hidden="true" className="size-3.5" /> : pull.status === 'succeeded' ? <CircleCheckIcon aria-hidden="true" className="size-3.5" /> : <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" />}
       <span className="max-w-[24rem] truncate" title={pull.url}>
         {pull.status === 'queued' ? t.folders.git.queued(pull.url, pull.path) : pull.status === 'running' ? t.folders.git.running(pull.url, pull.path) : pull.status === 'succeeded' ? t.folders.git.succeeded(pull.path) : t.folders.git.failed(pull.errorCode ? t.folders.git.errors[pull.errorCode] : t.folders.git.errors.clone_failed)}
@@ -463,7 +493,7 @@ function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { 
       {pull.status === 'succeeded' && <button type="button" className="cursor-pointer text-riso-blue underline" onClick={onShow}>{t.folders.git.show}</button>}
       {pull.status === 'failed' && pull.errorMessage && <button type="button" aria-expanded={details} className="cursor-pointer underline" onClick={onDetails}>{t.folders.git.details}</button>}
       {pull.status === 'failed' && <button type="button" className="cursor-pointer text-riso-blue underline" onClick={onRetry}>{t.folders.git.retry}</button>}
-      {ended && <button type="button" aria-label={t.folders.git.dismiss} className="cursor-pointer rounded-full p-0.5 hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-tint-blue" onClick={onDismiss}><XIcon aria-hidden="true" className="size-3.5" /></button>}
+      {ended && <button type="button" aria-label={t.folders.git.dismiss} className="cursor-pointer rounded-full p-0.5 hover:bg-surface-hover" onClick={onDismiss}><XIcon aria-hidden="true" className="size-3.5" /></button>}
     </span>
   )
 }
@@ -473,7 +503,7 @@ function Breadcrumbs({ rootLabel, path, entryType, onNavigate, className }: { ro
   const parts = segmentsOf(path)
   return (
     <nav aria-label={t.folders.path} className={cn('flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-[12.5px]', className)}>
-      <button type="button" onClick={() => onNavigate('')} className={cn('inline-flex min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-tint-blue', parts.length === 0 ? 'font-semibold [[data-skin=plate]_&]:font-black' : 'font-medium text-ink-700 [[data-skin=plate]_&]:font-bold')} aria-current={parts.length === 0 ? 'page' : undefined}>
+      <button type="button" onClick={() => onNavigate('')} className={cn('inline-flex min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-surface-hover', parts.length === 0 ? 'font-semibold' : 'font-medium text-ink-700')} aria-current={parts.length === 0 ? 'page' : undefined}>
         <EntryIcon path="" type="dir" open={parts.length === 0} />
         <span className="truncate">{rootLabel}</span>
       </button>
@@ -483,13 +513,13 @@ function Breadcrumbs({ rootLabel, path, entryType, onNavigate, className }: { ro
           <span key={target} className={cn('flex min-w-0 items-center gap-0.5', !last && 'shrink-[2]')}>
             <span aria-hidden="true" className="text-ink-500/60">/</span>
             {last ? (
-              <span aria-current="page" className="inline-flex min-w-0 items-center gap-1.5 px-1 font-semibold [[data-skin=plate]_&]:font-black">
+              <span aria-current="page" className="inline-flex min-w-0 items-center gap-1.5 px-1 font-semibold">
                 {entryType && entryType !== 'dir' && <EntryIcon path={path} type={entryType} className="size-3.5" />}
                 <span className="truncate">{part}</span>
                 {entryType && entryType !== 'dir' && isEntryFile(path) && <EntryBadge />}
               </span>
             ) : (
-              <button type="button" onClick={() => onNavigate(target)} className="cursor-pointer truncate rounded-[6px] px-1.5 py-0.5 font-medium text-ink-700 hover:bg-surface-hover [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-blue">{part}</button>
+              <button type="button" onClick={() => onNavigate(target)} className="cursor-pointer truncate rounded-[6px] px-1.5 py-0.5 font-medium text-ink-700 hover:bg-surface-hover">{part}</button>
             )}
           </span>
         )
@@ -510,18 +540,18 @@ function UploadPanel({ rows, onClose }: { rows: UploadRow[]; onClose: () => void
     return () => clearTimeout(timer)
   }, [finished, failed, onClose])
   return (
-    <section aria-label={t.folders.upload} className="absolute right-3 bottom-9 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-card border border-hairline-strong bg-surface-elevated shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+    <section aria-label={t.folders.upload} className="absolute right-3 bottom-9 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-card border border-hairline-strong bg-surface-elevated shadow-floating">
       <header className="flex items-center gap-2 px-3.5 pt-2.5 pb-2">
-        <h3 role="status" className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{t.folders.uploads.title(done, rows.length, finished)}</h3>
-        {failed > 0 && <span className="text-[12px] font-medium text-red-text [[data-skin=plate]_&]:font-bold">{t.folders.uploads.failed(failed)}</span>}
-        {finished && <button type="button" aria-label={t.folders.uploads.close} onClick={onClose} className="ml-auto cursor-pointer rounded-full p-1 text-ink-500 hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-tint-blue"><XIcon aria-hidden="true" className="size-3.5" /></button>}
+        <h3 role="status" className="text-[13px] font-semibold">{t.folders.uploads.title(done, rows.length, finished)}</h3>
+        {failed > 0 && <span className="text-[12px] font-medium text-red-text">{t.folders.uploads.failed(failed)}</span>}
+        {finished && <button type="button" aria-label={t.folders.uploads.close} onClick={onClose} className="ml-auto cursor-pointer rounded-full p-1 text-ink-500 hover:bg-surface-hover"><XIcon aria-hidden="true" className="size-3.5" /></button>}
       </header>
-      <div className="mx-3.5 h-1.5 overflow-hidden rounded-full bg-surface-active [[data-skin=plate]_&]:bg-tint-blue"><div className={cn('h-full rounded-full', failed ? 'bg-red [[data-skin=plate]_&]:bg-riso-pink' : 'bg-ink [[data-skin=plate]_&]:bg-riso-blue')} style={{ width: `${total ? Math.round((loaded / total) * 100) : 100}%` }} /></div>
+      <div className="mx-3.5 h-1.5 overflow-hidden rounded-full bg-surface-active"><div className={cn('h-full rounded-full', failed ? 'bg-red' : 'bg-ink')} style={{ width: `${total ? Math.round((loaded / total) * 100) : 100}%` }} /></div>
       <ul className="mt-1.5 max-h-36 overflow-y-auto px-1.5 pb-1.5">
         {rows.map((row) => (
           <li key={row.id} className="flex h-7 items-center gap-2 rounded-[6px] px-2 text-[12.5px]" title={row.error ?? row.path}>
             <span className="min-w-0 flex-1 truncate">{row.path}</span>
-            <span className={cn('shrink-0 tabular-nums', row.state === 'failed' ? 'font-medium text-red-text [[data-skin=plate]_&]:font-bold' : row.state === 'done' ? 'text-green-text' : 'text-ink-500')}>
+            <span className={cn('shrink-0 tabular-nums', row.state === 'failed' ? 'font-medium text-red-text' : row.state === 'done' ? 'text-green-text' : 'text-ink-500')}>
               {row.state === 'done' ? <CircleCheckIcon aria-hidden="true" className="size-3.5" /> : row.state === 'failed' ? <CircleAlertIcon aria-hidden="true" className="size-3.5" /> : `${row.size ? Math.round((row.loaded / row.size) * 100) : 0}%`}
             </span>
           </li>

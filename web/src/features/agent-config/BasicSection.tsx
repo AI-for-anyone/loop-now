@@ -153,7 +153,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
       </div>
 
       <div className="grid gap-1.5">
-        <span id={runnerLabel} className="text-[13px] leading-snug font-semibold text-ink [[data-skin=plate]_&]:font-black">
+        <span id={runnerLabel} className="text-[13px] leading-snug font-semibold text-ink">
           {t.runtime.picker.label}
         </span>
         <PopoverPrimitive.Root open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -163,12 +163,12 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
               aria-labelledby={`${runnerLabel} ${summaryId}`}
               aria-invalid={modelInvalid || undefined}
               className={cn(
-                'group flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-card border border-hairline bg-surface-control px-3.5 py-2 text-left transition-colors outline-none hover:border-hairline-strong hover:bg-surface-hover focus-visible:shadow-focus aria-expanded:border-ink aria-expanded:bg-surface-active/50 aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:aria-expanded:bg-tint-yellow',
+                'group flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-card border border-hairline bg-surface-control px-3.5 py-2 text-left transition-colors outline-none hover:border-hairline-strong hover:bg-surface-hover focus-visible:shadow-focus aria-expanded:border-ink aria-expanded:bg-surface-active/50 aria-invalid:border-red aria-invalid:ring-1 aria-invalid:ring-red',
               )}
             >
               {activeRuntime && <RuntimeMark runtime={activeRuntime} className="size-8 shrink-0" />}
               <span id={summaryId} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13.5px]">
-                <span className="font-semibold text-ink [[data-skin=plate]_&]:font-bold">{summaryLead}</span>
+                <span className="font-semibold text-ink">{summaryLead}</span>
                 {modelDisplay && (
                   <>
                     <span aria-hidden="true" className="text-ink-500">·</span>
@@ -188,7 +188,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
                   </>
                 )}
               </span>
-              <span className="ml-auto shrink-0 rounded-input border border-hairline-strong bg-surface-canvas px-2.5 py-1 text-[12.5px] font-medium text-ink group-hover:bg-surface-control [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black">
+              <span className="ml-auto shrink-0 rounded-input border border-hairline-strong bg-surface-canvas px-2.5 py-1 text-[12.5px] font-medium text-ink group-hover:bg-surface-control">
                 {t.config.basic.changeRunner}
               </span>
             </button>
@@ -201,7 +201,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
               align="start"
               sideOffset={8}
               collisionPadding={12}
-              className="z-50 flex max-h-[min(520px,calc(100dvh-140px))] w-[min(460px,calc(100vw-32px))] flex-col overflow-hidden rounded-panel border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)]"
+              className="z-50 flex max-h-[min(520px,calc(100dvh-140px))] w-[min(460px,calc(100vw-32px))] flex-col overflow-hidden rounded-panel border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
             >
               <div className="flex min-h-0 flex-1 flex-col">
                 <RunnerPicker
@@ -221,7 +221,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
                   offers={(definition) => canRunAgent(agent, definition)}
                 />
               </div>
-              <div className="flex shrink-0 items-center justify-end border-t border-hairline bg-surface-subtle/60 px-3 py-1.5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper">
+              <div className="flex shrink-0 items-center justify-end border-t border-hairline bg-surface-subtle/60 px-3 py-1.5">
                 <Button type="button" size="sm" variant="secondary" onClick={() => setPickerOpen(false)}>
                   {t.config.basic.done}
                 </Button>
@@ -231,18 +231,18 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
         </PopoverPrimitive.Root>
 
         {!pickerOpen && providerNote && (
-          <p role="note" className="text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
+          <p role="note" className="text-[12.5px] font-medium text-ink-700">
             {providerNote}
           </p>
         )}
         {!pickerOpen && notInCatalog && model && (
-          <p role="note" className="text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
+          <p role="note" className="text-[12.5px] font-medium text-ink-700">
             {t.runtime.picker.notInCatalog(`${model.provider} / ${model.modelId}`)}
           </p>
         )}
         {!pickerOpen && catalogError && model && (
           <div className="grid gap-0.5 text-[12.5px] text-red-text">
-            <p className="font-semibold [[data-skin=plate]_&]:font-bold">{t.config.basic.catalogUnavailable}</p>
+            <p className="font-semibold">{t.config.basic.catalogUnavailable}</p>
             <p>{t.config.basic.catalogReason(describeError(catalogError))}</p>
             <p role="note" className="text-ink-700">
               {`${t.runtime.picker.inUse} `}
@@ -266,18 +266,18 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
       {!isAgentNameConflict(update.error) && <ErrorAlert error={unmatchedFieldError(update.error, shownInline)} />}
       {serverUpdated && dirty && (
         <Alert variant="warning" role="status">
-          <AlertDescription className="text-[13px] font-medium text-ink [[data-skin=plate]_&]:font-bold">{t.config.basic.serverUpdated}</AlertDescription>
+          <AlertDescription className="text-[13px] font-medium text-ink">{t.config.basic.serverUpdated}</AlertDescription>
         </Alert>
       )}
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
         {dirty && (
-          <p role="status" className="mr-auto rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[12.5px] font-medium [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black">
+          <p role="status" className="mr-auto rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[12.5px] font-medium">
             {t.common.unsaved}
           </p>
         )}
         {notice && !dirty && (
           <p
-            className="mr-auto rounded-full border border-hairline bg-tint-green px-3 py-0.5 text-[12.5px] font-medium text-green-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-black"
+            className="mr-auto rounded-full border border-hairline bg-tint-green px-3 py-0.5 text-[12.5px] font-medium text-green-text"
             role="status"
           >
             {notice}

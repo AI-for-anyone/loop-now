@@ -27,7 +27,7 @@ import { fieldsOf } from './schema-form'
 const text = t.plugins.project
 
 function SubTitle({ children }: { children: string }) {
-  return <h3 className="text-[13px] font-semibold text-ink-700 [[data-skin=plate]_&]:font-black">{children}</h3>
+  return <h3 className="text-[13px] font-semibold text-ink-700">{children}</h3>
 }
 
 // Mounted only when a project plugin row is expanded and has x-scope: project fields, so usePluginConfig isn't fetched until needed.
@@ -82,7 +82,7 @@ function ProjectPluginExpandedBody({
   const displayName = localizedText(item.displayName)
 
   return (
-    <div className="flex min-w-0 flex-col gap-3.5 border-t border-hairline bg-surface-subtle/35 px-4 py-4 [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-transparent">
+    <div className="flex min-w-0 flex-col gap-3.5 border-t border-hairline bg-surface-subtle/35 px-4 py-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {detail.data && <InstalledSourceBadge plugin={detail.data.plugin} />}
         <IdVersion id={item.pluginId} version={item.version} />
@@ -127,8 +127,8 @@ function ProjectPluginExpandedBody({
             <div className="grid min-w-0 content-start gap-2.5">
               <SubTitle>{text.here}</SubTitle>
               {(item.status === 'error' || item.status === 'host_stopped') && (
-                <p className="rounded-input border border-red/20 bg-tint-red px-3 py-2 text-[13px] text-red-text [[data-skin=plate]_&]:border-0">
-                  <span className="font-semibold [[data-skin=plate]_&]:font-black">
+                <p className="rounded-input border border-red/20 bg-tint-red px-3 py-2 text-[13px] text-red-text">
+                  <span className="font-semibold">
                     {item.status === 'error' ? text.pluginError : text.hostStopped}
                   </span>{' '}
                   · {text.keepsEnabled}
@@ -156,14 +156,14 @@ function ProjectPluginRow({ project, item }: { project: Schemas['Project']; item
       <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
           <StatusDot status={item.status} muted={!item.enabled} />
-          <h2 className="min-w-0 text-[14px] leading-snug font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[20px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-normal">
+          <h2 className="min-w-0 text-[14px] leading-snug font-semibold [overflow-wrap:anywhere]">
             <Link to={pluginPath(item.pluginId)} className="outline-none hover:underline focus-visible:shadow-focus">
               {displayName}
             </Link>
           </h2>
           <span className="font-mono text-[11.5px] text-ink-500">v{item.version}</span>
           {item.enabled && overrideCount > 0 && (
-            <span className="rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-px text-[11.5px] text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.06]">
+            <span className="rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-px text-[11.5px] text-ink-700">
               {t.plugins.detail.overrides(overrideCount)}
             </span>
           )}

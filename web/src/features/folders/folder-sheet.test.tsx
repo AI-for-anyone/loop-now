@@ -41,10 +41,6 @@ describe('Folder on the sheet', () => {
         'border',
         'border-hairline-strong',
         'bg-surface-control',
-        '[[data-skin=plate]_&]:rounded-full',
-        '[[data-skin=plate]_&]:border-[1.5px]',
-        '[[data-skin=plate]_&]:border-ink',
-        '[[data-skin=plate]_&]:bg-paper-raised',
       )
       expect(button).toHaveTextContent(name)
     }
@@ -78,7 +74,7 @@ describe('Folder on the sheet', () => {
     expect(toolbar).toHaveClass('bg-tint-yellow/50')
   })
 
-  it('no AGENTS.md yet: a compact single-row banner with mono and Plate skin styling', async () => {
+  it('no AGENTS.md yet: a compact single-row banner with unified surface styling', async () => {
     setup('project')
     const note = await screen.findByRole('note')
     expect(note).toHaveTextContent('No AGENTS.md yet')
@@ -89,22 +85,18 @@ describe('Folder on the sheet', () => {
       'border-hairline-strong',
       'bg-surface-subtle',
       'shadow-surface',
-      '[[data-skin=plate]_&]:bg-tint-pink-2',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:shadow-print-pink',
     )
   })
 
-  it('file list: high-density 36px rows with 16px EntryIcon, no redundant heading, crisp hairlines in mono and dashed rows in Plate', async () => {
+  it('file list: high-density 36px rows with 16px EntryIcon, no redundant heading, and crisp hairline rows', async () => {
     setup()
     const table = await within(content()).findByRole('table')
     expect(within(content()).queryByRole('heading', { level: 3, name: "server's folder" })).toBeNull()
-    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong', '[[data-skin=plate]_&]:border-b-2', '[[data-skin=plate]_&]:border-ink')
+    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong')
     const rows = [...table.querySelectorAll('tbody tr')]
     expect(rows.length).toBeGreaterThan(2)
     for (const row of rows) {
-      expect(row).toHaveClass('h-9', 'border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+      expect(row).toHaveClass('h-9', 'border-b', 'border-hairline')
       expect(row.querySelector('[data-folder-icon]')).toBeNull()
       expect(row.querySelector('[data-file-icon]')).toBeNull()
       expect(row.querySelector('svg')).toHaveClass('size-4')
@@ -114,20 +106,20 @@ describe('Folder on the sheet', () => {
     expect(cells[2]).toHaveClass('font-mono')
   })
 
-  it('the selected item in the file tree uses surface-active in mono skin and yellow in Plate skin', async () => {
+  it('the selected item in the file tree uses surface-active token', async () => {
     const { user } = setup()
     const tree = await screen.findByRole('tree')
     // The root folder is selected at first.
     const root = within(tree).getAllByRole('treeitem')[0]
     expect(root).toHaveAttribute('aria-selected', 'true')
-    expect(root).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(root).toHaveClass('bg-surface-active')
     // After opening another folder, the selection styling follows it.
     const web = () => tree.querySelector<HTMLElement>('[role=treeitem][data-path="web"]')
     await waitFor(() => expect(web()).not.toBeNull())
     await user.click(web()!)
     await waitFor(() => expect(web()).toHaveAttribute('aria-selected', 'true'))
-    expect(web()).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
-    expect(root).not.toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(web()).toHaveClass('bg-surface-active')
+    expect(root).not.toHaveClass('bg-surface-active')
   })
 
   it('bottom 28px status strip shows live directory counts and size, switches to file metadata in file mode, and keeps the concurrency tooltip', async () => {
@@ -139,7 +131,7 @@ describe('Folder on the sheet', () => {
 
     await within(content()).findByRole('table')
     const footer = container.querySelector<HTMLElement>('[data-folder-footer]')!
-    expect(footer).toHaveClass('h-7', 'border-t', 'border-hairline', 'bg-surface-subtle/50', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed')
+    expect(footer).toHaveClass('h-7', 'border-t', 'border-hairline', 'bg-surface-subtle/50')
     expect(footer).toHaveTextContent(`${t.folders.summary(dirs, nonDirs)} · ${t.folders.size(bytes)}`)
     expect(footer.querySelector(`[title*="${t.folders.concurrent}"]`)).not.toBeNull()
 

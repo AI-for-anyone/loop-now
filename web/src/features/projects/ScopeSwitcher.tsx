@@ -15,17 +15,12 @@ const text = t.shell
 
 type Option = { kind: 'global' } | { kind: 'project'; project: Schemas['Project'] }
 
-// Option row: semantic active/hover highlights in mono; yellow current row and navy inner outline in Plate.
+// Option row: fixed single-line height with semantic active and hover highlights.
 const rowClass = (current: boolean, active: boolean) =>
   cn(
-    'grid min-h-[36px] cursor-pointer grid-cols-[18px_minmax(0,1fr)_max-content] items-center gap-2 rounded-ticket py-0 pr-3 pl-2.5 text-[13.5px] transition-colors [[data-skin=plate]_&]:min-h-[38px] [[data-skin=plate]_&]:text-[14px]',
-    current
-      ? 'bg-surface-active font-semibold text-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black'
-      : 'font-medium hover:bg-surface-hover [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-blue',
-    active &&
-      (current
-        ? '[[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
-        : 'bg-surface-hover [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'),
+    'grid h-[38px] cursor-pointer grid-cols-[18px_minmax(0,1fr)_max-content] items-center gap-2 rounded-ticket py-0 pr-3 pl-2.5 text-[13.5px] transition-colors',
+    current ? 'bg-surface-active font-semibold text-ink' : 'font-medium hover:bg-surface-hover',
+    active && !current && 'bg-surface-hover',
   )
 
 // Colored monogram badge for a project: each project gets a stable distinct hue derived from its id/name.
@@ -40,25 +35,20 @@ export function ProjectAvatar({
   size?: 'xs' | 'sm'
   className?: string
 }) {
-  const { skin, resolvedTheme } = useTheme()
+  const { resolvedTheme } = useTheme()
   const monogram = projectMonogram(name)
   const palette = projectAvatarPalette(id ?? name)
   const colors = palette[resolvedTheme]
-  const sizeClass =
-    size === 'xs'
-      ? 'size-[18px] rounded-[5px] text-[9.5px]'
-      : 'size-[22px] rounded-[6px] text-[10.5px] [[data-skin=plate]_&]:size-[24px] [[data-skin=plate]_&]:rounded-[7px] [[data-skin=plate]_&]:text-[12px]'
-
-  const glyph = skin === 'plate' ? (Array.from(name)[0] ?? '?') : monogram
+  const sizeClass = size === 'xs' ? 'size-[18px] rounded-[5px] text-[9.5px]' : 'size-[22px] rounded-[6px] text-[10.5px]'
 
   return (
     <span
       aria-hidden="true"
       data-project-avatar={palette.name}
-      data-monogram={glyph}
-      style={skin !== 'plate' ? { backgroundColor: colors.bg, color: colors.fg } : undefined}
+      data-monogram={monogram}
+      style={{ backgroundColor: colors.bg, color: colors.fg }}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center font-sans leading-none font-bold tracking-[-0.02em] select-none before:content-[attr(data-monogram)] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-ink',
+        'inline-flex shrink-0 items-center justify-center font-sans leading-none font-bold tracking-[-0.02em] select-none before:content-[attr(data-monogram)]',
         sizeClass,
         className,
       )}
@@ -74,7 +64,7 @@ function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] bg-surface-hover text-ink-700 [[data-skin=plate]_&]:size-[24px] [[data-skin=plate]_&]:rounded-[7px] [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink"
+      className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[6px] bg-sidebar-control-bg text-sidebar-control-fg"
     >
       <NavIcon name="settings" className="size-3.5" />
     </span>
@@ -188,15 +178,17 @@ export function ScopeSwitcher({
               <NavIcon name="settings" className="size-3" />
             </span>
           )}
-          <span className="truncate">{item.kind === 'global' ? text.global : item.project.name}</span>
+          <span title={item.kind === 'project' ? item.project.name : undefined} className="truncate">
+            {item.kind === 'global' ? text.global : item.project.name}
+          </span>
           {item.kind === 'project' && item.project.isDefault && (
-            <span className="shrink-0 rounded-stamp border border-hairline-strong bg-surface-subtle px-1.5 text-[11px] leading-5 font-semibold text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:px-[7px] [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[inset_0_0_0_1.5px_var(--ink)]">
+            <span className="shrink-0 rounded-stamp border border-hairline-strong bg-surface-subtle px-1.5 text-[11px] leading-5 font-semibold text-ink-700">
               {t.projects.switcher.isDefault}
             </span>
           )}
         </span>
         {item.kind === 'project' ? (
-          <span className={cn('text-[12px] font-medium whitespace-nowrap [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-bold', isCurrent ? 'text-ink-700' : 'text-ink-500')}>
+          <span className={cn('text-[12px] font-medium whitespace-nowrap', isCurrent ? 'text-ink-700' : 'text-ink-500')}>
             {t.projects.switcher.agentCount(item.project.agentCount)}
           </span>
         ) : (
@@ -218,14 +210,14 @@ export function ScopeSwitcher({
           aria-label={text.scope.label(name)}
           title={name}
           className={cn(
-            'flex h-8 min-w-0 items-center gap-2 rounded-ticket border-0 bg-transparent px-1.5 text-[13px] text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:h-10 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:px-2 [[data-skin=plate]_&]:text-[13.5px] [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]',
-            open && 'bg-sidebar-hover [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
+            'flex h-8 min-w-0 items-center gap-2 rounded-ticket border-0 bg-transparent px-1.5 text-[13px] text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus',
+            open && 'bg-sidebar-hover',
             className,
           )}
         >
           <ScopeMark scope={scope} />
-          <span className="min-w-0 truncate font-semibold [[data-skin=plate]_&]:font-black">{name}</span>
-          <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 text-sidebar-muted [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:[stroke-width:2.8]" />
+          <span className="min-w-0 flex-1 truncate text-left font-semibold">{name}</span>
+          <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 text-sidebar-muted" />
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
           <PopoverPrimitive.Content
@@ -234,7 +226,7 @@ export function ScopeSwitcher({
             sideOffset={8}
             collisionPadding={16}
             aria-label={text.scope.list}
-            className="z-50 flex w-[min(320px,calc(100vw-32px))] flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-elevated p-2 text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]"
+            className="z-50 flex w-[min(320px,calc(100vw-32px))] flex-col gap-1.5 rounded-card border border-hairline-strong bg-surface-elevated p-2 text-ink shadow-floating outline-none"
             onOpenAutoFocus={(event) => {
               event.preventDefault()
               ;(event.currentTarget as HTMLElement).querySelector('input')?.focus()
@@ -249,14 +241,14 @@ export function ScopeSwitcher({
               value={filter}
               onChange={(event) => onFilterChange(event.target.value)}
               onKeyDown={onKeyDown}
-              className="h-[36px] w-full rounded-input border border-hairline-strong bg-surface-control px-3 text-[13.5px] text-ink outline-none transition-colors placeholder:text-ink-500 focus-visible:border-ink/35 [[data-skin=plate]_&]:h-[38px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]"
+              className="h-[36px] w-full rounded-input border border-hairline-strong bg-surface-control px-3 text-[13.5px] text-ink transition-colors outline-none placeholder:text-ink-500 focus-visible:border-ink/35"
             />
             <div id={listId} role="listbox" aria-label={text.scope.list} className="flex flex-col gap-0.5">
               <ul role="none" className="flex flex-col">
                 {option(options[0], 0)}
               </ul>
-              <span aria-hidden="true" className="mx-1.5 my-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/18" />
-              <span id={groupId} className="px-3 pt-0.5 text-[11.5px] font-semibold text-ink-500 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:font-black">
+              <span aria-hidden="true" className="mx-1.5 my-1 border-t border-hairline" />
+              <span id={groupId} className="px-3 pt-0.5 text-[11.5px] font-semibold text-ink-500">
                 {text.scope.projects(shown.length)}
               </span>
               {/* Show at most 7 rows and scroll inside the list beyond that; on narrow screens at most half the screen height. */}
@@ -269,10 +261,10 @@ export function ScopeSwitcher({
                 {options.slice(1).map((item, index) => option(item, index + 1))}
               </ul>
             </div>
-            <span aria-hidden="true" className="mx-1.5 my-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/18" />
+            <span aria-hidden="true" className="mx-1.5 my-1 border-t border-hairline" />
             <button
               type="button"
-              className="flex min-h-[36px] items-center gap-2.5 rounded-ticket px-3 text-[13.5px] font-semibold text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:min-h-[38px] [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-blue"
+              className="flex h-[38px] items-center gap-2.5 rounded-ticket px-3 text-[13.5px] font-semibold whitespace-nowrap text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus"
               onClick={() => {
                 setOpen(false)
                 setCreating(true)
@@ -284,7 +276,7 @@ export function ScopeSwitcher({
             {statusDotClass && statusTitle && (
               <div
                 data-scope-connection-status
-                className="flex items-center gap-2 border-t border-hairline px-3 pt-2 pb-0.5 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/18"
+                className="flex items-center gap-2 border-t border-hairline px-3 pt-2 pb-0.5 text-[11.5px] text-ink-500"
               >
                 <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', statusDotClass)} />
                 <span className="min-w-0 truncate">{statusTitle}</span>

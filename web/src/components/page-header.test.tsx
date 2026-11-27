@@ -15,30 +15,22 @@ describe('Page title', () => {
       </MemoryRouter>,
     )
 
-  it('breadcrumb: the earlier levels are links, the last item is the current page in primary ink (riso blue in Plate skin)', () => {
+  it('breadcrumb: the earlier levels are links, the last item is the current page in primary ink', () => {
     renderHeader()
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(crumbs).getByRole('link', { name: 'Demo' })).toHaveAttribute('href', '/?project=Demo')
     const current = within(crumbs).getByText('Tasks')
     expect(current).toHaveAttribute('aria-current', 'page')
-    expect(current).toHaveClass('text-ink', '[[data-skin=plate]_&]:text-riso-blue')
+    expect(current).toHaveClass('text-ink')
   })
 
-  it('the title uses compact 14px bar typography by default and preserves ZCOOL display styling with pink misregistration in Plate skin', () => {
+  it('the title uses compact 14px bar typography', () => {
     renderHeader()
     const title = screen.getByRole('heading', { level: 1, name: 'Tasks' })
     expect(title).toHaveClass('text-[14px]', 'font-semibold', 'tracking-[-0.01em]', 'text-ink', 'truncate')
-    expect(title).toHaveClass(
-      '[[data-skin=plate]_&]:font-display-cn',
-      '[[data-skin=plate]_&]:text-riso-blue',
-      '[[data-skin=plate]_&]:text-[clamp(38px,6vw,60px)]',
-      '[[data-skin=plate]_&]:[text-shadow:4px_4px_0_var(--riso-pink)]',
-      '[[data-skin=plate]_&]:nav:text-[40px]',
-      '[[data-skin=plate]_&]:nav:[text-shadow:3px_3px_0_var(--riso-pink)]',
-    )
   })
 
-  it('single-row 48px bar in mono skin: meta and actions sit inline with title; right padding for OverprintDeco is scoped to Plate skin only', () => {
+  it('single-row 48px bar: meta and actions sit inline with title and note renders in a slim band below', () => {
     render(
       <MemoryRouter>
         <PageHeader
@@ -58,28 +50,17 @@ describe('Page title', () => {
     expect(row).toContainElement(screen.getByRole('heading', { level: 1 }))
     expect(row).toContainElement(screen.getByText('Tasks in this project'))
     expect(row).toContainElement(screen.getByRole('button', { name: 'New task' }))
-    expect(row).toHaveClass(
-      'flex',
-      'flex-wrap',
-      'items-center',
-      '[[data-skin=plate]_&]:@[820px]:pr-[316px]',
-      '[[data-skin=plate]_&]:nav:@[820px]:pr-[196px]',
-    )
-    expect(row).not.toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
+    expect(row).toHaveClass('flex', 'flex-wrap', 'items-center')
     expect(header.querySelector('[data-page-actions]')).toHaveClass('ml-auto')
     expect(header.querySelector('[data-page-note]')).toHaveClass('border-b', 'border-hairline', 'bg-surface-subtle/50')
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
-    expect(header.querySelector('[data-overprint-deco]')).toHaveClass('nav:scale-[0.6]')
   })
 
-  it('the meta container renders inline when provided; the overprint decoration at the top right is hidden from screen readers and not shown when narrow', () => {
+  it('the meta container renders inline when provided', () => {
     renderHeader(<span>Tasks in this project</span>)
     const header = screen.getByRole('banner')
     expect(header).toHaveClass('@container', 'relative')
     expect(within(header).getByText('Tasks in this project').closest('[data-page-meta]')).not.toBeNull()
-    const deco = header.querySelector('[data-overprint-deco]')
-    expect(deco).toHaveAttribute('aria-hidden', 'true')
-    expect(deco).toHaveClass('hidden', '@[820px]:block')
   })
 
   it('leaves no empty line when there is no meta', () => {
@@ -87,17 +68,18 @@ describe('Page title', () => {
     expect(document.querySelector('[data-page-meta]')).toBeNull()
   })
 
-  it('page frame: full-bleed p-0 in mono skin, preserving fluid side padding and extra bottom room in Plate skin', () => {
-    render(<PageFrame data-testid="frame">Body</PageFrame>)
-    expect(screen.getByTestId('frame')).toHaveClass(
-      'flex',
-      'h-full',
-      'min-h-0',
-      'flex-col',
-      'p-0',
-      '[[data-skin=plate]_&]:px-[clamp(14px,2.4vw,34px)]',
-      '[[data-skin=plate]_&]:pb-[26px]',
+  it('page frame: fills the content area directly without outer margins; the header bar carries its own horizontal gutters', () => {
+    render(
+      <MemoryRouter>
+        <PageFrame data-testid="frame">
+          <PageHeader crumbs={[{ label: 'Demo', to: '/?project=Demo' }]} title="Tasks" />
+        </PageFrame>
+      </MemoryRouter>,
     )
+    const frame = screen.getByTestId('frame')
+    expect(frame).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col')
+    expect(frame).not.toHaveClass('px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]', 'max-nav:pb-4')
+    expect(screen.getByRole('banner').querySelector('[data-page-bar]')).toHaveClass('px-4', 'sm:px-6')
   })
 
   it('keeps SidebarExpandButton clickable inside the window-drag bar with macOS traffic-light offset when collapsed in desktop mode', () => {

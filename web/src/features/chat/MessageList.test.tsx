@@ -369,8 +369,8 @@ describe('how replies show', () => {
     expect(dividers).toHaveLength(1)
     const bubble = screen.getByText('Run lint first')
     expect(dividers[0].compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(bubble).toHaveClass('bg-tint-pink-2', '[[data-skin=plate]_&]:border-riso-pink')
-    expect(screen.getByText('Run the tests')).toHaveClass('bg-surface-hover', '[[data-skin=plate]_&]:bg-tint-pink')
+    expect(bubble).toHaveClass('bg-tint-pink-2')
+    expect(screen.getByText('Run the tests')).toHaveClass('bg-surface-hover')
   })
 
   // A runtime may never report a tool's end (Antigravity moves a long command to the background and its end arrives after the turn). The
@@ -432,7 +432,7 @@ describe('how replies show', () => {
     for (const divider of [session, interrupted]) {
       const lines = divider.querySelectorAll('[data-cut-line]')
       expect(lines).toHaveLength(2)
-      for (const line of lines) expect(line).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-2', '[[data-skin=plate]_&]:border-dashed', '[[data-skin=plate]_&]:border-riso-pink')
+      for (const line of lines) expect(line).toHaveClass('border-t', 'border-hairline')
       expect(divider.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     }
     // The cut line has a pair of scissors at its left end; the interrupt divider's icon is still a lightning bolt.

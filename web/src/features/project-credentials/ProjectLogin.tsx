@@ -142,15 +142,15 @@ export function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDev
     try { await navigator.clipboard.writeText(code.userCode) } catch { return }
     setCopied(true); setTimeout(() => setCopied(false), 1500)
   }
-  return <div className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-    <span id={labelId} className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.device.code}</span>
+  return <div className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px]">
+    <span id={labelId} className="font-semibold">{copy.device.code}</span>
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <code aria-labelledby={labelId} className="min-w-0 font-mono text-[20px] leading-tight font-semibold tracking-[0.12em] select-all [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{code.userCode}</code>
-      <Button type="button" size="xs" variant="secondary" className="h-8 bg-surface-control px-3 text-[12.5px] hover:bg-surface-hover [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:hover:bg-riso-yellow" aria-describedby={labelId} onClick={() => void copyCode()}>{copied ? t.common.copied : t.common.copy}</Button>
+      <code aria-labelledby={labelId} className="min-w-0 font-mono text-[20px] leading-tight font-semibold tracking-[0.12em] select-all [overflow-wrap:anywhere]">{code.userCode}</code>
+      <Button type="button" size="xs" variant="secondary" className="h-8 bg-surface-control px-3 text-[12.5px] hover:bg-surface-hover" aria-describedby={labelId} onClick={() => void copyCode()}>{copied ? t.common.copied : t.common.copy}</Button>
     </div>
     {href
-      ? <a href={href} target="_blank" rel="noopener noreferrer" className="justify-self-start font-medium text-ink underline [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-blue">{copy.device.open(hostOf(href))}</a>
-      : <p role="alert" className="font-medium text-red-text [[data-skin=plate]_&]:font-bold">{copy.device.urlRejected}</p>}
+      ? <a href={href} target="_blank" rel="noopener noreferrer" className="justify-self-start font-medium text-ink underline [overflow-wrap:anywhere]">{copy.device.open(hostOf(href))}</a>
+      : <p role="alert" className="font-medium text-red-text">{copy.device.urlRejected}</p>}
     {code.expiresAt && <p className="text-ink-700">{copy.device.expires(t.chat.time(code.expiresAt))}</p>}
   </div>
 }
@@ -174,10 +174,10 @@ export function LoginPrompt({ prompt, disabled, answering, onAnswer }: { prompt:
     await onAnswer(sent)
   }
   const error = missing ? (prompt.kind === 'select' ? text.choose : text.required) : undefined
-  return <form className="grid min-w-0 gap-2.5 rounded-input border border-hairline-strong bg-surface-subtle p-3 text-[13.5px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-yellow" onSubmit={event => void submit(event)} noValidate>
+  return <form className="grid min-w-0 gap-2.5 rounded-input border border-hairline-strong bg-surface-subtle p-3 text-[13.5px]" onSubmit={event => void submit(event)} noValidate>
     {prompt.kind === 'select'
       ? <fieldset className="grid min-w-0 gap-1.5" aria-describedby={error ? `${id}-error` : undefined}>
-        <legend className="mb-1 font-semibold whitespace-pre-wrap [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{message || text.choose}</legend>
+        <legend className="mb-1 font-semibold whitespace-pre-wrap [overflow-wrap:anywhere]">{message || text.choose}</legend>
         {prompt.options.map(option => <label key={option.id} className="flex min-w-0 items-start gap-2">
           <input type="radio" name={id} value={option.id} checked={value === option.id} disabled={disabled} onChange={() => setValue(option.id)} className="mt-1 shrink-0" />
           <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{option.label}</span>

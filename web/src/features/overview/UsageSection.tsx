@@ -27,42 +27,42 @@ const fmt = (count: number) => t.overview.tokens(count)
 
 // Swatches for the four breakdown items: monochrome chart scale in Mono; riso blue, fluorescent pink and outlined tints in Plate.
 const SWATCH = {
-  input: 'bg-[var(--chart-blue)] [[data-skin=plate]_&]:bg-riso-blue',
-  output: 'bg-[var(--chart-pink)] [[data-skin=plate]_&]:bg-riso-pink',
-  cacheRead: 'bg-[var(--chart-ochre)] [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--riso-blue)]',
-  cacheWrite: 'bg-[var(--chart-other)] [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--pink-text)]',
+  input: 'bg-[var(--chart-blue)]',
+  output: 'bg-[var(--chart-pink)]',
+  cacheRead: 'bg-[var(--chart-ochre)]',
+  cacheWrite: 'bg-[var(--chart-other)]',
 } as const
 
 const PARTS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const
 
 // Fill of the stacked total bars: flat chart tokens in Mono; halftone/tinted fills in Plate.
 const FILL = {
-  input: 'bg-[var(--chart-blue)] [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:bg-[radial-gradient(rgb(255_255_255/.28)_1px,transparent_1.3px)] [[data-skin=plate]_&]:bg-size-[5px_5px]',
-  output: 'bg-[var(--chart-pink)] [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:bg-[radial-gradient(rgb(24_38_94/.22)_1px,transparent_1.3px)] [[data-skin=plate]_&]:bg-size-[5px_5px]',
-  cacheRead: 'bg-[var(--chart-ochre)] [[data-skin=plate]_&]:bg-tint-blue',
-  cacheWrite: 'bg-[var(--chart-other)] [[data-skin=plate]_&]:bg-tint-pink-2',
+  input: 'bg-[var(--chart-blue)]',
+  output: 'bg-[var(--chart-pink)]',
+  cacheRead: 'bg-[var(--chart-ochre)]',
+  cacheWrite: 'bg-[var(--chart-other)]',
 } as const
 
 // The total line: the total for the selected period, with the four breakdown items to the right (no raw camelCase keys).
 function TotalLine({ rangeLabel, sum }: { rangeLabel: string; sum: UsageParts }) {
   return (
-    <div className="flex flex-wrap items-end gap-x-8 gap-y-2.5 rounded-card border border-hairline bg-surface-control px-4 py-3 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised">
+    <div className="flex flex-wrap items-end gap-x-8 gap-y-2.5 rounded-card border border-hairline bg-surface-control px-4 py-3">
       <span className="flex flex-col gap-0.5">
-        <span className="text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink">
+        <span className="text-[12px] font-medium text-ink-500">
           {t.overview.usage.total(rangeLabel)}
         </span>
-        <span className="riso-misreg font-display-latin text-[28px] leading-none font-semibold tracking-[-0.02em] text-ink tabular-nums [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[36px] [[data-skin=plate]_&]:font-extrabold [[data-skin=plate]_&]:text-riso-blue">
+        <span className="riso-misreg font-display-latin text-[28px] leading-none font-semibold tracking-[-0.02em] text-ink tabular-nums [overflow-wrap:anywhere]">
           {fmt(sum.total)}
         </span>
       </span>
       <dl className="flex flex-wrap gap-x-6 gap-y-1.5">
         {PARTS.map((part) => (
           <div key={part} className="flex min-w-0 flex-col">
-            <dt className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink-700">
+            <dt className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500">
               <span aria-hidden="true" className={cn('h-2 w-2.5 shrink-0 rounded-[2px]', SWATCH[part])} />
               {t.overview.usage.parts[part]}
             </dt>
-            <dd className="font-mono text-[13px] font-semibold text-ink tabular-nums [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">
+            <dd className="font-mono text-[13px] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]">
               {fmt(sum[part])}
             </dd>
           </div>
@@ -75,7 +75,7 @@ function TotalLine({ rangeLabel, sum }: { rangeLabel: string; sum: UsageParts })
 function LineName({ line, dimension }: { line: UsageLine; dimension: UsageDimension }) {
   if (dimension === 'agent') {
     return (
-      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13.5px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13.5px] font-semibold [overflow-wrap:anywhere]">
         {line.agentName}
         {line.deleted && <Badge tone="neutral">{t.overview.usage.deleted}</Badge>}
         {line.scope && <ScopeTag scope={line.scope} projectId={line.projectId} />}
@@ -83,10 +83,10 @@ function LineName({ line, dimension }: { line: UsageLine; dimension: UsageDimens
     )
   }
   if (line.provider === null || line.model === null) {
-    return <span className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">{t.overview.usage.unknownModel}</span>
+    return <span className="text-[13.5px] font-semibold">{t.overview.usage.unknownModel}</span>
   }
   return (
-    <span className="font-mono text-[12px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">
+    <span className="font-mono text-[12px] font-semibold [overflow-wrap:anywhere]">
       {t.overview.usage.model(line.provider, line.model)}
     </span>
   )
@@ -107,7 +107,7 @@ function UsageBar({ line, dimension, max, most }: { line: UsageLine; dimension: 
       <span
         aria-hidden="true"
         data-usage-track
-        className="flex h-[16px] min-w-0 overflow-hidden rounded-[4px] border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper"
+        className="flex h-[16px] min-w-0 overflow-hidden rounded-[4px] border border-hairline-strong bg-surface-subtle"
       >
         {PARTS.map((part) =>
           line[part] > 0 ? (
@@ -115,10 +115,10 @@ function UsageBar({ line, dimension, max, most }: { line: UsageLine; dimension: 
           ) : null,
         )}
       </span>
-      <span className="flex items-center justify-end gap-2 font-mono text-[12px] font-medium tabular-nums [[data-skin=plate]_&]:font-bold">
+      <span className="flex items-center justify-end gap-2 font-mono text-[12px] font-medium tabular-nums">
         {fmt(line.total)}
         {most && (
-          <span className="rounded-[4px] bg-surface-active px-1.5 font-sans text-[11px] leading-[18px] font-semibold text-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black">
+          <span className="rounded-[4px] bg-surface-active px-1.5 font-sans text-[11px] leading-[18px] font-semibold text-ink">
             {t.overview.usage.most}
           </span>
         )}
@@ -126,7 +126,7 @@ function UsageBar({ line, dimension, max, most }: { line: UsageLine; dimension: 
       <span
         id={detailId}
         role="tooltip"
-        className="invisible absolute right-0 bottom-full z-10 mb-2 max-w-[min(100%,420px)] rounded-input bg-tooltip-bg px-3 py-2 text-[12px] leading-[1.6] text-tooltip-fg shadow-floating group-hover:visible group-focus-visible:visible [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--riso-pink)]"
+        className="invisible absolute right-0 bottom-full z-10 mb-2 max-w-[min(100%,420px)] rounded-input bg-tooltip-bg px-3 py-2 text-[12px] leading-[1.6] text-tooltip-fg shadow-floating group-hover:visible group-focus-visible:visible"
       >
         {t.overview.usage.detail(fmt(line.input), fmt(line.output), fmt(line.cacheRead), fmt(line.cacheWrite), fmt(line.total))}
       </span>
@@ -147,8 +147,8 @@ function Bars({ lines, dimension }: { lines: UsageLine[]; dimension: UsageDimens
       </ul>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-500">
         {PARTS.map((part) => (
-          <span key={part} aria-hidden="true" className="inline-flex items-center gap-1.5 font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">
-            <span className={cn('h-2 w-3 rounded-[2px] border border-hairline-strong [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink', SWATCH[part])} />
+          <span key={part} aria-hidden="true" className="inline-flex items-center gap-1.5 font-medium text-ink-700">
+            <span className={cn('h-2 w-3 rounded-[2px] border border-hairline-strong', SWATCH[part])} />
             {t.overview.usage.parts[part]}
           </span>
         ))}
@@ -162,9 +162,9 @@ function Empty({ rangeLabel }: { rangeLabel: string }) {
   return (
     <p
       role="status"
-      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-card border border-hairline bg-surface-subtle px-4 py-3 text-[13px] text-ink-700 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:bg-transparent"
+      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-card border border-hairline bg-surface-subtle px-4 py-3 text-[13px] text-ink-700"
     >
-      <span className="font-semibold text-ink [[data-skin=plate]_&]:font-bold">{t.overview.usage.empty(rangeLabel)}</span>
+      <span className="font-semibold text-ink">{t.overview.usage.empty(rangeLabel)}</span>
       <span className="text-ink-500">{t.overview.usage.emptyHint}</span>
     </p>
   )
@@ -283,7 +283,7 @@ function UsageBody({
         <span className="text-[12px] text-ink-500">{t.overview.usage.unit}</span>
         <Link
           to={statsHref}
-          className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-medium text-ink-700 underline-offset-2 hover:text-ink hover:underline focus-visible:shadow-focus [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue"
+          className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-medium text-ink-700 underline-offset-2 hover:text-ink hover:underline focus-visible:shadow-focus"
         >
           {t.overview.usage.fullAnalytics}
           <ArrowRightIcon aria-hidden="true" className="size-3.5" strokeWidth={2.4} />

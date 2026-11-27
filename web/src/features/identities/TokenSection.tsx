@@ -15,7 +15,7 @@ import { IssueTokenDialog } from './IssueTokenDialog'
 
 type TokenFilter = 'active' | 'all'
 
-const headClass = 'py-2 px-2 first:pl-1 last:pr-1 text-[12px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black'
+const headClass = 'py-2 px-2 first:pl-1 last:pr-1 text-[12px] font-semibold text-ink-500'
 
 // Tokens table: lists active or all tokens (newest first) with an inline Active | All status filter; active tokens can be revoked
 // individually; issuing happens in a dialog. Fits comfortably at 1280px without horizontal overflow.
@@ -32,10 +32,10 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
   return (
     <section aria-labelledby="identity-tokens" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <h3 id="identity-tokens" className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">
+        <h3 id="identity-tokens" className="text-[15px] leading-[1.3] font-semibold">
           {t.identities.tokens}
           {tokens.data && (
-            <span aria-hidden="true" className="ml-2 font-mono text-[12.5px] font-medium text-ink-500 tabular-nums [[data-skin=plate]_&]:font-display-latin [[data-skin=plate]_&]:text-[15px] [[data-skin=plate]_&]:font-extrabold">
+            <span aria-hidden="true" className="ml-2 font-mono text-[12.5px] font-medium text-ink-500 tabular-nums">
               {list.length}
             </span>
           )}
@@ -59,7 +59,7 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
             </ToggleGroupItem>
           </ToggleGroup>
         )}
-        <Button size="xs" className="ml-auto [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)]" onClick={() => setIssuing(true)}>
+        <Button size="xs" className="ml-auto" onClick={() => setIssuing(true)}>
           {t.identities.issue}
         </Button>
       </div>
@@ -72,7 +72,7 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
       {visible.length > 0 && (
         <Table className="w-full text-[13px]" card={false}>
           <TableHeader className="bg-transparent">
-            <TableRow className="border-b border-hairline-strong last:border-b [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-solid [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:last:border-b-2">
+            <TableRow className="border-b border-hairline-strong last:border-b">
               <TableHead scope="col" className={headClass}>{t.identities.columns.prefix}</TableHead>
               <TableHead scope="col" className={headClass}>{t.identities.columns.createdAt}</TableHead>
               <TableHead scope="col" className={headClass}>{t.identities.columns.expiresAt}</TableHead>
@@ -90,7 +90,7 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
                 <TableRow
                   key={token.id}
                   className={cn(
-                    'border-b border-hairline last:border-b [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:last:border-b-[1.5px]',
+                    'border-b border-hairline last:border-b',
                     state !== 'active' && 'text-ink-500',
                   )}
                 >
@@ -106,7 +106,7 @@ export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity
                       <Button
                         variant="ghost"
                         size="xs"
-                        className="h-7 px-1.5 text-[12.5px] text-red-text underline decoration-red-text decoration-1 underline-offset-4 hover:bg-tint-red [[data-skin=plate]_&]:decoration-2"
+                        className="h-7 px-1.5 text-[12.5px] text-red-text underline decoration-red-text decoration-1 underline-offset-4 hover:bg-tint-red"
                         aria-label={`${t.identities.revoke} ${token.prefix}`}
                         onClick={() => setRevoking(token)}
                       >

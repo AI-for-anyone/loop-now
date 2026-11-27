@@ -1,6 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
+import { apiUrl } from '@/test/api'
+import { server } from '@/test/server'
+import type { ReplyFolderContext } from './local-images'
 import { Markdown } from './Markdown'
 
 describe('Markdown rendering and safety', () => {
@@ -302,4 +306,478 @@ it('a leading bold word in documents (plugin READMEs, Markdown files in folders)
   const file = render(<Markdown leadLabels={false} text={text} />)
   expect(file.container.querySelector('.md-lead')).toBeNull()
   expect(file.container.querySelector('strong')).toHaveTextContent('Export')
+})
+
+describe('Markdown images in a reply', () => {
+  it('caps a reply image as a rounded thumbnail with its alt text as tooltip', () => {
+    render(<Markdown text="![Architecture diagram](https://example.com/big.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image: Architecture diagram' })
+    expect(trigger).toHaveAttribute('title', 'Architecture diagram')
+    expect(trigger.className).toContain('rounded-input')
+    expect(trigger.className).toContain('max-w-[min(100%,360px)]')
+    const img = within(trigger).getByRole('img', { name: 'Architecture diagram' })
+    expect(img).toHaveAttribute('src', 'https://example.com/big.png')
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer')
+    expect(img).toHaveAttribute('title', 'Architecture diagram')
+    expect(img.className).toContain('max-h-[240px]')
+    expect(img.className).toContain('h-auto')
+    expect(img.className).toContain('w-auto')
+  })
+
+  it('opens the preview dialog on click and Enter, shows a link to the original in a new tab, and closes on Escape', async () => {
+    const user = userEvent.setup()
+    render(<Markdown text="![Hero shot](https://example.com/hero.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image: Hero shot' })
+
+    await user.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: 'Hero shot' })
+    const large = within(dialog).getByRole('img', { name: 'Hero shot' })
+    expect(large).toHaveAttribute('src', 'https://example.com/hero.png')
+    expect(large).toHaveAttribute('referrerpolicy', 'no-referrer')
+    const link = within(dialog).getByRole('link', { name: 'Open original in new tab' })
+    expect(link).toHaveAttribute('href', 'https://example.com/hero.png')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    trigger.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Hero shot' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('uses fallback accessible labels when an image has no alt text', async () => {
+    const user = userEvent.setup()
+    render(<Markdown text="![](https://example.com/plain.png)" />)
+    const trigger = screen.getByRole('button', { name: 'Enlarge image' })
+    expect(trigger).not.toHaveAttribute('title')
+    await user.click(trigger)
+    expect(await screen.findByRole('dialog', { name: 'Image' })).toBeInTheDocument()
+  })
+
+  it('keeps an image between two text paragraphs inline as a thumbnail', () => {
+    const { container } = render(<Markdown text={'Before the chart.\n\n![Latency chart](https://example.com/chart.png)\n\nAfter the chart.'} />)
+    expect(container.querySelector('[data-md-image-row]')).toBeNull()
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs).toHaveLength(3)
+    expect(paragraphs[0]).toHaveTextContent('Before the chart.')
+    expect(within(paragraphs[1]).getByRole('button', { name: 'Enlarge image: Latency chart' })).toBeInTheDocument()
+    expect(paragraphs[2]).toHaveTextContent('After the chart.')
+  })
+
+  it('renders an image inside a link as a capped thumbnail without nesting a button', () => {
+    const { container } = render(<Markdown text="[![Build status](https://example.com/badge.png)](https://example.com/ci)" />)
+    const link = screen.getByRole('link', { name: 'Build status' })
+    expect(link).toHaveAttribute('href', 'https://example.com/ci')
+    expect(within(link).queryByRole('button')).toBeNull()
+    const img = within(link).getByRole('img', { name: 'Build status' })
+    expect(img.className).toContain('max-h-[240px]')
+    expect(container.querySelector('a button')).toBeNull()
+  })
+
+  it('shows the alt text in a small box when an image fails to load or has a blocked URL', () => {
+    const { rerender } = render(<Markdown text="![Broken chart](https://example.com/missing.png)" />)
+    const img = screen.getByRole('img', { name: 'Broken chart' })
+    fireEvent.error(img)
+    expect(screen.queryByRole('button', { name: /Enlarge image/ })).toBeNull()
+    const box = screen.getByRole('img', { name: 'Broken chart' })
+    expect(box.tagName).not.toBe('IMG')
+    expect(box).toHaveTextContent('Broken chart')
+
+    rerender(<Markdown text="![Blocked image](javascript:alert(1))" />)
+    const blocked = screen.getByRole('img', { name: 'Blocked image' })
+    expect(blocked.tagName).not.toBe('IMG')
+    expect(blocked).toHaveTextContent('Blocked image')
+
+    rerender(<Markdown text="![](https://example.com/missing-no-alt.png)" />)
+    fireEvent.error(document.querySelector('img')!)
+    expect(screen.getByRole('img', { name: 'Image failed to load' })).toHaveTextContent('Image failed to load')
+  })
+
+  it('keeps README images as alt text only', () => {
+    const { container } = render(<Markdown readme text={'![Architecture](https://example.com/a.png)\n\n![Details](https://example.com/b.png)'} />)
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(container).toHaveTextContent('Architecture')
+    expect(container).toHaveTextContent('Details')
+  })
+
+  it('places consecutive images in one paragraph in a single row', () => {
+    const { container } = render(
+      <Markdown text={'![One](https://example.com/1.png) ![Two](https://example.com/2.png)\n![Three](https://example.com/3.png) ![Four](https://example.com/4.png)'} />,
+    )
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).not.toBeNull()
+    expect(row).toHaveAttribute('data-count', '4')
+    expect(row.querySelectorAll('.md-image-item')).toHaveLength(4)
+    expect(row.querySelectorAll('figure')).toHaveLength(0)
+    expect(within(row as HTMLElement).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['One', 'Two', 'Three', 'Four'])
+  })
+
+  it('merges consecutive image-only paragraphs into one row without pulling in an intro paragraph', () => {
+    const { container } = render(
+      <Markdown
+        text={[
+          'Here are four candidates:',
+          '',
+          '![One](https://example.com/1.png)',
+          '',
+          '![Two](https://example.com/2.png)',
+          '',
+          '![Three](https://example.com/3.png)',
+          '',
+          '![Four](https://example.com/4.png)',
+          '',
+          'Pick your favorite.',
+        ].join('\n')}
+      />,
+    )
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs.map((p) => p.textContent)).toEqual(['Here are four candidates:', 'Pick your favorite.'])
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+    expect(row.querySelectorAll('.md-image-item')).toHaveLength(4)
+    expect(row.querySelectorAll('figure')).toHaveLength(0)
+  })
+
+  it('groups caption lines with their following images in one row across blank-line, single-newline, and heading forms', () => {
+    const separated = [
+      'Four options:',
+      '',
+      '**2D-1**: bright blue poster',
+      '',
+      '![2D-1](https://example.com/1.png)',
+      '',
+      '**2D-2**: warm yellow print',
+      '',
+      '![2D-2](https://example.com/2.png)',
+      '',
+      'Which one works best?',
+    ].join('\n')
+    const view1 = render(<Markdown text={separated} />)
+    expect([...view1.container.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['Four options:', 'Which one works best?'])
+    const row1 = view1.container.querySelector('[data-md-image-row]')!
+    expect(row1).toHaveAttribute('data-count', '2')
+    const figures1 = [...row1.querySelectorAll<HTMLElement>('figure.md-image-item')]
+    expect(figures1).toHaveLength(2)
+    expect(figures1[0].firstElementChild!.tagName).toBe('FIGCAPTION')
+    expect(figures1[0].firstElementChild).toHaveTextContent('2D-1: bright blue poster')
+    expect(within(figures1[0]).getByRole('img', { name: '2D-1' })).toBeInTheDocument()
+    expect(figures1[1].firstElementChild).toHaveTextContent('2D-2: warm yellow print')
+    expect(within(figures1[1]).getByRole('img', { name: '2D-2' })).toBeInTheDocument()
+    view1.unmount()
+
+    const singleNewline = [
+      '2D-1: bright blue poster\n![2D-1](https://example.com/1.png)',
+      '',
+      '2D-2: warm yellow print\n![2D-2](https://example.com/2.png)',
+    ].join('\n')
+    const view2 = render(<Markdown text={singleNewline} />)
+    const figures2 = [...view2.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures2).toHaveLength(2)
+    expect(figures2[0].firstElementChild).toHaveTextContent('2D-1: bright blue poster')
+    expect(figures2[1].firstElementChild).toHaveTextContent('2D-2: warm yellow print')
+    view2.unmount()
+
+    const compact = '2D-1: bright blue\n![2D-1](https://example.com/1.png)\n2D-2: warm yellow\n![2D-2](https://example.com/2.png)'
+    const view3 = render(<Markdown text={compact} />)
+    const figures3 = [...view3.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures3).toHaveLength(2)
+    expect(figures3[0].firstElementChild).toHaveTextContent('2D-1: bright blue')
+    expect(figures3[1].firstElementChild).toHaveTextContent('2D-2: warm yellow')
+    view3.unmount()
+
+    const headings = '### 2D-1\n\n![2D-1](https://example.com/1.png)\n\n### 2D-2\n\n![2D-2](https://example.com/2.png)'
+    const view4 = render(<Markdown text={headings} />)
+    const figures4 = [...view4.container.querySelectorAll('[data-md-image-row] figure.md-image-item')]
+    expect(figures4).toHaveLength(2)
+    expect(figures4[0].firstElementChild).toHaveTextContent('2D-1')
+    expect(figures4[1].firstElementChild).toHaveTextContent('2D-2')
+  })
+
+  it('does not turn long prose paragraphs or a single captioned image into an image row', () => {
+    const prose = [
+      'After refactoring the scheduler we ran the full benchmark suite across three machines and verified that tail latency dropped steadily.',
+      '',
+      '![Latency](https://example.com/latency.png)',
+      '',
+      'Next we checked garbage collection pause times under the same steady workload because earlier versions spiked whenever compaction ran.',
+      '',
+      '![Pauses](https://example.com/pauses.png)',
+    ].join('\n')
+    const view1 = render(<Markdown text={prose} />)
+    expect(view1.container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(view1.container.querySelectorAll('figure')).toHaveLength(0)
+    view1.unmount()
+
+    const single = render(<Markdown text={'2D-1: bright blue\n![2D-1](https://example.com/1.png)\n\nClosing note.'} />)
+    expect(single.container.querySelector('[data-md-image-row]')).toBeNull()
+    expect(single.container.querySelectorAll('p')).toHaveLength(2)
+  })
+
+  it('keeps consecutive images in one row while streaming with the output cursor after the row', () => {
+    const { container } = render(<Markdown cursor text={'![One](https://example.com/1.png)\n\n![Two](https://example.com/2.png)'} />)
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '2')
+    const cursor = container.querySelector('.riso-cursor')!
+    expect(cursor).not.toBeNull()
+    expect(row.contains(cursor)).toBe(false)
+  })
+
+  it('groups multi-line captions (up to 3 lines with hard/soft breaks and inline links) into rows while rejecting 4+ lines', () => {
+    const twoSections = [
+      'Intro summary for all four candidates.',
+      '',
+      '### 2D sticker style',
+      '',
+      '**2D-1**: cute smile, one thin white line near the top corner.  ',
+      'Local file: [mascot-2d-1.png](file:///workspace/mascot-2d-1.png)',
+      '![Mascot 2D-1](https://example.com/2d-1.png)',
+      '',
+      '**2D-2 (pick)**: clean floating yellow block and matching cover colors.  ',
+      'Local file: [mascot-2d-2.png](https://example.com/2d-2.png)',
+      '![Mascot 2D-2](https://example.com/2d-2.png)',
+      '',
+      '---',
+      '',
+      '### 3D vinyl toy style',
+      '',
+      '**3D-1**: smooth material, slightly smaller corner opening.  ',
+      'Local file: [mascot-3d-1.png](https://example.com/3d-1.png)',
+      '![Mascot 3D-1](https://example.com/3d-1.png)',
+      '',
+      '**3D-2 (pick)**: crisp logo silhouette, warm expression and gold accent.  ',
+      'Local file: [mascot-3d-2.png](https://example.com/3d-2.png)',
+      '![Mascot 3D-2](https://example.com/3d-2.png)',
+    ].join('\n')
+    const view = render(<Markdown text={twoSections} />)
+    const rows = [...view.container.querySelectorAll<HTMLElement>('[data-md-image-row]')]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.getAttribute('data-count'))).toEqual(['2', '2'])
+    expect(view.container.querySelectorAll('h3')).toHaveLength(2)
+    expect(view.container.querySelectorAll('hr')).toHaveLength(1)
+    const firstCaption = rows[0].querySelector('figure figcaption')!
+    expect(firstCaption.querySelector('br')).not.toBeNull()
+    expect(firstCaption).toHaveTextContent('2D-1: cute smile, one thin white line near the top corner.')
+    expect(firstCaption).toHaveTextContent('Local file: mascot-2d-1.png')
+    // The blocked file:// link stays visible as a span inside the caption.
+    expect(firstCaption.querySelector('span')).toHaveTextContent('mascot-2d-1.png')
+    view.unmount()
+
+    const tooManyLines = [
+      'Line 1  \nLine 2  \nLine 3  \nLine 4\n![One](https://example.com/1.png)',
+      '',
+      'Line 1  \nLine 2  \nLine 3  \nLine 4\n![Two](https://example.com/2.png)',
+    ].join('\n')
+    const view2 = render(<Markdown text={tooManyLines} />)
+    expect(view2.container.querySelector('[data-md-image-row]')).toBeNull()
+  })
+
+  it('starts a trailing image after a soft or hard line break on its own line even when not in a row, while keeping inline images inline', () => {
+    const softBreak = render(<Markdown text={'Local file: mascot.png\n![Mascot](https://example.com/a.png)'} />)
+    const softButton = screen.getByRole('button', { name: 'Enlarge image: Mascot' })
+    expect(softButton).toHaveAttribute('data-md-block-image')
+    expect(softButton.className).toContain('block')
+    expect(softButton.className).not.toContain('inline-block')
+    softBreak.unmount()
+
+    const hardBreak = render(<Markdown text={'Local file: mascot.png  \n![Mascot](https://example.com/a.png)'} />)
+    const hardButton = screen.getByRole('button', { name: 'Enlarge image: Mascot' })
+    expect(hardButton).toHaveAttribute('data-md-block-image')
+    expect(hardButton.className).toContain('block')
+    expect(hardBreak.container.querySelector('p br')).toBeNull()
+    hardBreak.unmount()
+
+    const failedTrailing = render(<Markdown text={'Local file: missing.png\n![Missing](https://example.com/missing.png)'} />)
+    fireEvent.error(screen.getByRole('img', { name: 'Missing' }))
+    const errorBox = screen.getByRole('img', { name: 'Missing' })
+    expect(errorBox).toHaveAttribute('data-md-block-image')
+    expect(errorBox.className).toContain('flex')
+    failedTrailing.unmount()
+
+    render(<Markdown text="Look at ![Icon](https://example.com/icon.png) right here" />)
+    const inlineButton = screen.getByRole('button', { name: 'Enlarge image: Icon' })
+    expect(inlineButton).not.toHaveAttribute('data-md-block-image')
+    expect(inlineButton.className).toContain('inline-block')
+  })
+})
+
+describe('Local folder images in a reply', () => {
+  const ROOT = '/var/work/agents/a1/workspace'
+  const REAL_ROOT = '/private/var/work/agents/a1/workspace'
+  const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const SVG_BYTES = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><script>window.__svgRan=true</script><rect width="32" height="32" fill="#2443b5"/></svg>'
+
+  function makeFolder(overrides: Partial<ReplyFolderContext> = {}): ReplyFolderContext {
+    return {
+      roots: [ROOT, REAL_ROOT],
+      contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      folderLink: (rel) => `/p/demo/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      maxBytes: 1024,
+      ...overrides,
+    }
+  }
+
+  function mockFolderFiles(files: Record<string, Uint8Array | string>) {
+    const requested: string[] = []
+    server.use(
+      http.get(apiUrl('/agents/a1/folder/content'), ({ request }) => {
+        const rel = new URL(request.url).searchParams.get('path') ?? ''
+        requested.push(rel)
+        const body = files[rel]
+        if (body === undefined) return new HttpResponse(null, { status: 404 })
+        return new HttpResponse(body, { headers: { 'Content-Type': 'application/octet-stream' } })
+      }),
+    )
+    return requested
+  }
+
+  it('loads absolute, realPath, relative, and file:// Markdown image sources through the folder content endpoint and opens the preview dialog', async () => {
+    const user = userEvent.setup()
+    const requested = mockFolderFiles({
+      'assets/abs.png': PNG_BYTES,
+      'assets/rel.JPG': PNG_BYTES,
+      'assets/file.webp': PNG_BYTES,
+      'assets/real.svg': SVG_BYTES,
+    })
+    const folder = makeFolder()
+    const md = [
+      `![Abs](${ROOT}/assets/abs.png)`,
+      '',
+      '![Rel](./assets/rel.JPG)',
+      '',
+      `![File](file://${ROOT}/assets/file.webp)`,
+      '',
+      `![Real](${REAL_ROOT}/assets/real.svg)`,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    const row = container.querySelector('[data-md-image-row]')!
+    expect(row).toHaveAttribute('data-count', '4')
+
+    for (const label of ['Abs', 'Rel', 'File', 'Real']) {
+      expect(await screen.findByRole('button', { name: `Enlarge image: ${label}` })).toBeInTheDocument()
+    }
+    expect(requested.sort()).toEqual(['assets/abs.png', 'assets/file.webp', 'assets/real.svg', 'assets/rel.JPG'])
+
+    // SVG is rendered inside <img>, never inlined, and its preview dialog never links to a blob: URL.
+    const svgImg = screen.getByRole('img', { name: 'Real' })
+    expect(svgImg.tagName).toBe('IMG')
+    expect(container.querySelector('svg script')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Enlarge image: Real' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Real' })
+    expect(within(dialog).getByRole('img', { name: 'Real' }).tagName).toBe('IMG')
+    const original = within(dialog).getByRole('link', { name: 'Open original in new tab' })
+    expect(original.getAttribute('href')).toBe(folder.contentURL('assets/real.svg'))
+    expect(original.getAttribute('href')).not.toMatch(/^blob:/i)
+  })
+
+  it('keeps inline-code and bare absolute paths as folder links and shows thumbnails right after the paragraph or as one row after a list', async () => {
+    mockFolderFiles({
+      'assets/preview-2x2.png': PNG_BYTES,
+      'assets/bare.jpg': PNG_BYTES,
+      'assets/a.svg': SVG_BYTES,
+      'assets/b.svg': SVG_BYTES,
+      'assets/c.svg': SVG_BYTES,
+    })
+    const folder = makeFolder()
+    const md = [
+      `Preview image \`${ROOT}/assets/preview-2x2.png\` and bare (${ROOT}/assets/bare.jpg).`,
+      '',
+      `- **Option A**: \`${ROOT}/assets/a.svg\``,
+      `- **Option B**: \`${ROOT}/assets/b.svg\``,
+      `- **Option C**: \`${ROOT}/assets/c.svg\``,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    // Every path text becomes a link to the Agent's Folder tab.
+    const inlineLink = screen.getByRole('link', { name: `${ROOT}/assets/preview-2x2.png` })
+    expect(inlineLink).toHaveAttribute('href', folder.folderLink!('assets/preview-2x2.png'))
+    expect(inlineLink).toHaveAttribute('title', 'Open in folder')
+    expect(screen.getByRole('link', { name: `${ROOT}/assets/bare.jpg` })).toHaveAttribute('href', folder.folderLink!('assets/bare.jpg'))
+    expect(screen.getByRole('link', { name: `${ROOT}/assets/a.svg` })).toHaveAttribute('href', folder.folderLink!('assets/a.svg'))
+
+    // Both the paragraph thumbnails and the list thumbnails appear as rows directly after their blocks.
+    await waitFor(() => expect(container.querySelectorAll('[data-md-local-images] [data-md-image-row]')).toHaveLength(2))
+    const rows = [...container.querySelectorAll<HTMLElement>('[data-md-local-images] [data-md-image-row]')]
+    expect(rows[0]).toHaveAttribute('data-count', '2')
+    expect(within(rows[0]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['preview-2x2.png', 'bare.jpg'])
+    expect(rows[1]).toHaveAttribute('data-count', '3')
+    expect(within(rows[1]).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['a.svg', 'b.svg', 'c.svg'])
+
+    // The list itself kept lead-label formatting because the thumbnail row sits after the <ul>.
+    const list = container.querySelector('ul')!
+    expect(list).toHaveClass('md-lead-list')
+    expect(list.nextElementSibling).toHaveAttribute('data-md-local-images')
+  })
+
+  it('places a single-item list thumbnail right after that list item', async () => {
+    mockFolderFiles({ 'shots/one.png': PNG_BYTES })
+    const folder = makeFolder()
+    const md = [
+      `- First item: \`${ROOT}/shots/one.png\``,
+      '- Second item without image',
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    const img = await screen.findByRole('img', { name: 'one.png' })
+    const items = container.querySelectorAll('li')
+    expect(items[0].contains(img)).toBe(true)
+    expect(items[1].contains(img)).toBe(false)
+  })
+
+  it('shows no thumbnail and keeps text intact for outside paths, missing files, and files above the preview limit', async () => {
+    const requested = mockFolderFiles({
+      'assets/huge.png': new Uint8Array(2048),
+      'assets/ok.png': PNG_BYTES,
+    })
+    const folder = makeFolder({ maxBytes: 512 })
+    const md = [
+      'Outside markdown: ![Outside](/etc/secret.png) ![Escape](../secret.png)',
+      '',
+      'Outside inline: `/etc/secret.png` and bare /tmp/other.jpg.',
+      '',
+      `Missing: \`${ROOT}/assets/missing.png\``,
+      '',
+      `Too large: \`${ROOT}/assets/huge.png\``,
+      '',
+      'Missing markdown: ![Missing](assets/missing.png)',
+      '',
+      'Huge markdown: ![Huge](assets/huge.png)',
+      '',
+      `Valid: \`${ROOT}/assets/ok.png\``,
+    ].join('\n')
+
+    const { container } = render(<Markdown folder={folder} text={md} />)
+    // Wait until the valid image finishes loading so every missing/too-large fetch has settled too.
+    expect(await screen.findByRole('img', { name: 'ok.png' })).toBeInTheDocument()
+
+    // Outside paths were never requested and never linked.
+    expect(requested.every((path) => path.startsWith('assets/'))).toBe(true)
+    expect(screen.queryByRole('link', { name: '/etc/secret.png' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '/tmp/other.jpg' })).toBeNull()
+    expect(container).toHaveTextContent('/etc/secret.png')
+    expect(container).toHaveTextContent('/tmp/other.jpg')
+
+    // Only the single valid file produced a thumbnail; missing, too-large, and outside paths show no thumbnail or error box.
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    expect(container.querySelector('[data-md-image-error]')).toBeNull()
+    expect(container).toHaveTextContent('Outside')
+    expect(container).toHaveTextContent('Missing')
+    expect(container).toHaveTextContent('Huge')
+  })
+
+  it('renders thumbnails without folder links when folderLink is omitted (task node conversations)', async () => {
+    mockFolderFiles({ 'assets/node.png': PNG_BYTES })
+    const folder = makeFolder({ folderLink: undefined })
+    render(<Markdown folder={folder} text={`Saved to \`${ROOT}/assets/node.png\`.`} />)
+    expect(await screen.findByRole('img', { name: 'node.png' })).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText(`${ROOT}/assets/node.png`)).toBeInTheDocument()
+  })
 })

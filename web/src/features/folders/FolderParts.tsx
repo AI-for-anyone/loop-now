@@ -27,7 +27,7 @@ export function EntryIcon({ path, type, open = false, className }: { path: strin
 // The "Entry" badge next to AGENTS.md.
 export function EntryBadge({ className }: { className?: string }) {
   return (
-    <span title={t.folders.entry.hint} className={cn('shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 text-[11px] leading-[18px] font-medium text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-pink-text', className)}>
+    <span title={t.folders.entry.hint} className={cn('shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 text-[11px] leading-[18px] font-medium text-ink-700', className)}>
       {t.folders.entry.badge}
     </span>
   )
@@ -44,7 +44,7 @@ export interface EntryActions {
   remove: (entry: FolderEntry) => void
 }
 
-const itemClass = 'flex h-8 cursor-pointer items-center gap-2.5 rounded-[6px] px-2.5 text-[13px] font-medium text-ink outline-none select-none data-[highlighted]:bg-surface-hover data-[disabled]:cursor-default data-[disabled]:opacity-40 [[data-skin=plate]_&]:data-[highlighted]:bg-tint-blue'
+const itemClass = 'flex h-8 cursor-pointer items-center gap-2.5 rounded-[6px] px-2.5 text-[13px] font-medium text-ink outline-none select-none data-[highlighted]:bg-surface-hover data-[disabled]:cursor-default data-[disabled]:opacity-40'
 
 function Item({ icon, children, onSelect, danger = false }: { icon: ReactNode; children: ReactNode; onSelect: () => void; danger?: boolean }) {
   return (
@@ -67,25 +67,25 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
           aria-label={t.folders.actions(nameOf(path))}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
-          className={cn('inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus data-[state=open]:bg-surface-hover data-[state=open]:text-ink [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:data-[state=open]:bg-white', className)}
+          className={cn('inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus data-[state=open]:bg-surface-hover data-[state=open]:text-ink', className)}
         >
           <EllipsisIcon aria-hidden="true" className="size-4" strokeWidth={2.2} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={4} onClick={(event) => event.stopPropagation()} className="z-50 min-w-44 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+        <DropdownMenu.Content align="end" sideOffset={4} onClick={(event) => event.stopPropagation()} className="z-50 min-w-44 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating">
           {entry.type === 'dir' && (
             <>
               <Item icon={<FilePlusIcon className={icon} />} onSelect={() => actions.create(path, 'file')}>{t.folders.newFile}</Item>
               <Item icon={<FolderPlusIcon className={icon} />} onSelect={() => actions.create(path, 'dir')}>{t.folders.newFolder}</Item>
               <Item icon={<UploadIcon className={icon} />} onSelect={() => actions.upload(path)}>{t.folders.uploadHere}</Item>
-              <DropdownMenu.Separator className="mx-1 my-1 h-px bg-hairline [[data-skin=plate]_&]:bg-ink/10" />
+              <DropdownMenu.Separator className="mx-1 my-1 h-px bg-hairline" />
             </>
           )}
           <Item icon={<TextCursorInputIcon className={icon} />} onSelect={() => actions.rename(entry)}>{t.folders.rename}</Item>
           <Item icon={<FolderInputIcon className={icon} />} onSelect={() => actions.move(entry)}>{t.folders.move}</Item>
           {entry.type === 'file' && <Item icon={<DownloadIcon className={icon} />} onSelect={() => actions.download(entry)}>{t.folders.download}</Item>}
-          <DropdownMenu.Separator className="mx-1 my-1 h-px bg-hairline [[data-skin=plate]_&]:bg-ink/10" />
+          <DropdownMenu.Separator className="mx-1 my-1 h-px bg-hairline" />
           <Item danger icon={<Trash2Icon className={icon} />} onSelect={() => actions.remove(entry)}>{t.folders.remove}</Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -95,7 +95,7 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
 
 // Compact 28px toolbar buttons: subtle bordered controls in mono skin, paper pills with ink outline in Plate skin.
 const controlClass =
-  'border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover disabled:hover:bg-surface-control [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:disabled:hover:bg-paper-raised'
+  'border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover disabled:hover:bg-surface-control'
 
 // Compact 28px buttons for the unified toolbar: icon plus optional text; accessible name is always present.
 export function ToolButton({ icon, label, showLabel = true, onClick, disabled, active, pill = false, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; onClick?: () => void; disabled?: boolean; active?: boolean; pill?: boolean; className?: string } & Omit<ComponentProps<'button'>, 'onClick'>) {
@@ -107,10 +107,10 @@ export function ToolButton({ icon, label, showLabel = true, onClick, disabled, a
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-ticket text-[12px] font-medium whitespace-nowrap text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:hover:bg-tint-blue [&_svg]:size-3.5 [&_svg]:shrink-0',
+        'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-ticket text-[12px] font-medium whitespace-nowrap text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent [&_svg]:size-3.5 [&_svg]:shrink-0',
         showLabel ? 'px-2.5' : 'w-7 justify-center',
         pill && controlClass,
-        active && 'bg-surface-active text-ink [[data-skin=plate]_&]:bg-tint-blue',
+        active && 'bg-surface-active text-ink',
         className,
       )}
       {...rest}
@@ -131,7 +131,7 @@ export function UploadMenu({ onFiles, onFolder, pill = false, className }: { onF
           aria-label={t.folders.upload}
           title={t.folders.upload}
           className={cn(
-            'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-ticket border border-hairline-strong bg-surface-control px-2.5 text-[12px] font-medium text-ink hover:bg-surface-hover focus-visible:shadow-focus data-[state=open]:bg-surface-hover [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:hover:bg-tint-blue [[data-skin=plate]_&]:data-[state=open]:bg-tint-blue',
+            'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-ticket border border-hairline-strong bg-surface-control px-2.5 text-[12px] font-medium text-ink hover:bg-surface-hover focus-visible:shadow-focus data-[state=open]:bg-surface-hover',
             pill && controlClass,
             className,
           )}
@@ -142,7 +142,7 @@ export function UploadMenu({ onFiles, onFolder, pill = false, className }: { onF
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={4} className="z-50 min-w-40 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+        <DropdownMenu.Content align="end" sideOffset={4} className="z-50 min-w-40 rounded-ticket border border-hairline-strong bg-surface-elevated p-1 shadow-floating">
           <Item icon={<FilePlusIcon className="size-3.5" />} onSelect={onFiles}>{t.folders.uploadFiles}</Item>
           <Item icon={<FolderPlusIcon className="size-3.5" />} onSelect={onFolder}>{t.folders.uploadFolder}</Item>
         </DropdownMenu.Content>

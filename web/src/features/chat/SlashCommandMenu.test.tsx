@@ -74,15 +74,13 @@ describe('the "/" command menu of the input box', () => {
       'border-hairline-strong',
       'bg-surface-elevated',
       'shadow-floating',
-      '[[data-skin=plate]_&]:bg-paper-raised',
-      '[[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]',
     )
-    for (const option of options()) expect(option).toHaveClass('aria-selected:bg-surface-active', '[[data-skin=plate]_&]:aria-selected:bg-riso-yellow')
+    for (const option of options()) expect(option).toHaveClass('aria-selected:bg-surface-active')
     expect(options()[0]).not.toHaveClass('aria-selected:bg-tint-blue')
-    expect(within(options()[0]).getByText('Platform command')).toHaveClass('rounded-full', 'bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
-    expect(within(options()[7]).getByText('Extension command · Plugin · Code review')).toHaveClass('rounded-stamp', 'bg-surface-subtle', 'text-ink-700', '[[data-skin=plate]_&]:bg-tint-blue', '[[data-skin=plate]_&]:text-ink')
-    // A hairline divider (dashed in Plate) separates the key hints at the bottom from the list.
-    expect(panel.lastElementChild).toHaveClass('border-t', 'border-hairline', '[[data-skin=plate]_&]:border-t-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+    expect(within(options()[0]).getByText('Platform command')).toHaveClass('rounded-full', 'bg-cta-bg', 'text-cta-fg')
+    expect(within(options()[7]).getByText('Extension command · Plugin · Code review')).toHaveClass('rounded-stamp', 'bg-surface-subtle', 'text-ink-700')
+    // A hairline divider separates the key hints at the bottom from the list.
+    expect(panel.lastElementChild).toHaveClass('border-t', 'border-hairline')
   })
 
   it('filters by the first word: those starting with the /pi: form first, then command names starting with it without pi:, then names or descriptions containing it', async () => {

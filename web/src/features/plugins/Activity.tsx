@@ -15,7 +15,7 @@ import { RECORD_PREFIX, recordRows, type DeliveryRecord } from './records'
 type DeliveryStatus = Schemas['PluginDelivery']['status']
 export type ActivityView = 'events' | 'records' | 'logs'
 
-const rowClass = 'grid min-w-0 items-center gap-x-3 gap-y-0.5 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink/[0.04]'
+const rowClass = 'grid min-w-0 items-center gap-x-3 gap-y-0.5 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px]'
 const dot = (tone: 'done' | 'interrupt' | 'fail' | 'quiet') =>
   cn('size-2 shrink-0 rounded-full', tone === 'done' ? 'bg-[var(--status-done)]' : tone === 'interrupt' ? 'bg-[var(--status-interrupt)]' : tone === 'fail' ? 'bg-[var(--status-fail)]' : 'bg-ink-500')
 const deliveryTone: Record<DeliveryStatus, 'done' | 'interrupt' | 'fail'> = { delivered: 'done', pending: 'interrupt', failed: 'fail' }
@@ -81,10 +81,10 @@ export function DeliveriesList({
                 <time dateTime={row.at} className="text-ink-700 tabular-nums">
                   {t.chat.time(row.at)}
                 </time>
-                <span className="truncate font-mono text-[12.5px] font-medium [[data-skin=plate]_&]:font-bold" title={row.eventType}>
+                <span className="truncate font-mono text-[12.5px] font-medium" title={row.eventType}>
                   {row.eventType}
                 </span>
-                <span className={cn('inline-flex items-center gap-1.5 justify-self-end font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black', toneText[tone])}>
+                <span className={cn('inline-flex items-center gap-1.5 justify-self-end font-semibold whitespace-nowrap', toneText[tone])}>
                   <span aria-hidden="true" className={dot(tone)} />
                   {[text.status[row.status], row.durationMs !== null && row.status === 'delivered' ? text.duration(row.durationMs) : null, row.attempts > 1 ? text.attempts(row.attempts) : null].filter(Boolean).join(' · ')}
                 </span>
@@ -127,20 +127,20 @@ export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?
     <div className="min-w-0 overflow-x-auto no-scrollbar">
       <table className="w-full border-separate border-spacing-y-1.5 text-[13px]">
         <thead>
-          <tr className="text-left text-[12px] font-semibold whitespace-nowrap text-ink-700 [[data-skin=plate]_&]:font-black">
-            <th scope="col" className="px-3 font-semibold [[data-skin=plate]_&]:font-black">{text.time}</th>
-            <th scope="col" className="px-3 font-semibold [[data-skin=plate]_&]:font-black">{text.target}</th>
-            <th scope="col" className="px-3 font-semibold [[data-skin=plate]_&]:font-black">{text.status}</th>
-            <th scope="col" className="px-3 font-semibold [[data-skin=plate]_&]:font-black">{text.attempts}</th>
+          <tr className="text-left text-[12px] font-semibold whitespace-nowrap text-ink-700">
+            <th scope="col" className="px-3 font-semibold">{text.time}</th>
+            <th scope="col" className="px-3 font-semibold">{text.target}</th>
+            <th scope="col" className="px-3 font-semibold">{text.status}</th>
+            <th scope="col" className="px-3 font-semibold">{text.attempts}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             if (!('record' in row))
               return (
-                <tr key={row.key} className="bg-surface-subtle [[data-skin=plate]_&]:bg-ink/[0.04]">
+                <tr key={row.key} className="bg-surface-subtle">
                   <td colSpan={4} className="rounded-input px-3 py-2">
-                    <span className="font-mono text-[12px] font-medium [[data-skin=plate]_&]:font-bold">{row.key}</span>
+                    <span className="font-mono text-[12px] font-medium">{row.key}</span>
                     <pre className="mt-1 max-h-32 overflow-auto no-scrollbar font-mono text-[11.5px] whitespace-pre-wrap [overflow-wrap:anywhere]" aria-label={text.raw}>
                       {JSON.stringify(row.raw, null, 2)}
                     </pre>
@@ -149,17 +149,17 @@ export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?
               )
             const { record } = row, state = recordState(record)
             return (
-              <tr key={row.key} className="bg-surface-subtle [[data-skin=plate]_&]:bg-ink/[0.04]">
+              <tr key={row.key} className="bg-surface-subtle">
                 <td className="rounded-l-input px-3 py-2 whitespace-nowrap text-ink-700 tabular-nums">{t.chat.time(record.at)}</td>
                 <td className="w-full max-w-0 truncate px-3 py-2 font-mono text-[12.5px]" title={record.target}>
                   {record.target}
                 </td>
-                <td className={cn('px-3 py-2 font-semibold whitespace-nowrap [[data-skin=plate]_&]:font-black', toneText[state.tone])} title={record.lastError ?? undefined}>
+                <td className={cn('px-3 py-2 font-semibold whitespace-nowrap', toneText[state.tone])} title={record.lastError ?? undefined}>
                   <span className="inline-flex items-center gap-1.5">
                     <span aria-hidden="true" className={dot(state.tone)} />
                     {state.label}
                   </span>
-                  {record.nextAttemptAt && record.status === 'failed' && <span className="block text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{text.nextAttempt(t.chat.time(record.nextAttemptAt))}</span>}
+                  {record.nextAttemptAt && record.status === 'failed' && <span className="block text-[11.5px] font-medium text-ink-500">{text.nextAttempt(t.chat.time(record.nextAttemptAt))}</span>}
                 </td>
                 <td className="rounded-r-input px-3 py-2 tabular-nums">{record.attempts}</td>
               </tr>
@@ -172,10 +172,10 @@ export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?
 }
 
 const levelTone: Record<Schemas['PluginLogEntry']['level'], string> = {
-  debug: 'text-code-muted [[data-skin=plate]_&]:text-white/55',
-  info: 'text-code-fg [[data-skin=plate]_&]:text-white/85',
-  warn: 'text-pink-text [[data-skin=plate]_&]:text-riso-yellow',
-  error: 'text-red-text [[data-skin=plate]_&]:text-[#FF8A80]',
+  debug: 'text-code-muted',
+  info: 'text-code-fg',
+  warn: 'text-pink-text',
+  error: 'text-red-text',
 }
 
 // The plugin's host logs: newest first, kept for 7 days; earlier ones can be loaded further down.
@@ -191,10 +191,10 @@ export function LogsView({ pluginId, compact }: { pluginId: string; compact?: nu
       ) : entries.length === 0 ? (
         <Quiet>{text.empty}</Quiet>
       ) : (
-        <ol aria-label={t.plugins.detail.logs} className="min-w-0 overflow-x-auto no-scrollbar rounded-input border border-code-border bg-code-bg px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-code-fg [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white">
+        <ol aria-label={t.plugins.detail.logs} className="min-w-0 overflow-x-auto no-scrollbar rounded-input border border-code-border bg-code-bg px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-code-fg">
           {entries.map((entry) => (
             <li key={entry.id} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-              <time dateTime={entry.at} className="text-code-muted [[data-skin=plate]_&]:text-white/60">
+              <time dateTime={entry.at} className="text-code-muted">
                 {text.clock(entry.at)}
               </time>{' '}
               <span className={cn('font-bold', levelTone[entry.level])}>{entry.level}</span> {entry.line}

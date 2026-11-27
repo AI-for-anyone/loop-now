@@ -1,5 +1,6 @@
 import { app, BrowserWindow, screen, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
+import type { ResolvedAppearance } from './appearance'
 import { classifyNavigation, handOffOnce } from './links'
 import { current, windowChrome, type PlatformId } from './platform'
 
@@ -26,10 +27,11 @@ type Options = {
   onAction: (action: StatusAction) => void
   note: (text: string) => void
   platform?: PlatformId
-  backgroundColor?: string
+  appearance?: ResolvedAppearance
 }
 
 const statusPage = join(__dirname, '..', 'static', 'status.html')
+const defaultAppearance: ResolvedAppearance = { skin: 'mono', theme: 'light', backgroundColor: '#FFFFFF' }
 
 // The single main window: loads the console the server serves, and shows the status page until the server is ready.
 export class MainWindow {
@@ -38,19 +40,16 @@ export class MainWindow {
   private consoleURL: string | undefined
   // Whether the user has opened the window yet (false before the first show in a background start).
   private opened: boolean
-  // Whether the window is currently hidden or minimized; used to replay the boarding splash when reopening.
-  private hidden = true
-  private lastBoardingAt = 0
-  private bgColor: string
+  private appearance: ResolvedAppearance
 
   constructor(private readonly o: Options) {
     this.opened = !o.background
-    this.bgColor = o.backgroundColor ?? '#FFFFFF'
+    this.appearance = o.appearance ?? defaultAppearance
   }
 
-  setBackgroundColor(color: string): void {
-    this.bgColor = color
-    if (this.win && !this.win.isDestroyed()) this.win.setBackgroundColor(color)
+  setAppearance(appearance: ResolvedAppearance): void {
+    this.appearance = appearance
+    if (this.win && !this.win.isDestroyed()) this.win.setBackgroundColor(appearance.backgroundColor)
   }
 
   get showingConsole(): boolean {
@@ -66,10 +65,7 @@ export class MainWindow {
     this.opened = true
     void app.dock?.show()
     const win = this.ensure()
-    const reopening = this.hidden || !win.isVisible() || win.isMinimized()
-    if (reopening) this.triggerBoarding(win)
     if (win.isMinimized()) win.restore()
-    this.hidden = false
     win.show()
     win.focus()
   }
@@ -83,19 +79,16 @@ export class MainWindow {
   showStatus(view: StatusView): void {
     const win = this.ensure()
     this.consoleURL = undefined
-    const query: Record<string, string> = { title: view.title, body: view.body, bg: this.bgColor }
+    const query: Record<string, string> = {
+      title: view.title,
+      body: view.body,
+      skin: this.appearance.skin,
+      theme: this.appearance.theme,
+    }
     if (view.log) query.log = view.log
     if (view.actions) Object.assign(query, view.actions)
     if (view.busy) query.busy = '1'
     void win.loadFile(statusPage, { query })
-  }
-
-  private triggerBoarding(win: BrowserWindow): void {
-    if (this.consoleURL === undefined || win.isDestroyed()) return
-    const now = Date.now()
-    if (now - this.lastBoardingAt < 250) return
-    this.lastBoardingAt = now
-    win.webContents.send('loop-now:boarding')
   }
 
   // Whether a call the page sends through preload comes from the console the server serves in the window (main frame, same origin), not
@@ -140,7 +133,7 @@ export class MainWindow {
       // In development, the Windows window icon comes from the exe (Electron's); once packaged, the exe carries the app's icon. It is given
       // again here so the taskbar and the title bar both use it.
       icon: join(__dirname, '..', 'assets', 'icon.png'),
-      backgroundColor: this.bgColor,
+      backgroundColor: this.appearance.backgroundColor,
       webPreferences: {
         contextIsolation: true,
         sandbox: true,
@@ -153,20 +146,6 @@ export class MainWindow {
     })
     win.once('ready-to-show', () => this.opened && win.show())
     win.once('show', () => this.o.onFirstShow?.(win))
-    win.on('hide', () => {
-      this.hidden = true
-    })
-    win.on('minimize', () => {
-      this.hidden = true
-    })
-    win.on('show', () => {
-      if (this.hidden) this.triggerBoarding(win)
-      this.hidden = false
-    })
-    win.on('restore', () => {
-      if (this.hidden) this.triggerBoarding(win)
-      this.hidden = false
-    })
     win.on('close', (event) => {
       if (this.o.quitting()) return
       event.preventDefault()

@@ -5,8 +5,9 @@ import { app, clipboard, dialog, ipcMain, nativeTheme, powerMonitor, session, sh
 import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { nativeThemeSource, resolveWindowAppearance } from './appearance'
 import { Badge } from './badge'
-import { parseAppearance } from './bridge'
+import { parseAppearance, type DesktopAppearance } from './bridge'
 import { handlePathPicker } from './dialogs'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
@@ -93,13 +94,13 @@ function run(): void {
     // userData/tls and is maintained by the server.
     external: { tlsDir: externalTLSDir, choosePort: () => choosePort(settings.read().externalPort ?? 0) },
   })
-  const savedAppearance = settings.read().appearance
-  if (savedAppearance) nativeTheme.themeSource = savedAppearance.mode
+  let currentAppearance: DesktopAppearance | undefined = parseAppearance(settings.read().appearance)
+  nativeTheme.themeSource = nativeThemeSource(currentAppearance)
   const window = new MainWindow({
     // The window title for the default profile carries no name.
     profile: profile?.label === defaultProfile ? undefined : profile?.label,
     background,
-    backgroundColor: savedAppearance?.backgroundColor ?? (nativeTheme.shouldUseDarkColors ? '#000000' : '#FFFFFF'),
+    appearance: resolveWindowAppearance(currentAppearance, nativeTheme.shouldUseDarkColors),
     onFirstShow: (win) => void checkGit(win),
     quitting: () => quitting,
     note,
@@ -303,9 +304,13 @@ function run(): void {
       if (!window.trusts(event)) return
       const appearance = parseAppearance(raw)
       if (!appearance) return
-      nativeTheme.themeSource = appearance.mode
-      window.setBackgroundColor(appearance.backgroundColor)
+      currentAppearance = appearance
+      nativeTheme.themeSource = nativeThemeSource(appearance)
+      window.setAppearance(resolveWindowAppearance(appearance, nativeTheme.shouldUseDarkColors))
       settings.update({ appearance })
+    })
+    nativeTheme.on('updated', () => {
+      window.setAppearance(resolveWindowAppearance(currentAppearance, nativeTheme.shouldUseDarkColors))
     })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),

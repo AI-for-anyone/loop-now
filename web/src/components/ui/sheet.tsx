@@ -23,11 +23,11 @@ function SheetContent({
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] [[data-skin=plate]_&]:bg-ink/20 [[data-skin=plate]_&]:backdrop-blur-none [[data-skin=plate]_&]:[background-image:radial-gradient(rgb(255_255_255/.06)_1px,transparent_1.3px)] [[data-skin=plate]_&]:[background-size:6px_6px]" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" />
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[620px] flex-col border-l border-hairline-strong bg-surface-elevated text-ink shadow-dialog outline-none [[data-skin=plate]_&]:border-l-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[-8px_0_0_var(--riso-blue)]",
+          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[620px] flex-col border-l border-hairline-strong bg-surface-elevated text-ink shadow-dialog outline-none",
           className
         )}
         {...focusHandlers}
@@ -44,13 +44,13 @@ function SheetHeader({ className, children, ...props }: React.ComponentProps<"di
     <div
       data-slot="sheet-header"
       className={cn(
-        "riso-halftone flex shrink-0 items-start gap-3 border-b border-hairline bg-surface-elevated px-6 pt-5 pb-4 text-ink [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-blue [[data-skin=plate]_&]:px-[26px] [[data-skin=plate]_&]:pt-6 [[data-skin=plate]_&]:pb-[18px] [[data-skin=plate]_&]:text-white",
+        "riso-halftone flex shrink-0 items-start gap-3 border-b border-hairline bg-surface-elevated px-6 pt-5 pb-4 text-ink",
         className
       )}
       {...props}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">{children}</div>
-      <DialogPrimitive.Close className={cn(closeStampClass, "[[data-skin=plate]_&]:size-[38px]")}>
+      <DialogPrimitive.Close className={cn(closeStampClass, "")}>
         <XIcon className="size-[15px]" strokeWidth={2.4} />
         <span className="sr-only">{t.common.close}</span>
       </DialogPrimitive.Close>
@@ -63,7 +63,7 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof DialogP
     <DialogPrimitive.Title
       data-slot="sheet-title"
       className={cn(
-        "text-[19px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-[24px] [[data-skin=plate]_&]:leading-tight [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:tracking-normal",
+        "text-[19px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere]",
         className
       )}
       {...props}
@@ -75,7 +75,7 @@ function SheetDescription({ className, ...props }: React.ComponentProps<typeof D
   return (
     <DialogPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-[13.5px] leading-[1.6] text-ink-500 [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:leading-[1.7] [[data-skin=plate]_&]:text-white", className)}
+      className={cn("text-[13.5px] leading-[1.6] text-ink-500", className)}
       {...props}
     />
   )
@@ -85,7 +85,7 @@ function SheetBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-body"
-      className={cn("riso-scrollbar flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5 [[data-skin=plate]_&]:px-[26px] [[data-skin=plate]_&]:py-[22px]", className)}
+      className={cn("riso-scrollbar flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5", className)}
       {...props}
     />
   )

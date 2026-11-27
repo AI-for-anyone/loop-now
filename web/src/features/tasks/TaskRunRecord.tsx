@@ -3,7 +3,7 @@ import { useId, useState } from 'react'
 import type { Schemas } from '@/api/client'
 import { useTaskRunTimeline } from '@/api/task-inbox'
 import { ToolList } from '@/features/chat/RunStatus'
-import { BackgroundToolCards } from '@/features/chat/BackgroundToolCard'
+import { BackgroundToolChips } from '@/features/chat/BackgroundToolChip'
 import { tasksFromTimeline } from '@/features/chat/background-text'
 import { useTaskNodeBackgroundTasks } from '@/api/background-tasks'
 import { unfinishedTool } from '@/features/chat/tool-state'
@@ -27,21 +27,20 @@ export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: 
   // (run.usageReported), its zeros mean "not known": the record says "no usage data" instead of "0 tokens".
   const entries = pages.flatMap(page => page.entries)
   const tools: Schemas['ToolEvent'][] = entries.filter(entry => entry.type === 'tool').map(entry => ({ toolCallId: entry.toolCallId, toolName: entry.toolName, state: entry.state, at: entry.at }))
-  // Tools that went on in the background are cards (as in an Agent's chat), told by the record; the node's live list is read from the
+  // Tools that went on in the background are chips with their details behind a click (as in an Agent's chat), told by the record; the node's live list is read from the
   // cache only (the node panel keeps it), for whether one was asked to stop.
   const running = useTaskNodeBackgroundTasks(taskId, nodeRunId, false).data?.tasks
   const background = tasksFromTimeline(entries, runId, running, latest ? unfinishedTool(latest.run) !== 'running' : false)
   const backgroundTools = new Set(background.flatMap(task => task.toolCallId ? [task.toolCallId] : []))
   const duration = latest ? runDurationMs(latest.run) : null
   return <div className="mt-2 grid min-w-0 gap-2" data-task-run-id={runId}>
-    <ToolList tools={tools} unfinished={latest ? unfinishedTool(latest.run) : 'running'} exclude={backgroundTools} />
-    <BackgroundToolCards tasks={background} toolNames={new Map(tools.map(tool => [tool.toolCallId, tool.toolName]))} />
+    <ToolList tools={tools} unfinished={latest ? unfinishedTool(latest.run) : 'running'} exclude={backgroundTools} after={background.length ? <BackgroundToolChips tasks={background} toolNames={new Map(tools.map(tool => [tool.toolCallId, tool.toolName]))} /> : undefined} />
     {timeline.hasNextPage && <p className="text-xs">{copy.timelinePartial}</p>}
-    <button type="button" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen(value => !value)} className="inline-flex min-h-9 items-center gap-2 justify-self-start rounded-full border border-hairline bg-surface-subtle px-3.5 text-[13px] font-semibold text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-[#d6ddf4]">{duration !== null && latest ? (latest.run.usageReported ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(latest.usage.total)) : t.timeline.toggleNoUsage(t.timeline.duration(duration))) : t.timeline.title}</button>
+    <button type="button" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen(value => !value)} className="inline-flex min-h-9 items-center gap-2 justify-self-start rounded-full border border-hairline bg-surface-subtle px-3.5 text-[13px] font-semibold text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus">{duration !== null && latest ? (latest.run.usageReported ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(latest.usage.total)) : t.timeline.toggleNoUsage(t.timeline.duration(duration))) : t.timeline.title}</button>
     {timeline.isPending && <p role="status" className="text-xs">{copy.recordsLoading}</p>}
     <ErrorAlert error={nodeMessagesUnsupported(timeline.error) ? null : timeline.error} />{nodeMessagesUnsupported(timeline.error) && <p role="status" className="text-xs">{copy.toolsUnsupported}</p>}
-    {open && latest && <div id={panelId} className="min-w-0 overflow-hidden rounded-card border border-hairline bg-surface-control shadow-surface [[data-skin=plate]_&]:rounded-[16px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[3px_3px_0_rgb(24_38_94/.12)]">
-      <div className="grid gap-1 border-b border-hairline bg-surface-subtle p-3 text-xs [overflow-wrap:anywhere] [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:bg-tint-blue"><strong>{latest.run.id}</strong><span>{latest.run.executionMode === 'task_node' ? copy.workMode : latest.run.executionMode === 'task_conversation' ? copy.chatMode : copy.unknownMode} · {t.tasks.messageStatuses[latest.run.status]}</span>{(latest.run.errorCode || latest.run.errorMessage) && <p>{turnErrorText(latest.run.errorCode, latest.run.errorMessage)}</p>}</div>
+    {open && latest && <div id={panelId} className="min-w-0 overflow-hidden rounded-card border border-hairline bg-surface-control shadow-surface">
+      <div className="grid gap-1 border-b border-hairline bg-surface-subtle p-3 text-xs [overflow-wrap:anywhere]"><strong>{latest.run.id}</strong><span>{latest.run.executionMode === 'task_node' ? copy.workMode : latest.run.executionMode === 'task_conversation' ? copy.chatMode : copy.unknownMode} · {t.tasks.messageStatuses[latest.run.status]}</span>{(latest.run.errorCode || latest.run.errorMessage) && <p>{turnErrorText(latest.run.errorCode, latest.run.errorMessage)}</p>}</div>
       <TimelineSteps steps={buildSteps(null, entries, runtimes.name)} />
       {timeline.hasNextPage && <div className="p-3"><p className="text-xs">{copy.timelinePartial}</p><Button variant="secondary" size="sm" disabled={timeline.isFetching} onClick={() => void timeline.fetchNextPage({ cancelRefetch: false })}>{copy.timelineMore}</Button></div>}
       <UsageBlock usage={latest.usage} reported={latest.run.usageReported} />

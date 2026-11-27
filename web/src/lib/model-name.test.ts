@@ -10,13 +10,16 @@ describe('shortModelName', () => {
     expect(shortModelName({ id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet' })).toBe('Sonnet 3.7')
   })
 
-  it('shortens OpenAI, Google, DeepSeek, Qwen, Kimi, GLM, and Grok models cleanly', () => {
-    expect(shortModelName('gpt-5.4-codex')).toBe('GPT-5.4')
-    expect(shortModelName('gpt-5-codex-mini')).toBe('GPT-5 Mini')
+  it('shortens OpenAI, Google, DeepSeek, Qwen, Kimi, GLM, and Grok models cleanly without collapsing variants', () => {
+    expect(shortModelName('gpt-5.4')).toBe('GPT-5.4')
+    expect(shortModelName('gpt-5.4-codex')).toBe('GPT-5.4 Codex')
+    expect(shortModelName('gpt-5-codex-mini')).toBe('GPT-5 Codex Mini')
     expect(shortModelName('o4-mini')).toBe('o4-mini')
     expect(shortModelName('gemini-2.5-pro-preview-05-06')).toBe('Gemini 2.5 Pro')
+    expect(shortModelName('gemini-2.5-flash-thinking')).toBe('Gemini 2.5 Flash Thinking')
     expect(shortModelName('deepseek-reasoner')).toBe('DeepSeek R1')
-    expect(shortModelName('qwen3-coder-plus')).toBe('Qwen3 Coder')
+    expect(shortModelName('qwen3-coder-plus')).toBe('Qwen3 Coder Plus')
+    expect(shortModelName('qwen3-coder-thinking')).toBe('Qwen3 Coder Thinking')
     expect(shortModelName('kimi-k2-0711')).toBe('Kimi K2')
     expect(shortModelName('glm-4.7')).toBe('GLM-4.7')
     expect(shortModelName('grok-3-mini')).toBe('Grok 3 Mini')

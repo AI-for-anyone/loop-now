@@ -35,7 +35,7 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="no-scrollbar grid max-h-[260px] min-h-0 content-start gap-2.5 overflow-y-auto py-3 pr-6 pl-3.5">
-        <h3 className="font-display text-[15px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:text-[18px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+        <h3 className="font-display text-[15px] leading-snug font-semibold tracking-tight text-ink">
           {copy.title(runtime.name)}
         </h3>
         {runtime.acpCommandId ? (
@@ -45,16 +45,16 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
         )}
         {step && (
           <div className="grid gap-1">
-            <p className="text-[11.5px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{step.label}</p>
-            <div className="flex min-w-0 items-center gap-2 rounded-input border border-hairline bg-code-bg py-1 pr-1.5 pl-2.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/55 [[data-skin=plate]_&]:bg-white">
-              <span aria-hidden="true" className="font-mono text-[12px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-riso-pink">
+            <p className="text-[11.5px] font-medium text-ink-500">{step.label}</p>
+            <div className="flex min-w-0 items-center gap-2 rounded-input border border-hairline bg-code-bg py-1 pr-1.5 pl-2.5">
+              <span aria-hidden="true" className="font-mono text-[12px] font-semibold text-ink-500">
                 $
               </span>
-              <code className="min-w-0 flex-1 py-0.5 font-mono text-[12px] leading-snug whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere] [[data-skin=plate]_&]:text-ink">{step.command}</code>
+              <code className="min-w-0 flex-1 py-0.5 font-mono text-[12px] leading-snug whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere]">{step.command}</code>
               <Button
                 type="button"
                 size="xs"
-                className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-yellow"
+               
                 onClick={() => void copyText(step.command).then(setCopied)}
               >
                 <CopyIcon aria-hidden="true" />
@@ -68,18 +68,18 @@ export function RunnerSetup({ runtime, problem, version = null }: { runtime: Run
             href={docs}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-ink underline decoration-hairline-strong decoration-1 underline-offset-4 hover:decoration-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:decoration-current [[data-skin=plate]_&]:decoration-2 [[data-skin=plate]_&]:hover:text-ink"
+            className="inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-ink underline decoration-hairline-strong decoration-1 underline-offset-4 hover:decoration-ink"
           >
             {copy.docs}
             <ArrowUpRightIcon aria-hidden="true" className="size-3.5" />
           </a>
         )}
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-hairline pt-2.5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">
-          <Button type="button" variant="secondary" size="xs" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 border-t border-hairline pt-2.5">
+          <Button type="button" variant="secondary" size="xs" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
             <RefreshCwIcon aria-hidden="true" />
             {refresh.isPending ? copy.rechecking : copy.recheck}
           </Button>
-          <p className="text-[12px] text-ink-500 [[data-skin=plate]_&]:font-bold">{copy.locked(runtime.name)}</p>
+          <p className="text-[12px] text-ink-500">{copy.locked(runtime.name)}</p>
         </div>
         <ErrorAlert error={refresh.error} />
       </div>
@@ -94,7 +94,7 @@ function AddedCommandProblem({ commandId, runtime, problem, version }: { command
   const command = useAcpCommands().data?.commands.find((candidate) => candidate.id === commandId)
   const routed = useInRouterContext()
   const linkClass =
-    'inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-ink underline decoration-hairline-strong decoration-1 underline-offset-4 hover:decoration-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:decoration-current [[data-skin=plate]_&]:decoration-2 [[data-skin=plate]_&]:hover:text-ink'
+    'inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-ink underline decoration-hairline-strong decoration-1 underline-offset-4 hover:decoration-ink'
   const label = t.runtime.picker.setup.editCommand
   return (
     <>

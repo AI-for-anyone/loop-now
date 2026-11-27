@@ -105,7 +105,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', secondarySize = 
       <Button size={buttonSize} variant="secondary" className={buttonClassName} disabled={disabled || pending} onClick={() => zipInput.current?.click()}>
         {t.skills.uploadZip}
       </Button>
-      {pending && <span className="self-center text-[13px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">{t.common.uploading}</span>}
+      {pending && <span className="self-center text-[13px] font-medium text-ink-500">{t.common.uploading}</span>}
     </>
   )
   const actions = renderButtons(size)
@@ -115,12 +115,12 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', secondarySize = 
   // the reason suggests using replace instead.
   const message = localError ?? (error ? describeError(error) : null)
   const feedback = message ? (
-    <Alert variant="error" className="shadow-floating [[data-skin=plate]_&]:shadow-print-ink">
+    <Alert variant="error" className="shadow-floating">
       <CircleAlertIcon />
       <AlertTitle>{message}</AlertTitle>
       {error instanceof ApiError && error.code === 'name_conflict' && <AlertDescription>{t.skills.nameConflictHint}</AlertDescription>}
       <AlertAction>
-        <Button size="icon-sm" variant="secondary" className="bg-surface-control text-red-text hover:bg-surface-hover [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white/80" onClick={dismiss}>
+        <Button size="icon-sm" variant="secondary" className="bg-surface-control text-red-text hover:bg-surface-hover" onClick={dismiss}>
           <XIcon />
           <span className="sr-only">{t.common.close}</span>
         </Button>

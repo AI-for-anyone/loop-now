@@ -1,73 +1,70 @@
-import { BrandIcon } from '@/components/BrandIcon'
-import { runtimeBrandIcon, runtimeGlyph, type RuntimeDefinition } from '@/lib/runtime'
+import antigravity from '@/assets/runtime-logos/antigravity.svg?raw'
+import claude from '@/assets/runtime-logos/claude.svg?raw'
+import grok from '@/assets/runtime-logos/grok.svg?raw'
+import openai from '@/assets/runtime-logos/openai.svg?raw'
+import pi from '@/assets/runtime-logos/pi.svg?raw'
+import { runtimeLogo, type RuntimeDefinition, type RuntimeLogo } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
-import { useTheme } from '@/theme/store'
 
-// A runtime's mark: official @lobehub/icons brand logo in mono skin; two misregistered riso inks in Plate skin.
-// The logo mapping lives exclusively in lib/runtime.ts (checked by check-runtime-ids.mjs).
-export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
-  const { skin } = useTheme()
-  if (skin !== 'plate') {
-    return <BrandIcon name={runtimeBrandIcon(runtime)} className={cn('size-4 shrink-0', className)} />
-  }
+const FRAME = 32
+const INSET = 6
+const INNER = FRAME - INSET * 2
 
-  const color = runtime.capabilities.bundled ? 'var(--ink)' : 'var(--paper-raised)'
-  const strokes = runtimeGlyph(runtime.id)
-  const glyph = strokes ? (
-    <g fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-      {strokes.map((d) => (
-        <path key={d} d={d} />
-      ))}
-    </g>
-  ) : (
-    <text x="16" y="21.6" textAnchor="middle" fontSize="13" fontWeight="800" fontFamily="var(--font-display-latin)" fill={color}>
-      {runtime.name.slice(0, 1).toUpperCase()}
-    </text>
-  )
-
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0 overflow-visible', className)}>
-      {runtime.capabilities.bundled ? (
-        <>
-          {/* The pink plate printed a little off register, under a yellow disc with an ink rim. */}
-          <circle cx="17.6" cy="17.6" r="12" fill="var(--riso-pink)" />
-          <circle cx="16" cy="16" r="12" fill="var(--riso-yellow)" stroke="var(--ink)" strokeWidth="2" style={{ mixBlendMode: 'multiply' }} />
-        </>
-      ) : (
-        <>
-          <rect x="4.2" y="5.6" width="25" height="22" rx="5" fill="var(--riso-pink)" />
-          <rect x="2.6" y="4" width="25" height="22" rx="5" fill="var(--riso-blue)" style={{ mixBlendMode: 'multiply' }} />
-          {/* The window's title bar: a rule and two dots in paper color. */}
-          <path d="M2.6 10h25" stroke="var(--paper-raised)" strokeWidth="1.4" opacity=".55" />
-          <circle cx="6.4" cy="7.1" r="1.1" fill="var(--paper-raised)" />
-          <circle cx="9.8" cy="7.1" r="1.1" fill="var(--paper-raised)" />
-        </>
-      )}
-      {glyph}
-    </svg>
-  )
+interface LogoShape {
+  transform: string
+  paths: readonly string[]
 }
 
-// The glyph alone, for small places (the Agent header's runtime badge, a sidebar row): official brand logo in mono skin, strokes in Plate.
-export function RuntimeGlyph({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
-  const { skin } = useTheme()
-  if (skin !== 'plate') {
-    return <BrandIcon name={runtimeBrandIcon(runtime)} className={cn('size-3.5 shrink-0', className)} />
+// Each official file in src/assets/runtime-logos/ keeps its source comment and holds a one-color silhouette (<svg viewBox="..."> with
+// one or more <path d="..."/>). Fit its viewBox inside the frame's clear-space box, centered and preserving aspect ratio.
+function parseShape(svg: string, name: RuntimeLogo): LogoShape {
+  const viewBox = svg.match(/\bviewBox="([^"]+)"/)?.[1]?.trim().split(/[\s,]+/).map(Number)
+  const paths = [...svg.matchAll(/<path\b[^>]*\bd="([^"]+)"/g)].map((match) => match[1])
+  if (!viewBox || viewBox.length !== 4 || viewBox.some((n) => !Number.isFinite(n)) || viewBox[2] <= 0 || viewBox[3] <= 0 || paths.length === 0) {
+    throw new Error(`runtime logo ${name} has no valid viewBox or path`)
   }
-  const strokes = runtimeGlyph(runtime.id)
+  const [vx, vy, vw, vh] = viewBox
+  const scale = INNER / Math.max(vw, vh)
+  const tx = INSET + (INNER - vw * scale) / 2 - vx * scale
+  const ty = INSET + (INNER - vh * scale) / 2 - vy * scale
+  return { transform: `translate(${tx} ${ty}) scale(${scale})`, paths }
+}
+
+const shapes: Record<RuntimeLogo, LogoShape> = {
+  claude: parseShape(claude, 'claude'),
+  openai: parseShape(openai, 'openai'),
+  grok: parseShape(grok, 'grok'),
+  antigravity: parseShape(antigravity, 'antigravity'),
+  pi: parseShape(pi, 'pi'),
+}
+
+// A runtime's mark: one ink-colored rounded square frame with the product's one-color shape inside in paper color (lib/runtime.ts says
+// which shape). Nothing else varies between runtimes; a runtime without a shape of its own (a local ACP command a person added, or an
+// unknown id) shows its initial in the same frame.
+export function RuntimeMark({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
+  const logo = runtimeLogo(runtime.id)
+  const shape = logo ? shapes[logo] : null
   return (
-    <svg viewBox="7 9.5 18 15" aria-hidden="true" className={cn('size-3.5 shrink-0', className)}>
-      {strokes ? (
-        <g fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-          {strokes.map((d) => (
-            <path key={d} d={d} />
+    <svg viewBox="0 0 32 32" aria-hidden="true" data-logo={logo ?? undefined} className={cn('size-8 shrink-0', className)}>
+      <rect x="0" y="0" width="32" height="32" rx="8" fill="var(--ink)" />
+      {shape ? (
+        <g transform={shape.transform}>
+          {shape.paths.map((d, index) => (
+            <path key={index} d={d} fill="var(--paper-raised)" />
           ))}
         </g>
       ) : (
-        <text x="16" y="22" textAnchor="middle" fontSize="14" fontWeight="800" fontFamily="var(--font-display-latin)" fill="currentColor">
-          {runtime.name.slice(0, 1).toUpperCase()}
+        <text x="16" y="22.8" textAnchor="middle" fontSize="19" fontWeight="800" fontFamily="var(--font-display-latin)" fill="var(--paper-raised)">
+          {initial(runtime)}
         </text>
       )}
     </svg>
   )
 }
+
+// The same mark small, for tight places (a sidebar row, the Agent header's runtime badge, the prompt writer's line): same ink frame, scaled.
+export function RuntimeGlyph({ runtime, className }: { runtime: RuntimeDefinition; className?: string }) {
+  return <RuntimeMark runtime={runtime} className={cn('size-4', className)} />
+}
+
+const initial = (runtime: RuntimeDefinition) => runtime.name.trim().slice(0, 1).toUpperCase() || '?'

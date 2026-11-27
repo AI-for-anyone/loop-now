@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { CheckIcon, ChevronDownIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { keys, useAllModels, useModelProviders, useModels, useModelsOf, useRuntimes, useUpdateAgent } from '@/api/queries'
-import { BrandIcon } from '@/components/BrandIcon'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ModelList } from '@/components/runner-picker/ModelList'
 import { blocks, unavailableOf } from '@/components/runner-picker/provider-access'
@@ -13,7 +12,6 @@ import { RuntimeMark } from '@/components/runner-picker/RuntimeMark'
 import { buildRows, modelKey, orderProviders } from '@/components/runner-picker/runner-rows'
 import { PermissionModeIcon } from '@/features/permissions/PermissionModePicker'
 import { t } from '@/i18n'
-import { providerBrandIcon } from '@/lib/brand-icons'
 import { shortModelName } from '@/lib/model-name'
 import { asksByOwnRules, canRunAgent, effectiveMode, PERMISSION_MODES } from '@/lib/permissions'
 import { canRun, railOrder, runtimeReadiness, statusOf, useRuntimeLookup, type AgentRuntime, type RuntimeDefinition } from '@/lib/runtime'
@@ -28,10 +26,10 @@ const SAVED_MS = 4000
 const MODEL_LIMIT = 200
 
 const TRIGGER_CLASS =
-  'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[7px] border border-transparent bg-transparent px-2 text-[12px] font-medium whitespace-nowrap text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-hover aria-expanded:text-ink [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:px-2.5 [[data-skin=plate]_&]:text-[12.5px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-white [[data-skin=plate]_&]:aria-expanded:bg-riso-yellow'
+  'inline-flex h-7 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-[7px] border border-transparent bg-transparent px-2 text-[12px] font-medium whitespace-nowrap text-ink-700 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-hover aria-expanded:text-ink'
 
 const POPOVER_CLASS =
-  'z-50 flex flex-col overflow-hidden rounded-[11px] border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-blue)]'
+  'z-50 flex flex-col overflow-hidden rounded-[11px] border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none'
 
 function thinkingBarCount(level: string | null): number {
   if (!level || level === 'off') return 0
@@ -53,7 +51,7 @@ function ThinkingBars({ level }: { level: string | null }) {
           style={{ height }}
           className={cn(
             'w-[2.5px] rounded-[1px] transition-colors',
-            index < lit ? 'bg-riso-blue [[data-skin=plate]_&]:bg-ink' : 'bg-ink-500/30',
+            index < lit ? 'bg-riso-blue' : 'bg-ink-500/30',
           )}
         />
       ))}
@@ -62,7 +60,7 @@ function ThinkingBars({ level }: { level: string | null }) {
 }
 
 // Four independent compact inline menus docked inside the chat composer toolbar:
-// 1) Harness (runtime with official brand logo; collapses to logo + chevron on narrow screens)
+// 1) Harness (runtime with single-color ink-frame logo; collapses to logo + chevron on narrow screens)
 // 2) Model (searchable provider/model dropdown with concise short model names)
 // 3) Thinking level (shown when the chosen model supports selectable thinking levels)
 // 4) Permissions (4 permission modes with runtime constraints)
@@ -111,7 +109,6 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
   const bundled = runtime?.capabilities.bundled ?? false
   const runtimeName = runtime?.name ?? agent.runtime
   const modelShort = shortModelName(currentModel ?? ref.modelId)
-  const modelProviderIcon = providerBrandIcon(ref.provider)
   const copy = t.runtime.picker.chip
   const menus = t.runtime.picker.menus
   const detail = copy.detail(
@@ -293,9 +290,9 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
           aria-label={menus.harnessLabel(runtimeName)}
           className={TRIGGER_CLASS}
         >
-          {runtime && <RuntimeMark runtime={runtime} className="size-3.5 [[data-skin=plate]_&]:size-[18px]" />}
+          {runtime && <RuntimeMark runtime={runtime} className="size-5" />}
           <span className="hidden truncate sm:inline">{runtimeName}</span>
-          <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-50 transition-transform group-aria-expanded:rotate-180" />
+          <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-50" />
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
           <PopoverPrimitive.Content
@@ -329,11 +326,11 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
                     onClick={() => selectHarness(entry)}
                     className={cn(
                       'flex w-full cursor-pointer items-center gap-2 rounded-ticket px-2 py-1.5 text-left text-[12.5px] font-medium text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus',
-                      isCurrent && 'bg-surface-active [[data-skin=plate]_&]:bg-riso-yellow',
+                      isCurrent && 'bg-surface-active',
                       isProblem && 'opacity-75',
                     )}
                   >
-                    <RuntimeMark runtime={entry.definition} className="size-3.5 shrink-0 [[data-skin=plate]_&]:size-5" />
+                    <RuntimeMark runtime={entry.definition} className="size-5 shrink-0" />
                     <span className="flex min-w-0 flex-1 items-center gap-1.5">
                       <span className="truncate">{entry.definition.name}</span>
                       {entry.definition.capabilities.bundled && (
@@ -381,7 +378,6 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
           aria-label={menus.modelLabel(modelShort)}
           className={TRIGGER_CLASS}
         >
-          {modelProviderIcon && <BrandIcon name={modelProviderIcon} className="size-3.5 shrink-0 [[data-skin=plate]_&]:hidden" />}
           <span className="max-w-[160px] truncate">{modelShort}</span>
           <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-50" />
         </PopoverPrimitive.Trigger>
@@ -403,7 +399,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
           >
             {browsedRuntime && activeRuntimeDef && (
               <div className="flex items-center gap-1.5 border-b border-hairline bg-surface-subtle/60 px-3 py-1.5 text-[11.5px] font-medium text-ink-700">
-                <RuntimeMark runtime={activeRuntimeDef} className="size-3.5" />
+                <RuntimeMark runtime={activeRuntimeDef} className="size-4" />
                 <span className="truncate">{activeRuntimeDef.name}</span>
                 <span className="ml-auto text-[11px] text-ink-500">{copy.hint}</span>
               </div>
@@ -481,7 +477,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
                       onClick={() => save({ thinkingLevel: mark.value === '__default__' ? null : (mark.value as ThinkingLevel) }, true)}
                       className={cn(
                         'flex w-full cursor-pointer items-center gap-2 rounded-ticket px-2 py-1.5 text-left text-[12.5px] font-medium text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus',
-                        selected && 'bg-surface-active [[data-skin=plate]_&]:bg-riso-yellow',
+                        selected && 'bg-surface-active',
                       )}
                     >
                       <ThinkingBars level={mark.level} />
@@ -542,7 +538,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
                     onClick={() => save({ permissionMode: candidate }, true)}
                     className={cn(
                       'flex w-full cursor-pointer items-start gap-2 rounded-ticket px-2 py-1.5 text-left text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40',
-                      selected && 'bg-surface-active [[data-skin=plate]_&]:bg-riso-yellow',
+                      selected && 'bg-surface-active',
                     )}
                   >
                     <PermissionModeIcon
@@ -575,7 +571,7 @@ export const RunnerChip = memo(function RunnerChip({ agent }: { agent: Schemas['
       </PopoverPrimitive.Root>
 
       {savedAt !== null && (
-        <span role="status" className="ml-1 text-[11.5px] font-medium whitespace-nowrap text-green-text [[data-skin=plate]_&]:font-black">
+        <span role="status" className="ml-1 text-[11.5px] font-medium whitespace-nowrap text-green-text">
           {copy.saved}
         </span>
       )}

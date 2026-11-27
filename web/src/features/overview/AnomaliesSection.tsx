@@ -49,10 +49,10 @@ function AnomalyItem({ item }: { item: Anomaly }) {
     <li>
       <Link
         to={to}
-        className="grid grid-cols-[minmax(56px,80px)_minmax(0,1fr)] items-center gap-x-3.5 gap-y-1 border-b border-hairline px-1 py-2 text-ink hover:bg-surface-hover sm:grid-cols-[80px_minmax(0,1fr)_max-content] [[data-skin=plate]_&]:border-b-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25 [[data-skin=plate]_&]:hover:bg-tint-pink-2/60"
+        className="grid grid-cols-[minmax(56px,80px)_minmax(0,1fr)] items-center gap-x-3.5 gap-y-1 border-b border-hairline px-1 py-2 text-ink hover:bg-surface-hover sm:grid-cols-[80px_minmax(0,1fr)_max-content]"
       >
         <span className="flex flex-col">
-          <span className="font-mono text-[12.5px] leading-tight font-medium tabular-nums [[data-skin=plate]_&]:font-bold">
+          <span className="font-mono text-[12.5px] leading-tight font-medium tabular-nums">
             {t.overview.anomalies.time(item.at)}
           </span>
           <span className="text-[11px] leading-tight text-ink-500">{dayLabel(item.at)}</span>
@@ -62,25 +62,25 @@ function AnomalyItem({ item }: { item: Anomaly }) {
             <Badge variant="stamp" tone={STAMP_TONE[item.kind]} className="[--stamp-tilt:0deg]">
               {item.compaction ? t.overview.anomalies.compactionFailed : t.overview.anomalies.kind[item.kind]}
             </Badge>
-            <span className="text-[13.5px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-black">{item.agentName}</span>
+            <span className="text-[13.5px] font-semibold [overflow-wrap:anywhere]">{item.agentName}</span>
             <ScopeTag scope={item.scope} projectId={item.projectId} />
             <span
               title={field}
-              className="max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0 font-mono text-[10.5px] leading-[18px] text-ink-500 [[data-skin=plate]_&]:border-ink/20 [[data-skin=plate]_&]:bg-paper-tab"
+              className="max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0 font-mono text-[10.5px] leading-[18px] text-ink-500"
             >
               {field}
             </span>
           </span>
           <span className="text-[12.5px] leading-snug [overflow-wrap:anywhere] text-ink-700">
             {item.compaction && (
-              <code className="mr-1.5 font-mono text-[12px] font-semibold text-ink [[data-skin=plate]_&]:font-bold">
+              <code className="mr-1.5 font-mono text-[12px] font-semibold text-ink">
                 {compactCommand(item.compaction)}
               </code>
             )}
             {reasonOf(item, item.runtime ? runtimes.name(item.runtime) : null)}
           </span>
         </span>
-        <span className="col-start-2 inline-flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap sm:col-start-auto [[data-skin=plate]_&]:font-black">
+        <span className="col-start-2 inline-flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap sm:col-start-auto">
           {action}
           <ArrowRightIcon aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
         </span>
@@ -131,11 +131,11 @@ function AnomaliesBody({ anomalies }: { anomalies: ReturnType<typeof useAnomalie
       ) : (
         pages &&
         (items.length === 0 ? (
-          <p className="rounded-card border border-green/20 bg-tint-green px-4 py-3 text-[13px] font-medium text-green-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:font-bold">
+          <p className="rounded-card border border-green/20 bg-tint-green px-4 py-3 text-[13px] font-medium text-green-text">
             {t.overview.anomalies.empty}
           </p>
         ) : (
-          <ul className="flex flex-col border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink">
+          <ul className="flex flex-col border-t border-hairline">
             {items.map((item) => (
               <AnomalyItem key={item.runId} item={item} />
             ))}

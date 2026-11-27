@@ -27,25 +27,18 @@ import { useOverviewLive } from './useOverviewLive'
 
 type OverviewTab = 'agents' | 'issues' | 'usage'
 
-// When there are no Agents at all: the overprint illustration, a large title and a way to create an Agent.
+// When there are no Agents at all: a centered title and ways to create or import an Agent.
 function EmptyOverview({ onCreate }: { onCreate: () => void }) {
   const titleId = useId()
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   return (
     <section aria-labelledby={titleId} className="flex flex-col items-center gap-[18px] px-6 py-14 text-center">
-      <span aria-hidden="true" className="relative hidden h-[140px] w-[200px] shrink-0 [[data-skin=plate]_&]:block">
-        <span className="riso-halftone absolute top-2.5 left-2.5 size-[120px] rounded-full bg-surface-active [[data-skin=plate]_&]:bg-riso-blue" />
-        <span className="absolute top-0 left-[70px] size-[120px] rounded-full border border-hairline-strong bg-surface-subtle [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:mix-blend-multiply" />
-      </span>
-      <h2
-        id={titleId}
-        className="text-[22px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[40px] [[data-skin=plate]_&]:leading-[1.2] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue"
-      >
+      <h2 id={titleId} className="text-[22px] leading-snug font-semibold tracking-tight text-ink">
         {t.overview.empty.title}
       </h2>
       <p className="text-[14.5px] text-ink-700">{t.overview.empty.body}</p>
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button size="lg" className="h-12 px-[26px] text-base [[data-skin=plate]_&]:shadow-print-pink" disabled={!reachable} onClick={onCreate}>
+        <Button size="lg" className="h-12 px-[26px] text-base" disabled={!reachable} onClick={onCreate}>
           <PlusIcon strokeWidth={3} />
           {t.agents.create}
         </Button>
@@ -151,7 +144,7 @@ export function OverviewPage() {
       ) : (
         <>
           <Header overview={overview} />
-          <Sheet className="flex-1 [[data-skin=plate]_&]:mt-2">
+          <Sheet className="flex-1">
             <PageBody width="wide">
               {filter.kind === 'project' && filter.project === null && (
                 <OverviewScopeNotFound name={filter.name} onBack={() => overview.select('')} />
@@ -197,7 +190,7 @@ function OverviewContent({ overview, query }: { overview: Overview; query: Scope
         canCreate={createScope !== null}
         onCreate={() => setCreating(true)}
       />
-      <Sheet className="flex-1 [[data-skin=plate]_&]:mt-2">
+      <Sheet className="flex-1">
         <PageBody width="wide" innerClassName="flex flex-col gap-4">
           {noAgents ? (
             filter.kind === 'all' ? (
@@ -223,7 +216,7 @@ function OverviewContent({ overview, query }: { overview: Overview; query: Scope
                 aria-label={t.overview.tabs.label}
                 value={tab}
                 onChange={setTab}
-                className="px-0 sm:px-0 [[data-skin=plate]_&]:pl-0"
+                className="px-0 sm:px-0"
                 items={[
                   {
                     key: 'agents',

@@ -112,6 +112,7 @@ function CommandPaletteBody({
         ? [
             { id: 'page:tasks', label: text.items.tasks, to: tasksPath(scope.name), icon: 'tasks' as const },
             { id: 'page:folder', label: text.items.folder, to: `${projectBase(scope.name)}/folder`, icon: 'folder' as const },
+            { id: 'page:project-plugins', label: t.plugins.project.title, to: `${projectBase(scope.name)}/plugins`, icon: 'plugins' as const },
             { id: 'page:project-settings', label: text.items.projectSettings, to: `${projectBase(scope.name)}/settings`, icon: 'projectSettings' as const },
           ]
         : []),
@@ -177,11 +178,11 @@ function CommandPaletteBody({
         event.preventDefault()
         inputRef.current?.focus()
       }}
-      className="fixed top-[14vh] left-1/2 z-50 flex w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-dialog border border-hairline-strong bg-surface-elevated text-ink shadow-dialog outline-none [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[6px_6px_0_var(--riso-blue)]"
+      className="fixed top-[14vh] left-1/2 z-50 flex w-[min(560px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-dialog border border-hairline-strong bg-surface-elevated text-ink shadow-dialog outline-none"
     >
       <DialogPrimitive.Title className="sr-only">{text.palette.title}</DialogPrimitive.Title>
-      <div className="flex items-center gap-2.5 border-b border-hairline px-4 py-3 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-ink/20">
-        <NavIcon name="search" className="size-4 text-ink-500 [[data-skin=plate]_&]:text-ink" />
+      <div className="flex items-center gap-2.5 border-b border-hairline px-4 py-3">
+        <NavIcon name="search" className="size-4 text-ink-500" />
         <input
           ref={inputRef}
           type="search"
@@ -202,7 +203,7 @@ function CommandPaletteBody({
         />
         <kbd
           aria-hidden="true"
-          className="shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink-500 [[data-skin=plate]_&]:border-ink/30 [[data-skin=plate]_&]:bg-paper-tab [[data-skin=plate]_&]:text-ink"
+          className="shrink-0 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink-500"
         >
           Esc
         </kbd>
@@ -219,7 +220,7 @@ function CommandPaletteBody({
               <div key={group.key} role="group" aria-labelledby={groupIds[group.key]} className="flex flex-col gap-0.5">
                 <div
                   id={groupIds[group.key]}
-                  className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-[0.06em] text-ink-500 uppercase [[data-skin=plate]_&]:font-black"
+                  className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-[0.06em] text-ink-500 uppercase"
                 >
                   {group.heading}
                 </div>
@@ -237,18 +238,18 @@ function CommandPaletteBody({
                       className={cn(
                         'flex min-h-[38px] cursor-pointer items-center gap-2.5 rounded-ticket px-2.5 py-1.5 text-[13.5px] transition-colors',
                         isActive
-                          ? 'bg-surface-active font-medium text-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
-                          : 'text-ink-700 hover:bg-surface-hover hover:text-ink [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:hover:bg-tint-blue',
+                          ? 'bg-surface-active font-medium text-ink'
+                          : 'text-ink-700 hover:bg-surface-hover hover:text-ink',
                       )}
                     >
                       {item.agentId ? (
                         <AgentAvatar size="sm" id={item.agentId} />
                       ) : (
-                        item.icon && <NavIcon name={item.icon} className="size-4 shrink-0 text-ink-500 [[data-skin=plate]_&]:text-ink" />
+                        item.icon && <NavIcon name={item.icon} className="size-4 shrink-0 text-ink-500" />
                       )}
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       {item.meta && (
-                        <span className="max-w-[40%] shrink-0 truncate text-[12px] text-ink-500 [[data-skin=plate]_&]:text-ink-700">
+                        <span className="max-w-[40%] shrink-0 truncate text-[12px] text-ink-500">
                           {item.meta}
                         </span>
                       )}
@@ -261,7 +262,7 @@ function CommandPaletteBody({
         )}
       </div>
 
-      <div className="flex items-center gap-4 border-t border-hairline bg-surface-subtle px-4 py-2 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-ink/15 [[data-skin=plate]_&]:bg-paper-tab">
+      <div className="flex items-center gap-4 border-t border-hairline bg-surface-subtle px-4 py-2 text-[11.5px] text-ink-500">
         <span className="inline-flex items-center gap-1">
           <kbd className="rounded-stamp border border-hairline bg-surface-control px-1 font-mono text-[10.5px]">↑↓</kbd>
           {text.palette.hints.navigate}
@@ -295,7 +296,7 @@ export function CommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px] [[data-skin=plate]_&]:bg-ink/35 [[data-skin=plate]_&]:backdrop-blur-none" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[1px]" />
         {open && <CommandPaletteBody scope={scope} projects={projects} onClose={() => onOpenChange(false)} />}
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

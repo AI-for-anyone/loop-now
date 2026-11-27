@@ -67,6 +67,14 @@ describe('independent composer menus (Harness, Model, Thinking, Permissions)', (
     expect(modelBtn()).toHaveAttribute('title', 'Run by Claude Code (this computer) · provider claude-code · model Claude Haiku (latest) (haiku) · thinking Medium')
   })
 
+  it('the Harness trigger shows the runtime ink frame icon', async () => {
+    await setup(makeAgent({ model: { provider: 'claude-code', modelId: 'haiku' }, runtime: 'claude-code', thinkingLevel: null }))
+    await waitFor(() => expect(harnessBtn().querySelector('svg[data-logo="claude"]')).not.toBeNull())
+    const svg = harnessBtn().querySelector('svg[data-logo="claude"]')!
+    expect(svg).toHaveClass('size-5')
+    expect(svg.querySelector(':scope > rect')).toHaveAttribute('fill', 'var(--ink)')
+  })
+
   it('shortens vendor model names for bundled Pi while keeping full details in the title tooltip', async () => {
     await setup(makeAgent({ model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, runtime: 'pi', thinkingLevel: 'high' }))
     await waitFor(() => expect(harnessBtn()).toHaveAccessibleName('Harness: Pi. Open to change'))

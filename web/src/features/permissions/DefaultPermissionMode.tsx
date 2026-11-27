@@ -24,7 +24,7 @@ export function DefaultPermissionMode({ labelledBy }: { labelledBy: string }) {
         }}
       />
       {saved && (
-        <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-green-text [[data-skin=plate]_&]:font-black">
+        <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-green-text">
           <CheckIcon aria-hidden="true" className="size-3.5" strokeWidth={2.8} />
           {t.permissions.saved}
         </span>

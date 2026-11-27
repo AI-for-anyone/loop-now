@@ -88,7 +88,7 @@ func TestLoadDefaults(t *testing.T) {
 	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute {
 		t.Errorf("unexpected executor defaults: %+v", c)
 	}
-	if c.MaxUploadFile != 10<<20 || c.MaxMessage != 64<<10 || c.TextEditMax != 1<<20 || c.MaxInboxMessage != 64<<10 {
+	if c.MaxUploadFile != 10<<20 || c.MaxMessage != 64<<10 || c.TextEditMax != 20<<20 || c.MaxInboxMessage != 64<<10 {
 		t.Errorf("unexpected size defaults: upload=%d message=%d textEdit=%d inbox=%d", c.MaxUploadFile, c.MaxMessage, c.TextEditMax, c.MaxInboxMessage)
 	}
 	if c.InboxPreviewChars != 200 || c.InboxPageMax != 100 {
@@ -150,7 +150,7 @@ func TestLoadErrors(t *testing.T) {
 		{"zero duration", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
 		{"malformed size", func(m map[string]string) { m[EnvMaxUploadFile] = "10MB" }, EnvMaxUploadFile},
 		{"negative process limit", func(m map[string]string) { m[EnvPiMaxProcesses] = "-1" }, EnvPiMaxProcesses},
-		{"text edit limit above upload limit", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
+		{"text edit limit above the folder upload limit", func(m map[string]string) { m[EnvMaxFolderUpload] = "10MiB" }, EnvTextEditMax},
 		{"malformed listen address", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
 		{"console origin with a path", func(m map[string]string) { m[EnvConsoleOrigins] = "http://localhost:5173/app" }, EnvConsoleOrigins},
 		{"none mixed with origins", func(m map[string]string) { m[EnvConsoleOrigins] = "none,http://localhost:5173" }, EnvConsoleOrigins},
@@ -178,6 +178,24 @@ func TestLoadErrors(t *testing.T) {
 				t.Errorf("the error leaked a secret: %v", err)
 			}
 		})
+	}
+}
+
+// The online preview and edit limit is independent of LOOP_NOW_MAX_UPLOAD_FILE: a saved text file goes through the folder
+// write, bounded by LOOP_NOW_MAX_FOLDER_UPLOAD. The variable still overrides the default.
+func TestLoadTextEditMax(t *testing.T) {
+	env := requiredEnv()
+	env[EnvTextEditMax] = "5MiB"
+	c, err := Load(envOf(env))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.TextEditMax != 5<<20 {
+		t.Errorf("TextEditMax = %d, want the override 5 MiB", c.TextEditMax)
+	}
+	env[EnvTextEditMax], env[EnvMaxUploadFile] = "30MiB", "10MiB"
+	if c, err = Load(envOf(env)); err != nil || c.TextEditMax != 30<<20 {
+		t.Errorf("a limit above the upload limit but within the folder upload limit should load: %v", err)
 	}
 }
 

@@ -89,7 +89,7 @@ function AlertDialogContent({
         {...focusHandlers}
         {...props}
       >
-        <div data-dialog-paper className={dialogPaperClass(kind)}>
+        <div data-dialog-paper className={dialogPaperClass}>
           <div data-dialog-topbar className={dialogTopbarClass}>
             <DialogTab kind={kind} />
             <AlertDialogPrimitive.Cancel data-slot="alert-dialog-close" className={closeStampClass}>
@@ -143,7 +143,7 @@ function AlertDialogMedia({
     <div
       data-slot="alert-dialog-media"
       className={cn(
-        "mb-2 inline-flex size-14 items-center justify-center rounded-full border border-hairline bg-surface-subtle *:[svg:not([class*='size-'])]:size-7 [[data-skin=plate]_&]:size-16 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:*:[svg:not([class*='size-'])]:size-8",
+        "mb-2 inline-flex size-14 items-center justify-center rounded-full border border-hairline bg-surface-subtle *:[svg:not([class*='size-'])]:size-7",
         className
       )}
       {...props}
@@ -159,7 +159,7 @@ function AlertDialogTitle({
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
       className={cn(
-        "text-[18px] leading-snug font-semibold tracking-tight text-ink [[data-skin=plate]_&]:font-display-cn [[data-skin=plate]_&]:text-[28px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal [[data-skin=plate]_&]:text-riso-blue [[data-skin=plate]_&]:[text-shadow:2.5px_2.5px_0_var(--riso-pink)]",
+        "text-[18px] leading-snug font-semibold tracking-tight text-ink",
         className
       )}
       {...props}

@@ -37,7 +37,7 @@ func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtim
 		return out, apperr.Invalid("workflow.steps.agentId", "The Agent that runs the step must belong to this project.")
 	}
 	out.Configuration = taskruntime.Configuration{AgentID: agentID, ConfigVersion: out.Agent.ConfigVersion, Provider: out.Agent.ModelProvider, ModelID: out.Agent.ModelID, Prompt: out.Agent.Prompt, Prompts: &prompts.Layers{Format: prompts.FormatV1, ProjectID: &project.ID, ProjectPrompt: project.Prompt, ProjectVersion: project.Version, AgentPrompt: out.Agent.Prompt, AgentVersion: out.Agent.PromptVersion}, Skills: []taskruntime.Skill{}, CLIs: []string{},
-		PermissionMode: out.Agent.PermissionMode}
+		PermissionMode: out.Agent.PermissionMode, UseLocalConfig: out.Agent.UseLocalConfig}
 	rows, err := tx.Query(ctx, `SELECT cli_name FROM agent_clis WHERE agent_id=$1 ORDER BY cli_name`, agentID)
 	if err != nil {
 		return out, err

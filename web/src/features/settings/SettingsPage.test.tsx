@@ -74,12 +74,12 @@ describe('Global settings tabs and routing', () => {
     expect(router.state.location.hash).toBe(expectedHash)
   })
 
-  it('the UI language is a segmented button, using recessed Geist track styling in mono skin and yellow in Plate skin', async () => {
+  it('the UI language is a segmented button using semantic segment tokens', async () => {
     await open()
     const group = within(region('Language')).getByRole('radiogroup', { name: 'Language' })
-    expect(group).toHaveClass('border', 'border-hairline', 'bg-segment-track', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
+    expect(group).toHaveClass('border', 'border-hairline', 'bg-segment-track')
     expect(within(group).getByRole('radio', { name: 'English' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-segment-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
+    expect(within(group).getByRole('radio', { name: 'English' })).toHaveClass('data-[state=on]:bg-segment-active')
   })
 
   it('switching theme between Risograph (Classic) and Minimal updates document.documentElement.dataset.skin', async () => {
@@ -100,8 +100,8 @@ describe('Global settings tabs and routing', () => {
     const switches = await within(local).findAllByRole('switch')
     expect(switches).toHaveLength(4)
     for (const item of switches) {
-      expect(item).toHaveClass('bg-switch-track', 'data-[state=checked]:bg-cta-bg', '[[data-skin=plate]_&]:data-[state=checked]:bg-riso-yellow', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
-      expect(item.closest('li')).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+      expect(item).toHaveClass('bg-switch-track', 'data-[state=checked]:bg-cta-bg')
+      expect(item.closest('li')).toHaveClass('border-b', 'border-hairline')
       expect(item.nextElementSibling).toHaveTextContent(item.getAttribute('aria-checked') === 'true' ? 'On' : 'Off')
     }
 
@@ -117,16 +117,7 @@ describe('Global settings tabs and routing', () => {
     const user = userEvent.setup()
     await open('/settings/runtimes')
     const card = await within(region('Agent runtimes')).findByRole('region', { name: 'Claude Code' })
-    expect(card).toHaveClass(
-      'border',
-      'border-hairline-strong',
-      'bg-surface-control',
-      'shadow-surface',
-      '[[data-skin=plate]_&]:border-2',
-      '[[data-skin=plate]_&]:border-ink',
-      '[[data-skin=plate]_&]:bg-white',
-      '[[data-skin=plate]_&]:shadow-[5px_5px_0_var(--ink)]',
-    )
+    expect(card).toHaveClass('border', 'border-hairline-strong', 'bg-surface-control', 'shadow-surface')
     expect(within(card).getByText('Claude Code')).toHaveClass('font-display-cn')
 
     const viewSwitch = screen.getByRole('radiogroup', { name: 'Runtimes & Models view' })
@@ -134,10 +125,10 @@ describe('Global settings tabs and routing', () => {
     expect(await screen.findByLabelText('models.json')).toBeInTheDocument()
   })
 
-  it('Server & Diagnostics shows the relocated read-only sticky note, server details, and CLI templates', async () => {
+  it('Server & Diagnostics shows the relocated read-only note, server details, and CLI templates', async () => {
     await open('/settings/server')
     const note = screen.getByText('Model settings, local mode and folders can be edited here; server environment configuration remains read-only.').closest('[role="note"]')!
-    expect(note).toHaveClass('riso-tilt')
+    expect(note).toHaveClass('rounded-card', 'border')
     const serverSection = region('Server')
     for (const label of ['Default organization', 'Default project', 'API address', 'Version', 'Connection']) {
       expect(within(serverSection).getByText(label)).toBeInTheDocument()

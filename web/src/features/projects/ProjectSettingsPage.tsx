@@ -105,7 +105,7 @@ export function ProjectSettingsPage() {
     <DraftNavigationGuard key={project.id} projectName={project.name}>
       <PageFrame>
         <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.projects.settings.title}>
-          {project.isDefault && <span className="shrink-0 rounded-full bg-cta-bg px-2.5 text-[12px] leading-[22px] font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{t.projects.settings.defaultBadge}</span>}
+          {project.isDefault && <span className="shrink-0 rounded-full bg-cta-bg px-2.5 text-[12px] leading-[22px] font-semibold text-cta-fg">{t.projects.settings.defaultBadge}</span>}
           <span className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{project.id}</span>
         </PageHeader>
         <SubNav aria-label={tabsCopy.nav} items={navItems} />
@@ -124,7 +124,7 @@ export function ProjectSettingsPage() {
                 <ProjectPromptForm projectId={project.id} />
               </SheetSection>
               <SheetSection id="settings-folder" titleId="settings-folder-title" index={1} title={t.folders.project.title}>
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-card border border-hairline bg-surface-control px-4 py-3 shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-print-rest">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-card border border-hairline bg-surface-control px-4 py-3 shadow-surface">
                   <div className="flex min-w-0 flex-[1_1_240px] items-start gap-2.5">
                     <FolderOpenIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-500" />
                     <p className="min-w-0 text-[13.5px] leading-snug text-ink-700">{t.folders.project.intro}</p>
@@ -210,7 +210,7 @@ function NameCard({ project }: { project: Schemas['Project'] }) {
               onChange={(e) => setName(e.target.value)}
             />
             {nameError && (
-              <p role="alert" className="text-[12.5px] leading-snug font-medium text-red-text [[data-skin=plate]_&]:font-bold">
+              <p role="alert" className="text-[12.5px] leading-snug font-medium text-red-text">
                 {nameError}
               </p>
             )}
@@ -277,13 +277,13 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
     <SheetSection id="settings-manager" titleId="settings-manager-title" index={1} title={t.projects.settings.manager.title}>
       <p className="text-[14px] text-ink-700">{t.projects.settings.manager.intro}</p>
       {manager ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-hairline bg-surface-control px-4 py-3.5 shadow-surface [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-print-rest">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-hairline bg-surface-control px-4 py-3.5 shadow-surface">
           <AgentAvatar id={manager.id} />
           <span className="flex min-w-0 flex-[1_1_220px] flex-col">
             <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <Link
                 to={agentPath(scope, manager.id, 'chat')}
-                className="text-[16px] font-semibold text-ink underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2"
+                className="text-[16px] font-semibold text-ink underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700"
               >
                 {manager.name}
               </Link>
@@ -297,7 +297,7 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
           </Button>
         </div>
       ) : (
-        <div role="status" className="flex items-center gap-2.5 rounded-card border border-hairline bg-surface-subtle px-4 py-3 text-[14.5px] font-medium [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-black">
+        <div role="status" className="flex items-center gap-2.5 rounded-card border border-hairline bg-surface-subtle px-4 py-3 text-[14.5px] font-medium">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-4 shrink-0">
             <path d="M5 21V4h11l-2 4 2 4H5" />
           </svg>
@@ -314,7 +314,7 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
         </div>
       ) : (
         <div className="grid max-w-[420px] gap-1.5">
-          <span id={labelId} className="text-[13.5px] leading-snug font-semibold [[data-skin=plate]_&]:font-black">
+          <span id={labelId} className="text-[13.5px] leading-snug font-semibold">
             {manager ? t.projects.settings.manager.change : t.projects.settings.manager.choose}
           </span>
           <Combobox
@@ -375,23 +375,23 @@ function DangerCard({ project }: { project: Schemas['Project'] }) {
           {t.projects.settings.danger.action}
         </Button>
       </div>
-      {activeTasks && <div role="alert" className="grid gap-2 rounded-card border border-hairline bg-surface-control p-4 text-[14px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white">
-        <p className="font-semibold text-red-text [[data-skin=plate]_&]:font-black">{t.credentials.projectSettings.deleteBlocked}</p>
-        <ul className="grid gap-2">{activeTasks.map(task => <li key={task.id}><Link className="inline-flex min-h-9 items-center font-medium underline [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold" to={`${tasksPath(project.name)}/${task.id}`}>{t.credentials.projectSettings.viewTaskPrefix}{task.id} · {task.status}</Link></li>)}</ul>
+      {activeTasks && <div role="alert" className="grid gap-2 rounded-card border border-hairline bg-surface-control p-4 text-[14px]">
+        <p className="font-semibold text-red-text">{t.credentials.projectSettings.deleteBlocked}</p>
+        <ul className="grid gap-2">{activeTasks.map(task => <li key={task.id}><Link className="inline-flex min-h-9 items-center font-medium underline [overflow-wrap:anywhere]" to={`${tasksPath(project.name)}/${task.id}`}>{t.credentials.projectSettings.viewTaskPrefix}{task.id} · {task.status}</Link></li>)}</ul>
       </div>}
       {busy && (
-        <div role="alert" className="flex flex-col gap-2.5 rounded-card border border-red/40 bg-surface-control px-[18px] py-4 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--red)]">
-          <span className="text-[15px] font-semibold text-red-text [[data-skin=plate]_&]:font-black">{t.projects.settings.danger.notIdleTitle}</span>
+        <div role="alert" className="flex flex-col gap-2.5 rounded-card border border-red/40 bg-surface-control px-[18px] py-4">
+          <span className="text-[15px] font-semibold text-red-text">{t.projects.settings.danger.notIdleTitle}</span>
           <span className="text-[14px] text-ink-700">{t.projects.settings.danger.notIdleBody}</span>
           <ul aria-label={t.projects.settings.danger.busyList} className="flex flex-col gap-2">
             {busy.map((agent) => (
               <li key={agent.id} className="flex items-center gap-3 rounded-ticket bg-error-field px-3 py-2">
                 <AgentAvatar id={agent.id} />
-                <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold [[data-skin=plate]_&]:font-black">{agent.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{agent.name}</span>
                 <Link
                   to={agentPath(scope, agent.id, 'chat')}
                   aria-label={t.projects.settings.danger.openChatOf(agent.name)}
-                  className="inline-flex min-h-9 shrink-0 items-center gap-1.5 text-[13.5px] font-medium text-ink underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2"
+                  className="inline-flex min-h-9 shrink-0 items-center gap-1.5 text-[13.5px] font-medium text-ink underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700"
                 >
                   {t.projects.settings.danger.openChat}
                   <ArrowRightIcon className="size-3.5" strokeWidth={2.6} />

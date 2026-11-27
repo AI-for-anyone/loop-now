@@ -30,7 +30,7 @@ export function AccountSelectionField({ label, description, options, value, curr
       className={
         embedded
           ? 'grid min-w-0 gap-2.5 text-[13px]'
-          : 'grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-3.5 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue'
+          : 'grid min-w-0 gap-2.5 rounded-card border border-hairline bg-surface-subtle p-3.5 text-[13px]'
       }
     >
       <div className="grid gap-0.5">
@@ -45,7 +45,7 @@ export function AccountSelectionField({ label, description, options, value, curr
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" disabled={disabled || pending || !dirty || !value} onClick={onSave}>{pending ? t.credentials.selectionField.saving : t.credentials.selectionField.save}</Button>
         {canRestore && <Button type="button" size="sm" variant="secondary" disabled={disabled || pending} onClick={onRestore}>{restoreLabel}</Button>}
-        <Link to={settingsPath} className="inline-flex min-h-8 items-center text-[12.5px] font-medium underline underline-offset-4 [[data-skin=plate]_&]:font-bold">{t.credentials.selectionField.manageInSettings}</Link>
+        <Link to={settingsPath} className="inline-flex min-h-8 items-center text-[12.5px] font-medium underline underline-offset-4">{t.credentials.selectionField.manageInSettings}</Link>
       </div>
     </div>
   )

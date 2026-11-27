@@ -51,7 +51,7 @@ export function SlashCommandMenu({ runtimeName, open, listId, optionId, items, b
           onInteractOutside={(event) => {
             if (event.target instanceof Element && event.target.closest('[data-chat-composer]')) event.preventDefault()
           }}
-          className="z-50 flex max-h-[min(360px,var(--radix-popover-content-available-height))] w-(--radix-popover-trigger-width) min-w-0 flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]"
+          className="z-50 flex max-h-[min(360px,var(--radix-popover-content-available-height))] w-(--radix-popover-trigger-width) min-w-0 flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
         >
           {status ? (
             <p role="status" className="px-4 py-3 text-[13.5px] text-ink-700">
@@ -73,11 +73,11 @@ export function SlashCommandMenu({ runtimeName, open, listId, optionId, items, b
                       onMouseDown={(event) => event.preventDefault()}
                       onMouseEnter={() => onActive(index)}
                       onClick={() => onChoose(command)}
-                      className="grid min-w-0 cursor-pointer gap-0.5 rounded-ticket px-2.5 py-2 aria-selected:bg-surface-active [[data-skin=plate]_&]:aria-selected:bg-riso-yellow"
+                      className="grid min-w-0 cursor-pointer gap-0.5 rounded-ticket px-2.5 py-2 aria-selected:bg-surface-active"
                     >
                       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <code className="min-w-0 font-mono text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{usageText(command)}</code>
-                        <span className={cn('px-2 text-[11px] leading-[18px]', command.source === 'platform' ? 'rounded-full bg-cta-bg font-semibold text-cta-fg [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white' : 'rounded-stamp border border-hairline bg-surface-subtle font-medium text-ink-700 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink')}>
+                        <code className="min-w-0 font-mono text-[13px] font-semibold [overflow-wrap:anywhere]">{usageText(command)}</code>
+                        <span className={cn('px-2 text-[11px] leading-[18px]', command.source === 'platform' ? 'rounded-full bg-cta-bg font-semibold text-cta-fg' : 'rounded-stamp border border-hairline bg-surface-subtle font-medium text-ink-700')}>
                           {[source, plugin && text.plugin(plugin)].filter(Boolean).join(' · ')}
                         </span>
                       </span>
@@ -88,14 +88,14 @@ export function SlashCommandMenu({ runtimeName, open, listId, optionId, items, b
               </div>}
               {blocked.length > 0 && (
                 // Clicking a grayed-out command does nothing, and focus stays in the input box.
-                <div role="group" aria-label={text.unavailable.title} onMouseDown={(event) => event.preventDefault()} className={cn('px-1.5 pt-1.5 pb-1', items.length > 0 && 'border-t border-hairline [[data-skin=plate]_&]:border-t-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25')}>
-                  <p aria-hidden="true" className="px-2.5 text-[11px] leading-[18px] font-semibold text-ink-500 [[data-skin=plate]_&]:font-black">{text.unavailable.title}</p>
+                <div role="group" aria-label={text.unavailable.title} onMouseDown={(event) => event.preventDefault()} className={cn('px-1.5 pt-1.5 pb-1', items.length > 0 && 'border-t border-hairline')}>
+                  <p aria-hidden="true" className="px-2.5 text-[11px] leading-[18px] font-semibold text-ink-500">{text.unavailable.title}</p>
                   <ul>
                     {blocked.map((command) => (
                       <li key={commandText(command)} className="grid min-w-0 gap-0.5 px-2.5 py-1.5 text-ink-500">
                         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                          <code className="min-w-0 font-mono text-[13px] font-semibold [overflow-wrap:anywhere] [[data-skin=plate]_&]:font-bold">{usageText(command)}</code>
-                          <span className="rounded-full bg-surface-active px-2 text-[11px] leading-[18px] font-semibold text-ink-700 [[data-skin=plate]_&]:bg-ink/45 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">{text.platform}</span>
+                          <code className="min-w-0 font-mono text-[13px] font-semibold [overflow-wrap:anywhere]">{usageText(command)}</code>
+                          <span className="rounded-full bg-surface-active px-2 text-[11px] leading-[18px] font-semibold text-ink-700">{text.platform}</span>
                         </span>
                         {command.unavailableReason && (
                           <span className="text-[12.5px] leading-snug [overflow-wrap:anywhere]">
@@ -111,9 +111,9 @@ export function SlashCommandMenu({ runtimeName, open, listId, optionId, items, b
               {/* When no command is selectable (all matches are unusable), the footer instead says Enter will send the text as typed;
                   this sentence is also read out to screen readers. */}
               {items.length > 0 ? (
-                <p className="border-t border-hairline px-3 py-1.5 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:border-t-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">{text.keys}</p>
+                <p className="border-t border-hairline px-3 py-1.5 text-[11.5px] text-ink-500">{text.keys}</p>
               ) : (
-                <p role="status" className="border-t border-hairline px-3 py-1.5 text-[11.5px] text-ink-500 [[data-skin=plate]_&]:border-t-[1.5px] [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/25">{text.unavailable.onlyBlocked}</p>
+                <p role="status" className="border-t border-hairline px-3 py-1.5 text-[11.5px] text-ink-500">{text.unavailable.onlyBlocked}</p>
               )}
             </>
           )}

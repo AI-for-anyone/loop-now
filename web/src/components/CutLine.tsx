@@ -8,17 +8,17 @@ import type { LucideIcon } from 'lucide-react'
 export function CutLine({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children?: ReactNode }) {
   return (
     <div role={children ? undefined : 'separator'} aria-label={children ? undefined : label} className="flex items-center gap-2.5">
-      <Icon aria-hidden="true" className="size-4 shrink-0 text-ink-500 [[data-skin=plate]_&]:text-pink-text" strokeWidth={2} />
+      <Icon aria-hidden="true" className="size-4 shrink-0 text-ink-500" strokeWidth={2} />
       <span
         aria-hidden="true"
         data-cut-line
-        className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-riso-pink"
+        className="h-0 flex-1 border-t border-hairline"
       />
-      {children ?? <span className="text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-pink-text">{label}</span>}
+      {children ?? <span className="text-[12px] font-medium text-ink-500">{label}</span>}
       <span
         aria-hidden="true"
         data-cut-line
-        className="h-0 flex-1 border-t border-hairline [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-riso-pink"
+        className="h-0 flex-1 border-t border-hairline"
       />
     </div>
   )

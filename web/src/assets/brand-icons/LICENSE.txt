@@ -1,5 +1,0 @@
-Brand SVG icons in this directory are vendored from @lobehub/icons-static-svg (v1.106.0)
-https://github.com/lobehub/lobe-icons
-
-License: MIT
-Copyright (c) LobeHub

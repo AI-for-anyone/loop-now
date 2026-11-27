@@ -6,7 +6,7 @@ import { apiUrl, errorBody } from '@/test/api'
 import { renderHookWithQuery } from '@/test/render'
 import { codexDefinition, runtimeDefinitions } from '@/test/runtimes'
 import { server } from '@/test/server'
-import { canRun, railOrder, runtimeGlyph, runtimeLookup, runtimeProblemText, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
+import { canRun, railOrder, runtimeLogo, runtimeLookup, runtimeProblemText, runtimeReadiness, useRuntimeLookup, type RuntimeReadiness } from './runtime'
 
 const definitions = runtimeDefinitions().runtimes
 // A runtime the contract does not have yet, to show nothing here depends on the two known ones.
@@ -53,15 +53,15 @@ describe('runtime lookup', () => {
 })
 
 describe('runtime marks', () => {
-  it('a runtime with a glyph of its own has its strokes; any other has none and is marked with its initial', () => {
-    expect(runtimeGlyph('pi')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('claude-code')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('codex')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('grok')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('antigravity')?.length).toBeGreaterThan(0)
-    expect(runtimeGlyph('acme' as Schemas['AgentRuntime'])).toBeNull()
+  it("each built-in runtime is marked with its product's own logo; any other has none", () => {
+    expect(runtimeLogo('claude-code')).toBe('claude')
+    expect(runtimeLogo('codex')).toBe('openai')
+    expect(runtimeLogo('grok')).toBe('grok')
+    expect(runtimeLogo('antigravity')).toBe('antigravity')
+    expect(runtimeLogo('pi')).toBe('pi')
+    expect(runtimeLogo('acme' as Schemas['AgentRuntime'])).toBeNull()
     // An id that is a property of every object is still no runtime's.
-    expect(runtimeGlyph('constructor' as Schemas['AgentRuntime'])).toBeNull()
+    expect(runtimeLogo('constructor' as Schemas['AgentRuntime'])).toBeNull()
   })
 })
 

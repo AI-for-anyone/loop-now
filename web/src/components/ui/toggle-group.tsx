@@ -24,7 +24,7 @@ function ToggleGroup({
         if (next) onValueChange(next)
       }}
       className={cn(
-        "inline-flex flex-wrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px] [[data-skin=plate]_&]:gap-1 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue [[data-skin=plate]_&]:p-1",
+        "inline-flex flex-wrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px]",
         className
       )}
       {...props}
@@ -37,7 +37,7 @@ function ToggleGroupItem({ className, ...props }: React.ComponentProps<typeof To
     <ToggleGroupPrimitive.Item
       data-slot="toggle-group-item"
       className={cn(
-        "inline-flex h-7 cursor-pointer items-center justify-center rounded-[5px] px-2.5 text-[12.5px] font-medium whitespace-nowrap text-ink-500 outline-none transition-[background-color,color,box-shadow] duration-150 hover:text-ink focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40 data-[state=on]:bg-segment-active data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)] data-[state=on]:focus-visible:shadow-focus motion-reduce:transition-none [[data-skin=plate]_&]:h-auto [[data-skin=plate]_&]:min-h-[34px] [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:px-4 [[data-skin=plate]_&]:text-[13.5px] [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:text-ink [[data-skin=plate]_&]:data-[state=on]:shadow-[2px_2px_0_var(--riso-pink)]",
+        "inline-flex h-7 cursor-pointer items-center justify-center rounded-[5px] px-2.5 text-[12.5px] font-medium whitespace-nowrap text-ink-500 outline-none transition-[background-color,color,box-shadow] duration-150 hover:text-ink focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40 data-[state=on]:bg-segment-active data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)] data-[state=on]:focus-visible:shadow-focus motion-reduce:transition-none",
         className
       )}
       {...props}

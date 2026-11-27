@@ -24,7 +24,7 @@ import { CredentialFields } from '@/features/project-credentials/CredentialField
 const CLI_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
 const listClass =
-  'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control [[data-skin=plate]_&]:divide-ink/10 [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white'
+  'grid min-w-0 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control'
 
 export function ClisSection({ agent }: { agent: Schemas['Agent'] }) {
   const templates = useCliTemplates()
@@ -176,7 +176,7 @@ function CliItem({
   if (!cli.hasTemplate) {
     return (
       <li className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2" aria-label={cli.name}>
-        <span className="font-mono text-[14px] font-semibold [[data-skin=plate]_&]:font-bold">{cli.name}</span>
+        <span className="font-mono text-[14px] font-semibold">{cli.name}</span>
         <span className="min-w-0 truncate text-[12.5px] text-ink-500">{t.config.clis.markerOnly}</span>
         <Button size="xs" variant="ghost" className="ml-auto shrink-0" onClick={() => setRemoving(true)}>
           {t.common.remove}
@@ -198,15 +198,15 @@ function CliItem({
   // Template CLI: compact ~48px summary row that expands inline account/DB or credential controls on click (matching AgentPlugins).
   return (
     <li
-      className={cn('min-w-0', open && 'shadow-[inset_2px_0_0_var(--ink)] [[data-skin=plate]_&]:shadow-[inset_3px_0_0_var(--riso-blue)]')}
+      className={cn('min-w-0', open && 'shadow-[inset_2px_0_0_var(--ink)]')}
       aria-label={cli.name}
     >
       <div
         className={cn(
           'flex min-h-12 items-center gap-2 pr-3 pl-4 transition-colors',
           open
-            ? 'bg-surface-subtle [[data-skin=plate]_&]:bg-tint-blue/40'
-            : 'hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-ink/[0.03]',
+            ? 'bg-surface-subtle'
+            : 'hover:bg-surface-hover',
         )}
       >
         <button
@@ -216,7 +216,7 @@ function CliItem({
           onClick={() => setOpen((value) => !value)}
           className="flex min-h-12 min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2.5 gap-y-1 py-2 text-left outline-none focus-visible:shadow-focus"
         >
-          <span className="font-mono text-[14px] font-semibold [[data-skin=plate]_&]:font-bold">{cli.name}</span>{' '}
+          <span className="font-mono text-[14px] font-semibold">{cli.name}</span>{' '}
           <Badge tone="info" className="text-riso-blue">
             {template ? t.config.clis.templateVersion(template.version) : t.config.clis.credential}
           </Badge>{' '}
@@ -242,7 +242,7 @@ function CliItem({
       </div>
 
       {open && (
-        <div id={bodyId} className="grid min-w-0 gap-3 border-t border-hairline bg-surface-subtle/50 px-4 py-3.5 [[data-skin=plate]_&]:border-ink/10 [[data-skin=plate]_&]:bg-tint-blue/25">
+        <div id={bodyId} className="grid min-w-0 gap-3 border-t border-hairline bg-surface-subtle/50 px-4 py-3.5">
           {!template && <p className="text-[12.5px] text-ink-500">{unavailableReason}</p>}
           {template && <WarningList warnings={template.warnings} />}
           {template && <CliToolStatus template={template} />}
@@ -250,13 +250,13 @@ function CliItem({
             <ProjectCliSelection agentId={agentId} configVersion={configVersion} cli={cli.name} embedded />
           ) : (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
-              <span className="font-semibold [[data-skin=plate]_&]:font-black">{t.config.clis.credential}</span>
+              <span className="font-semibold">{t.config.clis.credential}</span>
               <CredentialStatus credential={cli.credential} />
               <div className="ml-auto flex flex-wrap gap-x-2 gap-y-1">
                 <Button
                   size="xs"
                   variant={cli.credential ? 'secondary' : 'ink'}
-                  className={cn(cli.credential && 'bg-surface-control hover:bg-surface-hover [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:hover:bg-white')}
+                  className={cn(cli.credential && 'bg-surface-control hover:bg-surface-hover')}
                   disabled={!template}
                   onClick={() => setEditing(true)}
                 >

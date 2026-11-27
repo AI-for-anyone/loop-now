@@ -33,7 +33,7 @@ export function WarningList({ warnings }: { warnings: Schemas['Warning'][] }) {
 export function CredentialStatus({ credential }: { credential: Schemas['CredentialMeta'] | null }) {
   if (!credential) {
     return (
-      <Badge tone="neutral" className="border border-hairline-strong bg-surface-control [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-white [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_rgb(24_38_94/.25)]">
+      <Badge tone="neutral" className="border border-hairline-strong bg-surface-control">
         {t.config.credentialStatus.unset}
       </Badge>
     )

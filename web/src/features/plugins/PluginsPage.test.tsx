@@ -119,20 +119,20 @@ describe('Plugin market layout and Plate skin', () => {
     const actions = header.querySelector('[data-page-actions]')!
     expect(actions).not.toBeNull()
     expect(header.querySelector('[data-page-meta]')).toBeNull()
-    expect(within(actions as HTMLElement).getByRole('region', { name: 'Plugin host' })).toHaveClass('border', 'border-hairline-strong', '[[data-skin=plate]_&]:border-dashed')
-    expect(within(actions as HTMLElement).getByRole('button', { name: 'Install plugin' })).toHaveClass('[[data-skin=plate]_&]:bg-riso-pink', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
+    expect(within(actions as HTMLElement).getByRole('region', { name: 'Plugin host' })).toHaveClass('border', 'border-hairline-strong')
+    expect(within(actions as HTMLElement).getByRole('button', { name: 'Install plugin' })).toHaveClass('bg-cta-bg', 'text-cta-fg')
   })
 
   it('uses two crisp tabs (Installed and Discover) above a Sheet + PageBody with a single-surface divide-y list', async () => {
     renderMarket()
     const tabs = await screen.findByRole('navigation', { name: 'Plugin market' })
     await waitFor(() => expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Installed3', 'Discover']))
-    expect(within(tabs).getByRole('link', { name: /Installed/ })).toHaveClass('border-b-2', 'border-ink', '[[data-skin=plate]_&]:h-10', '[[data-skin=plate]_&]:bg-riso-yellow')
-    expect(within(tabs).getByRole('link', { name: 'Discover' })).toHaveClass('border-b-2', 'border-transparent', '[[data-skin=plate]_&]:h-[34px]', '[[data-skin=plate]_&]:bg-paper-tab')
+    expect(within(tabs).getByRole('link', { name: /Installed/ })).toHaveClass('border-b-2', 'border-ink')
+    expect(within(tabs).getByRole('link', { name: 'Discover' })).toHaveClass('border-b-2', 'border-transparent')
     const list = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('ul')!
     expect(list.closest('[data-sheet]')).not.toBeNull()
     expect(list.closest('[data-page-body]')).not.toBeNull()
-    expect(list).toHaveClass('divide-y', 'border', 'border-hairline-strong', 'bg-surface-control', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:shadow-print-pink')
+    expect(list).toHaveClass('divide-y', 'border', 'border-hairline-strong', 'bg-surface-control')
   })
 
   it('built-in plugins in Discover keep halftone color bands cycling blue, pink, yellow and Official badge tokens', async () => {
@@ -145,6 +145,6 @@ describe('Plugin market layout and Plate skin', () => {
     const cards = ['Hello example', 'Browser', 'Webhook inbox', 'Fourth one'].map((name) => screen.getByRole('heading', { name }).closest('li')!)
     expect(cards.map((card) => card.querySelector('[data-band]')!.getAttribute('data-band'))).toEqual(['blue', 'pink', 'yellow', 'blue'])
     expect(within(cards[0]).getByRole('heading', { name: 'Hello example' })).toHaveClass('font-display-cn')
-    expect(within(cards[0]).getByText('Official')).toHaveClass('bg-cta-bg', 'text-cta-fg', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+    expect(within(cards[0]).getByText('Official')).toHaveClass('bg-cta-bg', 'text-cta-fg')
   })
 })

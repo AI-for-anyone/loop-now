@@ -61,7 +61,7 @@ export function IdentitiesPage() {
         crumbs={[{ label: t.shell.global }]}
         title={t.identities.title}
         actions={
-          <Button variant="interrupt" size="xs" className="[[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink" onClick={() => setCreating(true)}>
+          <Button variant="interrupt" size="xs" onClick={() => setCreating(true)}>
             <PlusIcon aria-hidden="true" />
             {t.identities.create}
           </Button>
@@ -69,11 +69,11 @@ export function IdentitiesPage() {
       >
         {identities.data && <span>{t.identities.count(list.length)}</span>}
       </PageHeader>
-      <Sheet className="flex-1 [[data-skin=plate]_&]:mt-2">
+      <Sheet className="flex-1">
         <div className="flex min-h-0 flex-1 flex-col nav:flex-row">
           <aside
             aria-label={t.identities.list}
-            className="relative flex shrink-0 flex-col border-b border-hairline max-nav:max-h-[200px] nav:w-[216px] nav:border-r nav:border-b-0 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/40 [[data-skin=plate]_&]:nav:border-r-2 [[data-skin=plate]_&]:nav:border-b-0"
+            className="relative flex shrink-0 flex-col border-b border-hairline max-nav:max-h-[200px] nav:w-[216px] nav:border-r nav:border-b-0"
           >
             <div ref={asideScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3 nav:py-4">
               {identities.isPending && <p className="text-[13.5px] text-ink-500">{t.common.loading}</p>}
@@ -87,20 +87,20 @@ export function IdentitiesPage() {
                         to={`/identities/${identity.id}${tabSuffix}`}
                         className={({ isActive }) =>
                           cn(
-                            'flex min-h-[44px] items-center gap-2.5 rounded-input border px-2.5 py-1.5 text-ink outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:mr-1 [[data-skin=plate]_&]:min-h-[46px] [[data-skin=plate]_&]:border-2',
+                            'flex min-h-[44px] items-center gap-2.5 rounded-input border px-2.5 py-1.5 text-ink outline-none focus-visible:shadow-focus',
                             isActive
-                              ? 'border-hairline-strong bg-surface-active [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:shadow-[4px_4px_0_var(--ink)]'
-                              : 'border-transparent hover:bg-surface-hover [[data-skin=plate]_&]:hover:bg-ink/[0.05]',
+                              ? 'border-hairline-strong bg-surface-active'
+                              : 'border-transparent hover:bg-surface-hover',
                           )
                         }
                       >
                         <KeyRoundIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.2} />
                         <span className="flex min-w-0 flex-1 flex-col leading-[1.35]">
-                          <span className="truncate text-[13.5px] font-semibold [[data-skin=plate]_&]:text-[14px] [[data-skin=plate]_&]:font-black">
+                          <span className="truncate text-[13.5px] font-semibold">
                             {identity.name}
                           </span>
                           {active !== undefined && (
-                            <span className="text-[11px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">
+                            <span className="text-[11px] font-medium text-ink-500">
                               {t.identities.activeTokens(active)}
                             </span>
                           )}
@@ -113,7 +113,7 @@ export function IdentitiesPage() {
             </div>
             <ScrollRuler targetRef={asideScrollRef} label={t.identities.list} />
           </aside>
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {identityId ? (
               <IdentityDetail
                 key={identityId}
@@ -124,7 +124,7 @@ export function IdentitiesPage() {
             ) : (
               identities.isSuccess && (
                 <div className="flex min-h-[320px] flex-1 items-center justify-center p-6">
-                  <p className="font-display-cn text-[18px] font-semibold text-ink-500 [[data-skin=plate]_&]:text-[34px] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:text-riso-blue">
+                  <p className="font-display-cn text-[18px] font-semibold text-ink-500">
                     {t.identities.empty}
                   </p>
                 </div>
@@ -181,7 +181,7 @@ function IdentityDetail({
             {effectiveTab === 'tokens' && !deleted && (
               <>
                 <StickyNote className="self-start">
-                  <span className="font-semibold [[data-skin=plate]_&]:font-black">{t.identities.riskTitle}</span>
+                  <span className="font-semibold">{t.identities.riskTitle}</span>
                   {t.identities.riskBody}
                 </StickyNote>
                 <TokenSection identity={data} />
@@ -211,16 +211,16 @@ function IdentityHeader({ identity }: { identity: Schemas['ExternalIdentity'] })
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-5 py-3 sm:px-6 [[data-skin=plate]_&]:border-b-0 [[data-skin=plate]_&]:pb-2">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-5 py-3 sm:px-6">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
-        <h2 className="riso-marker font-display-cn text-[18px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] [[data-skin=plate]_&]:px-1.5 [[data-skin=plate]_&]:text-[28px] [[data-skin=plate]_&]:leading-[1.15] [[data-skin=plate]_&]:font-normal [[data-skin=plate]_&]:tracking-normal">
+        <h2 className="riso-marker font-display-cn text-[18px] leading-snug font-semibold tracking-tight [overflow-wrap:anywhere]">
           {identity.name}
         </h2>
         <span className="font-mono text-[12.5px] text-ink-700">{identity.address}</span>
         <Button
           size="xs"
           variant="secondary"
-          className="h-6 px-2.5 text-[11.5px] [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:hover:bg-riso-yellow"
+          className="h-6 px-2.5 text-[11.5px]"
           onClick={() => void copy()}
         >
           {copied ? t.common.copied : t.common.copy}
@@ -228,7 +228,7 @@ function IdentityHeader({ identity }: { identity: Schemas['ExternalIdentity'] })
         {deleted ? (
           <>
             <DeletedMark label={t.identities.deleted} className="text-[12px] leading-5" />
-            <span className="text-[12px] font-medium text-ink-500 [[data-skin=plate]_&]:font-bold">
+            <span className="text-[12px] font-medium text-ink-500">
               {t.identities.deletedAt(identity.deletedAt!)}
             </span>
           </>
@@ -287,24 +287,24 @@ function IdentitySettingsTab({ identity }: { identity: Schemas['ExternalIdentity
       <IdentityManager identity={identity} />
       <section
         aria-labelledby="identity-metadata-title"
-        className="flex flex-col gap-3 border-t border-hairline pt-5 [[data-skin=plate]_&]:border-t-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/[0.22]"
+        className="flex flex-col gap-3 border-t border-hairline pt-5"
       >
-        <h3 id="identity-metadata-title" className="text-[15px] leading-[1.3] font-semibold [[data-skin=plate]_&]:text-[17px] [[data-skin=plate]_&]:font-black">
+        <h3 id="identity-metadata-title" className="text-[15px] leading-[1.3] font-semibold">
           {t.identities.metadata.title}
         </h3>
         <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-2 text-[13.5px]">
-          <dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{t.identities.metadata.address}</dt>
+          <dt className="font-medium text-ink-500">{t.identities.metadata.address}</dt>
           <dd className="font-mono text-[13px] text-ink">{identity.address}</dd>
-          <dt className="font-medium text-ink-500 [[data-skin=plate]_&]:font-black">{t.identities.metadata.createdAt}</dt>
+          <dt className="font-medium text-ink-500">{t.identities.metadata.createdAt}</dt>
           <dd className="text-ink-700">{t.identities.createdAt(identity.createdAt)}</dd>
         </dl>
       </section>
       <section
         aria-labelledby="identity-danger-title"
-        className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-red-text/30 bg-tint-red/30 px-4 py-3.5 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-red-text [[data-skin=plate]_&]:bg-paper-raised"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-red-text/30 bg-tint-red/30 px-4 py-3.5"
       >
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h3 id="identity-danger-title" className="text-[14.5px] font-semibold text-red-text [[data-skin=plate]_&]:font-black">
+          <h3 id="identity-danger-title" className="text-[14.5px] font-semibold text-red-text">
             {t.identities.dangerZone}
           </h3>
           <p className="text-[13px] text-ink-700">{t.identities.dangerHint}</p>
@@ -312,7 +312,7 @@ function IdentitySettingsTab({ identity }: { identity: Schemas['ExternalIdentity
         <Button
           variant="danger-outline"
           size="xs"
-          className="shrink-0 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-red-text"
+          className="shrink-0"
           onClick={() => setConfirming(true)}
         >
           {t.identities.delete}

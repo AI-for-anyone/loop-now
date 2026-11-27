@@ -60,12 +60,18 @@ describe('sidebar and page structure', () => {
     window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
   })
 
-  it('the main area has a layer of paper grain on its beige background; the sidebar does not', async () => {
+  it('the main area has a layer of paper grain and the sidebar has a right border without grain; pages use a clean full-bleed sheet', async () => {
     server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [] })), ...baseHandlers([makeAgent()]))
     renderRoutes(routes, '/')
     await screen.findByRole('heading', { name: 'Overview', level: 1 })
-    expect(screen.getByRole('main').closest('.riso-grain')).not.toBeNull()
+    const contentColumn = screen.getByRole('main').closest('.riso-grain')!
+    expect(contentColumn).not.toBeNull()
+    expect(sidebar()).toHaveClass('border-r', 'border-sidebar-border')
     expect(sidebar().closest('.riso-grain')).toBeNull()
+    // Other pages using the shared PageFrame + Sheet use the same clean full-bleed sheet with no outer margin or shadow.
+    const sheet = document.querySelector('[data-sheet]')!
+    expect(sheet).toHaveClass('bg-surface-canvas', 'riso-grain')
+    expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5', 'mt-2')
   })
 
   it('an address that does not exist goes back to the overview', async () => {
@@ -94,10 +100,14 @@ describe('sidebar and page structure', () => {
     expect(hrefs()).toEqual(['/', '/?project=test-project', `${project}/tasks`, `${project}/folder`, `${project}/settings`, `${project}/agents/${agent.id}`, ...globalEntries])
     expect(within(sidebar()).queryByRole('link', { name: /Inbox/ })).toBeNull()
     expect(await screen.findByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
-    // Main-area page header: the location breadcrumb, the title in the display font, and the model.
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('test-project/dev-helper')
+    // Agent page header is one thin bar with no breadcrumb; details and back-to-project link live in the More menu.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'dev-helper', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    const menu = await screen.findByRole('dialog', { name: 'Agent info' })
+    expect(within(menu).getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
+    expect(within(menu).getByRole('link', { name: 'Back to test-project' })).toHaveAttribute('href', '/?project=test-project')
   })
 
   it('opening a global page (Plugin market, Global settings) from a project keeps the current project in the sidebar', async () => {
@@ -125,7 +135,8 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(within(list).getByRole('link', { name: 'Inspector' })).toHaveAttribute('aria-current', 'page'))
     expect(scopeSwitcher('Global')).toBeInTheDocument()
     expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('test-project')
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global/Inspector')
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Inspector', level: 1 })).toBeInTheDocument()
   })
 
   it('the full navigation has no Inbox entry, and the Inbox event stream is still set up (messages for you and items needing you are updated through it)', async () => {
@@ -280,6 +291,10 @@ describe('sidebar and page structure', () => {
     expect(within(dialog3).getByRole('status')).toHaveTextContent('No matching results')
 
     await user.clear(input3)
+    await user.type(input3, 'plugins')
+    expect(within(dialog3).getByRole('option', { name: 'Plugins' })).toBeInTheDocument()
+
+    await user.clear(input3)
     await user.type(input3, 'settings')
     const options = within(dialog3).getAllByRole('option')
     expect(options.length).toBeGreaterThanOrEqual(2)
@@ -349,6 +364,44 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'Writing team' })}`))
     expect(router.state.location.pathname).toBe('/')
     expect(window.localStorage.getItem('loop-now.lastScope')).toBe(writing.id)
+  })
+
+  it('project list rows, nav items, group headings and scope switcher rows stay on one line with truncation and tooltips', async () => {
+    const longProject = { ...defaultProject, name: 'very-long-project-name-for-narrow-sidebar-testing' }
+    const platform = makeAgent({ name: 'Inspector', scope: 'platform', projectId: null })
+    server.use(
+      ...overviewHandlers(),
+      http.get(apiUrl('/projects'), () => HttpResponse.json({ projects: [longProject] })),
+      http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(platform)] })),
+      ...baseHandlers([]),
+    )
+    const user = userEvent.setup()
+    renderRoutes(routes, '/')
+
+    const projectsList = await within(sidebar()).findByRole('list', { name: 'Projects' })
+    const projectRow = await within(projectsList).findByRole('link', { name: longProject.name })
+    expect(projectRow).toHaveClass('h-8')
+    expect(projectRow).not.toHaveClass('flex-wrap')
+    const projectLabel = within(projectRow).getByText(longProject.name)
+    expect(projectLabel).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(projectLabel).toHaveAttribute('title', longProject.name)
+
+    const globalEntry = within(sidebar()).getByRole('link', { name: 'External identities' })
+    expect(globalEntry).toHaveClass('h-[30px]')
+    expect(within(globalEntry).getByText('External identities')).toHaveClass('min-w-0', 'flex-1', 'truncate')
+    expect(within(globalEntry).getByText('External identities')).toHaveAttribute('title', 'External identities')
+
+    const platformHeading = within(sidebar()).getByRole('heading', { name: 'Platform Agents' })
+    expect(platformHeading).toHaveClass('min-w-0', 'truncate')
+    expect(within(sidebar()).getByRole('button', { name: 'New Agent' })).toHaveClass('shrink-0')
+
+    const switcher = scopeSwitcher('Global')
+    expect(switcher).toHaveClass('h-8')
+    await user.click(switcher)
+    const option = within(await screen.findByRole('listbox', { name: 'Scopes' })).getByRole('option', { name: new RegExp(longProject.name) })
+    expect(option).toHaveClass('h-[38px]')
+    expect(within(option).getByText(longProject.name)).toHaveClass('truncate')
+    expect(within(option).getByText(longProject.name)).toHaveAttribute('title', longProject.name)
   })
 })
 

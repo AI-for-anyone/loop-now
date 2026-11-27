@@ -185,7 +185,7 @@ describe('Project settings tabs and routing', () => {
     const header = title.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Project settings`)
     const meta = header.querySelector<HTMLElement>('[data-page-meta]')!
-    expect(within(meta).getByText('Default project')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full', '[[data-skin=plate]_&]:bg-ink', '[[data-skin=plate]_&]:text-white')
+    expect(within(meta).getByText('Default project')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full')
     expect(within(meta).getByText(defaultProject.id)).toHaveClass('font-mono')
   })
 

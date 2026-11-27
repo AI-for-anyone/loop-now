@@ -442,22 +442,22 @@ describe('Overview workspace layout', () => {
     expect(within(section('Usage')).getByRole('link', { name: 'Full analytics in Stats' })).toHaveAttribute('href', expectedStats)
   })
 
-  it('Agent table removes forced 860px overflow, uses 4 columns with hairline borders, and preserves mono/plate styling', async () => {
+  it('Agent table removes forced 860px overflow and uses 4 columns with hairline borders', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     const table = screen.getByRole('table')
     expect(table).not.toHaveClass('min-w-[860px]')
     expect(table.querySelectorAll('thead th')).toHaveLength(4)
-    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong', '[[data-skin=plate]_&]:border-b-2', '[[data-skin=plate]_&]:border-ink')
+    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong')
     const row = within(table).getByText('dev-helper').closest('tr')!
-    expect(row).toHaveClass('border-b', 'border-hairline', '[[data-skin=plate]_&]:border-b-[1.5px]', '[[data-skin=plate]_&]:border-dashed')
+    expect(row).toHaveClass('border-b', 'border-hairline')
     expect(within(row).getByText(/ \/ /)).toHaveClass('font-mono')
     const pill = within(row).getByText('Idle').closest('[data-state-pill]')!
     expect(pill).toHaveAttribute('data-state-pill', 'idle')
-    expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green', '[[data-skin=plate]_&]:rotate-[-3deg]')
+    expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green')
   })
 
-  it('usage bars use chart tokens in mono skin and halftone fills in Plate skin; period and grouping are segmented buttons', async () => {
+  it('usage bars use chart tokens and period/grouping are segmented buttons', async () => {
     const { snapshot, user } = await renderOverview({
       usage: usagePage([makeUsageRow({ agentName: 'dev-helper', input: 9000, output: 1000 }), makeUsageRow({ agentName: 'Test helper', input: 2000, output: 500 })]),
     })
@@ -466,13 +466,13 @@ describe('Overview workspace layout', () => {
     const usage = section('Usage')
     const lines = await within(usage).findAllByRole('listitem')
     expect(lines[0]).toHaveTextContent('dev-helper')
-    expect(within(lines[0]).getByText('Most')).toHaveClass('bg-surface-active', '[[data-skin=plate]_&]:bg-riso-yellow')
+    expect(within(lines[0]).getByText('Most')).toHaveClass('bg-surface-active')
     expect(within(lines[1]).queryByText('Most')).toBeNull()
     const track = lines[0].querySelector('[data-usage-track]')!
-    expect(track).toHaveClass('border', 'border-hairline-strong', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink')
-    expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-[var(--chart-blue)]', '[[data-skin=plate]_&]:bg-riso-blue', '[[data-skin=plate]_&]:bg-size-[5px_5px]')
+    expect(track).toHaveClass('border', 'border-hairline-strong')
+    expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-[var(--chart-blue)]')
     const range = within(usage).getByRole('radiogroup', { name: 'Period' })
-    expect(range).toHaveClass('rounded-[8px]', 'border', 'border-hairline', 'bg-segment-track', '[[data-skin=plate]_&]:border-2', '[[data-skin=plate]_&]:border-ink', '[[data-skin=plate]_&]:rounded-full')
-    expect(within(range).getByRole('radio', { name: 'Today' })).toHaveClass('data-[state=on]:bg-segment-active', '[[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow')
+    expect(range).toHaveClass('rounded-[8px]', 'border', 'border-hairline', 'bg-segment-track')
+    expect(within(range).getByRole('radio', { name: 'Today' })).toHaveClass('data-[state=on]:bg-segment-active')
   })
 })

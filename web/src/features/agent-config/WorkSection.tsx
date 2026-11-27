@@ -22,7 +22,7 @@ const copy = t.config.work
 function Saved({ show }: { show: boolean }) {
   if (!show) return null
   return (
-    <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-green-text [[data-skin=plate]_&]:font-black">
+    <span role="status" className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-green-text">
       <CheckIcon aria-hidden="true" className="size-3.5" strokeWidth={3} />
       {t.permissions.saved}
     </span>
@@ -57,8 +57,8 @@ function FolderField({ agent, runtime }: { agent: Schemas['Agent']; runtime: Run
   const error = fieldMessages(update.error, (field) => field === 'workingDirectory')
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
-      <Label htmlFor={ids.input} className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
-        <FolderOpenIcon aria-hidden="true" className="size-4 text-ink-700 [[data-skin=plate]_&]:text-riso-blue" strokeWidth={2.2} />
+      <Label htmlFor={ids.input} className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold">
+        <FolderOpenIcon aria-hidden="true" className="size-4 text-ink-700" strokeWidth={2.2} />
         {copy.folder.label}
       </Label>
       <p id={ids.hint} className="text-[12.5px] text-ink-700">{copy.folder.hint}</p>
@@ -117,7 +117,7 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
             update.mutate({ useLocalConfig: next }, { onSuccess: () => setSaved(true) })
           }}
         />
-        <Label htmlFor={id} className="text-[13.5px] font-semibold [[data-skin=plate]_&]:font-black">
+        <Label htmlFor={id} className="text-[13.5px] font-semibold">
           {copy.localConfig.label}
         </Label>
         <Saved show={saved} />
@@ -125,17 +125,17 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
       <div
         id={`${id}-state`}
         className={cn(
-          'flex flex-col gap-1.5 rounded-ticket border px-3.5 py-2.5 [[data-skin=plate]_&]:border-0',
+          'flex flex-col gap-1.5 rounded-ticket border px-3.5 py-2.5',
           on
-            ? 'border-hairline-strong bg-tint-yellow [[data-skin=plate]_&]:shadow-[inset_0_0_0_2px_var(--ink)]'
-            : 'border-hairline bg-surface-subtle [[data-skin=plate]_&]:bg-ink/[0.04]',
+            ? 'border-hairline-strong bg-tint-yellow'
+            : 'border-hairline bg-surface-subtle',
         )}
       >
         {unsupported && runtime ? (
-          <p className="text-[12.5px] font-medium text-ink-700 [[data-skin=plate]_&]:font-bold">{copy.localConfig.unsupported(runtime.name)}</p>
+          <p className="text-[12.5px] font-medium text-ink-700">{copy.localConfig.unsupported(runtime.name)}</p>
         ) : on ? (
           <>
-            <p className="text-[13px] font-semibold [[data-skin=plate]_&]:font-black">{copy.localConfig.onIntro}</p>
+            <p className="text-[13px] font-semibold">{copy.localConfig.onIntro}</p>
             <ul className="flex flex-col gap-1 pl-1">
               {items.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-[13px]">
@@ -145,7 +145,7 @@ function LocalConfigField({ agent, runtime }: { agent: Schemas['Agent']; runtime
               ))}
             </ul>
             <p className="text-[12.5px] text-ink-700">{copy.localConfig.alsoKept}</p>
-            <p className="text-[12.5px] font-semibold text-pink-text [[data-skin=plate]_&]:font-black">{copy.localConfig.risk}</p>
+            <p className="text-[12.5px] font-semibold text-pink-text">{copy.localConfig.risk}</p>
           </>
         ) : (
           <p className="text-[12.5px] text-ink-700">{copy.localConfig.off}</p>
@@ -186,8 +186,8 @@ export function WorkSection({ agent }: { agent: Schemas['Agent'] }) {
     <Section id="work" title={copy.title}>
       <div className="flex flex-col gap-5">
         {agent.importedFrom && (
-          <p className="flex flex-col gap-1 rounded-ticket border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-            <span className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.importedFrom(t.importing.cli[agent.importedFrom.cli], t.chat.time(agent.importedFrom.importedAt))}</span>
+          <p className="flex flex-col gap-1 rounded-ticket border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[13px]">
+            <span className="font-semibold">{copy.importedFrom(t.importing.cli[agent.importedFrom.cli], t.chat.time(agent.importedFrom.importedAt))}</span>
             <span className="font-mono text-[12.5px] [overflow-wrap:anywhere] text-ink-700">{agent.importedFrom.path}</span>
           </p>
         )}

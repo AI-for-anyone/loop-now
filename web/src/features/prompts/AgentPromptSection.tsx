@@ -26,7 +26,7 @@ function InheritedPrompt({ projectId, projectName }: { projectId: string; projec
     <div
       role="region"
       aria-label={t.prompts.inherited}
-      className="min-w-0 overflow-hidden rounded-card border border-hairline bg-surface-subtle [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue"
+      className="min-w-0 overflow-hidden rounded-card border border-hairline bg-surface-subtle"
     >
       <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-1.5">
         <button
@@ -34,7 +34,7 @@ function InheritedPrompt({ projectId, projectName }: { projectId: string; projec
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => setOpen((value) => !value)}
-          className="inline-flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left text-[13px] font-semibold text-ink outline-none focus-visible:shadow-focus [[data-skin=plate]_&]:font-black"
+          className="inline-flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left text-[13px] font-semibold text-ink outline-none focus-visible:shadow-focus"
         >
           <ChevronRightIcon aria-hidden="true" className={cn('size-4 shrink-0 text-ink-500 transition-transform motion-reduce:transition-none', open && 'rotate-90')} />
           <span className="min-w-0 truncate">{t.prompts.source(projectName)}</span>
@@ -42,13 +42,13 @@ function InheritedPrompt({ projectId, projectName }: { projectId: string; projec
         </button>
         <Link
           to={projectSettingsPath({ name: projectName }, 'context')}
-          className="shrink-0 text-[12.5px] font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:decoration-riso-pink [[data-skin=plate]_&]:decoration-2"
+          className="shrink-0 text-[12.5px] font-medium underline decoration-ink decoration-1 underline-offset-4 hover:text-ink-700"
         >
           {t.prompts.editProject}
         </Link>
       </div>
       {open && (
-        <div id={bodyId} className="grid min-w-0 gap-2.5 border-t border-hairline px-3.5 py-3 [[data-skin=plate]_&]:border-ink/10">
+        <div id={bodyId} className="grid min-w-0 gap-2.5 border-t border-hairline px-3.5 py-3">
           <p className="text-[12px] text-ink-700">{t.prompts.savedConfiguration}</p>
           <ErrorAlert error={query.error} />
           {query.error && (

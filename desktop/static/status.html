@@ -8,7 +8,7 @@
     <title>Loop Now</title>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: light;
         --bg: #ffffff;
         --ink: #171717;
         --muted: #666666;
@@ -18,8 +18,31 @@
         --primary-fg: #ffffff;
         --logo-shadow: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.14));
       }
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #000000;
+        --ink: #ededed;
+        --muted: #888888;
+        --border: rgba(255, 255, 255, 0.12);
+        --panel: #0a0a0a;
+        --primary: #3291ff;
+        --primary-fg: #ffffff;
+        --logo-shadow: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.65));
+      }
+      :root[data-skin='plate'] {
+        color-scheme: light;
+        --bg: #f3efe6;
+        --ink: #18265e;
+        --muted: #5a628a;
+        --border: rgba(24, 38, 94, 0.18);
+        --panel: #fbf9f4;
+        --primary: #2443b5;
+        --primary-fg: #ffffff;
+        --logo-shadow: drop-shadow(0 12px 28px rgba(24, 38, 94, 0.18));
+      }
       @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-theme]):not([data-skin='plate']) {
+          color-scheme: dark;
           --bg: #000000;
           --ink: #ededed;
           --muted: #888888;
@@ -293,9 +316,13 @@
     </main>
     <script>
       const query = new URLSearchParams(location.search)
-      const bg = query.get('bg')
-      if (bg && /^#[0-9a-fA-F]{6}$/.test(bg)) {
-        document.documentElement.style.setProperty('--bg', bg)
+      const skin = query.get('skin')
+      const theme = query.get('theme')
+      if (skin === 'plate' || skin === 'mono') {
+        document.documentElement.dataset.skin = skin
+      }
+      if (skin !== 'plate' && (theme === 'light' || theme === 'dark')) {
+        document.documentElement.dataset.theme = theme
       }
       const busy = query.get('busy') === '1'
       const title = query.get('title') || 'Loop Now'

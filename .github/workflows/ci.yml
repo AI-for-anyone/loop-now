@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue on main: each queued pull request is checked again on top of the latest main before it lands.
+  merge_group:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,7 +16,10 @@ jobs:
     name: server (go vet + go test)
     runs-on: ubuntu-latest
     steps:
+      # Two commits deep: on a pull request HEAD is the merge into the base, and the pull request notes check compares it with HEAD^1.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -22,6 +27,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.21.0
+      # A change records its notes in its pull request description (.github/pull_request_template.md), never in
+      # CHANGELOG*.md, a changes/ file or MAIN.md's change list, so queued pull requests do not conflict; release-*
+      # branches write the CHANGELOG files with scripts/release/collect-pr-notes.sh. Checked on pull requests only: a
+      # merge group has no branch name and its pull requests were checked already.
+      - name: Notes in the pull request description
+        if: github.event_name == 'pull_request'
+        run: scripts/release/check-pr-notes.sh HEAD^1 HEAD "$GITHUB_HEAD_REF"
+      - name: Release scripts (pull request notes)
+        run: scripts/release/pr-notes-test.sh
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
       # Go comments, string literals (tests included) and the API contracts (api/*.yaml) must be in English (a quoted
@@ -29,9 +43,6 @@ jobs:
       # "check-english: zh (reason)"); see scripts/check-english for the exact rule.
       - name: English comments, strings and API contracts
         run: go run ./scripts/check-english
-      # The whole server must cross-compile to Windows (process groups, locks, permissions and no-follow opens each have a Windows implementation); real runs are in server-windows.
-      - name: go vet (windows cross)
-        run: GOOS=windows GOARCH=amd64 go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
       - name: go test
         run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/...
       # Stress tests for concurrent writes, read-your-writes, cancellation, killed processes and checkpoints, run three times on their own.
@@ -42,7 +53,7 @@ jobs:
   server-windows:
     name: server (windows, go vet + go test)
     # Disabled for now (user decision, 2026-11-11): 4 executor tests of the Claude Code runtime do not pass on Windows yet; see MAIN.md.
-    # The Windows cross-compile check stays in the server job above (go vet windows cross), and the desktop Windows packaging check is unaffected. Delete the line below to re-enable.
+    # The Windows cross-compile check was removed from the server job too (user decision, 2026-11-26); the desktop Windows packaging check is unaffected. Delete the line below to re-enable.
     if: false
     runs-on: windows-latest
     defaults:
@@ -137,51 +148,3 @@ jobs:
           for dir in official/*/; do
             node host/dist/main.js validate "$dir"
           done
-
-  desktop:
-    name: desktop (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      # Unit tests really start, stop and clean up orphans of test/fakeserver (a fake server written in Go): taskkill and PowerShell process queries on Windows, signals on Linux.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      # electron only downloads its binary on first run; here we only type-check, compile and run unit tests, with no download and no installer.
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      # Windows: build one NSIS installer with the fake server standing in for loop-server.exe, to confirm electron-builder's win config and after-pack work on windows-latest.
-      # Once the real server's Windows package lands, desktop-win in release.yml uses the same command.
-      - name: fake server bundle
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          node scripts/fake-bundle.js "$RUNNER_TEMP/fake-bundle" --os windows --arch amd64
-          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/fake-bundle" >> "$GITHUB_ENV"
-      - name: dist:win (fake server)
-        if: runner.os == 'Windows'
-        run: npm run dist:win
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
-        with:
-          name: loop-now-desktop-fake-win-x64
-          path: |
-            .local-build/desktop/*.exe
-            .local-build/desktop/latest.yml
-          retention-days: 3
-          if-no-files-found: error

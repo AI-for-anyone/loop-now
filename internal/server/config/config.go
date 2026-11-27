@@ -364,7 +364,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		ExternalTLSKey:        p.str(EnvExternalTLSKey, ""),
 		ExternalTLSSelfSigned: p.str(EnvExternalTLSSelfSigned, ""),
 		TextEditExtensions:    p.list(EnvTextEditExtensions, defaultTextEditExtensions),
-		TextEditMax:           p.size(EnvTextEditMax, "1MiB"),
+		TextEditMax:           p.size(EnvTextEditMax, "20MiB"),
 		LogFormat:             p.str(EnvLogFormat, "text"),
 	}
 	c.LogLevel = p.logLevel(EnvLogLevel, "info")
@@ -845,7 +845,8 @@ func (p *parser) checkConstraints(c *Config) {
 	if c.InboxPageMax < 1 {
 		p.fail(EnvInboxPageMax, "Must be at least 1.")
 	}
-	if c.TextEditMax > 0 && c.MaxUploadFile > 0 && c.TextEditMax > c.MaxUploadFile {
-		p.fail(EnvTextEditMax, "Must not be greater than %s.", EnvMaxUploadFile)
+	// A text file edited online is saved through the folder write, which LOOP_NOW_MAX_FOLDER_UPLOAD bounds.
+	if c.TextEditMax > 0 && c.MaxFolderUpload > 0 && c.TextEditMax > c.MaxFolderUpload {
+		p.fail(EnvTextEditMax, "Must not be greater than %s.", EnvMaxFolderUpload)
 	}
 }

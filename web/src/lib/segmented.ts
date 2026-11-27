@@ -2,7 +2,7 @@
 // pill with 2px ink borders and yellow active fill in Plate skin.
 // Used on ToggleGroup: segmentedClass goes on the ToggleGroup, segmentedItemClass on each ToggleGroupItem.
 export const segmentedClass =
-  'h-8 flex-nowrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px] [[data-skin=plate]_&]:gap-0 [[data-skin=plate]_&]:overflow-hidden [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:p-0'
+  'h-8 flex-nowrap items-center gap-0.5 rounded-[8px] border border-hairline bg-segment-track p-[3px]'
 
 export const segmentedItemClass =
-  'h-full min-h-0 rounded-[5px] px-2.5 text-[12.5px] font-medium text-ink-500 transition-[background-color,color,box-shadow] duration-150 hover:text-ink focus-visible:shadow-focus data-[state=on]:bg-segment-active data-[state=on]:font-medium data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)] [[data-skin=plate]_&]:rounded-none [[data-skin=plate]_&]:px-3.5 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:not-first:border-l-2 [[data-skin=plate]_&]:not-first:border-ink [[data-skin=plate]_&]:hover:bg-transparent [[data-skin=plate]_&]:focus-visible:shadow-[inset_0_0_0_3px_var(--riso-blue)] [[data-skin=plate]_&]:data-[state=on]:bg-riso-yellow [[data-skin=plate]_&]:data-[state=on]:text-ink [[data-skin=plate]_&]:data-[state=on]:shadow-none [[data-skin=plate]_&]:data-[state=on]:focus-visible:shadow-[inset_0_0_0_3px_var(--riso-blue)]'
+  'h-full min-h-0 rounded-[5px] px-2.5 text-[12.5px] font-medium text-ink-500 transition-[background-color,color,box-shadow] duration-150 hover:text-ink focus-visible:shadow-focus data-[state=on]:bg-segment-active data-[state=on]:font-medium data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--hairline)]'

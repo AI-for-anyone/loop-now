@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { Settings } from 'lucide-react'
@@ -7,20 +7,35 @@ import { useProjects } from '@/api/queries'
 import { BrandWordmark } from '@/components/BrandWordmark'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
-import { useInboxLive } from '@/features/inbox/useInboxLive'
-import { BoardingSplash } from '@/features/desktop/BoardingSplash'
+import { mac } from '@/features/chat/composer-style'
 import { hasInsetTitleBar, useDesktopNavigation } from '@/features/desktop/desktop'
+import { useInboxLive } from '@/features/inbox/useInboxLive'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
+import {
+  SIDEBAR_WIDTH_DEFAULT,
+  SIDEBAR_WIDTH_MIN,
+  clampSidebarWidth,
+  maxSidebarWidth,
+  sidebarWidth,
+} from '@/lib/sidebar-width'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './CommandPalette'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
 import { SidebarContext } from './sidebar-context'
+import { SidebarResizeHandle } from './SidebarResizeHandle'
 
 const text = t.shell
 
 export const SIDEBAR_COLLAPSED_KEY = 'loop-now.sidebar-collapsed'
+
+function subscribeResize(onChange: () => void) {
+  window.addEventListener('resize', onChange)
+  return () => window.removeEventListener('resize', onChange)
+}
+
+const getViewportWidth = () => window.innerWidth
 
 function readSidebarCollapsed(): boolean {
   try {
@@ -68,13 +83,8 @@ function remembered(list: Schemas['Project'][] | undefined): Kept {
 // Matches the width at which the sidebar switches between the wide and narrow layouts (--breakpoint-nav in index.css).
 const wide = '(min-width: 56.3125rem)'
 
-// The console's frame: the sidebar plus the main area. The sidebar's scope comes from the URL (project pages and the overview); global pages
-// carry no scope and keep the previous one, so opening the plugin market, global settings and so on from inside a project does not lose
-// the current project. At widths ≤ 900 the sidebar folds into a drawer and the top becomes a narrow blue bar.
-// At widths ≥ 901 (nav:) the frame is fixed to the viewport height and each column scrolls within its own area; when narrower, the whole page
-// scrolls together and the sidebar folds into a drawer.
-// In a desktop shell window, the blue bar at the top of the narrow layout also drags the window, and the menu button moves aside to the
-// right of the system's traffic-light buttons.
+// The console's frame: the draggable, collapsible sidebar plus the main area. The sidebar's scope comes from the URL (project pages and
+// the overview); global pages carry no scope and keep the previous one. At widths ≤ 900 the sidebar folds into a drawer.
 export function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -99,16 +109,16 @@ export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const desktop = hasInsetTitleBar()
 
-  const setCollapsed = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+  const setCollapsed = useCallback((nextValue: boolean | ((prev: boolean) => boolean)) => {
     setSidebarCollapsed((prev) => {
-      const resolved = typeof next === 'function' ? next(prev) : next
+      const resolved = typeof nextValue === 'function' ? nextValue(prev) : nextValue
       writeSidebarCollapsed(resolved)
       return resolved
     })
   }, [])
 
   // Global keyboard shortcuts: ⌘K / Ctrl+K toggles the command palette; ⌘B / Ctrl+B toggles the desktop sidebar
-  // (skipped while editing text).
+  // (skipped while editing text); ⌘, / Ctrl+, opens Settings.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
@@ -151,78 +161,99 @@ export function AppLayout() {
   // live updates.
   useInboxLive()
   useDesktopNavigation()
+
+  const viewportWidth = useSyncExternalStore(subscribeResize, getViewportWidth, () => 1440)
+  const [preferredWidth, setPreferredWidth] = useState<number>(() => sidebarWidth.read())
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
+  const maxWidth = maxSidebarWidth(viewportWidth)
+  const currentSidebarWidth = clampSidebarWidth(dragWidth ?? preferredWidth, viewportWidth)
+
   return (
     <SidebarContext.Provider value={sidebarControl}>
       <div className="riso-paper flex min-h-screen text-ink nav:h-screen">
-      {!sidebarCollapsed && (
-        <div className="sticky top-0 h-screen w-[228px] shrink-0 self-start max-nav:hidden">
-          <Sidebar
-            scope={scope}
-            projects={list}
-            projectsError={projects.error}
-            onCollapse={() => setCollapsed(true)}
-            onOpenPalette={() => setPaletteOpen(true)}
-          />
-        </div>
-      )}
-      <DialogPrimitive.Root open={drawerOpen} onOpenChange={(open) => setDrawerAt(open ? location.key : null)}>
-        <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 nav:hidden [[data-skin=plate]_&]:bg-ink/30" />
-          <DialogPrimitive.Content
-            aria-describedby={undefined}
-            className="fixed inset-y-0 left-0 z-50 w-[min(248px,86vw)] shadow-dialog outline-none nav:hidden [[data-skin=plate]_&]:shadow-[6px_0_0_var(--riso-pink)]"
-          >
-            <DialogPrimitive.Title className="sr-only">{text.nav}</DialogPrimitive.Title>
+        {!sidebarCollapsed && (
+          <div style={{ width: currentSidebarWidth }} className="sticky top-0 z-20 h-screen shrink-0 self-start max-nav:hidden">
             <Sidebar
               scope={scope}
               projects={list}
               projectsError={projects.error}
-              onClose={() => setDrawerAt(null)}
-              onOpenPalette={() => {
-                setDrawerAt(null)
-                setPaletteOpen(true)
+              onCollapse={() => setCollapsed(true)}
+              onOpenPalette={() => setPaletteOpen(true)}
+            />
+            <SidebarResizeHandle
+              width={currentSidebarWidth}
+              min={SIDEBAR_WIDTH_MIN}
+              max={maxWidth}
+              onPreview={setDragWidth}
+              onCommit={(nextWidth) => {
+                setPreferredWidth(nextWidth)
+                sidebarWidth.write(nextWidth)
+              }}
+              onReset={() => {
+                setDragWidth(null)
+                setPreferredWidth(SIDEBAR_WIDTH_DEFAULT)
+                sidebarWidth.clear()
               }}
             />
-          </DialogPrimitive.Content>
-        </DialogPrimitive.Portal>
-      </DialogPrimitive.Root>
-      <div
-        data-sidebar-collapsed={sidebarCollapsed ? 'true' : undefined}
-        className="riso-grain relative flex min-w-0 flex-1 flex-col nav:min-h-0"
-      >
-        <header
-          className={cn(
-            'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden [[data-skin=plate]_&]:border-b-0',
-            desktop && 'window-drag pl-[84px]',
-          )}
+          </div>
+        )}
+        <DialogPrimitive.Root open={drawerOpen} onOpenChange={(open) => setDrawerAt(open ? location.key : null)}>
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 nav:hidden" />
+            <DialogPrimitive.Content
+              aria-describedby={undefined}
+              className="fixed inset-y-0 left-0 z-50 w-[min(248px,86vw)] shadow-dialog outline-none nav:hidden"
+            >
+              <DialogPrimitive.Title className="sr-only">{text.nav}</DialogPrimitive.Title>
+              <Sidebar
+                scope={scope}
+                projects={list}
+                projectsError={projects.error}
+                onClose={() => setDrawerAt(null)}
+                onOpenPalette={() => {
+                  setDrawerAt(null)
+                  setPaletteOpen(true)
+                }}
+              />
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
+        <div
+          data-sidebar-collapsed={sidebarCollapsed ? 'true' : undefined}
+          className="riso-grain relative flex min-w-0 flex-1 flex-col nav:min-h-0"
         >
-          <button
-            type="button"
-            aria-label={text.menu}
-            aria-expanded={drawerOpen}
-            onClick={() => setDrawerAt(location.key)}
-            className="inline-flex size-9 items-center justify-center rounded-ticket border border-hairline-strong bg-surface-control text-sidebar-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-[1.5px] [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]"
+          <header
+            className={cn(
+              'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar-bg px-4 text-sidebar-fg nav:hidden',
+              desktop && 'window-drag pl-[84px]',
+            )}
           >
-            <NavIcon name="menu" className="[stroke-width:2.6]" />
-          </button>
-          <BrandWordmark />
-          <Link
-            to="/settings"
-            aria-label={text.items.settings}
-            title={`${text.items.settings} (${text.settingsShortcut})`}
-            className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-sidebar-border bg-surface-control text-sidebar-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus [[data-skin=plate]_&]:border-white/35 [[data-skin=plate]_&]:bg-white/15 [[data-skin=plate]_&]:text-white"
-          >
-            <Settings className="size-4" strokeWidth={1.8} />
-          </Link>
-        </header>
-        <ConnectionBanner />
-        <main className="min-h-0 flex-1">
-          <Outlet />
-        </main>
-      </div>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} scope={scope} projects={list} />
-      <Toasts />
-      <BoardingSplash />
+            <button
+              type="button"
+              aria-label={text.menu}
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerAt(location.key)}
+              className="inline-flex size-9 items-center justify-center rounded-ticket border border-sidebar-border bg-sidebar-control-bg text-sidebar-control-fg outline-none hover:bg-sidebar-hover focus-visible:shadow-focus"
+            >
+              <NavIcon name="menu" className="[stroke-width:2.6]" />
+            </button>
+            <BrandWordmark />
+            <Link
+              to="/settings"
+              aria-label={text.items.settings}
+              title={`${text.items.settings} (${text.settingsShortcut(mac)})`}
+              className="ml-auto inline-flex size-8 items-center justify-center rounded-ticket border border-sidebar-border bg-sidebar-control-bg text-sidebar-control-fg transition-colors outline-none hover:bg-sidebar-hover focus-visible:shadow-focus"
+            >
+              <Settings className="size-4" strokeWidth={1.8} />
+            </Link>
+          </header>
+          <ConnectionBanner />
+          <main className="min-h-0 flex-1">
+            <Outlet />
+          </main>
+        </div>
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} scope={scope} projects={list} />
+        <Toasts />
       </div>
     </SidebarContext.Provider>
   )

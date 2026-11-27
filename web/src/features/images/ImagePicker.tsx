@@ -27,7 +27,7 @@ export function ImagePicker({ images, onChange, limits, disabled, refused, uploa
       variant="secondary"
       size="icon-sm"
       className={cn(
-        'border border-hairline-strong bg-surface-subtle text-ink-700 hover:bg-surface-hover hover:text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-transparent [[data-skin=plate]_&]:hover:bg-tint-blue',
+        'border border-hairline-strong bg-surface-subtle text-ink-700 hover:bg-surface-hover hover:text-ink',
         addClassName,
       )}
       aria-label={t.images.add}
@@ -46,19 +46,19 @@ export function ImagePicker({ images, onChange, limits, disabled, refused, uploa
       return <li key={image.id} className="relative size-[60px] shrink-0">
         <DraftImagePreview file={image.file} thumb />
         {upload === 'uploading' && (
-          <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-ticket bg-surface-canvas/70 [[data-skin=plate]_&]:bg-white/70">
-            <LoaderCircleIcon aria-hidden="true" className="riso-spin size-5 text-ink motion-reduce:animate-none [[data-skin=plate]_&]:text-riso-blue" strokeWidth={2.4} />
+          <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-ticket bg-surface-canvas/70">
+            <LoaderCircleIcon aria-hidden="true" className="riso-spin size-5 text-ink motion-reduce:animate-none" strokeWidth={2.4} />
             <span className="sr-only">{t.images.uploading}</span>
           </span>
         )}
         {upload === 'failed' && (
           <span className="pointer-events-none absolute inset-0 flex items-end rounded-ticket ring-2 ring-red ring-inset">
-            <span className="w-full rounded-b-ticket bg-red py-px text-center text-[11px] leading-4 font-semibold text-white [[data-skin=plate]_&]:font-bold">{t.images.uploadFailed}</span>
+            <span className="w-full rounded-b-ticket bg-red py-px text-center text-[11px] leading-4 font-semibold text-white">{t.images.uploadFailed}</span>
           </span>
         )}
         <button
           type="button"
-          className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-cta-bg/85 text-cta-fg outline-none hover:bg-cta-bg focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-cta-bg/85 [[data-skin=plate]_&]:bg-ink/75 [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:bg-ink [[data-skin=plate]_&]:disabled:hover:bg-ink/75"
+          className="absolute top-1 right-1 grid size-5 cursor-pointer place-items-center rounded-full bg-cta-bg/85 text-cta-fg outline-none hover:bg-cta-bg focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-cta-bg/85"
           disabled={disabled}
           aria-label={t.images.remove(index + 1)}
           title={t.images.remove(index + 1)}
@@ -73,7 +73,7 @@ export function ImagePicker({ images, onChange, limits, disabled, refused, uploa
     })}</ul>
     {Object.values(uploads ?? {}).includes('uploading') && <p role="status" className="sr-only">{t.images.loading}</p>}
   </div> : null
-  return <div onPaste={paste} onDragOver={drag} onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragging(false) }} onDrop={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDragging(false); add(Array.from(event.dataTransfer.files)) } }} className={cn('grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3', dragging && 'rounded-panel ring-1 ring-ink [[data-skin=plate]_&]:ring-2 [[data-skin=plate]_&]:ring-riso-blue')}>
+  return <div onPaste={paste} onDragOver={drag} onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragging(false) }} onDrop={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDragging(false); add(Array.from(event.dataTransfer.files)) } }} className={cn('grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3', dragging && 'rounded-panel ring-1 ring-ink')}>
     {typeof children === 'function' ? children(addButton, strip) : <>{children}{strip}</>}
     <input ref={input} type="file" accept={imageMimeTypes.join(',')} multiple aria-label={t.images.selectFile} className="sr-only" disabled={disabled} onChange={event => { add(Array.from(event.target.files ?? [])); event.target.value = '' }} />
     {typeof children !== 'function' && <div className="flex flex-wrap items-center gap-3">{addButton}</div>}

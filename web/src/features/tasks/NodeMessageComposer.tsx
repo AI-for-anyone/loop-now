@@ -23,7 +23,7 @@ const copy = t.taskInbox
 
 // The border belongs to the shared container; the text area grows with its content and scrolls on its own once it hits the limit.
 const inputClass =
-  'min-h-9 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[7px] text-[14px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent [[data-skin=plate]_&]:min-h-10 [[data-skin=plate]_&]:py-[9px] [[data-skin=plate]_&]:text-[15px]'
+  'min-h-9 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[7px] text-[14px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
 type Props = {
   taskId: string
@@ -41,6 +41,7 @@ type Props = {
   stop?: StopControl
   reply?: QuestionReply
   stopAlso?: number
+  background?: ReactNode
   placeholder?: string
   details?: ReactNode
 }
@@ -49,6 +50,7 @@ type Props = {
 // stop: given while the node has a reply in progress; with an empty draft the send button becomes stop.
 // reply: answering a question the node asked you; the text goes out as that answer (an Inbox reply), not as a node message.
 // stopAlso: the background tasks this node's turns started; stopping or interrupting the turn stops them too, and the box says so.
+// background: the mark for those tasks (a shell glyph and the count), first in the line below the box.
 // details: compact target-details disclosure rendered inline in the hint bar below the input.
 export function NodeMessageComposer({
   taskId,
@@ -66,6 +68,7 @@ export function NodeMessageComposer({
   stop,
   reply,
   stopAlso = 0,
+  background,
   placeholder,
   details,
 }: Props) {
@@ -246,24 +249,24 @@ export function NodeMessageComposer({
   // While busy, Stop stays available even when a draft is present, and an explicit Interrupt button appears beside Send.
   const field = (addButton?: ReactNode, strip?: ReactNode) => (
     <div className="flex min-w-0 items-end gap-2">
-      {addButton && <span className="flex h-9 shrink-0 items-center [[data-skin=plate]_&]:h-11">{addButton}</span>}
+      {addButton && <span className="flex h-9 shrink-0 items-center">{addButton}</span>}
       <div
         data-node-composer
         className={cn(
-          'flex min-h-9 min-w-0 flex-1 flex-col rounded-panel border border-hairline-strong bg-surface-control px-3.5 shadow-surface transition-colors focus-within:border-ink/35 [[data-skin=plate]_&]:min-h-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:px-4 [[data-skin=plate]_&]:shadow-none [[data-skin=plate]_&]:focus-within:border-riso-blue [[data-skin=plate]_&]:focus-within:ring-2 [[data-skin=plate]_&]:focus-within:ring-riso-blue/25',
-          strip || reply ? 'pt-1.5 [[data-skin=plate]_&]:rounded-[18px]' : '[[data-skin=plate]_&]:rounded-[22px]',
+          'flex min-h-9 min-w-0 flex-1 flex-col rounded-panel border border-hairline-strong bg-surface-control px-3.5 shadow-surface transition-colors focus-within:border-ink/35',
+          (strip || reply) && 'pt-1.5',
         )}
       >
         {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
         {strip}
         {editor}
       </div>
-      <div className="flex h-9 shrink-0 items-center gap-1.5 [[data-skin=plate]_&]:h-11">
+      <div className="flex h-9 shrink-0 items-center gap-1.5">
         {showStop && (
           <Button
             type="button"
             size="icon"
-            className="size-8 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:text-white [[data-skin=plate]_&]:hover:border-ink [[data-skin=plate]_&]:hover:bg-ink-700 [[data-skin=plate]_&]:hover:text-white"
+            className="size-8 rounded-full border border-hairline-strong bg-surface-elevated text-ink shadow-none hover:border-red hover:bg-tint-red hover:text-red-text"
             aria-label={stopLabel}
             title={stopLabel}
             disabled={stop.pending}
@@ -276,7 +279,7 @@ export function NodeMessageComposer({
           <Button
             type="button"
             variant="secondary"
-            className="h-9 shrink-0 gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-3 text-[12.5px] font-semibold text-ink shadow-none hover:bg-surface-hover [[data-skin=plate]_&]:h-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-tint-pink-2 [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:hover:bg-tint-pink"
+            className="h-9 shrink-0 gap-1.5 rounded-full border border-hairline-strong bg-surface-control px-3 text-[12.5px] font-semibold text-ink shadow-none hover:bg-surface-hover"
             aria-label={t.chat.interruptSend}
             title={t.chat.interruptSendTitle(mac)}
             disabled={!canSend || pending}
@@ -291,13 +294,13 @@ export function NodeMessageComposer({
             type="button"
             variant="interrupt"
             size="icon"
-            className="size-8 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover [[data-skin=plate]_&]:mr-[3px] [[data-skin=plate]_&]:size-11 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:text-ink [[data-skin=plate]_&]:shadow-[3px_3px_0_var(--ink)] [[data-skin=plate]_&]:hover:bg-riso-pink"
+            className="size-8 rounded-full border border-transparent bg-cta-bg text-cta-fg shadow-none hover:bg-cta-hover"
             aria-label={sendLabel}
             title={sendLabel}
             disabled={reply ? answering : !canSend || pending || unknown}
             onClick={() => void (reply ? answerQuestion(reply, 'queue') : submit())}
           >
-            <ArrowUpIcon aria-hidden="true" className="size-4 [[data-skin=plate]_&]:size-5" strokeWidth={2.6} />
+            <ArrowUpIcon aria-hidden="true" className="size-4" strokeWidth={2.6} />
           </Button>
         )}
       </div>
@@ -307,7 +310,7 @@ export function NodeMessageComposer({
   return (
     <div className="grid gap-1.5">
       <div className="flex min-w-0 flex-col">
-        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[44px] [[data-skin=plate]_&]:sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[40px] [[data-skin=plate]_&]:sm:pl-[50px]')}>{queue}</div>}
+        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[44px]', imageLimits && onImages && 'sm:pl-[40px]')}>{queue}</div>}
         {imageLimits && onImages ? (
           <ImagePicker
             images={draft.images ?? []}
@@ -315,7 +318,7 @@ export function NodeMessageComposer({
             limits={imageLimits}
             disabled={!current || reply !== undefined}
             uploads={uploads}
-            addClassName="size-8 rounded-full border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover [[data-skin=plate]_&]:size-10 [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-paper-raised [[data-skin=plate]_&]:hover:bg-white"
+            addClassName="size-8 rounded-full border border-hairline-strong bg-surface-control text-ink hover:bg-surface-hover"
           >
             {field}
           </ImagePicker>
@@ -324,12 +327,13 @@ export function NodeMessageComposer({
         )}
       </div>
       {(current || details) && (
-        <div className={cn('flex flex-wrap items-center justify-between gap-x-3 gap-y-1', imageLimits && onImages && 'sm:pl-[40px] [[data-skin=plate]_&]:sm:pl-[52px]')}>
+        <div className={cn('flex flex-wrap items-center justify-between gap-x-3 gap-y-1', imageLimits && onImages && 'sm:pl-[40px]')}>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {current && background}
             {current && (
               <KeyHint
                 stop={stop !== undefined && stopAlso === 0}
-                className="justify-start text-[11.5px] text-ink-500 [[data-skin=plate]_&]:text-[12px] [[data-skin=plate]_&]:text-ink-700"
+                className="justify-start text-[11.5px] text-ink-500"
                 kbdClassName={barKbdClass}
                 keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }}
               />

@@ -37,12 +37,12 @@ export function RunnerState({ entry }: { entry: RailEntry }) {
   if (readiness.state === 'problem') {
     const tone =
       readiness.problem === 'logged_out'
-        ? 'bg-tint-yellow text-pink-text [[data-skin=plate]_&]:border [[data-skin=plate]_&]:border-pink-text/50'
-        : 'bg-tint-red text-red-text [[data-skin=plate]_&]:border [[data-skin=plate]_&]:border-red-text/50'
+        ? 'bg-tint-yellow text-pink-text'
+        : 'bg-tint-red text-red-text'
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded-stamp px-1.5 py-0.5 text-[10.5px] leading-none font-medium whitespace-nowrap [[data-skin=plate]_&]:font-black',
+          'inline-flex items-center rounded-stamp px-1.5 py-0.5 text-[10.5px] leading-none font-medium whitespace-nowrap',
           tone,
         )}
       >
@@ -51,18 +51,18 @@ export function RunnerState({ entry }: { entry: RailEntry }) {
     )
   }
   if (readiness.state !== 'ready') {
-    return <span className="text-[11px] font-normal text-ink-500 [[data-skin=plate]_&]:font-bold">{readiness.state === 'checking' ? copy.checking : copy.unknown}</span>
+    return <span className="text-[11px] font-normal text-ink-500">{readiness.state === 'checking' ? copy.checking : copy.unknown}</span>
   }
   if (definition.capabilities.bundled) {
     return (
-      <span className="rounded-stamp bg-surface-hover px-1.5 py-0.5 text-[10.5px] leading-none font-medium text-ink-500 [[data-skin=plate]_&]:rounded-full [[data-skin=plate]_&]:bg-ink [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:text-white">
+      <span className="rounded-stamp bg-surface-hover px-1.5 py-0.5 text-[10.5px] leading-none font-medium text-ink-500">
         {copy.bundled}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1">
-      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green [[data-skin=plate]_&]:ring-1 [[data-skin=plate]_&]:ring-ink" />
+      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green" />
       {entry.version && <span className="font-mono text-[10.5px] font-normal text-ink-500">{entry.version}</span>}
     </span>
   )
@@ -103,7 +103,7 @@ export function RunnerRail({ entries, lead, browsed, current, tabId, panelId, on
   }
   const offset = lead ? 1 : 0
   return (
-    <div className="border-b border-hairline bg-surface-subtle/60 px-2.5 py-2 [[data-skin=plate]_&]:border-b-2 [[data-skin=plate]_&]:border-dashed [[data-skin=plate]_&]:border-ink/35 [[data-skin=plate]_&]:bg-paper-tab">
+    <div className="border-b border-hairline bg-surface-subtle/60 px-2.5 py-2">
       <div
         role="tablist"
         aria-label={t.runtime.picker.rail}
@@ -180,10 +180,10 @@ function RailTab({ id, register, label, selected, inUse, panelId, onClick, onKey
       onClick={onClick}
       onKeyDown={onKeyDown}
       className={cn(
-        'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-input border px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none [[data-skin=plate]_&]:border-2 [[data-skin=plate]_&]:focus-visible:shadow-focus',
+        'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-input border px-2.5 text-[12.5px] whitespace-nowrap transition-colors outline-none',
         selected
-          ? 'border-hairline-strong bg-surface-elevated font-semibold text-ink shadow-xs [[data-skin=plate]_&]:border-ink [[data-skin=plate]_&]:bg-riso-yellow [[data-skin=plate]_&]:font-black [[data-skin=plate]_&]:shadow-[2px_2px_0_var(--ink)]'
-          : 'border-transparent font-medium text-ink-500 hover:bg-surface-hover hover:text-ink [[data-skin=plate]_&]:font-bold [[data-skin=plate]_&]:text-ink-700 [[data-skin=plate]_&]:hover:border-ink/25 [[data-skin=plate]_&]:hover:bg-paper-raised',
+          ? 'border-hairline-strong bg-surface-elevated font-semibold text-ink shadow-xs'
+          : 'border-transparent font-medium text-ink-500 hover:bg-surface-hover hover:text-ink',
       )}
     >
       <span className="inline-flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{mark}</span>
@@ -192,7 +192,7 @@ function RailTab({ id, register, label, selected, inUse, panelId, onClick, onKey
       {inUse && (
         <span
           aria-hidden="true"
-          className="ml-0.5 size-1.5 shrink-0 rounded-full bg-ink [[data-skin=plate]_&]:size-2 [[data-skin=plate]_&]:bg-riso-pink [[data-skin=plate]_&]:ring-1 [[data-skin=plate]_&]:ring-ink"
+          className="ml-0.5 size-1.5 shrink-0 rounded-full bg-ink"
         />
       )}
     </button>

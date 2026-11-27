@@ -81,15 +81,15 @@ function VerificationVersion({ account, version }: { account: Schemas['ProjectCr
   }
   // An operation found by GET resolves an uncertain POST without sending it again.
   const unresolved = unknown && !op
-  return <section aria-label={`${copy.title} · ${account.name}`} className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px] [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:bg-tint-blue">
-    <h4 className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.title}</h4><p>{copy.scope}</p><p>{copy.prepare}</p>
+  return <section aria-label={`${copy.title} · ${account.name}`} className="grid min-w-0 gap-2 rounded-input border border-hairline bg-surface-subtle p-3 text-[13px]">
+    <h4 className="font-semibold">{copy.title}</h4><p>{copy.scope}</p><p>{copy.prepare}</p>
     {unsupported ? <p role="status">{copy.unsupported}</p> : <>
       {state.isPending && <p role="status">{copy.reading}</p>}
-      {changed && <p role="status" className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.changed}</p>}
+      {changed && <p role="status" className="font-semibold">{copy.changed}</p>}
       {unresolved && <p role="status">{copy.unknown}</p>}
       {conflict && <p role="status">{copy.conflict}</p>}
       {op && targetMatches && <div role="status" className="grid gap-1">
-        <p className="font-semibold [[data-skin=plate]_&]:font-bold">{copy.status[op.status]}</p>
+        <p className="font-semibold">{copy.status[op.status]}</p>
         {!op.isCurrentVersion && <p>{copy.old}</p>}
         {active && op.phase && <p>{copy.phase[op.phase]}</p>}
         {op.status === 'succeeded' && op.result?.outcome === 'passed' && <><p>{copy.depth[op.probeKind]}</p><p>{copy.method[op.authMethod]}</p></>}

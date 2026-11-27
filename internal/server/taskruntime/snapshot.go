@@ -60,6 +60,9 @@ type Configuration struct {
 	CLIs                []string        `json:"clis"`
 	// PermissionMode is the Agent's permission mode when the task started; empty in tasks from before modes (full).
 	PermissionMode string `json:"permissionMode,omitempty"`
+	// UseLocalConfig is the Agent's "use my CLI configuration" when the task started; it applies only to steps of a
+	// task with a worktree. False in tasks from before workspaces.
+	UseLocalConfig bool `json:"useLocalConfig,omitempty"`
 }
 
 // CredentialPayload is only for explicit reads by the internal run; it must not be serialized by default or printed in

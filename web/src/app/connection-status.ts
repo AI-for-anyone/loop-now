@@ -10,22 +10,22 @@ export type ConnectionState = 'checking' | 'connected' | 'degraded' | 'unreachab
 const stateStyle: Record<ConnectionState, { label: string; chip: string; dot: string }> = {
   checking: {
     label: t.app.topbar.checking,
-    chip: 'text-sidebar-muted [[data-skin=plate]_&]:text-white',
-    dot: 'bg-sidebar-muted/60 [[data-skin=plate]_&]:bg-white/60',
+    chip: 'text-sidebar-muted',
+    dot: 'bg-sidebar-muted/60',
   },
   connected: {
     label: t.app.topbar.connected,
-    chip: 'text-sidebar-muted [[data-skin=plate]_&]:text-white',
-    dot: 'bg-green [[data-skin=plate]_&]:bg-tint-green',
+    chip: 'text-sidebar-muted',
+    dot: 'bg-green',
   },
   degraded: {
     label: t.settings.healthDegraded,
-    chip: 'border border-pink-text/30 bg-tint-yellow px-2.5 text-ink [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:px-3 [[data-skin=plate]_&]:shadow-[inset_0_3px_0_var(--ink)]',
-    dot: 'bg-pink-text [[data-skin=plate]_&]:bg-ink',
+    chip: 'border border-pink-text/30 bg-tint-yellow px-2.5 text-ink',
+    dot: 'bg-pink-text',
   },
   unreachable: {
     label: t.app.topbar.unreachable,
-    chip: 'border border-red-text/25 bg-tint-red px-2.5 text-red-text [[data-skin=plate]_&]:border-0 [[data-skin=plate]_&]:px-3',
+    chip: 'border border-red-text/25 bg-tint-red px-2.5 text-red-text',
     dot: 'bg-red',
   },
 }
