@@ -147,6 +147,8 @@ export const tasks = {
   targetTerminal: (state: string) => `The original question is ${state.toLowerCase()} and can no longer be answered.`,
   updated: 'Updated', updatedAt: (time: string) => formatDayClock(time),
   filters: { label: 'Status filter', all: 'All', active: 'In progress', blocked: 'Blocked', completed: 'Completed' },
+  filteredEmpty: 'No tasks match this status filter.',
+  showAll: 'Show all',
   progress: { title: 'Progress', active: 'in progress', blocked: 'blocked', completed: 'completed' },
   loading: 'Loading task…',
   updating: 'Live',

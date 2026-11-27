@@ -16,8 +16,8 @@ const TONE: Record<Task['status'], string> = {
   running: 'bg-tint-blue text-ink',
   completed: 'bg-tint-green text-green-text',
   failed: 'bg-tint-red text-red-text',
-  stopped: 'bg-ink/[0.07] text-ink-700',
-  unknown: 'bg-ink/[0.07] text-ink-700',
+  stopped: 'bg-surface-subtle text-ink-700',
+  unknown: 'bg-surface-subtle text-ink-700',
 }
 
 // What else is known about an ended task: its exit code, how long it took, and why it was stopped. An unknown end has none of these
@@ -45,10 +45,10 @@ function RunningFor({ task }: { task: Task }) {
 export function BackgroundTaskHead({ task, name }: { task: Task; name: string }) {
   return (
     <>
-      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-ink text-riso-yellow">
+      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-[7px] border border-hairline bg-surface-elevated text-ink">
         <BackgroundKindIcon kind={task.kind} className="size-3.5" />
       </span>
-      <span className="font-mono text-[13px] font-black">{name}</span>
+      <span className="font-mono text-[13px] font-semibold">{name}</span>
       <span className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status])}>{statusText(task)}</span>
     </>
   )
@@ -59,9 +59,9 @@ export function BackgroundTaskBody({ task }: { task: Task }) {
   const facts = task.status === 'running' ? [] : endFacts(task)
   return (
     <>
-      <p className="font-mono text-[13px] leading-[1.5] font-bold [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">{task.label}</p>
+      <p className="font-mono text-[13px] leading-[1.5] font-medium [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">{task.label}</p>
       {(task.status === 'running' || facts.length > 0) && (
-        <p className="flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 font-bold text-ink-500">
+        <p className="flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 font-medium text-ink-500">
           {task.status === 'running' ? (
             <RunningFor task={task} />
           ) : (
@@ -76,8 +76,8 @@ export function BackgroundTaskBody({ task }: { task: Task }) {
       )}
       {task.status !== 'running' && task.output && (
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-[12.5px] font-black text-ink">{t.background.card.outputTail}</span>
-          <pre className="riso-halftone max-h-64 min-w-0 overflow-auto rounded-input bg-riso-blue px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-white [overflow-wrap:anywhere]">
+          <span className="text-[12.5px] font-semibold text-ink">{t.background.card.outputTail}</span>
+          <pre className="riso-halftone max-h-64 min-w-0 overflow-auto rounded-input border border-code-border bg-code-bg px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-code-fg [overflow-wrap:anywhere]">
             {task.output}
           </pre>
         </div>
@@ -86,7 +86,7 @@ export function BackgroundTaskBody({ task }: { task: Task }) {
   )
 }
 
-// Popover frame shared by a single task chip and the “+N” overflow chip in follow-up headings.
+// Popover frame shared by a single task chip and the "+N" overflow chip in follow-up headings.
 export function BackgroundTaskPopover({ label, children }: { label: string; children: ReactNode }) {
   return (
     <PopoverPrimitive.Portal>
@@ -96,7 +96,7 @@ export function BackgroundTaskPopover({ label, children }: { label: string; chil
         sideOffset={8}
         collisionPadding={12}
         aria-label={label}
-        className="z-50 flex max-h-[min(460px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)] outline-none"
+        className="z-50 flex max-h-[min(460px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
       >
         {children}
       </PopoverPrimitive.Content>
@@ -108,7 +108,7 @@ export function BackgroundTaskPopover({ label, children }: { label: string; chil
 function Details({ task, name }: { task: Task; name: string }) {
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b-2 border-ink bg-tint-yellow px-4 py-2.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface-subtle px-4 py-2.5">
         <BackgroundTaskHead task={task} name={name} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
@@ -118,9 +118,8 @@ function Details({ task, name }: { task: Task; name: string }) {
   )
 }
 
-// One tool of a reply that went on in the background (a command, a sub-agent), as a chip among the reply's other tools: “Bash 后台运行中”
-// (Bash Running in the background) with a spinner while it runs, then how it ended. The details are behind a click. The person's reply has
-// long ended by then; the chip changes wherever that reply is shown.
+// One tool of a reply that went on in the background (a command, a sub-agent), as a chip among the reply's other tools:
+// with a spinner while it runs, then how it ended. The details are behind a click.
 export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string }) {
   const name = toolName ?? t.background.kind[task.kind]
   const status = statusText(task)
@@ -132,7 +131,7 @@ export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: 
         data-status={task.status}
         aria-label={t.background.card.chipLabel(name, status, task.label)}
         title={task.label}
-        className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status], 'cursor-pointer outline-none hover:shadow-[inset_0_0_0_1.5px_currentColor] focus-visible:shadow-focus aria-expanded:shadow-[inset_0_0_0_2px_var(--ink)]')}
+        className={cn(badgeVariants({ variant: 'chip' }), TONE[task.status], 'cursor-pointer outline-none hover:border-hairline-strong focus-visible:shadow-focus aria-expanded:border-ink')}
       >
         {task.status === 'running' && (
           <>

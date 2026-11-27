@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- The shell's built-in status page: shown before the server is ready and when it fails to start. The shell picks the text by language and
-     puts it in the query parameters; the buttons are links carrying an action, which the shell intercepts and handles. -->
+<!-- The shell's built-in status page: shown while the server starts (minimalist centered logo boarding screen) and when it fails to start.
+     The shell passes text in query parameters; action links on failure are intercepted by the shell. -->
 <html>
   <head>
     <meta charset="utf-8" />
@@ -8,99 +8,67 @@
     <title>Loop Now</title>
     <style>
       :root {
-        color-scheme: light dark;
-        --paper: #fbf9f4;
-        --ink: #1f1d1a;
-        --muted: #6b6760;
-        --blue: #2443b5;
-        --panel: #f1ede4;
+        color-scheme: light;
+        --bg: #ffffff;
+        --ink: #171717;
+        --muted: #666666;
+        --border: rgba(0, 0, 0, 0.08);
+        --panel: #fafafa;
+        --primary: #0070f3;
+        --primary-fg: #ffffff;
+        --logo-shadow: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.14));
+      }
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #000000;
+        --ink: #ededed;
+        --muted: #888888;
+        --border: rgba(255, 255, 255, 0.12);
+        --panel: #0a0a0a;
+        --primary: #3291ff;
+        --primary-fg: #ffffff;
+        --logo-shadow: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.65));
+      }
+      :root[data-skin='plate'] {
+        color-scheme: light;
+        --bg: #f3efe6;
+        --ink: #18265e;
+        --muted: #5a628a;
+        --border: rgba(24, 38, 94, 0.18);
+        --panel: #fbf9f4;
+        --primary: #2443b5;
+        --primary-fg: #ffffff;
+        --logo-shadow: drop-shadow(0 12px 28px rgba(24, 38, 94, 0.18));
       }
       @media (prefers-color-scheme: dark) {
-        :root {
-          --paper: #1b1a18;
-          --ink: #f3f0e9;
-          --muted: #a8a399;
-          --blue: #8fa4ff;
-          --panel: #262421;
+        :root:not([data-theme]):not([data-skin='plate']) {
+          color-scheme: dark;
+          --bg: #000000;
+          --ink: #ededed;
+          --muted: #888888;
+          --border: rgba(255, 255, 255, 0.12);
+          --panel: #0a0a0a;
+          --primary: #3291ff;
+          --primary-fg: #ffffff;
+          --logo-shadow: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.65));
         }
       }
+      * {
+        box-sizing: border-box;
+      }
+      html,
       body {
         margin: 0;
-        box-sizing: border-box;
-        min-height: 100vh;
-        /* The top 48px is the strip for dragging the window (the window has no system title bar, and the traffic lights sit in this strip);
-           the content is centered below it. */
-        padding-top: 48px;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
         display: grid;
         place-items: center;
-        background: var(--paper);
-        color: var(--ink);
-        font: 15px/1.7 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
-      }
-      main {
-        box-sizing: border-box;
-        width: min(720px, 100vw);
-        padding: 32px 24px;
-      }
-      .logo {
-        width: 48px;
-        height: 48px;
-        display: block;
-        margin-bottom: 20px;
-      }
-      h1 {
-        margin: 0 0 8px;
-        font-size: 22px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      p {
-        margin: 0;
-        color: var(--muted);
-        overflow-wrap: anywhere;
-        white-space: pre-line;
-      }
-      .spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid var(--muted);
-        border-top-color: transparent;
-        border-radius: 50%;
-        animation: spin 0.9s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      pre {
-        margin: 20px 0 0;
-        padding: 12px 14px;
-        max-height: 45vh;
-        overflow: auto;
-        background: var(--panel);
-        border-radius: 8px;
-        font: 12px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-      nav {
-        margin-top: 20px;
-        display: flex;
-        gap: 12px;
-      }
-      nav a {
-        padding: 6px 14px;
-        border-radius: 999px;
-        border: 1.5px solid var(--blue);
-        color: var(--blue);
-        font-weight: 600;
-        text-decoration: none;
-      }
-      nav a:first-child {
-        background: var(--blue);
-        color: var(--paper);
       }
       .titlebar {
         position: fixed;
@@ -108,42 +76,273 @@
         height: 48px;
         -webkit-app-region: drag;
       }
+      main {
+        width: min(600px, 100vw);
+        padding: 48px 28px 32px;
+      }
+      body.boarding main {
+        width: auto;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+      .logo {
+        width: 48px;
+        height: 48px;
+        display: block;
+        margin-bottom: 20px;
+        filter: var(--logo-shadow);
+      }
+      body.boarding .logo {
+        width: 72px;
+        height: 72px;
+        margin: 0;
+      }
+      .gold-square {
+        transform-origin: 45px 19px;
+      }
+      body.boarding .gold-square {
+        animation: gold-turn 4.6s linear infinite;
+      }
+      @keyframes gold-turn {
+        0% {
+          transform: rotate(0deg);
+          animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        19%,
+        25% {
+          transform: rotate(90deg);
+          animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        44%,
+        50% {
+          transform: rotate(180deg);
+          animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        69%,
+        75% {
+          transform: rotate(270deg);
+          animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        94%,
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        body.boarding .gold-square {
+          animation: none;
+        }
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        white-space: pre-line;
+      }
+      pre {
+        margin: 20px 0 0;
+        padding: 12px 14px;
+        max-height: 45vh;
+        overflow: auto;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font: 12px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      nav {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+      }
+      nav a {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      nav a:first-child {
+        border-color: transparent;
+        background: var(--primary);
+        color: var(--primary-fg);
+      }
       [hidden] {
         display: none !important;
       }
     </style>
   </head>
-  <body>
+  <body class="boarding">
     <div class="titlebar" aria-hidden="true"></div>
-    <main>
+    <main id="stage" role="status" aria-label="Loop Now">
       <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-        <rect width="64" height="64" rx="15" fill="#2443B5" />
-        <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="#FBF9F4" />
-        <rect x="40" y="14" width="10" height="10" rx="3" fill="#FFE14D" />
+        <defs>
+          <clipPath id="sq">
+            <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" />
+          </clipPath>
+          <clipPath id="lc">
+            <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" />
+          </clipPath>
+          <linearGradient id="bg" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stop-color="#2A2D34" />
+            <stop offset="18%" stop-color="#1A1C22" />
+            <stop offset="52%" stop-color="#0E1014" />
+            <stop offset="100%" stop-color="#06070A" />
+          </linearGradient>
+          <radialGradient id="oh" cx="50%" cy="2%" r="72%" fx="44%" fy="0%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22" />
+            <stop offset="32%" stop-color="#DCE4F2" stop-opacity="0.08" />
+            <stop offset="65%" stop-color="#FFFFFF" stop-opacity="0.015" />
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+          </radialGradient>
+          <radialGradient id="rf" cx="50%" cy="104%" r="60%">
+            <stop offset="0%" stop-color="#C8D6EE" stop-opacity="0.16" />
+            <stop offset="45%" stop-color="#7B8BA6" stop-opacity="0.045" />
+            <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+          </radialGradient>
+          <radialGradient id="dp" cx="50%" cy="50%" r="54%">
+            <stop offset="68%" stop-color="#000000" stop-opacity="0" />
+            <stop offset="100%" stop-color="#000000" stop-opacity="0.34" />
+          </radialGradient>
+          <radialGradient id="ga" cx="45" cy="19" r="16" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#F8CE64" stop-opacity="0.28" />
+            <stop offset="45%" stop-color="#C98A1E" stop-opacity="0.09" />
+            <stop offset="100%" stop-color="#C98A1E" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="rd" x1="6%" y1="2%" x2="94%" y2="98%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.72" />
+            <stop offset="18%" stop-color="#E8EEF8" stop-opacity="0.24" />
+            <stop offset="48%" stop-color="#FFFFFF" stop-opacity="0.07" />
+            <stop offset="80%" stop-color="#D4DFEE" stop-opacity="0.18" />
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.46" />
+          </linearGradient>
+          <linearGradient id="rs" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.24" />
+            <stop offset="28%" stop-color="#FFFFFF" stop-opacity="0.03" />
+            <stop offset="75%" stop-color="#FFFFFF" stop-opacity="0.02" />
+            <stop offset="100%" stop-color="#C8D8F0" stop-opacity="0.16" />
+          </linearGradient>
+          <linearGradient id="sv" x1="20%" y1="6%" x2="78%" y2="94%">
+            <stop offset="0%" stop-color="#FFFFFF" />
+            <stop offset="22%" stop-color="#EEF1F6" />
+            <stop offset="52%" stop-color="#CFD6E0" />
+            <stop offset="76%" stop-color="#B0B8C5" />
+            <stop offset="92%" stop-color="#C6CDD8" />
+            <stop offset="100%" stop-color="#9CA4B2" />
+          </linearGradient>
+          <radialGradient id="sb" cx="24" cy="20" r="24" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.62" />
+            <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.14" />
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="svb" x1="16%" y1="6%" x2="84%" y2="94%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.98" />
+            <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.28" />
+            <stop offset="72%" stop-color="#353B46" stop-opacity="0.34" />
+            <stop offset="100%" stop-color="#EEF3FA" stop-opacity="0.48" />
+          </linearGradient>
+          <linearGradient id="gd" x1="18%" y1="4%" x2="82%" y2="96%">
+            <stop offset="0%" stop-color="#FFF5C8" />
+            <stop offset="22%" stop-color="#F9D876" />
+            <stop offset="55%" stop-color="#DFAA39" />
+            <stop offset="84%" stop-color="#B57E1B" />
+            <stop offset="100%" stop-color="#CE992F" />
+          </linearGradient>
+          <radialGradient id="gb" cx="43.5" cy="16.5" r="7.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FFFDF0" stop-opacity="0.72" />
+            <stop offset="50%" stop-color="#FFE694" stop-opacity="0.18" />
+            <stop offset="100%" stop-color="#FFE694" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="gdb" x1="12%" y1="6%" x2="88%" y2="94%">
+            <stop offset="0%" stop-color="#FFFDF2" stop-opacity="0.96" />
+            <stop offset="42%" stop-color="#FFE89E" stop-opacity="0.32" />
+            <stop offset="76%" stop-color="#5E3A05" stop-opacity="0.42" />
+            <stop offset="100%" stop-color="#F7CF65" stop-opacity="0.56" />
+          </linearGradient>
+          <filter id="ms" x="-25%" y="-25%" width="150%" height="165%">
+            <feDropShadow dx="0" dy="2.1" stdDeviation="2.2" flood-color="#000000" flood-opacity="0.72" />
+            <feDropShadow dx="0" dy="0.5" stdDeviation="0.55" flood-color="#000000" flood-opacity="0.55" />
+          </filter>
+          <filter id="gs" x="-55%" y="-55%" width="210%" height="210%">
+            <feDropShadow dx="0" dy="1.8" stdDeviation="1.9" flood-color="#000000" flood-opacity="0.68" />
+          </filter>
+        </defs>
+        <g clip-path="url(#sq)">
+          <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#bg)" />
+          <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#dp)" />
+          <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#oh)" />
+          <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="url(#rf)" />
+          <circle cx="45" cy="19" r="16" fill="url(#ga)" />
+          <g filter="url(#ms)">
+            <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="url(#sv)" />
+            <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="url(#sb)" />
+            <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="none" stroke="url(#svb)" stroke-width="1.2" clip-path="url(#lc)" />
+          </g>
+          <g filter="url(#gs)">
+            <g class="gold-square">
+              <rect x="40" y="14" width="10" height="10" rx="3" fill="url(#gd)" />
+              <rect x="40" y="14" width="10" height="10" rx="3" fill="url(#gb)" />
+              <rect x="40.5" y="14.5" width="9" height="9" rx="2.5" fill="none" stroke="url(#gdb)" stroke-width="0.9" />
+            </g>
+          </g>
+          <path d="M32 0.75C50 0.75 55.9 0.75 59.6 4.4C63.25 8.1 63.25 14 63.25 32C63.25 50 63.25 55.9 59.6 59.6C55.9 63.25 50 63.25 32 63.25C14 63.25 8.1 63.25 4.4 59.6C0.75 55.9 0.75 50 0.75 32C0.75 14 0.75 8.1 4.4 4.4C8.1 0.75 14 0.75 32 0.75Z" fill="none" stroke="url(#rs)" stroke-width="2.6" />
+          <path d="M32 0.75C50 0.75 55.9 0.75 59.6 4.4C63.25 8.1 63.25 14 63.25 32C63.25 50 63.25 55.9 59.6 59.6C55.9 63.25 50 63.25 32 63.25C14 63.25 8.1 63.25 4.4 59.6C0.75 55.9 0.75 50 0.75 32C0.75 14 0.75 8.1 4.4 4.4C8.1 0.75 14 0.75 32 0.75Z" fill="none" stroke="url(#rd)" stroke-width="0.95" />
+          <path d="M32 0C50.4 0 56.4 0 60.2 3.8C64 7.6 64 13.6 64 32C64 50.4 64 56.4 60.2 60.2C56.4 64 50.4 64 32 64C13.6 64 7.6 64 3.8 60.2C0 56.4 0 50.4 0 32C0 13.6 0 7.6 3.8 3.8C7.6 0 13.6 0 32 0Z" fill="none" stroke="#000000" stroke-opacity="0.52" stroke-width="0.8" />
+        </g>
       </svg>
-      <h1><span id="spinner" class="spinner" hidden></span><span id="title"></span></h1>
-      <p id="body"></p>
-      <pre id="log" hidden></pre>
-      <nav id="actions" hidden>
-        <a id="retry" href="?action=retry"></a>
-        <a id="logs" href="?action=logs"></a>
-      </nav>
+      <div id="error-panel" hidden>
+        <h1 id="title"></h1>
+        <p id="body"></p>
+        <pre id="log" hidden></pre>
+        <nav id="actions" hidden>
+          <a id="retry" href="?action=retry"></a>
+          <a id="logs" href="?action=logs"></a>
+        </nav>
+      </div>
     </main>
     <script>
       const query = new URLSearchParams(location.search)
-      const text = (id, value) => (document.getElementById(id).textContent = value ?? '')
-      text('title', query.get('title'))
-      text('body', query.get('body'))
-      document.title = query.get('title') || 'Loop Now'
-      document.getElementById('spinner').hidden = query.get('busy') !== '1'
-      if (query.get('log')) {
-        text('log', query.get('log'))
-        document.getElementById('log').hidden = false
+      const skin = query.get('skin')
+      const theme = query.get('theme')
+      if (skin === 'plate' || skin === 'mono') {
+        document.documentElement.dataset.skin = skin
       }
-      if (query.get('retry')) {
-        text('retry', query.get('retry'))
-        text('logs', query.get('logs'))
-        document.getElementById('actions').hidden = false
+      if (skin !== 'plate' && (theme === 'light' || theme === 'dark')) {
+        document.documentElement.dataset.theme = theme
+      }
+      const busy = query.get('busy') === '1'
+      const title = query.get('title') || 'Loop Now'
+      document.title = title
+      document.getElementById('stage').setAttribute('aria-label', title)
+      document.body.classList.toggle('boarding', busy)
+      if (!busy) {
+        const text = (id, value) => (document.getElementById(id).textContent = value ?? '')
+        document.getElementById('error-panel').hidden = false
+        text('title', query.get('title'))
+        text('body', query.get('body'))
+        if (query.get('log')) {
+          text('log', query.get('log'))
+          document.getElementById('log').hidden = false
+        }
+        if (query.get('retry')) {
+          text('retry', query.get('retry'))
+          text('logs', query.get('logs'))
+          document.getElementById('actions').hidden = false
+        }
       }
     </script>
   </body>

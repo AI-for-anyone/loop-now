@@ -121,21 +121,21 @@ describe('Look and status of the Agent rows in the sidebar', () => {
     renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
 
-    // Replying: pulsing pink dot with reduced-motion fallback.
+    // Replying: pulsing busy dot with reduced-motion fallback.
     const itemA = await within(list).findByRole('link', { name: /^A/ })
     const busyMark = within(itemA).getByTitle('Replying')
     expect(busyMark).toHaveAttribute('data-status', 'busy')
     const dot = busyMark.querySelector('[data-status-dot]')!
-    expect(dot).toHaveClass('bg-riso-pink', 'rounded-full', 'animate-pulse', 'motion-reduce:animate-none')
+    expect(dot).toHaveClass('bg-status-busy', 'rounded-full', 'animate-pulse', 'motion-reduce:animate-none')
     expect(dot).toHaveAttribute('aria-hidden', 'true')
     expect(within(busyMark).getByText('Replying')).toHaveClass('sr-only')
     expect(itemA).toHaveTextContent(/^AReplying$/)
 
-    // Background tasks: yellow pill with shell glyph and count; full words in tooltip and sr-only.
+    // Background tasks: high-contrast pill with shell glyph and count; full words in tooltip and sr-only.
     const itemB = within(list).getByRole('link', { name: /^B/ })
     const bgMark = within(itemB).getByTitle('Idle; 2 background tasks are still running')
     expect(bgMark).toHaveAttribute('data-status', 'background')
-    expect(bgMark).toHaveClass('bg-riso-yellow', 'text-ink', 'rounded-full')
+    expect(bgMark).toHaveClass('bg-sidebar-active-bg', 'text-sidebar-active-fg', 'rounded-full')
     expect(bgMark.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(within(bgMark).getByText('2')).toHaveAttribute('aria-hidden', 'true')
     expect(within(bgMark).getByText('Idle; 2 background tasks are still running')).toHaveClass('sr-only')
@@ -143,7 +143,7 @@ describe('Look and status of the Agent rows in the sidebar', () => {
     // Sleeping: moon glyph with wake time and reason in tooltip and sr-only.
     const itemC = within(list).getByRole('link', { name: /^C/ })
     const sleepMark = itemC.querySelector<HTMLElement>('[data-status="sleeping"]')!
-    expect(sleepMark).toHaveClass('bg-ink/45', 'text-white', 'rounded-full')
+    expect(sleepMark).toHaveClass('bg-sidebar-control-bg', 'text-sidebar-control-fg', 'rounded-full')
     expect(sleepMark.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(sleepMark.getAttribute('title')).toMatch(/^Sleeping until .+ · Waiting for external confirmation; keeping the current results\.$/)
     expect(sleepMark.querySelector('.sr-only')?.textContent).toBe(sleepMark.getAttribute('title'))
@@ -152,7 +152,7 @@ describe('Look and status of the Agent rows in the sidebar', () => {
     const itemD = within(list).getByRole('link', { name: /^D/ })
     const managerMark = within(itemD).getByTitle('Project Manager')
     expect(managerMark).toHaveAttribute('data-status', 'manager')
-    expect(managerMark).toHaveClass('bg-ink/45', 'text-white', 'rounded-full')
+    expect(managerMark).toHaveClass('bg-sidebar-control-bg', 'text-sidebar-control-fg', 'rounded-full')
     expect(managerMark.querySelector('svg path')).toHaveAttribute('d', 'M5 21V4h11l-2 4 2 4H5')
     expect(within(managerMark).getByText('Project Manager')).toHaveClass('sr-only')
 
@@ -236,19 +236,18 @@ describe('Sidebar styling', () => {
   const manager = makeAgent({ name: 'manager', isManager: true })
   const other = makeAgent({ name: 'Researcher', isManager: true })
 
-  it('the project card and the selected Agent row both have a 2px navy border and a 4px solid navy shadow', async () => {
+  it('the project switcher and the selected Agent row use semantic sidebar tokens', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(row).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(row).toHaveClass('bg-sidebar-active-bg', 'font-semibold', 'text-sidebar-active-fg')
     const card = within(sidebar()).getByRole('button', { name: /^Switch scope/ })
-    expect(card).toHaveClass('border-2', 'border-ink', 'bg-paper-raised', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(card).toHaveClass('h-8', 'border-0', 'bg-transparent')
     const unselected = within(sidebar()).getByRole('link', { name: /Researcher/ })
-    expect(unselected).not.toHaveClass('bg-riso-yellow')
-    expect(unselected).not.toHaveClass('shadow-[4px_4px_0_var(--ink)]')
+    expect(unselected).not.toHaveClass('bg-sidebar-active-bg')
   })
 
-  it('status symbols adapt to the selected yellow row and keep their blue-row colors when unselected', async () => {
+  it('status symbols adapt to selected and unselected rows via semantic sidebar tokens', async () => {
     const busySel = makeAgent({ name: 'BusySelected', busy: true })
     const busyIdle = makeAgent({ name: 'BusyOther', busy: true })
     const bgSel = makeAgent({ name: 'BgSelected', backgroundTaskCount: 2 })
@@ -279,29 +278,29 @@ describe('Sidebar styling', () => {
 
     const mgr = await checkPair(mgrSel, mgrOther)
     const selFlag = within(mgr.selRow).getByTitle('Project Manager')
-    expect(selFlag).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(selFlag).toHaveClass('bg-sidebar-active-fg', 'text-sidebar-active-bg', 'rounded-full')
     const unselFlag = within(mgr.unselRow).getByTitle('Project Manager')
-    expect(unselFlag).toHaveClass('bg-ink/45', 'text-white', 'rounded-full')
-    expect(unselFlag).not.toHaveClass('bg-ink')
+    expect(unselFlag).toHaveClass('bg-sidebar-control-bg', 'text-sidebar-control-fg', 'rounded-full')
+    expect(unselFlag).not.toHaveClass('bg-sidebar-active-fg')
     mgr.unmount()
 
     const slp = await checkPair(sleepSel, sleepOther, true)
-    expect(slp.selRow.querySelector('[data-status="sleeping"]')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(slp.selRow.querySelector('[data-status="sleeping"]')).toHaveClass('bg-sidebar-active-fg', 'text-sidebar-active-bg', 'rounded-full')
     const unselMoon = slp.unselRow.querySelector('[data-status="sleeping"]')!
-    expect(unselMoon).toHaveClass('bg-ink/45', 'text-white', 'rounded-full')
-    expect(unselMoon).not.toHaveClass('bg-ink')
+    expect(unselMoon).toHaveClass('bg-sidebar-control-bg', 'text-sidebar-control-fg', 'rounded-full')
+    expect(unselMoon).not.toHaveClass('bg-sidebar-active-fg')
     slp.unmount()
 
     const bg = await checkPair(bgSel, bgOther)
-    expect(bg.selRow.querySelector('[data-status="background"]')).toHaveClass('bg-ink', 'text-riso-yellow', 'rounded-full')
-    expect(bg.unselRow.querySelector('[data-status="background"]')).toHaveClass('bg-riso-yellow', 'text-ink', 'rounded-full')
+    expect(bg.selRow.querySelector('[data-status="background"]')).toHaveClass('bg-sidebar-active-fg', 'text-sidebar-active-bg', 'rounded-full')
+    expect(bg.unselRow.querySelector('[data-status="background"]')).toHaveClass('bg-sidebar-active-bg', 'text-sidebar-active-fg', 'rounded-full')
     bg.unmount()
 
     const bsy = await checkPair(busySel, busyIdle)
-    expect(bsy.selRow.querySelector('[data-status-dot]')).toHaveClass('bg-riso-pink', 'shadow-[0_0_0_1.5px_var(--ink)]')
+    expect(bsy.selRow.querySelector('[data-status-dot]')).toHaveClass('bg-status-busy', 'ring-1', 'ring-sidebar-active-fg/40')
     const unselDot = bsy.unselRow.querySelector('[data-status-dot]')!
-    expect(unselDot).toHaveClass('bg-riso-pink')
-    expect(unselDot).not.toHaveClass('shadow-[0_0_0_1.5px_var(--ink)]')
+    expect(unselDot).toHaveClass('bg-status-busy')
+    expect(unselDot).not.toHaveClass('ring-1')
     bsy.unmount()
   })
 
@@ -316,7 +315,7 @@ describe('Sidebar styling', () => {
     setup([longBusy, longIdle], defaultAgentPath(longBusy.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /^loop-now-publicity/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    expect(row).toHaveClass('h-10')
+    expect(row).toHaveClass('h-9')
     expect(row).not.toHaveClass('flex-wrap')
     expect(row.querySelector('.flex-wrap')).toBeNull()
     const name = within(row).getByText(longBusy.name)
@@ -327,34 +326,26 @@ describe('Sidebar styling', () => {
     expect(marks).not.toContainElement(name)
     // Unselected rows use the same single-line layout.
     const unselected = within(sidebar()).getByRole('link', { name: longIdle.name })
-    expect(unselected).toHaveClass('h-9')
+    expect(unselected).toHaveClass('h-8')
     expect(unselected.querySelector('.flex-wrap')).toBeNull()
     expect(within(unselected).getByText(longIdle.name)).toHaveAttribute('title', longIdle.name)
     expect(within(unselected).getByText(longIdle.name)).toHaveClass('min-w-0', 'flex-1', 'truncate')
   })
 
-  it('the sidebar scroll area uses a thin semi-transparent white scrollbar on the blue background', async () => {
+  it('the sidebar scroll area uses a thin hairline scrollbar', async () => {
     setup([manager])
     const list = await within(sidebar()).findByRole('list', { name: 'Agents' })
     const scroller = list.closest('.overflow-y-auto')!
-    expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:rgb(255_255_255/.45)_transparent]')
+    expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:var(--hairline-strong)_transparent]')
   })
 
-  it('the search box is 34px tall; the shortcut hint has a thin border', async () => {
+  it('the search box is 32px tall; the shortcut hint has a thin border', async () => {
     setup([manager])
     const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
-    expect(search.closest('label')).toHaveClass('h-[34px]', 'bg-ink/[0.42]')
-    expect(search.closest('label')!.querySelector('kbd')).toHaveClass('border', 'border-white/45')
-  })
-
-  it('the halftone circle and the two color dots in the lower middle are decoration: hidden from screen readers, not blocking clicks, placed in a slot shown depending on the height', async () => {
-    setup([manager])
-    await within(sidebar()).findByRole('link', { name: /manager/ })
-    const deco = sidebar().querySelector<HTMLElement>('[data-sidebar-deco]')!
-    expect(deco).toHaveAttribute('aria-hidden', 'true')
-    // Not shown in the drawer on narrow screens.
-    expect(deco).toHaveClass('pointer-events-none', 'sidebar-deco', 'max-nav:hidden')
-    expect(deco.parentElement).toHaveClass('sidebar-deco-slot')
-    expect(deco.querySelectorAll('span')).toHaveLength(3)
+    const box = search.parentElement!
+    expect(box).toHaveClass('h-[32px]', 'border-sidebar-border', 'bg-sidebar-control-bg')
+    const kbd = box.querySelector('kbd')!
+    const shortcut = kbd.closest('button') ?? kbd
+    expect(shortcut).toHaveClass('border', 'border-sidebar-border')
   })
 })

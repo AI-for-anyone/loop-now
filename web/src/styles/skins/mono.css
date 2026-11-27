@@ -1,0 +1,405 @@
+/* Default skin: "mono" — Vercel Geist-inspired modern studio palette (layered surfaces + crisp semantic accents, light and dark). */
+
+:root,
+:root[data-skin="mono"] {
+  /* Core layered neutral surfaces (light): #FAFAFA canvas lifting crisp #FFFFFF cards */
+  --surface-canvas: #FAFAFA;
+  --surface-subtle: #F3F4F6;
+  --surface-elevated: #FFFFFF;
+  --surface-control: #FFFFFF;
+  --surface-hover: #ECEEF2;
+  --surface-active: #E8F1FE;
+  --segment-track: #F0F1F4;
+  --segment-active: #FFFFFF;
+  --switch-track: #D4D6DC;
+
+  /* Sidebar chrome (light) */
+  --sidebar-bg: #FAFAFA;
+  --sidebar-fg: #171717;
+  --sidebar-muted: #525866;
+  --sidebar-border: rgb(0 0 0 / 0.08);
+  --sidebar-hover: #EFEFF2;
+  --sidebar-active-bg: #EBF3FE;
+  --sidebar-active-fg: #0058C4;
+  --sidebar-group: #666E7C;
+  --sidebar-control-bg: #FFFFFF;
+  --sidebar-control-fg: #171717;
+
+  /* Hairlines and Geist micro-elevation shadows (light) */
+  --hairline: rgb(0 0 0 / 0.08);
+  --hairline-strong: rgb(0 0 0 / 0.14);
+  --surface-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.03);
+  --floating-shadow: 0 10px 30px -6px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.08);
+  --dialog-shadow: 0 20px 48px -8px rgb(0 0 0 / 0.16), 0 0 0 1px rgb(0 0 0 / 0.08);
+
+  /* Geist Blue primary CTA and crisp dark tooltips (light) */
+  --cta-bg: #0066DB;
+  --cta-fg: #FFFFFF;
+  --cta-hover: #0055BA;
+  --tooltip-bg: #171717;
+  --tooltip-fg: #FFFFFF;
+  --tooltip-muted: #A1A1AA;
+
+  /* Code blocks (light) */
+  --code-bg: #F6F8FA;
+  --code-fg: #171717;
+  --code-border: rgb(0 0 0 / 0.08);
+  --code-muted: #59606D;
+
+  /* Semantic ink, accent and tinted wash tokens (light) */
+  --paper: #FAFAFA;
+  --paper-raised: #FFFFFF;
+  --paper-tab: #F3F4F6;
+  --ink: #171717;
+  --ink-700: #404652;
+  --ink-500: #59606D;
+  --riso-blue: #0066DB;
+  --riso-blue-soft: #60A5FA;
+  --riso-pink: #F4F0FF;
+  --pink-text: #92400E;
+  --riso-yellow: #E8F1FE;
+  --green: #0D9488;
+  --green-text: #0F766E;
+  --red: #DC2626;
+  --red-text: #B91C1C;
+  --tint-pink: #F4F0FF;
+  --tint-pink-2: #FEF3C7;
+  --tint-blue: #EDF5FF;
+  --tint-green: #ECFDF5;
+  --tint-red: #FEF2F2;
+  --tint-yellow: #FFFBEB;
+  --error-field: #FEF2F2;
+
+  /* Geist multi-hue charts and status (light) */
+  --chart-blue: #0066DB;
+  --chart-pink: #7928CA;
+  --chart-ochre: #0D9488;
+  --chart-other: #D97706;
+  --chart-grid: #EAECEF;
+  --chart-bar-stroke: transparent;
+  --chart-point-stroke: #FFFFFF;
+  --status-done: #0D9488;
+  --status-interrupt: #D97706;
+  --status-fail: #DC2626;
+  --status-busy: #0066DB;
+
+  /* Shadows and focus ring (light) */
+  --print-rest: none;
+  --print-pink: none;
+  --print-blue: none;
+  --print-ink: none;
+  --print-dialog: none;
+  --focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 4px #0066DB;
+
+  /* Crisp geometric radii */
+  --skin-radius-stamp: 5px;
+  --skin-radius-ticket: 6px;
+  --skin-radius-input: 6px;
+  --skin-radius-card: 10px;
+  --skin-radius-panel: 12px;
+  --skin-radius-bubble: 14px;
+  --skin-radius-dialog: 12px;
+
+  /* Typography: clean sans across headings in default skin */
+  --skin-display-cn: var(--font-sans);
+  --skin-display-latin: var(--font-sans);
+
+  /* shadcn semantic variables */
+  --background: var(--surface-canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-elevated);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--ink);
+  --primary: var(--cta-bg);
+  --primary-foreground: var(--cta-fg);
+  --secondary: var(--surface-hover);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-subtle);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--surface-active);
+  --accent-foreground: var(--ink);
+  --destructive: var(--red);
+  --border: var(--hairline);
+  --input: var(--hairline-strong);
+  --ring: var(--riso-blue);
+  --radius: 0.625rem;
+}
+
+:root[data-skin="mono"][data-theme="dark"],
+:root.dark[data-skin="mono"] {
+  /* Core layered neutral surfaces (dark): #000000 canvas with subtle lifted slate cards */
+  --surface-canvas: #000000;
+  --surface-subtle: #111216;
+  --surface-elevated: #0B0C0F;
+  --surface-control: #111216;
+  --surface-hover: #191B21;
+  --surface-active: #10213A;
+  --segment-track: #0A0B0E;
+  --segment-active: #1E2028;
+  --switch-track: #2B2E38;
+
+  /* Sidebar chrome (dark) */
+  --sidebar-bg: #08090B;
+  --sidebar-fg: #EDEDED;
+  --sidebar-muted: #939AA8;
+  --sidebar-border: rgb(255 255 255 / 0.09);
+  --sidebar-hover: #16181E;
+  --sidebar-active-bg: #10213A;
+  --sidebar-active-fg: #7CC0FF;
+  --sidebar-group: #8A919E;
+  --sidebar-control-bg: #111216;
+  --sidebar-control-fg: #EDEDED;
+
+  /* Hairlines and edge-lit shadows (dark) */
+  --hairline: rgb(255 255 255 / 0.09);
+  --hairline-strong: rgb(255 255 255 / 0.16);
+  --surface-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --floating-shadow: 0 16px 40px rgb(0 0 0 / 0.72), 0 0 0 1px rgb(255 255 255 / 0.13);
+  --dialog-shadow: 0 24px 56px rgb(0 0 0 / 0.84), 0 0 0 1px rgb(255 255 255 / 0.14);
+
+  /* Geist Blue primary CTA and tooltips (dark) */
+  --cta-bg: #0068E1;
+  --cta-fg: #FFFFFF;
+  --cta-hover: #1D7CF2;
+  --tooltip-bg: #EDEDED;
+  --tooltip-fg: #0A0A0A;
+  --tooltip-muted: #525252;
+
+  /* Code blocks (dark) */
+  --code-bg: #0F1115;
+  --code-fg: #EDEDED;
+  --code-border: rgb(255 255 255 / 0.10);
+  --code-muted: #8F98A8;
+
+  /* Semantic ink, accent and tinted wash tokens (dark) */
+  --paper: #000000;
+  --paper-raised: #0B0C0F;
+  --paper-tab: #14161C;
+  --ink: #EDEDED;
+  --ink-700: #B4BAC6;
+  --ink-500: #8F98A8;
+  --riso-blue: #52A8FF;
+  --riso-blue-soft: #93C5FD;
+  --riso-pink: #1D1533;
+  --pink-text: #FBBF24;
+  --riso-yellow: #10213A;
+  --green: #2DD4BF;
+  --green-text: #5EEAD4;
+  --red: #C81E1E;
+  --red-text: #F87171;
+  --tint-pink: #1D1533;
+  --tint-pink-2: #2D1F08;
+  --tint-blue: #0E1F38;
+  --tint-green: #06281B;
+  --tint-red: #2E1012;
+  --tint-yellow: #2B1F06;
+  --error-field: #2E1012;
+
+  /* Geist multi-hue charts and status (dark) */
+  --chart-blue: #3B9EFF;
+  --chart-pink: #A855F7;
+  --chart-ochre: #2DD4BF;
+  --chart-other: #FBBF24;
+  --chart-grid: #1F222A;
+  --chart-bar-stroke: transparent;
+  --chart-point-stroke: #0B0C0F;
+  --status-done: #2DD4BF;
+  --status-interrupt: #FBBF24;
+  --status-fail: #F87171;
+  --status-busy: #52A8FF;
+
+  /* Focus ring (dark) */
+  --focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 4px #52A8FF;
+
+  /* shadcn semantic variables */
+  --background: var(--surface-canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-elevated);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--ink);
+  --primary: var(--cta-bg);
+  --primary-foreground: var(--cta-fg);
+  --secondary: var(--surface-hover);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-subtle);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--surface-active);
+  --accent-foreground: var(--ink);
+  --destructive: var(--red);
+  --border: var(--hairline);
+  --input: var(--hairline-strong);
+  --ring: var(--riso-blue);
+}
+
+/* Neutralize Risograph-only ornaments and textures when mono skin is active. */
+:root:not([data-skin="plate"]) .riso-grain,
+:root:not([data-skin="plate"]) .riso-halftone,
+:root:not([data-skin="plate"]) .riso-halftone-pink,
+:root:not([data-skin="plate"]) .riso-halftone-red,
+:root:not([data-skin="plate"]) .riso-stripes-red {
+  background-image: none;
+}
+
+:root:not([data-skin="plate"]) .riso-misreg,
+:root:not([data-skin="plate"]) .riso-misreg-sm {
+  text-shadow: none;
+}
+
+:root:not([data-skin="plate"]) .riso-mark::before {
+  display: none;
+}
+
+:root:not([data-skin="plate"]) .riso-marker {
+  background: none;
+}
+
+:root:not([data-skin="plate"]) .riso-tilt::before {
+  transform: none;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+:root:not([data-skin="plate"]) .riso-skeleton {
+  background-color: var(--surface-hover);
+  background-image: none;
+}
+
+:root:not([data-skin="plate"]) [data-overprint-deco],
+:root:not([data-skin="plate"]) [data-sidebar-deco],
+:root:not([data-skin="plate"]) .sidebar-deco-slot {
+  display: none;
+}
+
+/* Select dropdown chevron adapts to light and dark modes. */
+:root:not([data-skin="plate"]) .select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+}
+
+:root[data-skin="mono"][data-theme="dark"] .select-chevron,
+:root.dark[data-skin="mono"] .select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23EDEDED' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Geist syntax highlighting (light): every color reaches at least 4.5:1 on --code-bg (#F6F8FA). */
+:root:not([data-skin="plate"]) .hljs {
+  color: #171717;
+}
+:root:not([data-skin="plate"]) .hljs-keyword,
+:root:not([data-skin="plate"]) .hljs-selector-tag,
+:root:not([data-skin="plate"]) .hljs-literal,
+:root:not([data-skin="plate"]) .hljs-type {
+  color: #7928CA;
+  font-weight: 600;
+}
+:root:not([data-skin="plate"]) .hljs-string,
+:root:not([data-skin="plate"]) .hljs-regexp,
+:root:not([data-skin="plate"]) .hljs-symbol,
+:root:not([data-skin="plate"]) .hljs-template-tag {
+  color: #0F766E;
+}
+:root:not([data-skin="plate"]) .hljs-number,
+:root:not([data-skin="plate"]) .hljs-variable,
+:root:not([data-skin="plate"]) .hljs-template-variable,
+:root:not([data-skin="plate"]) .hljs-attr,
+:root:not([data-skin="plate"]) .hljs-attribute {
+  color: #B45309;
+}
+:root:not([data-skin="plate"]) .hljs-built_in,
+:root:not([data-skin="plate"]) .hljs-selector-class,
+:root:not([data-skin="plate"]) .hljs-selector-id {
+  color: #0058C4;
+}
+:root:not([data-skin="plate"]) .hljs-comment,
+:root:not([data-skin="plate"]) .hljs-quote,
+:root:not([data-skin="plate"]) .hljs-meta {
+  color: #59606D;
+  font-style: italic;
+}
+:root:not([data-skin="plate"]) .hljs-title,
+:root:not([data-skin="plate"]) .hljs-section,
+:root:not([data-skin="plate"]) .hljs-name {
+  color: #111827;
+  font-weight: 600;
+}
+:root:not([data-skin="plate"]) .hljs-deletion {
+  color: #B91C1C;
+}
+:root:not([data-skin="plate"]) .hljs-addition {
+  color: #0F766E;
+}
+
+/* Monochrome syntax highlighting (dark): every color reaches at least 4.5:1 on --code-bg (#0F1115). */
+:root[data-skin="mono"][data-theme="dark"] .hljs,
+:root.dark[data-skin="mono"] .hljs {
+  color: #EDEDED;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-keyword,
+:root[data-skin="mono"][data-theme="dark"] .hljs-selector-tag,
+:root[data-skin="mono"][data-theme="dark"] .hljs-literal,
+:root[data-skin="mono"][data-theme="dark"] .hljs-type,
+:root.dark[data-skin="mono"] .hljs-keyword,
+:root.dark[data-skin="mono"] .hljs-selector-tag,
+:root.dark[data-skin="mono"] .hljs-literal,
+:root.dark[data-skin="mono"] .hljs-type {
+  color: #C084FC;
+  font-weight: 600;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-string,
+:root[data-skin="mono"][data-theme="dark"] .hljs-regexp,
+:root[data-skin="mono"][data-theme="dark"] .hljs-symbol,
+:root[data-skin="mono"][data-theme="dark"] .hljs-template-tag,
+:root.dark[data-skin="mono"] .hljs-string,
+:root.dark[data-skin="mono"] .hljs-regexp,
+:root.dark[data-skin="mono"] .hljs-symbol,
+:root.dark[data-skin="mono"] .hljs-template-tag {
+  color: #5EEAD4;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-number,
+:root[data-skin="mono"][data-theme="dark"] .hljs-variable,
+:root[data-skin="mono"][data-theme="dark"] .hljs-template-variable,
+:root[data-skin="mono"][data-theme="dark"] .hljs-attr,
+:root[data-skin="mono"][data-theme="dark"] .hljs-attribute,
+:root.dark[data-skin="mono"] .hljs-number,
+:root.dark[data-skin="mono"] .hljs-variable,
+:root.dark[data-skin="mono"] .hljs-template-variable,
+:root.dark[data-skin="mono"] .hljs-attr,
+:root.dark[data-skin="mono"] .hljs-attribute {
+  color: #FCD34D;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-built_in,
+:root[data-skin="mono"][data-theme="dark"] .hljs-selector-class,
+:root[data-skin="mono"][data-theme="dark"] .hljs-selector-id,
+:root.dark[data-skin="mono"] .hljs-built_in,
+:root.dark[data-skin="mono"] .hljs-selector-class,
+:root.dark[data-skin="mono"] .hljs-selector-id {
+  color: #7CC0FF;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-comment,
+:root[data-skin="mono"][data-theme="dark"] .hljs-quote,
+:root[data-skin="mono"][data-theme="dark"] .hljs-meta,
+:root.dark[data-skin="mono"] .hljs-comment,
+:root.dark[data-skin="mono"] .hljs-quote,
+:root.dark[data-skin="mono"] .hljs-meta {
+  color: #8F98A8;
+  font-style: italic;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-title,
+:root[data-skin="mono"][data-theme="dark"] .hljs-section,
+:root[data-skin="mono"][data-theme="dark"] .hljs-name,
+:root.dark[data-skin="mono"] .hljs-title,
+:root.dark[data-skin="mono"] .hljs-section,
+:root.dark[data-skin="mono"] .hljs-name {
+  color: #F4F4F5;
+  font-weight: 600;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-deletion,
+:root.dark[data-skin="mono"] .hljs-deletion {
+  color: #F87171;
+}
+:root[data-skin="mono"][data-theme="dark"] .hljs-addition,
+:root.dark[data-skin="mono"] .hljs-addition {
+  color: #4ADE80;
+}

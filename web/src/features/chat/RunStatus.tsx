@@ -88,12 +88,12 @@ export function ToolList({ tools: events, unfinished = 'running', exclude, after
         return (
           <li key={tool.toolCallId}>
             {state === 'interrupted' ? (
-              <Badge data-interrupted className="border-[1.5px] border-dashed border-ink/30 bg-paper-raised text-ink-500">
+              <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500">
                 <span className="font-mono">{tool.toolName}</span>
                 <span>{t.chat.toolInterrupted}</span>
               </Badge>
             ) : state === 'no_result' ? (
-              <Badge data-no-result className="bg-ink/[0.07] text-ink-700">
+              <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700">
                 <span className="font-mono text-ink">{tool.toolName}</span>
                 <span>{t.chat.tool.no_result}</span>
               </Badge>

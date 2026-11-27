@@ -27,4 +27,12 @@ export const skills = {
   notFound: "This template doesn't exist or was deleted.",
   updated: (time: string) => `Updated ${formatTime(time)}`,
   submitCreate: 'Create',
+  searchLabel: 'Filter skills',
+  searchPlaceholder: 'Filter skills…',
+  noMatch: 'No matching templates.',
+  selectHint: 'Select a template from the list to inspect or edit SKILL.md, or create a new one.',
+  backToList: 'Back to skills',
+  unsaved: 'Unsaved changes',
+  replaceHint: 'Upload a folder or zip archive to replace all files in this template.',
+  columns: { path: 'Path', size: 'Size' },
 } satisfies Messages['skills']

@@ -2,8 +2,25 @@
 // LOOP_NOW_DESKTOP_BUNDLE points at the platform directory of the server release bundle (the output of scripts/release/build.sh; on Windows
 // the set built around loop-server.exe), and the whole directory goes into Resources/server (resources\server on Windows).
 // JS rather than YAML: in YAML, ${env.…} is expanded only after paths are resolved, so an absolute path would get appended to the project directory.
+const { execFileSync } = require('node:child_process')
+
 const bundle = process.env.LOOP_NOW_DESKTOP_BUNDLE
 if (!bundle) throw new Error('LOOP_NOW_DESKTOP_BUNDLE is not set: point it at the platform directory of the server release bundle')
+
+// Use the macOS 26+ Icon Composer bundle (.icon) when Xcode 26+ actool is available so macOS Tahoe
+// renders native Liquid Glass (Assets.car + CFBundleIconName), and fall back to build/icon.icns on
+// older build hosts.
+function resolveMacIcon() {
+  if (process.platform !== 'darwin') return 'build/icon.icns'
+  try {
+    const out = execFileSync('xcrun', ['actool', '--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const match = out.match(/<key>short-bundle-version<\/key>\s*<string>(\d+)/)
+    if (match && Number(match[1]) >= 26) return 'build/icon.icon'
+  } catch {
+    // Fall back to precompiled .icns when Xcode 26+ actool is unavailable.
+  }
+  return 'build/icon.icns'
+}
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
@@ -21,7 +38,7 @@ module.exports = {
       { target: 'zip', arch: 'arm64' },
     ],
     category: 'public.app-category.developer-tools',
-    icon: 'build/icon.icns',
+    icon: resolveMacIcon(),
     minimumSystemVersion: '12.0',
     // Ad-hoc signing until a certificate is in place. Under ad-hoc signing, the hardened runtime would refuse to load the frameworks Electron
     // ships with their own signatures.

@@ -13,14 +13,12 @@ export function Spark({ className }: { className?: string }) {
   )
 }
 
-// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): not a product's logo but a
-// yellow tag with an ink rim, its pink plate printed a little off register behind it, and the spark in ink.
+// "Automatic" among the runtimes' marks (components/runner-picker/RuntimeMark): a single-color ink-frame badge matching the runtime marks.
 export function AutomaticMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={cn('size-8 shrink-0 overflow-visible', className)}>
-      <rect x="4.6" y="5.6" width="24.4" height="22.4" rx="7" fill="var(--riso-pink)" transform="rotate(-6 16.8 16.8)" />
-      <rect x="2.8" y="4" width="24.4" height="22.4" rx="7" fill="var(--riso-yellow)" stroke="var(--ink)" strokeWidth="2" />
-      <g transform="translate(5.4 5.6) scale(0.82)">
+      <rect x="3.8" y="4.8" width="24.4" height="22.4" rx="7" fill="var(--surface-control)" stroke="var(--hairline-strong)" strokeWidth="1.5" />
+      <g transform="translate(6.2 6.2) scale(0.82)">
         <path d={SPARK} fill="var(--ink)" />
         <path d={SMALL} fill="var(--ink)" />
       </g>

@@ -20,7 +20,7 @@ type SidebarResizeHandleProps = {
 }
 
 // Drag handle on the right edge of the permanent desktop sidebar (never mounted inside the narrow phone drawer).
-// Invisible at rest; reveals a thin riso-pink line on hover and while dragging, and a yellow-with-navy focus line for keyboard users.
+// Invisible at rest; reveals a thin accent line on hover, while dragging, and on keyboard focus.
 export function SidebarResizeHandle({ width, min, max, onPreview, onCommit, onReset }: SidebarResizeHandleProps) {
   const [dragging, setDragging] = useState(false)
   const cleanupRef = useRef<(() => void) | null>(null)
@@ -162,8 +162,8 @@ export function SidebarResizeHandle({ width, min, max, onPreview, onCommit, onRe
         className={cn(
           'pointer-events-none absolute inset-y-0 left-[3px] transition-opacity duration-150',
           dragging
-            ? 'w-[3px] bg-riso-pink opacity-100'
-            : 'w-[2px] bg-riso-pink opacity-0 group-hover:opacity-100 group-focus-visible:w-[3px] group-focus-visible:bg-riso-yellow group-focus-visible:opacity-100 group-focus-visible:shadow-[0_0_0_2px_var(--ink)]',
+            ? 'w-[3px] bg-riso-blue opacity-100'
+            : 'w-[2px] bg-riso-blue opacity-0 group-hover:opacity-100 group-focus-visible:w-[3px] group-focus-visible:bg-riso-blue group-focus-visible:opacity-100 group-focus-visible:shadow-focus',
         )}
       />
     </div>

@@ -29,7 +29,9 @@ describe('resume after disconnect and snapshots', () => {
     await emit('run.text', { runId: run.id, delta: ' red' }, '11-0')
     await emit('run.text', { runId: run.id, delta: ', violets' }, '12-0')
     expect(await screen.findByText('Roses are red, violets')).toBeInTheDocument()
-    expect(screen.getByText('Live')).toBeInTheDocument()
+    // Healthy connection omits the permanent "Live" indicator; only degraded states are surfaced.
+    expect(screen.queryByText('Connection lost, reconnecting…')).toBeNull()
+    expect(screen.queryByText('Live')).toBeNull()
   })
 
   it('beyond the retained range the server pushes a snapshot, and the snapshot text replaces everything', async () => {

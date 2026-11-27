@@ -57,17 +57,17 @@ export function PromptEditor({ formId, label, saveLabel, text, version, save, re
       {state.readFailed && <><p className="text-[13px] font-bold text-red-text">{copy.readFailed}</p><ErrorAlert error={readError} /><Button variant="secondary" className="justify-self-start" onClick={() => void review()}>{copy.readAgain}</Button></>}
       {state.review && <>
         <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-black">{copy.serverVersion(state.review.version)}</p><pre className="max-h-80 overflow-auto rounded-card bg-tint-blue p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">{state.review.text || copy.empty}</pre></div>
-          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-black">{copy.draft}</p><pre className="max-h-80 overflow-auto rounded-card bg-tint-yellow p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">{state.draft || copy.empty}</pre></div>
+          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold">{copy.serverVersion(state.review.version)}</p><pre className="max-h-80 overflow-auto rounded-card border border-hairline bg-surface-subtle p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">{state.review.text || copy.empty}</pre></div>
+          <div className="grid min-w-0 gap-2"><p className="text-[13px] font-semibold">{copy.draft}</p><pre className="max-h-80 overflow-auto rounded-card border border-hairline bg-tint-yellow p-4 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap [overflow-wrap:anywhere]">{state.draft || copy.empty}</pre></div>
         </div>
-        {state.latest.version > state.review.version && <p className="text-[13px] font-bold">{copy.newerThanReview}</p>}
+        {state.latest.version > state.review.version && <p className="text-[13px] font-medium">{copy.newerThanReview}</p>}
         <Button variant="secondary" className="h-auto min-h-11 max-w-full justify-self-start py-2 text-left whitespace-normal" onClick={() => { dispatch({ type: 'adopt' }); setError(null) }}>{copy.adopt(state.review.version)}</Button>
       </>}
     </div>}
     <ErrorAlert error={error} />
     <div className="flex flex-wrap items-center justify-end gap-3">
-      {promptDirty(state) && <p role="status" className="mr-auto rounded-full bg-tint-yellow px-3 py-0.5 text-[13px] font-black">{t.common.unsaved}</p>}
-      {saved && !promptDirty(state) && <p role="status" className="mr-auto text-[13px] font-bold text-green-text">{t.common.saved}</p>}
+      {promptDirty(state) && <p role="status" className="mr-auto rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[13px] font-medium">{t.common.unsaved}</p>}
+      {saved && !promptDirty(state) && <p role="status" className="mr-auto text-[13px] font-medium text-green-text">{t.common.saved}</p>}
       <Button size="lg" disabled={!promptDirty(state) || state.pending || state.conflict} onClick={() => void submit()}>{state.pending ? t.common.saving : saveLabel}</Button>
     </div>
   </div>

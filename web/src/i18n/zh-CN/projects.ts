@@ -56,6 +56,24 @@ export const projects = {
     // Default project badge in the project settings page header (white text on navy).
     defaultBadge: '默认项目',
     title: '项目设置',
+    tabs: {
+      nav: '项目设置分组',
+      general: '常规',
+      context: 'Prompt 与上下文',
+      credentials: '账号与凭证',
+      plugins: '插件',
+      danger: '危险操作',
+    },
+    folderCard: {
+      open: '打开项目文件夹',
+    },
+    accounts: {
+      filterLabel: '账号分类',
+      verify: '测试连接',
+      hideVerify: '收起连接测试',
+      relogin: '重新登录',
+      hideRelogin: '收起登录',
+    },
     name: {
       title: '项目名称',
       id: '项目 ID',

@@ -57,7 +57,7 @@ describe('turn numbers on the chat page', () => {
     await emit('message.created', { message: makeMessage({ text: 'Third question', createdAt: '2026-11-12T09:00:00Z', run }) })
     await waitFor(() => expect(numbers()).toEqual(['25', '26', '27']))
     expect(total()).toHaveTextContent('27')
-    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' })).getAllByRole('button')).toHaveLength(3)
+    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' }).querySelector('ol')!).getAllByRole('button')).toHaveLength(3)
     expect(reads).toBe(readsBefore)
   })
 
@@ -80,7 +80,7 @@ describe('manual compaction in progress', () => {
     await screen.findByText(/Agent is busy/)
     expect(numbers()).toEqual(['25', '26'])
     expect(document.querySelectorAll('[data-run-id]')).toHaveLength(2)
-    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' })).getAllByRole('button')).toHaveLength(2)
+    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' }).querySelector('ol')!).getAllByRole('button')).toHaveLength(2)
     expect(total()).toHaveTextContent('26')
     expect(screen.getByRole('button', { name: 'Stop the current reply' })).toBeInTheDocument()
   })

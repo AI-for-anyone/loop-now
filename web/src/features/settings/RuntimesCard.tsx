@@ -33,7 +33,7 @@ export function RuntimesCard() {
         <Button
           size="sm"
           variant="secondary"
-          className="h-[34px] rounded-full border-2 border-ink bg-paper-raised px-5 text-[13.5px] font-black"
+          className="h-[34px] px-5 text-[13.5px]"
           disabled={refresh.isPending || runtimes.isPending}
           onClick={() => refresh.mutate()}
         >
@@ -66,9 +66,9 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
   return (
     // Redesign: a white card with a 2px navy outline and a solid navy offset shadow; the name is in display type, followed by
     // a status pill and the version number in monospace.
-    <section aria-label={name} className="mr-[5px] mb-[5px] flex min-w-0 flex-col gap-2.5 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-[5px_5px_0_var(--ink)]">
+    <section aria-label={name} className="flex min-w-0 flex-col gap-2.5 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface">
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-        <span className="font-display-cn text-[26px] leading-[1.1]">{name}</span>
+        <span className="font-display-cn text-[18px] leading-snug font-semibold">{name}</span>
         {runtime.version && (
           <span className="text-[12.5px] text-ink-700">
             {text.version} <span className="font-mono text-ink">{runtime.version}</span>
@@ -81,8 +81,8 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
       </div>
       {(runtime.binaryPath || account) && (
         <dl className="grid grid-cols-[minmax(60px,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[13.5px]">
-          {runtime.binaryPath && <><dt className="font-black text-ink-500">{text.path}</dt><dd className="min-w-0 font-mono text-[12.5px] break-all">{runtime.binaryPath}</dd></>}
-          {account && <><dt className="font-black text-ink-500">{text.account}</dt><dd className="min-w-0 break-words">{account}</dd></>}
+          {runtime.binaryPath && <><dt className="font-medium text-ink-500">{text.path}</dt><dd className="min-w-0 font-mono text-[12.5px] break-all">{runtime.binaryPath}</dd></>}
+          {account && <><dt className="font-medium text-ink-500">{text.account}</dt><dd className="min-w-0 break-words">{account}</dd></>}
         </dl>
       )}
       {problem && (

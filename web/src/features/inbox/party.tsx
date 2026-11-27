@@ -15,7 +15,7 @@ export function PartyAvatar({ party, className }: { party: Participant; classNam
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-base font-bold text-riso-yellow shadow-[6px_2px_0_var(--riso-pink)]',
+        'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline-strong bg-surface-subtle font-mono text-base font-semibold text-ink',
         party.deleted && 'opacity-50',
         className,
       )}
@@ -27,7 +27,7 @@ export function PartyAvatar({ party, className }: { party: Participant; classNam
 
 // Deleted mark: a small light yellow pill.
 export function DeletedMark({ label, className }: { label: string; className?: string }) {
-  return <span className={cn('shrink-0 rounded-full bg-tint-yellow px-2 text-[11.5px] leading-[20px] font-black text-ink', className)}>{label}</span>
+  return <span className={cn('shrink-0 rounded-full bg-tint-yellow px-2 text-[11.5px] leading-[20px] font-semibold text-ink', className)}>{label}</span>
 }
 
 // Connection state of the inbox event stream: when connected, show “实时更新中” (Live); while reconnecting after a drop, reuse

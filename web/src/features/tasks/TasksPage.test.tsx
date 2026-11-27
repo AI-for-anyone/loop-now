@@ -80,7 +80,7 @@ describe('compact task list rows', () => {
     const titled = await row('With a branch')
     const chip = within(titled).getByText('Implement')
     expect(chip).toHaveAttribute('title', 'implement')
-    expect(chip).toHaveClass('truncate', 'bg-tint-blue')
+    expect(chip).toHaveClass('truncate', 'bg-surface-subtle')
     expect(chip).not.toHaveClass('font-mono')
     expect(within(titled).queryByText('implement')).not.toBeInTheDocument()
 
@@ -115,11 +115,12 @@ describe('compact task list rows', () => {
     const agent = await within(item).findByText(longAgentName)
     expect(agent).toHaveAttribute('title', longAgentName)
     expect(agent).toHaveClass('truncate')
-    expect(agent.parentElement).toHaveClass('flex-[0_0_160px]')
+    expect(agent.parentElement).toHaveClass('min-w-0')
 
-    // Header columns align with row columns.
+    // Header columns align with row columns via the shared grid track definition.
     const header = item.closest('ul')!.previousElementSibling!
-    expect(header.children[4]).toHaveClass('flex-[0_0_160px]')
+    expect(item).toHaveClass('sm:grid', 'sm:grid-cols-[48px_minmax(0,1fr)_96px_116px_136px_84px]')
+    expect(header).toHaveClass('sm:grid', 'sm:grid-cols-[48px_minmax(0,1fr)_96px_116px_136px_84px]')
   })
 
   it('long branch names keep their end: the start gives way first', () => {

@@ -1,12 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { Composer } from './Composer'
+import { resetChatDraftsForTest } from './draft-store'
 import { apiUrl, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
+afterEach(() => resetChatDraftsForTest())
 const agentId = 'image-agent', limits = { maxCount: 4, maxImageBytes: 5242880, maxTotalBytes: 20971520 }
 const refs = new Map<string, Schemas['MessageImage']>()
 const file = (name: string) => new File(['synthetic-png'], name, { type: 'image/png' })
@@ -24,36 +26,33 @@ function accepted(body: Schemas['SendMessageInput']) {
   const run = makeRun({ status: 'starting', endedAt: null })
   return HttpResponse.json({ run, message: { ...makeMessage({ text: body.text, run }), images: (body.imageIds ?? []).map(id => refs.get(id)!) } }, { status: 202 })
 }
-// After the redesign: the plus button, the input and the send button sit in one row
-// (data-chat-composer), and the border surrounds only the input (data-chat-input).
-it('keeps the image plus, one-line editor and send arrow in the same composer row', async () => {
+// Unified floating composer card: editor on top and integrated bottom toolbar holding the image plus and send arrow inside one rounded card.
+it('keeps the image plus, one-line editor and send arrow inside the unified composer card', async () => {
   mount()
-  const editor = screen.getByRole('textbox'), row = editor.closest('[data-chat-composer]')!, border = editor.closest('[data-chat-input]')!
+  const editor = screen.getByRole('textbox'), card = editor.closest('[data-chat-composer]') as HTMLElement, toolbar = card.querySelector('[data-chat-toolbar]') as HTMLElement
   expect(editor).toHaveAttribute('rows', '1')
-  expect(within(row as HTMLElement).getByRole('button', { name: 'Add image' })).toBeInTheDocument()
-  const send = within(row as HTMLElement).getByRole('button', { name: 'Send' })
+  expect(card).toHaveAttribute('data-chat-input')
+  expect(within(toolbar).getByRole('button', { name: 'Add image' })).toBeInTheDocument()
+  const send = within(toolbar).getByRole('button', { name: 'Send' })
   expect(send.textContent).toBe('')
   expect(send.querySelector('svg')).toBeInTheDocument()
   expect(screen.getAllByRole('button', { name: 'Add image' })).toHaveLength(1)
-  // The plus and send buttons sit outside the input's border, one on the left and one on the right.
-  expect(within(border as HTMLElement).queryByRole('button')).toBeNull()
-  expect([...row.children].map((child) => child.contains(editor))).toEqual([false, true, false])
   await userEvent.type(editor, 'Line one{Shift>}{Enter}{/Shift}Line two')
   expect(editor).toHaveValue('Line one\nLine two')
-  expect(border).toHaveClass('rounded-[22px]')
+  expect(card).toHaveClass('rounded-2xl')
 })
-it('puts attached thumbnails inside the input border, above the text row', async () => {
+it('puts attached thumbnails inside the composer card, above the text row', async () => {
   mount(); await userEvent.upload(screen.getByLabelText('Choose an image file'), [file('one.png'), file('two.png')])
-  const border = screen.getByRole('textbox').closest('[data-chat-input]') as HTMLElement, list = within(border).getByRole('list', { name: 'Images to send' })
-  expect(border.firstElementChild).toContainElement(list)
-  expect(border.lastElementChild).toBe(screen.getByRole('textbox'))
-  expect(border).toHaveClass('rounded-[22px]')
+  const card = screen.getByRole('textbox').closest('[data-chat-input]') as HTMLElement, list = within(card).getByRole('list', { name: 'Images to send' })
+  expect(card.firstElementChild).toContainElement(list)
+  expect(list.compareDocumentPosition(screen.getByRole('textbox')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(card).toHaveClass('rounded-2xl')
   expect(await within(list).findByAltText('two.png')).toBeInTheDocument()
   await userEvent.click(within(list).getByRole('button', { name: 'Remove image 1' }))
   expect(within(list).queryByAltText('one.png')).not.toBeInTheDocument()
-  await userEvent.click(within(border).getByRole('button', { name: 'Remove image 1' }))
+  await userEvent.click(within(card).getByRole('button', { name: 'Remove image 1' }))
   expect(screen.queryByRole('list', { name: 'Images to send' })).not.toBeInTheDocument()
-  expect(border).toHaveClass('rounded-[22px]')
+  expect(card).toHaveClass('rounded-2xl')
 })
 it('shows upload progress and the failed image on its own thumbnail', async () => {
   let release!: () => void, uploads = 0; const gate = new Promise<void>(resolve => { release = resolve })
@@ -148,5 +147,22 @@ it("doesn't take images for a model that takes none: the plus is disabled and sa
   editor.focus()
   await userEvent.paste({ files: [file('shot.png')] } as unknown as DataTransfer)
   expect(await screen.findByRole('alert')).toHaveTextContent("This model doesn't take images")
+  expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull()
+})
+it('preserves pending images per Agent across unmount and remount, and clears them after sending', async () => {
+  uploadFixture()
+  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => accepted(await request.json() as Schemas['SendMessageInput'])))
+  const first = renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
+  await userEvent.upload(screen.getByLabelText('Choose an image file'), file('persisted.png'))
+  expect(await screen.findByAltText('persisted.png')).toBeInTheDocument()
+  first.unmount()
+
+  const second = renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
+  expect(await screen.findByAltText('persisted.png')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull())
+  second.unmount()
+
+  renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />)
   expect(screen.queryByRole('list', { name: 'Images to send' })).toBeNull()
 })

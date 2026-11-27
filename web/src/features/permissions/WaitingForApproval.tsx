@@ -8,12 +8,12 @@ import { PermissionModeIcon } from './PermissionModePicker'
 export function WaitingForApproval({ requests, onLocate }: { requests: Schemas['PermissionRequest'][]; onLocate?: (runId: string) => void }) {
   const first = requests[0]
   return (
-    <p role="status" data-waiting-approval className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-ticket bg-riso-pink px-3 py-1.5 text-[13px] leading-snug font-black text-ink shadow-[inset_0_0_0_2px_var(--ink)]">
+    <p role="status" data-waiting-approval className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-ticket border border-hairline-strong bg-tint-yellow px-3 py-1.5 text-[13px] leading-snug font-semibold text-ink">
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <PermissionModeIcon mode="supervised" className="size-4 shrink-0" />
         {t.permissions.request.waiting(requests.length)}
       </span>
-      <span className="text-[12px] font-bold text-ink-700">{t.permissions.request.stopRejects}</span>
+      <span className="text-[12px] font-medium text-ink-700">{t.permissions.request.stopRejects}</span>
       {first && (
         <button
           type="button"
@@ -23,9 +23,9 @@ export function WaitingForApproval({ requests, onLocate }: { requests: Schemas['
             if (card) card.scrollIntoView({ block: 'center', behavior: 'smooth' })
             else if (onLocate) onLocate(first.runId)
           }}
-          className="ml-auto inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-paper-raised px-3 text-[12.5px] font-black text-ink shadow-[inset_0_0_0_2px_var(--ink)] outline-none focus-visible:shadow-focus"
+          className="ml-auto inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border border-hairline-strong bg-surface-elevated px-3 text-[12.5px] font-semibold text-ink outline-none hover:bg-surface-hover focus-visible:shadow-focus"
         >
-          <ArrowUpIcon aria-hidden="true" className="size-3.5" strokeWidth={3} />
+          <ArrowUpIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
           {t.permissions.request.show}
         </button>
       )}

@@ -74,6 +74,12 @@ function identityBackend(backend: Backend) {
     http.get(apiUrl('/external-identities/:id/inbox/:messageId'), ({ params }) =>
       HttpResponse.json(backend.inbox?.[String(params.id)]?.find((m) => m.id === params.messageId)),
     ),
+    http.get(apiUrl('/inbox/threads/:threadId'), ({ params }) => {
+      const messages = Object.values(backend.inbox ?? {})
+        .flat()
+        .filter((m) => m.threadId === params.threadId)
+      return HttpResponse.json({ id: params.threadId, messages })
+    }),
   ]
   return { handlers, writes }
 }
@@ -88,31 +94,33 @@ async function renderIdentities(backend: Backend, path = '/identities') {
 }
 
 const list = () => within(screen.getByRole('complementary', { name: 'External identities' }))
+const pageHeader = () => within(screen.getByRole('heading', { level: 1, name: 'External identities' }).closest('header')!)
 const tokenTable = async () => within(await screen.findByRole('table'))
 
 describe('Create external identity', () => {
-  it('without external identities says the list is empty; after ci-bot is created it appears in the list and is selected', async () => {
+  it('without external identities says the list is empty; after ci-bot is created it opens its Tokens & Access tab', async () => {
     const { user, writes, router } = await renderIdentities({ identities: [], tokens: {} })
     expect(await screen.findByText('No external identities yet.')).toBeInTheDocument()
-    await user.click(list().getByRole('button', { name: 'New' }))
+    await user.click(pageHeader().getByRole('button', { name: 'New' }))
     const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
     expect(dialog.getByText(/Can't be console or platform/)).toBeInTheDocument()
     await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'ci-bot')
     await user.click(dialog.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(writes).toEqual([{ method: 'POST', path: '/external-identities', body: { name: 'ci-bot' } }]))
     await waitFor(() => expect(list().getByRole('link', { name: /ci-bot/ })).toHaveAttribute('aria-current', 'page'))
-    expect(router.state.location.pathname).toMatch(/^\/identities\/.+/)
+    expect(router.state.location.pathname).toMatch(/^\/identities\/.+\/tokens$/)
     expect(await screen.findByRole('heading', { name: 'ci-bot', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Issue token' })).toBeInTheDocument()
   })
 
   it('does not submit a name that breaks the rules or is reserved, and says why', async () => {
     const { user, writes } = await renderIdentities({ identities: [], tokens: {} })
-    await user.click(list().getByRole('button', { name: 'New' }))
+    await user.click(pageHeader().getByRole('button', { name: 'New' }))
     const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
     const input = dialog.getByRole('textbox', { name: 'Name' })
     await user.type(input, 'platform')
     await user.click(dialog.getByRole('button', { name: 'Create' }))
-    expect(dialog.getByRole('alert')).toHaveTextContent('The name can\'t be platform; it\'s reserved')
+    expect(dialog.getByRole('alert')).toHaveTextContent("The name can't be platform; it's reserved")
     await user.clear(input)
     await user.type(input, 'CI Bot')
     await user.click(dialog.getByRole('button', { name: 'Create' }))
@@ -122,7 +130,7 @@ describe('Create external identity', () => {
 
   it('duplicate name: shows the reason next to the name and keeps what was typed', async () => {
     const { user } = await renderIdentities({ identities: [makeIdentity({ name: 'ci-bot' })], tokens: {} })
-    await user.click(await list().findByRole('button', { name: 'New' }))
+    await user.click(pageHeader().getByRole('button', { name: 'New' }))
     const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
     await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'ci-bot')
     await user.click(dialog.getByRole('button', { name: 'Create' }))
@@ -132,11 +140,15 @@ describe('Create external identity', () => {
 })
 
 describe('Delete external identity', () => {
-  it('the confirmation lists four consequences; after deletion it disappears from the list, earlier threads with it can still be viewed and it shows as a deleted identity', async () => {
+  it('the Danger Zone lives in Settings and confirms four consequences before deleting', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const backend: Backend = { identities: [ciBot, makeIdentity({ name: 'deploy-watcher' })], tokens: { [ciBot.id]: [makeToken(), makeToken()] } }
     const { user, writes } = await renderIdentities(backend, `/identities/${ciBot.id}`)
     expect(await list().findByRole('link', { name: /ci-bot/ })).toBeInTheDocument()
+    // Delete is not mounted in the persistent header on Messages.
+    expect(screen.queryByRole('button', { name: 'Delete external identity' })).toBeNull()
+
+    await user.click(screen.getByRole('link', { name: 'Settings' }))
     await user.click(await screen.findByRole('button', { name: 'Delete external identity' }))
     const confirm = within(await screen.findByRole('alertdialog', { name: 'Delete external identity "ci-bot"?' }))
     expect(confirm.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
@@ -151,7 +163,7 @@ describe('Delete external identity', () => {
     expect(list().getByRole('link', { name: /deploy-watcher/ })).toBeInTheDocument()
   })
 
-  it('deleted identity: shows only the read-only inbox and the deletion time, requests no tokens, and cannot issue, revoke or delete', async () => {
+  it('deleted identity: shows only Messages with the read-only inbox and deletion time, requests no tokens, and cannot issue, revoke or delete', async () => {
     const gone = makeIdentity({ name: 'release-bot', deletedAt: '2026-10-11T02:00:00Z' })
     const inbox = { [gone.id]: [makeInboxMessage({ from: externalParty(gone, true), to: consoleParty, text: 'v0.1.0 released', readAt: '2026-10-11T01:00:00Z' })] }
     await renderIdentities({ identities: [gone], tokens: {}, inbox }, `/identities/${gone.id}`)
@@ -159,6 +171,8 @@ describe('Delete external identity', () => {
     expect(screen.getByText('Deleted identity')).toBeInTheDocument()
     expect(screen.getByText(/^Deleted \d/)).toBeInTheDocument()
     expect(await screen.findByText('v0.1.0 released')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Tokens & Access/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete external identity' })).toBeNull()
     expect(screen.queryByRole('table')).toBeNull()
@@ -168,7 +182,7 @@ describe('Delete external identity', () => {
 describe('Issue token', () => {
   it('issue and copy: the plaintext and the risk note show only once, closing asks for confirmation; after closing the plaintext is nowhere in the page, the URL, browser storage or the query cache', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    const { user, writes, client, router } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const { user, writes, client, router } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}/tokens`)
     expect(await screen.findByRole('note')).toHaveTextContent(/A token has every permission of the external CLI.*A leaked token hands control of the platform to whoever has it/)
     await user.click(screen.getByRole('button', { name: 'Issue token' }))
     const issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
@@ -183,20 +197,17 @@ describe('Issue token', () => {
     expect(days).toBeGreaterThan(29.99)
     expect(days).toBeLessThan(30.01)
     expect(result.getByText(SECRET)).toBeInTheDocument()
-    // English UI issue: the bold onceStrong and onceBody are joined without a space ("…in full.Once you close…").
-    expect(result.getByRole('alert')).toHaveTextContent('This is the only time the token is shown in full.Once you close this, you can\'t see it again. Copy it now and keep it safe.')
+    expect(result.getByRole('alert')).toHaveTextContent("This is the only time the token is shown in full.Once you close this, you can't see it again. Copy it now and keep it safe.")
     expect(result.getByText(/A token has every permission of the external CLI/)).toBeInTheDocument()
     await user.click(result.getByRole('button', { name: 'Copy' }))
     await expect(navigator.clipboard.readText()).resolves.toBe(SECRET)
-    // Closing needs confirmation; choosing “Back” keeps the plaintext.
-    await user.click(result.getByRole('button', { name: 'I\'ve saved it, close' }))
+    // Closing needs confirmation; choosing Back keeps the plaintext.
+    await user.click(result.getByRole('button', { name: "I've saved it, close" }))
     const confirm = within(await screen.findByRole('alertdialog', { name: 'Have you saved the token?' }))
-    expect(confirm.getByText('Once closed, this token\'s full value won\'t be shown again and can\'t be recovered.')).toBeInTheDocument()
+    expect(confirm.getByText("Once closed, this token's full value won't be shown again and can't be recovered.")).toBeInTheDocument()
     await user.click(confirm.getByRole('button', { name: 'Back' }))
     expect(screen.getByText(SECRET)).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    // English UI issue: the confirm button (t.identities.confirmClose) and the dialog's X (t.common.close) are both named "Close",
-    // though the X only goes back and the confirm closes the token for good; the footer's button is the confirm.
     await user.click(within((await screen.findByRole('alertdialog')).querySelector<HTMLElement>('[data-slot="alert-dialog-footer"]')!).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByText(SECRET)).toBeNull())
     expect(document.body.innerHTML).not.toContain(SECRET)
@@ -205,43 +216,40 @@ describe('Issue token', () => {
     expect(JSON.stringify({ ...window.localStorage })).not.toContain(SECRET)
     expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(SECRET)
     expect(router.state.location.pathname + router.state.location.search + router.state.location.hash).not.toContain(SECRET)
-    // Look at the token list again: it has this token's metadata but not the plaintext.
     const table = await tokenTable()
     expect(table.getAllByRole('row')).toHaveLength(2)
     expect(table.getByText('Active')).toBeInTheDocument()
     expect(table.queryByText(SECRET)).toBeNull()
   })
 
-  it('token shown only once: a sticky-note warning, the plaintext in a dashed box with a yellow “Copy” next to it; the close button in the top right also asks to confirm it was saved', async () => {
+  it('token shown only once: a sticky-note warning, the plaintext in a dashed box with a yellow Copy next to it; the close button in the top right also asks to confirm it was saved', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}/tokens`)
     await user.click(await screen.findByRole('button', { name: 'Issue token' }))
     await user.click(within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' })).getByRole('button', { name: 'Issue' }))
     const box = await screen.findByRole('dialog', { name: 'Token issued' })
     const result = within(box)
     expect(box.querySelector('[data-dialog-tab]')).toHaveTextContent('Token')
-    expect(result.getByRole('alert')).toHaveClass('riso-tilt')
+    expect(result.getByRole('alert')).toHaveClass('rounded-card', 'border')
     const copy = result.getByRole('button', { name: 'Copy' })
-    expect(copy).toHaveClass('bg-riso-yellow')
-    expect(copy.parentElement).toHaveClass('border-dashed')
+    expect(copy).toHaveAttribute('data-slot', 'button')
+    expect(copy.parentElement).toHaveClass('bg-code-bg', 'border', 'border-code-border')
     await user.click(result.getByRole('button', { name: 'Close' }))
     expect(await screen.findByRole('alertdialog', { name: 'Have you saved the token?' })).toBeInTheDocument()
-    // While the confirmation dialog is open, the result dialog is still there (only
-    // temporarily hidden from screen readers), and the plaintext is not lost.
     expect(box).toBeInTheDocument()
     expect(within(box).getByText(SECRET)).toBeInTheDocument()
   })
-  it('choosing “Never expires” submits no expiry; a picked date means the end of that day, and a date before today is not submitted', async () => {
+
+  it('choosing Never expires submits no expiry; a picked date means the end of that day, and a date before today is not submitted', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}/tokens`)
     await user.click(await screen.findByRole('button', { name: 'Issue token' }))
     let issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
     await user.click(issue.getByRole('radio', { name: 'Never expires' }))
-    expect(issue.getByText('The token won\'t expire on its own; it can only be revoked by hand.')).toBeInTheDocument()
+    expect(issue.getByText("The token won't expire on its own; it can only be revoked by hand.")).toBeInTheDocument()
     await user.click(issue.getByRole('button', { name: 'Issue' }))
     await waitFor(() => expect(writes.at(-1)?.body).toEqual({}))
-    await user.click(within(await screen.findByRole('dialog', { name: 'Token issued' })).getByRole('button', { name: 'I\'ve saved it, close' }))
-    // The footer's "Close" is the confirm (see the English UI issue above).
+    await user.click(within(await screen.findByRole('dialog', { name: 'Token issued' })).getByRole('button', { name: "I've saved it, close" }))
     await user.click(within((await screen.findByRole('alertdialog')).querySelector<HTMLElement>('[data-slot="alert-dialog-footer"]')!).getByRole('button', { name: 'Close' }))
     await user.click(await screen.findByRole('button', { name: 'Issue token' }))
     issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
@@ -259,13 +267,13 @@ describe('Issue token', () => {
   })
 })
 
-describe('View and revoke tokens', () => {
-  it('shows only metadata; after one token is revoked it shows as revoked and the other stays active; an expired token shows as expired', async () => {
+describe('View, filter and revoke tokens', () => {
+  it('shows metadata, filters by Active | All, and revokes one token without affecting others', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const first = makeToken({ lastUsedAt: '2026-10-12T06:02:00Z' })
     const second = makeToken({ expiresAt: '2099-01-01T00:00:00Z' })
     const old = makeToken({ expiresAt: '2026-09-08T00:30:00Z' })
-    const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [first, second, old] } }, `/identities/${ciBot.id}`)
+    const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [first, second, old] } }, `/identities/${ciBot.id}/tokens`)
     const table = await tokenTable()
     expect(table.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['ID', 'Issued', 'Expires', 'Last used', 'Status', 'Actions'])
     const rowOf = (prefix: string) => table.getByText(prefix).closest('tr')!
@@ -273,6 +281,14 @@ describe('View and revoke tokens', () => {
     expect(rowOf(old.prefix)).toHaveTextContent(/Never used.*Expired/)
     expect(within(rowOf(old.prefix)).queryByRole('button')).toBeNull()
     expect(list().getByRole('link', { name: /ci-bot/ })).toHaveTextContent('2 active tokens')
+
+    // Inline Active | All status filter hides expired tokens when Active is selected.
+    await user.click(screen.getByRole('radio', { name: /^Active/ }))
+    expect(table.queryByText(old.prefix)).toBeNull()
+    expect(table.getByText(first.prefix)).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /^All/ }))
+    expect(table.getByText(old.prefix)).toBeInTheDocument()
+
     await user.click(within(rowOf(first.prefix)).getByRole('button', { name: `Revoke ${first.prefix}` }))
     const confirm = within(await screen.findByRole('alertdialog', { name: `Revoke token ${first.prefix}?` }))
     expect(confirm.getByText(/ci-bot's other tokens are not affected/)).toBeInTheDocument()
@@ -285,19 +301,20 @@ describe('View and revoke tokens', () => {
 })
 
 describe('Read-only inbox of an external identity', () => {
-  it('lists received and sent messages with their direction and read state; filters by direction and unread; opening the full text does not change the read state', async () => {
+  it('switches to All activity in Messages to list received and sent rows; filters by direction and unread; opening full text does not change read state', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const reviewer = makeAgent({ name: 'Code reviewer', address: 'test-org/test-project/Code reviewer' })
     const gotIt = makeInboxMessage({ from: agentParty(reviewer), to: externalParty(ciBot), text: 'Fix merged; please rerun the nightly build.' })
     const sent = makeInboxMessage({ from: externalParty(ciBot), to: consoleParty, text: 'Nightly build failed: 1 test in naming did not pass.', readAt: '2026-10-12T09:00:00Z' })
     const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] }, inbox: { [ciBot.id]: [gotIt, sent] } }, `/identities/${ciBot.id}`)
-    // The list reloads when the filter changes, so look it up again each time.
+    await user.click(await screen.findByRole('radio', { name: 'All activity' }))
+
     const inboxList = () => within(screen.getByRole('list', { name: 'Inbox' }))
     await screen.findByRole('list', { name: 'Inbox' })
     const items = inboxList().getAllByRole('listitem')
     expect(items[0]).toHaveTextContent(/^ReceivedCode reviewer.*Fix merged.*Unread$/)
     expect(items[1]).toHaveTextContent(/^SentConsole@console.*Read$/)
-    expect(screen.getByText('Read-only; doesn\'t change read status')).toBeInTheDocument()
+    expect(screen.getByText("Read-only; doesn't change read status")).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Sent' }))
     await waitFor(() => expect(inboxList().getAllByRole('listitem')).toHaveLength(1))
     expect(inboxList().getByRole('listitem')).toHaveTextContent('Sent')
@@ -311,35 +328,49 @@ describe('Read-only inbox of an external identity', () => {
   })
 })
 
-// "Printed sheet" redesign, step 4: external identities sit on a sheet, with the list on the left and the selected identity on the right.
 describe('External identities on the sheet', () => {
-  it('the header is the page title: breadcrumb “Global›External identities”, next to it the number of identities; the fluorescent pink “New” sits at the top of the list', async () => {
+  it('the header has breadcrumb "Global›External identities", count, and right-aligned New button', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
     const header = screen.getByRole('heading', { level: 1, name: 'External identities' }).closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›External identities')
     expect(await within(header).findByText('1 identity')).toBeInTheDocument()
-    expect(list().getByRole('button', { name: 'New' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    expect(within(header).getByRole('button', { name: 'New' })).toHaveClass('bg-surface-control')
   })
 
-  it('list and details are on one sheet; the selected identity is a yellow block with a navy outline and a shadow', async () => {
+  it('list and details sit on one sheet and switching identities preserves the active tab', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const release = makeIdentity({ name: 'release-bot' })
-    await renderIdentities({ identities: [ciBot, release], tokens: { [ciBot.id]: [], [release.id]: [] } }, `/identities/${ciBot.id}`)
+    const { user, router } = await renderIdentities(
+      { identities: [ciBot, release], tokens: { [ciBot.id]: [], [release.id]: [] } },
+      `/identities/${ciBot.id}/tokens`,
+    )
     await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
     const aside = screen.getByRole('complementary', { name: 'External identities' })
     expect(aside.closest('[data-sheet]')).toContainElement(screen.getByRole('heading', { level: 2, name: 'ci-bot' }))
-    expect(list().getByRole('link', { name: /ci-bot/ })).toHaveClass('bg-riso-yellow', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
-    expect(list().getByRole('link', { name: /release-bot/ })).not.toHaveClass('bg-riso-yellow')
+    expect(list().getByRole('link', { name: /ci-bot/ })).toHaveClass(
+      'bg-surface-active',
+      'border-hairline-strong',
+    )
+    expect(list().getByRole('link', { name: /release-bot/ })).not.toHaveClass('bg-surface-active')
+
+    await user.click(list().getByRole('link', { name: /release-bot/ }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/identities/${release.id}/tokens`))
+    expect(await screen.findByRole('heading', { level: 2, name: 'release-bot' })).toBeInTheDocument()
   })
 
-  it('the identity name is in the display face with a yellow marker and the address is monospaced; “Delete external identity” is a red outlined button; the token risk note is a yellow sticky note', async () => {
+  it('uses unified semantic styling on the identity header, token risk note and Danger Zone button', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}/tokens`)
     const name = await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
     expect(name).toHaveClass('riso-marker', 'font-display-cn')
     expect(screen.getByText(ciBot.address)).toHaveClass('font-mono')
-    expect(screen.getByRole('button', { name: 'Delete external identity' })).toHaveClass('border-2', 'border-red-text', 'text-red-text', 'rounded-full')
-    expect(await screen.findByRole('note')).toHaveClass('riso-tilt')
+    expect(await screen.findByRole('note')).toHaveClass('rounded-card', 'border')
+
+    await user.click(screen.getByRole('link', { name: 'Settings' }))
+    expect(await screen.findByRole('button', { name: 'Delete external identity' })).toHaveClass(
+      'border',
+      'text-red-text',
+    )
   })
 })

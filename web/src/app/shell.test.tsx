@@ -6,14 +6,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { keys } from '@/api/queries'
 import { config } from '@/config'
 import { localeStorageKey, page as browserPage } from '@/i18n/locale'
-import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, makeProject, platformAgentsUrl, toListItem } from '@/test/api'
+import { projectBackend } from '@/test/projects'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers, currentSidebarLinks, scopeSwitcher, sidebar, sidebarLinks } from '@/test/shell'
 import { routes } from './routes'
 import { chooseModel } from '@/test/model-picker'
 import { openInboxStream } from '@/test/inbox'
-import { AppLayout } from './AppLayout'
+import { AppLayout, SIDEBAR_COLLAPSED_KEY } from './AppLayout'
+import { SIDEBAR_PLATFORM_OPEN_KEY } from './Sidebar'
 import { FakeEventSource } from '@/test/fake-event-source'
 
 // Global connection notice: told apart from the error messages inside each page by the server address in its description.
@@ -33,30 +35,42 @@ const hrefs = () => sidebarLinks().map((link) => link.getAttribute('href'))
 const names = () => sidebarLinks().map((link) => link.textContent)
 
 describe('sidebar and page structure', () => {
-  it('the root address is the overview of the global scope: Overview is current, followed by projects, platform Agents and the global entries at the bottom', async () => {
+  it('the root address is the overview of the global scope: Overview is current, followed by projects, platform Agents, collapsible Platform tools (expanded by default), and Settings in the footer dock', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const platform = makeAgent({ name: 'Inspector', scope: 'platform', projectId: null })
     server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(platform)] })), ...baseHandlers([makeAgent()]))
+    const user = userEvent.setup()
     renderRoutes(routes, '/')
     expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
     await within(sidebar()).findByRole('link', { name: 'Inspector' })
     expect(scopeSwitcher('Global')).toBeInTheDocument()
+    // Platform group starts expanded at the bottom of the scroll area above the footer dock.
+    const platformToggle = within(sidebar()).getByRole('button', { name: /Platform/ })
+    expect(platformToggle).toHaveAttribute('aria-expanded', 'true')
     expect(names()).toEqual(['LOOP NOW', 'Overview', 'test-project', 'Inspector', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
     expect(hrefs()).toEqual(['/', '/', '/?project=test-project', `/platform/agents/${platform.id}`, ...globalEntries])
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Overview'])
     expect(within(sidebar()).getByRole('list', { name: 'Platform Agents' })).toBeInTheDocument()
+    // Collapsing the Platform group hides the four global tools and persists the disclosure state.
+    await user.click(platformToggle)
+    expect(platformToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(window.localStorage.getItem(SIDEBAR_PLATFORM_OPEN_KEY)).toBe('false')
+    expect(names()).toEqual(['LOOP NOW', 'Overview', 'test-project', 'Inspector', 'Global settings'])
+    expect(hrefs()).toEqual(['/', '/', '/?project=test-project', `/platform/agents/${platform.id}`, '/settings'])
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
   })
 
-  it('the main area has a layer of paper grain on its beige background and a 1.5px ink line next to the desktop sidebar; the sidebar has no grain', async () => {
+  it('the main area has a layer of paper grain and the sidebar has a right border without grain; pages use a clean full-bleed sheet', async () => {
     server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [] })), ...baseHandlers([makeAgent()]))
     renderRoutes(routes, '/')
     await screen.findByRole('heading', { name: 'Overview', level: 1 })
     const contentColumn = screen.getByRole('main').closest('.riso-grain')!
     expect(contentColumn).not.toBeNull()
-    expect(contentColumn).toHaveClass('nav:border-l-[1.5px]', 'nav:border-ink')
+    expect(sidebar()).toHaveClass('border-r', 'border-sidebar-border')
     expect(sidebar().closest('.riso-grain')).toBeNull()
-    // Other pages using the shared PageFrame + Sheet use the same flush sheet with no outer margin or shadow.
+    // Other pages using the shared PageFrame + Sheet use the same clean full-bleed sheet with no outer margin or shadow.
     const sheet = document.querySelector('[data-sheet]')!
-    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).toHaveClass('bg-surface-canvas', 'riso-grain')
     expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5', 'mt-2')
   })
 
@@ -75,6 +89,7 @@ describe('sidebar and page structure', () => {
   })
 
   it('opening an Agent config page directly: the sidebar shows its project with the Agent selected; the global entries are still reachable in the project', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
@@ -96,6 +111,7 @@ describe('sidebar and page structure', () => {
   })
 
   it('opening a global page (Plugin market, Global settings) from a project keeps the current project in the sidebar', async () => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
     const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     const user = userEvent.setup()
@@ -161,10 +177,11 @@ describe('sidebar and page structure', () => {
     expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('Working notes')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Git' })).toBeInTheDocument()
     expect(reads).toContain('')
-    // Redesign: the folder sits directly on the tab's sheet, with the overview in the stub on the
-    // right; the description that used to sit at the top of the tab moved into the footer note.
-    expect(screen.getByRole('complementary', { name: 'Overview' }).closest('[data-sheet]')).not.toBeNull()
-    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent("dev-helper's folder: it works here")
+    // Full-bleed 2-pane explorer on the tab's sheet, with live counts/size and the folder note in the footer strip.
+    expect(document.querySelector('[data-file-manager]')?.closest('[data-sheet]')).not.toBeNull()
+    const footer = document.querySelector('[data-folder-footer]')
+    expect(footer).toHaveTextContent('0 folders · 1 file · 12 B')
+    expect(footer).toHaveTextContent("dev-helper's folder: it works here")
   })
 
   it('the sidebar “Project folder” opens the folder shared by the project and becomes current', async () => {
@@ -180,10 +197,11 @@ describe('sidebar and page structure', () => {
     expect(await screen.findByRole('heading', { name: 'Project folder', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: 'File tree' })).toHaveTextContent('Project folder')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Project folder'])
-    // Redesign: the title is outside the sheet, the folder is on a sheet, and the overview is in the stub on the right.
-    const sheet = screen.getByRole('complementary', { name: 'Overview' }).closest('[data-sheet]')!
+    // The title stays in PageHeader outside the sheet; the 2-pane explorer sits on the sheet with live counts in the footer strip.
+    const sheet = document.querySelector('[data-file-manager]')?.closest<HTMLElement>('[data-sheet]') ?? null
     expect(sheet).not.toBeNull()
     expect(sheet).not.toContainElement(screen.getByRole('heading', { name: 'Project folder', level: 1 }))
+    await waitFor(() => expect(document.querySelector('[data-folder-footer]')).toHaveTextContent('0 folders · 0 files'))
     expect(reads).toContain('')
   })
 
@@ -201,11 +219,17 @@ describe('sidebar and page structure', () => {
     expect(within(await screen.findByRole('dialog')).getByRole('heading', { name: 'New Agent' })).toBeInTheDocument()
   })
 
-  it.each(['/skills', '/identities', '/plugins', '/settings'])('global subpage %s keeps the five global entries and the Inbox event stream', async path => {
+  it.each(['/skills', '/identities', '/plugins', '/settings'])('global subpage %s keeps the five global entries reachable and the Inbox event stream', async path => {
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
+    const user = userEvent.setup()
     renderRoutes([{ path: '/', element: <AppLayout />, children: [{ path: path.slice(1), element: <p>Global page content</p> }] }], path)
     await screen.findByText('Global page content')
+    // Platform subpages auto-expand the Platform section; Settings keeps it collapsed until expanded.
+    const toggle = within(sidebar()).getByRole('button', { name: /Platform/ })
+    if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle)
     for (const href of globalEntries) expect(hrefs()).toContain(href)
     expect(FakeEventSource.instances.some(source => source.url.endsWith('/inbox/events') && source.readyState !== FakeEventSource.CLOSED)).toBe(true)
+    window.localStorage.removeItem(SIDEBAR_PLATFORM_OPEN_KEY)
   })
 
   it('on narrow screens the menu button opens the sidebar as a drawer, which closes by itself once an entry changes the address', async () => {
@@ -228,13 +252,118 @@ describe('sidebar and page structure', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Main navigation' })).toBeNull())
   })
 
-  it('⌘K focuses the sidebar search', async () => {
-    server.use(...baseHandlers([makeAgent()]))
+  it('⌘K opens the command palette, supports searching projects, Agents and pages with keyboard navigation, and closes on Esc', async () => {
+    const other = makeProject({ name: 'design-lab' })
+    const helper = makeAgent({ name: 'dev-helper' })
+    const writer = makeAgent({ name: 'docs-writer' })
+    server.use(...overviewHandlers(), ...projectBackend({ projects: [defaultProject, other], agents: [helper, writer] }).handlers)
+    const user = userEvent.setup()
+    const { router } = renderRoutes(routes, defaultAgentPath(helper.id, 'chat'))
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
+
+    // Open with ⌘K and filter to an Agent in the current scope
+    await user.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input = within(dialog).getByRole('combobox')
+    expect(input).toHaveFocus()
+
+    await user.type(input, 'docs-writer')
+    expect(within(dialog).getByRole('option', { name: /docs-writer/ })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull())
+    expect(router.state.location.pathname).toBe(defaultAgentPath(writer.id, 'chat'))
+
+    // Open with Ctrl+K and switch to another project via Enter (updates lastScope)
+    await user.keyboard('{Control>}k{/Control}')
+    const dialog2 = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input2 = within(dialog2).getByRole('combobox')
+    await user.type(input2, 'design-lab')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'design-lab' })}`))
+    expect(router.state.location.pathname).toBe('/')
+    expect(window.localStorage.getItem('loop-now.lastScope')).toBe(other.id)
+
+    // Open via sidebar shortcut button, navigate pages with ArrowDown/ArrowUp, test empty state, and close with Esc
+    await user.click(within(sidebar()).getByRole('button', { name: 'Open command palette' }))
+    const dialog3 = await screen.findByRole('dialog', { name: 'Command palette' })
+    const input3 = within(dialog3).getByRole('combobox')
+    await user.type(input3, 'no-such-match-xyz')
+    expect(within(dialog3).getByRole('status')).toHaveTextContent('No matching results')
+
+    await user.clear(input3)
+    await user.type(input3, 'plugins')
+    expect(within(dialog3).getByRole('option', { name: 'Plugins' })).toBeInTheDocument()
+
+    await user.clear(input3)
+    await user.type(input3, 'settings')
+    const options = within(dialog3).getAllByRole('option')
+    expect(options.length).toBeGreaterThanOrEqual(2)
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowDown}')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowUp}')
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull())
+  })
+
+  it('desktop sidebar collapses and expands via button and ⌘B, persists to localStorage, and ignores ⌘B while editing text', async () => {
+    window.localStorage.removeItem(SIDEBAR_COLLAPSED_KEY)
+    server.use(...baseHandlers([makeAgent({ name: 'dev-helper' })]))
     const user = userEvent.setup()
     renderRoutes(routes, defaultAgentsPath)
-    const search = await within(sidebar()).findByRole('searchbox', { name: 'Search Agents' })
-    await user.keyboard('{Meta>}k{/Meta}')
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
+
+    // Collapse via header button
+    await user.click(within(sidebar()).getByRole('button', { name: 'Collapse navigation' }))
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('true')
+
+    // Expand via top-left expand button
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }))
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+
+    // Skip ⌘B while typing in an input
+    const search = within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })
+    await user.click(search)
     expect(search).toHaveFocus()
+    await user.keyboard('{Meta>}b{/Meta}')
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+
+    // Toggle with ⌘B when not focused in an editable element
+    search.blur()
+    await user.keyboard('{Meta>}b{/Meta}')
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('true')
+
+    // Toggle back with Ctrl+B
+    await user.keyboard('{Control>}b{/Control}')
+    expect(sidebar()).toBeInTheDocument()
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('false')
+  })
+
+  it('ScopeSwitcher selects the first matching project on Enter when filtering instead of jumping to Global', async () => {
+    const writing = makeProject({ name: 'Writing team' })
+    server.use(...overviewHandlers(), ...projectBackend({ projects: [defaultProject, makeProject({ name: 'model-access' }), writing] }).handlers)
+    const user = userEvent.setup()
+    const { router } = renderRoutes(routes, defaultAgentsPath)
+    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: test-project' }))
+    const filter = await screen.findByRole('searchbox', { name: 'Filter projects by name' })
+
+    // Typing a query with no matching project or Global match does not jump to Global on Enter
+    await user.type(filter, 'zzz-no-match')
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('listbox', { name: 'Scopes' })).toBeInTheDocument()
+
+    // Filtering to a matching project selects that project on Enter
+    await user.clear(filter)
+    await user.type(filter, 'Writ')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'Writing team' })}`))
+    expect(router.state.location.pathname).toBe('/')
+    expect(window.localStorage.getItem('loop-now.lastScope')).toBe(writing.id)
   })
 
   it('project list rows, nav items, group headings and scope switcher rows stay on one line with truncation and tooltips', async () => {
@@ -251,14 +380,14 @@ describe('sidebar and page structure', () => {
 
     const projectsList = await within(sidebar()).findByRole('list', { name: 'Projects' })
     const projectRow = await within(projectsList).findByRole('link', { name: longProject.name })
-    expect(projectRow).toHaveClass('h-9')
+    expect(projectRow).toHaveClass('h-8')
     expect(projectRow).not.toHaveClass('flex-wrap')
     const projectLabel = within(projectRow).getByText(longProject.name)
     expect(projectLabel).toHaveClass('min-w-0', 'flex-1', 'truncate')
     expect(projectLabel).toHaveAttribute('title', longProject.name)
 
     const globalEntry = within(sidebar()).getByRole('link', { name: 'External identities' })
-    expect(globalEntry).toHaveClass('h-[34px]')
+    expect(globalEntry).toHaveClass('h-[30px]')
     expect(within(globalEntry).getByText('External identities')).toHaveClass('min-w-0', 'flex-1', 'truncate')
     expect(within(globalEntry).getByText('External identities')).toHaveAttribute('title', 'External identities')
 
@@ -267,7 +396,7 @@ describe('sidebar and page structure', () => {
     expect(within(sidebar()).getByRole('button', { name: 'New Agent' })).toHaveClass('shrink-0')
 
     const switcher = scopeSwitcher('Global')
-    expect(switcher).toHaveClass('h-12')
+    expect(switcher).toHaveClass('h-8')
     await user.click(switcher)
     const option = within(await screen.findByRole('listbox', { name: 'Scopes' })).getByRole('option', { name: new RegExp(longProject.name) })
     expect(option).toHaveClass('h-[38px]')
@@ -447,7 +576,10 @@ describe('global settings page', () => {
       ),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     // The names in the test data differ from the row labels, so the assertions are scoped to the value that belongs to each label.
     await waitFor(() => expect(screen.getByText('Default organization').nextElementSibling).toHaveTextContent('test-org'))
     expect(screen.getByText('Default project').nextElementSibling).toHaveTextContent('test-project')
@@ -460,14 +592,17 @@ describe('global settings page', () => {
     expect(within(gh).getByText('checksum mismatch')).toBeInTheDocument()
     const lark = screen.getByRole('region', { name: 'lark-cli' })
     expect(within(lark).getByRole('note')).toHaveTextContent('system keychain')
-    // The sidebar has the scope switcher and search, so "no editing actions"
-    // (in the test title) means the parts of the page body outside the folder.
-    expect(within(page).getByRole('region', { name: 'Global folder' })).toBeInTheDocument()
-    const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    // The runtime status “Check again” button only reads again; it does not modify the server. “Add command” only opens the dialog
-    // for a local ACP command (the runtimes section's own editing, not the server information).
-    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['Check again', 'Add command'])
-    expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
+    // Server & Diagnostics is read-only: no editing buttons or text inputs in the main body.
+    expect(within(page).queryAllByRole('button')).toEqual([])
+    expect(within(page).queryAllByRole('textbox')).toEqual([])
+
+    // Global folder lives under Workspace & Local Mode -> Global Folder and keeps its file editing actions.
+    await user.click(within(tabs).getByRole('link', { name: 'Workspace & Local Mode' }))
+    const workspaceViews = await within(page).findByRole('radiogroup', { name: 'Workspace & Local Mode view' })
+    await user.click(within(workspaceViews).getByRole('radio', { name: 'Global Folder' }))
+    const folder = await within(page).findByRole('region', { name: 'Global folder' })
+    expect(folder.querySelector('[data-file-manager]')).not.toBeNull()
+    expect(within(folder).getByRole('button', { name: 'New file' })).toBeInTheDocument()
   })
   it('the server section shows the version, taken from the Loop-Now-Version header of the server response', async () => {
     server.use(
@@ -476,7 +611,10 @@ describe('global settings page', () => {
       ),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     await waitFor(() => expect(screen.getByText('Version', { selector: 'dt' }).nextElementSibling).toHaveTextContent('dev-d6eed7b50c04'))
   })
 
@@ -485,7 +623,10 @@ describe('global settings page', () => {
       http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 300 << 20, events: 1 << 20 }, walWarning: true } })),
       ...baseHandlers([]),
     )
+    const user = userEvent.setup()
     renderRoutes(routes, '/settings')
+    const tabs = await screen.findByRole('navigation', { name: 'Global settings sections' })
+    await user.click(within(tabs).getByRole('link', { name: 'Server & Diagnostics' }))
     const page = screen.getByRole('main')
     expect(await within(page).findByText('Database: OK')).toBeInTheDocument()
     expect(within(page).getByText(/^The database log file is very large/).closest('[role="note"]')).toHaveTextContent('The service is still available and will tidy up on its own.')

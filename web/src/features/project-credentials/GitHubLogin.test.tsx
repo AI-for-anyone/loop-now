@@ -132,7 +132,9 @@ describe('GitHub accounts page and the existing PAT form', () => {
     accountsHandlers(() => accounts)
     server.use(http.post<{ projectId: string }, Schemas['CLIAuthStart']>(apiUrl('/projects/:projectId/cli-auth/operations'), async ({ request }) => { const body = await request.json(); accounts = [next]; return HttpResponse.json({ operation: githubOperation('succeeded', body.operationId, { targetAccountId: old.id, targetRevision: old.revision }), account: next }, { status: 202 }) }),
       http.get(apiUrl('/projects/:projectId/cli-auth/operations/:operationId'), ({ params }) => HttpResponse.json({ operation: githubOperation('succeeded', String(params.operationId), { targetAccountId: old.id, targetRevision: old.revision }), account: next })))
-    renderAccounts(); await user.click(await screen.findByRole('button', { name: copy.relogin })); await screen.findByText('@verified-new-user')
+    renderAccounts()
+    await user.click(await screen.findByRole('button', { name: 'Re-login' }))
+    await user.click(await screen.findByRole('button', { name: copy.relogin })); await screen.findByText('@verified-new-user')
     expect(screen.getByRole('heading', { name: 'Kept note' })).toBeInTheDocument(); expect(screen.queryByText('@old-user')).toBeNull(); expect(screen.getByText('9007199254740993')).toBeInTheDocument()
     expect(screen.getByText(scopes === null ? copy.unknownScopes : copy.emptyScopes)).toBeInTheDocument(); expect(screen.queryByRole('link', { name: copy.open })).toBeNull()
   })
@@ -142,7 +144,7 @@ describe('GitHub accounts page and the existing PAT form', () => {
     accountsHandlers(() => accounts)
     server.use(http.patch(apiUrl('/projects/:projectId/credential-accounts/:accountId'), () => { puts++; return HttpResponse.json({ error: { code: 'precondition_failed', message: 'fixture conflict' } }, { status: 412 }) }))
     const env = renderAccounts(); const row = (await screen.findByRole('heading', { name: 'Kept note' })).closest('li')!
-    expect(await screen.findAllByRole('button', { name: copy.relogin })).toHaveLength(2)
+    expect(await screen.findAllByRole('button', { name: 'Re-login' })).toHaveLength(2)
     await user.click(within(row).getByRole('button', { name: 'Rename' })); await user.clear(screen.getByLabelText('Account name')); await user.type(screen.getByLabelText('Account name'), 'Local note draft'); await user.click(screen.getByRole('button', { name: 'Save' })); await waitFor(() => expect(puts).toBe(1)); expect(screen.getByLabelText('Account name')).toHaveValue('Local note draft')
     accounts = [projectAccount({ purpose: 'cli', provider: null, cli: 'gh', authMethod: null, githubIdentity: null, revision: 3 })]; await act(() => env.client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))
     expect(await screen.findByText(copy.identityMissing)).toBeInTheDocument(); expect(screen.queryAllByText('@verified-new-user')).toHaveLength(0); expect(screen.getByLabelText('Account name')).toHaveValue('Local note draft')

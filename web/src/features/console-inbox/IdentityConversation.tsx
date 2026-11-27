@@ -34,9 +34,9 @@ export function IdentityConversation({ identity }: { identity: Schemas['External
   const deleted = identity.deletedAt !== null
   const last = conversation.messages.at(-1)
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
+    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3.5">
       <div className="flex flex-col gap-1">
-        <h3 id={titleId} className="text-[17px] leading-[1.3] font-black">{text.conversation}</h3>
+        <h3 id={titleId} className="text-[15px] leading-[1.3] font-semibold">{text.conversation}</h3>
         <p className="text-[13px] text-ink-500">{text.conversationIntro}</p>
       </div>
       <ErrorAlert error={conversation.error} />
@@ -79,7 +79,7 @@ function ConversationItem({ message }: { message: Message }) {
         {unread && <UnreadDot />}
         {message.cancelledAt && <Badge className="shadow-none">{t.inbox.cancelled}</Badge>}
       </span>
-      <div className="min-w-0 rounded-[4px_20px_20px_20px] bg-white px-5 py-3.5 text-[15.5px] leading-[1.8] shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+      <div className="min-w-0 rounded-[4px_20px_20px_20px] border border-hairline bg-surface-control px-5 py-3.5 text-[15.5px] leading-[1.8] shadow-surface">
         <Markdown text={message.text} />
         <MessageImages images={message.images} />
         {message.notice && <InboxNotice notice={message.notice} />}
@@ -110,7 +110,7 @@ function ReplyBox({ last, name }: { last: Message; name: string }) {
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-[13px] font-bold">{t.inbox.replyTo(name)}</label>
       <Textarea id={id} rows={3} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={localError ? true : undefined} />
-      {localError && <p role="alert" className="text-[13px] font-black text-red-text">{localError}</p>}
+      {localError && <p role="alert" className="text-[13px] font-semibold text-red-text">{localError}</p>}
       <ErrorAlert error={reply.error} />
       <Button className="self-end" disabled={reply.isPending} onClick={() => void submit()}>
         <ReplyIcon />
@@ -136,11 +136,11 @@ function NewMessageBox({ identity, onClose }: { identity: Schemas['ExternalIdent
     if (message) onClose()
   }
   return (
-    <div className="flex flex-col gap-2 rounded-card bg-white p-4">
+    <div className="flex flex-col gap-2 rounded-card border border-hairline bg-surface-control p-4">
       <label htmlFor={id} className="text-[13px] font-bold">{text.newMessageLabel(identity.name)}</label>
       <p className="text-xs text-ink-500">{text.newMessageHint}</p>
       <Textarea id={id} rows={3} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={localError ? true : undefined} />
-      {localError && <p role="alert" className="text-[13px] font-black text-red-text">{localError}</p>}
+      {localError && <p role="alert" className="text-[13px] font-semibold text-red-text">{localError}</p>}
       <ErrorAlert error={send.error} />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>{text.cancel}</Button>

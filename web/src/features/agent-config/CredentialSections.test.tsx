@@ -9,6 +9,13 @@ import { ghTemplate, larkTemplate, renderConfig } from '@/test/config'
 const region = (name: string) => screen.getByRole('region', { name })
 const makeAgent = (overrides: Partial<Schemas['Agent']> = {}) => makeBaseAgent({ scope: 'platform', projectId: null, ...overrides })
 
+const expandCli = async (user: Awaited<ReturnType<typeof renderConfig>>['user'], cli: string) => {
+  const item = within(region('Available CLIs')).getByRole('listitem', { name: cli })
+  const toggle = within(item).getByRole('button', { name: new RegExp(`^${cli}\\b`) })
+  if (toggle.getAttribute('aria-expanded') !== 'true') await user.click(toggle)
+  return item
+}
+
 describe('CLI credential validation', () => {
   it('server field errors show next to the matching input by fields.<field name>; the rest are all listed', async () => {
     const agent = makeAgent({ clis: [{ name: 'lark-cli', hasTemplate: true, credential: null }] })
@@ -28,7 +35,7 @@ describe('CLI credential validation', () => {
         ),
       ],
     })
-    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'lark-cli' })
+    const item = await expandCli(user, 'lark-cli')
     await waitFor(() => expect(within(item).getByRole('button', { name: 'Enter credential' })).toBeEnabled())
     await user.click(within(item).getByRole('button', { name: 'Enter credential' }))
     const dialog = await screen.findByRole('dialog')
@@ -45,7 +52,7 @@ describe('CLI credential validation', () => {
 
 describe('Entering credentials when CLI templates are unavailable', () => {
   it('while templates load, the button is disabled and the reason is shown', async () => {
-    await renderConfig({
+    const { user } = await renderConfig({
       agent: makeAgent({ clis: [{ name: 'gh', hasTemplate: true, credential: null }] }),
       handlers: [
         http.get(apiUrl('/cli-templates'), async () => {
@@ -54,7 +61,7 @@ describe('Entering credentials when CLI templates are unavailable', () => {
         }),
       ],
     })
-    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })
+    const item = await expandCli(user, 'gh')
     expect(within(item).getByRole('button', { name: 'Enter credential' })).toBeDisabled()
     expect(within(item).getByText('Loading CLI templates; credentials can be entered once they load.')).toBeInTheDocument()
   })
@@ -72,7 +79,7 @@ describe('Entering credentials when CLI templates are unavailable', () => {
     const clis = region('Available CLIs')
     expect(await within(clis).findByText('Couldn\'t load CLI templates.')).toBeInTheDocument()
     expect(within(clis).getByRole('alert')).toHaveTextContent('Internal server error')
-    const item = within(clis).getByRole('listitem', { name: 'gh' })
+    const item = await expandCli(user, 'gh')
     expect(within(item).getByText('CLI templates failed to load, so credentials can\'t be entered right now.')).toBeInTheDocument()
     const button = within(item).getByRole('button', { name: 'Enter credential' })
     expect(button).toBeDisabled()

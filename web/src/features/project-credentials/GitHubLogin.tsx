@@ -118,12 +118,12 @@ function Login({ projectId, account, id, locate }: { projectId: string; account?
     catch { if (mounted.current && latestId.current === operationId) setCopyError(true) }
   }
   const statusText = starting ? copy.opening : op?.status === 'pending' ? copy.opening : op?.status === 'awaiting_authorization' ? copy.waiting : op?.status === 'succeeded' ? copy.success : op?.status === 'failed' ? copy.failed : op?.status === 'cancelled' ? copy.cancelled : op?.status === 'expired' ? copy.expired : null
-  return <section aria-label={account ? copy.target(account.name) : copy.newTarget} className="grid min-w-0 gap-3 rounded-card bg-tint-blue p-4">
-    <p className="font-bold [overflow-wrap:anywhere]">{account ? copy.target(account.name) : copy.newTarget}</p>
+  return <section aria-label={account ? copy.target(account.name) : copy.newTarget} className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-subtle p-4">
+    <p className="font-semibold [overflow-wrap:anywhere]">{account ? copy.target(account.name) : copy.newTarget}</p>
     <p className="text-[13px]">{copy.app}</p><p className="text-[13px]">{copy.scopes}</p><p className="text-[13px]">{copy.permission}</p>
     <p className="text-[13px]">{account ? copy.replaceIdentity : copy.newName}</p>
     <Button type="button" className="justify-self-start" disabled={!canStart} onClick={begin}>{op && !active ? copy.newAttempt : account ? copy.relogin : copy.login}</Button>
-    {statusText && <p role="status" className="font-bold">{statusText}</p>}
+    {statusText && <p role="status" className="font-semibold">{statusText}</p>}
     {op && !active && op.status !== 'succeeded' && account && <p className="text-[13px]">{copy.retained}</p>}
     {id && !validId && <p role="alert">{copy.invalidLocator}</p>}
     {unresolved && validId && !starting && !notFound && <p role="status" className="text-[13px]">{copy.unknown}</p>}
@@ -132,8 +132,8 @@ function Login({ projectId, account, id, locate }: { projectId: string; account?
     {unavailable && <p role="status">{copy.unsupported}</p>}
     {op && !mismatch && <><p className="text-[13px] [overflow-wrap:anywhere]">{copy.deadline}{op.expiresAt}</p>{active && <p role="status" className="text-[13px]">{expiredLocally ? copy.deadlineReached : copy.remaining(Math.max(0, Math.ceil((Date.parse(op.expiresAt) - now) / 1000)))}</p>}</>}
     {rejected && <p role="alert">{copy.rejected}</p>}
-    {canAuthorize && op?.cli === 'gh' && op.status === 'awaiting_authorization' && <div className="grid min-w-0 gap-3 rounded-card bg-white p-4">
-      <p className="text-[13px]">{copy.steps}</p><p className="text-sm font-bold">{copy.code}</p><code tabIndex={0} className="select-all font-mono text-[24px] tracking-widest [overflow-wrap:anywhere]">{op.userCode}</code>
+    {canAuthorize && op?.cli === 'gh' && op.status === 'awaiting_authorization' && <div className="grid min-w-0 gap-3 rounded-card border border-hairline bg-surface-control p-4">
+      <p className="text-[13px]">{copy.steps}</p><p className="text-sm font-semibold">{copy.code}</p><code tabIndex={0} className="select-all font-mono text-[24px] tracking-widest [overflow-wrap:anywhere]">{op.userCode}</code>
       <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="sm" onClick={() => void copyCode()}>{copy.copy}</Button><Button asChild size="sm"><a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">{copy.open}</a></Button></div>
       {copiedFor === op.id && <p role="status" className="text-[13px]">{copy.copied}</p>}{copyError && <p role="alert" className="text-[13px]">{copy.copyFailed}</p>}
     </div>}

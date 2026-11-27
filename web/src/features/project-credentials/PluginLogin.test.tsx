@@ -195,7 +195,8 @@ describe('Plugin providers on the accounts page', () => {
     renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectAccounts projectId={defaultProject.id} purpose="model" /></DraftNavigationGuard> }], '/')
     const row = (await screen.findByRole('heading', { name: 'My Grok' })).closest('li')!
     await waitFor(() => expect(row).toHaveTextContent('Grok CLIgrok-cli'))
-    await user.click(within(row).getByRole('button', { name: 'Log in again' }))
+    await user.click(within(row).getByRole('button', { name: 'Re-login' }))
+    await user.click(await within(row).findByRole('button', { name: 'Log in again' }))
     await waitFor(() => expect(starts).toEqual([{ provider: 'grok-cli', accountId: account.id, expectedRevision: 4 }]))
     await user.click(screen.getByRole('button', { name: 'Add model account · provider' }))
     await user.click(await screen.findByRole('option', { name: /Grok CLI/ }))

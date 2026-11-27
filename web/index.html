@@ -5,6 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <title>Loop Now 控制台</title>
+    <script>
+      // Apply persisted skin and resolved color mode before CSS paints to prevent a flash of the wrong theme.
+      ;(function () {
+        try {
+          var q = new URLSearchParams(window.location.search)
+          var qs = q.get('skin')
+          var qt = q.get('theme')
+          var ss = window.localStorage.getItem('loop-now.skin')
+          var st = window.localStorage.getItem('loop-now.theme')
+          var skin = qs === 'mono' || qs === 'plate' ? qs : ss === 'mono' || ss === 'plate' ? ss : 'mono'
+          var mode = qt === 'system' || qt === 'light' || qt === 'dark' ? qt : st === 'system' || st === 'light' || st === 'dark' ? st : 'system'
+          var sysDark = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          var resolved = skin === 'plate' ? 'light' : mode === 'system' ? (sysDark ? 'dark' : 'light') : mode
+          var root = document.documentElement
+          root.dataset.skin = skin
+          root.dataset.theme = resolved
+          root.classList.toggle('dark', resolved === 'dark')
+          root.style.colorScheme = resolved
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

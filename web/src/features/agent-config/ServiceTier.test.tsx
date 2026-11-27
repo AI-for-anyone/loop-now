@@ -13,6 +13,11 @@ const catalog: Schemas['Model'][] = ['gpt-a', 'gpt-b'].map(id => ({ id, name: id
 const basic = () => screen.getByRole('region', { name: 'Basics' })
 const picker = () => within(basic()).getByLabelText('Codex speed')
 const save = () => within(basic()).getByRole('button', { name: 'Save' })
+const openRunner = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
+  const trigger = within(basic()).getByRole('button', { name: /^Runs on/ })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+  return screen.findByRole('dialog', { name: 'Runs on' })
+}
 async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
   let current = makeAgent({ model: { provider: 'openai-codex', modelId: 'gpt-a' }, serviceTier: tier, thinkingLevel: 'high' })
   const agent = current, writes: Schemas['AgentUpdate'][] = []
@@ -26,7 +31,7 @@ async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
       current = { ...current, ...body }; return HttpResponse.json(current)
     }),
   ] })
-  await waitFor(() => expect(within(thinkingPicker(basic())).getAllByRole('radio')[0]).toBeEnabled())
+  await waitFor(() => expect(within(basic()).getByRole('button', { name: /^Runs on/ })).toHaveTextContent('High'))
   return { ...view, writes, changeServer: (tier: Schemas['CodexServiceTier']) => { current = { ...current, serviceTier: tier } } }
 }
 it('an older response without a tier means Standard and only three tiers are listed; speed and thinking level are independent, speed is saved on its own', async () => {
@@ -34,7 +39,10 @@ it('an older response without a tier means Standard and only three tiers are lis
   expect(picker()).toHaveDisplayValue('Standard')
   expect(within(picker()).getAllByRole('option').map(option => option.textContent)).toEqual(['Standard', 'Fast', 'Ultrafast'])
   await user.selectOptions(picker(), 'priority')
-  expect(thinkingChoice(basic())).toBe('High')
+  const runner = await openRunner(user)
+  await waitFor(() => expect(within(thinkingPicker(runner)).getAllByRole('radio')[0]).toBeEnabled())
+  expect(thinkingChoice(runner)).toBe('High')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
   await user.click(save()); await waitFor(() => expect(writes).toEqual([{ serviceTier: 'priority' }]))
   await waitFor(() => expect(save()).toBeDisabled())
 })
@@ -52,7 +60,9 @@ it('going back to Standard sends null, a later name-only change does not carry t
 it('switching to another provider hides and clears the speed while keeping the name draft; the Prompt is not touched', async () => {
   const { user, writes } = await setup('priority')
   await user.type(within(basic()).getByLabelText('Display name'), '2')
-  await chooseModel(user, basic(), 'claude-sonnet-5-5', { provider: 'anthropic' })
+  const runner = await openRunner(user)
+  await chooseModel(user, runner, 'claude-sonnet-5-5', { provider: 'anthropic' })
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
   expect(within(basic()).queryByLabelText('Codex speed')).toBeNull()
   expect(within(basic()).getByLabelText('Display name')).toHaveValue('dev-helper2')
   await user.click(save())
@@ -60,9 +70,11 @@ it('switching to another provider hides and clears the speed while keeping the n
 })
 it('switching models within the same provider keeps the speed, and the thinking level the new model also has', async () => {
   const { user, writes } = await setup('ultrafast')
-  await chooseModel(user, basic(), 'gpt-b')
+  const runner = await openRunner(user)
+  await chooseModel(user, runner, 'gpt-b')
+  expect(thinkingChoice(runner)).toBe('High')
+  await user.click(within(runner).getByRole('button', { name: 'Done' }))
   expect(picker()).toHaveDisplayValue('Ultrafast')
-  expect(thinkingChoice(basic())).toBe('High')
   await user.click(save())
   await waitFor(() => expect(writes).toEqual([{ model: { provider: 'openai-codex', modelId: 'gpt-b' } }]))
 })

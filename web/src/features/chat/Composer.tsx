@@ -1,6 +1,6 @@
-import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowUpIcon, TriangleAlertIcon } from 'lucide-react'
+import { ArrowUpIcon, TriangleAlertIcon, ZapIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -13,7 +13,8 @@ import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
-import { barKbdClass, mac } from './composer-style'
+import { mac } from './composer-style'
+import { clearChatDraft, getChatDraft, setChatDraftImages, setChatDraftText } from './draft-store'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import { copyText } from '@/lib/clipboard'
@@ -63,18 +64,16 @@ interface ComposerProps {
   onSent: (result: Schemas['SendMessageResult']) => void
   // When a message starting with / is claimed by the platform or a plugin: the result and the original command, which the chat page
   // shows as one line; it doesn't count as a sent message.
-  // When the /copy content couldn't be written to the clipboard, copyFailed is passed along and the chat page offers a way to copy it
-  // by hand on that line.
   onCommand?: (result: Schemas['ConsoleCommandResult'], command: string, outcome?: { copyFailed: boolean }) => void
   // Queued messages attached to the top of the input box, provided by the chat page.
   queue?: ReactNode
-  // The line below the input area: the busy hint on the left (followed by the key hints) and the live connection status on the right,
-  // both provided by the chat page.
+  // Busy status accessible region, provided by the chat page.
   status?: ReactNode
+  // Degraded connection indicator, provided by the chat page.
   connection?: ReactNode
   // Provided by the chat page when a reply is in progress.
   stop?: StopControl
-  // Who runs the Agent now (the runner chip), at the start of the line below the input box.
+  // Who runs the Agent now (the runner chip), at the start of the composer toolbar.
   runner?: ReactNode
   // The running background tasks (a shell mark with the count), right after the runner chip.
   background?: ReactNode
@@ -92,15 +91,42 @@ type CommandList = Schemas['AgentCommandList']
 // Names of the built-in platform commands listed by the server; null while the list hasn't been fetched yet.
 const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
 
-// The border belongs to the outer input box container; the text area grows with its content and scrolls on its own past the maximum.
+// The border belongs to the unified floating composer card; the text area grows with its content and scrolls past the maximum.
 const inputClass =
-  'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
+  'field-sizing-fixed min-h-[42px] max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-[14px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
 export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, imagesRefused = false, onSent, onCommand, queue, status, connection, stop, reply, runner, background, notice, stopAlso = 0 }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
-  const [text, setText] = useState('')
-  const [images, setImages] = useState<ImageDraft[]>([]), [submitting, setSubmitting] = useState(false), [uploads, setUploads] = useState<ImageUploads>({}), [imageError, setImageError] = useState<unknown>(null)
+  const [draftState, setDraftState] = useState(() => {
+    const initial = getChatDraft(agentId)
+    return { agentId, text: initial.text, images: initial.images }
+  })
+  if (draftState.agentId !== agentId) {
+    const next = getChatDraft(agentId)
+    setDraftState({ agentId, text: next.text, images: next.images })
+  }
+  const text = draftState.text
+  const images = draftState.images
+  const setText = useCallback(
+    (next: string | ((current: string) => string)) => {
+      const current = getChatDraft(agentId).text
+      const value = typeof next === 'function' ? next(current) : next
+      setChatDraftText(agentId, value)
+      setDraftState((prev) => (prev.agentId === agentId && prev.text !== value ? { ...prev, text: value } : prev))
+    },
+    [agentId],
+  )
+  const setImages = useCallback(
+    (next: ImageDraft[] | ((current: ImageDraft[]) => ImageDraft[])) => {
+      const current = getChatDraft(agentId).images
+      const value = typeof next === 'function' ? next(current) : next
+      setChatDraftImages(agentId, value)
+      setDraftState((prev) => (prev.agentId === agentId && prev.images !== value ? { ...prev, images: value } : prev))
+    },
+    [agentId],
+  )
+  const [submitting, setSubmitting] = useState(false), [uploads, setUploads] = useState<ImageUploads>({}), [imageError, setImageError] = useState<unknown>(null)
   const busyRequest = useRef(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const pending = send.isPending || submitting
@@ -113,8 +139,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const replyId = reply?.message.id
   // The "/" menu: opens when the input starts with "/" and the caret is still in the first word, and filters commands by that word;
   // after Esc closes it, it reopens once that word changes. The menu isn't shown while answering a question.
-  // Commands come only from the server's list (GET /agents/{id}/commands): first the built-in platform commands, each with whether it
-  // can be used right now; then the Pi commands.
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
@@ -122,7 +146,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuRequested)
-  // The runtime the command list states, as the runtime definitions describe it.
   const runtimes = useRuntimeLookup()
   const listRuntime = runtimes.get(commands.data?.runtime)
   const listError = commands.error ?? (commands.data && !listRuntime ? runtimes.error : null)
@@ -132,10 +155,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   // "/" text with images is an ordinary message, so platform commands aren't suggested.
   const pool = images.length > 0 ? listed.filter((command) => command.source !== 'platform') : listed
   const matched = matchCommands(pool, token ?? '/')
-  // Commands that can't be used right now can't be chosen; they are grayed out at the bottom of the menu with the reason.
   const selectable = matched.filter((command) => command.available)
   const blocked = matched.filter((command) => !command.available)
-  // When the session is missing, open the menu only if there is a /resume to suggest, or the list can't be read (the reason must be shown).
   const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || images.length === 0)
   const menuStatus = matched.length > 0
     ? null
@@ -143,9 +164,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       ? t.chat.commands.failed(describeError(listError))
       : !commands.data || !listRuntime
         ? t.chat.commands.loading
-        // The list states the runtime: an Agent whose runtime lists no commands of its own (Claude Code) has no Pi commands, no matter
-        // how many times it runs; only when the runtime does and the Agent has never started do we say “运行一次后才有” (The command
-        // list appears after the Agent has run once).
         : !listRuntime.capabilities.nativeCommands
           ? t.chat.commands.noPi(listRuntime.name)
           : commands.data.capturedAt === null
@@ -188,12 +206,10 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       if (replyId || busyRequest.current) return
       setResumeDraft(text)
       setText(`/resume ${sessionId}`)
-      // This isn't typing a command: the caret counts as being at the end, so the command menu doesn't open (the menu only looks at the
-      // first word, so dismissing it with the whole sentence wouldn't close it).
       setCaret(Number.MAX_SAFE_INTEGER)
       setConfirmResume(true)
     },
-  }), [replyId, text])
+  }), [replyId, setImages, setText, text])
 
   // After completing a command, put the caret after the whitespace following the command.
   useLayoutEffect(() => {
@@ -235,22 +251,17 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       await answerQuestion(reply, whenBusy)
       return
     }
+    const sentAgentId = agentId
     // A resume confirmed from the list is always a platform command; images already attached stay in the input box and are neither
     // uploaded nor sent with the command.
     const confirmedResume = confirmed && confirmResume && /^\/resume\s+\S/.test(text.trim())
-    // Whether this text is a built-in platform command is decided only by the command names the server lists; if the list hasn't been
-    // fetched yet, fetch it now.
     const word = images.length === 0 ? /^\/(\S+)/.exec(text.trim())?.[1] : undefined
     let names = platformNames(commands.data)
     if (word !== undefined && names === null) {
-      // While the list is being fetched the send button can't be clicked, showing that work is in progress; no retry: if it can't be
-      // fetched, take the fallback below.
       busyRequest.current = true; setSubmitting(true)
-      try { names = platformNames(await client.ensureQueryData({ ...agentCommandsQuery(agentId), retry: false })) } catch { /* List unavailable: see below. */ } finally { busyRequest.current = false; setSubmitting(false) }
+      try { names = platformNames(await client.ensureQueryData({ ...agentCommandsQuery(sentAgentId), retry: false })) } catch { /* List unavailable: see below. */ } finally { busyRequest.current = false; setSubmitting(false) }
     }
     const platform = confirmedResume || (word !== undefined && names?.has(word) === true)
-    // Without the list we don't know which ones are platform commands, but /new and /resume <id> still ask for confirmation first:
-    // asking once more does no harm, while skipping the confirmation would restart or switch the session outright.
     const guarded = platform || (word !== undefined && names === null)
     if (!confirmed && guarded && /^\/new(?:\s|$)/.test(text.trim())) {
       setConfirmNew(true)
@@ -268,10 +279,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     const sent = text, sentImages = confirmedResume ? [] : [...images]
     busyRequest.current = true; setSubmitting(true)
     try {
-      const refs = await uploadMessageImages({ kind: 'agent', agentId }, sentImages, setUploads)
+      const refs = await uploadMessageImages({ kind: 'agent', agentId: sentAgentId }, sentImages, setUploads)
       const input = { text: sent, ...(refs.length ? { imageIds: refs.map(ref => ref.id) } : {}) }
-      // An ordinary message is resent the chosen way when the idle check turns out to be stale; a platform command just reports busy and
-      // is not turned into a queued message.
       const result = platform
         ? await send.mutateAsync(input)
         : await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
@@ -279,43 +288,49 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           return send.mutateAsync({ ...input, whenBusy })
         })
       if (isCommandResult(result)) {
-        // /copy: a network round trip has already happened by now, so Safari no longer counts this as part of the key gesture and may
-        // refuse the clipboard write; when the console is opened at an http LAN address, there is no navigator.clipboard at all.
-        // Failing to write doesn't count as the command failing: the content goes to the chat page as usual, and that line offers a way
-        // to copy it by hand.
         const copyFailed = result.source === 'platform' && result.copyText != null && !(await copyText(result.copyText))
-        if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
+        if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(sentAgentId, result.exportFormat)
         onCommand?.(result, sent, copyFailed ? { copyFailed } : undefined)
-        // When the command changed the session (/new, /resume), the server pushes session.updated and the command list is reread then,
-        // so it isn't reread here.
       } else {
-        upsertMessage(client, agentId, result.message)
+        upsertMessage(client, sentAgentId, result.message)
         onSent(result)
       }
+      // Update only the sending Agent's draft so switching Agents while a send is in flight never clears the new Agent's draft.
+      const latest = getChatDraft(sentAgentId)
+      const nextImages = latest.images.filter((image) => !sentImages.some((sentImage) => sentImage.id === image.id))
       if (confirmedResume && resumeDraft !== null) {
-        setText(resumeDraft)
+        setChatDraftText(sentAgentId, resumeDraft)
+        setChatDraftImages(sentAgentId, nextImages)
+        setDraftState((prev) => (prev.agentId === sentAgentId ? { ...prev, text: resumeDraft, images: nextImages } : prev))
         setResumeDraft(null)
       } else {
-        // Remove the part that was sent and keep only text typed during the send; if the sent part was changed during the send, keep
-        // everything.
-        setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+        const nextText = latest.text.startsWith(sent) ? latest.text.slice(sent.length) : latest.text
+        if (nextText === '' && nextImages.length === 0) {
+          clearChatDraft(sentAgentId)
+        } else {
+          setChatDraftText(sentAgentId, nextText)
+          setChatDraftImages(sentAgentId, nextImages)
+        }
+        setDraftState((prev) => (prev.agentId === sentAgentId ? { ...prev, text: nextText, images: nextImages } : prev))
       }
-      setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
     } catch (error) {
       setImageError(error)
     } finally { busyRequest.current = false; setSubmitting(false) }
   }
 
-  // Answering a question: text only; when the Agent is busy it is likewise sent as queued or as an interrupt. Whether it is recorded as
-  // the answer depends on the response; when it is saved as an ordinary note, a notice below says so.
+  // Answering a question: text only; when the Agent is busy it is likewise sent as queued or as an interrupt.
   const answerQuestion = async (target: QuestionReply, whenBusy: Schemas['WhenBusy']) => {
     if (images.length) { setLocalError(t.consoleInbox.replyNoImages); return }
     if (target.maxBytes !== undefined && encoder.encode(text).length > target.maxBytes) { setLocalError(t.chat.tooLong(target.maxBytes)); return }
+    const sentAgentId = agentId
     const sent = text
     busyRequest.current = true; setSubmitting(true)
     try {
       await answer.submit(target.message, { text: sent, whenBusy: busy ? whenBusy : 'queue' })
-      setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+      const latest = getChatDraft(sentAgentId)
+      const nextText = latest.text.startsWith(sent) ? latest.text.slice(sent.length) : latest.text
+      setChatDraftText(sentAgentId, nextText)
+      setDraftState((prev) => (prev.agentId === sentAgentId ? { ...prev, text: nextText } : prev))
       target.onDone()
     } catch (error) {
       setImageError(error)
@@ -331,8 +346,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         setDismissed(token)
         return
       }
-      // When the menu has commands, the up/down keys move between them and Enter or Tab completes the selected command (without
-      // sending); when it has none, send as usual.
       if (menuItems.length > 0) {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault()
@@ -354,61 +367,136 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   }
 
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
-  const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
+  const hasDraft = text.trim() !== '' || images.length > 0
+  const showStop = busy && stop !== undefined
+  const showInterrupt = busy && !submitDisabled && hasDraft && !reply
+  const showSend = !showStop || hasDraft || reply !== undefined
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : stopAlso > 0 ? t.background.stopWithTasks(stopAlso) : t.chat.stop
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
-  // Three things in a row: the round add-image button on the left, the input box in the middle, and the fluorescent pink round send
-  // stamp on the right (it turns into a navy stop button when busy and the input box is empty).
-  // The input box has a light paper fill and a navy border, and is a pill when it has one line; the reply bar and images waiting to be
-  // sent sit inside the same border, above the text line.
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu runtimeName={listRuntime?.name} open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
-    {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
-    <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
-      {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
-      {strip}
-      {editor}
-    </div>
-    {showStop ? (
-      <Button type="button" size="icon" className="mr-[3px] size-11 border-2 border-ink bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
-    ) : (
-      <Button type="button" variant="interrupt" size="icon" className="mr-[3px] size-11 border-2 border-ink" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>
-    )}
-  </div></SlashCommandMenu>
+  // Unified floating composer card: upper region holds ReplyChip, attached image thumbnails and the borderless auto-sizing editor;
+  // integrated bottom toolbar holds image attach + RunnerChip + BackgroundTasksMark + busy status on the left,
+  // and degraded connection + Stop / Interrupt / Send on the right.
+  const input = (addButton?: ReactNode, strip?: ReactNode) => (
+    <SlashCommandMenu
+      runtimeName={listRuntime?.name}
+      open={menuOpen}
+      listId={listId}
+      optionId={optionId}
+      items={menuItems}
+      blocked={menuBlocked}
+      active={active}
+      status={menuStatus}
+      onActive={setActive}
+      onChoose={choose}
+      onDismiss={() => setDismissed(token)}
+    >
+      <div
+        data-chat-composer
+        data-chat-input
+        className="flex min-w-0 flex-col rounded-2xl border border-hairline-strong bg-surface-elevated shadow-surface transition-colors focus-within:border-riso-blue/50"
+      >
+        {(reply || strip) && (
+          <div className="flex min-w-0 flex-col gap-1.5 px-3 pt-2.5">
+            {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
+            {strip}
+          </div>
+        )}
+        {editor}
+        <div
+          data-chat-toolbar
+          className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1.5 px-2 pt-1 pb-2"
+        >
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            {addButton}
+            {addButton && runner && (
+              <span aria-hidden="true" className="mx-0.5 h-3.5 w-px shrink-0 bg-hairline-strong" />
+            )}
+            {runner}
+            {background}
+            {status}
+            {/* Warn before stopping or interrupting when the runtime's stop also terminates running background tasks. */}
+            {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {connection}
+            {showInterrupt && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-7 shrink-0 gap-1 rounded-full border border-hairline-strong bg-surface-subtle px-2.5 text-[11.5px] font-medium text-ink shadow-none hover:border-ink/30 hover:bg-surface-hover"
+                aria-label={t.chat.interruptSend}
+                title={t.chat.interruptSendTitle(mac)}
+                disabled={submitDisabled || pending}
+                onClick={() => void submit('interrupt')}
+              >
+                <ZapIcon aria-hidden="true" className="size-3 shrink-0 text-pink-text" strokeWidth={2.4} />
+                <span className="hidden sm:inline">{t.chat.interruptAction}</span>
+              </Button>
+            )}
+            {showSend && (
+              <Button
+                type="button"
+                variant="interrupt"
+                size="icon"
+                className="size-7 rounded-full border-0 bg-cta-bg text-cta-fg shadow-[0_1px_4px_rgb(0_102_219/0.30)] transition-[background-color,transform,box-shadow] hover:-translate-y-[0.5px] hover:bg-cta-hover active:scale-[0.94] disabled:translate-y-0 disabled:bg-ink/[0.08] disabled:text-ink/30 disabled:opacity-100 disabled:shadow-none"
+                aria-label={sendLabel}
+                title={busy ? t.chat.queueSendTitle : `${sendLabel} (${t.chat.barKeys.enter})`}
+                disabled={submitDisabled || pending}
+                onClick={() => void submit()}
+              >
+                <ArrowUpIcon aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
+              </Button>
+            )}
+            {showStop && (
+              <Button
+                type="button"
+                size="icon"
+                className="size-7 rounded-full border-0 bg-red text-white shadow-[0_1px_4px_rgb(220_38_38/0.30)] transition-[background-color,transform,box-shadow] hover:-translate-y-[0.5px] hover:bg-red/90 active:scale-[0.94]"
+                aria-label={stopLabel}
+                title={stopLabel}
+                disabled={stop.pending}
+                onClick={stop.onStop}
+              >
+                <StopMark className="size-2.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </SlashCommandMenu>
+  )
   return (
-    // The input area is a light yellow bar at the bottom of the sheet, with a navy line along its top edge. On wide screens the inner
-    // column matches the message column (24px left gutter, 24px + 40px turn ruler on the right, up to 1600px wide), and vertical padding
-    // tightens to leave more lines for the conversation.
-    <div data-chat-bar className="flex shrink-0 flex-col border-t-2 border-ink bg-tint-yellow px-3.5 pt-3.5 pb-3 nav:pt-2.5 nav:pb-2 nav:pr-[64px] nav:pl-6">
-      <div data-chat-bar-inner className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-2.5 nav:gap-1.5">
+    // Centered floating composer dock aligned with the 800px conversation stream.
+    <div data-chat-bar className="shrink-0 bg-surface-canvas px-4 pt-1 pb-3 sm:px-6">
+      <div data-chat-bar-inner className="mx-auto flex w-full max-w-[800px] min-w-0 flex-col gap-2">
         {localError && (
-          <p role="alert" className="text-[13px] font-black text-red-text">
+          <p role="alert" className="text-[13px] font-semibold text-red-text">
             {localError}
           </p>
         )}
         <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
         {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
         {notice}
-        {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
-            leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
+        {/* Queue tray docks cleanly on top of the composer card with no gap between them. */}
         <div className="flex min-w-0 flex-col">
-          {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
-          {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} refused={imagesRefused ? t.images.modelRefuses : null} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
-        </div>
-        {/* The line below: on the left who runs the Agent, the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
-            right the live connection status. On wide screens it lines up with the left edge of the input box. */}
-        <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
-            {runner}
-            {background}
-            {status}
-            {/* “只停止当前回复” (Stops only this reply) would be wrong when stopping also ends background tasks; the warning says it instead. */}
-            {busy ? <KeyHint stop={stop !== undefined && stopAlso === 0} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
-            {/* Said before the person stops or interrupts: on this runtime that ends the process, and the background tasks with it. */}
-            {busy && stopAlso > 0 && <StopAlsoWarning count={stopAlso} />}
-          </div>
-          {connection}
+          {queue && <div className="flex min-w-0 flex-col">{queue}</div>}
+          {imageLimits ? (
+            <ImagePicker
+              images={images}
+              onChange={setImages}
+              limits={imageLimits}
+              disabled={disabled || reply !== undefined}
+              refused={imagesRefused ? t.images.modelRefuses : null}
+              uploads={uploads}
+              addClassName="size-7 rounded-lg border-0 bg-transparent text-ink-500 shadow-none hover:bg-surface-hover hover:text-ink"
+            >
+              {input}
+            </ImagePicker>
+          ) : (
+            input()
+          )}
         </div>
       </div>
       <ConfirmDialog
@@ -438,23 +526,10 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   )
 }
 
-const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
-// Key hints below the input box when idle: Enter sends, Shift + Enter starts a new line.
-function IdleHint() {
-  return (
-    <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
-      <kbd className={barKbdClass}>{t.chat.barKeys.enter}</kbd>
-      <span>{t.chat.idleHint.send}</span>
-      <span aria-hidden="true">·</span>
-      <kbd className={barKbdClass}>{t.chat.barKeys.shiftEnter}</kbd>
-      <span>{t.chat.idleHint.newline}</span>
-    </p>
-  )
-}
+const kbdClass = 'rounded-stamp border border-hairline-strong bg-surface-control px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
 
 // Key hints below the input box: Enter queues, ⌘/Ctrl+Enter interrupts right away; when a reply is in progress, also explain the stop
-// button. The task node input box uses it too (with the default style and key labels);
-// the chat page's input area passes its own style and writes the keys the way the UI language does (in Chinese, “回车” (Enter)).
+// button. The task node input box uses it too.
 export function KeyHint({
   stop = false,
   className,
@@ -490,8 +565,8 @@ export function KeyHint({
 // task node's turn takes its tasks with it).
 export function StopAlsoWarning({ count }: { count: number }) {
   return (
-    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full bg-tint-red px-2.5 text-[12px] leading-[22px] font-black text-red-text shadow-[inset_0_0_0_1.5px_var(--red)]">
-      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
+    <span role="status" data-stop-also className="inline-flex items-center gap-1.5 rounded-full border border-red-text/30 bg-tint-red px-2.5 text-[12px] leading-[22px] font-semibold text-red-text">
+      <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.4} />
       {t.background.stopWarning(count)}
     </span>
   )

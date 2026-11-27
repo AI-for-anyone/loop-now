@@ -294,7 +294,8 @@ describe('desktop sidebar resizing', () => {
 
     // Nav labels truncate, search shortcut does not shrink, and connection status truncates its host inside the sidebar.
     expect(within(within(nav).getByRole('link', { name: 'Project settings' })).getByText('Project settings')).toHaveClass('min-w-0', 'flex-1', 'truncate')
-    expect(within(nav).getByRole('searchbox', { name: 'Search Agents' }).closest('label')!.querySelector('kbd')).toHaveClass('shrink-0')
+    const searchKbd = within(nav).getByRole('searchbox', { name: 'Search Agents' }).parentElement!.querySelector('kbd')!
+    expect(searchKbd.closest('button') ?? searchKbd).toHaveClass('shrink-0')
     const status = within(nav).getByRole('status', { name: 'Connection' })
     expect(status).toHaveClass('min-w-0')
     expect(within(status).getByText('127.0.0.1:8780')).toHaveClass('min-w-0', 'truncate')

@@ -1,16 +1,52 @@
 @import "tailwindcss";
 @import "./styles/shadcn-tailwind.css";
 @import "./styles/fonts.css";
+@import "./styles/skins/mono.css";
+@import "./styles/skins/plate.css";
 
-/* Visual style "Plate · Risograph print", following the loop-now-uiux handoff notes (canvas Version 16). The console is light theme only. */
+/* Theme-driven design tokens: "mono" (default, light/dark/system) and "plate" (Risograph palette, light only). */
 
 @theme inline {
     --font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
-    --font-heading: var(--font-display-cn);
-    --font-display-cn: 'ZCOOL QingKe HuangYou', 'Noto Sans SC', 'PingFang SC', sans-serif;
-    --font-display-latin: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
+    --font-heading: var(--skin-display-cn);
+    --font-display-cn: var(--skin-display-cn);
+    --font-display-latin: var(--skin-display-latin);
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
+    /* Semantic surface, chrome, border, CTA, tooltip and code tokens */
+    --color-surface-canvas: var(--surface-canvas);
+    --color-surface-subtle: var(--surface-subtle);
+    --color-surface-elevated: var(--surface-elevated);
+    --color-surface-control: var(--surface-control);
+    --color-surface-hover: var(--surface-hover);
+    --color-surface-active: var(--surface-active);
+    --color-segment-track: var(--segment-track);
+    --color-segment-active: var(--segment-active);
+    --color-switch-track: var(--switch-track);
+    --color-sidebar-bg: var(--sidebar-bg);
+    --color-sidebar-fg: var(--sidebar-fg);
+    --color-sidebar-muted: var(--sidebar-muted);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-hover: var(--sidebar-hover);
+    --color-sidebar-active-bg: var(--sidebar-active-bg);
+    --color-sidebar-active-fg: var(--sidebar-active-fg);
+    --color-sidebar-group: var(--sidebar-group);
+    --color-sidebar-control-bg: var(--sidebar-control-bg);
+    --color-sidebar-control-fg: var(--sidebar-control-fg);
+    --color-hairline: var(--hairline);
+    --color-hairline-strong: var(--hairline-strong);
+    --color-cta-bg: var(--cta-bg);
+    --color-cta-fg: var(--cta-fg);
+    --color-cta-hover: var(--cta-hover);
+    --color-tooltip-bg: var(--tooltip-bg);
+    --color-tooltip-fg: var(--tooltip-fg);
+    --color-tooltip-muted: var(--tooltip-muted);
+    --color-code-bg: var(--code-bg);
+    --color-code-fg: var(--code-fg);
+    --color-code-border: var(--code-border);
+    --color-code-muted: var(--code-muted);
+
+    /* Shared paper/ink/status tokens */
     --color-paper: var(--paper);
     --color-paper-raised: var(--paper-raised);
     --color-paper-tab: var(--paper-tab);
@@ -33,6 +69,7 @@
     --color-tint-red: var(--tint-red);
     --color-tint-yellow: var(--tint-yellow);
     --color-error-field: var(--error-field);
+    --color-status-busy: var(--status-busy);
 
     --color-success: var(--tint-green);
     --color-success-foreground: var(--green-text);
@@ -41,12 +78,23 @@
     --color-interrupt: var(--riso-pink);
     --color-interrupt-foreground: var(--ink);
 
+    --shadow-surface: var(--surface-shadow);
+    --shadow-floating: var(--floating-shadow);
+    --shadow-dialog: var(--dialog-shadow);
     --shadow-print-rest: var(--print-rest);
     --shadow-print-pink: var(--print-pink);
     --shadow-print-blue: var(--print-blue);
     --shadow-print-ink: var(--print-ink);
     --shadow-print-dialog: var(--print-dialog);
     --shadow-focus: var(--focus-ring);
+
+    --radius-stamp: var(--skin-radius-stamp);
+    --radius-ticket: var(--skin-radius-ticket);
+    --radius-input: var(--skin-radius-input);
+    --radius-card: var(--skin-radius-card);
+    --radius-panel: var(--skin-radius-panel);
+    --radius-bubble: var(--skin-radius-bubble);
+    --radius-dialog: var(--skin-radius-dialog);
 
     --color-ring: var(--ring);
     --color-input: var(--input);
@@ -75,86 +123,10 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Shapes: class names such as rounded-stamp and rounded-panel, also output as variables of the same name on :root. */
 @theme {
-    --radius-stamp: 4px;
-    --radius-ticket: 10px;
-    --radius-input: 12px;
-    --radius-card: 14px;
-    --radius-panel: 18px;
-    --radius-bubble: 20px;
-    --radius-dialog: 22px;
     /* The minimum width for the permanent sidebar (901px): narrower than that, it folds into a drawer. The class prefixes are nav: and
        max-nav:. */
     --breakpoint-nav: 56.3125rem;
-}
-
-:root {
-    /* Paper and ink */
-    --paper: #F3EFE6;
-    --paper-raised: #FBF9F4;
-    /* The beige-gray of an unselected index tab: one step darker than the paper. */
-    --paper-tab: #E8E2D4;
-    --ink: #18265E;
-    --ink-700: #3B4778;
-    --ink-500: #5A628A;
-    --riso-blue: #2443B5;
-    /* A light version of riso blue: only for avatars in the blue sidebar, where circles in the original color would be invisible on the blue. */
-    --riso-blue-soft: #8EA2FF;
-    --riso-pink: #FF4FA3;
-    --pink-text: #B8287A;
-    --riso-yellow: #FFE14D;
-    --green: #2BB673;
-    --green-text: #1E7A4D;
-    --red: #D9381E;
-    --red-text: #A8261A;
-    --tint-pink: #FFC9E3;
-    --tint-pink-2: #FFE9F3;
-    --tint-blue: #E3E8F8;
-    --tint-green: #D7F5E6;
-    --tint-red: #FFD0CC;
-    --tint-yellow: #FFF4B8;
-    --error-field: #FFF4F2;
-
-    /* Stats charts: series take blue, pink and ochre in a fixed order, with “其他” (Other) in neutral gray; reply outcomes use the three state
-       colors for completed, interrupted and failed; grid lines recede */
-    --chart-blue: #2443B5;
-    --chart-pink: #E0428F;
-    --chart-ochre: #C98500;
-    --chart-other: #B3ADA2;
-    --chart-grid: #E6E1D6;
-    --status-done: #0CA30C;
-    --status-interrupt: #FAB219;
-    --status-fail: #D03B3B;
-
-    /* Print shadows: solid offset only, no blur */
-    --print-rest: 2px 2px 0 rgb(24 38 94 / .12);
-    --print-pink: 4px 4px 0 var(--riso-pink);
-    --print-blue: 4px 4px 0 var(--riso-blue);
-    --print-ink: 3px 3px 0 var(--ink);
-    --print-dialog: 6px 6px 0 var(--riso-blue);
-    --focus-ring: 0 0 0 3px var(--riso-yellow), 0 0 0 5px var(--ink);
-
-    /* shadcn variables */
-    --background: var(--paper);
-    --foreground: var(--ink);
-    --card: var(--paper-raised);
-    --card-foreground: var(--ink);
-    --popover: var(--paper-raised);
-    --popover-foreground: var(--ink);
-    --primary: var(--riso-blue);
-    --primary-foreground: #FFFFFF;
-    --secondary: var(--tint-blue);
-    --secondary-foreground: var(--ink);
-    --muted: var(--tint-blue);
-    --muted-foreground: var(--ink-500);
-    --accent: var(--riso-yellow);
-    --accent-foreground: var(--ink);
-    --destructive: var(--red);
-    --border: rgb(24 38 94 / .18);
-    --input: rgb(24 38 94 / .18);
-    --ring: var(--ink);
-    --radius: 0.875rem;
 }
 
 @layer base {
@@ -166,7 +138,7 @@
     -webkit-font-smoothing: antialiased;
   }
   body {
-    @apply bg-paper text-ink text-[15px] leading-[1.75];
+    @apply bg-surface-canvas text-ink text-[13.5px] leading-[1.55];
   }
   :focus-visible {
     outline: none;
@@ -174,72 +146,26 @@
   }
 }
 
-/* Halftone dots, grain, misregistration and tilt. Tilt is drawn only on ::before; the element itself is not transformed. */
 @layer utilities {
   .riso-paper {
-    background-color: var(--paper);
+    background-color: var(--surface-canvas);
   }
-  /* Paper grain on the beige background of the main area: a 128px tiled image (navy, at most about 6% opacity), no filters, so nothing is
-     recomputed while scrolling. */
-  /* Scrollbars inside the sheet (redesign): thin, translucent navy, with a transparent track, instead of the system's gray scrollbar.
-     scrollbar-width is not inherited, so it is set on all descendants as well; :where adds no specificity, so places that need to hide the
-     scrollbar (no-scrollbar and its breakpoint forms) still hide it. */
+  /* Thin translucent scrollbars inside the sheet; :where adds zero specificity so .no-scrollbar can hide them where a ruler replaces them. */
   :where(.riso-scrollbar, .riso-scrollbar *) {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink) 38%, transparent) transparent;
+    scrollbar-color: color-mix(in srgb, var(--ink) 26%, transparent) transparent;
   }
-  .riso-grain {
-    background-image: url('./assets/paper-grain.png');
-    background-size: 128px 128px;
-  }
-  /* The area for dragging the window in a desktop shell window (the system title bar is hidden); buttons, links and inputs in the area can
-     still be clicked as usual. */
+  /* Window drag strip in the desktop shell window (macOS hiddenInset); interactive controls remain clickable. */
   .window-drag {
     -webkit-app-region: drag;
   }
-  .window-drag :is(a, button, input, select, textarea, [role='button']) {
-    -webkit-app-region: no-drag;
-  }
+  .window-drag :is(a, button, input, select, textarea, [role='button']),
   .window-no-drag {
     -webkit-app-region: no-drag;
-  }
-  .riso-halftone {
-    background-image: radial-gradient(rgb(255 255 255 / .12) 1px, transparent 1.3px);
-    background-size: 6px 6px;
-  }
-  .riso-halftone-pink {
-    background-image: radial-gradient(rgb(255 79 163 / .35) 1.4px, transparent 1.7px);
-    background-size: 7px 7px;
-  }
-  .riso-halftone-red {
-    background-image: radial-gradient(rgb(168 38 26 / .10) 1px, transparent 1.3px);
-    background-size: 6px 6px;
-  }
-  /* Only for display type ≥ 28px */
-  .riso-misreg {
-    text-shadow: 5px 3px 0 rgb(255 79 163 / .85);
-  }
-  .riso-misreg-sm {
-    text-shadow: 3px 2px 0 rgb(255 79 163 / .8);
   }
   .riso-mark {
     position: relative;
     isolation: isolate;
-  }
-  .riso-mark::before {
-    content: "";
-    position: absolute;
-    left: -6px;
-    right: -10px;
-    bottom: .1em;
-    height: .32em;
-    background: var(--riso-yellow);
-    transform: rotate(-1deg);
-    z-index: -1;
-  }
-  /* The stroke of yellow highlighter mark on section titles: a yellow bar over the lower half of the text. */
-  .riso-marker {
-    background: linear-gradient(transparent 0, transparent 62%, var(--riso-yellow) 62%, var(--riso-yellow) 94%, transparent 94%);
   }
   .riso-tilt {
     position: relative;
@@ -251,47 +177,76 @@
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: var(--tilt-bg, #fff);
-    box-shadow: var(--tilt-shadow, var(--print-rest));
-    transform: rotate(var(--tilt, -1deg));
+    background: var(--tilt-bg, var(--surface-elevated));
+    box-shadow: var(--tilt-shadow, var(--surface-shadow));
   }
-  /* The decoration slot below the sidebar list: takes the remaining height; the decoration shows only when all of it fits (about 200px),
-     otherwise it is hidden, so it never covers text. */
-  .sidebar-deco-slot {
-    position: relative;
-    flex: 1 1 0;
-    min-height: 0;
-    container-type: size;
-  }
-  .sidebar-deco {
-    display: none;
-  }
-  @container (min-height: 204px) {
-    .sidebar-deco {
-      display: block;
-    }
-  }
-  .riso-skeleton {
-    background-color: var(--tint-blue);
-    background-image: radial-gradient(rgb(36 67 181 / .18) 1.2px, transparent 1.5px);
-    background-size: 6px 6px;
-  }
-  /* The dropdown arrow on the right of a native select (navy). */
-  .select-chevron {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2318265E' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-position: right 14px center;
-    background-repeat: no-repeat;
-  }
-  .riso-stripes-red {
-    background-image: repeating-linear-gradient(-45deg, rgb(217 56 30 / .08) 0 8px, transparent 8px 16px);
-  }
-  /* Two of the three animations: the output cursor blinking in 1s steps, and the tool-in-progress icon spinning steadily every 0.9s (the
-     third is the button press offset). */
   .riso-cursor {
     animation: riso-blink 1s steps(2, start) infinite;
   }
   .riso-spin {
     animation: riso-spin 0.9s linear infinite;
+  }
+  /* Diagonal specular light-sweep clipped strictly to the BrandWordmark text glyphs via ::after. */
+  .brand-wordmark {
+    position: relative;
+    display: inline-block;
+  }
+  .brand-wordmark::after {
+    content: attr(data-sheen);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    background-image: linear-gradient(
+      112deg,
+      transparent 37%,
+      var(--brand-sheen-edge, rgba(255, 255, 255, 0.35)) 45%,
+      var(--brand-sheen-core, rgba(255, 255, 255, 0.96)) 50%,
+      var(--brand-sheen-edge, rgba(255, 255, 255, 0.35)) 55%,
+      transparent 63%
+    );
+    background-size: 280% 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+  }
+  .brand-wordmark[data-sweep='intro']::after {
+    animation: brand-sweep-intro 920ms cubic-bezier(0.22, 1, 0.36, 1) 280ms 1 both;
+  }
+  .brand-wordmark[data-sweep='a']::after {
+    animation: brand-sweep-a 820ms cubic-bezier(0.22, 1, 0.36, 1) 0ms 1 both;
+  }
+  .brand-wordmark[data-sweep='b']::after {
+    animation: brand-sweep-b 820ms cubic-bezier(0.22, 1, 0.36, 1) 0ms 1 both;
+  }
+}
+
+@keyframes brand-sweep-intro {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@keyframes brand-sweep-a {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@keyframes brand-sweep-b {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
   }
 }
 
@@ -307,8 +262,6 @@
   }
 }
 
-/* With reduced motion, turn off all animations and transitions; components also have motion-reduce: variants that show the spinning
-   icon as static. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -321,20 +274,20 @@
 /* Markdown styles for Agent replies */
 @layer components {
   .markdown {
-    @apply text-base leading-[1.8] break-words;
+    @apply text-[14px] leading-[1.65] break-words;
   }
   .markdown > * + * {
     @apply mt-3;
   }
   .markdown h1 {
-    @apply text-xl font-black;
+    @apply text-xl font-semibold tracking-tight;
   }
   .markdown h2 {
-    @apply text-lg font-black;
+    @apply text-lg font-semibold tracking-tight;
   }
   .markdown h3,
   .markdown h4 {
-    @apply font-bold;
+    @apply font-semibold;
   }
   .markdown ul {
     @apply list-disc pl-6;
@@ -343,20 +296,17 @@
     @apply list-decimal pl-6;
   }
   .markdown a {
-    @apply font-bold text-riso-blue underline decoration-2 underline-offset-2;
+    @apply font-medium text-riso-blue underline decoration-1 underline-offset-3;
   }
   .markdown blockquote {
-    @apply border-l-4 border-riso-pink pl-3 text-ink-700;
+    @apply border-l-2 border-hairline-strong pl-3.5 text-ink-700;
   }
-  /* Inline code: a small monospace label on light blue. */
   .markdown :not(pre) > code {
-    @apply rounded-stamp bg-tint-blue px-[7px] py-px font-mono text-[0.85em];
+    @apply rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[0.85em];
   }
-  /* A bold word at the start of a list item: a small yellow label (marked by rehype-lead-label). When every item of an unordered list is
-     "label + inline text" (.md-lead-list), lay the items out side by side: label on the left, text on the right, no bullets, 6px between
-     adjacent items; the outermost such list is not indented, while sublists keep their indentation. */
+  /* A bold word at the start of a list item (marked by rehype-lead-label). */
   .markdown .md-lead {
-    @apply mr-3 inline-block rounded-stamp bg-riso-yellow px-[9px] text-[13.5px] leading-6 font-black;
+    @apply mr-2.5 inline-block rounded-stamp border border-hairline bg-surface-subtle px-2 text-[13px] leading-6 font-semibold;
   }
   .markdown ul.md-lead-list {
     @apply list-none;
@@ -377,7 +327,7 @@
     @apply mt-1.5;
   }
   .markdown pre {
-    @apply overflow-x-auto px-4 pt-1.5 pb-4 font-mono text-[13px] leading-[1.75];
+    @apply overflow-x-auto px-4 pt-2 pb-4 font-mono text-[13px] leading-[1.7];
   }
   .markdown pre code.hljs {
     @apply bg-transparent p-0;
@@ -428,52 +378,6 @@
   }
 }
 
-/* Code highlighting: colors on the riso-blue background, each with a contrast of at least 4.5:1 against it (see the tokens contrast test). */
-.hljs {
-  color: #FFFFFF;
-}
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-literal,
-.hljs-type {
-  color: #FFB3D9;
-}
-.hljs-string,
-.hljs-regexp,
-.hljs-symbol,
-.hljs-template-tag {
-  color: #FFE14D;
-}
-.hljs-number,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-attr,
-.hljs-attribute {
-  color: #7CF2B5;
-}
-.hljs-built_in,
-.hljs-selector-class,
-.hljs-selector-id {
-  color: #FFD27A;
-}
-.hljs-comment,
-.hljs-quote,
-.hljs-meta {
-  color: #C9D2F2;
-  font-style: italic;
-}
-.hljs-title,
-.hljs-section,
-.hljs-name {
-  color: #FFFFFF;
-  font-weight: 700;
-}
-.hljs-deletion {
-  color: #FFC9E3;
-}
-.hljs-addition {
-  color: #A7F0CF;
-}
 .hljs-emphasis {
   font-style: italic;
 }
@@ -481,13 +385,12 @@
   font-weight: 700;
 }
 
-/* The file manager's code view: a light color scheme on white, reusing the paper and ink colors; applies only inside .code-view, so code
-   blocks in conversations are not affected. */
+/* The file manager's code view: uses current theme tokens so it stays legible in both light and dark modes. */
 .code-view .hljs { color: var(--ink); }
 .code-view .hljs-keyword,
 .code-view .hljs-selector-tag,
 .code-view .hljs-literal,
-.code-view .hljs-type { color: var(--riso-blue); font-weight: 700; }
+.code-view .hljs-type { color: var(--riso-blue); font-weight: 600; }
 .code-view .hljs-string,
 .code-view .hljs-regexp,
 .code-view .hljs-symbol,
@@ -499,18 +402,12 @@
 .code-view .hljs-attribute { color: var(--pink-text); }
 .code-view .hljs-built_in,
 .code-view .hljs-selector-class,
-.code-view .hljs-selector-id { color: var(--ink-700); font-weight: 700; }
+.code-view .hljs-selector-id { color: var(--ink-700); font-weight: 600; }
 .code-view .hljs-comment,
 .code-view .hljs-quote,
 .code-view .hljs-meta { color: var(--ink-500); font-style: italic; }
 .code-view .hljs-title,
 .code-view .hljs-section,
-.code-view .hljs-name { color: var(--ink); font-weight: 700; }
+.code-view .hljs-name { color: var(--ink); font-weight: 600; }
 .code-view .hljs-deletion { color: var(--red-text); }
 .code-view .hljs-addition { color: var(--green-text); }
-
-/* English UI: ZCOOL only suits Chinese, so display type switches to the Bricolage Grotesque bundled in the repository (only the 800
-   weight is included). */
-html:lang(en) .font-display-cn {
-  font-family: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
-}

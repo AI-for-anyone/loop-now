@@ -7,7 +7,16 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 import { XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DialogTab } from "@/components/ui/dialog"
-import { closeStampClass, dialogContentClass, dialogFooterClass, dialogPaperClass, overlayClass, type DialogKind } from "@/components/ui/dialog-style"
+import {
+  closeStampClass,
+  dialogBodyClass,
+  dialogContentClass,
+  dialogFooterClass,
+  dialogPaperClass,
+  dialogTopbarClass,
+  overlayClass,
+  type DialogKind,
+} from "@/components/ui/dialog-style"
 import { t } from "@/i18n"
 import { useReturnFocus } from "@/lib/return-focus"
 
@@ -46,10 +55,8 @@ function AlertDialogOverlay({
   )
 }
 
-// Confirmation dialog (redesign step 5): the same small sheet as the dialog, with an index tab on the top edge naming the kind (“确认”
-// (Confirm) by default; danger is red text on light red, with a red sheet shadow),
-// and a yellow round stamp in the top right that closes it (it acts as “取消” (Cancel), comes first, and on open focus still lands on
-// Cancel in the button area).
+// Confirmation dialog: shares the elevated non-scrolling topbar + scrolling body layout with Dialog.
+// The top-right close button mounts before children so initial focus still lands on the footer Cancel button.
 function AlertDialogContent({
   className,
   paperClassName,
@@ -82,13 +89,17 @@ function AlertDialogContent({
         {...focusHandlers}
         {...props}
       >
-        <AlertDialogPrimitive.Cancel data-slot="alert-dialog-close" className={cn(closeStampClass, "absolute top-[52px] right-[26px] z-[1] max-sm:right-[18px]")}>
-          <XIcon className="size-[15px]" strokeWidth={2.8} />
-          <span className="sr-only">{t.common.close}</span>
-        </AlertDialogPrimitive.Cancel>
-        <DialogTab kind={kind} />
-        <div data-dialog-paper className={cn(dialogPaperClass(kind), paperClassName)}>
-          {children}
+        <div data-dialog-paper className={dialogPaperClass}>
+          <div data-dialog-topbar className={dialogTopbarClass}>
+            <DialogTab kind={kind} />
+            <AlertDialogPrimitive.Cancel data-slot="alert-dialog-close" className={closeStampClass}>
+              <XIcon className="size-[15px]" strokeWidth={2.4} />
+              <span className="sr-only">{t.common.close}</span>
+            </AlertDialogPrimitive.Cancel>
+          </div>
+          <div data-dialog-body className={cn(dialogBodyClass, paperClassName)}>
+            {children}
+          </div>
         </div>
       </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
@@ -132,7 +143,7 @@ function AlertDialogMedia({
     <div
       data-slot="alert-dialog-media"
       className={cn(
-        "mb-2 inline-flex size-16 items-center justify-center rounded-full bg-tint-blue *:[svg:not([class*='size-'])]:size-8",
+        "mb-2 inline-flex size-14 items-center justify-center rounded-full border border-hairline bg-surface-subtle *:[svg:not([class*='size-'])]:size-7",
         className
       )}
       {...props}
@@ -148,7 +159,7 @@ function AlertDialogTitle({
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
       className={cn(
-        "font-display-cn text-[28px] leading-[1.15] font-normal text-riso-blue [text-shadow:2.5px_2.5px_0_var(--riso-pink)]",
+        "text-[18px] leading-snug font-semibold tracking-tight text-ink",
         className
       )}
       {...props}

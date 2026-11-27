@@ -122,6 +122,23 @@ export const runtime = {
       saving: '正在保存…',
       saved: '已换好，下一条消息起生效',
     },
+    // Independent inline composer menus (Harness, Model, Thinking, Permissions).
+    menus: {
+      harnessTitle: 'Harness',
+      modelTitle: '模型',
+      thinkingTitle: '思考等级',
+      permissionsTitle: '权限模式',
+      harnessLabel: (name: string) => `Harness：${name}。点开更换`,
+      modelLabel: (name: string) => `模型：${name}。点开更换`,
+      thinkingLabel: (level: string) => `思考等级：${level}。点开更换`,
+      permissionsLabel: (mode: string) => `权限模式：${mode}。点开更换`,
+      shortPermission: {
+        supervised: '每次确认',
+        accept_edits: '自动改码',
+        auto: '自动判断',
+        full: '完全放开',
+      },
+    },
     // A runtime that is not ready: the command for this computer from the server (RuntimeDefinition.setup), then check again.
     setup: {
       title: (name: string) => `先把 ${name} 准备好`,

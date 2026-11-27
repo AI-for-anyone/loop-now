@@ -6,6 +6,12 @@ const oneDecimal = (value: number) => grouped(Math.round(value * 10) / 10)
 
 export const stats = {
   title: '统计',
+  tabs: {
+    label: '统计分区',
+    usage: '用量与成本',
+    reliability: '可靠性与速度',
+    diagnostics: '排查与诊断',
+  },
   global: '全局',
   platform: '平台',
   rangeLabel: '时间范围',
@@ -67,6 +73,11 @@ export const stats = {
     tokens: 'token 合计',
     tokensDelta: (cost: string | null, hit: string | null) =>
       [cost && `估算 ${cost}`, hit && `缓存命中 ${hit}`].filter(Boolean).join('，'),
+    tokensCostDelta: (cost: string | null) => (cost ? `按 API 单价估算 ${cost}` : '无可估算单价的模型'),
+    cacheHit: '缓存命中率',
+    cacheHitDelta: (cached: string, input: string) => `缓存读 ${cached} / 输入 ${input}`,
+    completion: '完成率',
+    completionDelta: (runs: number) => `共 ${grouped(runs)} 回合`,
   },
 
   origins: {
@@ -111,6 +122,7 @@ export const stats = {
     avg: '你平均多久回',
     max: '最久等了',
     pending: '现在还在等的',
+    longestWait: (time: string) => `最久等了 ${time}`,
     waited: (time: string) => `等了 ${time}`,
     noPending: '现在没有在等你回答的问题。',
   },
@@ -201,8 +213,12 @@ export const stats = {
     none: '这段时间没有工具调用。',
   },
 
+  modelCost: {
+    title: '模型与花费',
+  },
+
   process: {
-    title: '模型与进程',
+    title: '进程与重试',
     retries: '模型重试',
     piExits: '进程异常退出',
     piExitsNote: '含打断超时被强制停止',

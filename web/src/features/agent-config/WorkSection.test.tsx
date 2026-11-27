@@ -24,20 +24,28 @@ function patches(agent: Schemas['Agent']) {
 }
 
 const work = () => screen.getByRole('region', { name: 'How it works' })
+const permissions = () => screen.getByRole('region', { name: 'Permissions' })
 const grok = (permissionMode: Schemas['PermissionMode']) => makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' }, runtime: 'grok', permissionMode })
 const allRuntimes = http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json(withAllRuntimes()))
 
 describe('How an Agent works (config page)', () => {
-  it('the working folder is typed (or chosen) and saved on its own; it can go back to Loop Now’s workspace', async () => {
+  it('the working folder is typed (or chosen) and saved on its own; unsaved folder edits guard leaving the page', async () => {
     const agent = claude()
     const api = patches(agent)
-    const { user } = await renderConfig({ agent, handlers: api.handlers })
+    const { user, router } = await renderConfig({ agent, handlers: api.handlers })
     const section = work()
     expect(within(section).getByText('None chosen: the workspace Loop Now gives it')).toBeInTheDocument()
     await user.type(within(section).getByLabelText('Working folder'), '/Users/me/code/app')
+    // Unsaved folder edit triggers the leave guard when navigating away.
+    await user.click(screen.getByRole('link', { name: 'Chat' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('You have unsaved changes')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(router.state.location.pathname).toMatch(/\/config$/)
+
     await user.click(within(section).getByRole('button', { name: 'Save folder' }))
     await waitFor(() => expect(api.bodies).toEqual([{ workingDirectory: '/Users/me/code/app' }]))
-    expect(await within(section).findByText(/Saved · Applies from the next message/)).toBeInTheDocument()
+    expect(await within(section).findByText('Saved')).toBeInTheDocument()
   })
 
   it('an Agent with a folder can go back to the workspace', async () => {
@@ -70,37 +78,37 @@ describe('How an Agent works (config page)', () => {
     expect(within(section).getByText(/the permission mode below is what holds it back/)).toBeInTheDocument()
   })
 
-  it('the permission mode is chosen from the four, saved at once', async () => {
+  it('the permission mode sits in the General tab as a compact picker and saves at once', async () => {
     const agent = claude()
     const api = patches(agent)
     const { user } = await renderConfig({ agent, handlers: api.handlers })
-    const modes = within(work()).getByRole('radiogroup', { name: 'Permissions' })
+    const modes = within(permissions()).getByRole('radiogroup', { name: 'Permissions' })
     expect(within(modes).getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
-      expect.stringContaining('Supervised'),
-      expect.stringContaining('Auto-accept edits'),
-      expect.stringContaining('Auto'),
-      expect.stringContaining('Full access'),
+      'Supervised',
+      'Auto-accept edits',
+      'Auto',
+      'Full access',
     ])
-    expect(within(modes).getByRole('radio', { name: /Full access/ })).toBeChecked()
-    await user.click(within(modes).getByRole('radio', { name: /^Supervised/ }))
+    expect(within(modes).getByRole('radio', { name: 'Full access' })).toBeChecked()
+    await user.click(within(modes).getByRole('radio', { name: 'Supervised' }))
     await waitFor(() => expect(api.bodies).toEqual([{ permissionMode: 'supervised' }]))
   })
 
   it('a runtime without the chosen mode says it runs as Supervised', async () => {
     const agent = makeAgent({ model: { provider: acpRuntimeId, modelId: 'default' }, runtime: acpRuntimeId, permissionMode: 'accept_edits' })
     await renderConfig({ agent, handlers: [http.get(apiUrl('/runtime-definitions'), () => HttpResponse.json({ runtimes: [...withAllRuntimes().runtimes, acpCommandDefinition()] }))] })
-    expect(await within(work()).findByText('Hermes has no “Auto-accept edits”; it runs as Supervised')).toBeInTheDocument()
+    expect(await within(permissions()).findByText('Hermes has no “Auto-accept edits”; it runs as Supervised')).toBeInTheDocument()
   })
 
   it('a runtime that asks by its own rules says so in a mode other than Full access', async () => {
     await renderConfig({ agent: grok('supervised'), handlers: [allRuntimes] })
-    expect(await within(work()).findByText('Grok decides by its own permission rules what to ask about, so some commands run without asking; to be asked about each one, use Claude Code or Codex')).toBeInTheDocument()
+    expect(await within(permissions()).findByText('Grok decides by its own permission rules what to ask about, so some commands run without asking; to be asked about each one, use Claude Code or Codex')).toBeInTheDocument()
   })
 
   it('on Full access it says nothing of the sort', async () => {
     await renderConfig({ agent: grok('full'), handlers: [allRuntimes] })
-    await within(work()).findByRole('radio', { name: /Full access/ })
-    expect(within(work()).queryByText(/its own permission rules/)).toBeNull()
+    await within(permissions()).findByRole('radio', { name: 'Full access' })
+    expect(within(permissions()).queryByText(/its own permission rules/)).toBeNull()
   })
 
   it('on Pi the folder and the local configuration are not offered, and only Full access is', async () => {
@@ -110,9 +118,10 @@ describe('How an Agent works (config page)', () => {
     expect(await within(section).findByText("Pi can't work in a chosen folder.")).toBeInTheDocument()
     expect(within(section).getByLabelText('Working folder')).toBeDisabled()
     expect(within(section).getByRole('switch', { name: 'Use my own CLI configuration' })).toBeDisabled()
-    expect(within(section).getByRole('radio', { name: /^Supervised/ })).toBeDisabled()
-    expect(within(section).getByRole('radio', { name: /Full access/ })).toBeEnabled()
-    expect(within(section).getByText('Pi never asks for approval; it runs with full access only')).toBeInTheDocument()
+    const perms = permissions()
+    expect(within(perms).getByRole('radio', { name: 'Supervised' })).toBeDisabled()
+    expect(within(perms).getByRole('radio', { name: 'Full access' })).toBeEnabled()
+    expect(within(perms).getByText('Pi never asks for approval; it runs with full access only')).toBeInTheDocument()
   })
 })
 

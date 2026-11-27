@@ -75,21 +75,24 @@ describe('Chinese console', () => {
   })
 
   it('overview sections and run status summary', async () => {
-    const { snapshot } = await renderOverview()
+    const { snapshot, user } = await renderOverview()
     await snapshot([makeAgentOverview({ name: 'dev-helper' })])
-    for (const name of ['运行状态', '用量', '异常与失败']) expect(screen.getByRole('region', { name })).toBeInTheDocument()
     const tiles = screen.getByRole('list', { name: '运行状态汇总' })
     for (const label of ['回复中', '空闲', '排队中']) expect(within(tiles).getByText(label)).toBeInTheDocument()
+    const tabs = screen.getByRole('tablist', { name: '概览分区' })
+    expect(screen.getByRole('region', { name: '运行状态' })).toBeInTheDocument()
+    await user.click(within(tabs).getByRole('tab', { name: /^24h 异常/ }))
+    expect(screen.getByRole('region', { name: '异常与失败' })).toBeInTheDocument()
+    await user.click(within(tabs).getByRole('tab', { name: '用量' }))
+    expect(screen.getByRole('region', { name: '用量' })).toBeInTheDocument()
   })
 
   it('chat composer', async () => {
     await renderChat()
     const box = screen.getByRole('textbox', { name: '消息' })
     expect(box).toHaveAttribute('placeholder', '给 dev-helper 发消息')
-    // The Chinese UI writes Enter as “回车” in the key hints.
-    expect(screen.getByText('Shift + 回车')).toBeInTheDocument()
-    expect(screen.getByText('换行')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+    // The Chinese UI writes Enter as “回车” in the send button tooltip.
+    expect(screen.getByRole('button', { name: '发送' })).toHaveAttribute('title', '发送 (回车)')
   })
 
   it('Agent header bar and More menu', async () => {
@@ -153,7 +156,8 @@ describe('Chinese console', () => {
     renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/folder`)
     expect(await screen.findByRole('heading', { name: '项目文件夹', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: '文件树' })).toHaveTextContent('项目文件夹')
-    expect(screen.getByRole('complementary', { name: '概况' })).toBeInTheDocument()
+    expect(await screen.findByText('0 个文件夹 · 0 个文件')).toBeInTheDocument()
+    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent('0 个文件夹 · 0 个文件')
   })
 
   it('project settings', async () => {
@@ -175,7 +179,8 @@ describe('Chinese console', () => {
     renderRoutes(routes, '/skills')
     const list = await screen.findByRole('list', { name: 'Skills 库' })
     await within(list).findByRole('link', { name: /pdf-tools/ })
-    expect(within(list).getByText(/更新于/)).toBeInTheDocument()
+    expect(within(list).getByText('2 个文件')).toBeInTheDocument()
+    expect(screen.getByText('共 1 个模板')).toBeInTheDocument()
   })
 
   it('stats', async () => {

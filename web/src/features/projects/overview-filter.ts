@@ -26,8 +26,16 @@ export function useOverviewFilter() {
         : { kind: 'all' }
 
   // The selected value: '' is All, PLATFORM is the platform, anything else is a project name.
+  // Mutate only project/platform so sibling query params (such as ?tab= and ?range= on /stats) are preserved.
   const select = (value: string) =>
-    setParams(value === '' ? {} : value === PLATFORM ? { platform: '1' } : { project: value.slice('project:'.length) })
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('project')
+      next.delete('platform')
+      if (value === PLATFORM) next.set('platform', '1')
+      else if (value.startsWith('project:')) next.set('project', value.slice('project:'.length))
+      return next
+    })
 
   // The scope parameters passed to the overview event stream, usage and anomalies; null while the project hasn't been resolved
   // yet, in which case nothing is requested.

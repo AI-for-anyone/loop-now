@@ -2,15 +2,46 @@ import { act, screen, waitFor, within, cleanup } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { agentsUrl, apiUrl, defaultAgentsPath, errorBody, makeAgent, makeRun, toListItem } from '@/test/api'
-import { credentialMeta, larkTemplate, renderConfig } from '@/test/config'
+import { routes } from '@/app/routes'
+import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, errorBody, makeAgent, makeRun, toListItem } from '@/test/api'
+import { catalogHandlers, credentialMeta, ghTemplate, larkTemplate, renderConfig } from '@/test/config'
 import { FakeIntersectionObserver } from '@/test/intersection-observer'
 import { openProvider, runnerTab } from '@/test/model-picker'
+import { emptySelections } from '@/test/project-credentials'
+import { renderRoutes } from '@/test/render'
+import { server } from '@/test/server'
+import { baseHandlers } from '@/test/shell'
+import userEvent from '@testing-library/user-event'
 
 const region = (name: string) => screen.getByRole('region', { name })
+const tabPanel = (key: string) => document.querySelector<HTMLElement>(`[data-tab-panel="${key}"]`)!
+const openRunner = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
+  const trigger = within(region('Basics')).getByRole('button', { name: /^Runs on/ })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+  return screen.findByRole('dialog', { name: 'Runs on' })
+}
+const expandCli = async (user: Awaited<ReturnType<typeof renderConfig>>['user'], cli: string) => {
+  const item = within(region('Available CLIs')).getByRole('listitem', { name: cli })
+  const toggle = within(item).getByRole('button', { name: new RegExp(`^${cli}\\b`) })
+  if (toggle.getAttribute('aria-expanded') !== 'true') await user.click(toggle)
+  return item
+}
+
+function renderConfigAt(path: string, agent = makeAgent()) {
+  server.use(
+    ...baseHandlers([agent]),
+    http.get(apiUrl(`/agents/${agent.id}/credential-selections`), () => HttpResponse.json(emptySelections(agent))),
+    http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: null })),
+    http.get(apiUrl(`/agents/${agent.id}/skills`), () => HttpResponse.json({ skills: [] })),
+    http.get(apiUrl('/skills'), () => HttpResponse.json({ skills: [] })),
+    http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [ghTemplate, larkTemplate] })),
+    ...catalogHandlers,
+  )
+  return { ...renderRoutes(routes, path), agent, user: userEvent.setup() }
+}
 
 describe('Layout', () => {
-  it('"The current reply uses the config from before the change" sits in the same sticky note as the effect notice', async () => {
+  it('"The current reply uses the config from before the change" shows in the compact header status pill alongside the effect notice', async () => {
     await renderConfig({
       agent: makeAgent({ configVersion: 3 }),
       status: { busy: true, currentRun: makeRun({ status: 'running', configVersion: 2 }) },
@@ -31,161 +62,149 @@ describe('Layout', () => {
   // container; that the whole page does not get stretched taller is checked in a browser.
   it('the page scroll area is a positioning container, so screen-reader text in sections does not stretch the whole page', async () => {
     await renderConfig()
-    expect(region('Basics').closest('.overflow-y-auto')).toHaveClass('relative')
+    expect(region('Basics').closest('[data-page-body]')).toHaveClass('relative', 'overflow-y-auto')
   })
 })
 
-// "Printed sheet" redesign, step 2: numbered sections, yellow sticky notes and the section ruler in the stub.
-describe('Redesigned layout', () => {
-  const sections = ['Basics', 'How it works', 'Prompt', 'Local directories', 'Model account credential', 'Skills', 'Available CLIs', 'Plugin grants', 'Delete Agent']
+describe('Sub-tab navigation and deep links', () => {
+  it('organizes config into 4 crisp sub-tabs synced with ?tab= and removes the 196px right-hand ConfigToc stub', async () => {
+    const { user, router } = await renderConfig()
+    const tablist = screen.getByRole('tablist', { name: 'Configuration tabs' })
+    const tabs = within(tablist).getAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['General & Model', 'Prompt & Workspace', 'Tools & Access', 'Danger'])
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+    expect(tabs[3].querySelector('.text-red-text')).not.toBeNull()
 
-  it('the nine sections are numbered 01–09 in order: the number is a hollow decoration and the title gets a yellow marker stroke; dashed lines separate the sections, with none above the first', async () => {
-    await renderConfig()
-    sections.forEach((name, index) => {
-      const section = region(name)
-      const number = section.querySelector('[data-section-number]')!
-      expect(number).toHaveTextContent(String(index + 1).padStart(2, '0'))
-      expect(number).toHaveAttribute('aria-hidden', 'true')
-      expect(number).toHaveClass('max-nav:hidden', 'text-transparent')
-      expect(within(section).getByRole('heading', { level: 2, name })).toHaveClass('riso-marker', 'font-display-cn')
-      if (index === 0) expect(section).not.toHaveClass('border-t-2')
-      else expect(section).toHaveClass('border-t-2', 'border-dashed')
-    })
+    // Active tab panel is visible; inactive panels are hidden via CSS while staying mounted for draft safety.
+    expect(tabPanel('general')).not.toHaveClass('hidden')
+    expect(tabPanel('workspace')).toHaveClass('hidden')
+    expect(tabPanel('tools')).toHaveClass('hidden')
+    expect(tabPanel('danger')).toHaveClass('hidden')
+
+    // Centered narrow PageBody + floating PrecisionRuler (zero-width-tax), no 196px right-hand stub.
+    expect(screen.getByRole('navigation', { name: 'Contents' })).toHaveAttribute('data-precision-ruler')
+    expect(document.querySelector('.w-\\[196px\\]')).toBeNull()
+
+    await user.click(within(tablist).getByRole('tab', { name: 'Prompt & Workspace' }))
+    expect(router.state.location.search).toBe('?tab=workspace')
+    expect(tabPanel('general')).toHaveClass('hidden')
+    expect(tabPanel('workspace')).not.toHaveClass('hidden')
+
+    await user.click(within(tablist).getByRole('tab', { name: 'Tools & Access' }))
+    expect(router.state.location.search).toBe('?tab=tools')
+    expect(tabPanel('tools')).not.toHaveClass('hidden')
+
+    await user.click(within(tablist).getByRole('tab', { name: 'Danger' }))
+    expect(router.state.location.search).toBe('?tab=danger')
+    expect(tabPanel('danger')).not.toHaveClass('hidden')
+    // Danger tab has only 1 section, so the floating ruler hides itself.
+    expect(screen.queryByRole('navigation', { name: 'Contents' })).toBeNull()
   })
 
-  it('sections are no longer separate cards but sit directly on the paper; the Delete Agent section stays red', async () => {
-    await renderConfig()
-    expect(region('Basics')).not.toHaveClass('shadow-print-rest')
-    expect(region('Basics')).not.toHaveClass('bg-paper-raised')
-    const danger = region('Delete Agent')
-    expect(within(danger).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveClass('text-red-text')
-    expect(danger.querySelector('[data-section-number]')).toHaveClass('[-webkit-text-stroke:1.6px_var(--red-text)]')
-    expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
+  it('preserves unsaved drafts across sub-tab switches without blocking tab switches, and still guards route exits', async () => {
+    const { user, router } = await renderConfig()
+    const tablist = screen.getByRole('tablist', { name: 'Configuration tabs' })
+    await user.type(screen.getByLabelText('Display name'), ' Draft')
+    await user.click(within(tablist).getByRole('tab', { name: 'Prompt & Workspace' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await user.type(screen.getByLabelText('Agent prompt'), 'Unsaved instructions')
+
+    await user.click(within(tablist).getByRole('tab', { name: 'General & Model' }))
+    expect(screen.getByLabelText('Display name')).toHaveValue('dev-helper Draft')
+
+    await user.click(within(tablist).getByRole('tab', { name: 'Prompt & Workspace' }))
+    expect(screen.getByLabelText('Agent prompt')).toHaveValue('Unsaved instructions')
+
+    // Leaving the config page still asks for confirmation.
+    await user.click(screen.getByRole('link', { name: 'Chat' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('You have unsaved changes')
+    expect(router.state.location.pathname).toMatch(/\/config$/)
   })
 
-  it('the internal ID sits in a dashed box, and the copy button is a small yellow square with a navy outline', async () => {
-    const { agent } = await renderConfig()
-    const id = within(region('Basics')).getByText(agent.id)
-    expect(id.parentElement).toHaveClass('border-dashed', 'rounded-input')
-    expect(within(region('Basics')).getByRole('button', { name: 'Copy' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
-  })
-
-  // jsdom does no layout: positions are confirmed with a browser check (the note under “模型提供方”
-  // (Model provider) in the left column no longer pushes “模型” (Model) in the right column down).
-  it('the internal ID and the display name share a row aligned to the top: a note under one grows downward without pushing the other down', async () => {
-    await renderConfig()
-    const basic = region('Basics')
-    // Internal ID and display name share a row.
-    expect(within(basic).getByLabelText('Display name').closest('.grid')!.parentElement).toHaveClass('items-start')
-  })
-
-  it('the body column and the contents are both inside the paper and use its thin scrollbar, without hiding scrollbars (the contents ruler is not a scroll position)', async () => {
-    await renderConfig()
-    const sheet = region('Basics').closest('[data-sheet]')!
-    expect(sheet).toHaveClass('riso-scrollbar')
-    const body = region('Basics').closest('.overflow-y-auto')!
-    const toc = screen.getByRole('navigation', { name: 'Contents' })
-    for (const area of [body, toc]) {
-      expect(sheet).toContainElement(area as HTMLElement)
-      expect(area.className).not.toMatch(/no-scrollbar/)
-    }
-  })
-
-  it('the "takes effect from the next message" notice is a yellow sticky note', async () => {
-    await renderConfig()
-    const note = screen.getByText('Changes take effect from the next dispatched message; a reply in progress is not affected.').closest('[role="note"]')!
-    expect(note).toHaveClass('riso-tilt', '[--tilt-bg:var(--riso-yellow)]')
-    expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-  })
-
-  it('the contents sit in the stub on the right of the paper: a row of ticks along the right edge, each entry is "name number short tick", and the current entry is marked with a yellow marker and a pink arrow', async () => {
-    await renderConfig()
-    const toc = screen.getByRole('navigation', { name: 'Contents' })
-    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
-    expect(within(toc).getByText('Contents')).toHaveAttribute('aria-hidden', 'true')
-    // A row of ticks along the right edge (decoration).
-    expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-3')
-    expect(toc.querySelector('[data-ruler-mark]')).toBeNull()
-    act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
-    const current = within(toc).getByRole('link', { name: 'Skills' })
-    expect(current.closest('li')!.querySelector('[data-ruler-mark]')).not.toBeNull()
-    expect(toc.querySelectorAll('[data-ruler-mark]')).toHaveLength(1)
-    // The Delete Agent entry is red.
-    expect(within(toc).getByRole('link', { name: 'Delete Agent' })).toHaveClass('text-red-text')
-  })
-})
-
-describe('Section contents', () => {
-  const toc = () => screen.getByRole('navigation', { name: 'Contents' })
-  const tocLink = (name: string) => within(toc()).getByRole('link', { name })
-  const highlighted = () => within(toc()).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'location')
-
-  it('lists the nine sections in order; clicking an entry jumps to its section and focuses the section title', async () => {
+  it('resolves legacy #config-* hashes (such as #config-prompt from StatsPage and #config-model-account) to their owning tab and focuses the section title', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
     try {
-      const { user, router } = await renderConfig()
-      expect(within(toc()).getAllByRole('link').map((link) => link.textContent)).toEqual([
-        '01Basics',
-        '02How it works',
-        '03Prompt',
-        '04Local directories',
-        '05Model account credential',
-        '06Skills',
-        '07Available CLIs',
-        '08Plugin grants',
-        '09Delete Agent',
-      ])
-      await user.click(tocLink('Available CLIs'))
-      const clis = region('Available CLIs')
-      expect(within(clis).getByRole('heading', { level: 2, name: 'Available CLIs' })).toHaveFocus()
-      expect(scroll.mock.contexts).toContain(clis)
-      // The URL does not change.
-      expect(router.state.location.pathname).toMatch(/\/config$/)
-      expect(router.state.location.hash).toBe('')
+      const agent = makeAgent()
+      const first = renderConfigAt(`${defaultAgentPath(agent.id, 'config')}#config-prompt`, agent)
+      await screen.findByRole('tablist', { name: 'Configuration tabs' })
+      expect(screen.getByRole('tab', { name: 'Prompt & Workspace' })).toHaveAttribute('aria-selected', 'true')
+      expect(tabPanel('workspace')).not.toHaveClass('hidden')
+      expect(tabPanel('general')).toHaveClass('hidden')
+      expect(within(region('Prompt')).getByRole('heading', { level: 2, name: 'Prompt' })).toHaveFocus()
+      expect(scroll.mock.contexts).toContain(region('Prompt'))
+      first.unmount()
 
-      await user.click(tocLink('Delete Agent'))
-      expect(within(region('Delete Agent')).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveFocus()
+      const second = renderConfigAt(`${defaultAgentPath(agent.id, 'config')}#config-clis`, agent)
+      await screen.findByRole('tablist', { name: 'Configuration tabs' })
+      expect(screen.getByRole('tab', { name: 'Tools & Access' })).toHaveAttribute('aria-selected', 'true')
+      expect(tabPanel('tools')).not.toHaveClass('hidden')
+      expect(within(region('Available CLIs')).getByRole('heading', { level: 2, name: 'Available CLIs' })).toHaveFocus()
+      second.unmount()
+
+      const third = renderConfigAt(`${defaultAgentPath(agent.id, 'config')}#config-model-account`, agent)
+      await screen.findByRole('tablist', { name: 'Configuration tabs' })
+      expect(screen.getByRole('tab', { name: 'General & Model' })).toHaveAttribute('aria-selected', 'true')
+      expect(tabPanel('general')).not.toHaveClass('hidden')
+      expect(within(region('Model account credential')).getByRole('heading', { level: 2, name: 'Model account credential' })).toHaveFocus()
+      third.unmount()
     } finally {
       scroll.mockRestore()
     }
   })
 
-  it('highlights the visible section, taking the earliest one when several are visible', async () => {
+  it('sections use compact headings with hairline dividers and red danger styling', async () => {
     await renderConfig()
-    expect(highlighted()).toHaveLength(0)
-    act(() => FakeIntersectionObserver.trigger(region('Available CLIs'), true))
-    expect(highlighted()).toEqual([tocLink('Available CLIs')])
-    act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
-    expect(highlighted()).toEqual([tocLink('Skills')])
-    act(() => FakeIntersectionObserver.trigger(region('Skills'), false))
-    expect(highlighted()).toEqual([tocLink('Available CLIs')])
-    // When all of them have left the viewport, the last highlight is kept.
-    act(() => FakeIntersectionObserver.trigger(region('Available CLIs'), false))
-    expect(highlighted()).toEqual([tocLink('Available CLIs')])
+    const basic = region('Basics')
+    expect(basic).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
+    expect(within(basic).getByRole('heading', { level: 2, name: 'Basics' })).toHaveClass('text-[14.5px]', 'font-semibold')
+    expect(basic.querySelector('[data-section-number]')).toBeNull()
+    expect(within(basic).getByLabelText('Display name').closest('.grid')!.parentElement).toHaveClass('sm:items-start')
+
+    const danger = region('Delete Agent')
+    expect(within(danger).getByRole('heading', { level: 2, name: 'Delete Agent' })).toHaveClass('text-red-text')
+    expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
   })
 
-  it('without IntersectionObserver support nothing is highlighted, but jumping still works', async () => {
-    vi.stubGlobal('IntersectionObserver', undefined)
+  it('the internal ID sits in a subtle hairline box with a copy button', async () => {
+    const { agent } = await renderConfig()
+    const id = within(region('Basics')).getByText(agent.id)
+    expect(id.parentElement).toHaveClass('rounded-input', 'border', 'border-hairline')
+    expect(within(region('Basics')).getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+  })
+
+  it('floating PageRuler tracks the visible section in the active tab and jumps on click', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
     try {
       const { user } = await renderConfig()
-      await user.click(tocLink('Available CLIs'))
-      expect(within(region('Available CLIs')).getByRole('heading', { level: 2, name: 'Available CLIs' })).toHaveFocus()
-      expect(highlighted()).toHaveLength(0)
+      const ruler = screen.getByRole('navigation', { name: 'Contents' })
+      expect(within(ruler).getAllByRole('button').map((btn) => btn.getAttribute('aria-label'))).toEqual([
+        'Basics',
+        'Model account credential',
+        'Permissions',
+      ])
+      act(() => FakeIntersectionObserver.trigger(region('Permissions'), true))
+      expect(within(ruler).getByRole('button', { name: 'Permissions' })).toHaveAttribute('aria-current', 'true')
+      await user.click(within(ruler).getByRole('button', { name: 'Model account credential' }))
+      expect(within(region('Model account credential')).getByRole('heading', { level: 2, name: 'Model account credential' })).toHaveFocus()
+      expect(scroll.mock.contexts).toContain(region('Model account credential'))
     } finally {
-      vi.unstubAllGlobals()
+      scroll.mockRestore()
     }
   })
 })
 
 describe('Name, model and Prompt', () => {
-  it("shows the read-only internal ID; who runs it comes first, and a provider lists only its own models", async () => {
+  it("shows the read-only internal ID and compact model trigger; opening the picker lists runtimes first and each provider's models", async () => {
     const { agent, user } = await renderConfig()
     const basic = region('Basics')
     expect(within(basic).getByText(agent.id)).toBeInTheDocument()
-    expect(await runnerTab(basic, 'Pi')).toHaveAttribute('aria-selected', 'true')
-    await waitFor(() => expect(within(basic).getByRole('treeitem', { name: 'Claude Sonnet 5.5 (claude-sonnet-5-5)' })).toHaveAttribute('aria-selected', 'true'))
-    await openProvider(user, basic, 'openai')
-    const openai = within(basic).getAllByRole('treeitem').find((row) => row.getAttribute('aria-label') === 'openai')!
+    await waitFor(() => expect(within(basic).getByRole('button', { name: /^Runs on/ })).toHaveTextContent(/anthropic.*Claude Sonnet 5\.5/))
+    const picker = await openRunner(user)
+    expect(await runnerTab(picker, 'Pi')).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(within(picker).getByRole('treeitem', { name: 'Claude Sonnet 5.5 (claude-sonnet-5-5)' })).toHaveAttribute('aria-selected', 'true'))
+    await openProvider(user, picker, 'openai')
+    const openai = within(picker).getAllByRole('treeitem').find((row) => row.getAttribute('aria-label') === 'openai')!
     expect(within(openai).getAllByRole('treeitem').map((row) => row.getAttribute('aria-label'))).toEqual(['GPT X (gpt-x)'])
   })
 
@@ -395,7 +414,7 @@ describe("The Agent's Skill copies", () => {
 })
 
 describe('Available CLIs', () => {
-  it('adding a CLI without a template: marker only, no credential entry', async () => {
+  it('adding a CLI without a template through the header dialog: marker only, no credential entry', async () => {
     let added: string | null = null
     const agent = makeAgent()
     let current = agent
@@ -411,30 +430,35 @@ describe('Available CLIs', () => {
       ],
     })
     const clis = region('Available CLIs')
-    await user.type(within(clis).getByLabelText('CLI name'), 'jq')
     await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add CLI' })
+    await user.type(within(dialog).getByLabelText('CLI name'), 'jq')
+    await user.click(within(dialog).getByRole('button', { name: 'Add CLI' }))
     await waitFor(() => expect(added).toBe('jq'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     const item = await within(clis).findByRole('listitem', { name: 'jq' })
     expect(item).toHaveTextContent('Marker only: not installed, no credential injected')
     expect(within(item).queryByRole('button', { name: /credential/i })).toBeNull()
   })
 
-  it('a network error keeps the input and says the server cannot be reached', async () => {
+  it('a network error keeps the input in the dialog and says the server cannot be reached', async () => {
     const agent = makeAgent()
     const { user } = await renderConfig({ agent, handlers: [http.put(apiUrl(`/agents/${agent.id}/clis/:cli`), () => HttpResponse.error())] })
-    const clis = region('Available CLIs')
-    await user.type(within(clis).getByLabelText('CLI name'), 'gh')
-    await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
-    expect(await within(clis).findByText('Can\'t reach the server')).toBeInTheDocument()
-    expect(within(clis).getByLabelText('CLI name')).toHaveValue('gh')
+    await user.click(within(region('Available CLIs')).getByRole('button', { name: 'Add CLI' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add CLI' })
+    await user.type(within(dialog).getByLabelText('CLI name'), 'gh')
+    await user.click(within(dialog).getByRole('button', { name: 'Add CLI' }))
+    expect(await within(dialog).findByText('Can\'t reach the server')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('CLI name')).toHaveValue('gh')
   })
 
   it('an invalid name is not submitted', async () => {
     const { user } = await renderConfig()
-    const clis = region('Available CLIs')
-    await user.type(within(clis).getByLabelText('CLI name'), 'Bad Name')
-    await user.click(within(clis).getByRole('button', { name: 'Add CLI' }))
-    expect(await within(clis).findByText(/Use only lowercase letters/)).toBeInTheDocument()
+    await user.click(within(region('Available CLIs')).getByRole('button', { name: 'Add CLI' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add CLI' })
+    await user.type(within(dialog).getByLabelText('CLI name'), 'Bad Name')
+    await user.click(within(dialog).getByRole('button', { name: 'Add CLI' }))
+    expect(await within(dialog).findByText(/Use only lowercase letters/)).toBeInTheDocument()
   })
 
   it('removing a project CLI keeps the shared accounts and the grants of running tasks', async () => {
@@ -468,10 +492,10 @@ describe('The "Irreversible" stamp when removing a CLI', () => {
 })
 
 describe('Credentials are write-only', () => {
-  it('a saved gh credential shows only its status and metadata', async () => {
-    await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] }) })
-    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'gh' })
-    expect(within(item).getByText('Set')).toBeInTheDocument()
+  it('a saved gh credential shows its status on the summary row and full metadata when expanded', async () => {
+    const { user } = await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] }) })
+    const item = await expandCli(user, 'gh')
+    expect(within(item).getAllByText('Set').length).toBeGreaterThan(0)
     expect(within(item).getByText('Injected environment variables: GH_TOKEN')).toBeInTheDocument()
     expect(within(item).getByText(/Updated/)).toBeInTheDocument()
     expect(await within(item).findByText('Built-in template v2.100.0')).toBeInTheDocument()
@@ -492,7 +516,7 @@ describe('Credentials are write-only', () => {
         }),
       ],
     })
-    const item = within(region('Available CLIs')).getByRole('listitem', { name: 'lark-cli' })
+    const item = await expandCli(user, 'lark-cli')
     expect((await within(item).findAllByRole('note'))[0]).toHaveTextContent("the host user's own Lark identity")
     await user.click(within(item).getByRole('button', { name: 'Enter credential' }))
     const dialog = await screen.findByRole('dialog')
@@ -505,7 +529,7 @@ describe('Credentials are write-only', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(body).toEqual({ fields: { appId: 'cli_app_id', appSecret: 'super-secret-value', brand: 'feishu' } }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(await within(item).findByText('Set')).toBeInTheDocument()
+    expect((await within(item).findAllByText('Set')).length).toBeGreaterThan(0)
     expect(document.body.innerHTML).not.toContain('super-secret-value')
     expect(router.state.location.pathname + router.state.location.search).not.toContain('super-secret-value')
     expect(JSON.stringify({ ...localStorage })).not.toContain('super-secret-value')
@@ -516,8 +540,6 @@ describe('Credentials are write-only', () => {
     await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ status: 'unavailable' }) }] }) })
     expect(within(region('Available CLIs')).getByText('Unavailable; enter it again')).toBeInTheDocument()
   })
-
-
 })
 
 describe('Delete Agent', () => {

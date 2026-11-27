@@ -80,13 +80,13 @@ export function SchemaFields({
         return (
           <div key={field.name} className="grid min-w-0 gap-1.5">
             {field.kind === 'boolean' && mode === 'global' ? (
-              <label className="inline-flex items-center gap-2 text-[14px] font-bold">
+              <label className="inline-flex items-center gap-2 text-[14px] font-medium">
                 <input
                   type="checkbox"
                   {...common}
                   checked={draft.values[field.name] === 'true'}
                   onChange={(event) => setValue(field.name, event.target.checked ? 'true' : 'false')}
-                  className="size-4 accent-riso-blue"
+                  className="size-4 accent-ink"
                 />
                 {field.label}
               </label>
@@ -106,7 +106,7 @@ export function SchemaFields({
                 onChange={(secret) => setSecret(field.name, secret)}
               />
             ) : field.kind === 'unsupported' ? (
-              <p id={inputId} className="rounded-input bg-ink/[0.04] px-3 py-2 text-[13px] text-ink-700">
+              <p id={inputId} className="rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] text-ink-700">
                 {text.unsupported}
               </p>
             ) : field.kind === 'enum' || (field.kind === 'boolean' && mode === 'project') ? (
@@ -174,7 +174,7 @@ function SecretInput({
   const action = 'shrink-0 cursor-pointer text-[13px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40'
   if (wasSet && secret.mode !== 'set')
     return (
-      <div id={inputId} aria-describedby={hintId} className={cn('flex h-11 min-w-0 items-center gap-3 rounded-input bg-white px-3.5 shadow-[inset_0_0_0_2px_rgb(24_38_94/.18)]', secret.mode === 'clear' && 'bg-tint-yellow')}>
+      <div id={inputId} aria-describedby={hintId} className={cn('flex h-11 min-w-0 items-center gap-3 rounded-input border border-hairline-strong bg-surface-control px-3.5', secret.mode === 'clear' && 'bg-tint-yellow')}>
         <span className="min-w-0 flex-1 truncate text-[14px] text-ink-700">
           {secret.mode === 'clear' ? text.secretCleared : <><span aria-hidden="true" className="tracking-[3px]">{'••••••••'}</span> {text.secretSet}</>}
         </span>
@@ -348,7 +348,7 @@ export function ConfigForm({
         <div role="group" aria-label={text.conflictTitle} className="grid min-w-0 gap-2.5">
           <Alert variant="warning" role="status">
             <AlertDescription>
-              <p className="font-black">{text.conflictTitle}</p>
+              <p className="font-semibold">{text.conflictTitle}</p>
               <p>{text.conflictBody}</p>
             </AlertDescription>
           </Alert>
@@ -366,12 +366,12 @@ export function ConfigForm({
       <div className="flex flex-wrap items-center justify-end gap-3">
         {footer && <div className="mr-auto text-[13px] text-ink-700">{footer}</div>}
         {dirty && (
-          <p role="status" className="rounded-full bg-tint-yellow px-3 py-0.5 text-[13px] font-black">
+          <p role="status" className="rounded-full border border-hairline bg-tint-yellow px-3 py-0.5 text-[13px] font-semibold">
             {Object.keys(errors).length ? text.fix : text.unsaved}
           </p>
         )}
         {saved && !dirty && (
-          <p role="status" className="text-[13px] font-bold text-green-text">
+          <p role="status" className="text-[13px] font-medium text-green-text">
             {text.saved}
           </p>
         )}

@@ -51,7 +51,7 @@ describe('Project accounts, formal HTTP fixture', () => {
     const hint = await within(area).findByText(message)
     expect(hint.closest(`[role="${role}"]`)).not.toBeNull()
     const link = within(area).queryByRole('link', { name: 'Open local mode settings' })
-    if (localLogin === 'missing') expect(link).toHaveAttribute('href', '/settings#local-mode')
+    if (localLogin === 'missing') expect(link).toHaveAttribute('href', '/settings/workspace#local-mode')
     else expect(link).toBeNull()
   })
 
@@ -336,16 +336,49 @@ describe('Project OAuth, formal HTTP fixture, no navigation to the provider', ()
   })
 })
 
-// "Printed sheet" redesign, step 3: in project settings the accounts sit in the numbered section "Project accounts".
-describe('Embedded in the numbered section of project settings', () => {
-  it('model accounts and CLI accounts are two blocks in the section: one heading size smaller (h3), not cards, with a dashed line between them', async () => {
-    server.use(directory, http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [] })))
+// Credentials tab: segmented sub-filter between Model accounts (N) and CLI accounts (M) + progressive disclosure.
+describe('Embedded in project settings Credentials tab', () => {
+  it('shows an inline segmented sub-filter with live counts and switches between Model accounts and CLI accounts', async () => {
+    const user = userEvent.setup()
+    const accounts = [
+      projectAccount({ id: '10000000-0000-7000-8000-000000000011', name: 'Anthropic main', purpose: 'model', provider: 'anthropic' }),
+      projectAccount({ id: '10000000-0000-7000-8000-000000000012', name: 'GitHub bot', purpose: 'cli', provider: null, cli: 'gh', authMethod: 'oauth' }),
+    ]
+    server.use(
+      directory,
+      http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
+      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts })),
+    )
     renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectCredentialSettings projectId={defaultProject.id} embedded /></DraftNavigationGuard> }], '/')
-    const model = await screen.findByRole('region', { name: 'Model accounts' })
-    const cli = screen.getByRole('region', { name: 'CLI accounts' })
+    const filter = await screen.findByRole('radiogroup', { name: 'Account category' })
+    expect(within(filter).getByRole('radio', { name: /Model accounts.*\(1\)/ })).toHaveAttribute('aria-checked', 'true')
+    expect(within(filter).getByRole('radio', { name: /CLI accounts.*\(1\)/ })).toHaveAttribute('aria-checked', 'false')
+
+    const model = screen.getByRole('region', { name: 'Model accounts' })
     expect(within(model).getByRole('heading', { level: 3, name: 'Model accounts' })).toBeInTheDocument()
-    for (const block of [model, cli]) expect(block).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
-    expect(cli).toHaveClass('not-first:border-t-[1.5px]', 'not-first:border-dashed')
+    expect(model).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
+    expect(screen.queryByRole('region', { name: 'CLI accounts' })).toBeNull()
+
+    await user.click(within(filter).getByRole('radio', { name: /CLI accounts/ }))
+    const cli = screen.getByRole('region', { name: 'CLI accounts' })
+    expect(within(cli).getByRole('heading', { level: 3, name: 'CLI accounts' })).toBeInTheDocument()
+    expect(cli).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
+    expect(screen.queryByRole('region', { name: 'Model accounts' })).toBeNull()
+    // Heavy sub-panels stay collapsed by default until toggled open.
+    expect(within(cli).getByRole('button', { name: 'Verify' })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(cli).getByRole('button', { name: 'Re-login' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('auto-selects CLI accounts when recovery query params are present', async () => {
+    server.use(
+      directory,
+      http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
+      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [] })),
+    )
+    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectCredentialSettings projectId={defaultProject.id} embedded /></DraftNavigationGuard> }], '/?cliImport=30000000-0000-7000-8000-000000000001')
+    const filter = await screen.findByRole('radiogroup', { name: 'Account category' })
+    expect(within(filter).getByRole('radio', { name: /CLI accounts/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('region', { name: 'CLI accounts' })).toBeInTheDocument()
   })
 
   it('when unavailable, the notice goes straight into the section without its own heading', async () => {

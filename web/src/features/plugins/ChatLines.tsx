@@ -47,16 +47,16 @@ function platformReply(result: Schemas['ConsoleCommandResult']): string {
 function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleResumeSession'][]; onResume?: (sessionId: string) => void }) {
   const text = t.chat.commands
   return (
-    <div role="list" aria-label={text.resumeList} className="flex w-full max-w-[640px] flex-col border-t-2 border-ink">
+    <div role="list" aria-label={text.resumeList} className="flex w-full max-w-[640px] flex-col border-t border-hairline-strong">
       {sessions.map((session) => {
         const title = session.title?.trim() || text.noTextSession
         const shortID = session.id.length > 12 ? `${session.id.slice(0, 8)}…${session.id.slice(-4)}` : session.id
         return (
-          <div role="listitem" key={session.id} className="flex min-w-0 items-center gap-3 border-b-[1.5px] border-dashed border-ink/25 px-1 py-2.5 text-ink-700">
+          <div role="listitem" key={session.id} className="flex min-w-0 items-center gap-3 border-b border-hairline px-1 py-2.5 text-ink-700">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[13.5px] font-black text-ink [overflow-wrap:anywhere]">{title}</span>
-                {session.current && <span className="rounded-stamp bg-riso-yellow px-1.5 text-[11px] leading-[18px] font-black text-ink">{text.currentSession}</span>}
+                <span className="text-[13.5px] font-semibold text-ink [overflow-wrap:anywhere]">{title}</span>
+                {session.current && <span className="rounded-stamp border border-hairline-strong bg-surface-active px-1.5 text-[11px] leading-[18px] font-semibold text-ink">{text.currentSession}</span>}
               </div>
               {session.preview && session.preview !== session.title && <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-ink-500 [overflow-wrap:anywhere]">{session.preview}</p>}
               <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ink-500">
@@ -66,7 +66,7 @@ function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleR
               </div>
             </div>
             {!session.current && onResume && (
-              <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => onResume(session.id)}>
+              <Button type="button" size="xs" variant="secondary" onClick={() => onResume(session.id)}>
                 {text.resumeAction}
               </Button>
             )}
@@ -94,7 +94,7 @@ function ManualCopy({ text: content }: { text: string }) {
     box.current?.setSelectionRange(0, content.length)
   }
   return (
-    <div className="ml-1 flex w-full max-w-[640px] flex-col gap-2 border-l-2 border-dashed border-ink/40 py-0.5 pl-3">
+    <div className="ml-1 flex w-full max-w-[640px] flex-col gap-2 border-l border-hairline-strong py-0.5 pl-3">
       <p className="text-[13.5px] leading-[1.6] text-ink-700">{t.chat.commands.copyManual}</p>
       <div className="flex min-w-0 items-start gap-2.5">
         <textarea
@@ -104,9 +104,9 @@ function ManualCopy({ text: content }: { text: string }) {
           value={content}
           rows={Math.min(6, content.split('\n').length + 1)}
           onFocus={(event) => event.currentTarget.setSelectionRange(0, content.length)}
-          className="min-w-0 flex-1 resize-y rounded-ticket border-2 border-ink bg-paper-raised px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus"
+          className="min-w-0 flex-1 resize-y rounded-ticket border border-hairline-strong bg-surface-control px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus"
         />
-        <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => void copy()}>
+        <Button type="button" size="xs" variant="secondary" onClick={() => void copy()}>
           {copied ? t.common.copied : t.common.copy}
         </Button>
       </div>
@@ -140,7 +140,7 @@ export function CommandLine({ command, result, at, onResume, copyFailed = false 
       ) : manualCopy !== null ? (
         <ManualCopy text={manualCopy} />
       ) : (
-        <p className="ml-1 border-l-2 border-dashed border-ink/40 py-0.5 pl-3 text-[13.5px] leading-[1.6] whitespace-pre-wrap text-ink-700 [overflow-wrap:anywhere]">{platform ? platformReply(result) : result.reply ?? text.noReply}</p>
+        <p className="ml-1 border-l border-hairline-strong py-0.5 pl-3 text-[13.5px] leading-[1.6] whitespace-pre-wrap text-ink-700 [overflow-wrap:anywhere]">{platform ? platformReply(result) : result.reply ?? text.noReply}</p>
       )}
     </div>
   )
@@ -150,10 +150,10 @@ export function CommandLine({ command, result, at, onResume, copyFailed = false 
 // the plugin has been uninstalled.
 export function PluginSenderChip({ participant, className }: { participant: Schemas['InboxParticipant']; className?: string }) {
   return (
-    <span title={participant.address ?? undefined} className={cn('inline-flex min-w-0 items-center gap-1 rounded-[6px] bg-tint-blue px-1.5 py-px text-[11.5px] leading-4 font-black text-ink', className)}>
+    <span title={participant.address ?? undefined} className={cn('inline-flex min-w-0 items-center gap-1 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-px text-[11.5px] leading-4 font-semibold text-ink', className)}>
       <PlugIcon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.4} />
       <span className="min-w-0 truncate">{text.sender(participant.name)}</span>
-      {participant.deleted && <span className="shrink-0 font-bold text-ink-500">{text.uninstalled}</span>}
+      {participant.deleted && <span className="shrink-0 font-medium text-ink-500">{text.uninstalled}</span>}
     </span>
   )
 }

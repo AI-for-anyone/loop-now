@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeImportConversation, makeImportFolder } from '@/test/importing'
-import { counts, folderCheck, groupFolders, importBody, initialSelection, MAX_PER_FOLDER, repositoryName, withConversation, withFolder } from './selection'
+import { counts, filterFolders, folderCheck, groupFolders, importBody, initialSelection, MAX_PER_FOLDER, repositoryName, withConversation, withFolder } from './selection'
 
 describe('What the import page picks', () => {
   it('starts with every suggested folder checked, leaving out conversations already imported or that cannot be imported', () => {
@@ -69,5 +69,35 @@ describe('What the import page picks', () => {
     expect(repositoryName('ssh://git@code.example.com:2222/team/tool')).toBe('team/tool')
     expect(repositoryName('/srv/git/plain')).toBeNull()
     expect(repositoryName(null)).toBeNull()
+  })
+
+  it('filters folders by CLI and search keyword across folder path, repo name, and conversation titles', () => {
+    const a = makeImportFolder({
+      path: '/code/t3code',
+      repository: { remote: 'git@github.com:pingdotgg/t3code.git', mainCheckout: '/code/t3code' },
+      conversations: [
+        makeImportConversation({ sessionId: 'c1', title: 'Welcome page', cli: 'claude' }),
+        makeImportConversation({ sessionId: 'c2', title: 'Permission modes', cli: 'codex' }),
+      ],
+    })
+    const b = makeImportFolder({
+      path: '/code/notes',
+      git: false,
+      repository: null,
+      conversations: [makeImportConversation({ sessionId: 'c3', title: 'Release checklist', cli: 'claude' })],
+    })
+
+    const codexOnly = filterFolders([a, b], { query: '', cli: 'codex' })
+    expect(codexOnly).toHaveLength(1)
+    expect(codexOnly[0].conversations.map((c) => c.sessionId)).toEqual(['c2'])
+
+    const byTitle = filterFolders([a, b], { query: 'checklist', cli: 'all' })
+    expect(byTitle).toHaveLength(1)
+    expect(byTitle[0].path).toBe('/code/notes')
+    expect(byTitle[0].conversations.map((c) => c.sessionId)).toEqual(['c3'])
+
+    const byRepo = filterFolders([a, b], { query: 'pingdotgg', cli: 'claude' })
+    expect(byRepo).toHaveLength(1)
+    expect(byRepo[0].conversations.map((c) => c.sessionId)).toEqual(['c1'])
   })
 })

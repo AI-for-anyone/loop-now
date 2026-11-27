@@ -1,5 +1,8 @@
+import { useEffect, useRef } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { AgentPlugins } from '@/features/plugins/AgentPlugins'
-import { StickyNote } from '@/components/StickyNote'
+import { SubNav } from '@/components/IndexTabs'
+import { PageBody } from '@/components/Sheet'
 import type { Schemas } from '@/api/client'
 import { useAgentStatus } from '@/api/queries'
 import { config } from '@/config'
@@ -7,15 +10,17 @@ import { useAgentContext } from '@/features/agents/agent-context'
 import { t } from '@/i18n'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { useRuntimeLookup } from '@/lib/runtime'
+import { cn } from '@/lib/utils'
 import { BasicSection } from './BasicSection'
 import { ClisSection } from './ClisSection'
-import { ConfigToc } from './ConfigToc'
+import { tabRulerSections } from './ConfigToc'
 import { DangerZone } from './DangerZone'
 import { ModelCredentialSection } from './ModelCredentialSection'
 import { LocalAccountSection } from './RuntimeNotes'
 import { Section } from './Section'
+import { parseConfigTab, resolveConfigHash, sectionId, sectionTitleId, tabPanelId, type ConfigTab } from './sections'
 import { SkillsSection } from './SkillsSection'
-import { WorkSection } from './WorkSection'
+import { PermissionsSection, WorkSection } from './WorkSection'
 import { AgentPromptSection } from '@/features/prompts/AgentPromptSection'
 import { AgentLocalDirectoriesSection } from '@/features/local-mode/LocalDirectories'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
@@ -25,8 +30,13 @@ import { ProjectModelSelection } from '@/features/project-credentials/AgentAccou
 export function ConfigPage() {
   const { agent } = useAgentContext()
   const scope = useScope()
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+
   // The config page has no event stream, so poll busy/idle at the Agent list's refresh interval; used for the config-takes-effect
-  // notice and the delete condition.
+  // status pill and the delete condition.
   const status = useAgentStatus(agent.id, config.agentListPollMs)
   const current = status.data?.currentRun ?? null
   const busy = status.data?.busy ?? agent.busy
@@ -34,34 +44,92 @@ export function ConfigPage() {
   const idle = status.data !== undefined && !status.data.busy && queued === 0
   const stale = current !== null && current.configVersion < agent.configVersion
 
-  // Inside the sheet, the numbered sections are on the left (scrolling on their own) and the section ruler in the stub is on the right
-  // (it doesn't scroll with the sections; hidden on narrow screens).
-  // The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the content
-  // instead of stretching the whole page based on their unscrolled position.
+  // Legacy #config-* hashes activate their owning sub-tab and scroll/focus the target section.
+  const hashTarget = resolveConfigHash(location.hash)
+  const activeTab: ConfigTab = hashTarget?.tab ?? parseConfigTab(searchParams.get('tab'))
+
+  const targetSection = hashTarget?.section ?? null
+  useEffect(() => {
+    if (!targetSection) return
+    document.getElementById(sectionId(targetSection))?.scrollIntoView({ block: 'start' })
+    document.getElementById(sectionTitleId(targetSection))?.focus({ preventScroll: true })
+  }, [targetSection, location.hash])
+
+  const selectTab = (next: ConfigTab) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', next)
+    void navigate({ search: `?${params.toString()}`, hash: '' }, { replace: true })
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }
+
+  const panelClass = (tab: ConfigTab) => cn('flex min-w-0 flex-col gap-6', activeTab !== tab && 'hidden')
+
   return (
-    <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}><div className="flex h-full min-h-0">
-      <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[960px] flex-col gap-6 px-3.5 pt-4 pb-16 nav:px-6">
-          {/* “当前回复使用修改前的配置” (The current reply uses the config from before the change) is bold navy: the artboard's pink
-              text on the yellow sticky note has a contrast ratio of only 4.45:1. */}
-          <StickyNote>
-            <p className="font-bold">{t.config.effectNotice}</p>
-            {stale && <p className="font-black">{t.config.staleRunNotice}</p>}
-          </StickyNote>
-          <BasicSection key={agent.id} agent={agent} busy={busy} />
-          <WorkSection key={`work:${agent.id}`} agent={agent} />
-          <AgentPromptSection agent={agent} />
-          <AgentLocalDirectoriesSection key={`local-dirs:${agent.id}`} agent={agent} />
-          {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} />
-            : <PlatformModelAccount agent={agent} />}
-          <SkillsSection agentId={agent.id} />
-          <ClisSection agent={agent} />
-          <AgentPlugins agent={agent} />
-          <DangerZone agent={agent} idle={idle} />
+    <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 border-b border-hairline bg-surface-canvas px-4 sm:px-6">
+          <SubNav
+            aria-label={t.config.tabs.label}
+            value={activeTab}
+            onChange={selectTab}
+            className="min-w-0 border-b-0 bg-transparent px-0 sm:px-0"
+            items={[
+              { key: 'general', label: t.config.tabs.general, controls: tabPanelId('general') },
+              { key: 'workspace', label: t.config.tabs.workspace, controls: tabPanelId('workspace') },
+              { key: 'tools', label: t.config.tabs.tools, controls: tabPanelId('tools') },
+              {
+                key: 'danger',
+                label: <span className="text-red-text">{t.config.tabs.danger}</span>,
+                controls: tabPanelId('danger'),
+              },
+            ]}
+          />
+          <div
+            role="note"
+            title={stale ? `${t.config.effectNotice} ${t.config.staleRunNotice}` : t.config.effectNotice}
+            className={cn(
+              'my-1 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap',
+              stale
+                ? 'border-pink-text/30 bg-tint-yellow text-ink'
+                : 'border-hairline bg-surface-subtle text-ink-500',
+            )}
+          >
+            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', stale ? 'bg-status-busy' : 'bg-ink-500/60')} />
+            <span>{stale ? t.config.staleRunNotice : t.config.effectShort}</span>
+            <span className="sr-only">{t.config.effectNotice}</span>
+          </div>
+        </div>
+        {/* Dedicated positioning wrapper below SubNav so the floating vernier PageRuler aligns only with the scrollable body. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <PageBody
+            ref={bodyRef}
+            width="narrow"
+            ruler={{ label: t.config.toc.title, sections: tabRulerSections(activeTab) }}
+            innerClassName="pb-14"
+          >
+            {/* All four tab panels stay mounted (hidden via CSS when inactive) so unsaved edits survive tab switches and DraftNavigationGuard guards route exits. */}
+            <div role="tabpanel" id={tabPanelId('general')} data-tab-panel="general" data-state={activeTab === 'general' ? 'active' : 'inactive'} className={panelClass('general')}>
+              <BasicSection key={agent.id} agent={agent} busy={busy} />
+              {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} /> : <PlatformModelAccount agent={agent} />}
+              <PermissionsSection key={`permissions:${agent.id}`} agent={agent} />
+            </div>
+            <div role="tabpanel" id={tabPanelId('workspace')} data-tab-panel="workspace" data-state={activeTab === 'workspace' ? 'active' : 'inactive'} className={panelClass('workspace')}>
+              <AgentPromptSection agent={agent} />
+              <WorkSection key={`work:${agent.id}`} agent={agent} />
+              <AgentLocalDirectoriesSection key={`local-dirs:${agent.id}`} agent={agent} />
+            </div>
+            <div role="tabpanel" id={tabPanelId('tools')} data-tab-panel="tools" data-state={activeTab === 'tools' ? 'active' : 'inactive'} className={panelClass('tools')}>
+              <SkillsSection agentId={agent.id} />
+              <ClisSection agent={agent} />
+              <AgentPlugins agent={agent} />
+            </div>
+            <div role="tabpanel" id={tabPanelId('danger')} data-tab-panel="danger" data-state={activeTab === 'danger' ? 'active' : 'inactive'} className={panelClass('danger')}>
+              <DangerZone agent={agent} idle={idle} />
+            </div>
+          </PageBody>
         </div>
       </div>
-      <ConfigToc />
-    </div></DraftNavigationGuard>
+    </DraftNavigationGuard>
   )
 }
 

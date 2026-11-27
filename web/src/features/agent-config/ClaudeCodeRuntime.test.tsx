@@ -12,6 +12,11 @@ import { thinkingOptions } from '@/test/thinking'
 // The runtime is determined by the model provider: choosing the local Claude Code means the Claude Code runtime; anything else is Pi.
 const region = (name: string) => screen.getByRole('region', { name })
 const saveButton = () => within(region('Basics')).getByRole('button', { name: 'Save' })
+const openRunner = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
+  const trigger = within(region('Basics')).getByRole('button', { name: /^Runs on/ })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+  return screen.findByRole('dialog', { name: 'Runs on' })
+}
 const providerNote = 'Uses the Claude Code installed on this computer and your login there. The platform doesn\'t store login details.'
 const differencesTitle = 'Running on Claude Code'
 const claudeAgent = (overrides: Partial<Schemas['Agent']> = {}) => makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', ...overrides })
@@ -22,15 +27,16 @@ describe('Choosing Claude Code', () => {
     const agent = makeAgent()
     const { user } = await renderConfig({ agent, handlers: [catalog] })
     const basic = region('Basics')
-    expect(await runnerTab(basic, 'Claude Code')).toHaveAccessibleName('Claude Code, Ready')
-    expect(within(basic).queryByText(providerNote)).toBeNull()
+    const picker = await openRunner(user)
+    expect(await runnerTab(picker, 'Claude Code')).toHaveAccessibleName('Claude Code, Ready')
+    expect(within(picker).queryByText(providerNote)).toBeNull()
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
 
     // Looking at Claude Code says whose login it runs on; the differences show once one of its models is chosen.
-    await chooseRunner(user, basic, 'Claude Code')
-    expect(await within(basic).findByText(providerNote)).toBeInTheDocument()
+    await chooseRunner(user, picker, 'Claude Code')
+    expect(await within(picker).findByText(providerNote)).toBeInTheDocument()
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
-    await chooseModel(user, basic, 'opus')
+    await chooseModel(user, picker, 'opus')
     const differences = within(basic).getByRole('region', { name: differencesTitle })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'It runs with your home directory and logins on this computer: gh, git and other commands it runs use your own logins.',
@@ -38,11 +44,11 @@ describe('Choosing Claude Code', () => {
       'Plugins that only contain Pi extensions don\'t apply to it; plugin skills and MCP tools work.',
       'There are no /pi: commands.',
     ])
-    expect(thinkingOptions(basic)).toEqual(['Default (Medium)', 'Max', 'Extra high', 'High', 'Medium', 'Low'])
+    expect(thinkingOptions(picker)).toEqual(['Default (Medium)', 'Max', 'Extra high', 'High', 'Medium', 'Low'])
     expect(within(basic).queryByLabelText('Codex speed')).toBeNull()
 
     // Choosing a Pi model again takes the differences away.
-    await chooseModel(user, basic, 'claude-haiku-5-5', { runtime: 'Pi', provider: 'anthropic' })
+    await chooseModel(user, picker, 'claude-haiku-5-5', { runtime: 'Pi', provider: 'anthropic' })
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
   })
 
@@ -64,13 +70,17 @@ describe('Choosing Claude Code', () => {
       ],
     })
     const basic = region('Basics')
-    await chooseModel(user, basic, 'sonnet', { runtime: 'Claude Code' })
+    let picker = await openRunner(user)
+    await chooseModel(user, picker, 'sonnet', { runtime: 'Claude Code' })
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     await user.click(saveButton())
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(await within(basic).findByText('Saved')).toBeInTheDocument()
 
-    await chooseModel(user, basic, 'claude-haiku-5-5', { runtime: 'Pi', provider: 'anthropic' })
+    picker = await openRunner(user)
+    await chooseModel(user, picker, 'claude-haiku-5-5', { runtime: 'Pi', provider: 'anthropic' })
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     await user.click(saveButton())
     await waitFor(() => expect(bodies).toHaveLength(2))
     expect(bodies[1]).toEqual({ model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' } })
@@ -95,7 +105,9 @@ describe('Choosing Claude Code', () => {
       ],
     })
     const basic = region('Basics')
-    await chooseModel(user, basic, 'sonnet', { runtime: 'Claude Code' })
+    const picker = await openRunner(user)
+    await chooseModel(user, picker, 'sonnet', { runtime: 'Claude Code' })
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     await user.click(saveButton())
     await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
     expect(await within(basic).findByText('Saved. The current reply is not affected; changes take effect from the next message.')).toBeInTheDocument()
@@ -146,12 +158,12 @@ describe('model account section when the runtime definitions cannot be read', ()
 describe('Local Claude Code unavailable or not logged in', () => {
   it('not installed: the rail says so, looking at it shows the install command, and none of its models can be chosen', async () => {
     const agent = makeAgent()
-    await renderConfig({ agent, handlers: [catalog, http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList({ available: false, version: null, binaryPath: null, unavailableReason: 'not_found', login: null })))] })
-    const basic = region('Basics')
-    const tab = await runnerTab(basic, 'Claude Code')
+    const { user } = await renderConfig({ agent, handlers: [catalog, http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList({ available: false, version: null, binaryPath: null, unavailableReason: 'not_found', login: null })))] })
+    const picker = await openRunner(user)
+    const tab = await runnerTab(picker, 'Claude Code')
     await waitFor(() => expect(tab).toHaveAccessibleName('Claude Code, Not installed'))
     await userEvent.click(tab)
-    const panel = within(basic).getByRole('tabpanel')
+    const panel = within(picker).getByRole('tabpanel')
     expect(within(panel).getByText("claude wasn't found on this computer: install Claude Code and make sure claude runs in a terminal.")).toBeInTheDocument()
     expect(within(panel).getByText('curl -fsSL https://claude.ai/install.sh | bash')).toBeInTheDocument()
     expect(within(panel).getByText("Claude Code can't be chosen until it's set up.")).toBeInTheDocument()
@@ -162,17 +174,18 @@ describe('Local Claude Code unavailable or not logged in', () => {
   it('an Agent on a logged-out Claude Code: its runtime is marked as in use but logged out, with the login command; logged in or unknown lists the models', async () => {
     const loggedOut = http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList({ login: { state: 'logged_out', authMethod: null, subscriptionType: null } })))
     const first = await renderConfig({ agent: claudeAgent(), handlers: [catalog, loggedOut] })
-    const tab = await runnerTab(region('Basics'), 'Claude Code')
+    const firstPicker = await openRunner(first.user)
+    const tab = await runnerTab(firstPicker, 'Claude Code')
     await waitFor(() => expect(tab).toHaveAccessibleName('Claude Code, Logged out, Current'))
-    expect(within(region('Basics')).getByText("Claude Code isn't logged in on this computer: run claude in a terminal there and log in.")).toBeInTheDocument()
-    expect(within(within(region('Basics')).getByRole('tabpanel')).getByText('claude')).toBeInTheDocument()
+    expect(within(firstPicker).getByText("Claude Code isn't logged in on this computer: run claude in a terminal there and log in.")).toBeInTheDocument()
+    expect(within(within(firstPicker).getByRole('tabpanel')).getByText('claude')).toBeInTheDocument()
     first.unmount()
 
     for (const login of [{ state: 'logged_in', authMethod: 'claude.ai', subscriptionType: 'max' }, { state: 'unknown', authMethod: null, subscriptionType: null }] as const) {
       const view = await renderConfig({ agent: claudeAgent(), handlers: [catalog, http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList({ login })))] })
-      const basic = region('Basics')
-      await waitFor(() => expect(within(basic).getByRole('treeitem', { name: 'Claude Sonnet (latest) (sonnet)' })).toHaveAttribute('aria-selected', 'true'))
-      expect(within(basic).queryByText(/isn't logged in/)).toBeNull()
+      const picker = await openRunner(view.user)
+      await waitFor(() => expect(within(picker).getByRole('treeitem', { name: 'Claude Sonnet (latest) (sonnet)' })).toHaveAttribute('aria-selected', 'true'))
+      expect(within(picker).queryByText(/isn't logged in/)).toBeNull()
       view.unmount()
     }
   })

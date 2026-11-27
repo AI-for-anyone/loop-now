@@ -38,7 +38,7 @@ export function ImagePreviewDialog({
               href={original}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-riso-blue underline decoration-2 underline-offset-2 outline-none focus-visible:shadow-focus"
+              className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-riso-blue underline decoration-2 underline-offset-2 outline-none focus-visible:shadow-focus"
             >
               {t.images.openOriginal}
               <ExternalLinkIcon aria-hidden="true" className="size-3.5 shrink-0" />
@@ -59,7 +59,11 @@ export function ImagePreview({ src, name, thumb }: { src: string; name: string; 
         type="button"
         aria-label={t.images.enlarge(name)}
         onClick={() => setOpen(true)}
-        className={thumb ? 'block size-full cursor-zoom-in overflow-hidden rounded-ticket border border-ink/15 bg-paper outline-none focus-visible:shadow-focus' : 'overflow-hidden rounded-input border border-ink/20 bg-white p-1'}
+        className={
+          thumb
+            ? 'block size-full cursor-zoom-in overflow-hidden rounded-ticket border border-hairline-strong bg-surface-subtle transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus'
+            : 'cursor-zoom-in overflow-hidden rounded-input border border-hairline-strong bg-surface-subtle p-1 transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus'
+        }
       >
         <img src={src} alt={name} onError={() => setFailed(true)} loading="lazy" className={thumb ? 'size-full object-cover' : 'h-20 w-28 object-contain'} />
         {failed && <span className={thumb ? 'sr-only' : 'block max-w-28 text-xs'}>{t.images.failed}</span>}
@@ -68,6 +72,7 @@ export function ImagePreview({ src, name, thumb }: { src: string; name: string; 
     </>
   )
 }
+
 export function DraftImagePreview({ file, thumb }: { file: File; thumb?: boolean }) {
   const [src, setSrc] = useState(''), [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -78,6 +83,19 @@ export function DraftImagePreview({ file, thumb }: { file: File; thumb?: boolean
     reader.readAsDataURL(file)
     return () => { reader.onload = null; reader.onerror = null; if (reader.readyState === FileReader.LOADING) reader.abort() }
   }, [file])
-  if (failed) return thumb ? <p role="alert" title={t.images.failed} className="grid size-full place-items-center rounded-ticket border border-ink/15 bg-tint-red text-red-text"><ImageOffIcon aria-hidden="true" className="size-5" /><span className="sr-only">{t.images.failed}</span></p> : <p role="alert" className="text-xs">{t.images.failed}</p>
-  return src ? <ImagePreview key={src} src={src} name={file.name} thumb={thumb} /> : thumb ? <span aria-hidden="true" className="block size-full rounded-ticket border border-ink/15 bg-paper" /> : null
+  if (failed) {
+    return thumb ? (
+      <p role="alert" title={t.images.failed} className="grid size-full place-items-center rounded-ticket border border-red-text/25 bg-tint-red text-red-text">
+        <ImageOffIcon aria-hidden="true" className="size-5" />
+        <span className="sr-only">{t.images.failed}</span>
+      </p>
+    ) : (
+      <p role="alert" className="text-xs text-red-text">{t.images.failed}</p>
+    )
+  }
+  return src ? (
+    <ImagePreview key={src} src={src} name={file.name} thumb={thumb} />
+  ) : thumb ? (
+    <span aria-hidden="true" className="block size-full rounded-ticket border border-hairline bg-surface-subtle" />
+  ) : null
 }

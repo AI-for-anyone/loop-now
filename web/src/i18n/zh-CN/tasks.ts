@@ -66,6 +66,8 @@ export const tasks = {
   // the progress in the stub. “进行中” (In progress) covers preparing, running and waiting for reply.
   updated: '更新', updatedAt: (time: string) => formatDayClock(time),
   filters: { label: '状态筛选', all: '全部', active: '进行中', blocked: '阻塞', completed: '已完成' },
+  filteredEmpty: '当前筛选下没有匹配的任务。',
+  showAll: '显示全部',
   progress: { title: '进度', active: '进行中', blocked: '阻塞', completed: '已完成' },
   loading: '加载任务中…', updating: '实时更新中', reconnecting: '连接中断，正在重连…',
   // Task-turn error codes that are not run error codes (those come from chat.runError): set by the task coordinator.

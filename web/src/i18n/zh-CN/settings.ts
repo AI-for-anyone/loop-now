@@ -4,8 +4,48 @@ type S = components['schemas']
 
 export const settings = {
   title: '全局设置',
+  tabs: {
+    nav: '全局设置分组',
+    general: '常规与外观',
+    runtimes: '运行时与模型',
+    workspace: '工作区与本机模式',
+    server: '服务端与诊断',
+  },
+  runtimesViews: {
+    label: '运行时与模型视图',
+    runtimes: '运行时与 AI 帮写',
+    models: 'models.json',
+  },
+  workspaceViews: {
+    label: '工作区与本机模式视图',
+    localMode: '本机模式',
+    folder: '全局文件夹',
+  },
   // The UI language is saved only in this browser; it isn't server config.
   language: { title: '界面语言', hint: '只影响这个浏览器；切换后页面会重新加载。' },
+  // Theme and color mode are stored only in this browser and take effect immediately without reloading.
+  appearance: {
+    title: '外观',
+    hint: '只保存在当前浏览器，切换立即生效，不会中断对话。',
+    skinLabel: '主题',
+    modeLabel: '外观模式',
+    lightOnlyHint: '该主题仅支持浅色模式。',
+    skins: {
+      mono: {
+        name: '极简黑白',
+        description: '纯净高对比单色工作台，支持浅色、深色与跟随系统。',
+      },
+      plate: {
+        name: '孔版印刷（经典）',
+        description: '原版暖纸、墨蓝与荧光套印风格（仅浅色）。',
+      },
+    },
+    modes: {
+      system: '跟随系统',
+      light: '浅色',
+      dark: '深色',
+    },
+  },
   // Page header meta: server version and connection status.
   product: (version: string) => `Loop Now ${version}`,
   serverStatus: { ok: '服务端连接正常', degraded: '服务端数据库不可用' },

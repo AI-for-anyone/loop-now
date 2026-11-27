@@ -8,7 +8,7 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DeletedMark } from './party'
 import { MailIcon } from 'lucide-react'
-import { avatarPair } from '@/lib/avatar'
+import { AgentAvatar } from '@/components/AgentAvatar'
 import { partyDisplay } from './participants'
 import { QuestionSummary } from './Question'
 import { InboxNotice } from './InboxNotice'
@@ -50,46 +50,58 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
         : read
           ? t.inbox.readByThem
           : t.inbox.unreadByThem
-  const unreadStyle = received ? 'bg-riso-pink text-ink' : 'bg-tint-yellow text-ink'
+  const unreadStyle = received ? 'bg-cta-bg text-cta-fg' : 'bg-tint-yellow text-ink'
   const body = open && (
-    <div id={bodyId} className={cn('mb-4 rounded-input bg-tint-blue px-4 py-3.5 text-[15px] leading-[1.85]', layout === 'row' ? 'mx-1' : 'mx-[18px] sm:ml-[39px]')}>
+    <div id={bodyId} className={cn('mb-4 rounded-input border border-hairline bg-surface-subtle px-4 py-3.5 text-[15px] leading-[1.85]', layout === 'row' ? 'mx-1' : 'mx-[18px] sm:ml-[39px]')}>
       {full.data ? <><Markdown text={full.data.text} /><MessageImages images={full.data.images} />{full.data.question && <QuestionSummary question={full.data.question} />}{full.data.notice && <InboxNotice notice={full.data.notice} />}</> : full.isError ? <ErrorAlert error={full.error} /> : <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
     </div>
   )
 
   if (layout === 'row') {
     return (
-      <li className="border-b-[1.5px] border-dashed border-ink/25">
+      <li className="border-b border-hairline">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={open ? bodyId : undefined}
           onClick={() => setOpen((value) => !value)}
-          className="flex w-full flex-wrap items-center gap-x-[18px] gap-y-1.5 px-1 py-[15px] text-left text-ink outline-none focus-visible:shadow-focus"
+          className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5 px-1 py-2.5 text-left text-ink outline-none hover:bg-surface-hover/50 focus-visible:shadow-focus"
         >
-          {/* Sender: avatar and name, with the monospace address below. */}
-          <span className="flex min-w-0 flex-[0_0_214px] items-center gap-2.5">
+          {owner.kind === 'identity' && (
+            <span
+              className={cn(
+                'inline-flex min-w-[46px] shrink-0 items-center justify-center rounded-full px-2 text-[11.5px] leading-[20px] font-semibold',
+                received
+                  ? 'border border-hairline bg-surface-subtle text-ink-700'
+                  : 'bg-tint-yellow text-pink-text',
+              )}
+            >
+              {received ? t.identities.directions.received : t.identities.directions.sent}
+            </span>
+          )}
+          {/* Sender / other party: avatar and name, with the monospace address below. */}
+          <span className="flex min-w-0 flex-[0_0_188px] items-center gap-2.5">
             <SenderMark party={party} />
-            <span className="flex min-w-0 flex-col leading-[1.35]">
+            <span className="flex min-w-0 flex-col leading-[1.3]">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-[14.5px] font-black">{shown.title}</span>
+                <span className="truncate text-[14px] font-semibold">{shown.title}</span>
                 {shown.deleted && <DeletedMark label={shown.deleted} />}
               </span>
               {shown.address && <span className="truncate font-mono text-[11px] text-ink-500">{shown.address}</span>}
             </span>
           </span>
-          {message.whenBusy === 'interrupt' && <span className="shrink-0 rounded-stamp bg-riso-pink px-1.5 text-[11.5px] font-black">{t.inbox.interrupt}</span>}
-          {!open && <span className={cn('min-w-0 flex-[1_1_260px] truncate text-[14.5px]', read ? 'font-normal text-ink-700' : 'font-bold text-ink')}>{message.preview}</span>}
-          <time dateTime={message.createdAt} className="ml-auto w-[92px] shrink-0 text-right font-mono text-[12px] text-ink-700">
+          {message.whenBusy === 'interrupt' && <span className="shrink-0 rounded-stamp border border-pink-text/30 bg-tint-yellow px-1.5 text-[11.5px] font-semibold text-pink-text">{t.inbox.interrupt}</span>}
+          {!open && <span className={cn('min-w-0 flex-[1_1_220px] truncate text-[14px]', read ? 'font-normal text-ink-700' : 'font-semibold text-ink')}>{message.preview}</span>}
+          <time dateTime={message.createdAt} className="ml-auto w-[88px] shrink-0 text-right font-mono text-[12px] text-ink-700">
             {t.inbox.time(message.createdAt)}
           </time>
-          {/* Unread is a slightly tilted stamp with a pink outline; read and cancelled are light blue pills. */}
+          {/* Unread is a clean amber tag in mono skin (tilted pink-outlined stamp in Plate skin); read and cancelled are subtle pills. */}
           {read ? (
-            <span data-read-state="read" className="shrink-0 rounded-full bg-tint-blue px-[9px] text-[12px] leading-[22px] font-bold whitespace-nowrap text-ink-700">
+            <span data-read-state="read" className="shrink-0 rounded-full border border-hairline bg-surface-subtle px-[9px] text-[12px] leading-[22px] font-medium whitespace-nowrap text-ink-700">
               {readText}
             </span>
           ) : (
-            <span data-read-state="unread" className="riso-tilt inline-flex min-h-[22px] shrink-0 items-center rounded-stamp px-[9px] text-[12px] font-black tracking-[0.08em] whitespace-nowrap text-pink-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_2px_var(--pink-text)] [--tilt:-4deg]">
+            <span data-read-state="unread" className="riso-tilt inline-flex min-h-[22px] shrink-0 items-center rounded-stamp px-[9px] text-[12px] font-semibold whitespace-nowrap text-pink-text [--tilt-bg:var(--tint-yellow)] [--tilt-shadow:inset_0_0_0_1px_var(--hairline-strong)]">
               {readText}
             </span>
           )}
@@ -100,7 +112,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   }
 
   return (
-    <li className="rounded-card bg-white shadow-[3px_3px_0_rgb(24_38_94/.12)]">
+    <li className="rounded-card border border-hairline bg-surface-control shadow-surface">
       <button
         type="button"
         aria-expanded={open}
@@ -111,13 +123,13 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
         {owner.kind === 'agent' ? (
           <span
             aria-hidden="true"
-            className={cn('mt-[9px] size-[9px] shrink-0 rounded-full', !read && 'bg-riso-pink shadow-[0_0_0_2px_var(--ink)]')}
+            className={cn('mt-[9px] size-[9px] shrink-0 rounded-full', !read && 'bg-pink-text')}
           />
         ) : (
           <span
             className={cn(
-              'mt-0.5 inline-flex min-w-[46px] shrink-0 items-center justify-center rounded-full px-2 text-[12px] leading-[22px] font-black',
-              received ? 'bg-tint-blue text-riso-blue' : 'bg-tint-pink-2 text-pink-text',
+              'mt-0.5 inline-flex min-w-[46px] shrink-0 items-center justify-center rounded-full px-2 text-[12px] leading-[22px] font-semibold',
+              received ? 'border border-hairline bg-surface-subtle text-ink-700' : 'bg-tint-yellow text-pink-text',
             )}
           >
             {received ? t.identities.directions.received : t.identities.directions.sent}
@@ -125,13 +137,13 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
         )}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-            <span className={cn('text-[15px]', !read && received ? 'font-black' : 'font-bold')}>{shown.title}</span>
+            <span className={cn('text-[15px]', !read && received ? 'font-semibold' : 'font-medium')}>{shown.title}</span>
             {shown.deleted && <DeletedMark label={shown.deleted} />}
             {shown.address && <span className="font-mono text-[11.5px] text-ink-500">{shown.address}</span>}
             {message.whenBusy === 'interrupt' && (
-              <span className="rounded-stamp bg-riso-pink px-1.5 text-[11.5px] font-black">{t.inbox.interrupt}</span>
+              <span className="rounded-stamp border border-pink-text/30 bg-tint-yellow px-1.5 text-[11.5px] font-semibold text-pink-text">{t.inbox.interrupt}</span>
             )}
-            <time dateTime={message.createdAt} className="ml-auto text-[12.5px] font-bold text-ink-500">
+            <time dateTime={message.createdAt} className="ml-auto text-[12.5px] font-medium text-ink-500">
               {t.inbox.time(message.createdAt)}
             </time>
           </span>
@@ -139,8 +151,8 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
         </span>
         <span
           className={cn(
-            'shrink-0 self-start rounded-full px-2.5 text-[12px] leading-[22px] font-black whitespace-nowrap',
-            read ? 'bg-tint-blue text-ink-700' : unreadStyle,
+            'shrink-0 self-start rounded-full px-2.5 text-[12px] leading-[22px] font-semibold whitespace-nowrap',
+            read ? 'border border-hairline bg-surface-subtle text-ink-700' : unreadStyle,
           )}
         >
           {readText}
@@ -151,21 +163,15 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   )
 }
 
-// The sender's small avatar in a row: an Agent gets two small overprinted circles (same as its avatar in chat); the platform,
-// the console and external identities get a small navy square with a yellow envelope inside.
+// The sender's small avatar in a row: an Agent gets two circles (same as its avatar in chat); the platform,
+// the console and external identities get a small square with an envelope inside.
 function SenderMark({ party }: { party: Schemas['InboxParticipant'] }) {
   if (party.kind === 'agent' && party.id) {
-    const [back, front] = avatarPair(party.id)
-    return (
-      <span aria-hidden="true" className={cn('relative block h-[18px] w-[26px] shrink-0', party.deleted && 'opacity-50')}>
-        <span className="absolute top-0 left-0 size-[17px] rounded-full" style={{ background: back }} />
-        <span className="absolute top-px left-[9px] size-[17px] rounded-full mix-blend-multiply" style={{ background: front }} />
-      </span>
-    )
+    return <AgentAvatar id={party.id} size="sm" className={cn(party.deleted && 'opacity-50')} />
   }
   return (
-    <span aria-hidden="true" className={cn('flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[6px] bg-ink text-riso-yellow', party.deleted && 'opacity-50')}>
-      <MailIcon className="size-[13px]" strokeWidth={2.6} />
+    <span aria-hidden="true" className={cn('flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[6px] border border-hairline bg-surface-subtle text-ink', party.deleted && 'opacity-50')}>
+      <MailIcon className="size-[13px]" strokeWidth={2.4} />
     </span>
   )
 }

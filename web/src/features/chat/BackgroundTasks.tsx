@@ -42,7 +42,7 @@ export type BackgroundStopControl = ReturnType<typeof useBackgroundStop>
 
 function useBackgroundStop(stopper: BackgroundStopper) {
   const actions = useQueueActions()
-  // Tasks whose stop was accepted; they show “正在停止…” (Stopping…) until the running list drops them.
+  // Tasks whose stop was accepted; they show "Stopping..." until the running list drops them.
   const [requested, setRequested] = useState<ReadonlySet<string>>(() => new Set())
   const [errors, setErrors] = useState<Record<string, unknown>>({})
   const settle = (key: string, ids: string[], result: Awaited<ReturnType<typeof actions.run>>) => {
@@ -67,7 +67,7 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
   const now = useNow(1000, tasks.length > 0)
   const own = useBackgroundStop(stopper)
   const control = shared ?? own
-  if (tasks.length === 0) return <p role="status" className="px-4 py-3 text-[13.5px] font-bold text-ink-500">{t.background.allEnded}</p>
+  if (tasks.length === 0) return <p role="status" className="px-4 py-3 text-[13.5px] font-semibold text-ink-500">{t.background.allEnded}</p>
   const allError = control.error('all')
   return (
     <div className="flex min-w-0 flex-col">
@@ -78,34 +78,34 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
           const error = control.error(task.id)
           const clock = elapsedClock(now - Date.parse(task.startedAt))
           return (
-            <li key={task.id} data-background-task={task.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b-[1.5px] border-dashed border-ink/25 px-4 py-3 last:border-b-0">
-              <span aria-hidden="true" className="mt-0.5 grid size-8 place-items-center rounded-[9px] bg-ink text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)]">
+            <li key={task.id} data-background-task={task.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hairline px-4 py-3 last:border-b-0">
+              <span aria-hidden="true" className="mt-0.5 grid size-8 place-items-center rounded-[9px] border border-hairline bg-surface-subtle text-ink">
                 <BackgroundKindIcon kind={task.kind} className="size-[17px]" />
               </span>
               <div className="flex min-w-0 flex-col gap-1">
-                <p title={task.label} className="line-clamp-2 font-mono text-[13px] leading-[1.45] font-bold [overflow-wrap:anywhere] text-ink">
+                <p title={task.label} className="line-clamp-2 font-mono text-[13px] leading-[1.45] font-semibold [overflow-wrap:anywhere] text-ink">
                   {task.label}
                 </p>
                 <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-5 text-ink-500">
-                  <span className="font-bold">{t.background.kind[task.kind]}</span>
+                  <span className="font-medium">{t.background.kind[task.kind]}</span>
                   {from && (
                     <>
                       <span aria-hidden="true">{t.chat.metaSeparator}</span>
-                      <Link to={from.to} onClick={onNavigate} aria-label={t.background.fromReplyLabel(from.label)} className="font-bold text-riso-blue underline decoration-[1.5px] underline-offset-[3px] hover:decoration-riso-pink">
+                      <Link to={from.to} onClick={onNavigate} aria-label={t.background.fromReplyLabel(from.label)} className="font-medium text-riso-blue underline decoration-[1.5px] underline-offset-[3px] hover:decoration-ink">
                         {from.label}
                       </Link>
                     </>
                   )}
                 </p>
                 {error !== undefined && (
-                  <p role="alert" className="text-[12.5px] font-bold text-red-text">
+                  <p role="alert" className="text-[12.5px] font-semibold text-red-text">
                     {describeError(error)}
                   </p>
                 )}
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <span className="inline-flex items-center gap-1.5 font-mono text-[15px] leading-5 font-black tabular-nums text-ink" title={t.background.elapsedLabel(clock)}>
-                  <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 text-pink-text motion-reduce:animate-none" strokeWidth={3} />
+                <span className="inline-flex items-center gap-1.5 font-mono text-[14px] leading-5 font-semibold tabular-nums text-ink" title={t.background.elapsedLabel(clock)}>
+                  <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 text-pink-text motion-reduce:animate-none" strokeWidth={2.6} />
                   <span className="sr-only">{t.background.elapsedLabel(clock)}</span>
                   <span aria-hidden="true">{clock}</span>
                 </span>
@@ -128,7 +128,7 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
         })}
       </ul>
       {tasks.length > 1 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t-2 border-ink bg-tint-red/40 px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-hairline bg-tint-red/60 px-4 py-2.5">
           <Button type="button" size="xs" variant="destructive" className="h-8" disabled={tasks.every(control.stopping)} onClick={() => void control.stopAll(tasks.map((task) => task.id))}>
             {control.retry('all') ? t.background.retryStop : t.background.stopAll(tasks.length)}
           </Button>
@@ -140,8 +140,8 @@ export function BackgroundTaskList({ tasks, stopper, origin, onNavigate, control
   )
 }
 
-// The mark in the bar under the message box, right after the runner chip, while background tasks run: a shell glyph and the count (as
-// Claude Code's status line has it), a navy pill so it reads as a thing that runs rather than a setting. It opens the list above it.
+// The mark in the composer bar right after the runner chip while background tasks run: a shell glyph and the count,
+// opening the running task list above it.
 // hint: what the list is about (by default, that the reply has ended and these still run).
 // While the list is open it stays when the last task ends (it says they all ended, and focus is not lost); closed, the mark goes. Stopping
 // is kept here, so a retry after an unknown outcome still repeats its actionId after the list was closed and opened again.
@@ -165,11 +165,11 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
         aria-label={label}
         title={label}
         className={cn(
-          'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink pr-2.5 pl-2 font-mono text-[13px] font-black whitespace-nowrap text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)] outline-none hover:bg-ink-700 focus-visible:shadow-focus aria-expanded:bg-riso-blue',
+          'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-active px-2.5 font-mono text-[12px] font-semibold whitespace-nowrap text-ink transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus aria-expanded:border-cta-bg aria-expanded:bg-cta-bg aria-expanded:text-cta-fg',
           className,
         )}
       >
-        <SquareTerminalIcon aria-hidden="true" className="size-4" strokeWidth={2.4} />
+        <SquareTerminalIcon aria-hidden="true" className="size-3.5" strokeWidth={2.2} />
         <span className="tabular-nums">{tasks.length}</span>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
@@ -179,7 +179,7 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
           sideOffset={10}
           collisionPadding={12}
           aria-label={t.background.title}
-          className="z-50 flex max-h-[min(520px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card bg-paper-raised text-ink shadow-[0_0_0_2px_var(--ink),6px_6px_0_2px_var(--riso-yellow)] outline-none"
+          className="z-50 flex max-h-[min(520px,calc(100dvh-120px))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-elevated text-ink shadow-floating outline-none"
         >
           <BackgroundPanelHead count={tasks.length} hint={hint} />
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -193,10 +193,10 @@ export function BackgroundTasksMark({ tasks, stopper, origin, hint, className }:
 
 export function BackgroundPanelHead({ count, hint = t.background.hint, children }: { count: number; hint?: string; children?: ReactNode }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-b-2 border-ink bg-tint-yellow px-4 py-2.5">
-      <span className="font-display-cn text-[20px] leading-tight">{t.background.title}</span>
-      <span className="rounded-full bg-ink px-2 text-[12px] leading-5 font-black text-riso-yellow">{t.background.running(count)}</span>
-      <span className="basis-full text-[12.5px] font-bold text-ink-700">{hint}</span>
+    <div className="flex shrink-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-b border-hairline bg-surface-subtle px-4 py-2.5">
+      <span className="font-display-cn text-[16px] leading-tight font-semibold">{t.background.title}</span>
+      <span className="rounded-full bg-cta-bg px-2 text-[12px] leading-5 font-semibold text-cta-fg">{t.background.running(count)}</span>
+      <span className="basis-full text-[12.5px] font-medium text-ink-500">{hint}</span>
       {children}
     </div>
   )
@@ -206,22 +206,22 @@ export function BackgroundPanelHead({ count, hint = t.background.hint, children 
 // background tasks: said before the person sends it.
 export function RestartNotice({ runtimeName, count }: { runtimeName: string; count: number }) {
   return (
-    <p role="status" data-restart-notice className="flex min-w-0 items-start gap-2 rounded-ticket border-2 border-dashed border-red-text/60 bg-tint-red px-3 py-1.5 text-[13px] leading-snug font-bold text-red-text">
-      <RotateCwIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.8} />
+    <p role="status" data-restart-notice className="flex min-w-0 items-start gap-2 rounded-ticket border border-red-text/30 bg-tint-red px-3 py-1.5 text-[13px] leading-snug font-medium text-red-text">
+      <RotateCwIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.5} />
       <span className="min-w-0">{t.background.restartWarning(runtimeName, count)}</span>
     </p>
   )
 }
 
-// The mark in lists (overview, project Agents) on an idle Agent whose background tasks still run: a small yellow tilted tag
-// “后台任务 N” (Background N) with the spinner, next to its idle state.
+// The mark in lists (overview, project Agents) on an idle Agent whose background tasks still run: a small tag
+// with the spinner, next to its idle state.
 export function BackgroundCountTag({ count, className }: { count: number; className?: string }) {
   if (count <= 0) return null
   return (
-    <span data-background-count={count} title={t.background.listTitle(count)} className={cn('relative inline-flex min-h-6 shrink-0 items-center px-[10px] text-[12px] font-black whitespace-nowrap text-ink', className)}>
-      <span aria-hidden="true" className="absolute inset-0 rotate-[2deg] rounded-full bg-riso-yellow shadow-[inset_0_0_0_2px_var(--ink)]" />
+    <span data-background-count={count} title={t.background.listTitle(count)} className={cn('relative inline-flex min-h-6 shrink-0 items-center px-[10px] text-[12px] font-semibold whitespace-nowrap text-ink', className)}>
+      <span aria-hidden="true" className="absolute inset-0 rounded-full border border-hairline-strong bg-tint-yellow" />
       <span className="relative inline-flex items-center gap-1.5">
-        <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3 motion-reduce:animate-none" strokeWidth={3} />
+        <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3 motion-reduce:animate-none" strokeWidth={2.8} />
         {t.background.mark(count)}
       </span>
     </span>

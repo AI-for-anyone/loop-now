@@ -19,6 +19,11 @@ const modelRow = (scope: HTMLElement, providerId: string, modelId: string) => wi
 
 const region = (name: string) => screen.getByRole('region', { name })
 const saveButton = () => within(region('Basics')).getByRole('button', { name: 'Save' })
+const openRunner = async (user: Awaited<ReturnType<typeof renderConfig>>['user']) => {
+  const trigger = within(region('Basics')).getByRole('button', { name: /^Runs on/ })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+  return screen.findByRole('dialog', { name: 'Runs on' })
+}
 
 describe('Leave confirmation for unsaved changes', () => {
   // On browser back/forward (POP navigation), popstate fires asynchronously; the memory router
@@ -89,7 +94,9 @@ describe('Following server refreshes', () => {
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
     await waitFor(() => expect(screen.getByLabelText('Display name')).toHaveValue('Renamed assistant'))
     expect(screen.getByLabelText('Agent prompt')).toHaveValue('Prompt changed elsewhere')
-    await waitFor(() => expect(chosenModel(region('Basics'))).toHaveAccessibleName('GPT X (gpt-x)'))
+    const picker = await openRunner(user)
+    await waitFor(() => expect(chosenModel(picker)).toHaveAccessibleName('GPT X (gpt-x)'))
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     expect(saveButton()).toBeDisabled()
     await user.click(screen.getByRole('link', { name: 'Chat' }))
     await waitFor(() => expect(router.state.location.pathname).toMatch(/\/chat$/))
@@ -214,7 +221,9 @@ describe('Model choice', () => {
       ],
     })
     const basic = region('Basics')
-    await chooseModel(user, basic, 'claude-haiku-5-5', { provider: 'anthropic' })
+    const picker = await openRunner(user)
+    await chooseModel(user, picker, 'claude-haiku-5-5', { provider: 'anthropic' })
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     await user.click(saveButton())
     expect(await within(basic).findByText('Provider anthropic has no model claude-haiku-5-5')).toBeInTheDocument()
     const alert = within(basic).getByRole('alert')
@@ -250,35 +259,36 @@ describe('Plugin providers', () => {
         grokModels,
       ],
     })
-    const basic = region('Basics')
-    await waitFor(() => expect(providerRow(basic, 'grok-cli')).toBeDefined())
+    const picker = await openRunner(user)
+    await waitFor(() => expect(providerRow(picker, 'grok-cli')).toBeDefined())
     expect(asked).toContain(agent.id)
     // Those that cannot be chosen at all come last.
-    expect(within(basic).getAllByRole('treeitem').filter((row) => row.hasAttribute('aria-expanded')).map((row) => row.getAttribute('aria-label'))).toEqual([
+    expect(within(picker).getAllByRole('treeitem').filter((row) => row.hasAttribute('aria-expanded')).map((row) => row.getAttribute('aria-label'))).toEqual([
       'anthropic',
       'openai',
       'grok-off, Grok subscription, all plugins are turned off',
       'grok-ok, Grok OK · Grok subscription',
       'grok-cli, Grok CLI · Grok subscription, plugin not granted to this Agent',
     ])
-    for (const id of ['grok-cli', 'grok-off', 'grok-ok']) await openProvider(user, basic, id)
-    expect(modelRow(basic, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true')
-    expect(modelRow(basic, 'grok-ok', 'grok-4')).not.toHaveAttribute('aria-disabled')
-    expect(modelRow(basic, 'grok-off', 'grok-4')).not.toHaveAttribute('aria-disabled')
+    for (const id of ['grok-cli', 'grok-off', 'grok-ok']) await openProvider(user, picker, id)
+    expect(modelRow(picker, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true')
+    expect(modelRow(picker, 'grok-ok', 'grok-4')).not.toHaveAttribute('aria-disabled')
+    expect(modelRow(picker, 'grok-off', 'grok-4')).not.toHaveAttribute('aria-disabled')
     const disabledNote = 'All plugins are turned off in global settings. You can save, but the Agent will fail to start.'
-    expect(within(basic).queryByText(disabledNote)).toBeNull()
-    await user.click(modelRow(basic, 'grok-off', 'grok-4'))
-    expect(within(basic).getByText(disabledNote)).toHaveAttribute('role', 'note')
-    await user.click(modelRow(basic, 'grok-ok', 'grok-4'))
-    expect(within(basic).queryByText(disabledNote)).toBeNull()
+    expect(within(picker).queryByText(disabledNote)).toBeNull()
+    await user.click(modelRow(picker, 'grok-off', 'grok-4'))
+    expect(within(picker).getByText(disabledNote)).toHaveAttribute('role', 'note')
+    await user.click(modelRow(picker, 'grok-ok', 'grok-4'))
+    expect(within(picker).queryByText(disabledNote)).toBeNull()
   })
 
   it('the plugin provider the Agent uses is now unusable: a note below the picker gives the reason and where to fix it', async () => {
     const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
-    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'plugin_not_enabled' })]))), grokModels] })
+    const { user } = await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'plugin_not_enabled' })]))), grokModels] })
     const basic = region('Basics')
     expect(await within(basic).findByText('This project hasn\'t enabled the plugin "Grok subscription". Enable it on the project\'s Plugins page, then grant it to this Agent under "Plugin grants" on this page.')).toHaveAttribute('role', 'note')
-    await waitFor(() => expect(modelRow(basic, 'grok-cli', 'grok-4')).toHaveAttribute('aria-selected', 'true'))
+    const picker = await openRunner(user)
+    await waitFor(() => expect(modelRow(picker, 'grok-cli', 'grok-4')).toHaveAttribute('aria-selected', 'true'))
   })
 
   it("platform Agent: a granted plugin's providers can be chosen; without a grant the option is disabled, and for the one in use a note says to grant it on this page", async () => {
@@ -289,15 +299,15 @@ describe('Plugin providers', () => {
       asked.push(new URL(request.url).searchParams.get('agentId'))
       return HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'agent_not_granted' }), pluginProvider('grok-ok', { name: 'Grok OK' })]))
     }), grokModels] })
-    const basic = region('Basics')
-    await waitFor(() => expect(modelRow(basic, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true'))
+    const picker = await openRunner(user)
+    await waitFor(() => expect(modelRow(picker, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true'))
     expect(asked).toContain(agent.id)
-    expect(providerRow(basic, 'grok-cli')).toHaveAccessibleName('grok-cli, Grok CLI · Grok subscription, plugin not granted to this Agent')
-    await openProvider(user, basic, 'grok-ok')
-    expect(modelRow(basic, 'grok-ok', 'grok-4')).not.toHaveAttribute('aria-disabled')
-    expect(providerRow(basic, 'grok-ok')).toHaveAccessibleName('grok-ok, Grok OK · Grok subscription')
-    expect(within(basic).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note')
-    expect(within(basic).queryByText(/only for project Agents/)).toBeNull()
+    expect(providerRow(picker, 'grok-cli')).toHaveAccessibleName('grok-cli, Grok CLI · Grok subscription, plugin not granted to this Agent')
+    await openProvider(user, picker, 'grok-ok')
+    expect(modelRow(picker, 'grok-ok', 'grok-4')).not.toHaveAttribute('aria-disabled')
+    expect(providerRow(picker, 'grok-ok')).toHaveAccessibleName('grok-ok, Grok OK · Grok subscription')
+    expect(within(picker).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note')
+    expect(within(picker).queryByText(/only for project Agents/)).toBeNull()
   })
 
   it('a 422 on save (model.provider): the message shows next to the model, and once the catalog is read again the reason is marked', async () => {
@@ -319,13 +329,16 @@ describe('Plugin providers', () => {
       ],
     })
     const basic = region('Basics')
-    await openProvider(user, basic, 'grok-cli')
-    await user.click(modelRow(basic, 'grok-cli', 'grok-4'))
+    const picker = await openRunner(user)
+    await openProvider(user, picker, 'grok-cli')
+    await user.click(modelRow(picker, 'grok-cli', 'grok-4'))
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
     const before = reads
     await user.click(saveButton())
     expect(await within(basic).findByText('Plugin grok is not granted to this Agent')).toBeInTheDocument()
-    await waitFor(() => expect(modelRow(basic, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true'))
+    await waitFor(() => expect(within(basic).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note'))
     expect(reads).toBeGreaterThan(before)
-    expect(within(basic).getByText('The plugin "Grok subscription" isn\'t granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.')).toHaveAttribute('role', 'note')
+    const reopened = await openRunner(user)
+    await waitFor(() => expect(modelRow(reopened, 'grok-cli', 'grok-4')).toHaveAttribute('aria-disabled', 'true'))
   })
 })

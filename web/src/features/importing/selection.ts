@@ -102,6 +102,43 @@ export interface FolderGroup {
   folders: Folder[]
 }
 
+export type CliFilter = 'all' | Conversation['cli']
+
+// Filter folders and their conversations by CLI and search keyword.
+// Matching a folder's path or repository name keeps all CLI-matching conversations inside it; otherwise only matching
+// conversations are kept and empty folders are omitted.
+export function filterFolders(folders: Folder[], filter: { query: string; cli: CliFilter }): Folder[] {
+  const q = filter.query.trim().toLowerCase()
+  const out: Folder[] = []
+  for (const folder of folders) {
+    const byCli = filter.cli === 'all' ? folder.conversations : folder.conversations.filter((c) => c.cli === filter.cli)
+    if (filter.cli !== 'all' && byCli.length === 0) continue
+    if (!q) {
+      out.push(byCli === folder.conversations ? folder : { ...folder, conversations: byCli })
+      continue
+    }
+    const repo = repositoryName(folder.repository?.remote ?? null)
+    const folderMatches =
+      folder.path.toLowerCase().includes(q) ||
+      (folder.repository?.remote?.toLowerCase().includes(q) ?? false) ||
+      (folder.repository?.mainCheckout.toLowerCase().includes(q) ?? false) ||
+      (repo?.toLowerCase().includes(q) ?? false)
+    if (folderMatches) {
+      if (byCli.length > 0 || filter.cli === 'all') out.push(byCli === folder.conversations ? folder : { ...folder, conversations: byCli })
+      continue
+    }
+    const matched = byCli.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        (c.firstPrompt?.toLowerCase().includes(q) ?? false) ||
+        c.cwd.toLowerCase().includes(q) ||
+        (c.model?.toLowerCase().includes(q) ?? false),
+    )
+    if (matched.length > 0) out.push({ ...folder, conversations: matched })
+  }
+  return out
+}
+
 // Git repositories first, grouped by remote (clones of one remote share a group), in the order the scan gives (newest first); folders
 // outside git last, under “Other folders”.
 export function groupFolders(folders: Folder[]): FolderGroup[] {

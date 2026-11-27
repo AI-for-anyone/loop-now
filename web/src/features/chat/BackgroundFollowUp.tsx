@@ -12,7 +12,7 @@ const MAX_CHIPS = 2
 
 const toolNameOf = (task: Task, toolNames?: ReadonlyMap<string, string>) => (task.toolCallId ? toolNames?.get(task.toolCallId) : undefined)
 
-// Overflow chip “+N” when more than two ended tasks triggered the follow-up reply: opens a popover with the rest,
+// Overflow chip "+N" when more than two ended tasks triggered the follow-up reply: opens a popover with the rest,
 // using the same detail layout as a single task chip.
 function MoreBackgroundTasksChip({ tasks, toolNames }: { tasks: Task[]; toolNames?: ReadonlyMap<string, string> }) {
   const copy = t.background.followUp
@@ -26,20 +26,20 @@ function MoreBackgroundTasksChip({ tasks, toolNames }: { tasks: Task[]; toolName
         title={copy.moreLabel(tasks.length)}
         className={cn(
           badgeVariants({ variant: 'chip' }),
-          'cursor-pointer bg-ink/[0.07] font-mono text-ink-700 outline-none hover:shadow-[inset_0_0_0_1.5px_currentColor] focus-visible:shadow-focus aria-expanded:shadow-[inset_0_0_0_2px_var(--ink)]',
+          'cursor-pointer bg-surface-subtle font-mono text-ink-700 outline-none hover:border-hairline-strong focus-visible:shadow-focus aria-expanded:border-ink',
         )}
       >
         {copy.more(tasks.length)}
       </PopoverPrimitive.Trigger>
       <BackgroundTaskPopover label={title}>
-        <div className="flex shrink-0 items-center border-b-2 border-ink bg-tint-yellow px-4 py-2.5">
-          <span className="text-[13.5px] font-black text-ink">{title}</span>
+        <div className="flex shrink-0 items-center border-b border-hairline bg-surface-subtle px-4 py-2.5">
+          <span className="text-[13.5px] font-semibold text-ink">{title}</span>
         </div>
         <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {tasks.map((task) => {
             const name = toolNameOf(task, toolNames) ?? t.background.kind[task.kind]
             return (
-              <li key={task.id} data-background-tool={task.id} className="flex flex-col gap-2.5 border-b-[1.5px] border-dashed border-ink/25 px-4 py-3 last:border-b-0">
+              <li key={task.id} data-background-tool={task.id} className="flex flex-col gap-2.5 border-b border-hairline px-4 py-3 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <BackgroundTaskHead task={task} name={name} />
                 </div>
@@ -54,8 +54,8 @@ function MoreBackgroundTasksChip({ tasks, toolNames }: { tasks: Task[]; toolName
 }
 
 // In place of a person's message, above a reply the CLI wrote by itself after background work ended (origin background):
-// one line with the kind icon, “后台任务结束后，Claude Code 接着说：” (After background work ended, Claude Code went on:),
-// up to two compact chips for the ended tasks (then “+N” opening the rest), and the time. Full commands live in the chip popovers.
+// one line with the kind icon, the heading, up to two compact chips for the ended tasks (then "+N" opening the rest),
+// and the time. Full commands live in the chip popovers.
 export function BackgroundFollowUpLine({ tasks, runtimeName, at, toolNames }: { tasks: Task[]; runtimeName: string; at: string; toolNames?: ReadonlyMap<string, string> }) {
   const copy = t.background.followUp
   const first = tasks[0]
@@ -63,10 +63,10 @@ export function BackgroundFollowUpLine({ tasks, runtimeName, at, toolNames }: { 
   const rest = tasks.slice(MAX_CHIPS)
   return (
     <div role="note" data-background-follow-up className="flex min-w-0 items-start gap-2.5">
-      <span aria-hidden="true" className="mt-px grid size-6 shrink-0 place-items-center rounded-[7px] bg-ink text-riso-yellow shadow-[2px_2px_0_var(--riso-yellow)]">
+      <span aria-hidden="true" className="mt-px grid size-6 shrink-0 place-items-center rounded-[7px] border border-hairline bg-surface-subtle text-ink">
         <BackgroundKindIcon kind={first?.kind ?? 'command'} className="size-3.5" />
       </span>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13.5px] leading-6 font-bold text-ink-700">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13.5px] leading-6 font-medium text-ink-700">
         <span>{first ? copy.heading(runtimeName) : copy.unknown(runtimeName)}</span>
         {shown.map((task) => (
           <BackgroundToolChip key={task.id} task={task} toolName={toolNameOf(task, toolNames)} />

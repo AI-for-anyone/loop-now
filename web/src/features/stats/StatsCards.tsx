@@ -1,16 +1,14 @@
-import { useContext, useId, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
-import { t } from '@/i18n'
-import { useNow } from '@/lib/use-now'
-import { agentPath, type Scope } from '@/lib/scope'
-import { cn } from '@/lib/utils'
-import { HollowNumber } from '@/components/NumberedSection'
-import { CardNumber } from './card-number'
 import { sectionId } from '@/features/agent-config/sections'
+import { t } from '@/i18n'
+import { agentPath, type Scope } from '@/lib/scope'
+import { useNow } from '@/lib/use-now'
+import { cn } from '@/lib/utils'
 import { Bar, Legend, LineChart, StackedColumns } from './charts'
-import { durationTicks, niceTicks } from './ticks'
 import { estimateCost, modelFamily, type ModelFamily } from './pricing'
+import { durationTicks, niceTicks } from './ticks'
 
 const text = t.stats
 
@@ -34,35 +32,25 @@ const COLOR = {
 
 const wanOf = (tokens: number) => tokens / 10_000
 
-// On the stats page (when it has a number) this is a numbered section on the sheet (redesign): a dashed line on top, an outlined
-// number on the left, a ZCOOL title with a yellow highlighter mark, followed by the unit and the legend on the right; outside
-// the stats page it is still a white card as before.
+// Restrained hairline card with crisp 13.5px semibold header; Plate skin keeps its 2px ink outline and offset shadow.
 export function Card({ title, unit, aside, children, className }: { title: string; unit?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string }) {
   const titleId = useId()
-  const number = useContext(CardNumber)
-  if (number !== null)
-    return (
-      <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5', className)}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <HollowNumber data-section-number className="w-auto text-[28px]">
-            {String(number).padStart(2, '0')}
-          </HollowNumber>
-          <h2 id={titleId} className="riso-marker px-1.5 font-display-cn text-[24px] leading-[1.25] font-normal">
-            {title}
-          </h2>
-          {unit && <span className="text-[12px] text-ink-500">{unit}</span>}
-          {aside && <div className="sm:ml-auto">{aside}</div>}
-        </div>
-        {children}
-      </section>
-    )
   return (
-    <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-2.5 rounded-panel border-2 border-ink bg-white px-4 py-3.5', className)}>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-        <h2 id={titleId} className="font-display-cn text-[22px] leading-tight font-normal">
+    <section
+      aria-labelledby={titleId}
+      className={cn(
+        'flex min-w-0 flex-col gap-3 rounded-card border border-hairline bg-surface-control p-4',
+        className,
+      )}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <h2
+          id={titleId}
+          className="text-[13.5px] leading-snug font-semibold tracking-tight text-ink"
+        >
           {title}
         </h2>
-        {unit && <span className="text-[12px] font-bold text-ink-500">{unit}</span>}
+        {unit && <span className="text-[12px] text-ink-500">{unit}</span>}
         {aside && <div className="sm:ml-auto">{aside}</div>}
       </div>
       {children}
@@ -93,7 +81,7 @@ export function OriginsCard({ report, axis }: { report: Report; axis: Axis }) {
         labels={axis.labels}
         titles={axis.titles}
         series={columns}
-        height={230}
+        height={220}
         format={(wan) => text.wan(Math.round(wan * 10_000))}
         axis={text.wanAxis}
         tops={(wan) => text.wanAxis(Math.round(wan))}
@@ -103,7 +91,7 @@ export function OriginsCard({ report, axis }: { report: Report; axis: Axis }) {
   )
 }
 
-// Wake frequency: written from the average interval between consecutive wakes, as in “每 4 小时醒一次” (Wakes every 4 h).
+// Wake frequency: written from the average interval between consecutive wakes, as in “Wakes every 4 h”.
 function cadence(wake: Schemas['StatsAgentWakes']) {
   const s = wake.avgIntervalSeconds
   if (s === null) return text.wakes.once
@@ -112,8 +100,7 @@ function cadence(wake: Schemas['StatsAgentWakes']) {
   return text.wakes.every(interval)
 }
 
-// Who burns tokens after waking: Agents ranked by what their wakes consume; the note at the bottom says how much the top
-// spender uses per wake and links to its prompt (how long it sleeps is its own decision).
+// Who burns tokens after waking: Agents ranked by what their wakes consume; links to the top spender's prompt.
 export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeOf }) {
   const wakes = report.wakes
   const count = wakes.reduce((sum, w) => sum + w.count, 0)
@@ -128,27 +115,38 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
     <Card title={text.wakes.title} unit={count > 0 ? text.wakes.summary(count, text.wan(tokens)) : undefined}>
       {top ? (
         <>
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-1.5">
             {wakes.slice(0, 5).map((wake, i) => (
-              <li key={wake.agentId} className={cn('flex flex-col gap-1 rounded-ticket px-2.5 py-2', i === 0 ? 'bg-tint-pink-2' : 'bg-paper/60')}>
+              <li
+                key={wake.agentId}
+                className={cn(
+                  'flex flex-col gap-1 rounded-ticket border border-hairline px-2.5 py-1.5',
+                  i === 0 ? 'bg-tint-pink-2' : 'bg-surface-subtle',
+                )}
+              >
                 <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate font-black">{wake.name}</span>
-                  <span className="min-w-0 truncate text-[12px] text-ink-700">{text.wakes.row(cadence(wake), text.wan(wake.avgTokens))}</span>
-                  <span className="ml-auto shrink-0 font-bold tabular-nums">{text.wan(wake.tokens)}</span>
+                  <span className="truncate text-[13px] font-semibold">{wake.name}</span>
+                  <span className="min-w-0 truncate text-[11.5px] text-ink-700">{text.wakes.row(cadence(wake), text.wan(wake.avgTokens))}</span>
+                  <span className="ml-auto shrink-0 font-mono text-[12.5px] font-semibold tabular-nums">
+                    {text.wan(wake.tokens)}
+                  </span>
                 </span>
-                <Bar value={wake.tokens} max={top.tokens} color={COLOR.pink} height="h-2.5" />
+                <Bar value={wake.tokens} max={top.tokens} color={COLOR.pink} height="h-2" />
               </li>
             ))}
           </ul>
           <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-700">
-            <span aria-hidden="true" className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-black text-ink">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--status-interrupt)] text-[12px] font-semibold text-[#111111]"
+            >
               !
             </span>
             <span className="min-w-0 flex-1">{text.wakes.note(top.name, text.wan(top.avgTokens), times !== null && times >= 2 ? times : null)}</span>
             {topScope && (
               <Link
                 to={`${agentPath(topScope, top.agentId, 'config')}#${sectionId('prompt')}`}
-                className="rounded-sm font-bold whitespace-nowrap text-riso-blue underline outline-none focus-visible:shadow-focus"
+                className="rounded-sm font-semibold whitespace-nowrap text-ink underline underline-offset-2 outline-none focus-visible:shadow-focus"
               >
                 {text.wakes.prompt}
               </Link>
@@ -162,23 +160,31 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
   )
 }
 
-// 2. How much context is sent with each model call, per Agent; an average above 120K gets marked “该重开” (New session due).
+// 2. How much context is sent with each model call, per Agent; an average above 120K gets marked "New session due".
 export function ContextCard({ report }: { report: Report }) {
   const agents = report.context.agents.slice(0, 6)
   const max = agents[0]?.avgInputPerCall ?? 0
   return (
     <Card title={text.context.title} unit={text.context.unit}>
       {agents.length ? (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-1.5">
           {agents.map((agent) => (
-            <li key={agent.agentId} className="grid grid-cols-[minmax(48px,120px)_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 sm:grid-cols-[minmax(48px,120px)_minmax(0,1fr)_54px_118px]">
-              <span className="truncate font-bold">{agent.name}</span>
+            <li
+              key={agent.agentId}
+              className="grid grid-cols-[minmax(48px,120px)_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 text-[12.5px] sm:grid-cols-[minmax(48px,120px)_minmax(0,1fr)_54px_118px]"
+            >
+              <span className="truncate font-medium">{agent.name}</span>
               <Bar value={agent.avgInputPerCall} max={max} color={COLOR.blue} />
-              <span className="text-right font-bold tabular-nums">{text.wan(agent.avgInputPerCall)}</span>
-              <span className="col-span-3 flex items-center gap-1.5 text-[12px] whitespace-nowrap text-ink-700 sm:col-span-1">
+              <span className="text-right font-mono text-[12px] font-medium tabular-nums">
+                {text.wan(agent.avgInputPerCall)}
+              </span>
+              <span className="col-span-3 flex items-center gap-1.5 text-[11.5px] whitespace-nowrap text-ink-700 sm:col-span-1">
                 {text.context.compactions(agent.compactions)}
                 {agent.avgInputPerCall > REOPEN_CONTEXT && (
-                  <span title={text.context.reopenTitle} className="rounded-[6px] bg-[var(--status-interrupt)] px-1.5 text-[11px] font-black text-ink">
+                  <span
+                    title={text.context.reopenTitle}
+                    className="rounded-stamp bg-[var(--status-interrupt)] px-1.5 text-[10.5px] font-semibold text-[#111111]"
+                  >
                     {text.context.reopen}
                   </span>
                 )}
@@ -194,45 +200,111 @@ export function ContextCard({ report }: { report: Report }) {
   )
 }
 
-// 3. Waiting for your answer: how many questions were asked in the time window, how long you take to reply on average, and
-// the longest wait; below are the questions still open now, each opening that Agent's chat.
-export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis: Axis; scopeOf: ScopeOf }) {
-  const { asked, avgAnswerSeconds, maxAnswerSeconds, pending } = report.questions
-  const now = useNow(60_000)
-  const stats = [
-    { label: text.questions.asked(axis.rangeLabel), value: text.items(asked) },
-    { label: text.questions.avg, value: avgAnswerSeconds === null ? text.none : text.minutes(avgAnswerSeconds) },
-    { label: text.questions.max, value: maxAnswerSeconds === null ? text.none : text.minutes(maxAnswerSeconds) },
+// Sum token shares by model family (Claude, GPT, other), from largest to smallest.
+function familyShares(tokens: Schemas['StatsTokens']) {
+  const sums = new Map<ModelFamily, number>()
+  for (const row of tokens.byModel) {
+    const family = modelFamily(row.provider, row.model)
+    sums.set(family, (sums.get(family) ?? 0) + row.total)
+  }
+  const total = [...sums.values()].reduce((a, b) => a + b, 0)
+  return [...sums.entries()]
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([family, n]) => ({
+      family,
+      tokens: n,
+      label: text.process.share(text.process.families[family], text.wholePercent(total ? n / total : 0)),
+    }))
+}
+
+// Models & cost card (split out of ProcessCard onto the Usage & Cost tab).
+export function ModelCostCard({ report }: { report: Report }) {
+  const shares = familyShares(report.tokens)
+  const shareLabels = shares.map((s) => s.label)
+  const cost = estimateCost(report.tokens)
+  const rows: { label: string; value: string; note?: string; extra?: string }[] = [
+    {
+      label: text.process.byModel,
+      value: shareLabels[0] ?? text.none,
+      note: shareLabels.length > 1 ? text.process.others(shareLabels.slice(1)) : undefined,
+    },
+    {
+      label: text.process.cost,
+      value: cost.priced ? text.usd(cost.usd) : text.none,
+      note: cost.priced ? text.process.costNote : text.process.noPrice,
+      extra: cost.unpriced.length ? text.process.unpriced(cost.unpriced) : undefined,
+    },
   ]
+  const topModels = [...report.tokens.byModel].sort((a, b) => b.total - a.total).slice(0, 4)
+  const maxModelTokens = topModels[0]?.total ?? 0
+
   return (
-    <Card title={text.questions.title} unit={text.questions.unit}>
-      <dl className="grid grid-cols-3 gap-2">
-        {stats.map((stat) => (
-          <div key={stat.label} className="flex min-w-0 flex-col gap-0.5 rounded-ticket bg-paper/60 px-2.5 py-2">
-            <dt className="text-[11.5px] leading-snug text-ink-700">{stat.label}</dt>
-            <dd className="text-[18px] leading-[1.1] font-bold">{stat.value}</dd>
+    <Card title={text.modelCost.title}>
+      <dl className="flex flex-col">
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0"
+          >
+            <dt className="text-[12.5px] text-ink-700">{row.label}</dt>
+            <dd className="ml-auto font-display-latin text-[17px] font-semibold text-ink tabular-nums">{row.value}</dd>
+            {row.note && <dd className="w-full text-[11.5px] text-ink-500">{row.note}</dd>}
+            {row.extra && <dd className="w-full text-[11.5px] text-ink-500">{row.extra}</dd>}
           </div>
         ))}
       </dl>
-      <h3 className="text-[12px] font-bold text-ink-700">{text.questions.pending}</h3>
+      {topModels.length > 0 && (
+        <ul className="flex flex-col gap-1.5 border-t border-hairline pt-2.5">
+          {topModels.map((row) => {
+            const label = row.provider && row.model ? `${row.provider} / ${row.model}` : row.model || text.none
+            return (
+              <li key={`${row.provider ?? ''}:${row.model ?? ''}`} className="grid grid-cols-[minmax(80px,150px)_minmax(0,1fr)_auto] items-center gap-2 text-[12px]">
+                <span className="truncate font-mono text-[11.5px] text-ink-700" title={label}>
+                  {row.model || text.none}
+                </span>
+                <Bar value={row.total} max={maxModelTokens} color={COLOR.blue} height="h-2" />
+                <span className="font-mono text-[11.5px] font-medium text-ink tabular-nums">{text.wan(row.total)}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+// 3. Waiting for your answer (trimmed: redundant 3-tile sub-KPI <dl> removed since Reliability MetricStrip owns those totals).
+export function QuestionsCard({ report, scopeOf }: { report: Report; scopeOf: ScopeOf }) {
+  const { maxAnswerSeconds, pending } = report.questions
+  const now = useNow(60_000)
+  const unit = maxAnswerSeconds !== null ? `${text.questions.unit} · ${text.questions.longestWait(text.minutes(maxAnswerSeconds))}` : text.questions.unit
+  return (
+    <Card title={text.questions.title} unit={unit}>
       {pending.length ? (
-        <ul className="flex flex-col gap-2">
-          {pending.slice(0, 4).map((question) => {
+        <ul className="flex flex-col gap-1.5">
+          {pending.slice(0, 5).map((question) => {
             const scope = scopeOf(question.projectId)
             const body = (
               <>
-                <span className="rounded-[6px] bg-riso-pink px-1.5 text-[11px] font-black text-ink">{question.name}</span>
-                <span className="truncate">{question.text}</span>
-                <span className="text-[11.5px] font-bold whitespace-nowrap text-red-text">
+                <span className="rounded-stamp bg-surface-active px-1.5 text-[11px] font-medium text-ink">
+                  {question.name}
+                </span>
+                <span className="truncate text-[12.5px]">{question.text}</span>
+                <span className="text-[11.5px] font-medium whitespace-nowrap text-red-text">
                   {text.questions.waited(text.minutes(Math.max(0, (now - Date.parse(question.askedAt)) / 1000)))}
                 </span>
               </>
             )
-            const row = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border-2 border-ink bg-white px-2.5 py-[7px] shadow-[2px_2px_0_var(--ink)]'
+            const row =
+              'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline-strong bg-surface-subtle px-2.5 py-1.5'
             return (
               <li key={question.messageId}>
                 {scope ? (
-                  <Link to={agentPath(scope, question.agentId, 'chat')} className={cn(row, 'outline-none hover:bg-tint-yellow focus-visible:shadow-focus')}>
+                  <Link
+                    to={agentPath(scope, question.agentId, 'chat')}
+                    className={cn(row, 'outline-none hover:bg-surface-hover focus-visible:shadow-focus')}
+                  >
                     {body}
                   </Link>
                 ) : (
@@ -257,13 +329,17 @@ export function WaitCard({ report, axis }: { report: Report; axis: Axis }) {
   ]
   const max = Math.max(0, ...series.flatMap((s) => s.values.filter((v) => v !== null)))
   return (
-    <Card title={text.wait.title}>
-      <Legend
-        items={[
-          { label: text.wait.p50, color: COLOR.blue, kind: 'line' },
-          { label: text.wait.p90, color: COLOR.pink, kind: 'line' },
-        ]}
-      />
+    <Card
+      title={text.wait.title}
+      aside={
+        <Legend
+          items={[
+            { label: text.wait.p50, color: COLOR.blue, kind: 'line' },
+            { label: text.wait.p90, color: COLOR.pink, kind: 'line' },
+          ]}
+        />
+      }
+    >
       {report.wait.p50 === null ? (
         <Quiet>{text.wait.none}</Quiet>
       ) : (
@@ -295,8 +371,11 @@ export function OutcomesCard({ report, axis }: { report: Report; axis: Axis }) {
     { key: 'failed', label: text.outcomes.failed, color: COLOR.fail, values: series.map((b) => b.failed) },
   ]
   return (
-    <Card title={text.outcomes.title} unit={text.outcomes.unit(axis.hourly)}>
-      <Legend items={columns.map((c) => ({ label: c.label, color: c.color, kind: 'rect' }))} />
+    <Card
+      title={text.outcomes.title}
+      unit={text.outcomes.unit(axis.hourly)}
+      aside={<Legend items={columns.map((c) => ({ label: c.label, color: c.color, kind: 'rect' }))} />}
+    >
       <StackedColumns
         label={text.outcomes.label(rate)}
         labels={axis.shortLabels}
@@ -315,8 +394,7 @@ export function OutcomesCard({ report, axis }: { report: Report; axis: Axis }) {
 
 const reasonText = (reason: Schemas['StatsOutcomeReason']) => (reason.code === null ? text.reasons.noCode : (text.reasons.codes[reason.code] ?? reason.code))
 
-// Why replies didn't finish: the reasons and counts for interrupted, stopped and failed turns; the most common failure reason
-// is written at the bottom.
+// Why replies didn't finish: reasons and counts for interrupted, stopped and failed turns.
 export function ReasonsCard({ report }: { report: Report }) {
   const { reasons, totals } = report.outcomes
   const total = reasons.reduce((sum, r) => sum + r.count, 0)
@@ -326,19 +404,24 @@ export function ReasonsCard({ report }: { report: Report }) {
       {reasons.length ? (
         <ul className="flex flex-col gap-1.5">
           {reasons.slice(0, 6).map((reason) => (
-            <li key={`${reason.kind}:${reason.code}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket bg-paper/60 px-2.5 py-1.5">
+            <li
+              key={`${reason.kind}:${reason.code}`}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-ticket border border-hairline bg-surface-subtle px-2.5 py-1.5"
+            >
               <span className="flex min-w-0 items-center gap-[7px]">
                 <span
                   className={cn(
-                    'shrink-0 rounded-[6px] px-1.5 text-[11px] font-black',
+                    'shrink-0 rounded-stamp px-1.5 text-[11px] font-semibold',
                     reason.kind === 'failed' ? 'bg-tint-red text-red-text' : 'bg-tint-yellow text-ink',
                   )}
                 >
                   {text.reasons.kinds[reason.kind]}
                 </span>
-                <span className={cn('truncate text-[12.5px]', reason.code !== null && !(reason.code in text.reasons.codes) && 'font-mono')}>{reasonText(reason)}</span>
+                <span className={cn('truncate text-[12.5px]', reason.code !== null && !(reason.code in text.reasons.codes) && 'font-mono')}>
+                  {reasonText(reason)}
+                </span>
               </span>
-              <span className="text-right font-bold tabular-nums">{reason.count}</span>
+              <span className="text-right font-mono text-[12.5px] font-medium tabular-nums">{reason.count}</span>
             </li>
           ))}
         </ul>
@@ -352,50 +435,76 @@ export function ReasonsCard({ report }: { report: Report }) {
 
 const rateOr = (rate: number | null) => (rate === null ? text.none : text.percent(rate))
 
-// Agent health: one row per Agent; on narrow screens the table scrolls horizontally inside the card. A completion rate below
-// 95% is marked red.
-export function HealthCard({ report }: { report: Report }) {
+// Agent health: tight py-1.5 rows, Agent names link to chat, zero native scrollbars.
+export function HealthCard({ report, scopeOf }: { report: Report; scopeOf: ScopeOf }) {
   const columns = text.health.columns
-  const cell = 'px-2 py-2 text-right'
+  const cell = 'px-2 py-1.5 text-right'
   return (
     <Card title={text.health.title}>
       {report.agents.length ? (
-        <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:thin]">
-          <table aria-label={text.health.label} className="w-full min-w-[820px] border-collapse text-[12.5px] tabular-nums">
+        <div className="-mx-1 overflow-x-auto px-1 no-scrollbar">
+          <table aria-label={text.health.label} className="w-full min-w-[780px] border-collapse text-[12.5px] tabular-nums">
             <thead>
-              <tr className="text-[11.5px] font-bold text-ink-500">
-                <th scope="col" className="px-2 py-1.5 text-left font-bold">
+              <tr className="border-b border-hairline-strong text-[11.5px] font-medium text-ink-500">
+                <th scope="col" className="px-2 py-1.5 text-left font-medium">
                   {columns.name}
                 </th>
-                {[columns.runs, columns.completion, columns.waitP90, columns.durationP50, columns.wakes, columns.wakeTokens, columns.context, columns.compactions, columns.tokens, columns.cache].map(
-                  (name) => (
-                    <th key={name} scope="col" className="px-2 py-1.5 text-right font-bold">
-                      {name}
-                    </th>
-                  ),
-                )}
+                {[
+                  columns.runs,
+                  columns.completion,
+                  columns.waitP90,
+                  columns.durationP50,
+                  columns.wakes,
+                  columns.wakeTokens,
+                  columns.context,
+                  columns.compactions,
+                  columns.tokens,
+                  columns.cache,
+                ].map((name) => (
+                  <th key={name} scope="col" className="px-2 py-1.5 text-right font-medium">
+                    {name}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {report.agents.map((agent) => (
-                <tr key={agent.agentId} className="border-t border-ink/10">
-                  <th scope="row" className="max-w-[160px] truncate px-2 py-2 text-left font-bold">
-                    {agent.name}
-                  </th>
-                  <td className={cell}>{agent.runs}</td>
-                  <td className={cn(cell, 'font-bold', agent.completionRate === null ? '' : agent.completionRate >= 0.95 ? 'text-green-text' : 'text-red-text')}>
-                    {rateOr(agent.completionRate)}
-                  </td>
-                  <td className={cell}>{agent.waitP90 === null ? text.none : text.seconds(agent.waitP90)}</td>
-                  <td className={cell}>{agent.durationP50 === null ? text.none : text.clock(agent.durationP50)}</td>
-                  <td className={cell}>{agent.wakes}</td>
-                  <td className={cell}>{agent.wakes ? text.wan(agent.wakeTokens) : text.none}</td>
-                  <td className={cell}>{agent.avgContext === null ? text.none : text.wan(agent.avgContext)}</td>
-                  <td className={cell}>{agent.compactions}</td>
-                  <td className={cell}>{text.wan(agent.tokens)}</td>
-                  <td className={cell}>{agent.cacheHitRate === null ? text.none : text.wholePercent(agent.cacheHitRate)}</td>
-                </tr>
-              ))}
+              {report.agents.map((agent) => {
+                const scope = scopeOf(agent.projectId)
+                return (
+                  <tr key={agent.agentId} className="border-t border-hairline hover:bg-surface-hover/50">
+                    <th scope="row" className="max-w-[160px] truncate px-2 py-1.5 text-left font-medium">
+                      {scope ? (
+                        <Link
+                          to={agentPath(scope, agent.agentId, 'chat')}
+                          className="rounded-sm text-ink underline-offset-2 outline-none hover:underline focus-visible:shadow-focus"
+                        >
+                          {agent.name}
+                        </Link>
+                      ) : (
+                        agent.name
+                      )}
+                    </th>
+                    <td className={cell}>{agent.runs}</td>
+                    <td
+                      className={cn(
+                        cell,
+                        'font-medium',
+                        agent.completionRate === null ? '' : agent.completionRate >= 0.95 ? 'text-green-text' : 'text-red-text',
+                      )}
+                    >
+                      {rateOr(agent.completionRate)}
+                    </td>
+                    <td className={cell}>{agent.waitP90 === null ? text.none : text.seconds(agent.waitP90)}</td>
+                    <td className={cell}>{agent.durationP50 === null ? text.none : text.clock(agent.durationP50)}</td>
+                    <td className={cell}>{agent.wakes}</td>
+                    <td className={cell}>{agent.wakes ? text.wan(agent.wakeTokens) : text.none}</td>
+                    <td className={cell}>{agent.avgContext === null ? text.none : text.wan(agent.avgContext)}</td>
+                    <td className={cell}>{agent.compactions}</td>
+                    <td className={cell}>{text.wan(agent.tokens)}</td>
+                    <td className={cell}>{agent.cacheHitRate === null ? text.none : text.wholePercent(agent.cacheHitRate)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -414,15 +523,15 @@ export function ToolsCard({ report }: { report: Report }) {
   return (
     <Card title={text.tools.title} unit={text.tools.unit}>
       {tools.length ? (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-1.5">
           {tools.map((tool) => {
             const rate = tool.calls ? text.percent(tool.failures / tool.calls) : text.none
             return (
               <li key={tool.name} className="grid grid-cols-[minmax(44px,max-content)_minmax(0,1fr)_auto_44px] items-center gap-2">
-                <code className="max-w-[110px] truncate font-mono text-[12px] font-bold">{tool.name}</code>
-                <Bar value={tool.calls} max={max} color={COLOR.blue} height="h-3" />
-                <b className="text-right text-[12px] tabular-nums">{text.number(tool.calls)}</b>
-                <span title={text.tools.failureRate(tool.name, rate)} className="text-right text-[11.5px] text-ink-700 tabular-nums">
+                <code className="max-w-[110px] truncate font-mono text-[12px] font-medium">{tool.name}</code>
+                <Bar value={tool.calls} max={max} color={COLOR.blue} height="h-2.5" />
+                <b className="text-right font-mono text-[12px] tabular-nums">{text.number(tool.calls)}</b>
+                <span title={text.tools.failureRate(tool.name, rate)} className="text-right font-mono text-[11.5px] text-ink-700 tabular-nums">
                   {rate}
                 </span>
               </li>
@@ -437,26 +546,10 @@ export function ToolsCard({ report }: { report: Report }) {
   )
 }
 
-// Sum token shares by model family (Claude, GPT, other), from largest to smallest.
-function familyShares(tokens: Schemas['StatsTokens']) {
-  const sums = new Map<ModelFamily, number>()
-  for (const row of tokens.byModel) {
-    const family = modelFamily(row.provider, row.model)
-    sums.set(family, (sums.get(family) ?? 0) + row.total)
-  }
-  const total = [...sums.values()].reduce((a, b) => a + b, 0)
-  return [...sums.entries()]
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => b[1] - a[1])
-    .map(([family, n]) => text.process.share(text.process.families[family], text.wholePercent(total ? n / total : 0)))
-}
-
-// Models and processes: model retries, Pi crashes and cold starts, token share by model, and the estimated cost.
+// Process diagnostics (trimmed: model share & cost moved to ModelCostCard on Usage & Cost tab).
 export function ProcessCard({ report }: { report: Report }) {
   const { modelRetries, piExits, piColdStarts, piColdStartAvgMs } = report.process
-  const shares = familyShares(report.tokens)
-  const cost = estimateCost(report.tokens)
-  const rows: { label: string; value: string; note?: string; extra?: string }[] = [
+  const rows: { label: string; value: string; note?: string }[] = [
     { label: text.process.retries, value: text.count(modelRetries) },
     { label: text.process.piExits, value: text.count(piExits), note: text.process.piExitsNote },
     {
@@ -464,23 +557,20 @@ export function ProcessCard({ report }: { report: Report }) {
       value: text.count(piColdStarts),
       note: piColdStartAvgMs === null ? undefined : text.process.coldStartAvg(text.process.coldStartSeconds(piColdStartAvgMs)),
     },
-    { label: text.process.byModel, value: shares[0] ?? text.none, note: shares.length > 1 ? text.process.others(shares.slice(1)) : undefined },
-    {
-      label: text.process.cost,
-      value: cost.priced ? text.usd(cost.usd) : text.none,
-      note: cost.priced ? text.process.costNote : text.process.noPrice,
-      extra: cost.unpriced.length ? text.process.unpriced(cost.unpriced) : undefined,
-    },
   ]
   return (
     <Card title={text.process.title}>
       <dl className="flex flex-col">
         {rows.map((row) => (
-          <div key={row.label} className="flex flex-wrap items-baseline gap-x-2 border-b border-ink/10 py-[7px] last:border-b-0">
+          <div
+            key={row.label}
+            className="flex flex-wrap items-baseline gap-x-2 border-b border-hairline py-2 first:pt-0 last:border-b-0"
+          >
             <dt className="text-[12.5px] text-ink-700">{row.label}</dt>
-            <dd className="ml-auto text-[17px] font-bold">{row.value}</dd>
-            {row.note && <dd className="text-[11.5px] text-ink-500">{row.note}</dd>}
-            {row.extra && <dd className="w-full text-right text-[11.5px] text-ink-500">{row.extra}</dd>}
+            <dd className="ml-auto font-display-latin text-[16px] font-semibold tabular-nums">
+              {row.value}
+            </dd>
+            {row.note && <dd className="w-full text-[11.5px] text-ink-500">{row.note}</dd>}
           </div>
         ))}
       </dl>
@@ -488,8 +578,7 @@ export function ProcessCard({ report }: { report: Report }) {
   )
 }
 
-// How busy the day gets: the average number of concurrent replies for each hour in the server's local time; hours that
-// haven't come yet are empty.
+// How busy the day gets: average concurrent replies per hour in server local time.
 export function BusyCard({ report }: { report: Report }) {
   const values = report.concurrency
   const known = values.filter((v): v is number => v !== null)

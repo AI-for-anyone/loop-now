@@ -6,7 +6,7 @@ import { createMockFolder } from '@/test/folders'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
-// "Printed sheet" redesign, step 2: the Agent's Folder tab and the project folder page sit on a sheet (variant="sheet").
+// Wave 2C redesign: full-bleed 2-pane IDE explorer (no 150px Overview stub, single 40px contextual toolbar, 36px file rows, 28px status strip).
 const limits = { maxBytes: 1 << 20, extensions: ['.md', '.go', '.ts', '.json'] }
 
 function setup(preset: 'workspace' | 'project' = 'workspace') {
@@ -19,87 +19,139 @@ function setup(preset: 'workspace' | 'project' = 'workspace') {
 const content = () => screen.getByRole('region', { name: 'Files' })
 
 describe('Folder on the sheet', () => {
-  it('sits directly on the sheet without a card around it; the toolbar is at the top: New, Upload and Pull from Git are labeled pills with a navy outline', async () => {
+  it('renders a full-bleed 2-pane IDE explorer without the Overview stub and with a single 40px toolbar of compact 28px controls', async () => {
     const { container } = setup()
     const manager = container.querySelector('[data-file-manager]')!
     expect(manager).not.toHaveClass('rounded-card')
     expect(manager).not.toHaveClass('bg-white')
+    expect(manager).toHaveClass('gap-0')
+    expect(screen.queryByRole('complementary', { name: 'Overview' })).toBeNull()
+
+    const treeAside = screen.getByRole('complementary', { name: 'File tree' })
+    expect(treeAside).toHaveClass('w-[220px]', 'border-r', 'border-hairline', '@min-[40rem]:block')
+
+    const toolbar = container.querySelector('[data-folder-toolbar]')!
+    expect(toolbar).toHaveClass('h-10', 'border-b', 'border-hairline')
+
     for (const name of ['New file', 'New folder', 'Upload', 'Pull from Git']) {
-      const button = await screen.findByRole('button', { name })
-      expect(button).toHaveClass('h-[34px]', 'rounded-full', 'border-2', 'border-ink', 'bg-paper-raised')
+      const button = await within(toolbar as HTMLElement).findByRole('button', { name })
+      expect(button).toHaveClass(
+        'h-7',
+        'rounded-ticket',
+        'border',
+        'border-hairline-strong',
+        'bg-surface-control',
+      )
       expect(button).toHaveTextContent(name)
     }
-    // The root folder's name is preceded by a yellow folder block.
-    expect(screen.getByRole('navigation', { name: 'Location' }).querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow', 'border-2', 'border-ink')
+
+    // Breadcrumb uses a crisp EntryIcon SVG instead of the old 26x22 FolderBlock.
+    const nav = screen.getByRole('navigation', { name: 'Location' })
+    expect(nav.querySelector('[data-folder-icon]')).toBeNull()
+    expect(nav.querySelector('svg')).toHaveClass('size-4')
   })
 
-  it('no AGENTS.md yet: a card with a pink shadow', async () => {
+  it('swaps the single 40px toolbar cleanly between directory actions and file viewing/editing actions without stacking a second bar', async () => {
+    const { container, user } = setup()
+    await within(content()).findByRole('table')
+
+    const tree = screen.getByRole('tree')
+    const readme = tree.querySelector<HTMLElement>('[role=treeitem][data-path="README.md"]')!
+    await user.click(readme)
+
+    const toolbar = container.querySelector<HTMLElement>('[data-folder-toolbar]')!
+    expect(within(toolbar).queryByRole('button', { name: 'New file' })).toBeNull()
+    expect(await within(toolbar).findByRole('radiogroup', { name: 'View' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Edit' })).toHaveClass('h-7')
+    expect(within(toolbar).getByRole('button', { name: 'Download' })).toHaveClass('h-7')
+    // No duplicate file header toolbar inside the content pane.
+    expect(within(content()).queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(within(content()).queryByRole('radiogroup', { name: 'View' })).toBeNull()
+
+    await user.click(within(toolbar).getByRole('button', { name: 'Edit' }))
+    expect(await within(toolbar).findByRole('button', { name: 'Save' })).toHaveClass('h-7')
+    expect(within(toolbar).getByRole('button', { name: 'Cancel' })).toHaveClass('h-7')
+    expect(toolbar).toHaveClass('bg-tint-yellow/50')
+  })
+
+  it('no AGENTS.md yet: a compact single-row banner with unified surface styling', async () => {
     setup('project')
     const note = await screen.findByRole('note')
     expect(note).toHaveTextContent('No AGENTS.md yet')
-    expect(note).toHaveClass('bg-tint-pink-2', 'border-2', 'border-ink', 'shadow-print-pink')
+    expect(note).toHaveClass(
+      'px-3',
+      'py-2',
+      'border',
+      'border-hairline-strong',
+      'bg-surface-subtle',
+      'shadow-surface',
+    )
   })
 
-  it('file list: a solid line under the header, dashed lines between rows; folders are yellow folder blocks, files are white paper; size and time are monospaced', async () => {
+  it('file list: high-density 36px rows with 16px EntryIcon, no redundant heading, and crisp hairline rows', async () => {
     setup()
     const table = await within(content()).findByRole('table')
-    expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
+    expect(within(content()).queryByRole('heading', { level: 3, name: "server's folder" })).toBeNull()
+    expect(table.querySelector('thead tr')).toHaveClass('border-b', 'border-hairline-strong')
     const rows = [...table.querySelectorAll('tbody tr')]
     expect(rows.length).toBeGreaterThan(2)
-    for (const row of rows) expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
-    const dir = rows.find((row) => row.querySelector('[data-folder-icon]'))!
-    const file = rows.find((row) => row.querySelector('[data-file-icon]'))!
-    expect(dir.querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow')
-    expect(file.querySelector('[data-file-icon]')).toHaveClass('bg-white', 'border-2', 'border-ink')
-    const cells = file.querySelectorAll('td')
+    for (const row of rows) {
+      expect(row).toHaveClass('h-9', 'border-b', 'border-hairline')
+      expect(row.querySelector('[data-folder-icon]')).toBeNull()
+      expect(row.querySelector('[data-file-icon]')).toBeNull()
+      expect(row.querySelector('svg')).toHaveClass('size-4')
+    }
+    const cells = rows[0].querySelectorAll('td')
     expect(cells[1]).toHaveClass('font-mono')
     expect(cells[2]).toHaveClass('font-mono')
   })
 
-  it('the selected item in the file tree is yellow', async () => {
+  it('the selected item in the file tree uses surface-active token', async () => {
     const { user } = setup()
     const tree = await screen.findByRole('tree')
     // The root folder is selected at first.
     const root = within(tree).getAllByRole('treeitem')[0]
     expect(root).toHaveAttribute('aria-selected', 'true')
-    expect(root).toHaveClass('bg-riso-yellow')
-    // After opening another folder, the yellow follows it.
+    expect(root).toHaveClass('bg-surface-active')
+    // After opening another folder, the selection styling follows it.
     const web = () => tree.querySelector<HTMLElement>('[role=treeitem][data-path="web"]')
     await waitFor(() => expect(web()).not.toBeNull())
     await user.click(web()!)
     await waitFor(() => expect(web()).toHaveAttribute('aria-selected', 'true'))
-    expect(web()).toHaveClass('bg-riso-yellow')
-    expect(root).not.toHaveClass('bg-riso-yellow')
+    expect(web()).toHaveClass('bg-surface-active')
+    expect(root).not.toHaveClass('bg-surface-active')
   })
 
-  it('a dashed line at the bottom with a note below it', async () => {
-    const { container } = setup()
-    await within(content()).findByRole('table')
-    const footer = container.querySelector('[data-folder-footer]')!
-    expect(footer).toHaveClass('border-t-2', 'border-dashed')
-    expect(footer).toHaveTextContent('The Agent may be editing these files too; the last save wins.')
-  })
-
-  it('the “Overview” stub shows the number of folders, the number of files and the total file size of the current folder; hidden on narrow screens', async () => {
-    const { source } = setup()
+  it('bottom 28px status strip shows live directory counts and size, switches to file metadata in file mode, and keeps the concurrency tooltip', async () => {
+    const { container, source, user } = setup()
     const { entries } = await source.list('', null)
     const dirs = entries.filter((entry) => entry.type === 'dir').length
-    const files = entries.filter((entry) => entry.type === 'file')
-    const bytes = files.reduce((sum, entry) => sum + (entry.size ?? 0), 0)
-    const stub = await screen.findByRole('complementary', { name: 'Overview' })
-    expect(stub).toHaveClass('max-nav:hidden', 'border-dashed')
-    await waitFor(() => expect(within(stub).getByText('folders')).toBeInTheDocument())
-    await waitFor(() => expect(within(stub).getByText('folders').previousElementSibling).toHaveTextContent(String(dirs)))
-    expect(within(stub).getByText('files').previousElementSibling).toHaveTextContent(String(files.length))
-    const [value, unit] = t.folders.size(bytes).split(' ')
-    expect(within(stub).getByText(unit).previousElementSibling).toHaveTextContent(value)
+    const nonDirs = entries.length - dirs
+    const bytes = entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0)
+
+    await within(content()).findByRole('table')
+    const footer = container.querySelector<HTMLElement>('[data-folder-footer]')!
+    expect(footer).toHaveClass('h-7', 'border-t', 'border-hairline', 'bg-surface-subtle/50')
+    expect(footer).toHaveTextContent(`${t.folders.summary(dirs, nonDirs)} · ${t.folders.size(bytes)}`)
+    expect(footer.querySelector(`[title*="${t.folders.concurrent}"]`)).not.toBeNull()
+
+    // Selecting a file updates the status strip to file metadata.
+    const goMod = screen.getByRole('tree').querySelector<HTMLElement>('[role=treeitem][data-path="go.mod"]')!
+    await user.click(goMod)
+    const goEntry = entries.find((entry) => entry.name === 'go.mod')!
+    await waitFor(() => expect(footer).toHaveTextContent(t.folders.size(goEntry.size!)))
+    expect(footer).not.toHaveTextContent(t.folders.summary(dirs, nonDirs))
   })
 
-  it('the card version (shared folders on settings pages) is unchanged: it has a border and no stub', async () => {
+  it('the card and panel variants keep a card border and no Overview stub', async () => {
     const source = createMockFolder({ key: 'card', preset: 'project', latency: 0 })
-    const { container } = renderWithQuery(<FileManager source={source} rootLabel="Project folder" limits={limits} className="h-[600px]" />)
+    const { container, rerender } = renderWithQuery(<FileManager source={source} rootLabel="Project folder" limits={limits} className="h-[600px]" />)
     await screen.findByRole('note')
     expect(container.querySelector('[data-file-manager]')).toHaveClass('rounded-card')
+    expect(screen.queryByRole('complementary', { name: 'Overview' })).toBeNull()
+
+    rerender(<FileManager variant="panel" source={source} rootLabel="Project folder" limits={limits} className="h-[600px]" />)
+    expect(container.querySelector('[data-file-manager]')).toHaveClass('rounded-card', 'border-hairline-strong')
     expect(screen.queryByRole('complementary', { name: 'Overview' })).toBeNull()
   })
 })

@@ -45,7 +45,7 @@ const received = () => [
   makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: 'Please review the naming package', whenBusy: 'interrupt', readAt: new Date().toISOString() }),
 ]
 
-describe('Each Agent\'s inbox is read-only', () => {
+describe("Each Agent's inbox is read-only", () => {
   it('a queued message someone cancelled is marked as cancelled by someone and does not count as unread', async () => {
     const cancelled = makeInboxMessage({ from: agentParty(tester), to: agentParty(agent), text: 'No need to handle this one', cancelledAt: '2026-10-25T08:00:00Z' })
     const { list } = await renderAgentInbox([cancelled])
@@ -61,13 +61,15 @@ describe('Each Agent\'s inbox is read-only', () => {
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent(/Console@consoleInterrupt.*Read \d{2}:\d{2}/)
     expect(items[1]).toHaveTextContent(/Testing assistanttest-org\/test-project\/Testing assistant.*I added two tests for the naming package.*Unread$/)
-    expect(screen.getByText('Read-only view: opening a message doesn\'t mark it read')).toBeInTheDocument()
+    const badge = screen.getByLabelText("Read-only view: opening a message doesn't mark it read")
+    expect(badge).toHaveTextContent('Read-only')
+    expect(badge).toHaveAttribute('title', "Read-only view: opening a message doesn't mark it read")
   })
 
   it('unread only: the list has only the messages the Agent has not read yet', async () => {
     const [first, second] = received()
     const { user, requests } = await renderAgentInbox([second, first])
-    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
+    await user.click(screen.getByRole('radio', { name: /^Unread only/ }))
     await waitFor(() => expect(requests).toContain(`GET /api/v1/agents/${agent.id}/inbox?limit=20&unread=true`))
     const list = within(await screen.findByRole('list', { name: 'Messages received by Code review assistant' }))
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(1))
@@ -77,7 +79,7 @@ describe('Each Agent\'s inbox is read-only', () => {
   it('unread only with no unread messages says there are no unread messages', async () => {
     const [, second] = received()
     const { user } = await renderAgentInbox([second])
-    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
+    await user.click(screen.getByRole('radio', { name: /^Unread only/ }))
     expect(await screen.findByText('No unread messages.')).toBeInTheDocument()
   })
 
@@ -127,7 +129,7 @@ describe('Showing the Agent address', () => {
     expect(await within(menu).findByRole('button', { name: 'Copy address' })).toHaveTextContent('Copied')
   })
 
-  it('a platform Agent\'s address is its name itself', async () => {
+  it("a platform Agent's address is its name itself", async () => {
     const watcher = makeAgent({ name: 'Integration patrol', scope: 'platform', projectId: null, address: 'Integration patrol' })
     server.use(http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [toListItem(watcher)] })), ...baseHandlers([watcher]))
     const user = userEvent.setup()
@@ -150,61 +152,53 @@ describe('Showing the Agent address', () => {
   })
 })
 
-// "Printed sheet" redesign, step 2: the Inbox tab sits directly on the sheet, with the unread count and the total in the stub on the right.
 describe('The inbox on the sheet', () => {
-  it('the filter is two pills: the selected one is yellow with a navy border and a navy shadow; a solid line between the top row and the list; the read-only note is one line of small text', async () => {
+  it('embeds counts directly inside the All and Unread only filter pills with no right-hand Mail stub', async () => {
     await renderAgentInbox(received())
-    const all = screen.getByRole('radio', { name: 'All' })
-    const unread = screen.getByRole('radio', { name: 'Unread only' })
-    for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-full', 'border-2')
+    expect(screen.queryByRole('complementary', { name: 'Mail' })).toBeNull()
+    const all = screen.getByRole('radio', { name: /^All/ })
+    const unread = screen.getByRole('radio', { name: /^Unread only/ })
+    for (const pill of [all, unread]) expect(pill).toHaveClass('rounded-[5px]')
     expect(all).toHaveAttribute('aria-checked', 'true')
-    expect(all).toHaveClass('data-[state=on]:bg-riso-yellow', 'data-[state=on]:border-ink', 'data-[state=on]:shadow-[3px_3px_0_var(--ink)]')
-    const bar = all.closest('[data-inbox-bar]')!
-    expect(bar).toHaveClass('border-b-2', 'border-ink')
-    const note = within(bar as HTMLElement).getByText('Read-only view: opening a message doesn\'t mark it read')
-    expect(note).not.toHaveClass('bg-tint-yellow')
+    expect(all).toHaveClass('data-[state=on]:bg-surface-active', 'data-[state=on]:border-hairline-strong')
+    expect(all.querySelector('[data-count="all"]')).toHaveTextContent(/^2$/)
+    expect(unread.querySelector('[data-count="unread"]')).toHaveTextContent(/^1$/)
+    expect(unread.querySelector('[data-count="unread"]')).toHaveClass('text-pink-text')
+
+    const bar = all.closest('[data-inbox-bar]') as HTMLElement
+    expect(bar).toHaveClass('border-b', 'border-hairline')
+    expect(within(bar).getByLabelText("Read-only view: opening a message doesn't mark it read")).toHaveTextContent('Read-only')
   })
 
-  it('one row per message: sender with a monospace address, single-line body, monospace time; unread is a tilted stamp with a pink outline, read is a light blue pill; dashed lines between rows', async () => {
+  it('one row per message: sender with a monospace address, single-line body, monospace time; unread is a tilted stamp with a pink outline, read is a subtle pill', async () => {
     const [first, second] = received()
     const { list } = await renderAgentInbox([second, first])
     const [read, fresh] = list.getAllByRole('listitem')
-    for (const item of [read, fresh]) expect(item).toHaveClass('border-b-[1.5px]', 'border-dashed')
+    for (const item of [read, fresh]) expect(item).toHaveClass('border-b', 'border-hairline')
     expect(within(fresh).getByText('test-org/test-project/Testing assistant')).toHaveClass('font-mono', 'truncate')
-    expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-bold')
+    expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-semibold')
     expect(fresh.querySelector('time')).toHaveClass('font-mono')
     const stamp = within(fresh).getByText('Unread').closest('[data-read-state]')!
     expect(stamp).toHaveAttribute('data-read-state', 'unread')
     expect(stamp).toHaveClass('riso-tilt', 'text-pink-text')
     const pill = within(read).getByText(/^Read /).closest('[data-read-state]')!
     expect(pill).toHaveAttribute('data-read-state', 'read')
-    expect(pill).toHaveClass('rounded-full', 'bg-tint-blue')
-    // The body text of read messages uses the secondary text color and is not bold.
+    expect(pill).toHaveClass('rounded-full', 'bg-surface-subtle')
     expect(within(read).getByText('Please review the naming package')).not.toHaveClass('font-bold')
   })
 
-  it('the “Mail” stub shows the unread count and the total; hidden on narrow screens', async () => {
-    const [first, second] = received()
-    await renderAgentInbox([second, first])
-    const stub = await screen.findByRole('complementary', { name: 'Mail' })
-    expect(stub).toHaveClass('max-nav:hidden')
-    await waitFor(() => expect(within(stub).getByText('unread').previousElementSibling).toHaveTextContent(/^1$/))
-    expect(within(stub).getByText('in total').previousElementSibling).toHaveTextContent(/^2$/)
-    expect(within(stub).getByText('unread').previousElementSibling).toHaveClass('text-pink-text')
-  })
-
-  it('the message list scrolls on its own inside the sheet, with the sheet\'s thin scrollbar, not hidden', async () => {
+  it('wraps the message list in PageBody inside the sheet', async () => {
     const { list } = await renderAgentInbox(received())
-    const area = list.getAllByRole('listitem')[0].closest('.overflow-y-auto')!
+    const area = list.getAllByRole('listitem')[0].closest('[data-page-body]')!
+    expect(area).toHaveClass('overflow-y-auto')
     expect(area.closest('[data-sheet]')).toHaveClass('riso-scrollbar')
-    expect(area.className).not.toMatch(/no-scrollbar/)
   })
 
-  it('with unread only, the stub still counts all messages', async () => {
+  it('with unread only selected, the All pill still counts all messages', async () => {
     const [first, second] = received()
     const { user } = await renderAgentInbox([second, first])
-    await user.click(screen.getByRole('radio', { name: 'Unread only' }))
-    const stub = screen.getByRole('complementary', { name: 'Mail' })
-    await waitFor(() => expect(within(stub).getByText('in total').previousElementSibling).toHaveTextContent(/^2$/))
+    await user.click(screen.getByRole('radio', { name: /^Unread only/ }))
+    const all = screen.getByRole('radio', { name: /^All/ })
+    await waitFor(() => expect(all.querySelector('[data-count="all"]')).toHaveTextContent(/^2$/))
   })
 })

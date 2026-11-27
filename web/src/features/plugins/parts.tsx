@@ -9,38 +9,26 @@ import { cn } from '@/lib/utils'
 
 const text = t.plugins
 
-export const cardClass = 'rounded-panel border-2 border-ink bg-white'
+export const cardClass = 'rounded-panel border border-hairline-strong bg-surface-control shadow-surface'
 
-// Plugin card (redesign): a card with a white background, a 2px navy outline and a navy solid offset shadow, with a color band with
-// halftone dots across the top, cycling blue, pink, yellow (the nth card takes the nth color).
 const BANDS = ['blue', 'pink', 'yellow'] as const
-const bandFill: Record<(typeof BANDS)[number], string> = {
-  blue: 'bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
-  pink: 'bg-riso-pink bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
-  yellow: 'bg-riso-yellow bg-[radial-gradient(rgb(24_38_94/.28)_1.2px,transparent_1.5px)]',
-}
-export const bandCardClass = 'mr-[5px] mb-[5px] flex min-w-0 flex-col overflow-hidden rounded-card border-2 border-ink bg-white shadow-[5px_5px_0_var(--ink)]'
+export const bandCardClass = 'flex min-w-0 flex-col overflow-hidden rounded-card border border-hairline-strong bg-surface-control shadow-surface'
 export function CardBand({ index }: { index: number }) {
   const band = BANDS[index % BANDS.length]
-  return <span aria-hidden="true" data-band={band} className={cn('block h-11 shrink-0 border-b-2 border-ink bg-size-[8px_8px]', bandFill[band])} />
+  return <span aria-hidden="true" data-band={band} className="hidden" />
 }
-// Install and update buttons on cards: pills with a white background, a navy outline and a navy offset shadow.
-export const cardButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
+export const cardButtonClass = ''
 
 export function IdVersion({ id, version }: { id: string; version: string }) {
-  return <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12px] leading-[18px] font-bold text-ink">{text.idVersion(id, version)}</code>
+  return <code className="rounded-stamp border border-hairline bg-surface-subtle px-2 py-0.5 font-mono text-[12px] leading-[18px] font-medium text-ink">{text.idVersion(id, version)}</code>
 }
 
-// Official plugins (shipped with the platform, or installed from the official market) get a navy pill with white text; ones a market
-// marks as verified get a green background; all other sources haven't been reviewed and get a yellow background naming the source.
-// When trust is omitted, judge by the source alone (shipped with the platform means official); when it is undefined, it isn't known yet
-// (the market list hasn't been read), so show nothing for now.
+// Official plugins get a primary pill; verified market entries get a green pill; unreviewed sources get a yellow pill.
 export function SourceBadge({ source, trust = source.kind === 'builtin' ? 'official' : null }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'>; trust?: 'official' | 'verified' | null }) {
-  // Redesign: “官方” (Official) is a pill with white text on navy (identity markers are always white on navy).
   if (trust === 'official')
-    return <span className="rounded-full bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{text.sources.builtin}</span>
-  if (trust === 'verified') return <span className="rounded-[6px] bg-tint-green px-1.5 py-px text-[11.5px] leading-4 font-black text-green-text">{text.verifiedSource(text.sources[source.kind])}</span>
-  return <span className="rounded-[6px] bg-tint-yellow px-1.5 py-px text-[11.5px] leading-4 font-black text-ink">{text.unverified(text.sources[source.kind])}</span>
+    return <span data-source-badge className="rounded-full bg-cta-bg px-2 text-[11.5px] leading-5 font-semibold text-cta-fg">{text.sources.builtin}</span>
+  if (trust === 'verified') return <span data-source-badge className="rounded-stamp bg-tint-green px-1.5 py-px text-[11.5px] leading-4 font-semibold text-green-text">{text.verifiedSource(text.sources[source.kind])}</span>
+  return <span data-source-badge className="rounded-stamp bg-tint-yellow px-1.5 py-px text-[11.5px] leading-4 font-semibold text-ink">{text.unverified(text.sources[source.kind])}</span>
 }
 
 // Source badge of an installed plugin: one installed from a market is judged by the market (the official market and verified entries
@@ -59,24 +47,30 @@ const statusTone: Record<Schemas['PluginStatus'], { dot: string; text: string }>
   host_stopped: { dot: 'bg-[var(--status-interrupt)]', text: 'text-ink' },
 }
 
+export const surfaceListClass =
+  'divide-y divide-hairline overflow-hidden rounded-card border border-hairline-strong bg-surface-control shadow-surface'
+
+export function StatusDot({ status, muted = false, className }: { status: Schemas['PluginStatus']; muted?: boolean; className?: string }) {
+  return <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', muted ? 'bg-ink-500/40' : statusTone[status].dot, className)} />
+}
+
 export function StatusLabel({ status, className }: { status: Schemas['PluginStatus']; className?: string }) {
   const tone = statusTone[status]
   return (
-    <span className={cn('inline-flex items-center gap-1.5 text-[13px] font-black whitespace-nowrap', tone.text, className)}>
+    <span className={cn('inline-flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap', tone.text, className)}>
       <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', tone.dot)} />
       {text.status[status]}
     </span>
   )
 }
 
-// A small heading inside a card: display font, followed by a line of gray explanation.
 export function PanelTitle({ title, hint, id, aside }: { title: string; hint?: ReactNode; id?: string; aside?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-      <h2 id={id} className="font-display-cn text-[22px] leading-tight font-normal">
+      <h2 id={id} className="font-display-cn text-[17px] leading-snug font-semibold tracking-tight">
         {title}
       </h2>
-      {hint && <span className="text-[12px] font-bold text-ink-500">{hint}</span>}
+      {hint && <span className="text-[12px] font-medium text-ink-500">{hint}</span>}
       {aside && <div className="ml-auto">{aside}</div>}
     </div>
   )
@@ -85,7 +79,7 @@ export function PanelTitle({ title, hint, id, aside }: { title: string; hint?: R
 // The source repository's web page, opened in a new window.
 export function RepositoryLink({ href }: { href: string }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-[13px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-riso-blue underline outline-none focus-visible:shadow-focus">
       <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
       {text.repository}
     </a>

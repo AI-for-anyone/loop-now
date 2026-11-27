@@ -14,6 +14,7 @@ import { rehypeLocalImages } from './rehype-local-images'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
+import { copyText } from '@/lib/clipboard'
 
 // react-markdown passes the syntax tree node to custom components as node, which must not be passed through to the DOM.
 function withoutNode<T extends ExtraProps>({ node, ...props }: T) {
@@ -37,7 +38,7 @@ function codeLanguage(node: ExtraProps['node']): string | null {
   return language ? language.slice('language-'.length) : null
 }
 
-// Code block: riso blue with a halftone-dot fill, white text, pink print shadow; the top row holds the language name and the copy action.
+// Code block: semantic code surface with hairline border (Plate keeps riso blue with halftone dots and pink print shadow).
 // What gets copied is taken from the rendered text, i.e. the original code, without highlighting markup.
 function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
   const { text, streaming } = useContext(MarkdownSource)
@@ -46,7 +47,8 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
   const ref = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
   const copy = async () => {
-    await navigator.clipboard.writeText(ref.current?.querySelector('code')?.textContent ?? ref.current?.textContent ?? '')
+    const ok = await copyText(ref.current?.querySelector('code')?.textContent ?? ref.current?.textContent ?? '')
+    if (!ok) return
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -60,12 +62,12 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
     return <MermaidBlock source={nodeText(node).replace(/\n$/, '') + '\n'} pending={streaming && !closed} />
   }
   return (
-    <div className="riso-halftone min-w-0 rounded-card bg-riso-blue text-white shadow-print-pink">
-      <div className="flex items-center justify-between gap-3 pt-2 pr-3 pl-4">
-        <span className="font-mono text-[11.5px] font-bold text-riso-yellow">{language}</span>
+    <div className="min-w-0 overflow-hidden rounded-card border border-code-border bg-code-bg text-code-fg">
+      <div className="flex items-center justify-between gap-3 border-b border-code-border px-4 py-2">
+        <span className="font-mono text-[11.5px] font-semibold text-code-muted">{language}</span>
         <button
           type="button"
-          className="inline-flex min-h-7 shrink-0 items-center rounded-full bg-riso-yellow px-3 text-xs font-black text-ink"
+          className="inline-flex min-h-7 shrink-0 cursor-pointer items-center rounded-stamp border border-hairline-strong bg-surface-control px-2.5 text-xs font-medium text-ink hover:bg-surface-hover focus-visible:shadow-focus"
           onClick={() => void copy()}
         >
           {copied ? t.common.copied : t.chat.copyCode}
@@ -343,7 +345,7 @@ const tableComponents = {
 }
 
 // The output cursor while replying: blinks in 1s steps; with reduced motion it stops blinking and stays on.
-const cursorClass = 'riso-cursor ml-1 inline-block h-[1.2em] w-2.5 bg-riso-pink align-[-0.25em] motion-reduce:animate-none'
+const cursorClass = 'riso-cursor ml-1 inline-block h-[1.15em] w-2 bg-ink align-[-0.2em] motion-reduce:animate-none'
 
 export function Cursor() {
   return <span aria-hidden="true" className={cursorClass} />

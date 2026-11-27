@@ -114,7 +114,7 @@ describe('Runtime mark in the header', () => {
     const claude = makeAgent({ name: 'Local assistant', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' })
     const pi = makeAgent({ name: 'Pi assistant' })
     server.use(...baseHandlers([claude, pi]))
-    const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'config'))
+    const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'chat'))
     const header = (await heading('Local assistant')).closest('header')!
     const mark = within(header).getByTitle('Runtime: Claude Code on this computer')
     expect(mark.querySelector('svg')).toHaveAttribute('data-logo', 'claude')
@@ -204,11 +204,11 @@ describe('Header bar and tabs', () => {
     return { user, router, title, header: title.closest('header')! }
   }
 
-  it('shows the Agent name in normal bold text (no display font, no shadow), Manager chip, status dot and four compact tabs, with no breadcrumb, model tag, runtime badge or overprint deco', async () => {
+  it('shows the Agent name in normal semibold text (no display font, no shadow), Manager chip, status dot and four compact tabs, with no breadcrumb, model tag, runtime badge or overprint deco', async () => {
     const agent = makeAgent({ name: 'manager', isManager: true, runtime: 'claude-code', model: { provider: 'claude-code', modelId: 'opus' }, address: 'test-org/test-project/manager' })
     const { title, header } = await open(agent)
     expect(header).toHaveClass('nav:flex', 'nav:h-12', 'nav:items-center')
-    expect(title).toHaveClass('text-[15px]', 'font-black', 'text-ink')
+    expect(title).toHaveClass('text-[14.5px]', 'font-semibold', 'text-ink')
     expect(title).not.toHaveClass('font-display-cn')
     expect(title.className).not.toMatch(/text-shadow/)
     expect(within(header).getByTitle('Project Manager')).toHaveTextContent('Manager')
@@ -219,12 +219,12 @@ describe('Header bar and tabs', () => {
     expect(within(header).queryByText('claude-code · opus')).toBeNull()
     expect(within(header).queryByText('Claude Code')).toBeNull()
     expect(within(header).queryByText('test-org/test-project/manager')).toBeNull()
-    // Four compact text tabs inside the bar (not large folder index tabs).
+    // Four compact tabs inside the segmented switcher.
     const tabs = within(header).getByRole('navigation', { name: 'manager' })
     expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config', 'Folder', 'Inbox'])
     const current = within(tabs).getByRole('link', { name: 'Config' })
     expect(current).toHaveAttribute('aria-current', 'page')
-    expect(current).toHaveClass('bg-riso-yellow')
+    expect(current).toHaveClass('bg-surface-elevated', 'font-semibold', 'text-ink')
     expect(current).not.toHaveClass('h-10', 'border-b-0')
     expect(within(tabs).getByRole('link', { name: 'Chat' })).not.toHaveClass('bg-paper-tab')
   })
@@ -348,6 +348,7 @@ describe('Header bar and tabs', () => {
 
   it('the sheet starts directly under the bar with no outer margin, thick border or drop shadow; the bar is outside the sheet and keeps phone two-row layout', async () => {
     const { header } = await open(makeAgent({ name: 'Agent A' }))
+    const tabs = within(header).getByRole('navigation', { name: 'Agent A' })
     const frame = header.parentElement as HTMLElement
     expect(frame).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col')
     expect(frame).not.toHaveClass('px-[clamp(14px,2.4vw,34px)]', 'pb-[26px]', 'max-nav:pb-4')
@@ -355,18 +356,19 @@ describe('Header bar and tabs', () => {
     expect(header).not.toHaveClass('mr-1.5')
     const sheet = header.nextElementSibling as HTMLElement
     expect(sheet).toHaveAttribute('data-sheet')
-    expect(sheet).toHaveClass('border-t-[1.5px]', 'border-ink', 'riso-grain')
+    expect(sheet).toHaveClass('bg-surface-canvas', 'riso-grain')
     expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
     expect(sheet).toContainElement(await screen.findByRole('heading', { name: 'Basics' }))
     expect(sheet).not.toContainElement(header)
+    expect(sheet).not.toContainElement(tabs)
     expect(header.closest('[data-sheet]')).toBeNull()
   })
 
-  it('the conversation panel under the bar uses tighter top and bottom padding around messages', async () => {
+  it('the conversation panel under the bar uses a centered 800px message column', async () => {
     const { header } = await open(makeAgent({ name: 'Agent A' }), 'chat')
     const sheet = header.nextElementSibling as HTMLElement
     const log = await within(sheet).findByRole('log', { name: 'Conversation' })
-    expect(log).toHaveClass('pt-2.5', 'pb-3', 'px-3.5', 'nav:px-6')
-    expect(log).not.toHaveClass('pt-[26px]', 'pb-[22px]')
+    const column = log.querySelector('[data-message-column]')!
+    expect(column).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]', 'px-4', 'pt-4', 'pb-6', 'sm:px-6')
   })
 })

@@ -26,7 +26,7 @@ describe('Global settings: local mode', () => {
     const local = localModeBackend({ settings: { git: false } })
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
-    renderRoutes(routes, '/settings')
+    renderRoutes(routes, '/settings/workspace')
     const card = await region('Local mode')
     const directories = await within(card).findByRole('switch', { name: 'Bind local directories' })
     const git = within(card).getByRole('switch', { name: 'Use local git identity' })
@@ -59,7 +59,7 @@ describe('Global settings: local mode', () => {
     const local = localModeBackend()
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
-    renderRoutes(routes, '/settings')
+    renderRoutes(routes, '/settings/workspace')
     const logins = await within(await region('Local mode')).findByRole('switch', { name: 'Use local logins' })
 
     await user.click(logins)
@@ -90,7 +90,7 @@ describe('Global settings: local mode', () => {
     const local = localModeBackend()
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
-    renderRoutes(routes, '/settings')
+    renderRoutes(routes, '/settings/workspace')
     const card = await region('Local mode')
     const logins = await within(card).findByRole('switch', { name: 'Use local logins' })
     local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', 'Failed to write the settings'), { status: 500 })
@@ -109,7 +109,7 @@ describe('Global settings: local mode', () => {
 
 describe('Project settings: local directories', () => {
   const project = makeProject({ name: 'model-access' })
-  const path = `/p/${encodeURIComponent(project.name)}/settings`
+  const path = `/p/${encodeURIComponent(project.name)}/settings/context`
   function setup(init: Parameters<typeof localModeBackend>[0] = {}) {
     const local = localModeBackend({ projects: { [project.id]: { revision: 2, directories: [dir('/Users/me/code/app', 'Main repo'), dir('/Users/me/missing-dir')] } }, ...init })
     server.use(...local.handlers, ...projectBackend({ projects: [defaultProject, project] }).handlers)
@@ -264,7 +264,7 @@ describe('Project settings: local directories', () => {
     const note = await within(card).findByText(/"Bind local directories" is off in global settings: the list is still saved, but no Agent is told about it\./)
     expect(await rows()).toHaveLength(2)
     await user.click(within(note).getByRole('link', { name: 'Open global settings' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/workspace'))
     expect(router.state.location.hash).toBe('#local-mode')
   })
 })
@@ -282,7 +282,7 @@ describe('Agent config: local directories', () => {
     expect(inherited).toHaveTextContent('/Users/me/shared')
     expect(inherited).toHaveTextContent('Project docs')
     expect(within(inherited).queryByRole('button')).toBeNull()
-    expect(within(inherited).getByRole('link', { name: 'Edit in project settings' })).toHaveAttribute('href', `/p/${encodeURIComponent('test-project')}/settings`)
+    expect(within(inherited).getByRole('link', { name: 'Edit in project settings' })).toHaveAttribute('href', `/p/${encodeURIComponent('test-project')}/settings/context`)
     for (const caution of cautions) expect(within(section).getByText(caution)).toBeInTheDocument()
 
     const own = within(section).getByRole('list', { name: 'Local directories' })
@@ -350,7 +350,7 @@ describe('Pull from Git fails: hints about the local git identity', () => {
     const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode, url)] } }
     const view = renderRoutes([
       { path: '/', element: <FileManager source={source} rootLabel="dev-helper's folder" limits={limits} className="h-[600px]" /> },
-      { path: '/settings', element: <p>Global settings</p> },
+      { path: '/settings/workspace', element: <p>Global settings</p> },
     ], '/')
     return { reads, ...view }
   }
@@ -361,7 +361,7 @@ describe('Pull from Git fails: hints about the local git identity', () => {
     const hint = await screen.findByRole('note')
     expect(hint).toHaveTextContent('"Use local git identity" is off, so pulls from HTTPS addresses can\'t use the git credentials saved on this computer.')
     await userEvent.setup().click(within(hint).getByRole('link', { name: 'Turn it on in global settings' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/workspace'))
     expect(router.state.location.hash).toBe('#local-mode')
   })
 

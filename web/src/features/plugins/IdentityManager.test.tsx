@@ -38,7 +38,7 @@ function setup(identity: Schemas['ExternalIdentity'], plugins = [webhook, lark],
       return HttpResponse.json(current)
     }),
   )
-  renderRoutes(routes, `/identities/${identity.id}`)
+  renderRoutes(routes, `/identities/${identity.id}/settings`)
   return { writes, fake }
 }
 
@@ -96,17 +96,27 @@ describe('Managing external identities', () => {
 })
 
 describe('"Can manage external identities" on plugin pages', () => {
-  it('the install confirmation and "What it contains" in plugin details both list the managing channels, and the card has a tag', async () => {
+  it('plugin details show the capability chip, list managing channels and permissions in the manifest inspector, and show them in the update confirmation', async () => {
     const user = userEvent.setup()
     const fake = fakePlugins({ details: [webhook] })
     server.use(...fake.handlers, ...baseHandlers([]), http.post(apiUrl('/plugin-previews'), () => HttpResponse.json(makePreview({ manifest: { ...webhook.manifest, version: '1.3.0' }, installedVersion: '1.2.0' }), { status: 201 })))
-    const { router } = renderRoutes(routes, '/plugins')
-    const card = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
-    await waitFor(() => expect(card).toHaveTextContent('Can manage external identities'))
-    await router.navigate('/plugins/webhook')
-    const contains = await screen.findByRole('region', { name: 'What it contains' })
-    expect(within(contains).getByText('Can manage external identities').parentElement).toHaveTextContent('Can manage external identities · Callback · Pushes messages sent to external identities out, and sends replies back as that identity')
-    expect(within(contains).getByText('identities.manage').parentElement).toHaveTextContent('Manage external identities: read their Inbox, reply and answer in their name')
+    renderRoutes(routes, '/plugins')
+    // Installed rows render from the list payload without N+1 per-plugin detail fetches.
+    const link = await screen.findByRole('link', { name: 'Webhook notifications' })
+    expect(fake.requests.some((r) => r.path === '/plugins/webhook')).toBe(false)
+    await user.click(link)
+
+    const capabilities = await screen.findByRole('region', { name: 'Capabilities & security' })
+    expect(within(within(capabilities).getAllByRole('list')[0]).getByText('Can manage external identities')).toBeInTheDocument()
+    const summary = within(capabilities).getByText('Inspect manifest & permissions')
+    const details = summary.closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    await user.click(summary)
+    expect(details).toHaveAttribute('open')
+    const platformHalf = within(details).getByRole('region', { name: 'Platform side' })
+    expect(within(platformHalf).getByText('Can manage external identities').parentElement).toHaveTextContent('Can manage external identities · Callback · Pushes messages sent to external identities out, and sends replies back as that identity')
+    expect(within(details).getByText('identities.manage').parentElement).toHaveTextContent('Manage external identities: read their Inbox, reply and answer in their name')
+
     await user.click(screen.getByRole('button', { name: 'Check for updates' }))
     const dialog = await screen.findByRole('dialog', { name: /Update Webhook notifications/ })
     expect(within(dialog).getByText('Can manage external identities').parentElement).toHaveTextContent('Can manage external identities · Callback')

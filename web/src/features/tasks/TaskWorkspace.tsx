@@ -20,19 +20,19 @@ export function TaskWorkspace({ taskId, projectId, workspace }: { taskId: string
   const isCopy = workspace.mode === 'copy'
   const from = git?.baseBranch ? copy.from(git.baseBranch, git.baseCommit?.slice(0, 7) ?? null) : null
   const label = isCopy ? copy.copyLabel : copy.label
-  return <section aria-label={label} className="mb-3 grid min-w-0 gap-2 rounded-card bg-paper-raised px-4 py-3 shadow-[inset_0_0_0_1.5px_var(--ink)]">
+  return <section aria-label={label} className="mb-2.5 grid min-w-0 gap-2 rounded-card border border-hairline-strong bg-surface-elevated px-4 py-3 shadow-surface">
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-      <h2 className="text-[13.5px] font-black">{label}</h2>
+      <h2 className="text-[13.5px] font-semibold text-ink">{label}</h2>
       <Badge variant="chip" tone={stateTone[workspace.state]}>{copy.states[workspace.state]}</Badge>
-      {git && <span className="min-w-0 font-mono text-[13px] font-bold break-all text-riso-blue" title={copy.branch}>{git.branch}</span>}
+      {git && <span className="min-w-0 font-mono text-[13px] font-semibold break-all text-riso-blue" title={copy.branch}>{git.branch}</span>}
       {from && <span className="font-mono text-[12px] text-ink-500">{from}</span>}
       {isCopy && workspace.copy && <span className="font-mono text-[12px] text-ink-500">{copy.size(workspace.copy.files, t.common.bytes(workspace.copy.bytes))}</span>}
     </div>
-    {workspace.modeNote && <p role="note" className="rounded-input bg-tint-blue px-3 py-1.5 text-[12.5px] font-bold">{workspace.modeNote}</p>}
+    {workspace.modeNote && <p role="note" className="rounded-input border border-hairline bg-tint-blue px-3 py-1.5 text-[12.5px] font-medium text-ink">{workspace.modeNote}</p>}
     <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12.5px]">
-      <dt className="font-bold text-ink-700">{isCopy ? copy.copyOf : copy.repository}</dt>
+      <dt className="font-semibold text-ink-700">{isCopy ? copy.copyOf : copy.repository}</dt>
       <dd className="min-w-0 font-mono break-all text-ink-700">{git?.repository ?? workspace.folder}</dd>
-      <dt className="font-bold text-ink-700">{copy.path}</dt>
+      <dt className="font-semibold text-ink-700">{copy.path}</dt>
       <dd className="flex min-w-0 items-start gap-2">
         <span className={`min-w-0 font-mono break-all ${workspace.state === 'removed' ? 'text-ink-500 line-through' : 'text-ink-700 select-all'}`} title={workspace.path}>{workspace.path}</span>
         {workspace.state !== 'removed' && <CopyPath path={workspace.path} />}
@@ -55,7 +55,7 @@ function CopyPath({ path }: { path: string }) {
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-  return <Button type="button" size="xs" variant="secondary" className="h-7 shrink-0 rounded-[8px] border-2 border-ink bg-riso-yellow px-2.5 text-[12px] hover:bg-riso-yellow" onClick={() => void write()}>
+  return <Button type="button" size="xs" variant="secondary" className="h-7 shrink-0 px-2.5 text-[12px]" onClick={() => void write()}>
     {copied ? t.common.copied : t.common.copy}
   </Button>
 }

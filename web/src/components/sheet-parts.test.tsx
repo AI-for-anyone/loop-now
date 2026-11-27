@@ -1,32 +1,59 @@
+import { createRef, useState } from 'react'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { indexTabClass } from '@/lib/index-tab'
-import { IndexTabLink, IndexTabs } from './IndexTabs'
+import { IndexTabLink, IndexTabs, SubNav } from './IndexTabs'
 import { HollowNumber, NumberedSection } from './NumberedSection'
-import { RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
+import { PageBody, RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
 import { StickyNote } from './StickyNote'
 
-// Shared parts of the "printed sheet" redesign: sheet, index tab, stub and ruler, numbered section heading, yellow sticky note.
+// Shared parts of the "printed sheet" redesign: sheet, page body, index tab / sub-nav, stub and ruler, numbered section heading, yellow sticky note.
 describe('Sheet', () => {
-  it('sits flush to the window and sidebar with no outer margin, thick border, rounded corners or drop shadow, separated from the header by a 1.5px ink line', () => {
+  it('uses a clean full-bleed canvas with no outer margin, thick border, rounded corners or drop shadow', () => {
     render(<Sheet data-testid="sheet">Body</Sheet>)
     const sheet = screen.getByTestId('sheet')
     expect(sheet).toHaveTextContent('Body')
     expect(sheet).toHaveAttribute('data-sheet')
-    expect(sheet).toHaveClass('bg-paper-raised', 'border-t-[1.5px]', 'border-ink', 'overflow-hidden', 'riso-grain')
+    expect(sheet).toHaveClass('relative', 'flex', 'min-h-0', 'flex-1', 'flex-col', 'bg-surface-canvas', 'overflow-hidden', 'riso-grain')
     expect(sheet).not.toHaveClass('border-2', 'rounded-panel', 'shadow-print-dialog', 'mr-1.5')
   })
 
-  it('scrollbars in the sheet are thin translucent navy ones (the sheet itself and every scrolling area inside it), not the grey system scrollbars', () => {
+  it('scrollbars in the sheet use riso-scrollbar', () => {
     render(<Sheet data-testid="sheet"><div className="overflow-y-auto">Body</div></Sheet>)
     expect(screen.getByTestId('sheet')).toHaveClass('riso-scrollbar')
   })
 
   it('the caller can add class names and attributes', () => {
     render(<Sheet data-testid="sheet" className="flex-1" aria-busy="true" />)
-    expect(screen.getByTestId('sheet')).toHaveClass('flex-1', 'bg-paper-raised')
+    expect(screen.getByTestId('sheet')).toHaveClass('flex-1', 'bg-surface-canvas')
     expect(screen.getByTestId('sheet')).toHaveAttribute('aria-busy', 'true')
+  })
+})
+
+describe('PageBody', () => {
+  it('applies width presets, forwards ref, and supports innerClassName', () => {
+    const ref = createRef<HTMLDivElement>()
+    const { rerender } = render(
+      <PageBody ref={ref} data-testid="body" width="narrow" innerClassName="flex flex-col gap-6">
+        Content
+      </PageBody>,
+    )
+    const outer = screen.getByTestId('body')
+    expect(ref.current).toBe(outer)
+    expect(outer).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto')
+    expect(outer.firstElementChild).toHaveClass('mx-auto', 'w-full', 'max-w-[780px]', 'px-4', 'py-5', 'sm:px-6', 'flex', 'flex-col', 'gap-6')
+
+    rerender(<PageBody data-testid="body">Default</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('max-w-[1080px]')
+
+    rerender(<PageBody data-testid="body" width="wide">Wide</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('max-w-[1320px]')
+
+    rerender(<PageBody data-testid="body" width="full">Full</PageBody>)
+    expect(screen.getByTestId('body').firstElementChild).toHaveClass('flex', 'h-full', 'min-h-0', 'w-full', 'flex-col')
+    expect(screen.getByTestId('body').firstElementChild).not.toHaveClass('px-4')
   })
 })
 
@@ -49,30 +76,95 @@ describe('Index tabs', () => {
     expect(within(nav).getByRole('link', { name: 'Chat' })).not.toHaveAttribute('aria-current')
   })
 
-  it('the current page is yellow and 40px tall; the others are beige-grey and 34px tall; all have a border on the top, left and right only', () => {
+  it('uses hairline bottom-border underline tabs with primary ink for the active tab', () => {
     tabs('/chat')
     const current = screen.getByRole('link', { name: 'Chat' })
     const other = screen.getByRole('link', { name: 'Config' })
-    expect(current).toHaveClass('h-10', 'bg-riso-yellow', 'text-ink', 'border-2', 'border-b-0', 'border-ink')
-    expect(other).toHaveClass('h-[34px]', 'bg-paper-tab', 'text-ink-700', 'border-2', 'border-b-0', 'border-ink')
+    expect(current).toHaveClass('border-b-2', 'border-ink', 'font-semibold', 'text-ink')
+    expect(other).toHaveClass('border-b-2', 'border-transparent', 'text-ink-500')
   })
 
-  it('on narrow screens the tabs get narrower and scroll sideways when they do not fit, without widening the page', () => {
+  it('the tabs scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
-    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
-    expect(screen.getByRole('link', { name: 'Chat' })).toHaveClass('max-sm:px-2.5')
-    expect(screen.getByRole('link', { name: 'Config' })).toHaveClass('max-sm:px-2.5')
+    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('h-9', 'overflow-x-auto', 'no-scrollbar', 'px-4', 'sm:px-6')
   })
 
   it('button-style tabs (status filters, categories) use the same styles', () => {
-    expect(indexTabClass(true)).toContain('bg-riso-yellow')
-    expect(indexTabClass(false)).toContain('bg-paper-tab')
-    expect(indexTabClass(true)).not.toContain('bg-paper-tab')
+    expect(indexTabClass(true)).toContain('border-ink')
+    expect(indexTabClass(false)).toContain('border-transparent')
+    expect(indexTabClass(true)).not.toContain('border-transparent')
+  })
+
+  it('SubNav supports route links with counts', () => {
+    render(
+      <MemoryRouter initialEntries={['/plugins']}>
+        <SubNav
+          aria-label="Plugins"
+          items={[
+            { key: 'installed', label: 'Installed', to: '/plugins', end: true, count: 3 },
+            { key: 'market', label: 'Market', to: '/plugins/market' },
+          ]}
+        />
+      </MemoryRouter>,
+    )
+    const nav = screen.getByRole('navigation', { name: 'Plugins' })
+    const installed = within(nav).getByRole('link', { name: /Installed/ })
+    expect(installed).toHaveAttribute('aria-current', 'page')
+    expect(installed).toHaveTextContent('Installed3')
+    expect(within(nav).getByRole('link', { name: 'Market' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('SubNav supports controlled tablist mode with ArrowLeft, ArrowRight, Home, End keyboard navigation', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [active, setActive] = useState<'all' | 'running' | 'failed' | 'done'>('all')
+      return (
+        <SubNav
+          aria-label="Task filters"
+          value={active}
+          onChange={setActive}
+          items={[
+            { key: 'all', label: 'All', count: 5 },
+            { key: 'running', label: 'Running', count: 2 },
+            { key: 'failed', label: 'Failed', disabled: true },
+            { key: 'done', label: 'Done', count: 3 },
+          ]}
+        />
+      )
+    }
+    render(<Harness />)
+    const tablist = screen.getByRole('tablist', { name: 'Task filters' })
+    const all = within(tablist).getByRole('tab', { name: /All/ })
+    const running = within(tablist).getByRole('tab', { name: /Running/ })
+    const done = within(tablist).getByRole('tab', { name: /Done/ })
+    expect(all).toHaveAttribute('aria-selected', 'true')
+
+    all.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(running).toHaveAttribute('aria-selected', 'true')
+    expect(running).toHaveFocus()
+
+    // Skips disabled "Failed" tab
+    await user.keyboard('{ArrowRight}')
+    expect(done).toHaveAttribute('aria-selected', 'true')
+    expect(done).toHaveFocus()
+
+    await user.keyboard('{Home}')
+    expect(all).toHaveAttribute('aria-selected', 'true')
+    expect(all).toHaveFocus()
+
+    await user.keyboard('{End}')
+    expect(done).toHaveAttribute('aria-selected', 'true')
+    expect(done).toHaveFocus()
+
+    await user.keyboard('{ArrowLeft}')
+    expect(running).toHaveAttribute('aria-selected', 'true')
+    expect(running).toHaveFocus()
   })
 })
 
 describe('Stub and ruler', () => {
-  it('the stub has a small heading separated from the body by a dashed line, and is hidden on narrow screens', () => {
+  it('the stub has a hairline separator and is hidden on narrow screens', () => {
     render(
       <Stub label="Overview" data-testid="stub">
         <span>4 files</span>
@@ -80,7 +172,7 @@ describe('Stub and ruler', () => {
     )
     const stub = screen.getByTestId('stub')
     expect(stub).toHaveTextContent('Overview4 files')
-    expect(stub).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
+    expect(stub).toHaveClass('border-l', 'border-hairline', 'max-nav:hidden')
     expect(screen.getByText('Overview')).not.toHaveAttribute('aria-hidden')
   })
 
@@ -100,7 +192,7 @@ describe('Stub and ruler', () => {
     expect(screen.getByText('TURNS')).toHaveClass('text-[9px]', 'indent-0')
   })
 
-  it('the ruler ticks and highlighter mark are decoration, hidden from screen readers', () => {
+  it('the ruler ticks and mark are decoration, hidden from screen readers', () => {
     render(
       <>
         <RulerTicks data-testid="ticks" />
@@ -111,34 +203,40 @@ describe('Stub and ruler', () => {
     const mark = screen.getByTestId('mark')
     expect(mark).toHaveAttribute('aria-hidden', 'true')
     expect(mark).toHaveStyle({ top: '12px', height: '40px' })
-    // A yellow highlighter mark with a small pink arrow on the left.
-    expect(mark.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
-    expect(mark.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
+    const band = mark.querySelector('[data-ruler-band]')!
+    expect(band).toHaveClass('bg-surface-active')
+    expect(band).not.toHaveClass('mix-blend-multiply')
+    expect(mark.querySelector('[data-ruler-arrow]')).toHaveClass('bg-ink')
   })
 })
 
 describe('Numbered section', () => {
-  it('the hollow number is decoration and hidden on narrow screens', () => {
+  it('the section number is decorative tabular mono', () => {
     render(<HollowNumber data-testid="number">25</HollowNumber>)
     const number = screen.getByTestId('number')
     expect(number).toHaveTextContent('25')
     expect(number).toHaveAttribute('aria-hidden', 'true')
-    expect(number).toHaveClass('max-nav:hidden', 'text-transparent')
+    expect(number).toHaveClass('max-nav:hidden', 'tabular-nums', 'text-ink-500')
   })
 
-  it('a section is a region named by its title: a two-digit number on the left, the title is a level-2 heading with a yellow highlighter stroke', () => {
+  it('a section is a region named by its title with a compact 14.5px semibold heading', () => {
     render(
       <NumberedSection number={3} title="Local directories">
         <p>Section content</p>
       </NumberedSection>,
     )
     const region = screen.getByRole('region', { name: 'Local directories' })
-    expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass('font-display-cn', 'riso-marker')
-    expect(within(region).getByText('03')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(region).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveClass(
+      'text-[14.5px]',
+      'font-semibold',
+    )
+    const num = within(region).getByText('03')
+    expect(num).toHaveAttribute('aria-hidden', 'true')
+    expect(num).toHaveClass('hidden')
     expect(region).toHaveTextContent('Section content')
   })
 
-  it('the title can be followed by a note and right-aligned actions; from the second section on there is a dashed line above', () => {
+  it('the title can be followed by a note and right-aligned actions; from the second section on there is a hairline divider above', () => {
     const { rerender } = render(
       <NumberedSection number={1} title="Usage" meta={<span>Unit: tokens</span>} actions={<button type="button">Today</button>}>
         <p>Section content</p>
@@ -149,22 +247,22 @@ describe('Numbered section', () => {
     expect(heading.parentElement).toContainElement(within(region).getByText('Unit: tokens'))
     expect(within(region).getByRole('button', { name: 'Today' }).parentElement).toHaveClass('sm:ml-auto')
     expect(region.querySelector('[data-section-number]')).toHaveTextContent('01')
-    expect(region).not.toHaveClass('border-t-2')
+    expect(region).not.toHaveClass('border-t')
     rerender(
       <NumberedSection number={2} title="Usage">
         <p>Section content</p>
       </NumberedSection>,
     )
-    expect(screen.getByRole('region', { name: 'Usage' })).toHaveClass('border-t-2', 'border-dashed')
+    expect(screen.getByRole('region', { name: 'Usage' })).toHaveClass('border-t', 'border-hairline')
   })
 })
 
-describe('Yellow sticky note', () => {
-  it('is a note (role=note) with a decorative info icon', () => {
+describe('Sticky note', () => {
+  it('is a note (role=note) with clean hairline callout styling', () => {
     render(<StickyNote>Changes take effect from the next message.</StickyNote>)
     const note = screen.getByRole('note')
     expect(note).toHaveTextContent('Changes take effect from the next message.')
-    expect(note).toHaveClass('riso-tilt')
+    expect(note).toHaveClass('border', 'border-hairline', 'bg-surface-subtle', 'rounded-card')
     expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 })

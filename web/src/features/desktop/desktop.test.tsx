@@ -111,21 +111,24 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     expect(bridge.notify).not.toHaveBeenCalled()
   })
 
-  it('the window has no system title bar: a strip at the top of the sidebar and the blue top bar on narrow screens drag the window; neither exists when opened in a browser', async () => {
+  it('the window has no system title bar: the top bar of the sidebar, the main header bar and the narrow-screen top bar drag the window; none do when opened in a browser', async () => {
     server.use(...baseHandlers([agent]))
     const { unmount } = renderRoutes(routes, defaultAgentsPath)
     await openInboxStream(0)
+    await screen.findByRole('heading', { name: 'Reviewer', level: 1 })
     const nav = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(nav.firstElementChild).toHaveClass('window-drag')
-    expect(nav.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    expect(nav.firstElementChild).toHaveClass('window-drag', 'pl-[84px]')
     expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).toHaveClass('window-drag')
+    expect(document.querySelector('[data-agent-header]')).toHaveClass('window-drag')
     unmount()
 
     delete window.loopNowDesktop
     renderRoutes(routes, defaultAgentsPath)
     await openInboxStream(0)
+    await screen.findByRole('heading', { name: 'Reviewer', level: 1 })
     expect(screen.getByRole('navigation', { name: 'Main navigation' }).firstElementChild).not.toHaveClass('window-drag')
     expect(screen.getByRole('button', { name: 'Open navigation' }).closest('header')).not.toHaveClass('window-drag')
+    expect(document.querySelector('[data-agent-header]')).not.toHaveClass('window-drag')
     expect(document.querySelector('.window-drag')).toBeNull()
   })
 

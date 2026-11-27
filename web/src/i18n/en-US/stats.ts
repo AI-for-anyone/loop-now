@@ -8,6 +8,12 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
 
 export const stats = {
   title: 'Stats',
+  tabs: {
+    label: 'Stats sections',
+    usage: 'Usage & Cost',
+    reliability: 'Reliability & Speed',
+    diagnostics: 'Diagnostics',
+  },
   global: 'Global',
   platform: 'Platform',
   rangeLabel: 'Time range',
@@ -61,6 +67,11 @@ export const stats = {
     tokens: 'Total tokens',
     tokensDelta: (cost: string | null, hit: string | null) =>
       capitalize([cost && `est. ${cost}`, hit && `${hit} cache hits`].filter(Boolean).join(', ')),
+    tokensCostDelta: (cost: string | null) => (cost ? `Est. ${cost} at API list prices` : 'No priced models'),
+    cacheHit: 'Cache hit rate',
+    cacheHitDelta: (cached: string, input: string) => `${cached} cached of ${input} input`,
+    completion: 'Completion rate',
+    completionDelta: (runs: number) => n(runs, 'turn', 'turns'),
   },
 
   origins: {
@@ -105,6 +116,7 @@ export const stats = {
     avg: 'Avg reply time',
     max: 'Longest wait',
     pending: 'Still waiting',
+    longestWait: (time: string) => `Longest wait ${time}`,
     waited: (time: string) => `Waited ${time}`,
     noPending: 'No questions are waiting for you.',
   },
@@ -193,8 +205,12 @@ export const stats = {
     none: 'No tool calls in this period.',
   },
 
+  modelCost: {
+    title: 'Models & cost',
+  },
+
   process: {
-    title: 'Models and processes',
+    title: 'Process & retries',
     retries: 'Model retries',
     piExits: 'Process crashes',
     piExitsNote: 'Includes forced stops after an interrupt timed out',

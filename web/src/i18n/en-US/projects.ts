@@ -58,6 +58,24 @@ export const projects = {
   settings: {
     defaultBadge: 'Default project',
     title: 'Project settings',
+    tabs: {
+      nav: 'Project settings sections',
+      general: 'General',
+      context: 'Prompt & Context',
+      credentials: 'Credentials',
+      plugins: 'Plugins',
+      danger: 'Danger',
+    },
+    folderCard: {
+      open: 'Open project folder',
+    },
+    accounts: {
+      filterLabel: 'Account category',
+      verify: 'Verify',
+      hideVerify: 'Hide verification',
+      relogin: 'Re-login',
+      hideRelogin: 'Hide login',
+    },
     name: {
       title: 'Project name',
       id: 'Project ID',

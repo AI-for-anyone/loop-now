@@ -1,39 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CircleAlertIcon, CircleCheckIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, RefreshCwIcon, XIcon } from 'lucide-react'
+import { CircleAlertIcon, CircleCheckIcon, DownloadIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, PencilIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
-import { RulerTicks, Stub, StubFigure } from '@/components/Sheet'
+import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
 import { config } from '@/config'
 import { pickedFiles } from '@/lib/upload'
 import { cn } from '@/lib/utils'
-import { ancestorsOf, encodeText, ENTRY_FILE, folderKeys, joinPath, nameOf, parentOf, PLAIN_TEXT, segmentsOf, within, type FolderEntry, type FolderSource, type GitPull, type TextEditLimits, type TextFormat, type UploadItem } from './folder-source'
-import { refreshDirs, useFolderList, useGitPulls, type FileText, type Selection } from './folder-queries'
+import { ancestorsOf, canEdit, encodeText, ENTRY_FILE, folderKeys, isEntryFile, isImage, isMarkdown, joinPath, nameOf, parentOf, PLAIN_TEXT, segmentsOf, within, type FolderEntry, type FolderSource, type GitPull, type TextEditLimits, type TextFormat, type UploadItem } from './folder-source'
+import { refreshDirs, useFolderFile, useFolderList, useGitPulls, type FileText, type Selection } from './folder-queries'
 import { DirView, FileView, Pending, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
 import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
-import { FolderBlock, ToolButton, UploadMenu, type EntryActions } from './FolderParts'
+import { EntryBadge, EntryIcon, EntryMenu, ToolButton, UploadMenu, type EntryActions } from './FolderParts'
 import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-uploads'
 
 interface FileManagerProps {
   source: FolderSource
   // Relative path to open right away (e.g. from a chat link into the Agent's Folder tab); ancestors are expanded in the tree.
   initialPath?: string
-  // The root's name in the tree and the path bar, e.g. “server 的工作区” (server's workspace).
+  // The root's name in the tree and the path bar, e.g. "server's folder".
   rootLabel: string
   // Context.limits.textEdit: the extensions and size limit for online editing.
   limits: TextEditLimits | undefined
   // Context.limits.maxFolderUpload: the limit for a single uploaded file.
   maxUpload?: number
   className?: string
-  // card: a white card with a light border (global settings); sheet: the Agent's folder tab and the project folder page, laid directly
-  // on the sheet, with the overview in the stub on the right;
-  // panel: a block inside one section of a sheet (project settings), with the same toolbar and list as sheet, a 2px navy outline around
-  // it and no stub.
+  // card: a bordered card (default); sheet: full-bleed 2-pane explorer on the Agent's folder tab and the project folder page;
+  // panel: a bordered block inside a settings section.
   variant?: 'card' | 'sheet' | 'panel'
-  // The first sentence of the note at the bottom of the sheet variant (e.g. “这是它的工作目录” (This is its working directory)).
+  // Optional context note surfaced in the status bar's info tooltip.
   note?: ReactNode
 }
 
@@ -47,10 +45,9 @@ type Dialog =
 const ROOT: Selection = { path: '', type: 'dir', entry: null }
 const INTERNAL = 'application/x-loop-now-path'
 
-// File manager: the file tree, expanded level by level, on the left; the folder list or file content on the right. When narrow, only the
-// right side shows and the file tree slides out from the left.
+// File manager: full-bleed 2-pane IDE split with a collapsible file tree on the left, folder/file content on the right, a single
+// 40px contextual toolbar at the top, and a 28px status strip at the bottom.
 export function FileManager({ source, initialPath, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
-  // sheet and panel use the redesigned toolbar (pills with labels), a dashed line and a note at the bottom; only sheet has a stub.
   const sheet = variant !== 'card'
   const client = useQueryClient()
   // User navigation overrides initialPath once clicked; while waiting to resolve initialPath we look it up in its parent directory.
@@ -105,6 +102,22 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
 
   const currentDir = selection.type === 'dir' ? selection.path : parentOf(selection.path)
   const dirty = !!edit && edit.text !== edit.original
+
+  const selectedEntry = selection.type !== 'dir' ? selection.entry : null
+  const maxBytes = limits?.maxBytes ?? 20 << 20
+  const fileTooLarge = !!selectedEntry && selectedEntry.size !== null && selectedEntry.size > maxBytes
+  const fileReadable = !!selectedEntry && (
+    (selectedEntry.type === 'file' && !fileTooLarge && !isImage(selectedEntry.path)) ||
+    (selectedEntry.type === 'symlink' && !!selectedEntry.symlinkTarget)
+  )
+  const activeFile = useFolderFile(source, selectedEntry?.path ?? '', fileReadable)
+  const activeText = selectedEntry && activeFile.data?.kind === 'text' ? activeFile.data.text : null
+  const activeEditable = !!selectedEntry && selectedEntry.type === 'file' && canEdit(selectedEntry.path, selectedEntry.size, limits) && activeText !== null
+  const activeMarkdown = !!selectedEntry && isMarkdown(selectedEntry.path)
+  const activeLines = activeText === null ? null : activeText.split('\n').length - (activeText.endsWith('\n') ? 1 : 0)
+  const editingCurrent = selectedEntry && edit?.path === selectedEntry.path ? edit : null
+
+  const dirList = useFolderList(source, currentDir, selection.type === 'dir')
 
   // Pulls that ran while the page was open and then succeeded: re-read the level containing the target folder and tell the person in the
   // status bar.
@@ -234,16 +247,35 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
     />
   )
 
-  const manager = (
+  let statusSummary: string | null = null
+  if (selectedEntry) {
+    statusSummary = selectedEntry.type === 'symlink'
+      ? t.folders.file.symlink(selectedEntry.symlinkTarget ?? '')
+      : [selectedEntry.size !== null && t.folders.size(selectedEntry.size), t.folders.time(selectedEntry.modifiedAt), activeLines !== null && t.folders.file.lines(activeLines)].filter(Boolean).join(' · ')
+  } else if (dirList.isSuccess) {
+    const entries = dirList.data.pages.flatMap((page) => page.entries)
+    const dirs = entries.filter((entry) => entry.type === 'dir').length
+    const nonDirs = entries.length - dirs
+    const bytes = entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0)
+    statusSummary = dirList.hasNextPage
+      ? `${t.folders.partial(entries.length)} · ${t.folders.size(bytes)}+`
+      : nonDirs > 0
+        ? `${t.folders.summary(dirs, nonDirs)} · ${t.folders.size(bytes)}`
+        : t.folders.summary(dirs, nonDirs)
+  }
+
+  const tooltipText = typeof note === 'string' && note ? `${note} ${t.folders.concurrent}` : t.folders.concurrent
+
+  return (
     <div
       data-file-manager
       className={cn(
-        '@container relative flex min-h-0 flex-col overflow-hidden text-ink',
+        '@container relative flex min-h-0 flex-col gap-0 overflow-hidden text-ink',
         variant === 'sheet'
-          ? 'min-w-0 flex-1 gap-5 px-3.5 pt-4 pb-5 nav:px-6'
+          ? cn('min-w-0 flex-1', className)
           : variant === 'panel'
-            ? cn('gap-4 rounded-card border-2 border-ink bg-paper-raised px-4 pt-4 pb-3', className)
-            : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),
+            ? cn('rounded-card border border-hairline-strong bg-surface-canvas', className)
+            : cn('rounded-card border border-hairline bg-surface-control', className),
       )}
       onDragOver={(event) => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(INTERNAL)) { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDraggingFiles(true) } }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) { setDraggingFiles(false); setDropTarget(null) } }}
@@ -252,38 +284,112 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
       <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} />
       <input ref={folderInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} {...{ webkitdirectory: '' }} />
 
-      {/* When narrow, the path bar takes a row of its own and the action buttons wrap to a second row. The sheet variant is a toolbar at the
-          top of the sheet: no background color or divider, and the buttons are pills with labels. */}
-      <div className={cn('flex shrink-0 flex-wrap items-center', sheet ? 'gap-x-4 gap-y-2.5' : 'min-h-11 gap-x-1.5 gap-y-1 border-b border-ink/10 bg-paper-raised px-2.5 py-1.5')}>
+      {/* Single unified 40px contextual toolbar: directory actions in directory mode, file actions in file viewing/editing mode. */}
+      <div
+        data-folder-toolbar
+        className={cn(
+          'flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3',
+          sheet ? 'bg-surface-canvas' : 'bg-surface-subtle',
+          editingCurrent && 'bg-tint-yellow/50',
+        )}
+      >
         <ToolButton className="@min-[40rem]:hidden" icon={<PanelLeftIcon />} label={treeOpen ? t.folders.hideTree : t.folders.showTree} showLabel={false} aria-expanded={treeOpen} onClick={() => setTreeOpen((value) => !value)} />
-        <Breadcrumbs className="@max-[34rem]:basis-[calc(100%-2.25rem)]" rootLabel={rootLabel} path={selection.path} onNavigate={(path) => go(path ? { path, type: 'dir', entry: null } : ROOT)} />
-        <div className={cn('ml-auto flex shrink-0 flex-wrap items-center', sheet ? 'gap-2' : 'gap-0.5')}>
-          <ToolButton pill={sheet} className={cn(sheet && '@max-[40rem]:[&>span]:hidden')} icon={<FilePlusIcon />} label={t.folders.newFile} showLabel={sheet} onClick={() => actions.create(currentDir, 'file')} />
-          <ToolButton pill={sheet} className={cn(sheet && '@max-[40rem]:[&>span]:hidden')} icon={<FolderPlusIcon />} label={t.folders.newFolder} showLabel={sheet} onClick={() => actions.create(currentDir, 'dir')} />
-          <ToolButton pill={sheet} icon={<RefreshCwIcon />} label={t.folders.refresh} showLabel={false} onClick={() => void client.invalidateQueries({ queryKey: folderKeys.all(source.key) })} />
-          {!sheet && <span aria-hidden="true" className="mx-1 h-4 w-px bg-ink/15" />}
-          <UploadMenu pill={sheet} className="@max-[34rem]:[&>span]:hidden" onFiles={() => actions.upload(currentDir)} onFolder={() => { uploadTarget.current = currentDir; folderInput.current?.click() }} />
-          {source.git && <ToolButton pill={sheet} className="@max-[34rem]:[&>span]:hidden" icon={<FolderGit2Icon />} label={t.folders.gitPull} onClick={() => setDialog({ type: 'git' })} />}
+        <Breadcrumbs rootLabel={rootLabel} path={selection.path} entryType={selectedEntry?.type} onNavigate={(path) => go(path ? { path, type: 'dir', entry: null } : ROOT)} />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {selectedEntry ? (
+            editingCurrent ? (
+              <>
+                <span className="mr-1 inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap text-ink-700 @max-[32rem]:hidden">
+                  {t.folders.file.editing}
+                </span>
+                {dirty && (
+                  <span className="mr-1 inline-flex items-center gap-1 text-[12px] font-medium whitespace-nowrap text-pink-text">
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-pink-text" />
+                    {t.folders.file.unsaved}
+                  </span>
+                )}
+                <Button size="xs" variant="ghost" className="h-7 no-underline" onClick={() => (dirty ? setDialog({ type: 'discard', next: null }) : setEdit(null))} disabled={editingCurrent.saving}>
+                  {t.folders.file.cancel}
+                </Button>
+                <Button size="xs" className="h-7 px-3" onClick={() => void save()} disabled={editingCurrent.saving || !dirty} title={t.folders.file.saveKey}>
+                  {editingCurrent.saving ? t.folders.file.saving : t.folders.file.save}
+                </Button>
+              </>
+            ) : (
+              <>
+                {activeMarkdown && activeText !== null && (
+                  <div role="radiogroup" aria-label={t.folders.file.view} className="mr-1 inline-flex h-7 items-center rounded-ticket border border-hairline-strong bg-surface-subtle p-0.5">
+                    {(['preview', 'source'] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={mode === value}
+                        onClick={() => setMode(value)}
+                        className={cn(
+                          'h-[22px] cursor-pointer rounded-[4px] px-2 text-[11.5px] font-medium text-ink-700',
+                          mode === value && 'bg-surface-control text-ink shadow-xs',
+                        )}
+                      >
+                        {value === 'preview' ? t.folders.file.preview : t.folders.file.source}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedEntry.type === 'file' && (
+                  <ToolButton
+                    pill={sheet}
+                    icon={<PencilIcon />}
+                    label={t.folders.file.edit}
+                    onClick={() => activeFile.data?.kind === 'text' && startEdit(selectedEntry.path, activeFile.data.text, activeFile.data.format)}
+                    disabled={!activeEditable}
+                    title={activeEditable ? t.folders.file.edit : t.folders.file.notEditable}
+                  />
+                )}
+                {selectedEntry.type === 'file' && (
+                  <ToolButton icon={<DownloadIcon />} label={t.folders.download} showLabel={false} onClick={() => actions.download(selectedEntry)} />
+                )}
+                <EntryMenu entry={selectedEntry} actions={actions} className="size-7" />
+              </>
+            )
+          ) : (
+            <>
+              <ToolButton pill={sheet} className="@max-[42rem]:px-1.5 @max-[42rem]:[&>span]:hidden" icon={<FilePlusIcon />} label={t.folders.newFile} onClick={() => actions.create(currentDir, 'file')} />
+              <ToolButton pill={sheet} className="@max-[42rem]:px-1.5 @max-[42rem]:[&>span]:hidden" icon={<FolderPlusIcon />} label={t.folders.newFolder} onClick={() => actions.create(currentDir, 'dir')} />
+              <UploadMenu pill={sheet} className="@max-[34rem]:px-1.5 @max-[34rem]:[&>span]:hidden" onFiles={() => actions.upload(currentDir)} onFolder={() => { uploadTarget.current = currentDir; folderInput.current?.click() }} />
+              {source.git && <ToolButton pill={sheet} className="@max-[36rem]:px-1.5 @max-[36rem]:[&>span]:hidden" icon={<FolderGit2Icon />} label={t.folders.gitPull} onClick={() => setDialog({ type: 'git' })} />}
+              <ToolButton icon={<RefreshCwIcon />} label={t.folders.refresh} showLabel={false} onClick={() => void client.invalidateQueries({ queryKey: folderKeys.all(source.key) })} />
+            </>
+          )}
         </div>
       </div>
 
+      {/* Full-bleed 2-pane IDE split: 220px tree on the left, scrollable content pane on the right. */}
       <div className="relative flex min-h-0 flex-1">
-        <aside aria-label={t.folders.tree} className={cn('hidden w-64 shrink-0 overflow-y-auto @min-[40rem]:block', sheet ? 'mr-4 border-r-2 border-dashed border-ink/25 pr-2' : 'border-r border-ink/10 bg-paper-raised/60')}>{tree}</aside>
+        <aside
+          aria-label={t.folders.tree}
+          className={cn(
+            'hidden w-[220px] shrink-0 overflow-y-auto border-r border-hairline @min-[40rem]:block',
+            sheet ? 'bg-surface-subtle/30' : 'bg-surface-subtle',
+          )}
+        >
+          {tree}
+        </aside>
         {treeOpen && (
           <div className="absolute inset-0 z-20 flex @min-[40rem]:hidden">
-            <aside aria-label={t.folders.tree} className="w-[min(18rem,85%)] overflow-y-auto border-r border-ink/15 bg-paper-raised shadow-[4px_0_0_rgb(24_38_94/.08)]">{tree}</aside>
-            <button type="button" aria-label={t.folders.hideTree} className="flex-1 cursor-default bg-ink/20" onClick={() => setTreeOpen(false)} />
+            <aside aria-label={t.folders.tree} className="w-[min(18rem,85%)] overflow-y-auto border-r border-hairline-strong bg-surface-elevated shadow-floating">{tree}</aside>
+            <button type="button" aria-label={t.folders.hideTree} className="flex-1 cursor-default bg-black/40" onClick={() => setTreeOpen(false)} />
           </div>
         )}
-        <section data-folder-content className="flex min-w-0 flex-1 flex-col" aria-label={t.folders.label}>
-          {displayError != null && <ErrorAlert error={displayError} className="mx-4 mt-3 w-auto" />}
+        <section data-folder-content className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label={t.folders.label}>
+          {displayError != null && <ErrorAlert error={displayError} className="mx-3 mt-3 w-auto" />}
           {locatingPending ? (
             <Pending />
           ) : selection.type === 'dir' ? (
             <DirView
+              key={selection.path}
               source={source}
               path={selection.path}
-              title={selection.path ? nameOf(selection.path) : rootLabel}
               actions={actions}
               onCreateEntry={() => void createEntryFile().catch(() => {})}
               onEditEntry={(entry) => {
@@ -292,19 +398,17 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
                 if (file?.kind === 'text') startEdit(entry.path, file.text, file.format)
               }}
             />
-          ) : selection.entry ? (
+          ) : selectedEntry ? (
             <FileView
               source={source}
-              entry={selection.entry}
+              entry={selectedEntry}
               limits={limits}
               actions={actions}
+              file={activeFile}
               edit={edit}
               mode={mode}
-              onMode={setMode}
-              onEdit={(text, format) => startEdit(selection.path, text, format)}
               onDraft={(text) => setEdit((old) => (old ? { ...old, text } : old))}
               onSave={() => void save()}
-              onCancel={() => (dirty ? setDialog({ type: 'discard', next: null }) : setEdit(null))}
             />
           ) : null}
         </section>
@@ -312,21 +416,18 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
 
       {pull?.status === 'failed' && <GitPullHint pull={pull} />}
       {pull?.status === 'failed' && pullDetails && pull.errorMessage && (
-        <pre className="max-h-32 shrink-0 overflow-auto border-t border-ink/10 bg-tint-red/40 px-4 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
+        <pre className="max-h-32 shrink-0 overflow-auto border-t border-hairline bg-tint-red/40 px-3 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
       )}
       <div
         data-folder-footer
-        className={cn(
-          'flex shrink-0 items-center gap-3 text-ink-500',
-          sheet ? 'min-h-9 flex-wrap border-t-2 border-dashed border-ink/[0.22] pt-3.5 text-[12px]' : 'min-h-8 border-t border-ink/10 bg-paper-raised px-3 text-[11.5px]',
-        )}
+        className="flex h-7 shrink-0 items-center justify-between gap-3 border-t border-hairline bg-surface-subtle/50 px-3 text-[11.5px] text-ink-500"
       >
         {/* Narrow screens can't fit both parts: when there is a pull status, show only the status. */}
-        <span className={cn('flex min-w-0 items-center gap-1.5', pull && '@max-[40rem]:hidden')}>
-          {!sheet && <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />}
-          <span className={cn(!sheet && 'truncate')}>
-            {sheet && note && <>{note} </>}
-            {t.folders.concurrent}
+        <span className={cn('flex min-w-0 items-center gap-1.5 tabular-nums', pull && '@max-[40rem]:hidden')}>
+          {statusSummary && <span className="truncate">{statusSummary}</span>}
+          <span title={tooltipText} className="inline-flex shrink-0 cursor-help items-center text-ink-500/80 hover:text-ink">
+            <InfoIcon aria-hidden="true" className="size-3.5" />
+            <span className="sr-only">{note && <>{note} </>}{t.folders.concurrent}</span>
           </span>
         </span>
         {pull && <PullStatus pull={pull} details={pullDetails} onDetails={() => setPullDetails((value) => !value)} onShow={() => go({ path: pull.path, type: 'dir', entry: null })} onRetry={() => setDialog({ type: 'git' })} onDismiss={() => { setDismissed((old) => new Set([...old, pull.id])); setPullDetails(false) }} />}
@@ -334,8 +435,8 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
 
       {uploads.rows.length > 0 && <UploadPanel rows={uploads.rows} onClose={uploads.clear} />}
       {draggingFiles && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-1.5 z-30 flex items-center justify-center rounded-[12px] border-2 border-dashed border-riso-blue bg-tint-blue/70">
-          <span className="rounded-full bg-white px-4 py-2 text-[13.5px] font-black text-riso-blue shadow-print-rest">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-1.5 z-30 flex items-center justify-center rounded-[12px] border border-dashed border-hairline-strong bg-surface-hover/85">
+          <span className="rounded-full bg-surface-elevated px-4 py-2 text-[13.5px] font-semibold text-ink shadow-floating">{t.folders.drop((dropTarget ?? currentDir) || rootLabel)}</span>
         </div>
       )}
 
@@ -378,44 +479,13 @@ export function FileManager({ source, initialPath, rootLabel, limits, maxUpload,
       )}
     </div>
   )
-  if (variant !== 'sheet') return manager
-  // Sheet variant: the overview in the stub on the right, hidden on narrow screens.
-  return (
-    <div className={cn('flex min-h-0', className)}>
-      {manager}
-      <FolderStub source={source} dir={currentDir} />
-    </div>
-  )
-}
-
-// The overview in the stub: the number of folders, the number of files and the total file size in the current folder. Only the pages
-// read so far are counted; while not everything has been read, the numbers get a trailing "+".
-function FolderStub({ source, dir }: { source: FolderSource; dir: string }) {
-  const list = useFolderList(source, dir)
-  const entries = list.data?.pages.flatMap((page) => page.entries) ?? []
-  const more = list.hasNextPage ? '+' : ''
-  const files = entries.filter((entry) => entry.type === 'file')
-  const size = t.folders.size(files.reduce((sum, entry) => sum + (entry.size ?? 0), 0))
-  const split = size.lastIndexOf(' ')
-  return (
-    <Stub as="aside" aria-label={t.folders.stub.title} label={t.folders.stub.title} className="w-[150px]">
-      {list.isSuccess && (
-        <div className="relative flex flex-1 flex-col gap-[22px] pt-1.5 pr-[30px] pl-[18px]">
-          <RulerTicks />
-          <StubFigure value={`${entries.filter((entry) => entry.type === 'dir').length}${more}`} label={t.folders.stub.dirs} />
-          <StubFigure value={`${files.length}${more}`} label={t.folders.stub.files} />
-          <StubFigure tone="ink" value={`${size.slice(0, split)}${more}`} label={size.slice(split + 1)} />
-        </div>
-      )}
-    </Stub>
-  )
 }
 
 // A Git pull in the status bar: in progress, succeeded (you can go and look), or failed (you can view the git output and retry).
 function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { pull: GitPull; details: boolean; onDetails: () => void; onShow: () => void; onRetry: () => void; onDismiss: () => void }) {
   const ended = pull.status === 'succeeded' || pull.status === 'failed'
   return (
-    <span role="status" className={cn('ml-auto flex min-w-0 shrink-0 items-center gap-1.5 font-bold', pull.status === 'failed' ? 'text-red-text' : pull.status === 'succeeded' ? 'text-green-text' : 'text-ink-700')}>
+    <span role="status" className={cn('ml-auto flex min-w-0 shrink-0 items-center gap-1.5 font-medium', pull.status === 'failed' ? 'text-red-text' : pull.status === 'succeeded' ? 'text-green-text' : 'text-ink-700')}>
       {pull.status === 'failed' ? <CircleAlertIcon aria-hidden="true" className="size-3.5" /> : pull.status === 'succeeded' ? <CircleCheckIcon aria-hidden="true" className="size-3.5" /> : <LoaderCircleIcon aria-hidden="true" className="riso-spin size-3.5 motion-reduce:animate-none" />}
       <span className="max-w-[24rem] truncate" title={pull.url}>
         {pull.status === 'queued' ? t.folders.git.queued(pull.url, pull.path) : pull.status === 'running' ? t.folders.git.running(pull.url, pull.path) : pull.status === 'succeeded' ? t.folders.git.succeeded(pull.path) : t.folders.git.failed(pull.errorCode ? t.folders.git.errors[pull.errorCode] : t.folders.git.errors.clone_failed)}
@@ -423,18 +493,18 @@ function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { 
       {pull.status === 'succeeded' && <button type="button" className="cursor-pointer text-riso-blue underline" onClick={onShow}>{t.folders.git.show}</button>}
       {pull.status === 'failed' && pull.errorMessage && <button type="button" aria-expanded={details} className="cursor-pointer underline" onClick={onDetails}>{t.folders.git.details}</button>}
       {pull.status === 'failed' && <button type="button" className="cursor-pointer text-riso-blue underline" onClick={onRetry}>{t.folders.git.retry}</button>}
-      {ended && <button type="button" aria-label={t.folders.git.dismiss} className="cursor-pointer rounded-full p-0.5 hover:bg-tint-blue" onClick={onDismiss}><XIcon aria-hidden="true" className="size-3.5" /></button>}
+      {ended && <button type="button" aria-label={t.folders.git.dismiss} className="cursor-pointer rounded-full p-0.5 hover:bg-surface-hover" onClick={onDismiss}><XIcon aria-hidden="true" className="size-3.5" /></button>}
     </span>
   )
 }
 
-// Path bar: the root and every folder level can be clicked to go back to that level; the current item is bold.
-function Breadcrumbs({ rootLabel, path, onNavigate, className }: { rootLabel: string; path: string; onNavigate: (path: string) => void; className?: string }) {
+// Path bar: single-line breadcrumb with plain EntryIcon; the root and every folder level can be clicked to go back to that level.
+function Breadcrumbs({ rootLabel, path, entryType, onNavigate, className }: { rootLabel: string; path: string; entryType?: FolderEntry['type']; onNavigate: (path: string) => void; className?: string }) {
   const parts = segmentsOf(path)
   return (
-    <nav aria-label={t.folders.path} className={cn('flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-[13px]', className)}>
-      <button type="button" onClick={() => onNavigate('')} className={cn('inline-flex min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-tint-blue', parts.length === 0 ? 'font-black' : 'font-bold text-ink-700')} aria-current={parts.length === 0 ? 'page' : undefined}>
-        <FolderBlock className="mr-1" />
+    <nav aria-label={t.folders.path} className={cn('flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-[12.5px]', className)}>
+      <button type="button" onClick={() => onNavigate('')} className={cn('inline-flex min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-surface-hover', parts.length === 0 ? 'font-semibold' : 'font-medium text-ink-700')} aria-current={parts.length === 0 ? 'page' : undefined}>
+        <EntryIcon path="" type="dir" open={parts.length === 0} />
         <span className="truncate">{rootLabel}</span>
       </button>
       {parts.map((part, index) => {
@@ -442,7 +512,15 @@ function Breadcrumbs({ rootLabel, path, onNavigate, className }: { rootLabel: st
         return (
           <span key={target} className={cn('flex min-w-0 items-center gap-0.5', !last && 'shrink-[2]')}>
             <span aria-hidden="true" className="text-ink-500/60">/</span>
-            {last ? <span aria-current="page" className="truncate px-1.5 font-black">{part}</span> : <button type="button" onClick={() => onNavigate(target)} className="cursor-pointer truncate rounded-[6px] px-1.5 py-0.5 font-bold text-ink-700 hover:bg-tint-blue">{part}</button>}
+            {last ? (
+              <span aria-current="page" className="inline-flex min-w-0 items-center gap-1.5 px-1 font-semibold">
+                {entryType && entryType !== 'dir' && <EntryIcon path={path} type={entryType} className="size-3.5" />}
+                <span className="truncate">{part}</span>
+                {entryType && entryType !== 'dir' && isEntryFile(path) && <EntryBadge />}
+              </span>
+            ) : (
+              <button type="button" onClick={() => onNavigate(target)} className="cursor-pointer truncate rounded-[6px] px-1.5 py-0.5 font-medium text-ink-700 hover:bg-surface-hover">{part}</button>
+            )}
           </span>
         )
       })}
@@ -462,18 +540,18 @@ function UploadPanel({ rows, onClose }: { rows: UploadRow[]; onClose: () => void
     return () => clearTimeout(timer)
   }, [finished, failed, onClose])
   return (
-    <section aria-label={t.folders.upload} className="absolute right-3 bottom-11 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-card border border-ink/15 bg-paper-raised shadow-[3px_3px_0_rgb(24_38_94/.14)]">
+    <section aria-label={t.folders.upload} className="absolute right-3 bottom-9 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-card border border-hairline-strong bg-surface-elevated shadow-floating">
       <header className="flex items-center gap-2 px-3.5 pt-2.5 pb-2">
-        <h3 role="status" className="text-[13px] font-black">{t.folders.uploads.title(done, rows.length, finished)}</h3>
-        {failed > 0 && <span className="text-[12px] font-bold text-red-text">{t.folders.uploads.failed(failed)}</span>}
-        {finished && <button type="button" aria-label={t.folders.uploads.close} onClick={onClose} className="ml-auto cursor-pointer rounded-full p-1 text-ink-500 hover:bg-tint-blue"><XIcon aria-hidden="true" className="size-3.5" /></button>}
+        <h3 role="status" className="text-[13px] font-semibold">{t.folders.uploads.title(done, rows.length, finished)}</h3>
+        {failed > 0 && <span className="text-[12px] font-medium text-red-text">{t.folders.uploads.failed(failed)}</span>}
+        {finished && <button type="button" aria-label={t.folders.uploads.close} onClick={onClose} className="ml-auto cursor-pointer rounded-full p-1 text-ink-500 hover:bg-surface-hover"><XIcon aria-hidden="true" className="size-3.5" /></button>}
       </header>
-      <div className="mx-3.5 h-1.5 overflow-hidden rounded-full bg-tint-blue"><div className={cn('h-full rounded-full', failed ? 'bg-riso-pink' : 'bg-riso-blue')} style={{ width: `${total ? Math.round((loaded / total) * 100) : 100}%` }} /></div>
+      <div className="mx-3.5 h-1.5 overflow-hidden rounded-full bg-surface-active"><div className={cn('h-full rounded-full', failed ? 'bg-red' : 'bg-ink')} style={{ width: `${total ? Math.round((loaded / total) * 100) : 100}%` }} /></div>
       <ul className="mt-1.5 max-h-36 overflow-y-auto px-1.5 pb-1.5">
         {rows.map((row) => (
           <li key={row.id} className="flex h-7 items-center gap-2 rounded-[6px] px-2 text-[12.5px]" title={row.error ?? row.path}>
             <span className="min-w-0 flex-1 truncate">{row.path}</span>
-            <span className={cn('shrink-0 tabular-nums', row.state === 'failed' ? 'font-bold text-red-text' : row.state === 'done' ? 'text-green-text' : 'text-ink-500')}>
+            <span className={cn('shrink-0 tabular-nums', row.state === 'failed' ? 'font-medium text-red-text' : row.state === 'done' ? 'text-green-text' : 'text-ink-500')}>
               {row.state === 'done' ? <CircleCheckIcon aria-hidden="true" className="size-3.5" /> : row.state === 'failed' ? <CircleAlertIcon aria-hidden="true" className="size-3.5" /> : `${row.size ? Math.round((row.loaded / row.size) * 100) : 0}%`}
             </span>
           </li>

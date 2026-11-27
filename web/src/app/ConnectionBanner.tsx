@@ -35,24 +35,27 @@ export function ConnectionBanner() {
   }, [reachable, client])
 
   if (reachable) return null
-  // Full-width red banner: light red halftone dots on the background, a navy line at the bottom. The tilt of the disconnected icon is drawn
-  // on ::before.
+  // Full-width unreachable banner driven by semantic theme tokens.
   return (
     <div
       role="alert"
-      className="riso-halftone-red flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3.5 bg-tint-red px-4 py-[22px] text-ink shadow-[inset_0_-3px_0_var(--ink)] sm:px-[30px]"
+      className="riso-halftone-red flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b border-red-text/25 bg-tint-red px-4 py-3.5 text-ink sm:px-6"
     >
       <span
         aria-hidden="true"
-        className="riso-tilt flex size-16 flex-none items-center justify-center rounded-full text-red-text [--tilt-shadow:3px_3px_0_var(--red-text)] [--tilt:-6deg]"
+        className="flex size-10 flex-none items-center justify-center rounded-ticket border border-red-text/25 bg-surface-control text-red-text"
       >
-        <WifiOffIcon className="size-[30px]" strokeWidth={2.4} />
+        <WifiOffIcon className="size-5" strokeWidth={2.2} />
       </span>
-      <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-1">
-        <h2 className="font-display-cn text-[34px] leading-[1.15] font-normal text-red-text">{t.connection.unreachableTitle}</h2>
-        <p className="text-[14.5px] leading-[1.75] break-words">{t.connection.unreachableBody(absoluteApiBase(), window.location.origin)}</p>
+      <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-0.5">
+        <h2 className="text-[16px] leading-snug font-semibold text-red-text">
+          {t.connection.unreachableTitle}
+        </h2>
+        <p className="text-[13.5px] leading-relaxed break-words text-ink-700">
+          {t.connection.unreachableBody(absoluteApiBase(), window.location.origin)}
+        </p>
       </div>
-      <Button variant="ink" size="lg" className="flex-none shadow-[3px_3px_0_var(--riso-pink)]" onClick={() => void retry(client)}>
+      <Button variant="ink" size="lg" className="flex-none" onClick={() => void retry(client)}>
         <RotateCwIcon />
         {t.common.retry}
       </Button>

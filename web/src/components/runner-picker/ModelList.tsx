@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type RefObject } from 'react'
-import { ChevronRightIcon, SearchIcon } from 'lucide-react'
+import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
+import { ScrollRuler } from '@/components/PrecisionRuler'
 import { t } from '@/i18n'
 import { describeError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ interface ModelListProps {
   onRail: () => void
   onThinking: () => void
   autoFocus?: boolean
+  listMaxHeightClass?: string
   searchRef: RefObject<HTMLInputElement | null>
 }
 
@@ -42,7 +44,28 @@ const contextFigure = (tokens: number) => (tokens >= 1_000_000 ? `${+(tokens / 1
 // runtimes, and right at the end of the text moves on to the thinking level. Under a runtime with several providers each provider is a
 // row of its own that opens to its models.
 export function ModelList(props: ModelListProps) {
-  const { rows, hidden, grouped, query, onQuery, active, onActive, chosen, loading, reading, failures, reasonOf, blocked, onToggle, onChoose, onRail, onThinking, autoFocus, searchRef } = props
+  const {
+    rows,
+    hidden,
+    grouped,
+    query,
+    onQuery,
+    active,
+    onActive,
+    chosen,
+    loading,
+    reading,
+    failures,
+    reasonOf,
+    blocked,
+    onToggle,
+    onChoose,
+    onRail,
+    onThinking,
+    autoFocus,
+    listMaxHeightClass = 'max-h-[220px]',
+    searchRef,
+  } = props
   const treeId = useId()
   const rowId = (key: string) => `${treeId}-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`
   const scrolled = useRef<string | null>(null)
@@ -154,35 +177,44 @@ export function ModelList(props: ModelListProps) {
         aria-selected={isChosen}
         aria-disabled={locked || undefined}
         aria-label={t.config.basic.modelOption(row.model.name, row.model.id)}
+        title={t.config.basic.modelOption(row.model.name, row.model.id)}
         onMouseMove={() => !isActive && onActive(row.key)}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => !locked && onChoose(row.provider, row.model)}
         className={cn(
-          'relative grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 rounded-[10px] py-[7px] pr-2.5 text-[14px]',
-          row.grouped ? 'pl-[30px]' : 'pl-[22px]',
-          // The keyboard's row is outlined only while the search box has focus; the mouse gets a plain hover.
-          isActive ? 'group-focus-within/list:bg-tint-blue group-focus-within/list:shadow-[inset_0_0_0_2px_var(--ink)]' : '',
-          !locked && 'hover:bg-tint-blue/70',
+          'relative flex min-h-8 cursor-pointer items-center gap-2 rounded-ticket py-1.5 pr-2.5 text-[13px] transition-colors',
+          row.grouped ? 'pl-6' : 'pl-2.5',
+          isChosen && 'bg-surface-active/80',
+          // The keyboard's row highlights while the search box has focus; the mouse gets a clean hover.
+          isActive &&
+            cn(
+              'group-focus-within/list:bg-surface-hover',
+              isChosen && 'group-focus-within/list:bg-surface-active',
+            ),
+          !locked && !isChosen && 'hover:bg-surface-hover',
           locked && 'cursor-not-allowed opacity-45',
         )}
       >
-        {isChosen && <span aria-hidden="true" className={cn('absolute top-1/2 size-0 -translate-y-1/2 border-y-[5px] border-l-[7px] border-y-transparent border-l-riso-pink', row.grouped ? 'left-[14px]' : 'left-[7px]')} />}
-        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-          <span className="relative min-w-0 font-black text-ink">
-            {isChosen && <span aria-hidden="true" className="absolute inset-x-[-4px] top-[45%] bottom-[-1px] -rotate-[1deg] bg-riso-yellow mix-blend-multiply" />}
-            <span className="relative">{row.model.name}</span>
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className={cn('relative min-w-0 truncate text-ink', isChosen ? 'font-semibold' : 'font-medium')}>
+            {row.model.name}
           </span>
-          {row.model.name !== row.model.id && <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-500">{row.model.id}</span>}
+          {row.model.name !== row.model.id && (
+            <span className="min-w-0 truncate font-mono text-[11px] text-ink-500">{row.model.id}</span>
+          )}
         </span>
-        {figure && <span className="font-mono text-[11px] font-medium text-ink-500">{figure}</span>}
+        <span className="flex shrink-0 items-center gap-2">
+          {figure && <span className="font-mono text-[11px] font-normal text-ink-500 tabular-nums">{figure}</span>}
+          {isChosen && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue" strokeWidth={2.5} />}
+        </span>
       </li>
     )
   }
 
   return (
     <div className="group/list flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="relative shrink-0 px-3 pt-3 pb-2">
-        <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-[25px] size-4 -translate-y-[calc(50%-2px)] text-ink-500" />
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-hairline px-3">
+        <SearchIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-500" />
         <input
           ref={searchRef}
           type="text"
@@ -199,69 +231,86 @@ export function ModelList(props: ModelListProps) {
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={onKeyDown}
-          className="h-10 w-full min-w-0 rounded-full border-0 bg-white pr-4 pl-10 text-[14px] text-ink shadow-[inset_0_0_0_2px_var(--ink)] outline-none placeholder:text-ink-500 focus-visible:shadow-[inset_0_0_0_2px_var(--ink),0_0_0_4px_var(--riso-yellow)]"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-500"
         />
       </div>
-      <ul ref={listRef} id={treeId} role="tree" aria-label={copy.models} className="riso-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
-        {blocks.map((block, blockIndex) => {
-          if (block.section) {
-            // A group heading, set like a margin note: small caps on a rule.
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <ul
+          ref={listRef}
+          id={treeId}
+          role="tree"
+          aria-label={copy.models}
+          className={cn('no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain py-1 pr-6 pl-1.5', listMaxHeightClass)}
+        >
+          {blocks.map((block, blockIndex) => {
+            if (block.section) {
+              return (
+                <li
+                  key={block.section.key}
+                  role="none"
+                  className={cn(
+                    'flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold text-ink-500',
+                    blockIndex > 0 ? 'pt-2.5' : 'pt-0.5',
+                  )}
+                >
+                  {block.section.usable && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-green" />}
+                  <span className="shrink-0">{copy.usable[String(block.section.usable) as 'true' | 'false']}</span>
+                  <span aria-hidden="true" className="h-0 flex-1 border-t border-hairline" />
+                </li>
+              )
+            }
+            if (!block.header) return block.models.map(modelRow)
+            const { provider, expanded, key, matched } = block.header
+            const reason = reasonOf(provider), locked = blocked(provider)
             return (
-              <li key={block.section.key} role="none" className={cn('flex items-center gap-2 px-1.5 pb-1 text-[11.5px] font-black tracking-[0.06em] text-ink-500', blockIndex > 0 ? 'pt-3' : 'pt-0.5')}>
-                {block.section.usable && <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-green shadow-[0_0_0_1.5px_var(--ink)]" />}
-                <span className="shrink-0">{copy.usable[String(block.section.usable) as 'true' | 'false']}</span>
-                <span aria-hidden="true" className="h-0 flex-1 border-t-2 border-dashed border-ink/20" />
+              <li
+                key={key}
+                id={rowId(key)}
+                data-row="provider"
+                role="treeitem"
+                aria-level={1}
+                aria-expanded={expanded}
+                aria-label={[provider.id, provider.source === 'plugin' ? [provider.name, pluginName(provider)].filter(Boolean).join(' · ') : null, reason ? t.config.basic.pluginUnavailable[reason] : null].filter(Boolean).join(', ')}
+                aria-selected={false}
+                className={cn(blockIndex > 0 && 'mt-0.5')}
+              >
+                <div
+                  onMouseMove={() => active !== key && onActive(key)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => onToggle(provider.id)}
+                  className={cn(
+                    'sticky top-0 z-[1] flex min-h-8 cursor-pointer items-center gap-1.5 rounded-ticket bg-surface-elevated px-2 py-1 text-[12.5px] transition-colors',
+                    active === key ? 'group-focus-within/list:bg-surface-hover' : 'hover:bg-surface-hover',
+                    locked && 'opacity-60',
+                  )}
+                >
+                  <ChevronRightIcon aria-hidden="true" className={cn('size-3.5 shrink-0 text-ink-500 transition-transform motion-reduce:transition-none', expanded && 'rotate-90')} />
+                  <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                    <span className="font-mono text-[12.5px] font-semibold text-ink">{provider.id}</span>
+                    {provider.source === 'plugin' && <span className="min-w-0 truncate text-[11.5px] font-medium text-ink-700">{[provider.name, pluginName(provider)].filter(Boolean).join(' · ')}</span>}
+                    {reason && <span className={cn('text-[11.5px] font-medium', locked ? 'text-red-text' : 'text-ink-500')}>{t.config.basic.pluginUnavailable[reason]}</span>}
+                  </span>
+                  <span className="shrink-0 rounded-stamp bg-surface-subtle px-1.5 py-0.5 font-mono text-[10.5px] leading-none font-normal text-ink-500">
+                    {matched === null ? copy.modelCount(provider.modelCount) : copy.matchCount(matched, provider.modelCount)}
+                  </span>
+                </div>
+                {expanded && (
+                  <ul role="group">
+                    {block.models.map(modelRow)}
+                    {reading.has(provider.id) && <li role="none" className="py-1.5 pl-6 text-[12px] text-ink-500">{copy.loading}</li>}
+                    {failures.has(provider.id) && <Failure error={failures.get(provider.id)} />}
+                  </ul>
+                )}
               </li>
             )
-          }
-          if (!block.header) return block.models.map(modelRow)
-          const { provider, expanded, key, matched } = block.header
-          const reason = reasonOf(provider), locked = blocked(provider)
-          return (
-            <li
-              key={key}
-              id={rowId(key)}
-              data-row="provider"
-              role="treeitem"
-              aria-level={1}
-              aria-expanded={expanded}
-              aria-label={[provider.id, provider.source === 'plugin' ? [provider.name, pluginName(provider)].filter(Boolean).join(' · ') : null, reason ? t.config.basic.pluginUnavailable[reason] : null].filter(Boolean).join(', ')}
-              aria-selected={false}
-              className={cn(blockIndex > 0 && 'mt-0.5')}
-            >
-              <div
-                onMouseMove={() => active !== key && onActive(key)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onToggle(provider.id)}
-                className={cn(
-                  'sticky top-0 z-[1] flex cursor-pointer items-center gap-2 rounded-[10px] bg-paper-raised py-[7px] pr-2.5 pl-1.5',
-                  active === key ? 'group-focus-within/list:bg-tint-blue group-focus-within/list:shadow-[inset_0_0_0_2px_var(--ink)]' : 'hover:bg-tint-blue/70',
-                  locked && 'opacity-60',
-                )}
-              >
-                <ChevronRightIcon aria-hidden="true" className={cn('size-4 shrink-0 text-ink transition-transform motion-reduce:transition-none', expanded && 'rotate-90')} />
-                <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                  <span className="font-mono text-[13px] font-bold text-ink">{provider.id}</span>
-                  {provider.source === 'plugin' && <span className="min-w-0 truncate text-[12px] font-bold text-ink-700">{[provider.name, pluginName(provider)].filter(Boolean).join(' · ')}</span>}
-                  {reason && <span className={cn('text-[12px] font-bold', locked ? 'text-red-text' : 'text-ink-500')}>{t.config.basic.pluginUnavailable[reason]}</span>}
-                </span>
-                <span className="shrink-0 rounded-full bg-tint-blue px-2 font-mono text-[11px] leading-[18px] font-bold text-ink-700">{matched === null ? copy.modelCount(provider.modelCount) : copy.matchCount(matched, provider.modelCount)}</span>
-              </div>
-              {expanded && (
-                <ul role="group">
-                  {block.models.map(modelRow)}
-                  {reading.has(provider.id) && <li role="none" className="py-1.5 pl-[30px] text-[12.5px] font-bold text-ink-500">{copy.loading}</li>}
-                  {failures.has(provider.id) && <Failure error={failures.get(provider.id)} />}
-                </ul>
-              )}
-            </li>
-          )
-        })}
-        {!grouped && [...failures.values()].slice(0, 1).map((error, index) => <Failure key={index} error={error} />)}
-        {loading && rows.length === 0 && <li role="none" className="px-3 py-3 text-[13px] font-bold text-ink-500">{copy.loading}</li>}
-        {!loading && rows.length === 0 && failures.size === 0 && <li role="none" className="px-3 py-3 text-[13px] font-bold text-ink-500">{copy.empty}</li>}
-        {hidden > 0 && <li role="none" className="px-3 pt-2 pb-1 text-[12.5px] font-bold text-ink-500">{copy.more(hidden)}</li>}
-      </ul>
+          })}
+          {!grouped && [...failures.values()].slice(0, 1).map((error, index) => <Failure key={index} error={error} />)}
+          {loading && rows.length === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500">{copy.loading}</li>}
+          {!loading && rows.length === 0 && failures.size === 0 && <li role="none" className="px-2.5 py-2.5 text-[12.5px] text-ink-500">{copy.empty}</li>}
+          {hidden > 0 && <li role="none" className="px-2.5 pt-1.5 pb-1 text-[11.5px] text-ink-500">{copy.more(hidden)}</li>}
+        </ul>
+        <ScrollRuler targetRef={listRef} label={copy.models} tickCount={11} className="inset-y-2 right-1" />
+      </div>
     </div>
   )
 }
@@ -269,8 +318,8 @@ export function ModelList(props: ModelListProps) {
 // A provider's models could not be read: why, in the list where they would be.
 function Failure({ error }: { error: unknown }) {
   return (
-    <li role="none" className="grid gap-0.5 py-1.5 pr-2 pl-[30px] text-[12.5px] text-red-text">
-      <span className="font-bold">{t.config.basic.catalogUnavailable}</span>
+    <li role="none" className="grid gap-0.5 py-1.5 pr-2 pl-6 text-[12px] text-red-text">
+      <span className="font-semibold">{t.config.basic.catalogUnavailable}</span>
       <span>{t.config.basic.catalogReason(describeError(error))}</span>
     </li>
   )

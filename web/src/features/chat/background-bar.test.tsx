@@ -33,7 +33,8 @@ describe('The background mark in the bar under the message box', () => {
     expect(mark).toHaveTextContent(/^1$/)
     expect(mark.querySelector('svg')).not.toBeNull()
     // Right after the runner chip.
-    const runner = within(bar()).getByRole('button', { name: /^Runs on:/ })
+    const runner = bar().querySelector<HTMLElement>('[data-composer-menu-trigger="model"]')!
+    expect(runner).not.toBeNull()
     expect(runner.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     await emit('background_tasks.updated', { tasks: [makeBackgroundTask(), makeBackgroundTask(), makeBackgroundTask()] })

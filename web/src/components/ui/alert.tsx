@@ -2,17 +2,16 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-// note: a yellow sticky note with a slightly tilted background layer and a strip of translucent white tape at the top; warning: light
-// yellow background with a 6px navy bar at the top; error: light red background; info: light blue background.
+// Alert banners: clean hairline callouts driven by semantic theme tokens.
 const alertVariants = cva(
   "group/alert relative grid w-full gap-0.5 px-4 py-3 text-left text-[14px] leading-[1.7] text-ink has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 *:[svg]:row-span-2 *:[svg]:mt-1 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        note: "riso-tilt rounded-[2px] [--tilt-bg:var(--riso-yellow)] [--tilt:-0.5deg] [--tilt-shadow:3px_3px_0_rgb(24_38_94/.18)] after:absolute after:-top-2 after:left-6 after:h-4 after:w-14 after:-rotate-[4deg] after:bg-white/60 after:content-['']",
-        warning: "rounded-ticket bg-tint-yellow pt-4 shadow-[inset_0_6px_0_var(--ink)]",
-        error: "rounded-ticket bg-tint-red text-red-text *:data-[slot=alert-description]:text-red-text",
-        info: "rounded-ticket bg-tint-blue",
+        note: "rounded-card border border-hairline bg-surface-subtle",
+        warning: "rounded-card border border-pink-text/30 bg-tint-yellow text-ink",
+        error: "rounded-card border border-red-text/25 bg-tint-red text-red-text *:data-[slot=alert-description]:text-red-text",
+        info: "rounded-card border border-hairline bg-surface-subtle",
       },
     },
     defaultVariants: {
@@ -43,7 +42,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "font-black group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3",
+        "font-semibold group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3",
         className
       )}
       {...props}

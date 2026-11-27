@@ -45,7 +45,7 @@ describe('Write with AI beside a Prompt', () => {
     expect(request()).toHaveAttribute('placeholder', 'e.g. Every morning, sort the new GitHub issues and post them to the Lark group')
     expect(within(panel()).getByText('It fills the box when done. You can undo.')).toBeInTheDocument()
     expect(await within(panel()).findByText('By Claude Code · Claude Haiku (latest)')).toBeInTheDocument()
-    expect(within(panel()).getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/settings#settings-writing')
+    expect(within(panel()).getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/settings/runtimes#settings-writing')
     expect(write()).toBeDisabled()
     await user.type(request(), '   ')
     expect(write()).toBeDisabled()
@@ -201,7 +201,7 @@ describe('Write with AI beside a Prompt', () => {
     const { user } = setup({ initial: 'Answer questions.', settings: automaticSettings(null) })
     await user.click(open())
     expect(await within(panel()).findByText('No CLI on this computer can write yet.')).toBeInTheDocument()
-    expect(within(panel()).getByRole('link', { name: 'Set one up' })).toHaveAttribute('href', '/settings#settings-writing')
+    expect(within(panel()).getByRole('link', { name: 'Set one up' })).toHaveAttribute('href', '/settings/runtimes#settings-writing')
     expect(write()).toBeDisabled()
   })
 

@@ -16,9 +16,9 @@ export function TaskActions({ task, disabled = false, showRetry = true, showCanc
   const ended = task.status === 'completed' || task.status === 'cancelled'
   // Redesign step 5: “重试当前节点” (Retry current node) is the fluorescent-pink primary button (navy outline plus offset shadow);
   // “取消任务” (Cancel task) is a red-outlined pill button.
-  return <div className="flex flex-wrap items-center gap-2.5">
-    {showRetry && task.status === 'blocked' && task.currentNodeRunId && <Button variant="interrupt" className="mr-[3px] border-2 border-ink" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: task.currentNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
-    {showCancel && !ended && <Button variant="danger-outline" size="xs" className="px-4" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}
+  return <div className="flex flex-wrap items-center gap-2">
+    {showRetry && task.status === 'blocked' && task.currentNodeRunId && <Button variant="interrupt" size="xs" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: task.currentNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
+    {showCancel && !ended && <Button variant="danger-outline" size="xs" className="px-3.5" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}
     <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={t.tasks.retry} body={t.tasks.retryBody} confirmLabel={t.tasks.retry} onConfirm={async () => {
       if (!target.current || disabled) return Promise.reject(new Error(t.tasks.reconnecting))
       await action.mutateAsync({ kind: 'retry', body: { actionId: target.current.actionId, expectedNodeRunId: target.current.nodeRunId, note } }); setNote('')

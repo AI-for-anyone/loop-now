@@ -1,0 +1,244 @@
+/* Classic skin: "plate" — Risograph print visual style (light theme only). */
+
+:root[data-skin="plate"] {
+  /* Paper and ink */
+  --paper: #F3EFE6;
+  --paper-raised: #FBF9F4;
+  /* The beige-gray of an unselected index tab: one step darker than the paper. */
+  --paper-tab: #E8E2D4;
+  --ink: #18265E;
+  --ink-700: #3B4778;
+  --ink-500: #5A628A;
+  --riso-blue: #2443B5;
+  /* A light version of riso blue: only for avatars in the blue sidebar, where circles in the original color would be invisible on the blue. */
+  --riso-blue-soft: #8EA2FF;
+  --riso-pink: #FF4FA3;
+  --pink-text: #B8287A;
+  --riso-yellow: #FFE14D;
+  --green: #2BB673;
+  --green-text: #1E7A4D;
+  --red: #D9381E;
+  --red-text: #A8261A;
+  --tint-pink: #FFC9E3;
+  --tint-pink-2: #FFE9F3;
+  --tint-blue: #E3E8F8;
+  --tint-green: #D7F5E6;
+  --tint-red: #FFD0CC;
+  --tint-yellow: #FFF4B8;
+  --error-field: #FFF4F2;
+
+  /* Semantic surface, chrome, tooltip and code tokens mapped to Plate equivalents */
+  --surface-canvas: var(--paper);
+  --surface-subtle: var(--paper-tab);
+  --surface-elevated: var(--paper-raised);
+  --surface-control: #FFFFFF;
+  --surface-hover: var(--tint-blue);
+  --surface-active: var(--riso-yellow);
+  --segment-track: var(--tint-blue);
+  --segment-active: var(--riso-yellow);
+  --switch-track: var(--paper);
+
+  --sidebar-bg: var(--riso-blue);
+  --sidebar-fg: #FFFFFF;
+  --sidebar-muted: #D8DFF5;
+  --sidebar-border: rgb(255 255 255 / 0.35);
+  --sidebar-hover: rgb(255 255 255 / 0.12);
+  --sidebar-active-bg: var(--riso-yellow);
+  --sidebar-active-fg: var(--ink);
+  --sidebar-group: var(--riso-yellow);
+  --sidebar-control-bg: #1F3790;
+  --sidebar-control-fg: #FFFFFF;
+
+  --hairline: rgb(24 38 94 / 0.18);
+  --hairline-strong: var(--ink);
+  --surface-shadow: var(--print-rest);
+  --floating-shadow: var(--print-ink);
+  --dialog-shadow: var(--print-dialog);
+
+  --cta-bg: var(--riso-blue);
+  --cta-fg: #FFFFFF;
+  --cta-hover: #1D3799;
+  --tooltip-bg: var(--ink);
+  --tooltip-fg: #FFFFFF;
+  --tooltip-muted: #C9D2F2;
+
+  --code-bg: var(--riso-blue);
+  --code-fg: #FFFFFF;
+  --code-border: transparent;
+  --code-muted: var(--riso-yellow);
+
+  /* Stats charts: series take blue, pink and ochre in a fixed order, with "Other" in neutral gray; reply outcomes use the three state
+     colors for completed, interrupted and failed; grid lines recede. */
+  --chart-blue: #2443B5;
+  --chart-pink: #E0428F;
+  --chart-ochre: #C98500;
+  --chart-other: #B3ADA2;
+  --chart-grid: #E6E1D6;
+  --chart-bar-stroke: var(--ink);
+  --chart-point-stroke: #FFFFFF;
+  --status-done: #0CA30C;
+  --status-interrupt: #FAB219;
+  --status-fail: #D03B3B;
+  --status-busy: var(--riso-pink);
+
+  /* Print shadows: solid offset only, no blur */
+  --print-rest: 2px 2px 0 rgb(24 38 94 / 0.12);
+  --print-pink: 4px 4px 0 var(--riso-pink);
+  --print-blue: 4px 4px 0 var(--riso-blue);
+  --print-ink: 3px 3px 0 var(--ink);
+  --print-dialog: 6px 6px 0 var(--riso-blue);
+  --focus-ring: 0 0 0 3px var(--riso-yellow), 0 0 0 5px var(--ink);
+
+  /* Plate radii */
+  --skin-radius-stamp: 4px;
+  --skin-radius-ticket: 10px;
+  --skin-radius-input: 12px;
+  --skin-radius-card: 14px;
+  --skin-radius-panel: 18px;
+  --skin-radius-bubble: 20px;
+  --skin-radius-dialog: 22px;
+
+  /* Plate display fonts */
+  --skin-display-cn: 'ZCOOL QingKe HuangYou', 'Noto Sans SC', 'PingFang SC', sans-serif;
+  --skin-display-latin: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
+
+  /* shadcn variables */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--riso-blue);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--tint-blue);
+  --secondary-foreground: var(--ink);
+  --muted: var(--tint-blue);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--riso-yellow);
+  --accent-foreground: var(--ink);
+  --destructive: var(--red);
+  --border: rgb(24 38 94 / 0.18);
+  --input: rgb(24 38 94 / 0.18);
+  --ring: var(--ink);
+  --radius: 0.875rem;
+}
+
+/* Plate paper grain, halftone dots, misregistration, highlighter, tilt and stripes. */
+:root[data-skin="plate"] .riso-grain {
+  background-image: url('../../assets/paper-grain.png');
+  background-size: 128px 128px;
+}
+
+:root[data-skin="plate"] .riso-halftone {
+  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1.3px);
+  background-size: 6px 6px;
+}
+
+:root[data-skin="plate"] .riso-halftone-pink {
+  background-image: radial-gradient(rgb(255 79 163 / 0.35) 1.4px, transparent 1.7px);
+  background-size: 7px 7px;
+}
+
+:root[data-skin="plate"] .riso-halftone-red {
+  background-image: radial-gradient(rgb(168 38 26 / 0.10) 1px, transparent 1.3px);
+  background-size: 6px 6px;
+}
+
+:root[data-skin="plate"] .riso-misreg {
+  text-shadow: 5px 3px 0 rgb(255 79 163 / 0.85);
+}
+
+:root[data-skin="plate"] .riso-misreg-sm {
+  text-shadow: 3px 2px 0 rgb(255 79 163 / 0.8);
+}
+
+:root[data-skin="plate"] .riso-mark::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -10px;
+  bottom: 0.1em;
+  height: 0.32em;
+  background: var(--riso-yellow);
+  transform: rotate(-1deg);
+  z-index: -1;
+}
+
+:root[data-skin="plate"] .riso-marker {
+  background: linear-gradient(transparent 0, transparent 62%, var(--riso-yellow) 62%, var(--riso-yellow) 94%, transparent 94%);
+}
+
+:root[data-skin="plate"] .riso-tilt::before {
+  background: var(--tilt-bg, #fff);
+  box-shadow: var(--tilt-shadow, var(--print-rest));
+  transform: rotate(var(--tilt, -1deg));
+}
+
+:root[data-skin="plate"] .riso-skeleton {
+  background-color: var(--tint-blue);
+  background-image: radial-gradient(rgb(36 67 181 / 0.18) 1.2px, transparent 1.5px);
+  background-size: 6px 6px;
+}
+
+:root[data-skin="plate"] .select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2318265E' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 14px center;
+  background-repeat: no-repeat;
+}
+
+:root[data-skin="plate"] .riso-stripes-red {
+  background-image: repeating-linear-gradient(-45deg, rgb(217 56 30 / 0.08) 0 8px, transparent 8px 16px);
+}
+
+/* Code highlighting on riso-blue in Plate skin: every color reaches at least 4.5:1 against #2443B5. */
+:root[data-skin="plate"] .hljs {
+  color: #FFFFFF;
+}
+:root[data-skin="plate"] .hljs-keyword,
+:root[data-skin="plate"] .hljs-selector-tag,
+:root[data-skin="plate"] .hljs-literal,
+:root[data-skin="plate"] .hljs-type {
+  color: #FFB3D9;
+}
+:root[data-skin="plate"] .hljs-string,
+:root[data-skin="plate"] .hljs-regexp,
+:root[data-skin="plate"] .hljs-symbol,
+:root[data-skin="plate"] .hljs-template-tag {
+  color: #FFE14D;
+}
+:root[data-skin="plate"] .hljs-number,
+:root[data-skin="plate"] .hljs-variable,
+:root[data-skin="plate"] .hljs-template-variable,
+:root[data-skin="plate"] .hljs-attr,
+:root[data-skin="plate"] .hljs-attribute {
+  color: #7CF2B5;
+}
+:root[data-skin="plate"] .hljs-built_in,
+:root[data-skin="plate"] .hljs-selector-class,
+:root[data-skin="plate"] .hljs-selector-id {
+  color: #FFD27A;
+}
+:root[data-skin="plate"] .hljs-comment,
+:root[data-skin="plate"] .hljs-quote,
+:root[data-skin="plate"] .hljs-meta {
+  color: #C9D2F2;
+  font-style: italic;
+}
+:root[data-skin="plate"] .hljs-title,
+:root[data-skin="plate"] .hljs-section,
+:root[data-skin="plate"] .hljs-name {
+  color: #FFFFFF;
+  font-weight: 700;
+}
+:root[data-skin="plate"] .hljs-deletion {
+  color: #FFC9E3;
+}
+:root[data-skin="plate"] .hljs-addition {
+  color: #A7F0CF;
+}
+
+/* English UI in Plate skin: ZCOOL only suits Chinese, so display type switches to Bricolage Grotesque. */
+html:lang(en)[data-skin="plate"] .font-display-cn {
+  font-family: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
+}

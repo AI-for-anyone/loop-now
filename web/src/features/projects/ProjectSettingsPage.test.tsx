@@ -59,8 +59,10 @@ describe('Renaming a project', () => {
 
   it('the default project can be renamed but not deleted', async () => {
     setup()
+    const user = userEvent.setup()
     renderRoutes(routes, `${base('test-project')}/settings`)
     expect(within(await card('Project name')).getByRole('textbox', { name: 'Project name' })).toBeEnabled()
+    await user.click(screen.getByRole('link', { name: 'Danger' }))
     const danger = await card('Delete project')
     expect(within(danger).getByText('The default project can\'t be deleted, but it can be renamed.')).toBeInTheDocument()
     expect(within(danger).queryByRole('button')).toBeNull()
@@ -118,7 +120,7 @@ describe('Delete project', () => {
     const { state, other, dev } = setup()
     state.busy.add(dev.id)
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, `${base('model-access')}/settings`)
+    const { router } = renderRoutes(routes, `${base('model-access')}/settings/danger`)
     const danger = await card('Delete project')
     await user.click(within(danger).getByRole('button', { name: 'Delete this project' }))
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete project "model-access"?' })
@@ -128,7 +130,7 @@ describe('Delete project', () => {
     const alert = await within(danger).findByRole('alert')
     expect(alert).toHaveTextContent('Some Agents in the project aren\'t idle, so the project wasn\'t deleted.')
     expect(within(alert).getByRole('link', { name: 'Open chat with "dev-helper"' })).toHaveAttribute('href', `${base('model-access')}/agents/${dev.id}/chat`)
-    expect(router.state.location.pathname).toBe(`${base('model-access')}/settings`)
+    expect(router.state.location.pathname).toBe(`${base('model-access')}/settings/danger`)
 
     state.busy.clear()
     await user.click(within(danger).getByRole('button', { name: 'Delete this project' }))
@@ -172,10 +174,8 @@ describe('Creating and deleting Agents by scope', () => {
   })
 })
 
-// "Printed sheet" redesign, step 3: project settings sit on a sheet, with numbered
-// sections and the section ruler in the stub, the same set as the Agent Config page.
-describe('Project settings on a sheet', () => {
-  const titles = ['Project name', 'Project prompt', 'Project folder', 'Local directories', 'Plugins', 'Manager', 'Project accounts', 'Delete project']
+// Tabbed project settings layout: URL-backed SubNav replacing the legacy 8-section scroll wall and 196px SectionToc stub.
+describe('Project settings tabs and routing', () => {
   const region = (name: string) => screen.getByRole('region', { name })
 
   it('the header is the page title: the breadcrumb is the project name, the title is “Project settings”, and next to it sit the default project badge and the monospace project ID', async () => {
@@ -185,54 +185,73 @@ describe('Project settings on a sheet', () => {
     const header = title.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent(`${defaultProject.name}›Project settings`)
     const meta = header.querySelector<HTMLElement>('[data-page-meta]')!
-    expect(within(meta).getByText('Default project')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(within(meta).getByText('Default project')).toHaveClass('bg-cta-bg', 'text-cta-fg', 'rounded-full')
     expect(within(meta).getByText(defaultProject.id)).toHaveClass('font-mono')
   })
 
-  it('the eight sections are numbered 01–08 in order and sit directly on the sheet with dashed lines between them; the Delete project section stays red', async () => {
+  it('renders 5 URL-backed SubNav tabs without the legacy SectionToc stub and navigates cleanly across tabs', async () => {
     setup()
-    renderRoutes(routes, `${base('model-access')}/settings`)
+    const user = userEvent.setup()
+    const { router } = renderRoutes(routes, `${base('model-access')}/settings`)
     await screen.findByRole('region', { name: 'Project name' })
+    expect(screen.queryByRole('navigation', { name: 'Contents' })).toBeNull()
+
+    const nav = screen.getByRole('navigation', { name: 'Project settings sections' })
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'General',
+      'Prompt & Context',
+      'Credentials',
+      'Plugins',
+      'Danger',
+    ])
+
+    // General tab shows Project name + Manager only.
     const sheet = region('Project name').closest('[data-sheet]')!
-    titles.forEach((name, index) => {
-      const section = region(name)
-      expect(sheet).toContainElement(section)
-      expect(section.querySelector('[data-section-number]')).toHaveTextContent(String(index + 1).padStart(2, '0'))
-      expect(within(section).getAllByRole('heading', { level: 2 })[0]).toHaveClass('riso-marker', 'font-display-cn')
-      expect(section).not.toHaveClass('shadow-print-rest')
-      if (index > 0) expect(section).toHaveClass('border-t-2', 'border-dashed')
-    })
-    const danger = region('Delete project')
+    expect(sheet).toContainElement(region('Project name'))
+    expect(sheet).toContainElement(region('Manager'))
+    expect(screen.queryByRole('region', { name: 'Delete project' })).toBeNull()
+
+    // Prompt & Context tab shows Project prompt, a compact Project folder link card (no embedded FileManager), and Local directories.
+    await user.click(within(nav).getByRole('link', { name: 'Prompt & Context' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('model-access')}/settings/context`))
+    const folder = await screen.findByRole('region', { name: 'Project folder' })
+    expect(folder.querySelector('[data-file-manager]')).toBeNull()
+    expect(within(folder).getByRole('link', { name: 'Open project folder' })).toHaveAttribute('href', `${base('model-access')}/folder`)
+    expect(screen.getByRole('region', { name: 'Project prompt' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Local directories' })).toBeInTheDocument()
+
+    // Plugins tab embeds ProjectPluginsPanel directly.
+    await user.click(within(nav).getByRole('link', { name: 'Plugins' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('model-access')}/settings/plugins`))
+    expect(await screen.findByText(/No plugins installed yet|No plugins available/i)).toBeInTheDocument()
+
+    // Danger tab keeps red danger styling for non-default projects.
+    await user.click(within(nav).getByRole('link', { name: 'Danger' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('model-access')}/settings/danger`))
+    const danger = await screen.findByRole('region', { name: 'Delete project' })
     expect(within(danger).getByRole('heading', { level: 2, name: 'Delete project' })).toHaveClass('text-red-text')
     expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
   })
 
-  it('the contents sit in the stub on the right of the sheet: a row of ticks on the right edge, each entry is “name number”, the Delete project entry is red; clicking an entry jumps to the section and focuses its heading', async () => {
-    setup()
-    const user = userEvent.setup()
-    renderRoutes(routes, `${base('model-access')}/settings`)
-    await screen.findByRole('region', { name: 'Project name' })
-    const toc = screen.getByRole('navigation', { name: 'Contents' })
-    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
-    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(titles.map((name, index) => `${String(index + 1).padStart(2, '0')}${name}`))
-    expect(within(toc).getByRole('link', { name: 'Delete project' })).toHaveClass('text-red-text')
-    await user.click(within(toc).getByRole('link', { name: 'Local directories' }))
-    expect(within(region('Local directories')).getByRole('heading', { level: 2, name: 'Local directories' })).toHaveFocus()
-  })
+  it('forwards legacy #settings-* hashes and credential recovery query params to the owning tab', async () => {
+    const { other } = setup()
+    const hashCase = renderRoutes(routes, `${base('model-access')}/settings#settings-local-dirs`)
+    await waitFor(() => expect(hashCase.router.state.location.pathname).toBe(`${base('model-access')}/settings/context`))
+    expect(hashCase.router.state.location.hash).toBe('#settings-local-dirs')
+    hashCase.unmount()
 
-  it('the Project folder section: an intro plus a file manager with a 2px navy border, with labeled pill buttons; no overview stub', async () => {
-    setup()
-    renderRoutes(routes, `${base('model-access')}/settings`)
-    const folder = await screen.findByRole('region', { name: 'Project folder' })
-    const manager = folder.querySelector('[data-file-manager]')!
-    expect(manager).toHaveClass('border-2', 'border-ink', 'rounded-card')
-    expect(within(folder).getByRole('button', { name: 'New file' })).toHaveClass('rounded-full', 'border-2')
-    expect(within(folder).queryByRole('complementary', { name: 'Overview' })).toBeNull()
+    const queryCase = renderRoutes(routes, `${base('model-access')}/settings?cliImport=30000000-0000-7000-8000-000000000001`)
+    await waitFor(() => expect(queryCase.router.state.location.pathname).toBe(`${base('model-access')}/settings/credentials`))
+    expect(queryCase.router.state.location.search).toBe('?cliImport=30000000-0000-7000-8000-000000000001')
+    queryCase.unmount()
+
+    const ghCase = renderRoutes(routes, `${base('model-access')}/settings?cliAuth.${other.id}.gh.new=30000000-0000-7000-8000-000000000002`)
+    await waitFor(() => expect(ghCase.router.state.location.pathname).toBe(`${base('model-access')}/settings/credentials`))
   })
 
   it('the default project\'s delete section is a single note, not red', async () => {
     setup()
-    renderRoutes(routes, `${base(defaultProject.name)}/settings`)
+    renderRoutes(routes, `${base(defaultProject.name)}/settings/danger`)
     const danger = await screen.findByRole('region', { name: 'Delete project' })
     expect(within(danger).getByRole('heading', { level: 2, name: 'Delete project' })).not.toHaveClass('text-red-text')
     expect(danger.querySelector('[data-section-body]')).not.toHaveClass('riso-stripes-red')

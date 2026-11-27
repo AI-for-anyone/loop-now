@@ -65,7 +65,7 @@ export function TaskLarkSwitchController({ detail, node, disabled, children = st
   const toggle = current ? (
     <>
       <Button type="button" variant="secondary" data-lark-switch-toggle aria-expanded={expanded} aria-controls={panelId} disabled={!available} onClick={() => setOpen(value => !value)}
-        className="mr-[3px] border-2 border-ink bg-paper-raised shadow-[3px_3px_0_var(--ink)] hover:bg-white">
+       >
         {copy.switch}
       </Button>
       {!available && <span role="status" className="min-w-0 text-[12.5px] text-ink-700">{copy.switchUnavailable}</span>}

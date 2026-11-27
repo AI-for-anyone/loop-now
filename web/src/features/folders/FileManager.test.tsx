@@ -242,6 +242,8 @@ describe('File manager', () => {
       <FileManager source={source} initialPath="assets/mascot/missing.png" rootLabel="server's folder" limits={limits} className="h-[600px]" />,
       createTestQueryClient(),
     )
-    expect(await screen.findByRole('heading', { name: 'mascot' })).toBeInTheDocument()
+    const location = await screen.findByRole('navigation', { name: 'Location' })
+    await waitFor(() => expect(within(location).getByText('mascot').closest('[aria-current="page"]')).not.toBeNull())
+    expect(await screen.findByRole('button', { name: 'concept.svg' })).toBeInTheDocument()
   })
 })

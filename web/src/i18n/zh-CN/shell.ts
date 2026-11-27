@@ -35,6 +35,7 @@ export const shell = {
     agents: 'Agent',
     projects: '项目',
     platformAgents: '平台 Agent',
+    platform: '平台管理',
   },
   chips: {
     busy: '回复中',
@@ -42,6 +43,34 @@ export const shell = {
   noProjects: '还没有项目',
   menu: '打开导航',
   closeMenu: '关闭导航',
+  settingsShortcut: (mac: boolean) => (mac ? '⌘,' : 'Ctrl+,'),
+  sidebarShortcut: (mac: boolean) => (mac ? '⌘B' : 'Ctrl+B'),
+  paletteShortcut: (mac: boolean) => (mac ? '⌘K' : 'Ctrl+K'),
+  routeError: {
+    title: '页面加载出错',
+    hint: '当前页面遇到了未预期的错误，你可以返回概览或重新加载。',
+    home: '返回概览',
+    reload: '重新加载',
+  },
+  collapseNav: '收起导航',
+  expandNav: '展开导航',
+  palette: {
+    title: '命令面板',
+    open: '打开命令面板',
+    placeholder: '跳转到项目、Agent 或页面…',
+    empty: '没有匹配的结果',
+    groups: {
+      projects: '项目',
+      agents: 'Agent',
+      pages: '页面',
+    },
+    hints: {
+      navigate: '选择',
+      select: '打开',
+      close: '关闭',
+      current: '当前',
+    },
+  },
   resizeSidebar: '调整侧边栏宽度',
   // Location trail in the main-area page header: project › Agent › name.
   breadcrumb: '页面位置',

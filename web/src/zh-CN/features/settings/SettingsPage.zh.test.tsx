@@ -16,11 +16,11 @@ describe('Global settings on the sheet', () => {
     return screen.findByRole('heading', { level: 1, name: '全局设置' })
   }
 
-  it('the UI language is a segmented button, with the current language in yellow', async () => {
+  it('the UI language is a segmented button using semantic surface tokens', async () => {
     await open()
     const group = within(region('界面语言')).getByRole('radiogroup', { name: '界面语言' })
-    expect(group).toHaveClass('border-2', 'border-ink', 'rounded-full')
+    expect(group).toHaveClass('border', 'border-hairline', 'bg-segment-track', 'rounded-[8px]')
     expect(within(group).getByRole('radio', { name: '中文' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(group).getByRole('radio', { name: '中文' })).toHaveClass('data-[state=on]:bg-riso-yellow')
+    expect(within(group).getByRole('radio', { name: '中文' })).toHaveClass('data-[state=on]:bg-segment-active')
   })
 })

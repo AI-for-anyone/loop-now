@@ -2,17 +2,41 @@ import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// Parse the tokens and code-highlighting colors in index.css, compute the WCAG 2
-// contrast ratio between text and background, and require at least 4.5:1 for every pair.
-// The tests run from the web/ directory.
-const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
-const root = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')))
-const tokens = Object.fromEntries([...root.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});/g)].map(([, name, hex]) => [name, hex]))
+// Parse the skin token blocks and code-highlighting colors in mono.css and plate.css, compute WCAG 2
+// contrast ratios between text and background, and require at least 4.5:1 for every pair.
+const monoCss = readFileSync(resolve(process.cwd(), 'src/styles/skins/mono.css'), 'utf8')
+const plateCss = readFileSync(resolve(process.cwd(), 'src/styles/skins/plate.css'), 'utf8')
 
-function token(name: string): string {
-  const value = name.startsWith('#') ? name : tokens[name]
-  if (!value) throw new Error(`index.css has no token --${name}`)
-  return value
+function extractBlock(source: string, selector: string): string {
+  const start = source.indexOf(selector)
+  if (start < 0) throw new Error(`Selector "${selector}" not found`)
+  const open = source.indexOf('{', start)
+  const close = source.indexOf('}', open)
+  return source.slice(open, close)
+}
+
+function parseHexTokens(block: string): Record<string, string> {
+  const raw = Object.fromEntries(
+    [...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\));/g)].map(([, name, value]) => [name, value]),
+  )
+  const resolved: Record<string, string> = {}
+  const resolveToken = (name: string, seen = new Set<string>()): string | undefined => {
+    if (resolved[name]) return resolved[name]
+    const value = raw[name]
+    if (!value || seen.has(name)) return undefined
+    if (value.startsWith('#')) {
+      resolved[name] = value
+      return value
+    }
+    const target = /^var\(--([a-z0-9-]+)\)$/.exec(value)?.[1]
+    if (!target) return undefined
+    seen.add(name)
+    const hex = resolveToken(target, seen)
+    if (hex) resolved[name] = hex
+    return hex
+  }
+  for (const name of Object.keys(raw)) resolveToken(name)
+  return resolved
 }
 
 function luminance(hex: string): number {
@@ -23,14 +47,23 @@ function luminance(hex: string): number {
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
 }
 
-function contrast(foreground: string, background: string): number {
-  const [light, dark] = [luminance(token(foreground)), luminance(token(background))].sort((a, b) => b - a)
+function contrastFrom(tokens: Record<string, string>, foreground: string, background: string): number {
+  const resolveHex = (name: string) => {
+    const value = name.startsWith('#') ? name : tokens[name]
+    if (!value) throw new Error(`Missing hex token --${name}`)
+    return value
+  }
+  const [light, dark] = [luminance(resolveHex(foreground)), luminance(resolveHex(background))].sort((a, b) => b - a)
   return (light + 0.05) / (dark + 0.05)
 }
 
 const WHITE = '#FFFFFF'
 
-const pairs: [string, string, string][] = [
+const plateTokens = parseHexTokens(extractBlock(plateCss, ':root[data-skin="plate"] {'))
+const monoLightTokens = parseHexTokens(extractBlock(monoCss, ':root,\n:root[data-skin="mono"] {'))
+const monoDarkTokens = parseHexTokens(extractBlock(monoCss, ':root[data-skin="mono"][data-theme="dark"],'))
+
+const platePairs: [string, string, string][] = [
   ['Body', 'ink', 'paper'],
   ['Secondary text', 'ink-700', 'paper'],
   ['Meta (page)', 'ink-500', 'paper'],
@@ -64,7 +97,6 @@ const pairs: [string, string, string][] = [
   ['Button destructive-link', 'red-text', 'paper-raised'],
   ['Button ink', 'riso-yellow', 'ink'],
   ['User message bubble', 'ink', 'tint-pink'],
-  // add-observability: segmented controls, overview and run records.
   ['Segmented control: not selected', 'ink-700', 'tint-blue'],
   ['Segmented control: selected', 'ink', 'riso-yellow'],
   ['Overview summary tile: replying', 'ink-700', 'tint-pink-2'],
@@ -82,7 +114,6 @@ const pairs: [string, string, string][] = [
   ['Run log: outcome (cut off by a server restart)', 'ink-700', 'tint-blue'],
   ['Locate: highlighted reply', 'ink', 'tint-yellow'],
   ['Locate: meta in a highlighted reply', 'ink-500', 'tint-yellow'],
-  // "Printed sheet" redesign.
   ['Index tab: not selected', 'ink-700', 'paper-tab'],
   ['Index tab: current page', 'ink', 'riso-yellow'],
   ['Stub: small heading', 'ink-500', 'paper-raised'],
@@ -91,32 +122,92 @@ const pairs: [string, string, string][] = [
   ['Composer: reconnecting', 'red-text', 'tint-yellow'],
 ]
 
-// Code blocks have a riso-blue background; the highlight colors are taken from the color values of .hljs* in index.css.
-const hljsColors = [...css.slice(css.indexOf('.hljs {')).matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex)
+const monoPairs: [string, string, string][] = [
+  ['Body on canvas', 'ink', 'surface-canvas'],
+  ['Secondary on canvas', 'ink-700', 'surface-canvas'],
+  ['Meta on canvas', 'ink-500', 'surface-canvas'],
+  ['Body on subtle surface', 'ink', 'surface-subtle'],
+  ['Secondary on subtle surface', 'ink-700', 'surface-subtle'],
+  ['Meta on subtle surface', 'ink-500', 'surface-subtle'],
+  ['Body on elevated surface', 'ink', 'surface-elevated'],
+  ['Meta on elevated surface', 'ink-500', 'surface-elevated'],
+  ['Sidebar primary', 'sidebar-fg', 'sidebar-bg'],
+  ['Sidebar muted', 'sidebar-muted', 'sidebar-bg'],
+  ['Sidebar active row', 'sidebar-active-fg', 'sidebar-active-bg'],
+  ['Sidebar control', 'sidebar-control-fg', 'sidebar-control-bg'],
+  ['Primary CTA', 'cta-fg', 'cta-bg'],
+  ['Tooltip text', 'tooltip-fg', 'tooltip-bg'],
+  ['Tooltip muted', 'tooltip-muted', 'tooltip-bg'],
+  ['Code text', 'code-fg', 'code-bg'],
+  ['Code muted', 'code-muted', 'code-bg'],
+  ['Status: success on tint', 'green-text', 'tint-green'],
+  ['Status: error on tint', 'red-text', 'tint-red'],
+  ['Status: interrupted on tint', 'pink-text', 'tint-pink-2'],
+  ['Status: warning on tint', 'ink', 'tint-yellow'],
+  ['Destructive CTA', WHITE, 'red'],
+  ['User message block', 'ink', 'tint-pink'],
+  ['Error text on elevated', 'red-text', 'surface-elevated'],
+  ['Success text on elevated', 'green-text', 'surface-elevated'],
+]
 
-describe('Design token contrast', () => {
-  it.each(pairs)('%s: at least 4.5:1', (_name, foreground, background) => {
-    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5)
+const plateHljsColors = [...plateCss.slice(plateCss.indexOf(':root[data-skin="plate"] .hljs {')).matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex)
+const monoLightHljsSlice = monoCss.slice(
+  monoCss.indexOf(':root:not([data-skin="plate"]) .hljs {'),
+  monoCss.indexOf('/* Monochrome syntax highlighting (dark)'),
+)
+const monoLightHljsColors = [...monoLightHljsSlice.matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex)
+const monoDarkHljsColors = [
+  ...monoCss.slice(monoCss.indexOf('/* Monochrome syntax highlighting (dark)')).matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g),
+].map(([, hex]) => hex)
+
+describe('Design token contrast — Plate skin', () => {
+  it.each(platePairs)('%s: at least 4.5:1', (_name, foreground, background) => {
+    expect(contrastFrom(plateTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(monoPairs)('Semantic pair — %s: at least 4.5:1', (_name, foreground, background) => {
+    expect(contrastFrom(plateTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('code block text and every highlight color are at least 4.5:1 on riso blue', () => {
-    expect(hljsColors.length).toBeGreaterThan(5)
-    for (const color of hljsColors) expect(contrast(color, 'riso-blue'), color).toBeGreaterThanOrEqual(4.5)
+    expect(plateHljsColors.length).toBeGreaterThan(5)
+    for (const color of plateHljsColors) expect(contrastFrom(plateTokens, color, 'riso-blue'), color).toBeGreaterThanOrEqual(4.5)
   })
 
-  // The paper grain on the main area's beige background: a small tiled image instead
-  // of a full-page SVG filter (so nothing needs recomputing while scrolling).
   it('the paper grain is a tiled image under 12 KB', () => {
-    const rule = css.slice(css.indexOf('.riso-grain {'), css.indexOf('}', css.indexOf('.riso-grain {')))
+    const start = plateCss.indexOf(':root[data-skin="plate"] .riso-grain {')
+    const rule = plateCss.slice(start, plateCss.indexOf('}', start))
     const file = /url\(['"]?([^'")]+)['"]?\)/.exec(rule)?.[1]
     expect(file).toMatch(/\.png$/)
     expect(rule).toMatch(/background-size:\s*128px 128px/)
-    expect(statSync(resolve(process.cwd(), 'src', file!)).size).toBeLessThan(12 * 1024)
-    expect(css).not.toContain('feTurbulence')
+    expect(statSync(resolve(process.cwd(), 'src/styles/skins', file!)).size).toBeLessThan(12 * 1024)
+    expect(plateCss).not.toContain('feTurbulence')
   })
 
   it('fluorescent pink and yellow do not reach body text contrast on paper, so they cannot be text colors', () => {
-    expect(contrast('riso-pink', 'paper')).toBeLessThan(4.5)
-    expect(contrast('riso-yellow', 'paper')).toBeLessThan(4.5)
+    expect(contrastFrom(plateTokens, 'riso-pink', 'paper')).toBeLessThan(4.5)
+    expect(contrastFrom(plateTokens, 'riso-yellow', 'paper')).toBeLessThan(4.5)
+  })
+})
+
+describe('Design token contrast — Mono skin (light)', () => {
+  it.each(monoPairs)('%s: at least 4.5:1', (_name, foreground, background) => {
+    expect(contrastFrom(monoLightTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('every light code highlight color reaches at least 4.5:1 on code background', () => {
+    expect(monoLightHljsColors.length).toBeGreaterThan(5)
+    for (const color of monoLightHljsColors) expect(contrastFrom(monoLightTokens, color, 'code-bg'), color).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('Design token contrast — Mono skin (dark)', () => {
+  it.each(monoPairs)('%s: at least 4.5:1', (_name, foreground, background) => {
+    expect(contrastFrom(monoDarkTokens, foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('every dark code highlight color reaches at least 4.5:1 on code background', () => {
+    expect(monoDarkHljsColors.length).toBeGreaterThan(5)
+    for (const color of monoDarkHljsColors) expect(contrastFrom(monoDarkTokens, color, 'code-bg'), color).toBeGreaterThanOrEqual(4.5)
   })
 })

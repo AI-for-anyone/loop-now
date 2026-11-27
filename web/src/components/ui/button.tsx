@@ -3,39 +3,45 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
-// Risograph-print buttons: all pill-shaped, with a solid offset shadow; when pressed, the shadow retracts and the button moves 2px down and
-// to the right (80ms), one of only three animations in the console.
+// Buttons: compact Vercel Geist geometry (36px default, 32px sm, 28px xs, 6px corners, subtle surface shadows) in mono skin;
+// pill-shaped with solid offset press shadows in Plate skin.
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 font-black whitespace-nowrap outline-none select-none transition-[translate,box-shadow] duration-[80ms] focus-visible:shadow-focus active:not-aria-[haspopup]:translate-x-[2px] active:not-aria-[haspopup]:translate-y-[2px] active:not-aria-[haspopup]:shadow-none disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-ticket border-0 font-medium whitespace-nowrap outline-none select-none transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:scale-[0.99] focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-riso-blue text-white shadow-[3px_3px_0_var(--riso-pink)]",
-        interrupt: "bg-riso-pink text-ink shadow-[3px_3px_0_var(--ink)]",
-        secondary: "bg-tint-blue text-ink hover:bg-[#d6ddf4]",
+        default:
+          "bg-cta-bg text-cta-fg shadow-[0_1px_2px_rgb(0_0_0/0.08)] hover:bg-cta-hover",
+        interrupt:
+          "border border-hairline-strong bg-surface-control text-ink shadow-[0_1px_2px_rgb(0_0_0/0.04)] hover:border-ink/25 hover:bg-surface-hover",
+        secondary:
+          "border border-hairline-strong bg-surface-control text-ink shadow-[0_1px_2px_rgb(0_0_0/0.04)] hover:border-ink/25 hover:bg-surface-hover",
         ghost:
-          "bg-transparent text-ink underline decoration-riso-pink decoration-[3px] underline-offset-[5px] hover:bg-tint-pink-2",
-        destructive: "bg-red text-white shadow-[3px_3px_0_var(--ink)]",
+          "bg-transparent text-ink-700 hover:bg-surface-hover hover:text-ink",
+        destructive:
+          "bg-red text-white shadow-[0_1px_2px_rgb(0_0_0/0.08)] hover:bg-red/90",
         "destructive-link":
-          "bg-transparent text-red-text underline decoration-red decoration-2 underline-offset-4 hover:bg-tint-red/40",
-        ink: "bg-ink text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)]",
-        // Dangerous actions in a page header (cancel task, uninstall plugin): a pill with a light paper background, red border and red text.
-        "danger-outline": "border-2 border-red-text bg-paper-raised text-red-text hover:bg-tint-red",
+          "bg-transparent text-red-text hover:bg-tint-red",
+        ink:
+          "bg-ink text-surface-canvas shadow-[0_1px_2px_rgb(0_0_0/0.08)] hover:bg-ink/88",
+        // Dangerous actions in a page header (cancel task, uninstall plugin): hairline control with red text and red tint on hover.
+        "danger-outline":
+          "border border-red-text/30 bg-surface-control text-red-text shadow-[0_1px_2px_rgb(0_0_0/0.03)] hover:border-red-text/50 hover:bg-tint-red",
       },
       size: {
-        default: "h-[42px] px-5 text-[14.5px]",
-        xs: "h-[34px] gap-1 px-3.5 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
-        sm: "h-[38px] gap-1 px-4 text-[13.5px]",
-        lg: "h-11 px-6 text-[15px]",
-        icon: "size-9",
-        "icon-sm": "size-[30px] [&_svg:not([class*='size-'])]:size-3.5",
-        "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3",
+        default: "h-9 px-3.5 text-[13.5px]",
+        xs: "h-7 gap-1 px-2.5 text-[12px] [&_svg:not([class*='size-'])]:size-3.5",
+        sm: "h-8 gap-1.5 px-3 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-10 px-4 text-[14px]",
+        icon: "size-8",
+        "icon-sm": "size-7 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
       },
     },
     compoundVariants: [
-      // Remove, delete, edit and similar actions inside lists are 36 high.
-      { variant: "ghost", size: "sm", className: "h-9 px-3" },
-      { variant: "destructive-link", size: "sm", className: "h-9 px-3" },
+      // Remove, delete, edit and similar actions inside lists: 32px in mono Geist, 36px in Plate.
+      { variant: "ghost", size: "sm", className: "h-8 px-2.5" },
+      { variant: "destructive-link", size: "sm", className: "h-8 px-2.5" },
     ],
     defaultVariants: {
       variant: "default",

@@ -33,9 +33,9 @@ export function PluginProviders({ detail }: { detail: Detail }) {
             const reason = outside(provider)
             const paths = providerState[provider.id]?.paths
             return (
-              <li key={provider.id} className="grid min-w-0 gap-1 rounded-input bg-ink/[0.04] px-3 py-2 text-[13px] leading-snug">
+              <li key={provider.id} className="grid min-w-0 gap-1 rounded-input border border-hairline bg-surface-subtle px-3 py-2 text-[13px] leading-snug">
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="font-black text-ink [overflow-wrap:anywhere]">{provider.name || provider.id}</span>
+                  <span className="font-semibold text-ink [overflow-wrap:anywhere]">{provider.name || provider.id}</span>
                   {provider.name !== provider.id && <code className="font-mono text-[12px] text-ink-500 [overflow-wrap:anywhere]">{provider.id}</code>}
                   {provider.oauth && <Badge tone="success">{text.oauth}</Badge>}
                   {provider.inCatalog && <Badge tone="info">{text.inCatalog}</Badge>}
@@ -61,7 +61,7 @@ export function PluginProviders({ detail }: { detail: Detail }) {
       )}
       {providerErrors.length > 0 && (
         <section className="grid min-w-0 gap-1.5">
-          <h3 className="text-[13px] font-black text-ink-700">{text.loadErrors}</h3>
+          <h3 className="text-[13px] font-semibold text-ink-700">{text.loadErrors}</h3>
           <ul className="grid min-w-0 gap-1.5">
             {providerErrors.map((item) => (
               <li key={item.path} className="grid min-w-0 gap-0.5 rounded-input bg-tint-red px-3 py-2 text-[13px] leading-snug">

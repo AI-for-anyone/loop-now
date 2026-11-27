@@ -4,8 +4,11 @@ import { ArrowLeftIcon, EllipsisIcon } from 'lucide-react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ManagerBadge } from '@/components/ManagerBadge'
+import { SidebarExpandButton } from '@/components/PageHeader'
 import { RuntimeMark } from '@/components/RuntimeBadge'
 import { Sheet } from '@/components/Sheet'
+import { useSidebarControl } from '@/app/sidebar-context'
+import { hasInsetTitleBar } from '@/features/desktop/desktop'
 import type { Schemas } from '@/api/client'
 import { useAgent, useAgentStatus, useProjects } from '@/api/queries'
 import { config } from '@/config'
@@ -30,25 +33,24 @@ function StatusDot({ state }: { state: AgentStickerState }) {
       data-agent-status
       data-tone={tone}
       className={cn(
-        'inline-flex min-w-0 shrink items-center gap-1.5 text-[12px] leading-5 font-black whitespace-nowrap',
+        'inline-flex min-w-0 shrink items-center gap-1.5 text-[12px] leading-5 font-semibold whitespace-nowrap',
         tone === 'busy' ? 'text-pink-text' : 'text-green-text',
       )}
     >
-      <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', tone === 'busy' ? 'bg-riso-pink' : 'bg-green')} />
+      <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', tone === 'busy' ? 'bg-status-busy' : 'bg-green')} />
       <span className="shrink-0">{label}</span>
       {phase && <span className="min-w-0 truncate font-medium text-ink-700">{phase}</span>}
     </span>
   )
 }
 
-// Compact text tabs in the header bar: the current tab is a yellow riso pill with a navy outline and small offset shadow;
-// the others are plain text links that keep the same border width so switching tabs never shifts the row.
+// Compact segmented view switcher tabs in the header bar.
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'inline-flex h-[30px] shrink-0 items-center rounded-full border-[1.5px] px-3 text-[13px] leading-none whitespace-nowrap no-underline outline-none focus-visible:shadow-focus',
+    'inline-flex h-7 shrink-0 items-center rounded-ticket px-2.5 text-[12.5px] leading-none whitespace-nowrap no-underline transition-colors outline-none focus-visible:shadow-focus',
     isActive
-      ? 'border-ink bg-riso-yellow font-black text-ink shadow-[2px_2px_0_var(--ink)]'
-      : 'border-transparent font-bold text-ink-700 hover:bg-ink/[0.06] hover:text-ink',
+      ? 'bg-surface-elevated font-semibold text-ink shadow-surface'
+      : 'font-medium text-ink-500 hover:text-ink',
   )
 
 // The "..." menu on the right of the header bar: holds the Inbox address (kept visible with its copy button), the runtime and
@@ -74,11 +76,11 @@ function AgentHeaderMenu({ agent, scope, className }: { agent: Schemas['Agent'];
         aria-label={t.agents.menu.label}
         title={t.agents.menu.label}
         className={cn(
-          'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-700 outline-none hover:bg-ink/[0.08] hover:text-ink focus-visible:shadow-focus aria-expanded:bg-riso-yellow aria-expanded:text-ink aria-expanded:shadow-[inset_0_0_0_1.5px_var(--ink)]',
+          'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-ticket text-ink-500 transition-colors outline-none hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus aria-expanded:bg-surface-active aria-expanded:text-ink',
           className,
         )}
       >
-        <EllipsisIcon aria-hidden="true" className="size-4" strokeWidth={2.4} />
+        <EllipsisIcon aria-hidden="true" className="size-4" strokeWidth={2.2} />
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
@@ -87,31 +89,31 @@ function AgentHeaderMenu({ agent, scope, className }: { agent: Schemas['Agent'];
           sideOffset={8}
           collisionPadding={12}
           aria-label={t.agents.menu.title}
-          className="z-50 flex w-[min(340px,calc(100vw-24px))] flex-col gap-3 rounded-card border-2 border-ink bg-paper-raised p-3.5 text-ink shadow-[4px_4px_0_var(--riso-blue)] outline-none"
+          className="z-50 flex w-[min(340px,calc(100vw-24px))] flex-col gap-3 rounded-card border border-hairline-strong bg-surface-elevated p-3.5 text-ink shadow-floating outline-none"
         >
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.address.label}</span>
+            <span className="text-[11.5px] leading-none font-semibold text-ink-500">{t.agents.address.label}</span>
             <AgentAddress address={agent.address} showSrLabel={false} />
           </div>
-          <dl className="grid gap-2 border-t-[1.5px] border-dashed border-ink/20 pt-2.5 text-[12.5px]">
+          <dl className="grid gap-2 border-t border-hairline pt-2.5 text-[12.5px]">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.menu.runtime}</dt>
-              <dd className="min-w-0 font-bold [overflow-wrap:anywhere] text-ink">{runtimeText}</dd>
+              <dt className="text-[11.5px] leading-none font-semibold text-ink-500">{t.agents.menu.runtime}</dt>
+              <dd className="min-w-0 font-medium [overflow-wrap:anywhere] text-ink">{runtimeText}</dd>
             </div>
             {!isAddedCommand && (
               <div className="flex min-w-0 flex-col gap-0.5">
-                <dt className="text-[11.5px] leading-none font-black text-ink-500">{t.agents.menu.model}</dt>
+                <dt className="text-[11.5px] leading-none font-semibold text-ink-500">{t.agents.menu.model}</dt>
                 <dd className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{`${agent.model.provider} · ${agent.model.modelId}`}</dd>
               </div>
             )}
           </dl>
-          <div className="border-t-[1.5px] border-dashed border-ink/20 pt-2">
+          <div className="border-t border-hairline pt-2">
             <Link
               to={backTarget}
               onClick={() => setOpen(false)}
-              className="inline-flex w-full items-center gap-2 rounded-ticket px-2 py-1.5 text-[13px] font-bold text-ink no-underline outline-none hover:bg-tint-blue focus-visible:shadow-focus"
+              className="inline-flex w-full items-center gap-2 rounded-ticket px-2 py-1.5 text-[13px] font-medium text-ink no-underline transition-colors outline-none hover:bg-surface-hover focus-visible:shadow-focus"
             >
-              <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-500" strokeWidth={2.4} />
+              <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-500" strokeWidth={2.2} />
               <span className="min-w-0 truncate">{backLabel}</span>
             </Link>
           </div>
@@ -134,6 +136,8 @@ function AgentDetailView({
   live: AgentStickerState | null
   reportLiveStatus: (state: AgentStickerState | null) => void
 }) {
+  const { collapsed } = useSidebarControl()
+  const desktop = hasInsetTitleBar()
   // The live status handed over by the Chat tab takes precedence; without it, use the periodically polled status endpoint,
   // and until that arrives, the busy/idle state from the Agent details.
   const status = useAgentStatus(agent.id, config.agentListPollMs)
@@ -148,37 +152,42 @@ function AgentDetailView({
   const sleeping = !statusState.busy && statusState.sleep?.state === 'sleeping' && statusState.sleep.wakeAt ? statusState.sleep : null
 
   return (
-    // One thin header bar (~48px on wide screens) directly above the full-bleed sheet shared by all four tabs.
+    // One thin header bar (48px on wide screens) directly above the full-bleed sheet shared by all four tabs.
     // On phone width it becomes two short lines (name + status + "..." on row 1; horizontally scrollable tabs on row 2),
     // while keeping DOM and keyboard focus order as: name area, tabs, "...".
     <div className="flex h-full min-h-0 flex-col">
       <header
         data-agent-header
-        className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-3.5 py-1.5 nav:flex nav:h-12 nav:flex-nowrap nav:items-center nav:gap-3 nav:px-6 nav:py-0"
+        className={cn(
+          'grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-hairline bg-surface-canvas px-3.5 py-1.5 nav:flex nav:h-12 nav:flex-nowrap nav:items-center nav:gap-3 nav:px-6 nav:py-0',
+          desktop && 'window-drag',
+          collapsed && desktop && 'nav:pl-[84px]',
+        )}
       >
         <div data-agent-identity className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 nav:flex-1">
+          <SidebarExpandButton />
           <RuntimeMark runtime={agent.runtime} />
-          <h1 title={agent.name} className="min-w-0 truncate text-[15px] leading-6 font-black text-ink">
+          <h1 title={agent.name} className="min-w-0 truncate text-[14.5px] leading-6 font-semibold tracking-[-0.01em] text-ink">
             {agent.name}
           </h1>
-          {agent.isManager && <ManagerBadge size="sm" />}
+          {agent.isManager && <ManagerBadge size="sm" className="shrink-0" />}
           <StatusDot state={statusState} />
         </div>
         <nav
           aria-label={agent.name}
           data-agent-tabs
-          className="col-span-2 row-start-2 flex items-center gap-1 max-nav:-mx-1.5 max-nav:-my-1.5 max-nav:overflow-x-auto max-nav:px-1.5 max-nav:py-1.5 max-nav:no-scrollbar nav:shrink-0"
+          className="window-no-drag col-span-2 row-start-2 flex items-center gap-0.5 max-nav:overflow-x-auto max-nav:no-scrollbar nav:inline-flex nav:h-8 nav:shrink-0 nav:rounded-input nav:border nav:border-hairline nav:bg-surface-subtle nav:p-0.5"
         >
           <NavLink to={agentPath(scope, agent.id, 'chat')} className={tabClass}>{t.agents.tabs.chat}</NavLink>
           <NavLink to={agentPath(scope, agent.id, 'config')} className={tabClass}>{t.agents.tabs.config}</NavLink>
           <NavLink to={agentPath(scope, agent.id, 'folder')} className={tabClass}>{t.agents.tabs.folder}</NavLink>
           <NavLink to={agentPath(scope, agent.id, 'inbox')} className={tabClass}>{t.agents.tabs.inbox}</NavLink>
         </nav>
-        <AgentHeaderMenu key={agent.id} agent={agent} scope={scope} className="col-start-2 row-start-1 nav:shrink-0" />
+        <AgentHeaderMenu key={agent.id} agent={agent} scope={scope} className="window-no-drag col-start-2 row-start-1 nav:shrink-0" />
       </header>
       <Sheet className="flex-1">
         {sleeping && sleeping.wakeAt && (
-          <div className="shrink-0 border-b-[1.5px] border-dashed border-ink/20 bg-tint-blue/70 px-3.5 py-2 nav:px-6">
+          <div className="shrink-0 border-b border-hairline bg-surface-subtle/70 px-3.5 py-2 nav:px-6">
             <SleepUntil compact at={sleeping.wakeAt} reason={sleeping.reason} />
           </div>
         )}
@@ -216,8 +225,8 @@ export function AgentDetail() {
   // When the project or platform in the URL doesn't match where the Agent actually belongs, switch to the URL where it actually
   // lives, keeping the tab, query parameters and hash unchanged.
   const actual = projects.data ? agentScope(agent.data, projects.data.projects) : null
+  const tab = location.pathname.split('/').at(-1)
   if (actual && !sameScope(actual, scope)) {
-    const tab = location.pathname.split('/').at(-1)
     const target = agentPath(actual, agentId, tab === 'chat' || tab === 'config' || tab === 'folder' || tab === 'inbox' ? tab : undefined)
     return <Navigate replace to={`${target}${location.search}${location.hash}`} />
   }

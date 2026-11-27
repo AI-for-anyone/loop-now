@@ -180,6 +180,6 @@ describe('A platform Agent logs in to a plugin provider', () => {
     await setup(grokLogin(''), { state: { localLogin: 'missing' } })
     const missing = await within(area()).findByRole('alert')
     expect(missing).toHaveTextContent('"Use local logins" is on, but this computer has no login for the extension, so the Agent will fail to start. Turn the switch off, or log in on this computer, and try again.')
-    expect(within(missing).getByRole('link', { name: 'Open local mode settings' })).toHaveAttribute('href', '/settings#local-mode')
+    expect(within(missing).getByRole('link', { name: 'Open local mode settings' })).toHaveAttribute('href', '/settings/workspace#local-mode')
   })
 })

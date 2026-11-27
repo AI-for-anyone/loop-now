@@ -59,27 +59,31 @@ it('a command result header is a segmented receipt (command | source | time) wit
   const parts = [...line.querySelectorAll('[data-receipt-part]')]
   expect(parts.map(part => part.textContent)).toEqual(['/compact keep the decisions', 'Platform command', expect.stringMatching(/\d{2}:\d{2}$/)])
   expect(parts[0].querySelector('code')).toHaveClass('font-mono', 'font-bold')
-  expect(parts[1]).toHaveClass('border-l-[1.5px]', 'border-dashed')
-  expect(parts[2]).toHaveClass('border-l-[1.5px]', 'border-dashed', 'font-mono')
-  expect(parts[0].parentElement).toHaveClass('bg-tint-blue', 'rounded-[6px]')
+  expect(parts[1]).toHaveClass('border-l', 'border-hairline')
+  expect(parts[2]).toHaveClass('border-l', 'border-hairline', 'font-mono')
+  expect(parts[0].parentElement).toHaveClass('bg-surface-subtle', 'rounded-ticket')
   const reply = screen.getByText('Context compacted: 4200 → about 350 tokens')
-  expect(reply).toHaveClass('border-l-2', 'border-dashed')
+  expect(reply).toHaveClass('border-l', 'border-hairline-strong')
 })
 
-it('the /resume session list: a solid line on top and dashed lines between rows; the current session is a yellow tag; ID and time in monospace; Resume is a white button with a navy outline', () => {
+it('the /resume session list uses hairline rules, highlights the current session, and uses monospace IDs and times', () => {
   render(<CommandLine command="/resume" at="2026-10-31T01:00:00Z" onResume={() => {}} result={{ ...base, command: 'resume', resumeSessions: [
     { id: '12345678-1234-1234-1234-123456789abc', title: 'Fix the resume list', preview: 'Latest discussion', updatedAt: '2026-10-31T01:00:00Z', current: false },
     { id: 'current-full-session-id', title: 'The current session', preview: '', updatedAt: '2026-10-30T01:00:00Z', current: true },
   ] }} />)
   const list = screen.getByRole('list', { name: 'Sessions available to resume' })
-  expect(list).toHaveClass('border-t-2', 'border-ink')
+  expect(list).toHaveClass('border-t', 'border-hairline-strong')
   const rows = [...list.querySelectorAll('[role="listitem"]')]
   expect(rows).toHaveLength(2)
-  for (const row of rows) expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
-  expect(screen.getByText('Current')).toHaveClass('bg-riso-yellow', 'text-ink', 'font-black')
+  for (const row of rows) expect(row).toHaveClass('border-b', 'border-hairline')
+  expect(screen.getByText('Current')).toHaveClass('bg-surface-active', 'text-ink', 'font-semibold')
   expect(screen.getByTitle('12345678-1234-1234-1234-123456789abc')).toHaveClass('font-mono')
   expect(rows[0].querySelector('time')).toHaveClass('font-mono')
-  expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass('border-2', 'border-ink', 'bg-paper-raised')
+  expect(screen.getByRole('button', { name: 'Resume' })).toHaveClass(
+    'border',
+    'border-hairline-strong',
+    'bg-surface-control',
+  )
 })
 
 // The /compact result reads compactRun.compaction from the response: when it compacted, show the

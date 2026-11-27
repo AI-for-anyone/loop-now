@@ -33,21 +33,21 @@ export function AcpCommandsSection() {
   const [deleting, setDeleting] = useState<Command | null>(null)
   const list = commands.data?.commands
   return (
-    <div className="grid gap-3.5 border-t-2 border-dashed border-ink/30 pt-4">
+    <div className="grid gap-3.5 border-t border-hairline pt-4">
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
         <div className="grid min-w-0 flex-[1_1_320px] gap-1">
-          <h3 className="font-display-cn text-[22px] leading-[1.2] text-ink">{text.title}</h3>
+          <h3 className="font-display-cn text-[17px] leading-snug font-semibold text-ink">{text.title}</h3>
           <p className="text-[13.5px] text-ink-700">{text.intro}</p>
         </div>
-        <Button size="sm" className="h-[34px] rounded-full px-4 text-[13.5px] font-black" onClick={() => setEditing('new')}>
-          <PlusIcon aria-hidden="true" className="size-4" strokeWidth={3} />
+        <Button size="sm" className="h-[34px] px-4 text-[13.5px]" onClick={() => setEditing('new')}>
+          <PlusIcon aria-hidden="true" className="size-4" strokeWidth={2.5} />
           {text.add}
         </Button>
       </div>
       <ErrorAlert error={commands.error} />
       {commands.isPending && <p className="text-[13.5px] text-ink-500">{t.common.loading}</p>}
       {list?.length === 0 && (
-        <p className="rounded-card border-2 border-dashed border-ink/35 px-[18px] py-4 text-[13.5px] font-bold text-ink-500">{text.empty}</p>
+        <p className="rounded-card border border-hairline bg-surface-subtle px-[18px] py-4 text-[13.5px] font-medium text-ink-500">{text.empty}</p>
       )}
       {list?.map((command) => <AcpCommandCard key={command.id} command={command} onEdit={() => setEditing(command)} onDelete={() => setDeleting(command)} />)}
       {editing && <AcpCommandDialog command={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
@@ -61,10 +61,10 @@ function AcpCommandCard({ command, onEdit, onDelete }: { command: Command; onEdi
   const definition = lookup.get(command.runtime)
   const status = useRuntimes().data?.runtimes.find((runtime) => runtime.id === command.runtime)
   return (
-    <section aria-label={command.name} className="mr-[5px] mb-[5px] flex min-w-0 flex-col gap-3 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-[5px_5px_0_var(--ink)]">
+    <section aria-label={command.name} className="flex min-w-0 flex-col gap-3 rounded-card border border-hairline-strong bg-surface-control px-[18px] py-3.5 shadow-surface">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {definition && <RuntimeMark runtime={definition} className="size-9" />}
-        <span className="min-w-0 font-display-cn text-[26px] leading-[1.1] break-words">{command.name}</span>
+        <span className="min-w-0 font-display-cn text-[18px] leading-snug font-semibold break-words">{command.name}</span>
         {status && <Badge tone={status.available ? 'success' : 'danger'}>{status.available ? text.found : text.notFound}</Badge>}
         <span className="ml-auto flex gap-2">
           <Button size="sm" variant="secondary" aria-label={`${text.edit} ${command.name}`} onClick={onEdit}>
@@ -76,13 +76,13 @@ function AcpCommandCard({ command, onEdit, onDelete }: { command: Command; onEdi
         </span>
       </div>
       <dl className="grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-[13.5px]">
-        <dt className="font-black text-ink-500">{text.command}</dt>
+        <dt className="font-medium text-ink-500">{text.command}</dt>
         <dd className="min-w-0">
           {/* The command as the program gets it: the executable, then each argument on a ticket of its own (no shell joins them). */}
           <span className="flex min-w-0 flex-wrap items-center gap-1.5 font-mono text-[12.5px]">
-            <span className="font-bold break-all text-ink">{command.command}</span>
+            <span className="font-semibold break-all text-ink">{command.command}</span>
             {command.args.map((arg, index) => (
-              <span key={index} className="rounded-[5px] bg-tint-blue px-1.5 py-px break-all whitespace-pre-wrap text-ink shadow-[inset_0_0_0_1.5px_rgb(24_38_94/.35)]">
+              <span key={index} className="rounded-stamp border border-hairline-strong bg-surface-subtle px-1.5 py-px break-all whitespace-pre-wrap text-ink">
                 {arg}
               </span>
             ))}
@@ -91,13 +91,13 @@ function AcpCommandCard({ command, onEdit, onDelete }: { command: Command; onEdi
         </dd>
         {command.envNames.length > 0 && (
           <>
-            <dt className="font-black text-ink-500">{text.env}</dt>
+            <dt className="font-medium text-ink-500">{text.env}</dt>
             <dd className="flex min-w-0 flex-wrap gap-1.5">
               {command.envNames.map((name) => (
-                <span key={name} className="inline-flex items-center gap-1 rounded-full bg-tint-yellow px-2.5 py-0.5 font-mono text-[12px] text-ink">
-                  <KeyRoundIcon aria-hidden="true" className="size-3" strokeWidth={2.6} />
+                <span key={name} className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface-subtle px-2.5 py-0.5 font-mono text-[12px] text-ink">
+                  <KeyRoundIcon aria-hidden="true" className="size-3" strokeWidth={2.2} />
                   {name}
-                  <span className="font-sans text-[11.5px] font-bold text-ink-500">{text.saved}</span>
+                  <span className="font-sans text-[11.5px] font-medium text-ink-500">{text.saved}</span>
                 </span>
               ))}
             </dd>
@@ -105,7 +105,7 @@ function AcpCommandCard({ command, onEdit, onDelete }: { command: Command; onEdi
         )}
         {status?.binaryPath && (
           <>
-            <dt className="font-black text-ink-500">{text.path}</dt>
+            <dt className="font-medium text-ink-500">{text.path}</dt>
             <dd className="min-w-0 font-mono text-[12.5px] break-all">{status.binaryPath}</dd>
           </>
         )}
@@ -162,8 +162,8 @@ function AcpCommandDialog({ command, onClose }: { command?: Command; onClose: ()
         </DialogHeader>
         <form className="grid gap-4" onSubmit={(event) => void submit(event)} noValidate>
           <Alert variant="warning" role="note" className="flex items-start gap-2.5">
-            <ShieldAlertIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0" strokeWidth={2.4} />
-            <AlertDescription className="text-[13.5px] leading-[1.65] font-black text-ink">{copy.trust}</AlertDescription>
+            <ShieldAlertIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0" strokeWidth={2.2} />
+            <AlertDescription className="text-[13.5px] leading-[1.65] font-medium text-ink">{copy.trust}</AlertDescription>
           </Alert>
           <Field id={`${ids}-name`} label={copy.name} hint={copy.nameHint} error={nameError}>
             <Input id={`${ids}-name`} value={draft.name} autoComplete="off" readOnly={saving} aria-invalid={nameError ? true : undefined} aria-describedby={`${ids}-name-hint`} onChange={(event) => set({ name: event.target.value })} />
@@ -177,7 +177,7 @@ function AcpCommandDialog({ command, onClose }: { command?: Command; onClose: ()
             <Textarea id={`${ids}-args`} value={draft.args} rows={3} spellCheck={false} readOnly={saving} className="min-h-[84px] font-mono text-[13.5px] leading-[1.6] whitespace-pre" placeholder={'acp\n--stdio'} aria-invalid={argsError ? true : undefined} aria-describedby={`${ids}-args-hint`} onChange={(event) => set({ args: event.target.value })} />
           </Field>
           <fieldset className="grid min-w-0 gap-2" aria-describedby={`${ids}-env-hint`}>
-            <legend className="mb-1.5 text-[13.5px] leading-snug font-black text-ink">{copy.env}</legend>
+            <legend className="mb-1.5 text-[13.5px] leading-snug font-semibold text-ink">{copy.env}</legend>
             {draft.env.map((row) => (
               <EnvRowField key={row.key} row={row} problem={shown?.env[row.key]} disabled={saving} onChange={(change) => setRow(row.key, change)} onRemove={() => set({ env: draft.env.filter((other) => other.key !== row.key) })} />
             ))}
@@ -241,8 +241,8 @@ function EnvRowField({ row, problem, disabled, onChange, onRemove }: { row: EnvR
       {/* Name, value, remove in one row; on a narrow screen the value goes under the name, at full width. */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]">
         {row.saved ? (
-          <span className="flex h-10 min-w-0 items-center gap-1.5 rounded-input bg-tint-yellow px-3 font-mono text-[13.5px] font-bold text-ink">
-            <KeyRoundIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.6} />
+          <span className="flex h-10 min-w-0 items-center gap-1.5 rounded-input border border-hairline bg-surface-subtle px-3 font-mono text-[13.5px] font-medium text-ink">
+            <KeyRoundIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.2} />
             <span className="truncate">{row.name}</span>
           </span>
         ) : (
@@ -260,8 +260,8 @@ function EnvRowField({ row, problem, disabled, onChange, onRemove }: { row: EnvR
         )}
         <div className="order-last col-span-full min-w-0 sm:order-none sm:col-span-1">
         {row.saved && !row.refill ? (
-          <span className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-input px-3 text-[13px] text-ink-500 shadow-[inset_0_0_0_2px_rgb(24_38_94/.2)]">
-            <span className="truncate font-bold">{copy.savedValue}</span>
+          <span className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-input border border-hairline-strong bg-surface-control px-3 text-[13px] text-ink-500">
+            <span className="truncate font-medium">{copy.savedValue}</span>
             <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-1 text-[13px]" disabled={disabled} aria-label={`${copy.refill} ${row.name}`} onClick={() => onChange({ refill: true })}>
               {copy.refill}
             </Button>
@@ -323,11 +323,11 @@ function InUse({ name, error }: { name: string; error: ApiError }) {
               return (
                 <li key={agent.id} className="flex flex-wrap items-baseline gap-x-2">
                   {to ? (
-                    <Link to={to} className="font-black text-ink underline decoration-red decoration-2 underline-offset-4">
+                    <Link to={to} className="font-semibold text-ink underline decoration-red decoration-1 underline-offset-4">
                       {agent.name}
                     </Link>
                   ) : (
-                    <span className="font-black text-ink">{agent.name}</span>
+                    <span className="font-semibold text-ink">{agent.name}</span>
                   )}
                   {where && <span className="text-[12.5px] text-ink-700">{where}</span>}
                 </li>

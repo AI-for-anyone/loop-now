@@ -32,10 +32,10 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   const lookup = useRuntimeLookup()
   const runtime = lookup.get(agent.runtime)
   return <Section id="model-credential" title={t.credentials.agentSelection.title}>
-    {runtime && <p className="text-[13.5px]">{runtime.capabilities.accounts === 'local' ? t.runtime.account(runtime.name) : t.credentials.agentSelection.intro}</p>}
+    {runtime && <p className="text-[13px] text-ink-700">{runtime.capabilities.accounts === 'local' ? t.runtime.account(runtime.name) : t.credentials.agentSelection.intro}</p>}
     <ErrorAlert error={result.error ?? lookup.error} />
-    {!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.modelOutOfSync}</p>}
-    {!result.data && !result.isError && <p role="status">{t.credentials.agentSelection.loading}</p>}
+    {!synchronized && result.data && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.modelOutOfSync}</p>}
+    {!result.data && !result.isError && <p role="status" className="text-[13px] text-ink-500">{t.credentials.agentSelection.loading}</p>}
     {result.data && providers.map(provider => {
       if (lookup.forProvider(provider)?.capabilities.accounts !== 'managed') return null
       const selection = known.values.get(provider)
@@ -44,16 +44,16 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   </Section>
 }
 
-export function ProjectCliSelection({ agentId, configVersion, cli }: { agentId: string; configVersion: number; cli: string }) {
-  if (cli === 'mysql' || cli === 'psql') return <AgentDBConnections agentId={agentId} configVersion={configVersion} cli={cli} />
-  return <LegacyProjectCliSelection agentId={agentId} configVersion={configVersion} cli={cli} />
+export function ProjectCliSelection({ agentId, configVersion, cli, embedded = false }: { agentId: string; configVersion: number; cli: string; embedded?: boolean }) {
+  if (cli === 'mysql' || cli === 'psql') return <AgentDBConnections agentId={agentId} configVersion={configVersion} cli={cli} embedded={embedded} />
+  return <LegacyProjectCliSelection agentId={agentId} configVersion={configVersion} cli={cli} embedded={embedded} />
 }
 
-export function LegacyProjectCliSelection({ agentId, configVersion, cli }: { agentId: string; configVersion: number; cli: string }) {
+export function LegacyProjectCliSelection({ agentId, configVersion, cli, embedded = false }: { agentId: string; configVersion: number; cli: string; embedded?: boolean }) {
   const result = useCredentialSelections(agentId)
   const synchronized = useSelectionSynchronization(agentId, configVersion, result.data?.configVersion)
   const selection = result.data?.selections.find(item => item.purpose === 'cli' && item.cli === cli)
-  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.cliOutOfSync}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} /> : <p className="text-[13px]">{t.credentials.agentSelection.cliLoading}</p>}</>
+  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.cliOutOfSync}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} embedded={embedded} /> : <p className="text-[13px] text-ink-500">{t.credentials.agentSelection.cliLoading}</p>}</>
 }
 
 function useSelectionSynchronization(agentId: string, agentVersion: number, selectionVersion: number | undefined) {
@@ -68,7 +68,7 @@ function useSelectionSynchronization(agentId: string, agentVersion: number, sele
   return synchronized
 }
 
-function SelectionEditor({ agentId, data, selection, current = true, synchronized }: { agentId: string; data: Schemas['CredentialSelections']; selection: Schemas['CredentialSelection']; current?: boolean; synchronized: boolean }) {
+function SelectionEditor({ agentId, data, selection, current = true, synchronized, embedded = false }: { agentId: string; data: Schemas['CredentialSelections']; selection: Schemas['CredentialSelection']; current?: boolean; synchronized: boolean; embedded?: boolean }) {
   const scope = useScope(), client = useQueryClient()
   const slot = selection.provider ?? selection.cli ?? ''
   const [session, setSession] = useState(0)
@@ -81,11 +81,11 @@ function SelectionEditor({ agentId, data, selection, current = true, synchronize
     if (!editing) setSession(v => v + 1)
   }
   if (scope.kind !== 'project') return null
-  return <SelectionForm key={session} id={`${agentId}:${selection.purpose}:${slot}`} agentId={agentId} projectId={data.projectId} configVersion={data.configVersion} selection={selection} current={current} synchronized={synchronized} settingsPath={projectSettingsPath(scope.project)} onDirty={setEditing} onSaved={async () => { setEditing(false); await invalidateProjectCredentials(client, data.projectId); setSession(v => v + 1) }} />
+  return <SelectionForm key={session} id={`${agentId}:${selection.purpose}:${slot}`} agentId={agentId} projectId={data.projectId} configVersion={data.configVersion} selection={selection} current={current} synchronized={synchronized} embedded={embedded} settingsPath={projectSettingsPath(scope.project, 'credentials')} onDirty={setEditing} onSaved={async () => { setEditing(false); await invalidateProjectCredentials(client, data.projectId); setSession(v => v + 1) }} />
 }
 
-function SelectionForm({ id, agentId, projectId, configVersion, selection, settingsPath, current, synchronized, onDirty, onSaved }: {
-  id: string; agentId: string; projectId: string; configVersion: number; selection: Schemas['CredentialSelection']; settingsPath: string; current: boolean; synchronized: boolean; onDirty: (dirty: boolean) => void; onSaved: () => void
+function SelectionForm({ id, agentId, projectId, configVersion, selection, settingsPath, current, synchronized, embedded, onDirty, onSaved }: {
+  id: string; agentId: string; projectId: string; configVersion: number; selection: Schemas['CredentialSelection']; settingsPath: string; current: boolean; synchronized: boolean; embedded: boolean; onDirty: (dirty: boolean) => void; onSaved: () => void
 }) {
   const client = useQueryClient(), [initial] = useState(selection)
   const slot = initial.provider ?? initial.cli ?? ''
@@ -99,11 +99,26 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
     const latest = await putSelection(agentId, initial.purpose === 'model' ? { purpose: 'model', provider: slot, accountId, expectedConfigVersion } : { purpose: 'cli', cli: slot, accountId, expectedConfigVersion })
     client.setQueryData(credentialKeys.selections(agentId), latest)
   }, onSaved })
-  return <div className="grid min-w-0 gap-3">
-    {!current && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.switched(slot)}</p>}
-    <AccountSelectionField label={t.credentials.agentSelection.fieldLabel(slot)} description={selectionDescription(selection)} options={selection.candidates.map(account => ({ value: account.id, label: slot === 'lark-cli' ? larkAccountOptionLabel(account) : `${account.name} · ${accountStatus[account.status]}` }))} value={form.draft ?? ''} currentLabel={selection.mode === 'automatic' ? (selection.resolvedAccountId ? t.credentials.agentSelection.automaticCurrent(selection.candidates.find(account => account.id === selection.resolvedAccountId)?.name ?? selection.resolvedAccountId) : t.credentials.agentSelection.notChosen) : undefined} canRestore={selection.mode !== 'automatic'} restoreLabel={selection.purpose === 'cli' ? t.credentials.agentSelection.restoreCliAutomatic : undefined} pending={form.pending} disabled={form.conflict || !synchronized} dirty={form.dirty} settingsPath={settingsPath} onChange={value => { form.setDraft(value || null); onDirty(true) }} onSave={() => void form.submit()} onRestore={() => { form.setDraft(null); onDirty(true); void form.submit(null) }} />
+  return <div className="grid min-w-0 gap-2.5">
+    {!current && <p role="status" className="text-[13px] font-medium">{t.credentials.agentSelection.switched(slot)}</p>}
+    <AccountSelectionField
+      label={t.credentials.agentSelection.fieldLabel(slot)}
+      description={selectionDescription(selection)}
+      options={selection.candidates.map(account => ({ value: account.id, label: slot === 'lark-cli' ? larkAccountOptionLabel(account) : `${account.name} · ${accountStatus[account.status]}` }))}
+      value={form.draft ?? ''}
+      currentLabel={selection.mode === 'automatic' ? (selection.resolvedAccountId ? t.credentials.agentSelection.automaticCurrent(selection.candidates.find(account => account.id === selection.resolvedAccountId)?.name ?? selection.resolvedAccountId) : t.credentials.agentSelection.notChosen) : undefined}
+      canRestore={selection.mode !== 'automatic'}
+      restoreLabel={selection.purpose === 'cli' ? t.credentials.agentSelection.restoreCliAutomatic : undefined}
+      pending={form.pending}
+      disabled={form.conflict || !synchronized}
+      dirty={form.dirty}
+      embedded={embedded}
+      settingsPath={settingsPath}
+      onChange={value => { form.setDraft(value || null); onDirty(true) }}
+      onSave={() => void form.submit()}
+      onRestore={() => { form.setDraft(null); onDirty(true); void form.submit(null) }}
+    />
     {slot === 'lark-cli' && currentAccount && <LarkAccountDetails account={currentAccount} showName={false} />}
-    {currentId && <p className="min-w-0 rounded-input bg-white px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{selection.mode === 'explicit' ? t.credentials.agentSelection.explicitLabel : t.credentials.agentSelection.automaticLabel}{t.credentials.agentSelection.labelSeparator}<span className="font-black">{currentAccount?.name ?? currentId}</span>{currentAccount && <span> · {accountStatus[currentAccount.status]}</span>}</p>}
     {selection.candidates.filter(account => account.id === selection.resolvedAccountId || account.id === selection.selectedAccountId).map(account => <WarningList key={account.id} warnings={account.template?.warnings ?? []} />)}
     {selection.purpose === 'model' && selection.localLogin && <LocalLoginNote state={selection.localLogin} />}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}

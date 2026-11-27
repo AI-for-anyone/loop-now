@@ -124,7 +124,8 @@ describe('Project Agent DB connection sets, formal HTTP fixture', () => {
 it('platform psql keeps its private single slot and does not query project DB sets', async () => {
   let dbReads = 0
   server.use(http.get(apiUrl('/agents/:agentId/db-connections/:cli'), () => { dbReads++; return HttpResponse.json(connections()) }))
-  await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'psql', hasTemplate: true, credential: null }] }), templates: [{ name: 'psql', version: '18.3', fields: [{ name: 'password', label: 'Password', type: 'secret', required: true }], injection: 'files', install: { status: 'not_installed' }, warnings: [] }] })
+  const { user } = await renderConfig({ agent: makeAgent({ scope: 'platform', projectId: null, clis: [{ name: 'psql', hasTemplate: true, credential: null }] }), templates: [{ name: 'psql', version: '18.3', fields: [{ name: 'password', label: 'Password', type: 'secret', required: true }], injection: 'files', install: { status: 'not_installed' }, warnings: [] }] })
+  await user.click(screen.getByRole('button', { name: /^psql\b/ }))
   expect(await screen.findByRole('button', { name: 'Enter credential' })).toBeInTheDocument()
   expect(screen.queryByText('Granted psql connections')).toBeNull()
   expect(dbReads).toBe(0)

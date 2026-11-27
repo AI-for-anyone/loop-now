@@ -10,7 +10,7 @@ import { t } from '@/i18n'
 export const LOCAL_MODE_ANCHOR = 'local-mode'
 // Hints on other pages (failed Git pull, the local directories list) link here, which opens global settings and scrolls to
 // local mode.
-export const localModeSettingsPath = `/settings#${LOCAL_MODE_ANCHOR}`
+export const localModeSettingsPath = `/settings/workspace#${LOCAL_MODE_ANCHOR}`
 
 type Key = keyof Schemas['LocalModeSettings']
 const KEYS: Key[] = ['directories', 'git', 'cli', 'logins']
@@ -21,9 +21,9 @@ function SwitchRow({ name, checked, disabled, onChange }: { name: Key; checked: 
   const id = useId()
   const copy = t.localMode.settings.items[name]
   return (
-    <li className="flex items-center gap-4 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3">
+    <li className="flex items-center gap-4 border-b border-hairline px-1 py-3">
       <div className="grid min-w-0 flex-1 gap-0.5 leading-[1.5]">
-        <label htmlFor={id} className="cursor-pointer text-[14.5px] font-black">
+        <label htmlFor={id} className="cursor-pointer text-[14.5px] font-semibold">
           {copy.label}
         </label>
         <p id={`${id}-description`} className="text-[12.5px] text-ink-700">
@@ -31,7 +31,7 @@ function SwitchRow({ name, checked, disabled, onChange }: { name: Key; checked: 
         </p>
       </div>
       <Switch id={id} checked={checked} disabled={disabled} aria-describedby={`${id}-description`} onCheckedChange={onChange} />
-      <span aria-hidden="true" className="-ml-2 w-4 text-[12px] font-black">
+      <span aria-hidden="true" className="-ml-2 w-4 text-[12px] font-medium text-ink-700">
         {checked ? t.localMode.settings.on : t.localMode.settings.off}
       </span>
     </li>

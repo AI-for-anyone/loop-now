@@ -1,25 +1,24 @@
-import { useId, useState, type ReactNode } from 'react'
-import { SelectChevron } from '@/components/SelectChevron'
+import { useSearchParams } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { STATS_RANGES, statsWindow, useStats, type StatsRange } from '@/api/stats'
+import { SubNav } from '@/components/IndexTabs'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { SectionError } from '@/components/RequestError'
+import { PageBody, Sheet } from '@/components/Sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useOverviewFilter, type OverviewFilter } from '@/features/projects/overview-filter'
-import { OverviewScopeNotFound } from '@/features/projects/OverviewScope'
+import { OverviewScopeNotFound, OverviewScopeSelect } from '@/features/projects/OverviewScope'
 import { t } from '@/i18n'
-import { HollowNumber } from '@/components/NumberedSection'
-import { PageFrame, PageHeader } from '@/components/PageHeader'
-import { Sheet } from '@/components/Sheet'
+import { overviewPath, type ScopeQuery } from '@/lib/scope'
 import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
-import { PLATFORM, type ScopeQuery } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { Spark } from './charts'
-import { CardNumber } from './card-number'
 import { estimateCost } from './pricing'
 import {
   BusyCard,
   ContextCard,
   HealthCard,
+  ModelCostCard,
   OriginsCard,
   OutcomesCard,
   ProcessCard,
@@ -36,11 +35,20 @@ import {
 const text = t.stats
 
 type Report = Schemas['StatsReport']
+type StatsTab = 'usage' | 'reliability' | 'diagnostics'
+
+const STATS_TABS: readonly StatsTab[] = ['usage', 'reliability', 'diagnostics']
+
+function parseStatsTab(raw: string | null): StatsTab {
+  return STATS_TABS.includes(raw as StatsTab) ? (raw as StatsTab) : 'usage'
+}
+
+function parseStatsRange(raw: string | null): StatsRange {
+  return STATS_RANGES.includes(raw as StatsRange) ? (raw as StatsRange) : 'week'
+}
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 
-// X-axis labels: hourly they read “15 点” (15:00); daily "10/21", with the shorter "21" in the reply outcomes chart; today
-// reads “今天” (Today).
 function axisOf(report: Report, range: StatsRange): Axis {
   const today = new Date()
   const hourly = report.bucket === 'hour'
@@ -50,22 +58,59 @@ function axisOf(report: Report, range: StatsRange): Axis {
   return { labels, shortLabels, titles: labels, hourly, rangeLabel: text.ranges[range] }
 }
 
-// Nothing happened in this period: no usage, no finished turns, no questions.
 const isEmpty = (report: Report) =>
   report.tokens.totals.total === 0 &&
   report.outcomes.totals.completed + report.outcomes.totals.interrupted + report.outcomes.totals.failed === 0 &&
   report.questions.asked === 0
 
-// tone: the shadow color tells the meaning apart: neutral navy, fluorescent pink for failures and interruptions, yellow for
-// waiting for your answer, riso blue for totals (redesign).
-type Tile = { label: string; value: string; delta: string; bad: boolean; spark: (number | null)[]; tone: 'ink' | 'pink' | 'yellow' | 'blue' }
+interface MetricItem {
+  label: string
+  value: string
+  delta: string
+  bad?: boolean
+  spark?: (number | null)[]
+}
 
-function tiles(report: Report): Tile[] {
-  const { tokens, byOrigin, context, wait, outcomes, questions } = report
+// Single-row 4-column hairline MetricStrip (~76px tall).
+function MetricStrip({ label, items }: { label: string; items: MetricItem[] }) {
+  return (
+    <section
+      aria-label={label}
+      className="grid grid-cols-1 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface-control sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0"
+    >
+      {items.map((item) => (
+        <div key={item.label} className="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-[11.5px] font-medium text-ink-500">
+              {item.label}
+            </span>
+            {item.spark && <Spark values={item.spark} className="h-[16px] w-14 shrink-0" />}
+          </div>
+          <span className="font-display-latin text-[22px] leading-[1.15] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]">
+            {item.value}
+          </span>
+          <span className={cn('truncate text-[11.5px] leading-snug', item.bad ?'font-medium text-red-text':'text-ink-500')}>
+            {item.delta}
+          </span>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function usageMetrics(report: Report): MetricItem[] {
+  const { tokens, byOrigin, context } = report
   const wakes = report.wakes.reduce((sum, w) => sum + w.count, 0)
   const topCompactions = [...context.agents].sort((a, b) => b.compactions - a.compactions)[0]
   const cost = estimateCost(tokens)
+  const totalInput = tokens.totals.input + tokens.totals.cacheRead
   return [
+    {
+      label: text.kpis.tokens,
+      value: text.wan(tokens.totals.total),
+      delta: text.kpis.tokensCostDelta(cost.priced ? text.usd(cost.usd) : null),
+      spark: tokens.series,
+    },
     {
       label: text.kpis.unrequested,
       value: byOrigin.unrequestedShare === null ? text.none : text.wholePercent(byOrigin.unrequestedShare),
@@ -75,7 +120,6 @@ function tiles(report: Report): Tile[] {
         const total = b.console + b.inboxReminder + b.sleepWake + b.task + b.other
         return total ? b.sleepWake / total : null
       }),
-      tone: 'ink',
     },
     {
       label: text.kpis.context,
@@ -83,160 +127,184 @@ function tiles(report: Report): Tile[] {
       delta: text.kpis.contextDelta(context.compactions, topCompactions?.compactions ? topCompactions : null),
       bad: context.agents.some((a) => a.avgInputPerCall > REOPEN_CONTEXT),
       spark: context.series,
-      tone: 'ink',
     },
     {
-      label: text.kpis.wait,
-      value: wait.p50 === null ? text.none : text.seconds(wait.p50),
-      delta: wait.p90 === null ? '' : text.kpis.waitDelta(text.seconds(wait.p90)),
-      bad: false,
-      spark: wait.series.map((b) => b.p50),
-      tone: 'ink',
+      label: text.kpis.cacheHit,
+      value: tokens.cacheHitRate === null ? text.none : text.wholePercent(tokens.cacheHitRate),
+      delta: text.kpis.cacheHitDelta(text.wan(tokens.totals.cacheRead), text.wan(totalInput)),
+    },
+  ]
+}
+
+function reliabilityMetrics(report: Report): MetricItem[] {
+  const { outcomes, wait, questions } = report
+  const runs = outcomes.totals.completed + outcomes.totals.interrupted + outcomes.totals.failed
+  const completionRate = runs ? outcomes.totals.completed / runs : null
+  return [
+    {
+      label: text.kpis.completion,
+      value: completionRate === null ? text.none : text.percent(completionRate),
+      delta: text.kpis.completionDelta(runs),
+      bad: completionRate !== null && completionRate < 0.95,
     },
     {
       label: text.kpis.failures,
       value: text.count(outcomes.totals.interrupted + outcomes.totals.failed),
       delta: text.kpis.failuresDelta(outcomes.totals.failed, outcomes.totals.interrupted),
-      bad: false,
+      bad: outcomes.totals.failed > 0,
       spark: outcomes.series.map((b) => b.interrupted + b.failed),
-      tone: 'pink',
+    },
+    {
+      label: text.kpis.wait,
+      value: wait.p50 === null ? text.none : text.seconds(wait.p50),
+      delta: wait.p90 === null ? text.none : text.kpis.waitDelta(text.seconds(wait.p90)),
+      spark: wait.series.map((b) => b.p50),
     },
     {
       label: text.kpis.questions,
       value: text.items(questions.asked),
-      delta: text.kpis.questionsDelta(questions.avgAnswerSeconds === null ? null : text.minutes(questions.avgAnswerSeconds), questions.pending.length),
+      delta: text.kpis.questionsDelta(
+        questions.avgAnswerSeconds === null ? null : text.minutes(questions.avgAnswerSeconds),
+        questions.pending.length,
+      ),
       bad: questions.pending.length > 0,
       spark: questions.series,
-      tone: 'yellow',
-    },
-    {
-      label: text.kpis.tokens,
-      value: text.wan(tokens.totals.total),
-      delta: text.kpis.tokensDelta(cost.priced ? text.usd(cost.usd) : null, tokens.cacheHitRate === null ? null : text.wholePercent(tokens.cacheHitRate)),
-      bad: false,
-      spark: tokens.series,
-      tone: 'blue',
     },
   ]
 }
 
-const TILE_SHADOW = {
-  ink: 'shadow-[4px_4px_0_var(--ink)]',
-  pink: 'shadow-[4px_4px_0_var(--riso-pink)]',
-  yellow: 'shadow-[4px_4px_0_var(--riso-yellow)]',
-  blue: 'shadow-[4px_4px_0_var(--riso-blue)]',
-} as const
-
-// Key metrics: the first numbered section on the sheet. White cards with a 2px navy outline, where the shadow color tells the
-// meaning apart; the numbers are large Bricolage type.
-function Kpis({ report }: { report: Report }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-[18px]">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-        <HollowNumber data-section-number>01</HollowNumber>
-        <h2 className="riso-marker px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal">{text.kpis.label}</h2>
-      </div>
-      <section aria-label={text.kpis.label} className="grid grid-cols-1 gap-x-3.5 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tiles(report).map((tile) => (
-          <div key={tile.label} className={cn('mr-1 mb-1 flex min-w-0 flex-col gap-1 rounded-card border-2 border-ink bg-white px-4 pt-3.5 pb-3', TILE_SHADOW[tile.tone])}>
-            <span className="text-[12.5px] font-black text-ink">{tile.label}</span>
-            <span className="font-display-latin text-[30px] leading-[1.1] font-extrabold [overflow-wrap:anywhere]">{tile.value}</span>
-            <span className={cn('text-[12px] leading-[1.4]', tile.bad ? 'font-bold text-red-text' : 'text-ink-700')}>{tile.delta}</span>
-            <Spark values={tile.spark} className="mt-auto" />
-          </div>
-        ))}
-      </section>
-    </div>
-  )
-}
-
-// Scope filter: all projects, each project, or the platform, stored in the URL (the same ?project= / ?platform=1 as the
-// overview); all by default.
-function ScopeSelect({ overview }: { overview: ReturnType<typeof useOverviewFilter> }) {
-  const { filter, projects } = overview
-  const value = filter.kind === 'all' ? '' : filter.kind === 'platform' ? PLATFORM : `project:${filter.name}`
-  const id = useId()
-  // Redesign: the same dashed box as the overview, reading “范围” (Scope) followed by the current scope, with a small arrow on
-  // the right; still a native select.
-  return (
-    <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus">
-      <label htmlFor={id} aria-hidden="true" className="shrink-0 text-ink-500">
-        {text.scopeLabel}
-      </label>
-      <select
-        id={id}
-        aria-label={text.scopeLabel}
-        value={value}
-        onChange={(event) => overview.select(event.target.value)}
-        className="max-w-[200px] min-w-0 cursor-pointer appearance-none truncate bg-transparent pr-[18px] font-bold text-ink outline-none"
-      >
-        <option value="">{text.allProjects}</option>
-        {filter.kind === 'project' && !filter.project && (
-          <option value={value} disabled>
-            {filter.project === null ? text.missingProject(filter.name) : filter.name}
-          </option>
-        )}
-        <optgroup label={text.projectGroup}>
-          {(projects ?? []).map((project) => (
-            <option key={project.id} value={`project:${project.name}`}>
-              {project.name}
-            </option>
-          ))}
-        </optgroup>
-        <option value={PLATFORM}>{text.platform}</option>
-      </select>
-      <SelectChevron />
-    </span>
-  )
-}
-
 const scopeName = (filter: OverviewFilter) => (filter.kind === 'all' ? text.global : filter.kind === 'platform' ? text.platform : filter.name)
+const scopeHref = (filter: OverviewFilter) =>
+  filter.kind === 'project' ? overviewPath({ kind: 'project', name: filter.name }) : filter.kind === 'platform' ? '/?platform=1' : '/'
 
-// The stats page: the first screen holds the six key metrics and the few things most worth knowing; below the dashed line
-// are the details to look at when troubleshooting.
-// Time range: today by hour, the last 7 and last 30 days by day; as in the overview, the scope can be all, one project or
-// the platform.
-// Redesign: the header is the shared page title (next to it the segmented time range, the scope in a dashed box, and the time
-// window); the content is laid out on one sheet, numbered 01, 02, ...
+// Stats & Diagnostics workspace: URL-backed ?tab=usage|reliability|diagnostics and ?range=today|week|month,
+// with SubNav directly below PageHeader and PageBody width="wide" (auto-mounting ScrollRuler).
 export function StatsPage() {
+  const [params, setParams] = useSearchParams()
   const overview = useOverviewFilter()
-  const [range, setRange] = useState<StatsRange>('week')
+  const tab = parseStatsTab(params.get('tab'))
+  const range = parseStatsRange(params.get('range'))
   const { from } = statsWindow(range)
   const eyebrow = range === 'today' ? text.today : text.window(text.day(from.getMonth() + 1, from.getDate()), text.today)
   const { filter } = overview
+
+  const updateParam = (key: 'tab' | 'range', value: string) => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set(key, value)
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   return (
     <PageFrame>
-      <PageHeader crumbs={[{ label: t.shell.global }]} title={text.title}>
-        <ToggleGroup aria-label={text.rangeLabel} className={segmentedClass} value={range} onValueChange={(value) => setRange(value as StatsRange)}>
-          {STATS_RANGES.map((item) => (
-            <ToggleGroupItem key={item} value={item} className={segmentedItemClass}>
-              {text.ranges[item]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <ScopeSelect overview={overview} />
-        <span className="font-mono text-[12px] text-ink-500">{`${scopeName(filter)} · ${eyebrow}`}</span>
+      <PageHeader
+        crumbs={[{ label: scopeName(filter), to: scopeHref(filter) }]}
+        title={text.title}
+        actions={
+          <>
+            <OverviewScopeSelect filter={filter} projects={overview.projects} onSelect={overview.select} allLabel={text.allProjects} />
+            <ToggleGroup
+              aria-label={text.rangeLabel}
+              className={segmentedClass}
+              value={range}
+              onValueChange={(value) => value && updateParam('range', value)}
+            >
+              {STATS_RANGES.map((item) => (
+                <ToggleGroupItem key={item} value={item} className={segmentedItemClass}>
+                  {text.ranges[item]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </>
+        }
+      >
+        <span className="font-mono text-[12px] text-ink-500">{eyebrow}</span>
       </PageHeader>
-      <Sheet className="flex-1">
-        {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
-            scroll with the content instead of stretching the whole page based on their unscrolled position. */}
-        <div className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="flex max-w-[1480px] flex-col gap-6 px-3.5 pt-6 pb-16 nav:px-6">
-            {overview.query ? (
-              <StatsBody key={overview.key} range={range} query={overview.query} projects={overview.projects} />
-            ) : (
-              filter.kind === 'project' && filter.project === null && <OverviewScopeNotFound name={filter.name} onBack={() => overview.select('')} />
+      {overview.query ? (
+        <StatsWorkspace
+          key={overview.key}
+          tab={tab}
+          range={range}
+          query={overview.query}
+          projects={overview.projects}
+          onTabChange={(next) => updateParam('tab', next)}
+        />
+      ) : (
+        <Sheet className="flex-1">
+          <PageBody width="wide">
+            {filter.kind === 'project' && filter.project === null && (
+              <OverviewScopeNotFound name={filter.name} onBack={() => overview.select('')} />
             )}
-          </div>
-        </div>
-      </Sheet>
+          </PageBody>
+        </Sheet>
+      )}
     </PageFrame>
   )
 }
 
-function StatsBody({ range, query, projects }: { range: StatsRange; query: ScopeQuery; projects: Schemas['Project'][] | undefined }) {
+function StatsWorkspace({
+  tab,
+  range,
+  query,
+  projects,
+  onTabChange,
+}: {
+  tab: StatsTab
+  range: StatsRange
+  query: ScopeQuery
+  projects: Schemas['Project'][] | undefined
+  onTabChange: (tab: StatsTab) => void
+}) {
   const stats = useStats(range, query)
-  // The scope an Agent lives in: a platform Agent's projectId is null; when the project isn't in the list, no link is given.
+  const report = stats.data
+  const reliabilityAlerts = report ? report.questions.pending.length + report.outcomes.totals.failed : 0
+
+  return (
+    <>
+      <SubNav
+        aria-label={text.tabs.label}
+        value={tab}
+        onChange={onTabChange}
+        items={[
+          { key: 'usage', label: text.tabs.usage, controls: 'stats-panel-usage' },
+          {
+            key: 'reliability',
+            label: text.tabs.reliability,
+            badge:
+              reliabilityAlerts > 0 ? (
+                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-tint-red px-1.5 font-mono text-[10.5px] leading-[16px] font-semibold text-red-text tabular-nums">
+                  {reliabilityAlerts}
+                </span>
+              ) : undefined,
+            controls: 'stats-panel-reliability',
+          },
+          { key: 'diagnostics', label: text.tabs.diagnostics, controls: 'stats-panel-diagnostics' },
+        ]}
+      />
+      <Sheet className="flex-1">
+        <PageBody width="wide" innerClassName="flex flex-col gap-4">
+          <StatsBody tab={tab} range={range} stats={stats} projects={projects} />
+        </PageBody>
+      </Sheet>
+    </>
+  )
+}
+
+function StatsBody({
+  tab,
+  range,
+  stats,
+  projects,
+}: {
+  tab: StatsTab
+  range: StatsRange
+  stats: ReturnType<typeof useStats>
+  projects: Schemas['Project'][] | undefined
+}) {
   const scopeOf: ScopeOf = (projectId) => {
     if (projectId === null) return { kind: 'platform' }
     const project = projects?.find((p) => p.id === projectId)
@@ -244,47 +312,76 @@ function StatsBody({ range, query, projects }: { range: StatsRange; query: Scope
   }
 
   if (stats.isError && !stats.data) return <SectionError title={text.title} error={stats.error} onRetry={() => void stats.refetch()} />
-  if (!stats.data)
+  if (!stats.data) {
     return (
-      <div aria-busy="true" className="flex flex-col gap-3">
-        <span className="riso-skeleton h-[120px] rounded-panel" />
-        <span className="riso-skeleton h-[260px] rounded-panel" />
+      <div aria-busy="true" className="flex flex-col gap-4">
+        <span className="riso-skeleton h-[76px] rounded-card" />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <span className="riso-skeleton h-[260px] rounded-card" />
+          <span className="riso-skeleton h-[260px] rounded-card" />
+        </div>
       </div>
     )
+  }
+
   const report = stats.data
-  if (isEmpty(report))
+  if (isEmpty(report)) {
     return (
-      <p role="status" className="rounded-panel border-2 border-dashed border-ink/25 px-5 py-8 text-center text-[14px] font-bold text-ink-700">
+      <p
+        role="status"
+        className="rounded-card border border-hairline-strong bg-surface-subtle px-5 py-8 text-center text-[14px] font-medium text-ink-700"
+      >
         {text.empty}
       </p>
     )
+  }
+
   const axis = axisOf(report, range)
-  // Each chart is a numbered section on the sheet, numbered in display order (01 is the key metrics).
-  const n = (number: number, card: ReactNode) => <CardNumber.Provider value={number}>{card}</CardNumber.Provider>
   return (
-    <div className={cn('flex flex-col gap-6', stats.isPlaceholderData && 'opacity-60')} aria-busy={stats.isPlaceholderData || undefined}>
-      <Kpis report={report} />
-      <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        {n(2, <OriginsCard report={report} axis={axis} />)}
-        {n(3, <WakesCard report={report} scopeOf={scopeOf} />)}
-      </div>
-      <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        {n(4, <ContextCard report={report} />)}
-        {n(5, <QuestionsCard report={report} axis={axis} scopeOf={scopeOf} />)}
-      </div>
-      <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
-        {n(6, <WaitCard report={report} axis={axis} />)}
-        {n(7, <OutcomesCard report={report} axis={axis} />)}
-        {n(8, <ReasonsCard report={report} />)}
-      </div>
-      {/* Below the dashed line are the details to look at when troubleshooting. */}
-      <p className="mt-2 self-start rounded-full bg-ink px-3 text-[12.5px] leading-6 font-black text-white">{text.more}</p>
-      {n(9, <HealthCard report={report} />)}
-      <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
-        {n(10, <ToolsCard report={report} />)}
-        {n(11, <ProcessCard report={report} />)}
-        {n(12, <BusyCard report={report} />)}
-      </div>
+    <div
+      id={`stats-panel-${tab}`}
+      role="tabpanel"
+      className={cn('flex flex-col gap-4', stats.isPlaceholderData && 'opacity-60')}
+      aria-busy={stats.isPlaceholderData || undefined}
+    >
+      {tab === 'usage' && (
+        <>
+          <MetricStrip label={text.kpis.label} items={usageMetrics(report)} />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <OriginsCard report={report} axis={axis} />
+            <WakesCard report={report} scopeOf={scopeOf} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <ContextCard report={report} />
+            <ModelCostCard report={report} />
+          </div>
+        </>
+      )}
+
+      {tab === 'reliability' && (
+        <>
+          <MetricStrip label={text.kpis.label} items={reliabilityMetrics(report)} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <WaitCard report={report} axis={axis} />
+            <OutcomesCard report={report} axis={axis} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ReasonsCard report={report} />
+            <QuestionsCard report={report} scopeOf={scopeOf} />
+          </div>
+        </>
+      )}
+
+      {tab === 'diagnostics' && (
+        <>
+          <HealthCard report={report} scopeOf={scopeOf} />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <ToolsCard report={report} />
+            <ProcessCard report={report} />
+            <BusyCard report={report} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

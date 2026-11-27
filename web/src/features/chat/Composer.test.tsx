@@ -1,12 +1,15 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { Composer, KeyHint } from './Composer'
+import { resetChatDraftsForTest } from './draft-store'
 import { apiUrl, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
+
+afterEach(() => resetChatDraftsForTest())
 
 it('sleep uses the idle busy=false send path, without requiring whenBusy or asking first', async () => {
   const sent: Schemas['SendMessageInput'][] = [], onSent = vi.fn()
@@ -66,8 +69,6 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
   }))
   const view = renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   const box = screen.getByRole('textbox', { name: 'Message' })
-  // When busy, the key hints appear below the input.
-  expect(screen.getByText('to interrupt')).toBeVisible()
   await userEvent.type(box, 'Queue this after{Enter}')
   await waitFor(() => expect(sent).toEqual([{ text: 'Queue this after', whenBusy: 'queue' }]))
   await waitFor(() => expect(box).toHaveValue(''))
@@ -78,79 +79,156 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
   await waitFor(() => expect(sent.at(-1)).toEqual({ text: 'Ctrl works too', whenBusy: 'interrupt' }))
 
   view.rerender(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
-  expect(screen.queryByText('to interrupt')).toBeNull()
   await waitFor(() => expect(box).toHaveValue(''))
   await userEvent.type(box, 'Thought it was idle{Meta>}{Enter}{/Meta}')
   await waitFor(() => expect(sent.slice(-2)).toEqual([{ text: 'Thought it was idle' }, { text: 'Thought it was idle', whenBusy: 'interrupt' }]))
 })
 
-// "Printed sheet" redesign: the input area merges into the bottom of the sheet.
+// Unified floating composer card centered with the conversation stream.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
-it('the input area is a light yellow bar at the bottom of the sheet whose inner column matches the message column up to 1600px and aligns with the 40px turn ruler', () => {
+it('the composer dock floats cleanly on surface-canvas centered in a max-w-[800px] column', () => {
   mountBar()
-  const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')!
-  expect(bar).toHaveClass('bg-tint-yellow', 'border-t-2', 'border-ink')
-  expect(bar).toHaveClass('px-3.5', 'pt-3.5', 'pb-3', 'nav:pt-2.5', 'nav:pb-2', 'nav:pl-6', 'nav:pr-[64px]')
-  const inner = bar.querySelector('[data-chat-bar-inner]')!
-  expect(inner).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]', 'gap-2.5', 'nav:gap-1.5')
+  const bar = screen.getByRole('textbox', { name: 'Message' }).closest('[data-chat-bar]')
+  expect(bar).toHaveClass('bg-surface-canvas')
+  expect(bar).not.toHaveClass('border-t')
+  expect(bar?.querySelector('[data-chat-bar-inner]')).toHaveClass('mx-auto', 'max-w-[800px]')
 })
 
-it('the input has a light paper background and a navy border; the send button is a fluorescent pink round stamp (navy border plus a solid navy shadow)', () => {
+it('the unified card uses surface-elevated with hairline-strong border and subtle focus-within; the send button uses CTA tokens', () => {
   mountBar()
   const editor = screen.getByRole('textbox', { name: 'Message' })
-  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-paper-raised', 'border-2', 'border-ink')
-  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-riso-pink', 'shadow-[3px_3px_0_var(--ink)]')
+  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-surface-elevated', 'border', 'border-hairline-strong', 'rounded-2xl', 'focus-within:border-riso-blue/50')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('size-7', 'rounded-full', 'bg-cta-bg', 'text-cta-fg')
 })
 
-it('when idle the placeholder is “Message <Agent>” and no longer explains the keys', () => {
+it('when idle the placeholder is “Message <Agent>” and keyboard hints stay in button tooltips instead of a permanent footer strip', () => {
   mountBar()
   expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message dev-helper')
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('title', 'Send (Enter)')
+  expect(screen.queryByText('new line')).toBeNull()
 })
 
-it('when idle, the line under the input says Enter to send, Shift + Enter for a new line', () => {
-  mountBar()
-  const hint = screen.getByText('send', { selector: 'span' }).closest('p')!
-  expect(hint).toHaveTextContent('Entersend·Shift + Enternew line')
-  expect(hint.querySelectorAll('kbd')).toHaveLength(2)
-  expect(screen.queryByText('to queue', { selector: 'span' })).toBeNull()
-})
-
-it('when busy, the key hints switch to queue and interrupt, and with an empty input the send button becomes a navy stop button', () => {
+it('when busy with an empty input, shows the compact Stop button inside the toolbar without a permanent key-hint footer', () => {
   mountBar(true)
-  const hint = screen.getByText('to queue', { selector: 'span' }).closest('p')!
-  // The input area writes keys its own way (t.chat.barKeys): in English that is “Enter” as elsewhere. The Chinese “回车” (Enter) is checked
-  // in src/zh-CN/features/chat/Composer.zh.test.tsx.
-  expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')
-  // Left-aligned inside the input area, using the input area's key style.
-  expect(hint).toHaveClass('justify-start', 'text-ink-700')
-  expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
   expect(screen.queryByText('new line')).toBeNull()
   const stop = screen.getByRole('button', { name: 'Stop the current reply' })
-  expect(stop).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-ink', 'text-white')
+  expect(stop).toHaveClass('size-7', 'rounded-full', 'bg-red', 'text-white')
   expect(screen.queryByRole('button', { name: 'Queue' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Interrupt and send' })).toBeNull()
 })
 
-it('the queue tray sits on the top edge of the input, leaving room at the sides for the plus and send buttons', () => {
+it('when busy with a typed draft, keeps the Stop button visible and renders an explicit clickable Interrupt button beside Queue', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  const onStop = vi.fn()
+  server.use(http.post(apiUrl('/agents/busy-agent/messages'), async ({ request }) => {
+    const body = await request.json() as Schemas['SendMessageInput']
+    sent.push(body)
+    const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
+    return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
+  }))
+  renderWithQuery(
+    <Composer
+      agentId="busy-agent"
+      agentName="dev-helper"
+      busy
+      disabled={false}
+      maxMessageBytes={4096}
+      onSent={() => {}}
+      stop={{ onStop, pending: false, retry: false }}
+    />,
+  )
+  const box = screen.getByRole('textbox', { name: 'Message' })
+  await userEvent.type(box, 'Urgent fix')
+  const stopButton = screen.getByRole('button', { name: 'Stop the current reply' })
+  const interruptButton = screen.getByRole('button', { name: 'Interrupt and send' })
+  const queueButton = screen.getByRole('button', { name: 'Queue' })
+  expect(stopButton).toBeEnabled()
+  expect(interruptButton).toBeEnabled()
+  expect(queueButton).toBeEnabled()
+
+  await userEvent.click(stopButton)
+  expect(onStop).toHaveBeenCalledTimes(1)
+
+  await userEvent.click(interruptButton)
+  await waitFor(() => expect(sent).toEqual([{ text: 'Urgent fix', whenBusy: 'interrupt' }]))
+  await waitFor(() => expect(box).toHaveValue(''))
+})
+
+it('preserves per-Agent draft text across unmount/remount and Agent switches, and clears it after sending', async () => {
+  server.use(http.post(apiUrl('/agents/agent-a/messages'), async ({ request }) => {
+    const body = await request.json() as Schemas['SendMessageInput']
+    const run = makeRun({ status: 'starting', endedAt: null })
+    return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
+  }))
+  const first = renderWithQuery(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Half typed for A')
+  first.unmount()
+
+  const second = renderWithQuery(<Composer agentId="agent-b" agentName="beta" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Draft for B')
+  second.unmount()
+
+  const backToA = renderWithQuery(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Half typed for A')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue(''))
+  backToA.unmount()
+
+  renderWithQuery(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('')
+})
+
+it('the queue tray docks directly on top of the unified composer card with no hardcoded side offsets', () => {
   renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="A queued message">Queued · 1</section>} />)
   const slot = screen.getByRole('region', { name: 'A queued message' }).parentElement!
-  // At phone width the tray spans the full row and no longer leaves room at the sides; otherwise it would be too narrow.
-  expect(slot).toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
-  expect(slot).not.toHaveClass('pl-[50px]')
+  expect(slot).not.toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
   expect(slot.nextElementSibling).toContainElement(screen.getByRole('textbox', { name: 'Message' }))
 })
 
-it('the key hints used elsewhere (the task node input) stay as they were: centered, secondary text color, keys on white with a thin border', () => {
+it('switching Agents while a send is in flight clears only the sending Agent draft and keeps the new Agent draft intact', async () => {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  server.use(
+    http.post(apiUrl('/agents/agent-a/messages'), async ({ request }) => {
+      const body = (await request.json()) as Schemas['SendMessageInput']
+      await held
+      const run = makeRun({ status: 'starting', endedAt: null })
+      return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
+    }),
+  )
+  const view = renderWithQuery(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Sending for A')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+  // Switch to Agent B while Agent A's send request is still pending.
+  view.rerender(<Composer agentId="agent-b" agentName="beta" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Draft for B')
+
+  release()
+  await waitFor(() => {
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft for B')
+  })
+
+  // Switching back to Agent A confirms its sent draft was cleared.
+  view.rerender(<Composer agentId="agent-a" agentName="alpha" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('')
+})
+
+it('the key hints used elsewhere (the task node input) stay centered with secondary text and semantic surface-control keys', () => {
   renderWithQuery(<KeyHint />)
   const hint = screen.getByText('to queue', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
-  expect(hint.querySelector('kbd')).toHaveClass('bg-white', 'border-ink/25', 'font-mono')
+  expect(hint.querySelector('kbd')).toHaveClass('bg-surface-control', 'border-hairline-strong', 'font-mono')
   // The key names are also written as before (that they differ from the input area's Chinese “回车” (Enter) is checked in
   // src/zh-CN/features/chat/Composer.zh.test.tsx).
   expect(hint).toHaveTextContent('Enterto queue·Ctrl Enterto interrupt')
 })
 
-it('the input text is 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
+it('the input text is 14px on desktop and 16px on narrow screens (a smaller size makes iOS zoom the page on focus)', () => {
   mountBar()
-  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[15.5px]', 'max-nav:text-base')
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveClass('text-[14px]', 'max-nav:text-base')
 })

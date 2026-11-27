@@ -12,6 +12,23 @@ export const overview = {
   sectionFailed: (section: string) => `${section}加载失败`,
   sectionFailedBody: (reason: string) => `${reason}，其他部分照常显示。`,
   requestId: '请求编号',
+  pendingMore: (count: number) => `展开其余 ${count} 条`,
+  pendingLess: '收起',
+  actions: {
+    import: '导入',
+  },
+  tabs: {
+    label: '概览分区',
+    agents: 'Agent',
+    issues: '24h 异常',
+    usage: '用量',
+  },
+  kpi: {
+    issues: '24h 异常',
+    issuesZero: '无异常',
+    todayTokens: '今日 token',
+    statsLink: '统计',
+  },
   empty: {
     title: '还没有 Agent。',
     body: '新建一个 Agent 后，这里会显示它的运行状态、用量和异常。',
@@ -76,7 +93,8 @@ export const overview = {
     dimensions: { agent: '按 Agent', model: '按模型' },
     total: (range: string) => `${range}合计`,
     parts: { input: '输入', output: '输出', cacheRead: '缓存读取', cacheWrite: '缓存写入' },
-    barNote: '条形长度为输入加输出；合计另含缓存读取与缓存写入。把鼠标放在一行上或用 Tab 聚焦一行查看明细。',
+    barNote: '条形长度按总 token（含输入、输出与缓存）比例显示。把鼠标放在一行上或用 Tab 聚焦一行查看明细。',
+    fullAnalytics: '在统计页查看完整分析',
     detail: (input: string, output: string, cacheRead: string, cacheWrite: string, total: string) =>
       `输入 ${input} · 输出 ${output} · 缓存读取 ${cacheRead} · 缓存写入 ${cacheWrite} · 合计 ${total}`,
     unknownModel: '未知模型',

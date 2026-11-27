@@ -61,6 +61,7 @@ export const agentInbox = {
   all: '全部',
   unreadOnly: '只看未读',
   readonly: '只读查看：打开全文不会改变已读状态',
+  readonlyBadge: '只读',
   // Counts in the stub on the right of the sheet: unread and total (counting only
   // the pages loaded so far; a + follows the numbers until everything is loaded).
   stub: { title: '信件', unread: '未读', all: '全部' },

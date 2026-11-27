@@ -31,31 +31,32 @@ interface QueuePanelProps {
   count: number
   // Already in the server's processing order.
   rows: QueueRow[]
-  // The queue list in the task node panel: more compact rows, collapsible; when collapsed it takes a single line: the total, the
-  // first message's sender and summary, and the expand control.
-  // The caller keeps the expanded state. Omitted for the queue list of an ordinary conversation, which is always expanded.
+  // Optional collapsible behavior: when collapsed it takes a single line with the total, the first message's sender and summary,
+  // and the expand control.
   collapse?: { expanded: boolean; onToggle: () => void }
+  // Show the ordering hint ("Handled in order after the current reply") when expanded. Defaults to true when non-collapsible.
+  showHint?: boolean
 }
 
-// The queue tray attached to the top of the input box: inset a little from the input box, with no bottom border, so the two read as one
-// piece; takes no space when nothing is queued, and a message moves into the conversation flow once it starts running.
-export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
+// The queue tray docked directly on top of the composer card: inset cleanly with mx-4 (matching rounded-2xl) and no bottom border so
+// the two read as one cohesive piece; takes no space when nothing is queued, and a message moves into the conversation flow once it starts running.
+export function QueuePanel({ count, rows, collapse, showHint = collapse === undefined }: QueuePanelProps) {
   const listId = useId()
   if (count === 0 && rows.length === 0) return null
-  const node = collapse !== undefined
-  const collapsed = node && !collapse.expanded
+  const collapsible = collapse !== undefined
+  const collapsed = collapsible && !collapse.expanded
   const first = rows[0]
   return (
     <section
       aria-label={t.chat.queueList.region}
       className={cn(
-        '-mb-0.5 flex min-w-0 flex-col border-[1.5px] border-b-0 border-ink/28 bg-paper-raised',
-        node ? cn('mx-[18px] rounded-t-[12px] pt-0.5', collapsed ? 'pr-1 pb-[3px] pl-2.5' : 'px-1 pb-[5px]') : 'mx-[26px] rounded-t-[14px] px-1.5 pt-[3px] pb-1.5',
+        'mx-4 -mb-0.5 flex min-w-0 flex-col rounded-t-xl border border-b-0 border-hairline-strong bg-surface-subtle',
+        collapsed ? 'py-0.5 pr-1.5 pl-2.5' : 'px-1.5 pt-1 pb-1.5',
       )}
     >
-      <div className={cn('flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-500', node ? (collapsed ? 'min-h-7' : 'min-h-[26px] pl-1.5') : 'h-[22px] px-1.5')}>
-        <h2 className="shrink-0 text-[11.5px] font-black text-ink-700">{t.chat.queueList.title(count)}</h2>
-        {!node && (
+      <div className={cn('flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-500', collapsed ? 'min-h-7' : 'min-h-6 px-1.5')}>
+        <h2 className="shrink-0 text-[11.5px] font-semibold text-ink-700">{t.chat.queueList.title(count)}</h2>
+        {!collapsed && showHint && (
           <>
             <span aria-hidden="true">·</span>
             <span className="min-w-0 truncate">{t.chat.queueList.hint}</span>
@@ -70,7 +71,7 @@ export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
               </>
             )}
             {first.sender && <SenderChip {...first.sender} />}
-            <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-ink-700" title={first.text || undefined}>
+            <span className="min-w-0 truncate text-[12px] leading-[18px] text-ink-700" title={first.text || undefined}>
               {first.text || t.chat.queueList.imagesOnly(first.images.length)}
             </span>
           </p>
@@ -81,7 +82,7 @@ export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
             aria-expanded={collapse.expanded}
             aria-controls={listId}
             onClick={collapse.onToggle}
-            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-bold text-riso-blue hover:bg-tint-blue focus-visible:shadow-focus"
+            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold text-ink-700 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus"
           >
             {collapse.expanded ? t.chat.queueList.collapse : t.chat.queueList.expand}
             {collapse.expanded ? <ChevronDownIcon aria-hidden="true" className="size-3" strokeWidth={2.6} /> : <ChevronUpIcon aria-hidden="true" className="size-3" strokeWidth={2.6} />}
@@ -89,9 +90,9 @@ export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
         )}
       </div>
       {rows.length > 0 && (
-        <ol id={listId} hidden={collapsed} className={cn('flex flex-col overflow-y-auto', node ? 'max-h-32' : 'max-h-48')}>
+        <ol id={listId} hidden={collapsed} className={cn('flex flex-col overflow-y-auto', collapsible ? 'max-h-36' : 'max-h-48')}>
           {rows.map(({ key, ...row }) => (
-            <QueueItem key={key} dense={node} {...row} />
+            <QueueItem key={key} dense={collapsible} {...row} />
           ))}
         </ol>
       )}
@@ -172,7 +173,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
       title={t.chat.queueList.promoteTitle}
       disabled={pending || disabled}
       onClick={onClick}
-      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-ink/35 bg-white px-2 text-xs font-bold whitespace-nowrap text-ink hover:bg-tint-pink-2 focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50"
+      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-full border border-hairline-strong bg-surface-control px-2 text-xs font-semibold whitespace-nowrap text-ink hover:bg-surface-hover focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50"
     >
       <ZapIcon aria-hidden="true" className="size-3 text-pink-text" strokeWidth={2.6} />
       {pending ? t.chat.queueList.promoting : label}
@@ -180,7 +181,7 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
   )
 }
 
-const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-tint-blue hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50'
+const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-surface-hover hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50'
 
 // Edit (✎, only for your own messages) and cancel (×) at the end of a row: edit withdraws this message and puts its text and images back
 // into the input box.
@@ -229,6 +230,8 @@ interface QueueListProps {
   // live.queueSeq when the action started: if a new list arrived before the receipt, don't overwrite it with the stale list in the
   // receipt.
   queueSeq: number
+  // Auto-collapse into a 1-line summary tray when more than one message is queued, expandable on click.
+  collapsible?: boolean
   onReceipt: (receipt: Schemas['AgentQueueActionReceipt'], seq: number) => void
   // Edit: after a successful withdrawal, hand the original text and images to the input box.
   onEdit: (text: string, images: ImageDraft[]) => void
@@ -237,11 +240,17 @@ interface QueueListProps {
 // The queue list of an ordinary conversation, one row per message. Every row can be promoted to an interrupt (except interrupt rows)
 // and cancelled; your own messages can also be edited.
 // The order follows the list returned by the server and queue.updated.
-export function QueueList({ agentId, items, queueSeq, onReceipt, onEdit }: QueueListProps) {
+export function QueueList({ agentId, items, queueSeq, collapsible = false, onReceipt, onEdit }: QueueListProps) {
   const client = useQueryClient()
   const actions = useQueueActions()
   const notice = useQueueNotice()
   const [error, setError] = useState<unknown>(null)
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null)
+  if (items.length <= 1 && expandedOverride !== null) {
+    setExpandedOverride(null)
+  }
+  const canCollapse = collapsible && items.length > 1
+  const expanded = expandedOverride ?? false
 
   const act = async (item: Schemas['QueueItem'], operation: QueueOperation, edit = false) => {
     const row = queueItemKey(item), seq = queueSeq
@@ -304,7 +313,12 @@ export function QueueList({ agentId, items, queueSeq, onReceipt, onEdit }: Queue
   return (
     <>
       <QueueMessages notice={notice.text} error={error} />
-      <QueuePanel count={items.length} rows={rows} />
+      <QueuePanel
+        count={items.length}
+        rows={rows}
+        showHint
+        collapse={canCollapse ? { expanded, onToggle: () => setExpandedOverride(!expanded) } : undefined}
+      />
     </>
   )
 }

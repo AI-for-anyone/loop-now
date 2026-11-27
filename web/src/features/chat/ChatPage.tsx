@@ -89,24 +89,17 @@ export function ChatPage() {
   const turnsBefore = messages.data?.pages.at(-1)?.turnsBefore
   // Total turn count at the bottom of the ruler. When loaded up to the latest, use the number of loaded turns: newly sent messages and
   // newly arrived replies keep counting locally without waiting for a refetch.
-  // While locating, the history isn't loaded up to the latest and later turns aren't in the conversation flow, so use the total from
-  // the API (pages are fetched at different times; take the largest);
-  // turns that start in the meantime only show a new-messages notice and are not added to the total. Some of them are already
-  // counted in the API's total and there's no telling which, so adding them would overcount.
   const turnsTotal =
     turnsBefore === undefined ? undefined : atLatest ? turnsBefore + turns.length : Math.max(...messages.data!.pages.map((page) => page.turnsTotal))
 
   // The located run isn't in the fetched page: it may be a manual compaction (/compact), which has no messages and is not a turn
   // (contract Anomaly.compaction).
-  // In that case fetch the run through the run record API; if it is a manual compaction, show a note where it started.
   const locatedMissing = aroundRun !== null && messages.isSuccess && !turns.some((turn) => turn.run.id === aroundRun)
   const locatedRun = useRunTimeline(agent.id, aroundRun ?? '', locatedMissing, true)
   const compactionRun = locatedMissing && locatedRun.data?.run.compaction ? locatedRun.data.run : null
 
   // Messages and questions the Agent sent you are placed into the conversation by time; the ones you sent it show up as its platform
   // reminder line and aren't repeated.
-  // When replying to a question, remember the original question; once it no longer awaits an answer (answered, expired or closed),
-  // the input box leaves reply mode.
   const consoleMessages = useAgentConsoleMessages(agent.id)
   // An approval question (kind permission) is the request card in the reply that asked, so it is not shown a second time here.
   const toYou = useMemo(() => (consoleMessages.data ?? []).filter((m) => m.from.kind === 'agent' && m.to.kind === 'console' && m.question?.kind !== 'permission'), [consoleMessages.data])
@@ -134,15 +127,10 @@ export function ChatPage() {
   const initialQueue = useAgentQueue(agent.id, !synced)
   const queueItems = synced ? live.queueItems : initialQueue.data?.agentId === agent.id ? initialQueue.data.items : []
   const currentRunId = synced ? live.current?.run.id : status.data?.currentRun?.id
-  // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none. Unknown
-  // while its provider's models are being read, and then images are offered as before.
+  // The model the Agent runs takes no images (a local ACP command's default model, a text-only model): the message box takes none.
   const runModel = useModels(agent.model.provider).data?.models.find((model) => model.id === agent.model.modelId)
   const imagesRefused = runModel !== undefined && !runModel.input.includes('image')
   const phase = live.current ? runPhaseText(live.current.run) : null
-  // Background tasks the next message, or stopping this reply, would stop: the next message restarts the CLI after a settings change;
-  // on some runtimes stopping a reply ends the process.
-  // The runtimes are the ones running now: the tasks' own, and the current reply's (the Agent's runtime may already be set to another for
-  // the next message).
   const runtimes = useRuntimeLookup()
   const runningTasks = synced ? live.backgroundTasks : (status.data?.backgroundTasks ?? [])
   const running = runningTasks.length
@@ -154,7 +142,6 @@ export function ChatPage() {
   const sleep = newerSleep(live, status.data ?? { sleep: null, sleepRevision: 0 }).sleep
 
   // The numbers of the loaded replies that started a running background task, so the list under the message box can name them.
-  // The turns change with every streamed piece of text; the numbers only when one of them changes.
   const numbered =
     turnsBefore === undefined
       ? ''
@@ -181,40 +168,38 @@ export function ChatPage() {
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
   return (
-    // The whole page sits in the sheet: above is the message scroll area (with the ruler in the stub on the right), below is the input
-    // area merged into the bottom of the sheet.
-    // On narrow screens the conversation part gets a fixed height and scrolls with the whole page; the conversation flow still scrolls
-    // inside its own area (loading earlier messages and sticking to the bottom both depend on it).
-    <div className="flex h-full min-h-0 flex-col lg:overflow-hidden">
-      <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-        {/* Notice bars sit above the message area, aligned with the message column and 40px turn ruler. */}
-        <div className="flex shrink-0 flex-col px-3.5 nav:pr-[64px] nav:pl-6 empty:hidden">
-          <div className="mx-auto flex w-full max-w-[1600px] min-w-0 flex-col empty:hidden">
-            {notFound && (
-              <Alert variant="warning" className="mt-3">
-                <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
-              </Alert>
-            )}
-            {aroundRun !== null && (
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
-                <span>{t.timeline.locate.viewing}</span>
-                <span role="status" aria-live="polite">
-                  {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
-                </span>
-                <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
-                  {t.timeline.locate.backToLatest}
-                </Button>
-              </div>
-            )}
-          </div>
+    // The whole page sits in the sheet: above is the centered 800px message stream (with the floating PrecisionRuler overlay on the right),
+    // below is the floating unified composer card.
+    // On narrow screens (below nav: 901px) the conversation gets a fixed viewport height and scrolls with the whole page;
+    // at nav: and wider it locks cleanly to the viewport height matching AppLayout's nav:h-screen.
+    <div className="flex h-full min-h-0 flex-col nav:overflow-hidden">
+      <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col nav:h-auto nav:min-h-0 nav:flex-1 nav:shrink">
+        {/* Notice bars sit above the message area, centered with the conversation column. */}
+        <div className="mx-auto flex w-full max-w-[800px] shrink-0 flex-col px-4 sm:px-6 empty:hidden">
+          {notFound && (
+            <Alert variant="warning" className="mt-4">
+              <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
+            </Alert>
+          )}
+          {aroundRun !== null && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket border border-hairline bg-surface-subtle px-4 py-2 text-[13px] font-semibold">
+              <span>{t.timeline.locate.viewing}</span>
+              <span role="status" aria-live="polite">
+                {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
+              </span>
+              <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
+                {t.timeline.locate.backToLatest}
+              </Button>
+            </div>
+          )}
         </div>
-        <div className="min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col">
           {messages.isError && !(aroundRun !== null && isNotFound(messages.error)) ? (
-            <ErrorAlert error={messages.error} className="mx-3.5 mt-4 w-auto nav:mx-6" />
+            <ErrorAlert error={messages.error} className="mx-auto mt-6 w-full max-w-[800px] px-4 sm:px-6" />
           ) : (
             <MessageList
               // Locating mode and normal mode each have their own scroll state, which starts over when switching.
-              key={aroundRun ?? 'latest'}
+              key={`${agent.id}:${aroundRun ?? 'latest'}`}
               agent={agent}
               folder={replyFolder}
               turns={turns}
@@ -256,6 +241,7 @@ export function ChatPage() {
                 agentId={agent.id}
                 items={queueItems}
                 queueSeq={live.queueSeq}
+                collapsible
                 onReceipt={recordQueueAction}
                 onEdit={(text, images) => composer.current?.refill(text, images)}
               />
@@ -272,29 +258,31 @@ export function ChatPage() {
           stopAlso={stopAlso}
           stop={currentRunId ? stop.control(currentRunId, (receipt) => recordQueueAction(receipt, live.queueSeq)) : undefined}
           status={
-            // Busy hint: a fluorescent pink dot with a navy outline, no background fill.
+            // Visually quiet (header status + composer placeholder + stop button already convey busy state); kept accessible via role="status".
             busy && (
-              <span role="status" className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink">
-                <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
+              <span role="status" className="sr-only">
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
             )
           }
           connection={
-            <span
-              role="status"
-              aria-live="polite"
-              className={cn(
-                'inline-flex items-center gap-1.5 text-[12px] font-black',
-                connection === 'open' ? 'text-green-text' : connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
-              )}
-            >
+            // Surface only degraded connection states (connecting / reconnecting); omit permanent "Live" noise when healthy.
+            connection !== 'open' ? (
               <span
-                aria-hidden="true"
-                className={cn('size-[7px] shrink-0 rounded-full', connection === 'open' ? 'bg-green' : connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
-              />
-              {t.chat.connection[connection]}
-            </span>
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-[11.5px] font-semibold',
+                  connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn('size-1.5 shrink-0 rounded-full', connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
+                />
+                {t.chat.connection[connection]}
+              </span>
+            ) : undefined
           }
         />
       </div>

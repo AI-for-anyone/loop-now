@@ -1,5 +1,6 @@
 import { app, BrowserWindow, screen, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
+import type { ResolvedAppearance } from './appearance'
 import { classifyNavigation, handOffOnce } from './links'
 import { current, windowChrome, type PlatformId } from './platform'
 
@@ -26,9 +27,11 @@ type Options = {
   onAction: (action: StatusAction) => void
   note: (text: string) => void
   platform?: PlatformId
+  appearance?: ResolvedAppearance
 }
 
 const statusPage = join(__dirname, '..', 'static', 'status.html')
+const defaultAppearance: ResolvedAppearance = { skin: 'mono', theme: 'light', backgroundColor: '#FFFFFF' }
 
 // The single main window: loads the console the server serves, and shows the status page until the server is ready.
 export class MainWindow {
@@ -37,9 +40,16 @@ export class MainWindow {
   private consoleURL: string | undefined
   // Whether the user has opened the window yet (false before the first show in a background start).
   private opened: boolean
+  private appearance: ResolvedAppearance
 
   constructor(private readonly o: Options) {
     this.opened = !o.background
+    this.appearance = o.appearance ?? defaultAppearance
+  }
+
+  setAppearance(appearance: ResolvedAppearance): void {
+    this.appearance = appearance
+    if (this.win && !this.win.isDestroyed()) this.win.setBackgroundColor(appearance.backgroundColor)
   }
 
   get showingConsole(): boolean {
@@ -69,7 +79,12 @@ export class MainWindow {
   showStatus(view: StatusView): void {
     const win = this.ensure()
     this.consoleURL = undefined
-    const query: Record<string, string> = { title: view.title, body: view.body }
+    const query: Record<string, string> = {
+      title: view.title,
+      body: view.body,
+      skin: this.appearance.skin,
+      theme: this.appearance.theme,
+    }
     if (view.log) query.log = view.log
     if (view.actions) Object.assign(query, view.actions)
     if (view.busy) query.busy = '1'
@@ -118,7 +133,7 @@ export class MainWindow {
       // In development, the Windows window icon comes from the exe (Electron's); once packaged, the exe carries the app's icon. It is given
       // again here so the taskbar and the title bar both use it.
       icon: join(__dirname, '..', 'assets', 'icon.png'),
-      backgroundColor: '#FBF9F4',
+      backgroundColor: this.appearance.backgroundColor,
       webPreferences: {
         contextIsolation: true,
         sandbox: true,

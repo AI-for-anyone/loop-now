@@ -69,15 +69,15 @@ function Tip({ id, x, width, title, rows }: { id: string; x: number; width: numb
     <div
       id={id}
       role="tooltip"
-      className="pointer-events-none absolute top-1 z-10 flex min-w-[120px] flex-col gap-0.5 rounded-input bg-ink px-3 py-2 text-[12px] leading-[1.5] whitespace-nowrap text-white shadow-[3px_3px_0_var(--riso-pink)]"
+      className="pointer-events-none absolute top-1 z-10 flex min-w-[120px] flex-col gap-0.5 rounded-input bg-tooltip-bg px-3 py-2 text-[12px] leading-[1.5] whitespace-nowrap text-tooltip-fg shadow-floating"
       style={{ left: x, transform: shift }}
     >
-      <span className="font-bold text-white/75">{title}</span>
+      <span className="font-semibold text-tooltip-muted">{title}</span>
       {rows.map((row) => (
         <span key={row.label} className="flex items-center gap-2">
           {row.color && <span aria-hidden="true" className="h-0.5 w-3 shrink-0" style={{ background: row.color }} />}
           <b className="tabular-nums">{row.value}</b>
-          <span className="text-white/80">{row.label}</span>
+          <span className="text-tooltip-muted">{row.label}</span>
         </span>
       ))}
     </div>
@@ -228,7 +228,7 @@ export function StackedColumns({
             </g>
           )
         })}
-        <line data-baseline x1={left} x2={left + plotW} y1={top + plotH} y2={top + plotH} stroke="var(--ink)" strokeWidth={2} />
+        <line data-baseline x1={left} x2={left + plotW} y1={top + plotH} y2={top + plotH} stroke="var(--hairline-strong)" strokeWidth={1} />
         {labels.map((text, i) => {
           const x = left + slot * i + (slot - barW) / 2
           const parts = series.map((s) => ({ key: s.key, color: s.color, value: s.values[i] ?? 0 })).filter((part) => part.value > 0)
@@ -236,7 +236,7 @@ export function StackedColumns({
           const stackH = parts.reduce((sum, part) => sum + Math.max(part.value * scale, 1), 0)
           return (
             <g key={i} opacity={active !== null && active !== i ? 0.45 : 1}>
-              {/* Redesign: the segments are stacked flush against each other, with a 2px navy outline around the whole bar. */}
+              {/* Segments are stacked flush against each other; Plate skin draws a 2px ink outline around the whole bar. */}
               {parts.map((part) => {
                 const h = Math.max(part.value * scale, 1)
                 const y = top + plotH - base * scale - h
@@ -244,7 +244,7 @@ export function StackedColumns({
                 return <rect key={part.key} x={x} y={y} width={barW} height={h} fill={part.color} />
               })}
               {parts.length > 0 && (
-                <rect data-column-outline x={x} y={top + plotH - stackH} width={barW} height={stackH} fill="none" stroke="var(--ink)" strokeWidth={2} />
+                <rect data-column-outline x={x} y={top + plotH - stackH} width={barW} height={stackH} fill="none" stroke="var(--chart-bar-stroke)" strokeWidth={2} />
               )}
               {showTops && totals[i] > 0 && (
                 <text x={cx(i)} y={top + plotH - totals[i] * scale - 5} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--ink)">
@@ -367,12 +367,12 @@ export function LineChart({
         {active !== null &&
           series.map((s, j) => {
             const p = points[j][active]
-            return p && <circle key={s.key} cx={p.x} cy={p.y} r={4} fill={s.color} stroke="#FFFFFF" strokeWidth={2} />
+            return p && <circle key={s.key} cx={p.x} cy={p.y} r={4} fill={s.color} stroke="var(--chart-point-stroke)" strokeWidth={2} />
           })}
         {active === null &&
           endMarks.map((mark) => (
             <g key={mark.key}>
-              <circle cx={mark.x} cy={mark.y} r={4.5} fill={mark.color} stroke="#FFFFFF" strokeWidth={2} />
+              <circle cx={mark.x} cy={mark.y} r={4.5} fill={mark.color} stroke="var(--chart-point-stroke)" strokeWidth={2} />
               <text x={mark.x - 2} y={mark.below ? mark.y + 17 : mark.y - 9} textAnchor="end" fontSize={11.5} fontWeight={700} fill="var(--ink)">
                 {mark.text}
               </text>
@@ -380,7 +380,7 @@ export function LineChart({
           ))}
         {active === null && peak && series[0] && series[0].values[peak.index] !== null && (
           <g>
-            <circle cx={x(peak.index)} cy={y(series[0].values[peak.index]!)} r={4.5} fill={series[0].color} stroke="#FFFFFF" strokeWidth={2} />
+            <circle cx={x(peak.index)} cy={y(series[0].values[peak.index]!)} r={4.5} fill={series[0].color} stroke="var(--chart-point-stroke)" strokeWidth={2} />
             <text x={x(peak.index)} y={y(series[0].values[peak.index]!) - 10} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--ink)">
               {peak.text}
             </text>
