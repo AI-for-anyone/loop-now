@@ -4,6 +4,16 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
+## v0.3.5
+
+The console has a new look: one modern layout with a centered conversation column, a command palette (⌘K / Ctrl+K), a sidebar you can collapse and resize, and compact page headers. Appearance settings switch between light, dark, following the system, and the classic Risograph colors, and the desktop window and start screen follow the choice. The desktop app has a new icon. Everything added in v0.3.3 and v0.3.4 stays. No database migrations this time.
+
+### Refreshed console interface with light, dark, and Risograph themes (#110)
+
+- Redesigned the console with a unified modern layout, centered conversation column, command palette (`⌘K`/`Ctrl+K`), collapsible and resizable sidebar, and compact page headers.
+- Added Appearance settings to switch between the default light/dark/system theme and the classic Risograph color theme, synced with the desktop window and cold-start screen.
+- Preserved all recent console features including reply images, composer-bar background tasks, compact task lists, and unified monochrome runtime marks.
+
 ## v0.3.4
 
 Pictures show up in replies: a picture an Agent puts in its reply, or names by its path, is a thumbnail you can open. The console wastes less room: page bodies use the whole window, the Agent page header is one thin bar, the sidebar can be dragged wider and keeps each Agent on one line, the task list takes one line per task, and every runtime mark is one color in one frame. The run record says what each tool did, files up to 20 MiB can be previewed, and a task step waits for all of its CLI's background work. No database migrations this time.
