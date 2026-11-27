@@ -392,8 +392,8 @@ func TestHostOriginAndCORS(t *testing.T) {
 		t.Errorf("a local request without Origin should pass: %d", r.StatusCode)
 	}
 	r = send("GET", "/api/v1/health", "http://localhost:5173", "", nil)
-	if r.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || r.Header.Get("Access-Control-Expose-Headers") != "ETag, Loop-Now-Request-Id, Loop-Now-Version, Content-Disposition" {
-		t.Errorf("responses to an allowed origin should expose ETag, the request headers and the download file name: %v", r.Header)
+	if r.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || r.Header.Get("Access-Control-Expose-Headers") != "ETag, Loop-Now-Request-Id, Loop-Now-Version, Content-Disposition, Content-Length" {
+		t.Errorf("responses to an allowed origin should expose ETag, the request headers, Content-Disposition and Content-Length: %v", r.Header)
 	}
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
 		t.Errorf("/healthz should be available: %d", r.StatusCode)

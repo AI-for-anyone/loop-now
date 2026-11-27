@@ -93,6 +93,22 @@ func TestFolderRawFile(t *testing.T) {
 	}
 	checkRawHeaders(t, "range", h)
 
+	// HEAD probes on raw files return Content-Length without a body so file cards can display sizes.
+	headReq, err := http.NewRequest("HEAD", e.srv.URL+"/api/v1"+base+"/raw/site/style.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headResp, err := (&http.Client{}).Do(headReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headBody, _ := io.ReadAll(headResp.Body)
+	headResp.Body.Close()
+	if headResp.StatusCode != 200 || len(headBody) != 0 || headResp.Header.Get("Content-Length") != "15" {
+		t.Fatalf("HEAD raw: %d len=%d content-length=%q", headResp.StatusCode, len(headBody), headResp.Header.Get("Content-Length"))
+	}
+	checkRawHeaders(t, "head", headResp.Header)
+
 	// Path rules, each answer sandboxed too.
 	for _, c := range []struct {
 		path string
