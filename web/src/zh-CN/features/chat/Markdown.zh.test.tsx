@@ -179,4 +179,68 @@ describe('Markdown rendering and safety', () => {
     const dialog = await screen.findByRole('dialog', { name: 'concept-1.svg' })
     expect(within(dialog).getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', folder.rawURL!('assets/mascot/svg-concepts/concept-1.svg'))
   })
+
+  it('renders file cards with Chinese kind labels, missing-file text, tooltips, and collapse button', async () => {
+    const root = '/Users/Shared/loop-now-desktop/default/agents/01a217ac/workspace'
+    const sizes: Record<string, number> = {
+      'pelican-night-ride.html': 18 * 1024,
+      'night-market-report.pdf': Math.round(1.2 * 1024 * 1024),
+      'README.md': 3 * 1024,
+      'night-market-sales-2026-11.csv': 96 * 1024,
+      'build-output.zip': Math.round(2.4 * 1024 * 1024),
+      'extra-1.txt': 1024,
+      'extra-2.txt': 2048,
+      'extra-3.txt': 3072,
+    }
+    server.use(
+      http.head(apiUrl('/agents/a1/folder/raw/*'), ({ request }) => {
+        const rel = new URL(request.url).pathname.split('/folder/raw/')[1] ?? ''
+        const size = sizes[rel]
+        if (size === undefined) return new HttpResponse(null, { status: 404 })
+        return new HttpResponse(null, { status: 200, headers: { 'Content-Length': String(size) } })
+      }),
+    )
+    const folder: ReplyFolderContext = {
+      roots: [root],
+      rootsReady: true,
+      contentURL: (rel) => apiUrl(`/agents/a1/folder/content?${new URLSearchParams({ path: rel })}`),
+      rawURL: (rel) => apiUrl(`/agents/a1/folder/raw/${rel.split('/').map(encodeURIComponent).join('/')}`),
+      folderLink: (rel) => `/p/loop-now/agents/a1/folder?${new URLSearchParams({ path: rel })}`,
+      checkDirectory: async () => 'not-dir',
+      maxBytes: 20 << 20,
+    }
+    const reply = [
+      `夜市画面已经画好：[打开动画](${root}/pelican-night-ride.html)，报告见 \`night-market-report.pdf\`。`,
+      '',
+      '```text',
+      `${root}/pelican-night-ride.html`,
+      '```',
+      '',
+      `已删除：[pelican-bike.html](${root}/pelican-bike.html)`,
+      '',
+      '全部附件：[README](README.md) [表格](night-market-sales-2026-11.csv) [压缩包](build-output.zip) [一](extra-1.txt) [二](extra-2.txt) [三](extra-3.txt) [四](missing-7.md)',
+    ].join('\n')
+
+    const user = userEvent.setup()
+    const { container } = render(<Markdown folder={folder} text={reply} />)
+
+    await waitFor(() => expect(container.querySelector('[data-md-file-card="pelican-night-ride.html"]')).toHaveTextContent('网页 · 18 KB'))
+    expect(container.querySelector('pre')).toBeNull()
+    expect(container.querySelector('[data-md-file-card="night-market-report.pdf"]')).toHaveTextContent('PDF · 1.2 MB')
+    const missingCard = container.querySelector<HTMLElement>('[data-md-file-card="pelican-bike.html"]')!
+    expect(missingCard).toHaveAttribute('data-md-file-card-state', 'missing')
+    expect(missingCard).toHaveTextContent('已不在文件夹里')
+
+    const pelicanCard = container.querySelector<HTMLElement>('[data-md-file-card="pelican-night-ride.html"]')!
+    expect(within(pelicanCard).getByRole('link', { name: '在文件夹中显示' })).toHaveAttribute('href', folder.folderLink!('pelican-night-ride.html'))
+    expect(within(pelicanCard).getByRole('link', { name: '新标签页打开' })).toHaveAttribute('href', folder.rawURL!('pelican-night-ride.html'))
+
+    // Third block has 7 cards -> shows 6 plus "还有 1 个文件".
+    await waitFor(() => expect(container.querySelector('[data-md-file-card="README.md"]')).toHaveTextContent('Markdown · 3 KB'))
+    expect(container.querySelector('[data-md-file-card="night-market-sales-2026-11.csv"]')).toHaveTextContent('表格 · 96 KB')
+    expect(container.querySelector('[data-md-file-card="build-output.zip"]')).toHaveTextContent('压缩包 · 2.4 MB')
+    const more = screen.getByRole('button', { name: '还有 1 个文件' })
+    await user.click(more)
+    expect(container.querySelector('[data-md-file-card="missing-7.md"]')).toHaveTextContent('已不在文件夹里')
+  })
 })

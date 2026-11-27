@@ -8,12 +8,13 @@ import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethr
 import remarkGfm from 'remark-gfm'
 import { ImagePreviewDialog } from '@/features/images/ImagePreview'
 import { cn } from '@/lib/utils'
+import { FileCardList, LocalFileCardStrip } from './FileCards'
 import { MermaidBlock } from './MermaidBlock'
 import { createLocalProbeStore, useLocalEntryStatus, type LocalProbeStore } from './local-files'
 import { useLocalFolderImage, useLocalFolderImages, type ReplyFolderContext } from './local-images'
 import { rehypeImageRows } from './rehype-image-rows'
 import { rehypeLeadLabel } from './rehype-lead-label'
-import { rehypeLocalFiles } from './rehype-local-files'
+import { rehypeLocalFiles, type FileCardCandidate } from './rehype-local-files'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
@@ -43,12 +44,46 @@ function codeLanguage(node: ExtraProps['node']): string | null {
   return language ? language.slice('language-'.length) : null
 }
 
+type MarkdownCodeBlockProps = ComponentProps<'pre'> & ExtraProps & {
+  'data-md-fenced-file'?: string
+  'data-md-fenced-certain'?: string
+  'data-md-fenced-duplicate'?: string
+}
+
+function FencedPathCodeBlock({
+  relativePath,
+  certain,
+  duplicate,
+  language,
+  preProps,
+}: {
+  relativePath: string
+  certain: boolean
+  duplicate: boolean
+  language: string | null
+  preProps: ComponentProps<'pre'>
+}) {
+  const folder = useContext(ReplyFolder)
+  const { streaming } = useContext(MarkdownSource)
+  const store = useContext(ProbeStore)
+  const status = useLocalEntryStatus(folder, relativePath, false, streaming, store)
+
+  if (!streaming && status !== 'loading' && folder) {
+    if (status.kind === 'file' && folder.rawURL) {
+      if (duplicate) return null
+      return <FileCardList cards={[{ relativePath, state: 'ready', size: status.size }]} folder={folder} />
+    }
+    if (status.kind === 'missing' && certain) {
+      if (duplicate) return null
+      return <FileCardList cards={[{ relativePath, state: 'missing' }]} folder={folder} />
+    }
+  }
+  return <PlainCodeBlock language={language} preProps={preProps} />
+}
+
 // Code block: semantic code surface with hairline border (Plate keeps riso blue with halftone dots and pink print shadow).
 // What gets copied is taken from the rendered text, i.e. the original code, without highlighting markup.
-function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
-  const { text, streaming } = useContext(MarkdownSource)
-  const language = codeLanguage(allProps.node)
-  const props = withoutNode(allProps)
+function PlainCodeBlock({ language, preProps }: { language: string | null; preProps: ComponentProps<'pre'> }) {
   const ref = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
   const copy = async () => {
@@ -56,15 +91,6 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
     if (!ok) return
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
-  }
-  if (language?.toLowerCase() === 'mermaid') {
-    const node = allProps.node
-    const original = text.slice(node?.position?.start.offset, node?.position?.end.offset)
-    const lines = original.split(/\r?\n/)
-    const opening = lines[0]?.match(/^\s*(?:>\s*)?(`{3,}|~{3,})/)
-    const last = lines.at(-1)?.trim() ?? ''
-    const closed = opening !== null && opening !== undefined && lines.length > 1 && new RegExp(`^${opening[1][0]}{${opening[1].length},}\\s*$`).test(last.replace(/^>\s*/, ''))
-    return <MermaidBlock source={nodeText(node).replace(/\n$/, '') + '\n'} pending={streaming && !closed} />
   }
   return (
     <div className="min-w-0 overflow-hidden rounded-card border border-code-border bg-code-bg text-code-fg">
@@ -78,9 +104,41 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
           {copied ? t.common.copied : t.chat.copyCode}
         </button>
       </div>
-      <pre ref={ref} {...props} />
+      <pre ref={ref} {...preProps} />
     </div>
   )
+}
+
+function CodeBlock(allProps: MarkdownCodeBlockProps) {
+  const { text, streaming } = useContext(MarkdownSource)
+  const language = codeLanguage(allProps.node)
+  const {
+    'data-md-fenced-file': fencedFile,
+    'data-md-fenced-certain': fencedCertain,
+    'data-md-fenced-duplicate': fencedDuplicate,
+    ...props
+  } = withoutNode(allProps)
+  if (language?.toLowerCase() === 'mermaid') {
+    const node = allProps.node
+    const original = text.slice(node?.position?.start.offset, node?.position?.end.offset)
+    const lines = original.split(/\r?\n/)
+    const opening = lines[0]?.match(/^\s*(?:>\s*)?(`{3,}|~{3,})/)
+    const last = lines.at(-1)?.trim() ?? ''
+    const closed = opening !== null && opening !== undefined && lines.length > 1 && new RegExp(`^${opening[1][0]}{${opening[1].length},}\\s*$`).test(last.replace(/^>\s*/, ''))
+    return <MermaidBlock source={nodeText(node).replace(/\n$/, '') + '\n'} pending={streaming && !closed} />
+  }
+  if (fencedFile !== undefined) {
+    return (
+      <FencedPathCodeBlock
+        relativePath={fencedFile}
+        certain={fencedCertain === '1'}
+        duplicate={fencedDuplicate === '1'}
+        language={language}
+        preProps={props}
+      />
+    )
+  }
+  return <PlainCodeBlock language={language} preProps={props} />
 }
 
 type LocalOrigin = 'link' | 'code-certain' | 'code-maybe' | 'bare-certain' | 'bare-maybe'
@@ -409,12 +467,53 @@ function LocalImageStrip({ paths, inline }: { paths: string[]; inline: boolean }
   )
 }
 
-type MarkdownDivProps = ComponentProps<'div'> & ExtraProps & { 'data-md-local-strip'?: string; 'data-md-local-strip-inline'?: string }
+function parseFileCardCandidates(raw: string): FileCardCandidate[] {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (item): item is FileCardCandidate =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as Record<string, unknown>).relativePath === 'string' &&
+        typeof (item as Record<string, unknown>).certain === 'boolean',
+    )
+  } catch {
+    return []
+  }
+}
+
+type MarkdownDivProps = ComponentProps<'div'> & ExtraProps & {
+  'data-md-local-strip'?: string
+  'data-md-local-strip-inline'?: string
+  'data-md-file-cards'?: string
+  'data-md-file-cards-inline'?: string
+}
 
 function MarkdownDiv(allProps: MarkdownDivProps) {
-  const { 'data-md-local-strip': strip, 'data-md-local-strip-inline': inlineAttr, ...props } = withoutNode(allProps)
+  const folder = useContext(ReplyFolder)
+  const { streaming } = useContext(MarkdownSource)
+  const store = useContext(ProbeStore)
+  const {
+    'data-md-local-strip': strip,
+    'data-md-local-strip-inline': inlineAttr,
+    'data-md-file-cards': fileCards,
+    'data-md-file-cards-inline': fileCardsInline,
+    ...props
+  } = withoutNode(allProps)
   if (strip !== undefined) {
     return <LocalImageStrip paths={parseStripPaths(strip)} inline={inlineAttr !== undefined} />
+  }
+  if (fileCards !== undefined) {
+    return (
+      <LocalFileCardStrip
+        candidates={parseFileCardCandidates(fileCards)}
+        folder={folder}
+        streaming={streaming}
+        store={store}
+        inline={fileCardsInline !== undefined}
+      />
+    )
   }
   return <div {...props} />
 }
@@ -517,19 +616,29 @@ function rehypePrefixFootnoteLabel(prefix: string) {
 const TEXT_BLOCKS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 const CONTAINERS = new Set(['ul', 'ol', 'li', 'blockquote'])
 
+const isAttachmentStrip = (node: HastNode) =>
+  node.type === 'element' &&
+  node.tagName === 'div' &&
+  (node.properties?.dataMdFileCards !== undefined || node.properties?.dataMdLocalStrip !== undefined)
+
 // Insert the output cursor at the end of the last paragraph of text (searching inward through lists and blockquotes), on the same
 // line as the text; when the last block is a code block, table or the like, put it after that block.
 function rehypeCursor() {
   return (tree: HastNode) => {
     let parent = tree
     for (;;) {
-      const last = parent.children?.findLast((child) => child.type === 'element' || (child.type === 'text' && child.value?.trim()))
+      const last = parent.children?.findLast(
+        (child) => (!isAttachmentStrip(child) && child.type === 'element') || (child.type === 'text' && child.value?.trim()),
+      )
       if (last?.type !== 'element' || !last.tagName || !(TEXT_BLOCKS.has(last.tagName) || CONTAINERS.has(last.tagName))) break
       parent = last
       if (TEXT_BLOCKS.has(last.tagName)) break
     }
     const cursor: HastNode = { type: 'element', tagName: 'span', properties: { ariaHidden: 'true', className: cursorClass.split(' ') }, children: [] }
-    parent.children = [...(parent.children ?? []), cursor]
+    const existing = parent.children ?? []
+    let insertAt = existing.length
+    while (insertAt > 0 && isAttachmentStrip(existing[insertAt - 1]!)) insertAt--
+    parent.children = [...existing.slice(0, insertAt), cursor, ...existing.slice(insertAt)]
   }
 }
 

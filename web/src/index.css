@@ -411,6 +411,186 @@
   .markdown .md-image-caption strong {
     @apply text-ink;
   }
+  /* Reply file cards: ChatGPT-style compact cards below blocks that name files in the Agent or task node folder. */
+  .markdown .md-file-cards-wrap {
+    container-type: inline-size;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .markdown .md-file-cards-wrap[data-inline] {
+    margin-top: 6px;
+  }
+  .markdown .md-file-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .markdown .md-file-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 300px;
+    max-width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    padding: 8px 10px 8px 8px;
+    background-color: var(--surface-elevated);
+    color: var(--ink);
+    transition: background-color 120ms ease;
+  }
+  @container (max-width: 480px) {
+    .markdown .md-file-card {
+      width: 100%;
+    }
+  }
+  .markdown .md-file-card:not([data-md-file-card-state='missing']):hover,
+  .markdown .md-file-card:not([data-md-file-card-state='missing']):focus-within {
+    background-color: var(--surface-hover);
+  }
+  .markdown .md-file-card:has(> .md-file-card-main:focus-visible) {
+    box-shadow: var(--focus-ring);
+  }
+  .markdown a.md-file-card-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+    color: inherit;
+    font-weight: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+  }
+  .markdown a.md-file-card-main::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+  }
+  .markdown a.md-file-card-main:focus-visible {
+    box-shadow: none;
+  }
+  .markdown .md-file-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+  .markdown .md-file-card-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: #ffffff;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .markdown .md-file-card-meta {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .markdown .md-file-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .markdown .md-file-card-sub {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--ink-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .markdown .md-file-card-actions {
+    position: relative;
+    z-index: 1;
+    display: none;
+    align-items: center;
+    gap: 2px;
+    flex: none;
+  }
+  .markdown .md-file-card:hover .md-file-card-actions,
+  .markdown .md-file-card:focus-within .md-file-card-actions,
+  .markdown .md-file-card[data-focused='true'] .md-file-card-actions {
+    display: flex;
+  }
+  .markdown a.md-file-card-action {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-500);
+    font-weight: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .markdown a.md-file-card-action:hover,
+  .markdown a.md-file-card-action:focus-visible {
+    background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
+  }
+  .markdown a.md-file-card-action:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
+  .markdown a.md-file-card-action svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .markdown .md-file-card[data-md-file-card-state='missing'] {
+    cursor: default;
+  }
+  .markdown .md-file-card[data-md-file-card-state='missing'] .md-file-card-icon {
+    background-color: var(--file-card-gone-icon);
+  }
+  .markdown .md-file-card[data-md-file-card-state='missing'] .md-file-card-name {
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+  .markdown .md-file-cards-more {
+    margin-top: 8px;
+    display: inline-flex;
+    height: 32px;
+    align-items: center;
+    border: 1px solid var(--hairline);
+    border-radius: 9999px;
+    background-color: var(--surface-elevated);
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-700);
+    cursor: pointer;
+    outline: none;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .markdown .md-file-cards-more:hover {
+    background-color: var(--surface-hover);
+    color: var(--ink);
+  }
+  .markdown .md-file-cards-more:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
 }
 
 .hljs-emphasis {

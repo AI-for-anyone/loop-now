@@ -57,7 +57,8 @@ describe('Local folder links and images in regular chat, task nodes, and Inbox',
         }),
         http.head(apiUrl(`/agents/${agent.id}/folder/raw/*`), ({ request }) => {
           const rel = new URL(request.url).pathname.split('/folder/raw/')[1] ?? ''
-          if (rel === 'pelican-night-ride.html' || rel === 'assets/banner.png' || rel === 'assets/mascot/concept.svg') {
+          if (rel === 'pelican-night-ride.html') return new HttpResponse(null, { status: 200, headers: { 'Content-Length': '18432' } })
+          if (rel === 'assets/banner.png' || rel === 'assets/mascot/concept.svg') {
             return new HttpResponse(null, { status: 200 })
           }
           if (rel === 'assets/mascot') return new HttpResponse(null, { status: 422 })
@@ -65,7 +66,7 @@ describe('Local folder links and images in regular chat, task nodes, and Inbox',
         }),
         http.get(apiUrl(`/agents/${agent.id}/folder/entries`), ({ request }) => {
           const dir = new URL(request.url).searchParams.get('path') ?? ''
-          if (dir === '') return HttpResponse.json({ path: '', entries: [entry('assets', 'dir')], nextCursor: null })
+          if (dir === '') return HttpResponse.json({ path: '', entries: [entry('assets', 'dir'), entry('pelican-night-ride.html', 'file', 18432)], nextCursor: null })
           if (dir === 'assets') return HttpResponse.json({ path: 'assets', entries: [entry('assets/mascot', 'dir'), entry('assets/banner.png', 'file')], nextCursor: null })
           if (dir === 'assets/mascot') return HttpResponse.json({ path: 'assets/mascot', entries: [entry('assets/mascot/concept.svg', 'file', SVG.length)], nextCursor: null })
           return new HttpResponse(null, { status: 404 })
@@ -98,6 +99,15 @@ describe('Local folder links and images in regular chat, task nodes, and Inbox',
     expect(screen.getByText('Secret').closest('[title]')).toHaveAttribute('title', 'Outside this folder; cannot be opened')
     expect(screen.getByText('/etc/secret.png').closest('[title]')).toHaveAttribute('title', 'Outside this folder; cannot be opened')
     await waitFor(() => expect(screen.getByText('Deleted').closest('[title]')).toHaveAttribute('title', 'This file no longer exists in the folder'))
+
+    // Non-image files produce file cards (missing file shows a gray card; images keep thumbnails without cards).
+    expect(await screen.findByRole('link', { name: 'pelican-night-ride.html, Web page · 18 KB, open in new tab' })).toHaveAttribute(
+      'href',
+      agentFolderRawURL(agent.id, 'pelican-night-ride.html'),
+    )
+    expect(document.querySelector('[data-md-file-card="gone.html"]')).toHaveAttribute('data-md-file-card-state', 'missing')
+    expect(document.querySelector('[data-md-file-card="assets/banner.png"]')).toBeNull()
+    expect(document.querySelector('[data-md-file-card="assets/mascot/concept.svg"]')).toBeNull()
 
     await user.click(svgButton)
     const dialog = await screen.findByRole('dialog', { name: 'concept.svg' })
