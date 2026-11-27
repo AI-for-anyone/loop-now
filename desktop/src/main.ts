@@ -136,10 +136,11 @@ function run(): void {
             settings,
             strings,
             showDialog: (options) => dialog.showMessageBox(win, options),
+            answered: () => !win.isDestroyed() && !quitting,
             note,
           })
         },
-        isAlive: () => !win.isDestroyed(),
+        isAlive: () => !win.isDestroyed() && !quitting,
       }),
     quitting: () => quitting,
     note,

@@ -830,6 +830,62 @@ describe('Installing the command line tool', () => {
     assert.equal(second, 'skipped_already_prompted')
   })
 
+  test('First-launch prompt: quitting or closing the window while the prompt is open does not record cliPrompted, so the next launch asks again', async () => {
+    const { file, sf } = freshSettings()
+    let quitting = false
+    let shownCount = 0
+    const interrupted = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => !quitting,
+      showDialog: async () => {
+        shownCount++
+        // App starts quitting while the dialog is open, causing Electron to resolve showMessageBox with cancelId (1).
+        quitting = true
+        return { response: 1 }
+      },
+    })
+    assert.equal(interrupted, 'interrupted')
+    assert.equal(shownCount, 1)
+    assert.equal(new SettingsFile(file).read().cliPrompted, undefined)
+
+    // Next launch still asks, and choosing Later records cliPrompted.
+    const nextLaunch = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: new SettingsFile(file),
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => true,
+      showDialog: async () => {
+        shownCount++
+        return { response: 1 }
+      },
+    })
+    assert.equal(nextLaunch, 'later')
+    assert.equal(shownCount, 2)
+    assert.equal(new SettingsFile(file).read().cliPrompted, true)
+
+    // If quitting starts while checking linkState (before the dialog opens), neither dialog nor cliPrompted happens.
+    const preQuit = freshSettings()
+    const beforeOpen = await maybePromptCliInstall({
+      location: macPackaged,
+      inApplications: true,
+      settings: preQuit.sf,
+      strings: enStrings,
+      checkLink: async () => ({ state: 'missing' }),
+      answered: () => false,
+      showDialog: async () => {
+        throw new Error('should not open dialog while quitting')
+      },
+    })
+    assert.equal(beforeOpen, 'interrupted')
+    assert.equal(preQuit.sf.read().cliPrompted, undefined)
+  })
+
   test('First-launch prompt: choosing Install runs directly, shows the next-step done dialog, and does not ask again; cancelling password still records asked', async () => {
     const { file, sf } = freshSettings()
     const shown: CliDialogMessage[] = []

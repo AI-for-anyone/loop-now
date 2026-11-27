@@ -286,6 +286,7 @@ export type PromptCliOutcome =
   | 'skipped_already_installed'
   | 'skipped_points_elsewhere'
   | 'skipped_error'
+  | 'interrupted'
   | 'later'
   | 'installed'
   | 'cancelled'
@@ -297,6 +298,8 @@ export type PromptCliDeps = {
   settings: Pick<SettingsFile, 'read' | 'update'>
   strings: () => Strings
   showDialog: (options: CliDialogMessage) => Promise<{ response: number }>
+  // Returns false when the prompt was dismissed because the window closed or the app started quitting (no user choice was made).
+  answered?: () => boolean
   checkLink?: (link: string, target: string) => Promise<LinkState>
   installLink?: (target: string, link: string) => Promise<'done' | 'cancelled' | Error>
   readUserPath?: () => Promise<string | Error>
@@ -307,7 +310,7 @@ export type PromptCliDeps = {
 // Offers loopctl installation once on first launch when it is missing for this user.
 // Never nags after Later or Install, never asks when already installed or pointing elsewhere, and waits until the macOS app is in Applications.
 export async function maybePromptCliInstall(deps: PromptCliDeps): Promise<PromptCliOutcome> {
-  const { location, inApplications, settings, strings, showDialog, note } = deps
+  const { location, inApplications, settings, strings, showDialog, answered, note } = deps
   if (!location.available) return 'skipped_unavailable'
   if (settings.read().cliPrompted) return 'skipped_already_prompted'
   if (location.mode === 'symlink' && !location.devOverride && !inApplications) return 'skipped_not_in_applications'
@@ -325,6 +328,7 @@ export async function maybePromptCliInstall(deps: PromptCliDeps): Promise<Prompt
     if (current.state === 'other') return 'skipped_points_elsewhere'
   }
 
+  if (answered && !answered()) return 'interrupted'
   const s = strings().cli
   const detail = location.mode === 'path' ? s.firstPromptDetailWindows(location.binDir) : s.firstPromptDetail(location.link)
   const { response } = await showDialog({
@@ -335,6 +339,8 @@ export async function maybePromptCliInstall(deps: PromptCliDeps): Promise<Prompt
     defaultId: 0,
     cancelId: 1,
   })
+  // When the app quits or the window closes while the dialog is open, Electron resolves showMessageBox with cancelId; do not count that as Later.
+  if (answered && !answered()) return 'interrupted'
   settings.update({ cliPrompted: true })
   if (response !== 0) return 'later'
 
