@@ -122,8 +122,8 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         title={!plate && done && run.usageReported ? label : undefined}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          'inline-flex max-w-full flex-wrap items-center gap-x-1.5 self-start rounded-stamp py-0.5 leading-5 transition-colors outline-none hover:text-ink-700 focus-visible:shadow-focus',
-          plate ? 'mt-0.5 text-[11.5px] text-ink-500' : 'text-[12.5px] text-ink-500/80',
+          'inline-flex max-w-full flex-wrap items-center gap-x-1.5 self-start rounded-stamp py-0.5 transition-colors outline-none hover:text-ink-700 focus-visible:shadow-focus',
+          plate ? 'mt-0.5 text-[11.5px] leading-5 text-ink-500' : 'text-[12.5px] leading-5 text-ink-500/80',
         )}
       >
         <span className="sr-only">{label}</span>

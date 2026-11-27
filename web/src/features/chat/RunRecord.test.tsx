@@ -288,7 +288,7 @@ describe('run log toggle bar', () => {
     expect(tokens).not.toHaveClass('font-mono')
     expect(tokens).toHaveClass('tabular-nums')
     // When it doesn't fit on a narrow screen, the segments wrap instead of extending past the background.
-    expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
+    expect(toggle).toHaveClass('flex-wrap', 'max-w-full', 'leading-5')
   })
 
   it('in Plate skin, keeps monospace numbers and the exact token count on the toggle bar', async () => {
@@ -298,6 +298,7 @@ describe('run log toggle bar', () => {
     await renderChat({ agent, messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })] })
     const toggle = await waitFor(recordToggle)
     expect(toggle).toHaveAccessibleName('Run log · 9.4 s · 1,234 tokens')
+    expect(toggle).toHaveClass('leading-5')
     expect(parts(toggle)).toEqual(['Run log', '9.4 s', '1,234 tokens'])
     const [, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
     expect(duration).toHaveClass('font-mono', 'tabular-nums')
