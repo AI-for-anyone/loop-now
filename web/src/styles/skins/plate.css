@@ -68,6 +68,7 @@
   --code-muted: var(--riso-yellow);
   --inline-code-bg: var(--surface-subtle);
   --ink-faint: var(--ink-500);
+  --file-card-gone-icon: #B3ADA2;
 
   /* Stats charts: series take blue, pink and ochre in a fixed order, with "Other" in neutral gray; reply outcomes use the three state
      colors for completed, interrupted and failed; grid lines recede. */

@@ -152,6 +152,8 @@ describe('local reply file link classification', () => {
       http.head(apiUrl('/agents/a1/folder/raw/*'), ({ request }) => {
         const path = new URL(request.url).pathname.split('/folder/raw/')[1] ?? ''
         if (path === 'site/index.html') return new HttpResponse(null, { status: 200 })
+        if (path === 'report.pdf') return new HttpResponse(null, { status: 200, headers: { 'Content-Length': '1258291' } })
+        if (path === 'empty.txt') return new HttpResponse(null, { status: 200, headers: { 'Content-Length': '0' } })
         if (path === 'big.mp4') return new HttpResponse(null, { status: 413 })
         if (path === 'assets' || path === 'escape.html') return new HttpResponse(null, { status: 422 })
         return new HttpResponse(null, { status: 404 })
@@ -168,6 +170,8 @@ describe('local reply file link classification', () => {
     }
 
     expect(await probeLocalFolderEntry(folder, 'site/index.html', false)).toEqual({ kind: 'file' })
+    expect(await probeLocalFolderEntry(folder, 'report.pdf', false)).toEqual({ kind: 'file', size: 1258291 })
+    expect(await probeLocalFolderEntry(folder, 'empty.txt', false)).toEqual({ kind: 'file', size: 0 })
     expect(await probeLocalFolderEntry(folder, 'assets', false)).toEqual({ kind: 'dir' })
     expect(await probeLocalFolderEntry(folder, 'assets', true)).toEqual({ kind: 'dir' })
     expect(await probeLocalFolderEntry(folder, 'missing-dir', true)).toEqual({ kind: 'missing' })

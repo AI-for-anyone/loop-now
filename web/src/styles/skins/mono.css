@@ -47,6 +47,7 @@
   --code-muted: #59606D;
   --inline-code-bg: rgb(15 23 42 / 0.055);
   --ink-faint: #9CA3AF;
+  --file-card-gone-icon: #D4D4D4;
 
   /* Semantic ink, accent and tinted wash tokens (light) */
   --paper: #FAFAFA;
@@ -177,6 +178,7 @@
   --code-muted: #8F98A8;
   --inline-code-bg: rgb(255 255 255 / 0.10);
   --ink-faint: #6B7280;
+  --file-card-gone-icon: #4A4A4A;
 
   /* Semantic ink, accent and tinted wash tokens (dark) */
   --paper: #000000;

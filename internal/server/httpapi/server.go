@@ -474,7 +474,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			h.Set("Access-Control-Expose-Headers", "ETag, "+RequestIDHeader+", "+VersionHeader+", Content-Disposition")
+			h.Set("Access-Control-Expose-Headers", "ETag, "+RequestIDHeader+", "+VersionHeader+", Content-Disposition, Content-Length")
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 				h.Set("Access-Control-Allow-Headers", "Content-Type, If-Match, Last-Event-ID")

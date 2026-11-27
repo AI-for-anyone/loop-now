@@ -21,10 +21,10 @@ const KNOWN_FILE_EXTENSIONS = new Set([
   'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico', 'bmp',
   'woff', 'woff2', 'ttf', 'otf',
   'mp4', 'webm', 'mp3', 'wav', 'ogg', 'm4a',
-  'pdf', 'wasm', 'zip', 'gz', 'tgz', 'tar',
+  'pdf', 'wasm', 'zip', 'gz', 'tgz', 'tar', 'bz2', 'xz', '7z', 'rar', 'zst',
   'go', 'py', 'rs', 'rb', 'java', 'kt', 'swift', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'php',
   'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'graphql', 'gql', 'proto', 'diff', 'patch', 'lock',
-  'tex', 'rtf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'tex', 'rtf', 'doc', 'docx', 'odt', 'pages', 'xls', 'xlsx', 'ods', 'numbers', 'ppt', 'pptx', 'key',
 ])
 
 const KNOWN_FILE_EXT_PATTERN = [...KNOWN_FILE_EXTENSIONS].join('|')
@@ -318,7 +318,7 @@ export function splitBareLocalPaths(
 }
 
 export type LocalEntryStatus =
-  | { kind: 'file' }
+  | { kind: 'file'; size?: number }
   | { kind: 'dir' }
   | { kind: 'missing' }
   | { kind: 'too-large' }
@@ -351,7 +351,11 @@ export async function probeLocalFolderEntry(
     return { kind: 'unavailable' }
   }
 
-  if (response.ok) return { kind: 'file' }
+  if (response.ok) {
+    const rawLength = response.headers.get('content-length')
+    const parsed = rawLength !== null && rawLength.trim() !== '' ? Number(rawLength) : NaN
+    return Number.isFinite(parsed) && parsed >= 0 ? { kind: 'file', size: parsed } : { kind: 'file' }
+  }
   if (response.status === 404) return { kind: 'missing' }
   if (response.status === 413) return { kind: 'too-large' }
   if (response.status === 422) {
@@ -443,4 +447,58 @@ export function useLocalEntryStatus(
   if (cached) return cached
   if (state?.key !== key) return 'loading'
   return state.status
+}
+
+// Probe a batch of folder-relative paths through the shared reply ProbeStore.
+export function useLocalEntryStatuses(
+  folder: ReplyFolderContext | undefined,
+  paths: readonly string[],
+  streaming: boolean,
+  store: LocalProbeStore | null,
+): Record<string, 'loading' | LocalEntryStatus> {
+  const keys = folder && !streaming
+    ? paths.map((path) => (store ? store.keyOf(folder, path, false) : `${folder.rawURL?.(path) ?? ''}\0${path}\u00000`))
+    : []
+  const batchKey = keys.join('\n')
+  const [state, setState] = useState<{ batchKey: string; results: Record<string, LocalEntryStatus> }>({ batchKey: '', results: {} })
+
+  useEffect(() => {
+    if (!folder || streaming || !batchKey) return
+    let active = true
+    const controller = store ? undefined : new AbortController()
+    for (let i = 0; i < paths.length; i++) {
+      const path = paths[i]!
+      const key = keys[i]!
+      if (store?.peek(key)) continue
+      const run = store
+        ? store.probe(folder, path, false)
+        : probeLocalFolderEntry(folder, path, false, controller!.signal)
+      void run.then((status) => {
+        if (!active) return
+        setState((prev) => ({
+          batchKey,
+          results: prev.batchKey === batchKey ? { ...prev.results, [path]: status } : { [path]: status },
+        }))
+      })
+    }
+    return () => {
+      active = false
+      controller?.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchKey, folder, streaming, store])
+
+  const out: Record<string, 'loading' | LocalEntryStatus> = {}
+  for (let i = 0; i < paths.length; i++) {
+    const path = paths[i]!
+    if (!folder) {
+      out[path] = { kind: 'unavailable' }
+    } else if (streaming) {
+      out[path] = 'loading'
+    } else {
+      const cached = store?.peek(keys[i]!)
+      out[path] = cached ?? (state.batchKey === batchKey ? state.results[path] : undefined) ?? 'loading'
+    }
+  }
+  return out
 }
