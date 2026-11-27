@@ -196,8 +196,8 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	var env struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	if err := json.Unmarshal(snapshot, &env); err != nil || env.SchemaVersion != 10 || sources != "[]" {
-		t.Fatalf("a new task should be snapshot v10 with no frozen sources: %d %s %v", env.SchemaVersion, sources, err)
+	if err := json.Unmarshal(snapshot, &env); err != nil || env.SchemaVersion != 11 || sources != "[]" {
+		t.Fatalf("a new task should be snapshot v11 with no frozen sources: %d %s %v", env.SchemaVersion, sources, err)
 	}
 	if !strings.Contains(logs.String(), "copied the task working directory") || !strings.Contains(logs.String(), "clonefile") {
 		t.Fatalf("the copy method should be logged (APFS clone): %s", logs.String())

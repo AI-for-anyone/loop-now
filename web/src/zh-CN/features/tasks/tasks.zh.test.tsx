@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { expect, it } from 'vitest'
@@ -49,4 +49,25 @@ it.each([
   await waitFor(() => expect(box).toHaveValue('原节点草稿'))
   if (unsupported) { await new Promise(resolve => setTimeout(resolve, 120)); expect(gets).toBe(1) }
   expect(screen.queryByText(unsupported ? `资源不存在或已删除：${message}` : '当前服务尚未启用节点消息')).not.toBeInTheDocument()
+})
+
+it('shows Chinese labels for the step prompt and conversation opt-in mark', async () => {
+  const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+  detail.workflow.steps[0].prompt = '### 执行说明\n\n- 先看 `PLAN.md`'
+  detail.workflow.steps[0].withConversation = true
+  setup(detail)
+  renderRoutes(routes, detailPath())
+  await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
+  const user = userEvent.setup()
+
+  const status = document.querySelector<HTMLElement>('[data-node-status]')!
+  expect(within(status).getByText('带聊天记录')).toBeVisible()
+  const promptRegion = within(status).getByRole('region', { name: '节点 Prompt' })
+  const toggle = within(promptRegion).getByRole('button', { name: /节点 Prompt/ })
+  expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  expect(toggle).toHaveTextContent('展开')
+  await user.click(toggle)
+  expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  expect(toggle).toHaveTextContent('收起')
+  expect(within(promptRegion).getByRole('heading', { level: 3, name: '执行说明' })).toBeVisible()
 })

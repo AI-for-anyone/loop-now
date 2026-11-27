@@ -22,12 +22,15 @@ import (
 // schemaVersion 8 stores credentials as a plaintext object. Snapshots converted
 // from schemas 1–7 keep that schema in sourceVersion; its validation rules stay.
 // Schema 9 copies the base Agent folder. Schema 10 additionally freezes the
-// selected Provider's native models.json fragment. Schemas 8 and 9 stay readable.
-const schemaVersion = 10
+// selected Provider's native models.json fragment. Schema 11 starts task
+// instances from a clean conversation. Schemas 8 to 10 stay readable.
+const schemaVersion = 11
 
 // frozenSourcesSchema is the last schema whose tasks sync frozen folder sources.
 const frozenSourcesSchema = 8
 const copiedAgentFolderSchema = 9
+const modelsJSONSchema = 10
+const cleanStartSchema = 11
 
 // latestSemantics are the rules of schema 7, applied to every new capture.
 const latestSemantics = 7
@@ -233,8 +236,12 @@ func (s *Snapshot) Encode() ([]byte, error) {
 // otherwise, by the old rules, the folder sources frozen at capture time are synced.
 func (s *Snapshot) CopiesAgentFolder() bool { return s.env.SchemaVersion >= copiedAgentFolderSchema }
 
+// StartsClean reports whether this task's instances start from a clean conversation (schema 11 and later) unless a
+// step of the Agent asks for its regular conversation; tasks from before keep forking the regular conversation.
+func (s *Snapshot) StartsClean() bool { return s.env.SchemaVersion >= cleanStartSchema }
+
 func supportedSchema(version int) bool {
-	return version == frozenSourcesSchema || version == copiedAgentFolderSchema || version == schemaVersion
+	return version >= frozenSourcesSchema && version <= schemaVersion
 }
 
 // Decode validates the format without calling external services; the credential content is validated when the
@@ -271,7 +278,7 @@ func validateEnvelope(e envelope) error {
 	if !supportedSchema(e.SchemaVersion) || e.SchemaVersion >= copiedAgentFolderSchema && e.SourceVersion != 0 || e.SourceVersion < 0 || e.SourceVersion > latestSemantics || e.SnapshotID == uuid.Nil || e.Credentials == nil || !scope.Valid() || !scope.IsTask() {
 		return ErrInvalidEncoding
 	}
-	if e.SchemaVersion < schemaVersion && len(e.Configuration.ModelsJSON) > 0 {
+	if e.SchemaVersion < modelsJSONSchema && len(e.Configuration.ModelsJSON) > 0 {
 		return ErrInvalidEncoding
 	}
 	version := e.semantics()

@@ -33,7 +33,16 @@ type Step struct {
 	InputFields  []Field           `json:"inputFields"`
 	OutputFields []Field           `json:"outputFields"`
 	Inputs       map[string]Source `json:"inputs"`
+	// Prompt is the node Agent's standing briefing for this step, written by the Manager: it goes into the Agent's
+	// system prompt after the Agent's own Prompt (Description stays the job of each visit, in the node message).
+	Prompt string `json:"prompt,omitempty"`
+	// WithConversation starts this step's Agent from a copy of its regular conversation, as tasks did before steps
+	// started clean. A task has one instance per Agent, so it applies to all of that Agent's steps.
+	WithConversation bool `json:"withConversation,omitempty"`
 }
+
+// MaxStepPromptBytes is the size limit of a step's prompt.
+const MaxStepPromptBytes = 32 << 10
 
 type Edge struct {
 	ID            string `json:"id"`
@@ -68,6 +77,17 @@ func (d Definition) Step(id string) (Step, bool) {
 	}
 	return Step{}, false
 }
+
+// WithConversation reports whether any step done by the Agent asks to start from the Agent's regular conversation.
+func (d Definition) WithConversation(agentID uuid.UUID) bool {
+	for _, n := range d.Steps {
+		if n.AgentID == agentID && n.WithConversation {
+			return true
+		}
+	}
+	return false
+}
+
 func (d Definition) Outgoing(id string) []Edge {
 	out := []Edge{}
 	for _, e := range d.Edges {
@@ -86,6 +106,9 @@ func (d Definition) Validate(l Limits) error {
 	for _, n := range d.Steps {
 		if !nodeName.MatchString(n.ID) || nodes[n.ID].ID != "" || strings.TrimSpace(n.Title) == "" || n.AgentID == uuid.Nil {
 			return invalid("workflow.steps", "Each step needs a unique id (a letter or _ followed by letters, digits, _ or -, at most 64 characters), a title that is not blank, and an agentId.")
+		}
+		if len(n.Prompt) > MaxStepPromptBytes {
+			return invalid("workflow.steps.prompt", fmt.Sprintf("A step's prompt must be at most %d bytes.", MaxStepPromptBytes))
 		}
 		if err := validateFields(n.InputFields); err != nil {
 			return err

@@ -66,6 +66,9 @@ type Snapshot struct {
 	TaskWorkspace string
 	// TaskWorkspaceCopyOf is the folder a copy-mode TaskWorkspace was copied from; empty for a git worktree.
 	TaskWorkspaceCopyOf string
+	// StepPrompt is, for a task instance, the Manager's prompt for the step it is doing (its current node, else its
+	// latest one): it goes into the system prompt after the Agent's Prompt. Empty for a regular Agent.
+	StepPrompt string
 	// RegularWorkingDirectory is, for a step of a task with a worktree, the base Agent's working folder in its regular
 	// conversation (empty: its own folder); Claude Code keys its auto memory by it, so the step shares that memory.
 	RegularWorkingDirectory string

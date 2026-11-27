@@ -35,6 +35,7 @@ import { segmentedClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { NodeMessageComposer } from './NodeMessageComposer'
 import { NodeQueueList } from './NodeQueueList'
+import { StepPrompt, WithConversationBadge } from './StepPrompt'
 import { TaskActions } from './TaskActions'
 import { TaskBadge } from './TaskBadge'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
@@ -246,7 +247,8 @@ export function NodeRecordPanel({
   }
   const oldDrafts = drafts.filter((d) => d.nodeRunId !== draft.nodeRunId && (d.text || d.images?.length))
   const stepIndex = detail.workflow.steps.findIndex((s) => s.id === node.stepId)
-  const stepTitle = detail.workflow.steps[stepIndex]?.title || node.stepId
+  const step = detail.workflow.steps[stepIndex]
+  const stepTitle = step?.title || node.stepId
   const number = stepNumber(stepIndex)
   const [reasonHead, ...reasonRest] = (statusReason ?? '').split('\n')
 
@@ -326,6 +328,7 @@ export function NodeRecordPanel({
             ) : (
               <span className="shrink-0 text-[11.5px] font-medium text-ink-500">{t.tasks.readonly}</span>
             )}
+            {step?.withConversation && <WithConversationBadge />}
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
             <TaskBadge status={node.status} />
@@ -388,6 +391,8 @@ export function NodeRecordPanel({
             )}
           </div>
         )}
+
+        <StepPrompt key={node.stepId} prompt={step?.prompt} />
 
         <TaskLarkSwitchController key={node.id} detail={detail} node={node} disabled={disabled}>
           {(lark) => (

@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -143,5 +144,33 @@ func TestEdgeSelectionDoesNotCountRetries(t *testing.T) {
 	}
 	if e, err := d.SelectEdge("finish", nil, nil); err != nil || e != nil {
 		t.Fatal("terminal node requires no edge")
+	}
+}
+
+func TestStepPromptAndConversation(t *testing.T) {
+	d := fixture()
+	d.Steps[0].Prompt = strings.Repeat("é", MaxStepPromptBytes/2)
+	d.Steps[1].WithConversation = true
+	if err := d.Validate(Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(d)
+	var back Definition
+	if err := json.Unmarshal(b, &back); err != nil || !reflect.DeepEqual(back, d) {
+		t.Fatalf("round trip: %v", err)
+	}
+	// Bytes count, not characters: one more two-byte character is over the limit.
+	d.Steps[0].Prompt += "é"
+	if err := d.Validate(Limits{}); err == nil {
+		t.Fatal("a prompt over the limit was accepted")
+	}
+	// A step without them writes neither, so stored workflows of older tasks read back the same.
+	plain, _ := json.Marshal(fixture().Steps[2])
+	if strings.Contains(string(plain), "prompt") || strings.Contains(string(plain), "withConversation") {
+		t.Fatalf("empty fields are written: %s", plain)
+	}
+	agent := d.Steps[0].AgentID
+	if !d.WithConversation(agent) || d.WithConversation(uuid.New()) || fixture().WithConversation(agent) {
+		t.Fatal("WithConversation must report whether any step of the Agent asks for its conversation")
 	}
 }

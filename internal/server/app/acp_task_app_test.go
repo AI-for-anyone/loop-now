@@ -19,10 +19,43 @@ import (
 	"loop-now/internal/testutil/fakeacpbin"
 )
 
-// A task step run by a Grok Agent: Grok cannot copy the regular session, so the task instance starts a new session whose
-// first message carries the regular conversation (a handoff with reason task_start, on the turn's timeline). The task
-// ends and its cleanup records the session Grok keeps.
+// A task step run by a Grok Agent that asks for its conversation: Grok cannot copy the regular session, so the task
+// instance starts a new session whose first message carries the regular conversation (a handoff with reason task_start,
+// on the turn's timeline). The task ends and its cleanup records the session Grok keeps.
 func TestGrokTaskStartsWithTheConversation(t *testing.T) {
+	first, s, task := runGrokTask(t, workflow.Step{WithConversation: true})
+	if !strings.Contains(first, "<conversation-handoff>") || !strings.Contains(first, "silver otter") || !strings.Contains(first, "task instance") ||
+		!strings.Contains(first, "fake:sleep 1s") || strings.Index(first, "<conversation-handoff>") > strings.Index(first, "fake:sleep 1s") {
+		t.Fatalf("the instance's first message carries the regular conversation, before the step:\n%s", first)
+	}
+	var handoff map[string]any
+	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT data FROM lifecycle_events WHERE task_id=$1 AND type='context.handoff'`, task).Scan(&handoff); err != nil {
+		t.Fatal("the turn records the handoff", err)
+	}
+	if handoff["reason"] != "task_start" || handoff["fromRuntime"] != "grok" || handoff["toRuntime"] != "grok" || handoff["includedMessages"] == float64(0) {
+		t.Fatalf("handoff record: %+v", handoff)
+	}
+}
+
+// By default a Grok task step starts from a clean conversation: its first message has the step's prompt in the
+// standing instructions and the step, but nothing of the regular conversation, and no handoff is recorded.
+func TestGrokTaskStartsClean(t *testing.T) {
+	first, s, task := runGrokTask(t, workflow.Step{Prompt: "The step's word is quiet heron."})
+	if strings.Contains(first, "<conversation-handoff>") || strings.Contains(first, "silver otter") || !strings.Contains(first, "quiet heron") ||
+		!strings.Contains(first, "fake:sleep 1s") || strings.Index(first, "quiet heron") > strings.Index(first, "</loop-now-instructions>") {
+		t.Fatalf("the instance's first message has the step's prompt and no regular conversation:\n%s", first)
+	}
+	var handoffs int
+	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM lifecycle_events WHERE task_id=$1 AND type='context.handoff'`, task).Scan(&handoffs); err != nil || handoffs != 0 {
+		t.Fatalf("a clean step records no handoff: %d %v", handoffs, err)
+	}
+}
+
+// runGrokTask has a Grok Manager chat once in its regular conversation ("the password is silver otter"), then runs a
+// one-step task with the step's prompt and withConversation from extra, to its end and cleanup. It returns the first
+// message of the instance's Grok session.
+func runGrokTask(t *testing.T, extra workflow.Step) (string, *server, uuid.UUID) {
+	t.Helper()
 	w := newWorld(t)
 	realHome := t.TempDir() // the "real" home: fake Grok keeps its sessions and login under .fakeacp there
 	w.options = func(o *app.Options) {
@@ -30,7 +63,7 @@ func TestGrokTaskStartsWithTheConversation(t *testing.T) {
 		o.RealHome = func() (string, error) { return realHome, nil }
 	}
 	s := w.start(func(c *config.Config) { c.CodexModelsRefresh = time.Hour })
-	defer s.stop()
+	t.Cleanup(s.stop)
 	ctx := context.Background()
 	s.must(200, "GET", "/runtimes?refresh=true", nil) // read the local CLIs' models now
 	path, agent := s.createAgent("grok Manager")
@@ -45,7 +78,8 @@ func TestGrokTaskStartsWithTheConversation(t *testing.T) {
 
 	body, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "grok task", Request: map[string]any{},
 		Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "run", Description: " fake:sleep 1s", AgentID: agent.ID,
-			InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+			InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{},
+			Prompt: extra.Prompt, WithConversation: extra.WithConversation}}, Edges: []workflow.Edge{}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,20 +131,9 @@ func TestGrokTaskStartsWithTheConversation(t *testing.T) {
 	if err = json.Unmarshal(b, &session); err != nil || len(session.Prompts) == 0 {
 		t.Fatalf("the instance's session: %s %v", b, err)
 	}
-	first := session.Prompts[0]
-	if !strings.Contains(first, "<conversation-handoff>") || !strings.Contains(first, "silver otter") || !strings.Contains(first, "task instance") ||
-		!strings.Contains(first, "fake:sleep 1s") || strings.Index(first, "<conversation-handoff>") > strings.Index(first, "fake:sleep 1s") {
-		t.Fatalf("the instance's first message carries the regular conversation, before the step:\n%s", first)
-	}
-	var handoff map[string]any
-	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT data FROM lifecycle_events WHERE task_id=$1 AND type='context.handoff'`, created.Task.ID).Scan(&handoff); err != nil {
-		t.Fatal("the turn records the handoff", err)
-	}
-	if handoff["reason"] != "task_start" || handoff["fromRuntime"] != "grok" || handoff["toRuntime"] != "grok" || handoff["includedMessages"] == float64(0) {
-		t.Fatalf("handoff record: %+v", handoff)
-	}
 	var calls int
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE task_id=$1 AND provider='grok-cli' AND input > 0`, created.Task.ID).Scan(&calls); err != nil || calls == 0 {
 		t.Fatalf("the task's turn records the usage Grok reports: %d %v", calls, err)
 	}
+	return session.Prompts[0], s, created.Task.ID
 }

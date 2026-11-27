@@ -672,4 +672,53 @@ describe('task list on the sheet', () => {
     expect(draft).toHaveClass('px-4', 'sm:px-5')
     expect(draft.querySelector('[data-node-draft-inner]')).toHaveClass('mx-auto', 'w-full', 'max-w-[800px]')
   })
+
+  it('shows each step prompt collapsed by default, expands it as Markdown, marks steps with conversation, and shows prompts on unvisited steps too', async () => {
+    const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
+    detail.workflow.steps[0].prompt = '## Check briefing\n\nVerify against `SPEC.md` and report **pass** or **fail**.'
+    detail.workflow.steps[0].withConversation = true
+    detail.workflow.steps[1].prompt = '### Final report\n\n- Summarize every finding'
+    setup(detail)
+    renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
+    const user = userEvent.setup()
+
+    const status = document.querySelector<HTMLElement>('[data-node-status]')!
+    expect(within(status).getByText('With conversation')).toBeVisible()
+    const rail = screen.getByRole('navigation', { name: 'Workflow' })
+    expect(within(rail).getByText('With conversation')).toBeVisible()
+
+    // Collapsed by default on the active visited step.
+    const promptRegion = within(status).getByRole('region', { name: 'Step prompt' })
+    const promptToggle = within(promptRegion).getByRole('button', { name: /Step prompt/ })
+    expect(promptToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(promptRegion).queryByText('Check briefing')).not.toBeInTheDocument()
+
+    // Expands to Markdown and stays reachable on both Conversation and Node materials tabs.
+    await user.click(promptToggle)
+    expect(promptToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(within(promptRegion).getByRole('heading', { level: 2, name: 'Check briefing' })).toBeVisible()
+    expect(within(promptRegion).getByText('SPEC.md').tagName).toBe('CODE')
+    await user.click(screen.getByRole('tab', { name: 'Node materials' }))
+    expect(within(promptRegion).getByRole('heading', { level: 2, name: 'Check briefing' })).toBeVisible()
+
+    // Switching to an unvisited step resets the prompt to collapsed and renders its prompt above the empty-pane note.
+    await user.click(within(rail).getByRole('button', { name: /Submit report/ }))
+    expect(await screen.findByText("This node hasn't been visited yet.")).toBeVisible()
+    const nextStatus = document.querySelector<HTMLElement>('[data-node-status]')!
+    expect(within(nextStatus).queryByText('With conversation')).not.toBeInTheDocument()
+    const nextPrompt = within(nextStatus).getByRole('region', { name: 'Step prompt' })
+    const nextToggle = within(nextPrompt).getByRole('button', { name: /Step prompt/ })
+    expect(nextToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(nextPrompt).queryByText('Final report')).not.toBeInTheDocument()
+    await user.click(nextToggle)
+    expect(within(nextPrompt).getByRole('heading', { level: 3, name: 'Final report' })).toBeVisible()
+    expect(within(nextPrompt).getByText('Summarize every finding')).toBeVisible()
+  })
+
+  it('omits the step prompt block and conversation badge for clean steps without a prompt', async () => {
+    await renderDetail()
+    expect(screen.queryByRole('region', { name: 'Step prompt' })).not.toBeInTheDocument()
+    expect(screen.queryByText('With conversation')).not.toBeInTheDocument()
+  })
 })

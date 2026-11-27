@@ -38,6 +38,8 @@ A task is a fixed **workflow** of nodes executed by agents. Workflows support:
 
 The workflow and captured configuration are **frozen** when the task starts. Ordinary retries do not refresh credentials.
 
+Each step starts from a **clean conversation**: its agent gets its own Prompt, its instruction files and memory, the task request, and the prompt the Manager wrote for that step, but not its regular chat history. A step that truly needs the agent's chat can ask to start from a copy of it. Creating a task does not wait for its agents to be idle, unless a step asks for the conversation.
+
 A task that works on code can carry a **workspace**: the Manager names a git repository on this computer, and the platform creates one worktree on one new branch for the task. Every step works in it, as the Agent does in its regular conversation, so several tasks can run on one repository at once. When the task ends, the worktree is removed if nothing would be lost; otherwise it is kept and the task page says why.
 
 ## Accounts and permissions

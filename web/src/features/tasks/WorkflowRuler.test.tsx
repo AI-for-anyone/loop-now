@@ -77,6 +77,17 @@ describe('workflow ruler', () => {
     expect(screen.getByText('all steps done')).toBeInTheDocument()
     expect(screen.queryByRole('button', { current: 'step' })).not.toBeInTheDocument()
   })
+
+  it('marks only steps that opted into starting with the regular conversation', () => {
+    const detail = makeTaskDetail('project')
+    detail.workflow.steps[0].withConversation = true
+    ruler(detail)
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    const check = within(nav).getByRole('button', { name: /Quality check/ })
+    const finish = within(nav).getByRole('button', { name: /Submit report/ })
+    expect(within(check).getByText('With conversation')).toBeVisible()
+    expect(within(finish).queryByText('With conversation')).not.toBeInTheDocument()
+  })
 })
 
 describe('small step tags on narrow screens', () => {
@@ -101,5 +112,17 @@ describe('small step tags on narrow screens', () => {
     expect(onRecord).toHaveBeenCalledWith('check', oldNodeId)
     await userEvent.click(finish)
     expect(onSelect).toHaveBeenCalledWith('finish')
+  })
+
+  it('marks steps with conversation on narrow step chips too', () => {
+    const detail = makeTaskDetail('project')
+    detail.workflow.steps[1].withConversation = true
+    render(<WorkflowChips detail={detail} selected="check" record={nodeId} onSelect={() => {}} onRecord={() => {}} />)
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    const [check, finish] = within(nav).getAllByRole('button')
+    expect(check.querySelector('[data-step-with-conversation]')).toBeNull()
+    const mark = finish.querySelector('[data-step-with-conversation]')!
+    expect(mark).not.toBeNull()
+    expect(mark).toHaveTextContent('With conversation')
   })
 })

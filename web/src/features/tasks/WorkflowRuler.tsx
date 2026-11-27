@@ -1,8 +1,9 @@
 import { Fragment, useLayoutEffect, useRef, useState } from 'react'
-import { CheckIcon, Undo2Icon } from 'lucide-react'
+import { CheckIcon, MessagesSquareIcon, Undo2Icon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { WithConversationBadge } from './StepPrompt'
 import { edgeUses, stepNumber, workflowPosition, workflowSteps, type StepState, type StepView } from './workflow-steps'
 
 type Props = {
@@ -95,7 +96,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
   const content = useRef<HTMLDivElement>(null)
   const [geometry, setGeometry] = useState<Geometry>({ height: 0, dots: [] })
   const currentStep = detail.task.currentStepId
-  const layoutKey = `${views.map((v) => `${v.step.id}:${v.state}:${v.records.length}:${v.jumps.length}:${v.next.length}`).join('|')}|${selected ?? ''}|${record ?? ''}`
+  const layoutKey = `${views.map((v) => `${v.step.id}:${v.state}:${v.records.length}:${v.jumps.length}:${v.next.length}:${v.step.withConversation ? 1 : 0}`).join('|')}|${selected ?? ''}|${record ?? ''}`
 
   // Measure each dot's vertical center after layout so the 1.5px rail connects cleanly across expanded visit lists and edge labels.
   useLayoutEffect(() => {
@@ -221,6 +222,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                         {view.records.length > 1 && <span className="font-mono text-[10.5px] text-ink-500">×{view.records.length}</span>}
                       </span>
                     </span>
+                    {view.step.withConversation && <WithConversationBadge compact />}
                   </button>
                   <StepDot view={view} />
                 </div>
@@ -334,6 +336,12 @@ export function WorkflowChips({
               {view.state === 'done' && <CheckIcon aria-hidden="true" className="size-3" strokeWidth={3} />}
               <span className="font-mono text-[11px]">{view.number}</span>
               {view.step.title || view.step.id}
+              {view.step.withConversation && (
+                <span data-step-with-conversation className="inline-flex items-center" title={t.tasks.withConversationHint}>
+                  <MessagesSquareIcon aria-hidden="true" className="size-3 shrink-0" strokeWidth={2.2} />
+                  <span className="sr-only"> · {t.tasks.withConversation}</span>
+                </span>
+              )}
               {view.records.length > 1 && <span className="font-mono text-[10.5px] opacity-70">×{view.records.length}</span>}
             </button>
           )

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { useAgents } from '@/api/queries'
 import { tasksPath, useTask } from '@/api/tasks'
+import { AgentAvatar } from '@/components/AgentAvatar'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { LiveDot, PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet } from '@/components/Sheet'
@@ -14,10 +15,12 @@ import { isNotFound } from '@/lib/errors'
 import { overviewPath } from '@/lib/scope'
 import { narrowQuery, useMediaQuery } from '@/lib/use-media-query'
 import { NodeRecordPanel, type NodeDraft, type NodePanelTab } from './NodeRecordPanel'
+import { StepPrompt, WithConversationBadge } from './StepPrompt'
 import { TaskActions } from './TaskActions'
 import { TaskBadge } from './TaskBadge'
 import { TaskWorkspace } from './TaskWorkspace'
 import { useTaskLive } from './useTaskLive'
+import { stepNumber } from './workflow-steps'
 import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
 
 // Breakpoint matching Tailwind's lg (1024px) where the 216px left step rail collapses to horizontal WorkflowChips.
@@ -100,6 +103,8 @@ export function TaskDetail() {
   }
 
   const project = scope.project
+  const selectedStepIndex = step ? detail.workflow.steps.findIndex((s) => s.id === step) : -1
+  const selectedStep = selectedStepIndex >= 0 ? detail.workflow.steps[selectedStepIndex] : undefined
   const nodeSleep =
     node?.sleep?.state === 'sleeping' && node.sleep.nodeRunId === node.id && node.sleep.runtimeId === node.runtimeId && node.sleep.wakeAt
       ? node.sleep
@@ -214,6 +219,30 @@ export function TaskDetail() {
               }))
             }
           />
+        ) : selectedStep && (selectedStep.prompt?.trim() || selectedStep.withConversation) ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div data-node-status className="flex shrink-0 flex-col">
+              <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-hairline bg-surface-canvas px-4 py-1.5 sm:px-5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">
+                    {stepNumber(selectedStepIndex)}
+                  </span>
+                  <h2 title={selectedStep.id} className="min-w-0 truncate text-[14px] leading-snug font-semibold tracking-tight text-ink">
+                    {selectedStep.title || selectedStep.id}
+                  </h2>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700">
+                    <AgentAvatar size="sm" id={selectedStep.agentId} />
+                    <span className="max-w-[140px] truncate">{agentName(selectedStep.agentId)}</span>
+                  </span>
+                  {selectedStep.withConversation && <WithConversationBadge />}
+                </div>
+              </div>
+              <StepPrompt key={selectedStep.id} prompt={selectedStep.prompt} />
+            </div>
+            <EmptyPane>
+              <p>{t.tasks.noRecord}</p>
+            </EmptyPane>
+          </div>
         ) : (
           <EmptyPane>
             <p>{step ? t.tasks.noRecord : t.tasks.selectNode}</p>

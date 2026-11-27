@@ -26,7 +26,6 @@ import (
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
-	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/toolcommand"
 )
@@ -639,7 +638,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 // changed since it started.
 func (e *Executor) reusable(p *proc, snap agentconfig.Snapshot) bool {
 	return p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity &&
-		p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() &&
+		p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == promptIdentity(snap) && p.localIdentity == snap.Local.Identity() &&
 		p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p)
 }
 
@@ -771,7 +770,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	}
 	client := st.rt
 	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
-		version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+		version: snap.ConfigVersion, promptIdentity: promptIdentity(snap), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, cwd: workDir(snap, d), mode: permissionMode(snap), ownConfig: localConfig(snap), lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{}),
 		task: snap.TaskID != uuid.Nil, thinking: snap.ThinkingLevel}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {

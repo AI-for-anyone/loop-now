@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/modelcredential"
+	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/store"
 )
 
@@ -178,20 +180,43 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	return e.syncSources(ctx, snap, d, sourceEnv, ghBin, outcomes)
 }
 
-// appendedPrompt is the content of the --append-system-prompt file: the Agent's Prompt plus the "Folders and context"
-// section.
+// appendedPrompt is the content of the --append-system-prompt file (every runtime reads it as its system or
+// developer prompt): the Agent's Prompt, a task step's prompt, then the "Folders and context" section.
 func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	section, err := e.contextPrompt(snap, d, loginHome)
 	if err != nil {
 		return "", err
 	}
-	switch {
-	case section == "":
-		return snap.Prompt, nil
-	case snap.Prompt == "":
-		return section, nil
+	return joinPrompt(joinPrompt(snap.Prompt, stepPromptSection(snap.StepPrompt)), section), nil
+}
+
+// stepPromptSection is the task step's prompt under its own heading; "" without one.
+func stepPromptSection(prompt string) string {
+	if strings.TrimSpace(prompt) == "" {
+		return ""
 	}
-	return strings.TrimRight(snap.Prompt, "\n") + "\n\n" + section, nil
+	return "## Your prompt for this task step\n\nThe Manager wrote this for the step of the task you are doing, and it holds on every visit of the step. The job of each visit comes in the node message.\n\n" + strings.TrimRight(prompt, "\n")
+}
+
+func joinPrompt(a, b string) string {
+	switch {
+	case b == "":
+		return a
+	case a == "":
+		return b
+	}
+	return strings.TrimRight(a, "\n") + "\n\n" + b
+}
+
+// promptIdentity fingerprints what the system prompt is made of; a change restarts the runtime. A task instance keeps
+// its frozen Prompt but takes the prompt of each step it moves to.
+func promptIdentity(snap agentconfig.Snapshot) string {
+	id := prompts.Identity(snap.PromptLayers)
+	if snap.StepPrompt != "" {
+		sum := sha256.Sum256([]byte(snap.StepPrompt))
+		id += "/step:" + hex.EncodeToString(sum[:8])
+	}
+	return id
 }
 
 // sourceOutcome is how one folder source was handled in this sync.
