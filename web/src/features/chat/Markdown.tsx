@@ -15,6 +15,7 @@ import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
 import { copyText } from '@/lib/clipboard'
+import { useSkin } from '@/theme/store'
 
 // react-markdown passes the syntax tree node to custom components as node, which must not be passed through to the DOM.
 function withoutNode<T extends ExtraProps>({ node, ...props }: T) {
@@ -392,8 +393,8 @@ function rehypeCursor() {
 // Each reply renders separately, and footnote ids get this instance's prefix, so ids don't collide when several replies all use [^1].
 // When cursor is true (reply in progress), the output cursor shows at the end of the text; when readme is true, relative links and
 // images are handled as for a plugin README.
-// leadLabels: the bold word at the start of a list item becomes a small yellow label; used for replies and messages, not for documents
-// (plugin READMEs, Markdown files in folders).
+// leadLabels: in the Plate skin, the bold word at the start of a list item becomes a small label; in the default mono skin, bold stays
+// plain inline text with its punctuation intact. Disabled for documents (plugin READMEs, Markdown files in folders).
 export const Markdown = memo(function Markdown({
   text,
   cursor = false,
@@ -407,6 +408,8 @@ export const Markdown = memo(function Markdown({
   leadLabels?: boolean
   folder?: ReplyFolderContext
 }) {
+  const skin = useSkin()
+  const useLeadLabels = leadLabels && skin === 'plate'
   const prefix = `md-${useId().replace(/[^\w-]/g, '')}-`
   const localFolder = readme ? undefined : folder
   return (
@@ -428,7 +431,7 @@ export const Markdown = memo(function Markdown({
           ...(localFolder ? [[rehypeLocalImages, localFolder] as [typeof rehypeLocalImages, ReplyFolderContext]] : []),
           ...(readme ? [] : [rehypeImageRows]),
           ...(cursor ? [rehypeCursor] : []),
-          ...(leadLabels ? [rehypeLeadLabel] : []),
+          ...(useLeadLabels ? [rehypeLeadLabel] : []),
         ]}
         components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, div: MarkdownDiv, ...tableComponents }}
       >

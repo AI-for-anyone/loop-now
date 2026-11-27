@@ -239,9 +239,9 @@ describe('Streaming, tool state and switching', () => {
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, ''))
     await emit('run.tool', { runId: run.id, toolCallId: 't1', toolName: 'bash', state: 'started', at: '2026-10-12T00:00:00Z' })
     const tools = await screen.findByRole('list', { name: 'Tool calls' })
-    expect(tools).toHaveTextContent('bashRunning')
+    expect(tools).toHaveTextContent('bash Running')
     await emit('run.tool', { runId: run.id, toolCallId: 't1', toolName: 'bash', state: 'succeeded', at: '2026-10-12T00:00:01Z' })
-    await waitFor(() => expect(tools).toHaveTextContent('bashSucceeded'))
+    await waitFor(() => expect(tools).toHaveTextContent('bash Succeeded'))
   })
 
   it('after switching Agents, no longer receives the events of the previous Agent', async () => {

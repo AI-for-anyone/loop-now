@@ -7,11 +7,11 @@
 /* Theme-driven design tokens: "mono" (default, light/dark/system) and "plate" (Risograph palette, light only). */
 
 @theme inline {
-    --font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
+    --font-sans: var(--skin-font-sans);
     --font-heading: var(--skin-display-cn);
     --font-display-cn: var(--skin-display-cn);
     --font-display-latin: var(--skin-display-latin);
-    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-mono: var(--skin-font-mono);
 
     /* Semantic surface, chrome, border, CTA, tooltip and code tokens */
     --color-surface-canvas: var(--surface-canvas);
@@ -304,26 +304,61 @@
   .markdown :not(pre) > code {
     @apply rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 font-mono text-[0.85em];
   }
-  /* A bold word at the start of a list item (marked by rehype-lead-label). */
-  .markdown .md-lead {
+  /* Default (mono) skin: clean reading typography — plain inline bold, quiet list rhythm, borderless inline code. */
+  :root:not([data-skin="plate"]) .markdown {
+    @apply text-[15px] leading-[1.75] tracking-[0.01em];
+  }
+  :root:not([data-skin="plate"]) .markdown strong {
+    font-weight: 600;
+  }
+  :root:not([data-skin="plate"]) .markdown ul,
+  :root:not([data-skin="plate"]) .markdown ol {
+    padding-left: 1.25em;
+  }
+  :root:not([data-skin="plate"]) .markdown li + li {
+    margin-top: 4px;
+  }
+  :root:not([data-skin="plate"]) .markdown li:has(> ul, > ol) + li,
+  :root:not([data-skin="plate"]) .markdown li + li:has(> ul, > ol) {
+    margin-top: 14px;
+  }
+  :root:not([data-skin="plate"]) .markdown li > ul,
+  :root:not([data-skin="plate"]) .markdown li > ol {
+    margin-top: 2px;
+  }
+  :root:not([data-skin="plate"]) .markdown li::marker {
+    color: var(--ink-faint);
+  }
+  :root:not([data-skin="plate"]) .markdown :not(pre) > code {
+    border: 0;
+    border-radius: 4px;
+    background-color: var(--inline-code-bg);
+    padding: 0.12em 0.36em;
+    font-family: var(--skin-font-mono);
+    font-size: 0.82em;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  /* A bold word at the start of a list item (marked by rehype-lead-label, Plate skin only). */
+  :root[data-skin="plate"] .markdown .md-lead {
     @apply mr-2.5 inline-block rounded-stamp border border-hairline bg-surface-subtle px-2 text-[13px] leading-6 font-semibold;
   }
-  .markdown ul.md-lead-list {
+  :root[data-skin="plate"] .markdown ul.md-lead-list {
     @apply list-none;
   }
-  .markdown > ul.md-lead-list {
+  :root[data-skin="plate"] .markdown > ul.md-lead-list {
     @apply pl-0;
   }
-  .markdown li.md-lead-item {
+  :root[data-skin="plate"] .markdown li.md-lead-item {
     @apply flex items-baseline;
   }
-  .markdown li.md-lead-item > .md-lead {
+  :root[data-skin="plate"] .markdown li.md-lead-item > .md-lead {
     @apply shrink-0;
   }
-  .markdown li.md-lead-item > .md-lead-text {
+  :root[data-skin="plate"] .markdown li.md-lead-item > .md-lead-text {
     @apply min-w-0;
   }
-  .markdown li.md-lead-item + li.md-lead-item {
+  :root[data-skin="plate"] .markdown li.md-lead-item + li.md-lead-item {
     @apply mt-1.5;
   }
   .markdown pre {

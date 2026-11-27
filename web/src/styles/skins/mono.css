@@ -40,11 +40,13 @@
   --tooltip-fg: #FFFFFF;
   --tooltip-muted: #A1A1AA;
 
-  /* Code blocks (light) */
+  /* Code blocks and inline code (light) */
   --code-bg: #F6F8FA;
   --code-fg: #171717;
   --code-border: rgb(0 0 0 / 0.08);
   --code-muted: #59606D;
+  --inline-code-bg: rgb(15 23 42 / 0.055);
+  --ink-faint: #9CA3AF;
 
   /* Semantic ink, accent and tinted wash tokens (light) */
   --paper: #FAFAFA;
@@ -100,9 +102,11 @@
   --skin-radius-bubble: 14px;
   --skin-radius-dialog: 12px;
 
-  /* Typography: clean sans across headings in default skin */
-  --skin-display-cn: var(--font-sans);
-  --skin-display-latin: var(--font-sans);
+  /* Typography: system UI sans (PingFang on macOS) and system mono with CJK fallback so Noto Sans SC is not fetched */
+  --skin-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  --skin-font-mono: ui-monospace, "SF Mono", Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", monospace;
+  --skin-display-cn: var(--skin-font-sans);
+  --skin-display-latin: var(--skin-font-sans);
 
   /* shadcn semantic variables */
   --background: var(--surface-canvas);
@@ -166,11 +170,13 @@
   --tooltip-fg: #0A0A0A;
   --tooltip-muted: #525252;
 
-  /* Code blocks (dark) */
+  /* Code blocks and inline code (dark) */
   --code-bg: #0F1115;
   --code-fg: #EDEDED;
   --code-border: rgb(255 255 255 / 0.10);
   --code-muted: #8F98A8;
+  --inline-code-bg: rgb(255 255 255 / 0.10);
+  --ink-faint: #6B7280;
 
   /* Semantic ink, accent and tinted wash tokens (dark) */
   --paper: #000000;

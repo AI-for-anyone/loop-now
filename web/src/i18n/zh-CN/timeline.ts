@@ -1,7 +1,17 @@
 import type { components } from '@/api/schema.gen'
-import { formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
+import { formatCount, formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
 
 type S = components['schemas']
+
+function compactZhTokens(count: number): string {
+  if (count < 10_000) return `${formatCount(count)} token`
+  if (count >= 99_995_000) {
+    const yi = count / 100_000_000
+    return `${yi >= 100 ? formatCount(Math.round(yi)) : formatCount(Math.round(yi * 10) / 10)} 亿 token`
+  }
+  const wan = count / 10_000
+  return `${wan >= 100 ? formatCount(Math.round(wan)) : formatCount(Math.round(wan * 10) / 10)} 万 token`
+}
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `运行记录 · ${duration} · ${tokens} token`,
@@ -9,7 +19,12 @@ export const timeline = {
   toggleNoUsage: (duration: string) => `运行记录 · ${duration} · 没有用量数据`,
   toggleRunning: (elapsed: string) => `运行记录 · 已用 ${elapsed}`,
   // The toggle bar is drawn as a segmented ticket: these are the segments after the name.
-  toggleParts: { tokens: (tokens: string) => `${tokens} token`, noUsage: '没有用量数据', running: (elapsed: string) => `已用 ${elapsed}` },
+  toggleParts: {
+    tokens: (tokens: string) => `${tokens} token`,
+    compactTokens: compactZhTokens,
+    noUsage: '没有用量数据',
+    running: (elapsed: string) => `已用 ${elapsed}`,
+  },
   title: '运行记录',
   total: (duration: string) => `合计 ${duration}`,
   loading: '正在加载运行记录…',

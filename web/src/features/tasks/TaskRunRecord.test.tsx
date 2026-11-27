@@ -45,7 +45,7 @@ it('task tools load with their own cursor without adding up the full usage of ea
   renderRecord(); await screen.findByText('fixture_tool'); expect(screen.getByText('The run log hasn\'t fully loaded; showing what has loaded so far.')).toBeVisible()
   await user.click(screen.getByRole('button', { name: /^Run log/ })); await user.click(screen.getByRole('button', { name: 'Load more of the run log' }))
   expect(cursors).toEqual([null, 'page-two']); expect(screen.getByRole('list', { name: 'Tool calls' }).children).toHaveLength(1)
-  expect(within(screen.getByRole('list', { name: 'Tool calls' })).getByText('Succeeded')).toBeVisible()
+  expect(within(screen.getByRole('list', { name: 'Tool calls' })).getByText('fixture_tool Succeeded')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /^Run log/ })).toHaveTextContent('3 tokens')
   expect(screen.queryByText('The run log hasn\'t fully loaded; showing what has loaded so far.')).toBeNull()
 })
@@ -85,12 +85,12 @@ it.each([
   server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ run: { ...dto.run, status, endedAt: status === 'running' ? null : dto.run.endedAt }, entries: [tool('started')] }))))
   renderRecord()
   const list = await screen.findByRole('list', { name: 'Tool calls' })
-  expect(within(list).getByRole('listitem')).toHaveTextContent(`fixture_tool${label}`)
+  expect(within(list).getByRole('listitem')).toHaveTextContent(`fixture_tool ${label}`)
 })
 
 it('a task tool the server closed as no_result shows “No result”', async () => {
   server.use(http.get(endpoint, () => HttpResponse.json(taskRunTimeline({ entries: [tool('started'), tool('no_result')] }))))
   renderRecord()
   const list = await screen.findByRole('list', { name: 'Tool calls' })
-  expect(within(list).getByRole('listitem')).toHaveTextContent('fixture_toolNo result')
+  expect(within(list).getByRole('listitem')).toHaveTextContent('fixture_tool No result')
 })

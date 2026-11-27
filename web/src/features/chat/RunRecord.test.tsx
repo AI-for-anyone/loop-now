@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
+import { t } from '@/i18n'
 import { apiUrl, makeAgent, makeMessage, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
+import { resetThemeForTest, setSkin } from '@/theme/store'
 
 type Entry = Schemas['TimelineEntry']
 
@@ -249,27 +251,58 @@ describe('run log timeline', () => {
   })
 })
 
-// "Printed sheet" redesign: the toggle bar is styled as a segmented receipt.
 describe('run log toggle bar', () => {
   const parts = (toggle: HTMLElement) => [...toggle.querySelectorAll('[data-receipt-part]')].map((part) => part.textContent)
 
-  it('once ended splits into three parts: name | duration | tokens, numbers in monospace; the button name is unchanged', async () => {
+  afterEach(() => {
+    window.localStorage.clear()
+    resetThemeForTest()
+  })
+
+  it('formats compact English token counts across magnitudes', () => {
+    const compact = t.timeline.toggleParts.compactTokens
+    expect(compact(0)).toBe('0 tokens')
+    expect(compact(1)).toBe('1 token')
+    expect(compact(999)).toBe('999 tokens')
+    expect(compact(1_000)).toBe('1K tokens')
+    expect(compact(1_234)).toBe('1.2K tokens')
+    expect(compact(123_456)).toBe('123.5K tokens')
+    expect(compact(3_132_788)).toBe('3.1M tokens')
+    expect(compact(1_200_000_000)).toBe('1.2B tokens')
+  })
+
+  it('in default mono skin, uses body font with tabular numbers and compact tokens, keeping exact tokens in title and sr-only name', async () => {
+    const agent = makeAgent()
+    const run = makeRun({ queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(191), usage: usage(3_000_000, 132_788) })
+    await renderChat({ agent, messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })] })
+    const toggle = await waitFor(recordToggle)
+    expect(toggle).toHaveAccessibleName('Run log · 3 min 11 s · 3,132,788 tokens')
+    expect(toggle).toHaveAttribute('title', 'Run log · 3 min 11 s · 3,132,788 tokens')
+    expect(parts(toggle)).toEqual(['Run log', '3 min 11 s', '3.1M tokens'])
+    const [name, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
+    for (const part of [name, duration, tokens]) expect(part).toHaveAttribute('aria-hidden', 'true')
+    expect(name).not.toHaveClass('font-mono')
+    expect(toggle).not.toHaveClass('border')
+    expect(duration).not.toHaveClass('font-mono')
+    expect(duration).toHaveClass('tabular-nums')
+    expect(tokens).not.toHaveClass('font-mono')
+    expect(tokens).toHaveClass('tabular-nums')
+    // When it doesn't fit on a narrow screen, the segments wrap instead of extending past the background.
+    expect(toggle).toHaveClass('flex-wrap', 'max-w-full', 'leading-5')
+  })
+
+  it('in Plate skin, keeps monospace numbers and the exact token count on the toggle bar', async () => {
+    setSkin('plate')
     const agent = makeAgent()
     const run = makeRun({ queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(9.4), usage: usage(1200, 34) })
     await renderChat({ agent, messages: [makeMessage({ text: 'Run the tests', run }), makeMessage({ role: 'assistant', text: 'The tests are done', run })] })
     const toggle = await waitFor(recordToggle)
     expect(toggle).toHaveAccessibleName('Run log · 9.4 s · 1,234 tokens')
+    expect(toggle).toHaveClass('leading-5')
     expect(parts(toggle)).toEqual(['Run log', '9.4 s', '1,234 tokens'])
-    const [name, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
-    for (const part of [name, duration, tokens]) expect(part).toHaveAttribute('aria-hidden', 'true')
-    expect(name).not.toHaveClass('font-mono')
-    expect(toggle).not.toHaveClass('border')
-    expect(duration).toHaveClass('font-mono')
-    expect(duration).not.toHaveClass('border-l')
-    expect(tokens).toHaveClass('font-mono')
-    expect(tokens).not.toHaveClass('border-l')
-    // When it doesn't fit on a narrow screen, the segments wrap instead of extending past the background.
-    expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
+    const [, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
+    expect(duration).toHaveClass('font-mono', 'tabular-nums')
+    expect(tokens).toHaveClass('font-mono', 'tabular-nums')
   })
 
   it('a turn whose runtime reported no usage (Grok, Antigravity, or a turn that never reached a model) says so instead of “0 tokens”', async () => {

@@ -176,6 +176,7 @@ export const chat = {
   metaSeparator: '·',
   toolStaticMark: '…',
   toolInterrupted: 'Interrupted',
+  toolGroupLabel: (name: string, state: string, count: number) => (count > 1 ? `${name} ${state}, ${count} times` : `${name} ${state}`),
   interruptDivider: 'Interrupted; handling this first',
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: 'to queue', interrupt: 'to interrupt', stopMark: '■', stop: 'Stop the current reply only' },
   barKeys: { enter: 'Enter', shiftEnter: 'Shift + Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter') },

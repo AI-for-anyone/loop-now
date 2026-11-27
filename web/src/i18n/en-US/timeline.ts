@@ -1,15 +1,25 @@
 import type { Messages } from '..'
 import { plural } from '../format'
-import { formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
+import { formatCompact, formatCount, formatMonthDayClock, formatPreciseClock, formatSlept, formatStepDuration } from './format'
 
 const count = (n: number, one: string, other: string) => `${n} ${plural('en-US', n, { one, other })}`
+
+function compactEnTokens(tokens: number): string {
+  if (tokens < 1000) return `${formatCount(tokens)} ${plural('en-US', tokens, { one: 'token', other: 'tokens' })}`
+  return `${formatCompact(tokens)} tokens`
+}
 
 export const timeline = {
   toggle: (duration: string, tokens: string) => `Run log · ${duration} · ${tokens} tokens`,
   // A turn whose runtime reported no usage (Run.usageReported false): its zeros mean "not known".
   toggleNoUsage: (duration: string) => `Run log · ${duration} · no usage data`,
   toggleRunning: (elapsed: string) => `Run log · ${elapsed} so far`,
-  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, noUsage: 'no usage data', running: (elapsed: string) => `${elapsed} so far` },
+  toggleParts: {
+    tokens: (tokens: string) => `${tokens} tokens`,
+    compactTokens: compactEnTokens,
+    noUsage: 'no usage data',
+    running: (elapsed: string) => `${elapsed} so far`,
+  },
   title: 'Run log',
   total: (duration: string) => `Total ${duration}`,
   loading: 'Loading the run log…',
