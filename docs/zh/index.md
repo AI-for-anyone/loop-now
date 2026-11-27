@@ -23,7 +23,7 @@ hero:
       text: English
       link: /
     - theme: alt
-      text: v0.3.5
+      text: v0.3.6
       link: https://github.com/AI-for-anyone/loop-now/releases
 
 features:
