@@ -184,6 +184,105 @@ describe('Markdown rendering and safety', () => {
   })
 })
 
+// check-english: zh (CJK emphasis and strikethrough flanking test cases)
+describe('CJK emphasis and strikethrough around punctuation', () => {
+  it('renders strong emphasis when bold Chinese text ends or wraps with CJK punctuation followed by CJK text', () => {
+    const cases: Array<{ input: string; strong: string; full: string }> = [
+      { input: '**你：**如果', strong: '你：', full: '你：如果' },
+      { input: '**注意：**这里', strong: '注意：', full: '注意：这里' },
+      { input: '中文**“引号”**中文', strong: '“引号”', full: '中文“引号”中文' },
+      { input: '**结论。**下一句', strong: '结论。', full: '结论。下一句' },
+    ]
+    for (const { input, strong, full } of cases) {
+      const view = render(<Markdown text={input} />)
+      const p = view.container.querySelector('p')!
+      const el = p.querySelector('strong')
+      expect(el, input).not.toBeNull()
+      expect(el!.textContent).toBe(strong)
+      expect(p.textContent).toBe(full)
+      expect(p.textContent).not.toContain('*')
+      view.unmount()
+    }
+  })
+
+  it('renders italic emphasis and GFM strikethrough ending in CJK punctuation followed by CJK text', () => {
+    const emView = render(<Markdown text="*斜体，*后文" />)
+    const emP = emView.container.querySelector('p')!
+    expect(emP.querySelector('em')?.textContent).toBe('斜体，')
+    expect(emP.textContent).toBe('斜体，后文')
+    expect(emP.textContent).not.toContain('*')
+    emView.unmount()
+
+    const delView = render(<Markdown text="~~删除，~~后文" />)
+    const delP = delView.container.querySelector('p')!
+    expect(delP.querySelector('del')?.textContent).toBe('删除，')
+    expect(delP.textContent).toBe('删除，后文')
+    expect(delP.textContent).not.toContain('~')
+    delView.unmount()
+  })
+
+  it('renders punctuation-ending CJK bold in list items without literal asterisks in both mono and Plate skins', () => {
+    const md = '- **你：**如果本机没装\n- **注意：**这里会直接改'
+    const mono = render(<Markdown text={md} />)
+    expect([...mono.container.querySelectorAll('li strong')].map((el) => el.textContent)).toEqual(['你：', '注意：'])
+    expect(mono.container.textContent).not.toContain('*')
+    mono.unmount()
+
+    setSkin('plate')
+    try {
+      const plate = render(<Markdown text={md} />)
+      expect([...plate.container.querySelectorAll('li strong')].map((el) => el.textContent)).toEqual(['你：', '注意：'])
+      expect(plate.container.textContent).not.toContain('*')
+      plate.unmount()
+    } finally {
+      window.localStorage.clear()
+      resetThemeForTest()
+    }
+  })
+
+  it('keeps English emphasis flanking rules unchanged from CommonMark', () => {
+    const bold = render(<Markdown text="**foo**bar" />)
+    const boldP = bold.container.querySelector('p')!
+    expect(boldP.querySelector('strong')?.textContent).toBe('foo')
+    expect(boldP.textContent).toBe('foobar')
+    bold.unmount()
+
+    const quotes = render(<Markdown text='a**"b"**c' />)
+    const quotesP = quotes.container.querySelector('p')!
+    expect(quotesP.querySelector('strong')).toBeNull()
+    expect(quotesP.textContent).toBe('a**"b"**c')
+    quotes.unmount()
+  })
+
+  it('leaves code spans, fenced code blocks, and links untouched', () => {
+    const { container } = render(
+      <Markdown
+        text={[
+          'Inline `**你：**如果` and `~~删除，~~后文`.',
+          '',
+          '```md',
+          '**注意：**这里',
+          '```',
+          '',
+          '[**你：**如果](https://example.com/a**b**c) and https://example.com/a**b**c',
+        ].join('\n')}
+      />,
+    )
+    const codes = [...container.querySelectorAll('code')]
+    expect(codes.map((el) => el.textContent)).toEqual(['**你：**如果', '~~删除，~~后文', '**注意：**这里\n'])
+    expect(container.querySelectorAll('code strong, code del')).toHaveLength(0)
+
+    const links = screen.getAllByRole('link')
+    expect(links).toHaveLength(2)
+    expect(links[0]).toHaveAttribute('href', 'https://example.com/a**b**c')
+    expect(links[0].querySelector('strong')?.textContent).toBe('你：')
+    expect(links[0].textContent).toBe('你：如果')
+    expect(links[1]).toHaveAttribute('href', 'https://example.com/a**b**c')
+    expect(links[1].textContent).toBe('https://example.com/a**b**c')
+    expect(links[1].querySelector('strong')).toBeNull()
+  })
+})
+
 describe('A bold word at the start of a list item (default mono skin)', () => {
   it('stays plain inline bold with no boxed label and keeps colons intact', () => {
     const { container } = render(

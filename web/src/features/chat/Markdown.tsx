@@ -3,6 +3,8 @@ import { ImageOffIcon } from 'lucide-react'
 import ReactMarkdown, { type ExtraProps } from 'react-markdown'
 import { Link as RouterLink, useInRouterContext } from 'react-router'
 import rehypeHighlight from 'rehype-highlight'
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly'
+import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough/parseOnly'
 import remarkGfm from 'remark-gfm'
 import { ImagePreviewDialog } from '@/features/images/ImagePreview'
 import { cn } from '@/lib/utils'
@@ -417,7 +419,8 @@ export const Markdown = memo(function Markdown({
     <ReplyFolder.Provider value={localFolder}>
     <div className="markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkHttpLinks]}
+        // remarkCjkFriendlyGfmStrikethrough must run after remarkGfm so it overrides GFM's strikethrough tokenizer.
+        remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkCjkFriendlyGfmStrikethrough, remarkHttpLinks]}
         remarkRehypeOptions={{
           clobberPrefix: prefix,
           footnoteLabel: t.chat.footnoteLabel,
