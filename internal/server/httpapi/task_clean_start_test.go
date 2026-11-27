@@ -77,10 +77,15 @@ func preparedInstance(t *testing.T, e *env, src *tasks.Source, inst store.TaskIn
 // does not wait for a reply in progress) and takes no fork of its regular conversation; the Agent folder is still
 // copied.
 func TestCleanTaskPreparesWithoutPausingOrForking(t *testing.T) {
-	e, src, inst, calls := cleanStartFixture(t, nil)
+	e, src, inst, calls := cleanStartFixture(t, map[string]any{"prompt": "Background for the step"})
 	got := preparedInstance(t, e, src, inst)
 	if got.ForkSource != nil || calls.Load() != 0 {
 		t.Fatalf("a clean step forked or paused its Agent: fork=%v calls=%d", got.ForkSource, calls.Load())
+	}
+	// It starts with no copy of the conversation and with its step's prompt.
+	snap, err := src.ExecutionSnapshot(context.Background(), inst.ID)
+	if err != nil || snap.ForkSessionFile != "" || snap.StepPrompt != "Background for the step" {
+		t.Fatalf("execution snapshot: fork=%q prompt=%q err=%v", snap.ForkSessionFile, snap.StepPrompt, err)
 	}
 	// Nothing about the regular conversation matters: not even a missing session blocks a clean step.
 	e2, src2, inst2, calls2 := cleanStartFixture(t, nil)

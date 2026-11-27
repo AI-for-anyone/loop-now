@@ -204,20 +204,40 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	if out.ProviderState, err = agentconfig.ResolveProviderState(ctx, s.ProviderState, out); err != nil {
 		return agentconfig.Snapshot{}, err
 	}
+	r, err := s.Store.GetTask(ctx, inst.TaskID)
+	if err != nil {
+		return agentconfig.Snapshot{}, err
+	}
+	out.StepPrompt = stepPrompt(&r, inst.ID)
 	// Last: with the Agent's own configuration in a worktree, the project accounts filled in above do not apply.
-	if err := s.workspaceSnapshot(ctx, inst, cfg, &out); err != nil {
+	if err := s.workspaceSnapshot(ctx, inst, &r, cfg, &out); err != nil {
 		return agentconfig.Snapshot{}, err
 	}
 	return out, nil
 }
 
+// stepPrompt is the Manager's prompt for the step the instance is doing: the current node's when the instance runs it,
+// otherwise the instance's latest node (for example when it answers an Inbox message after its step ended).
+func stepPrompt(r *taskmodel.Record, runtimeID uuid.UUID) string {
+	n := r.Current()
+	if n == nil || n.RuntimeID != runtimeID {
+		n = nil
+		for i := len(r.View.Nodes) - 1; i >= 0 && n == nil; i-- {
+			if r.View.Nodes[i].RuntimeID == runtimeID {
+				n = &r.View.Nodes[i]
+			}
+		}
+	}
+	if n == nil {
+		return ""
+	}
+	step, _ := r.View.Workflow.Step(n.StepID)
+	return step.Prompt
+}
+
 // workspaceSnapshot points a step of a task with an active workspace (worktree or copy) at it, with the Agent's own CLI configuration when
 // the Agent had that on at task start; as in a regular conversation, project accounts then do not apply.
-func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance, cfg taskruntime.Configuration, out *agentconfig.Snapshot) error {
-	r, err := s.Store.GetTask(ctx, inst.TaskID)
-	if err != nil {
-		return err
-	}
+func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance, r *taskmodel.Record, cfg taskruntime.Configuration, out *agentconfig.Snapshot) error {
 	w := r.View.Workspace
 	if w == nil || w.State != taskmodel.WorkspaceStateActive {
 		return nil
