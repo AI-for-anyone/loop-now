@@ -65,8 +65,39 @@ export const server = setupServer(
   // nor Agents have registered local directories yet (tests that need them override with localModeBackend).
   http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
   http.get(apiUrl('/text-generation-settings'), () => HttpResponse.json(automaticSettings())),
-  // Remote door & paired devices: off and empty by default (local door tests override as needed).
+  // Remote door, relay account, tunnel & paired devices: off/signed-out and empty by default (local door tests override as needed).
   http.get(apiUrl('/remote-access'), () => HttpResponse.json({ enabled: false, port: null, state: 'off', url: null, error: null })),
+  http.get(apiUrl('/relay-account'), () =>
+    HttpResponse.json({
+      relayUrl: 'https://relay.loop-now.app',
+      signedIn: false,
+      accountId: null,
+      signedInAt: null,
+      signIn: null,
+      error: null,
+    }),
+  ),
+  http.get(apiUrl('/tunnel'), () =>
+    HttpResponse.json({
+      enabled: false,
+      state: 'off',
+      hostname: null,
+      url: null,
+      error: null,
+      errorCode: null,
+      retryAt: null,
+      download: null,
+      cloudflared: null,
+    }),
+  ),
+  http.get(apiUrl('/device-pairings/:pairingId'), ({ params }) =>
+    HttpResponse.json({
+      id: String(params.pairingId),
+      state: 'open',
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      device: null,
+    }),
+  ),
   http.get(apiUrl('/devices'), () => HttpResponse.json({ devices: [] })),
   // Read wherever a path can be chosen (whether this computer's dialog can be shown in a browser): false unless a test says otherwise.
   http.get(apiUrl('/context'), () => HttpResponse.json(context)),
