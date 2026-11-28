@@ -1,377 +1,271 @@
+<p align="center"><img src="web/public/favicon.svg" width="96" alt="Loop Now"></p>
+
+<p align="center"><strong>Your coding agents, one workspace. Claude Code, Codex, Antigravity, Grok and Pi working together — on your computer, reachable from your phone.</strong></p>
+
+<p align="center"><img src="docs/assets/console-en.png" width="100%" alt="Loop Now console: an Agent's conversation with its tools, run log and message box"></p>
+
 <p align="center">
-  <img src="web/public/favicon.svg" width="72" alt="Loop Now logo" />
+  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest"><img src="https://img.shields.io/github/v/release/AI-for-anyone/loop-now?label=release" alt="Latest release"></a>
+  <a href="https://github.com/AI-for-anyone/loop-now/stargazers"><img src="https://img.shields.io/github/stars/AI-for-anyone/loop-now?style=flat" alt="GitHub stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/desktop-macOS%20Apple%20silicon-black" alt="Desktop app: macOS Apple silicon">
+  <img src="https://img.shields.io/badge/server-macOS%20%7C%20Linux-555" alt="Server: macOS and Linux">
 </p>
 
-<h1 align="center">Loop Now</h1>
-
 <p align="center">
-  <strong>A local multi-agent workspace, built to extend with plugins.</strong><br />
-  Connect CLI and MCP tools, subscribe to events, and shape how your agents work—while keeping projects, conversations, and tasks in one place.
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a><br />
-  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest">Download the desktop app</a> ·
-  <a href="#getting-started">Getting started</a> ·
-  <a href="#what-you-can-do">Features</a> ·
-  <a href="#built-to-extend-the-plugin-system">Plugins</a> ·
+  <a href="#quick-start">Install</a> ·
+  <a href="#install-with-your-agent">Install with your agent</a> ·
+  <a href="#use-cases">Use cases</a> ·
+  <a href="#why-loop-now">Why Loop Now</a> ·
+  <a href="#docs">Docs</a> ·
   <a href="https://github.com/AI-for-anyone/loop-now/issues">Issues</a>
 </p>
 
-![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](docs/assets/console-en.png)
+<div align="center">
 
-<p align="center"><sub>Actual console with demonstration data. The interface supports English and Chinese; it follows your browser language, or switch in Global settings.</sub></p>
+**English** · [简体中文](README.zh-CN.md)
 
-Loop Now brings your agents into one browser workspace. An agent keeps its own working directory and conversation; a Manager can coordinate specialists through a task workflow. You can follow the conversation, inspect tool calls, send a message, and see who is working or waiting.
+</div>
 
-**Plugins are the main extension point:** tools, event hooks, accounts, permissions, and resources can travel together as a versioned package.
+<a id="quick-start"></a><a id="快速开始"></a>
 
-The platform runs on your machine, with [Pi](https://github.com/earendil-works/pi) as its execution engine. You choose the models, credentials, repositories, and tools each agent may use.
+# Loop Now
 
-> **Early-stage personal edition.** This repository targets a single local server. The console has no login and is intended for loopback access. Model and tool providers may still receive data when you use their services.
+Loop Now is a local, open-source workspace where your coding agents work as a team. Each Agent keeps its own folder,
+conversation and tools; a Manager hands out tasks that run step by step — or in parallel — with review loops you can watch.
+Agents run on the CLIs you already use with your own logins, or on the bundled Pi with your API keys. Everything stays on your
+computer, and you can pick it up from your phone.
 
-## What you can do
+- 🤝 **Bring the agents you already pay for.** Claude Code, Codex, Antigravity, Grok, any ACP command — or the bundled Pi.
+- 🧭 **Tasks you can watch.** A Manager writes the workflow; every step runs in its own git worktree, then opens a PR.
+- 📱 **From anywhere.** Pair your phone with a QR code; your computer gets its own `https://<id>.loop-now.app`.
+- 🧩 **Built to extend.** Plugins bring CLI and MCP tools, event hooks, accounts and Skills in one versioned package.
 
-| Capability | What it gives you |
+### Download the desktop app
+
+macOS on Apple silicon. One DMG holds the server, the console, Node and Pi — nothing else to install.
+
+**[Download the latest Loop Now for Mac →](https://github.com/AI-for-anyone/loop-now/releases/latest)** (`loop-now-desktop-<version>-mac-arm64.dmg`)
+
+The app is not notarized yet: on first launch open **System Settings › Privacy & Security** and click **Open Anyway**.
+
+<a id="install-with-your-agent"></a>
+
+### Install with your agent
+
+Already using Claude Code, Codex or another coding agent? Paste this into it and let it do the install:
+
+```text
+Read https://github.com/AI-for-anyone/loop-now/blob/main/docs/install.md and follow the instructions to install Loop Now on this computer. Ask me before replacing anything or using sudo, and tell me what to click when macOS asks.
+```
+
+The agent picks the desktop app or the server bundle for your computer, checks the download against `SHA256SUMS`, starts it
+and tells you the console address. [docs/install.md](docs/install.md) is written for agents; you can read it too.
+
+### Run the server bundle (macOS or Linux)
+
+```sh
+V=0.3.7; PLATFORM=linux-amd64      # darwin-arm64, darwin-amd64, linux-amd64, linux-arm64
+curl -fLO https://github.com/AI-for-anyone/loop-now/releases/download/v$V/loop-now-$V-$PLATFORM.tar.gz
+tar -xzf loop-now-$V-$PLATFORM.tar.gz && cd loop-now-$V-$PLATFORM
+LOOP_NOW_WORK_ROOT=/var/lib/loop-now ./loop-server     # then open http://127.0.0.1:8780/
+```
+
+The bundle carries its own Node and Pi; the machine needs only Git. Details: [Setup](#docs).
+
+<a id="use-cases"></a>
+
+## 🎬 What you can do
+
+Some things people hand to Loop Now. Type them to your Manager Agent — or to any Agent — in the console.
+
+| You say | What happens |
 | --- | --- |
-| **Build a team** | Organize agents by project. Give each a model, thinking level, instructions, Skills, repositories, and tool access. Designate a Manager to coordinate the project. |
-| **Keep work in context** | Continue an agent's regular conversation and workspace. Tasks use separate copies, with the same agent reusing its task workspace and session across steps. |
-| **Coordinate through Inbox** | Agents and people exchange messages, ask questions, and reply. Choose queue or interrupt when an agent is busy; sleeping agents can wake when messages arrive. |
-| **Run visible workflows** | Follow task nodes, conditional branches, bounded review loops, retries, and saved artifacts. A task's workflow and captured configuration stay fixed after it starts. |
-| **Extend through plugins** | Bring CLI and MCP tools, event hooks, accounts, permissions, and Skills into one package. Add the integrations your team needs. |
-| **See what happened** | Stream replies, send images, render Markdown and Mermaid, and inspect model usage, tool commands, timing, and failures in each reply's run timeline. |
+| *"Add sign-in with GitHub. Backend and console in parallel, then review, then open a PR and merge when CI is green."* | The Manager writes a task: two branches work at the same time in their own worktrees and merge at a join step, a reviewer Agent checks the result for real, and the last step opens the PR and merges it once CI passes. |
+| *"Read the open issues and draft a fix plan for the bugs."* | An Agent on Claude Code works in your repository with your own login and leaves the plan in its folder; it shows as a card in the reply, one click to open. |
+| *"Continue the conversation I started in Codex yesterday."* | Import the Codex (or Claude Code) conversation; the Agent continues it, on the same CLI or another. |
+| *"Run the full test suite and tell me what fails."* | The Agent starts it in the background; the reply shows `⟳ Bash running in the background`, and the Agent follows up with the result when it ends — on whatever device you are using. |
+| *"Make me an animated HTML page of a pelican riding a bike."* | The file shows as a card; click it to open the page in a sandboxed tab. |
 
-![Loop Now overview: run status for every agent, and today's token usage](docs/assets/overview-en.png)
+<p align="center"><img src="docs/assets/overview-en.png" width="100%" alt="Loop Now overview: run status for every Agent and today's token usage"></p>
 
-### An example: from implementation to review
+<a id="why-loop-now"></a>
 
-Create a Manager, a Developer, and a Reviewer. Assign their repositories, models, and allowed tools, then ask the Manager to coordinate a change:
+## ✨ Why Loop Now
 
-> Implement this feature, have the Reviewer check it, and return the result. Ask me through Inbox if a decision is needed.
+### 1. Bring your own agents
 
-A workflow can move from development to review and back for a bounded number of revisions. Each participant works in its task context; you can inspect messages and artifacts throughout. Your project instructions and Skills define the actual process—the platform does not prescribe a particular coding, QA, or deployment policy.
+An Agent runs on one of these, and you can switch at any message — the conversation comes along:
 
-## Built to extend: the plugin system
+<p>
+  <img src="web/src/assets/runtime-logos/claude.svg" height="28" alt="Claude Code">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/openai.svg" height="28" alt="Codex">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/antigravity.svg" height="28" alt="Antigravity">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/grok.svg" height="28" alt="Grok">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/pi.svg" height="28" alt="Pi">
+</p>
 
-**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two sides, and either one is optional:
-
-- The **agent side** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
-- The **platform side** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
-
-| The host provides | What it means for a plugin |
+| Runtime | How it runs |
 | --- | --- |
-| **Events** | Every observation event in the catalog: runs, tasks, nodes, Inbox, questions, sleep, agents, Pi processes, folders, plugins. Events are persisted, acknowledged after the handler returns, retried, and replayed after a restart. Interception, modification, and claim hooks have their own timeouts and fallbacks. |
-| **State + secrets** | Per-plugin persistent state, global or per project. `x-secret` configuration fields are write-only in the console and masked in plugin logs. |
-| **Configuration forms** | `loopNow.configSchema` is plain JSON Schema; the console renders it. Fields marked `x-scope: project` can be overridden per project. |
-| **Reliable outbound HTTP** | The SDK's delivery library keeps a persisted queue, retries with backoff, signs requests with HMAC-SHA256, and writes a delivery log that the plugin page displays. |
-| **Logs + isolation** | Each plugin's output lands in its own log. A plugin that throws, times out, or fails to load affects only itself. |
+| **Claude Code, Codex** | The CLI installed on your computer, with your own login and subscription. Loop Now never reads or stores the login. |
+| **Antigravity, Grok, any ACP command** | Through the Agent Client Protocol, with the CLI's own login. |
+| **Pi** (bundled) | Loop Now's built-in engine, with the model accounts and API keys you add per project. |
 
-The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both sides, the events, and the permissions before anything runs.
+- **Your own configuration, or a clean one.** **Use my own CLI configuration** lets an Agent on a CLI load your settings,
+  `CLAUDE.md`, plugins, skills and MCP servers, exactly as in your terminal; off, it gets only what Loop Now gives it.
+- **Permission modes.** *Supervised*, *Auto-accept edits*, *Auto* or *Full access*. Requests to approve show as cards in the
+  conversation, on any device.
+- **Background work, visible.** Long commands and sub-agents an Agent starts in the background are listed, can be stopped,
+  and the Agent follows up when they end.
+- **Write with AI.** Draft an Agent's Prompt with the CLI of your choice.
 
-Observation events, state, secrets, configuration, and the delivery library are available now. Interception and modification hooks, console action buttons, HTTP endpoints, schedules, channels, and plugin accounts are specified in [`plugins/SPEC.md`](plugins/SPEC.md) and are being rolled out.
+### 2. Tasks you can watch, with a real git workflow
 
-### Install once, enable per project, grant per agent
+A Manager Agent turns a request into a **task**: a workflow of steps, each done by an Agent, with labelled ways forward
+("approved", "needs a fix") and bounded review loops. The workflow is frozen when the task starts, so it runs the way you
+approved it.
 
-Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent side. Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
-
-Three official plugins ship with the platform:
-
-- [**webhook**](plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
-- [**playwright**](plugins/official/playwright/README.md) gives agents a dedicated, visible Chromium through the official Playwright MCP: open pages, read them, click, type, and take screenshots, without touching your everyday Chrome.
-- [**hello**](plugins/official/hello/README.md) is the smallest plugin with both sides, and the starting point for writing your own.
-
-![Loop Now plugin market: plugin host status and the official plugins](docs/assets/plugins-en.png)
-
-### A platform side in a few lines
-
-```ts
-import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
-
-export default function register(api: PluginAPI) {
-  const delivery = createDelivery(api)
-  api.on('task.completed', async (event) => {
-    const { url } = api.config.get<{ url?: string }>(event.projectId)
-    if (url) await delivery.deliver({ target: url, body: event, eventId: event.id, eventType: event.type })
-  })
-}
-```
-
-```json
-{
-  "name": "task-notifier",
-  "version": "1.0.0",
-  "keywords": ["loop-now-plugin"],
-  "peerDependencies": { "@loop-now/plugin-sdk": "*" },
-  "loopNow": {
-    "id": "task-notifier",
-    "platform": "./platform.ts",
-    "events": ["task.completed"],
-    "permissions": ["state"],
-    "configSchema": { "type": "object", "properties": { "url": { "type": "string", "x-scope": "project" } } }
-  }
-}
-```
-
-The host loads TypeScript directly, as Pi does, and provides `@loop-now/plugin-sdk` itself. Check a directory with `node plugins/host/dist/main.js validate <dir> --load`, which reports manifest errors and any subscriptions the code makes outside `loopNow.events`.
-
-Start with the [SDK reference](plugins/sdk/README.md) and the official plugins. [`plugins/SPEC.md`](plugins/SPEC.md) is the full contract: package format, event catalog, hook kinds and timeouts, permissions, and installation. [`api/plugin-host-protocol.md`](api/plugin-host-protocol.md) describes the wire protocol between the server and the host. There is no sandbox: plugins execute code, so install sources you trust.
-
-Lark user execution separately requires the pinned platform bundle described in [its build notes](scripts/lark-user-variant/README.md); it is not required for basic chat.
-
-## Getting started
-
-Four ways to run it: the **desktop app** (macOS, nothing to install), a **server release bundle** (Linux and macOS), **Docker Compose**, or a source installation. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
-
-### Desktop app (macOS Apple Silicon)
-
-One DMG carries the server, the console, Node and Pi; nothing else is required.
-
-1. Download `loop-now-desktop-<version>-mac-arm64.dmg` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), open it and drag Loop Now into Applications.
-2. First launch: the package is not yet notarized by Apple, so macOS says it cannot verify the developer. Open System Settings › Privacy & Security, find the Security section and click "Open Anyway"; the prompt does not return.
-3. A Loop Now icon appears in the menu bar and the window shows the console. Closing the window keeps the server and the agents running in the background; choose "Quit" from the menu bar icon to stop everything.
-
-Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. By default the desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist. To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`. To move over from a source installation and keep its work root, stop the source installation's server, quit Loop Now, add `{"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}` to `~/Library/Application Support/Loop Now/desktop.json` (`dataDir` and `contextDir` can be set the same way, as absolute paths) and open it again; the profile line in the menu bar shows the paths in use. A PostgreSQL-based installation also needs its database imported first; [Getting started](https://ai-for-anyone.github.io/loop-now/guide/getting-started#moving-to-the-desktop-app) has the full steps.
-
-Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
-
-Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. On first launch, Loop Now offers once to install the `loopctl` command line tool for your terminal (you can also install it any time from the menu bar / tray icon › "Install Command Line Tool…" or in **Global settings**). The external TLS port used by external identities and `loopctl` is opened automatically on this computer only (`127.0.0.1`, with a self-signed certificate maintained by the server); menu bar / tray icon › "External Identity Connection…" shows the address, certificate path and `loopctl` setup command.
-
-
-### Server release bundle (Linux / macOS)
-
-Each release also carries a server bundle per platform, `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`. It holds `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, and its own Node 24.21.0 and Pi 1.4.0, so the machine needs only Git.
-
-1. Download your platform's bundle and `SHA256SUMS` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), then check the download:
-
-   ```sh
-   sha256sum -c --ignore-missing SHA256SUMS        # Linux
-   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
-   ```
-
-2. Unpack it with `tar` in a terminal. On macOS, unpacking it in Finder marks the files as downloaded from the internet, and Gatekeeper then blocks the unsigned binaries.
-
-   ```sh
-   tar -xzf loop-now-<version>-<platform>.tar.gz
-   cd loop-now-<version>-<platform>
-   ```
-
-3. Set the data directory and the work root, then start the server. The work root follows the same rules as in a source installation and is created the same way ([step 2](#2-configure-the-server)):
-
-   ```sh
-   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
-   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS: /Users/Shared/loop-now
-   ./loop-server
-   ```
-
-4. Open **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**. The console is served at the root of the server's port; there is no separate console process.
-
-The bundled Node and Pi are used automatically, so there is nothing else to install; variables such as `LOOP_NOW_NODE_BIN` still take precedence when set. Credentials are stored in plaintext in the data directory; protect it and its backups. To update, stop the server, unpack the new bundle and start its `loop-server` with the same `LOOP_NOW_DATA_DIR` and `LOOP_NOW_WORK_ROOT`, then delete the old directory.
-
-
-### Docker Compose (local all-in-one)
-
-The first startup builds the server and console images locally, then starts both:
-
-```sh
-docker compose up --build -d
-```
-
-Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`. Do not expose this configuration externally.
-
-The `loopdata` named volume stores the database (SQLite, with daily backups), agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
-
-Agents running in containers have some boundaries:
-
-- The Lark user CLI supports macOS arm64 only and is unavailable in these Linux containers.
-- Containers do not automatically see host directories. Mount existing repositories or files into the `server` container separately, then configure the container paths in the console; `loopdata` stores only the platform's own workspaces.
-- Containers do not share Pi or CLI login sessions from the host. Configure model API keys and required tool accounts in the project before starting work.
-
-### Native models.json
-
-Go to **Global settings → Model settings** to edit the native `models.json` for the pinned Pi version, add custom providers, or override built-in providers. For example:
-
-```json
-{
-  "providers": {
-    "example": {
-      "baseUrl": "https://models.example.com/v1",
-      "api": "openai-completions",
-      "apiKey": "$EXAMPLE_KEY",
-      "headers": { "X-Client": "$EXAMPLE_CLIENT_HEADER" },
-      "models": [
-        { "id": "my-model", "input": ["text", "image"], "contextWindow": 128000, "maxTokens": 8192 }
-      ]
-    }
-  }
-}
-```
-
-`apiKey` and `headers` values on providers, models, and model overrides accept only `$NAME` environment-variable references. Names start with an ASCII letter or underscore, followed by letters, digits, or underscores. Plaintext secrets and `!commands` are rejected. Configure real credentials in project model accounts; they are not written to `models.json` or returned to the editor.
-
-Persistent agents use the saved catalog from their next message, while running tasks keep the provider configuration frozen at creation. If a saved configuration no longer passes validation after a restart, the server temporarily falls back to the built-in catalog and shows a warning on the settings page so you can repair and save it.
-
-### Source installation: 1. Prepare dependencies
-
-| Dependency | Repository baseline |
+| | |
 | --- | --- |
-| Go | 1.27 or later |
-| Node.js / npm | **24.21.0 / 11.19.0**; Web scripts check these exact versions |
-| Pi coding agent | **1.4.0** |
-| Other tools | Git |
+| **A worktree per task** | A task on a git repository gets its own worktree and branch; any other folder is copied and only read, with results saved as artifacts. Cleanup removes the worktree only when nothing would be lost. |
+| **Parallel steps** | Fork a workflow into branches that run at the same time, each in its own worktree; the join step merges them and resolves conflicts. |
+| **Clean steps** | Every step starts from a clean conversation with a prompt written for that step — no long chat history to re-read on every call. |
+| **One PR per task** | Steps commit and push to the task branch; a final step can open the PR, wait for CI and merge it — whatever the Manager writes into the workflow. |
+| **Everything on record** | Each step's conversation, tool calls, timing, token usage, questions and artifacts stay with the task. |
 
-With the required Node and npm active:
+### 3. From anywhere, on your phone
+
+Turn on **Global settings › Phones and other devices › Access from phones**, sign in to a Loop Now account, and your computer gets a
+public address `https://<id>.loop-now.app` through a Cloudflare Tunnel. Scan the pairing QR code with your phone and you're in:
+chat, approve requests, follow tasks — live.
+
+- Only paired devices get in; each can be removed at once, and one unused for 30 days must pair again.
+- The console and your conversations go phone → Cloudflare → your computer. The relay at `relay.loop-now.app` only hands
+  out the tunnel and address; it never sees console traffic or device sessions.
+- Your computer must keep Loop Now running. On this computer itself, the console needs no sign-in.
+
+### 4. Built to extend: plugins
+
+A plugin is one directory whose `package.json` is the manifest, with up to two sides:
+
+- the **agent side** — a standard [Pi package](https://pi.dev/packages): extensions, Skills, MCP servers and CLIs;
+- the **platform side** — runs in a Node plugin host next to the server, subscribes to platform events and calls the
+  platform API with a scoped token.
+
+Install once, enable per project, grant per Agent. Official plugins include a webhook that POSTs Inbox events to your URL.
+Read the [plugin guide](https://ai-for-anyone.github.io/loop-now/plugins/) and the [specification](plugins/SPEC.md).
+
+<p align="center"><img src="docs/assets/plugins-en.png" width="100%" alt="Loop Now plugin market"></p>
+
+<a id="docs"></a>
+
+## 🛠 Setup and technical documentation
+
+Full guides: **[ai-for-anyone.github.io/loop-now](https://ai-for-anyone.github.io/loop-now/)** —
+[getting started](https://ai-for-anyone.github.io/loop-now/guide/getting-started),
+[concepts](https://ai-for-anyone.github.io/loop-now/guide/concepts),
+[architecture](https://ai-for-anyone.github.io/loop-now/guide/architecture),
+[configuration](https://ai-for-anyone.github.io/loop-now/reference/configuration).
+
+### Desktop app
+
+- **Install:** open the DMG, drag Loop Now into Applications. First launch: **System Settings › Privacy & Security › Open
+  Anyway** (the app is ad-hoc signed, not notarized).
+- **Running:** a Loop Now icon sits in the menu bar. Closing the window keeps the server and the Agents running; **Quit** in
+  the menu stops everything.
+- **Command line:** on first launch Loop Now offers to install `loopctl` (asks for your password once); you can also do it
+  from the menu bar icon or **Global settings**. External identities connect through a local TLS port: menu bar icon ›
+  **External Identity Connection…**.
+- **Data:** database and daily backups in `~/Library/Application Support/Loop Now/default/data`, Agent folders in
+  `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`.
+- **Updating:** quit, replace the app with the new DMG's copy, open it; data is kept. The menu bar icon tells you when a new
+  version is out and opens the download page.
+
+### Server bundle (macOS, Linux)
+
+Each release has `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64`, `linux-arm64`,
+with `loop-server` (console built in), `loopctl`, the plugin host, the official plugins, Node 24.21 and Pi 1.4.0.
 
 ```sh
-npm install -g @earendil-works/pi-coding-agent@1.4.0
-pi --version
-
-git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
-cd loop-now
+shasum -a 256 -c --ignore-missing SHA256SUMS     # Linux: sha256sum -c --ignore-missing SHA256SUMS
+tar -xzf loop-now-<version>-<platform>.tar.gz    # use tar; Finder quarantines the files on macOS
+export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+export LOOP_NOW_WORK_ROOT=/var/lib/loop-now      # macOS: /Users/Shared/loop-now
+./loop-server                                    # console at http://127.0.0.1:8780/
 ```
 
-### 2. Configure the server
+The work root must be outside your home directory, with no `AGENTS.md` or `CLAUDE.md` above it, so Agents do not inherit
+unrelated instructions. Credentials are stored in plaintext in the data directory: protect it and its backups.
 
-Run the following from the repository root:
+### Docker Compose
 
 ```sh
-export LOOP_NOW_NODE_BIN="$(command -v node)"
-export LOOP_NOW_PI_BIN="$(command -v pi)"
+docker compose up --build -d      # console at http://localhost:5173
 ```
 
-The server keeps its database and daily backups in a data directory, `~/.loop_now` of the server user by default (`LOOP_NOW_DATA_DIR` changes it); it creates the database on first start. Credentials are stored in plaintext in that database; protect the data directory and its backups. The server reads process environment variables; it does not automatically load an `.env` file.
+Ports are published on `127.0.0.1` only. The `loopdata` volume holds the database, Agent folders and sessions;
+`docker compose down -v` deletes it. Containers do not see host folders or share CLI logins unless you mount them.
 
-Choose a persistent working directory **outside your home directory**, with no `AGENTS.md` or `CLAUDE.md` in its ancestor directories. This prevents Pi from inheriting unrelated host instructions. For a fresh installation, the default is `/Users/Shared/loop-now` on macOS or `/var/lib/loop-now` on Linux:
+### From source
 
-```sh
-# macOS; on Linux use /var/lib/loop-now instead.
-export LOOP_NOW_WORK_ROOT='/Users/Shared/loop-now'
-sudo mkdir -p "$LOOP_NOW_WORK_ROOT"
-sudo chown "$(id -u):$(id -g)" "$LOOP_NOW_WORK_ROOT"
-chmod 700 "$LOOP_NOW_WORK_ROOT"
-```
-
-### 3. Build and start the backend
-
-Build the server and its matching `loopctl` distribution together:
+Go 1.27+, Node.js 24.21.0 / npm 11.19.0, Pi 1.4.0, Git. Build the server with its matching `loopctl`, then the console:
 
 ```sh
-mkdir -p bin
+git clone --depth 1 https://github.com/AI-for-anyone/loop-now.git && cd loop-now
 go build -o bin/loop-server ./cmd/loop-server
-loop_version="$(bin/loop-server version)"
-go run ./cmd/loopctl-dist -version "$loop_version" -out "$PWD/.local-build/loopctl-dist"
-
-export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
-bin/loop-server
+go run ./cmd/loopctl-dist -version "$(bin/loop-server version)" -out "$PWD/.local-build/loopctl-dist"
+LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist" bin/loop-server
+cd web && ./bin/npm24 ci && ./bin/npm24 run dev      # console at http://localhost:5173
 ```
 
-Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory. To move an installation from a PostgreSQL-based release (up to v0.1.0), first check out the tag `pg-final` (the last PostgreSQL-based commit), build it and start it once so the old database reaches its last migration, stop it, then run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` pointing at the old database; it copies everything into a new database in the data directory.
+The [getting started guide](https://ai-for-anyone.github.io/loop-now/guide/getting-started) covers the work root, Pi, models
+and every variable.
 
-Plugins need the Node plugin host, built from `plugins/` (Node 24.21.0). The server runs it only when `LOOP_NOW_PLUGIN_HOST_ENTRY` is set, and offers the official plugins as the `builtin` install source when `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is set:
-
-```sh
-(cd plugins && npm ci --ignore-scripts && npm run build)
-export LOOP_NOW_PLUGIN_HOST_ENTRY="$PWD/plugins/host/dist/main.js"
-export LOOP_NOW_PLUGIN_OFFICIAL_DIR="$PWD/plugins/official"
-```
-
-Set these before starting `bin/loop-server`. `dist/main.js` is a single self-contained file and can be copied elsewhere. Optional tool integrations may require their own dependencies and credentials.
-
-### 4. Start the console
-
-In a second terminal, from the repository root, with Node 24.21.0 and npm 11.19.0 active:
-
-```sh
-cd web
-export LOOP_NOW_WEB_NODE_BIN="$(dirname "$(command -v node)")"
-./bin/npm24 ci
-./bin/npm24 run dev
-```
-
-Open **[http://localhost:5173](http://localhost:5173)**. The default API address is already configured. For a different address, see [`web/.env.example`](web/.env.example).
-
-### 5. Give your first agent a job
-
-1. Open a project and add a model account using a supported login or API key.
-2. Create an Agent, select its model and account, and add instructions or Skills.
-3. Add any repositories or files it needs. Enable plugins and grant tool access explicitly.
-4. Start a conversation. For images, choose a model that supports image input.
-5. When you want collaboration, add specialist agents and designate a project Manager.
-
-Start with one agent and a small task before adding a longer workflow.
-
-## How it fits together
+### How it fits together
 
 ```mermaid
 flowchart LR
-    UI[Web console] <-->|HTTP and SSE| Server[Go server]
+    Phone[Phone / other device] -->|Cloudflare Tunnel| Server
+    UI[Web console / desktop app] <-->|HTTP and SSE| Server[Go server]
     Server <--> DB[(SQLite)]
-    Server -->|RPC| Pi[Pi processes]
+    Server -->|RPC / stdio| Runtimes[Pi · Claude Code · Codex · ACP CLIs]
     Server <-->|stdio| Host[Node plugin host]
-    Host -->|HTTP, plugin token| Server
-    Pi --> CLI[Scoped CLI tools]
-    Pi --> Ext[Plugin extensions and MCP servers]
+    Server -.->|sign-in, tunnel| Relay[relay.loop-now.app]
 ```
-
-SQLite in the data directory stores platform state, credentials, messages, task records, and queues; busy locks and live streams are kept in the server process. The local filesystem holds agent workspaces, sessions, and installed tools. These components form one local installation; the diagram does not imply independently scalable services.
 
 | Source | Purpose |
 | --- | --- |
-| [`web/`](web/) | React, TypeScript, and Vite console |
-| [`internal/server/`](internal/server/) | Go API, scheduling, storage, and local execution |
-| [`cmd/loopctl/`](cmd/loopctl/) | JSON CLI for platform agents and external identities |
-| [`plugins/`](plugins/) | Plugin specification, Node plugin host, SDK, and official plugins |
-| [`api/`](api/) | Console and Agent OpenAPI contracts |
-| [`MAIN.md`](MAIN.md) | Maintainer overview and current implementation state |
+| [`internal/server/`](internal/server/) | Go API, scheduling, tasks, storage and the Agent runtimes |
+| [`web/`](web/) | React, TypeScript and Vite console |
+| [`desktop/`](desktop/) | Electron desktop app |
+| [`cmd/loopctl/`](cmd/loopctl/) | JSON CLI for Agents and external identities |
+| [`plugins/`](plugins/) | Plugin specification, host, SDK and official plugins |
+| [`api/`](api/) | OpenAPI contracts for the console and Agents |
 
-## Configuration and boundaries
+### Boundaries
 
-All server options and defaults are defined in [`internal/server/config/config.go`](internal/server/config/config.go). Frequently adjusted settings include:
+Loop Now is an early-stage personal edition: one person, one computer.
 
-| Variable | Purpose / default |
-| --- | --- |
-| `LOOP_NOW_LISTEN_ADDR` | Console API; `127.0.0.1:8780` |
-| `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
-| `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files |
-| `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugins' platform sides do not run |
-| `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | Absolute path of the official plugins shipped with the platform (one directory per plugin); unset means no `builtin` install source |
-| `LOOP_NOW_PLUGIN_MARKET_URL` | `https` address of the official plugin market's `loop-now-market.json`; defaults to the official market index and can point elsewhere |
-| `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |
-| `LOOP_NOW_PI_IDLE_TIMEOUT` | Idle Pi process timeout; `10m` |
-| `LOOP_NOW_CONSOLE_ORIGINS` | Allowed browser origins; local port 5173 by default |
-| `LOOP_NOW_LARK_USER_BUNDLE_DIR` | Optional verified Lark user CLI bundle |
+- On this computer the console needs no sign-in; keep it on loopback. Other devices come in only through the remote door, as
+  paired devices.
+- Agents run local commands as your operating-system user. A task folder is not a security sandbox; choose permission modes
+  and plugins you trust.
+- Model and tool providers still receive what you send them.
+- Restarting or updating interrupts running replies; update when Agents are idle.
 
-The current release is intended for trusted personal use:
+## 🤝 Contributing
 
-- The console has no authentication. Keep it on loopback rather than exposing it to a public network.
-- Phones and other devices: **Global settings › Phones and other devices** turns on a second loopback listener, the remote door (off by default). Every request there needs a device paired with a one-time code that only this computer can make (a QR code and a link, valid for 10 minutes); the same page lists the devices and removes them, and a device unused for 30 days must pair again. Until a tunnel reaches it (a later release), the remote door opens only on this computer. Details: [Configuration › Phones and other devices](https://ai-for-anyone.github.io/loop-now/reference/configuration#phones-and-other-devices).
-- Agents execute local commands under the server's operating-system user. A separate task directory is not an OS security sandbox.
-- Plugins execute code; install sources you trust. Model and tool access also depends on the credentials and permissions you provide.
-- Workflows support linear steps, conditional branches, and bounded loops. Parallel joins, multi-replica deployment, and elastic scaling are outside this edition's current scope.
-- Conversation history is persistent, but a server restart is not a promise of uninterrupted execution or automatic replay of in-flight work. Prefer updating when agents are idle.
+Issues and pull requests are welcome. Read [AGENTS.md](AGENTS.md) for the working rules (English first, the API is defined in
+`api/*.yaml`, a change's notes go in its pull request description) and the
+[contributing guide](https://ai-for-anyone.github.io/loop-now/reference/contributing).
+Loop Now is built with Loop Now: its own Agents plan, build, verify and merge most changes.
 
-## Contributing
+### License
 
-Bug reports, small fixes, plugin integrations, and documentation improvements are welcome. For larger behavior changes, open an [issue](https://github.com/AI-for-anyone/loop-now/issues) first so the scope is clear.
+Loop Now is licensed under [Apache-2.0](LICENSE). Bundled third-party components such as Node.js and Pi keep their own licenses.
 
-Read [`AGENTS.md`](AGENTS.md) and [`MAIN.md`](MAIN.md), keep changes focused, and run the checks relevant to your changes:
+## Star History
 
-```sh
-# Backend (from the repository root)
-go test ./cmd/... ./internal/... ./api/...
-
-# Web (from web/, using the Node path configured above)
-./bin/npm24 run typecheck
-./bin/npm24 run api:check
-./bin/npm24 run lint
-./bin/npm24 test
-./bin/npm24 run build
-```
-
-Backend tests need no external services; each uses its own temporary data directory. Only the one-off PostgreSQL importer's tests need a test database through `LOOP_NOW_TEST_DATABASE_URL`. Native and browser tests have additional fixture requirements. A skipped integration test is not a successful integration run. Keep credentials, local runtime data, and build artifacts out of contributions.
-
-## License
-
-Copyright 2026 Loop Now contributors.
-
-Loop Now is licensed under the [Apache License 2.0](LICENSE). Bundled third-party code and fonts retain their own licenses and notices.
+<a href="https://www.star-history.com/#AI-for-anyone/loop-now&Date">
+  <img src="https://api.star-history.com/svg?repos=AI-for-anyone/loop-now&type=Date" width="600" alt="Star history of Loop Now">
+</a>

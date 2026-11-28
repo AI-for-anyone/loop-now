@@ -1,372 +1,258 @@
-<p align="center">
-  <img src="web/public/favicon.svg" width="72" alt="Loop Now 图标" />
-</p>
+<p align="center"><img src="web/public/favicon.svg" width="96" alt="Loop Now"></p>
 
-<h1 align="center">Loop Now</h1>
+<p align="center"><strong>你的编程 Agent，一个工作台。Claude Code、Codex、Antigravity、Grok 和 Pi 一起干活——跑在你自己的电脑上，手机也能接着用。</strong></p>
 
-<p align="center">
-  <strong>让多个 AI Agent 在本地协作，用插件扩展它们的能力。</strong><br />
-  接入 CLI 与 MCP，订阅事件、编写 Hook，把项目、对话和任务放在一个工作台中。
-</p>
+<p align="center"><img src="docs/assets/console.png" width="100%" alt="Loop Now 控制台：一个 Agent 的对话、工具调用、运行记录和输入框"></p>
 
 <p align="center">
-  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a><br />
-  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest">下载桌面版</a> ·
-  <a href="#开始使用">开始使用</a> ·
-  <a href="#你可以用它做什么">功能</a> ·
-  <a href="#核心能力可扩展的插件体系">插件</a> ·
-  <a href="https://github.com/AI-for-anyone/loop-now/issues">反馈问题</a>
+  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest"><img src="https://img.shields.io/github/v/release/AI-for-anyone/loop-now?label=release" alt="最新版本"></a>
+  <a href="https://github.com/AI-for-anyone/loop-now/stargazers"><img src="https://img.shields.io/github/stars/AI-for-anyone/loop-now?style=flat" alt="GitHub stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/desktop-macOS%20Apple%20silicon-black" alt="桌面版：macOS Apple 芯片">
+  <img src="https://img.shields.io/badge/server-macOS%20%7C%20Linux-555" alt="服务端：macOS 和 Linux">
 </p>
 
-![Loop Now 控制台：Agent 对话、图表渲染与紧凑输入框](docs/assets/console.png)
+<p align="center">
+  <a href="#快速开始">安装</a> ·
+  <a href="#让-agent-帮你装">让 Agent 帮你装</a> ·
+  <a href="#能拿它做什么">用法</a> ·
+  <a href="#为什么用-loop-now">为什么用它</a> ·
+  <a href="#文档">文档</a> ·
+  <a href="https://github.com/AI-for-anyone/loop-now/issues">Issues</a>
+</p>
 
-<p align="center"><sub>真实控制台，使用演示数据。界面支持中文和英文，按浏览器语言或在设置里切换。</sub></p>
+<div align="center">
 
-Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 保留自己的工作目录和会话，Manager 可以通过任务流程协调不同角色。你可以随时查看对话、检查工具调用、发消息介入，并了解谁在执行、谁在等待。
+[English](README.md) · **简体中文**
 
-**插件是平台的核心扩展入口：**工具、事件 Hook、账号、权限和资源可以一起打包、安装与管理版本。
+</div>
 
-平台运行在你的电脑上，以 [Pi](https://github.com/earendil-works/pi) 为执行引擎。使用哪些模型、账号、代码仓库和工具，由你为各个 Agent 配置。
+<a id="快速开始"></a><a id="quick-start"></a>
 
-> **早期个人版。** 当前仓库面向本地单实例。控制台没有登录功能，应通过本机回环地址访问。使用模型或工具供应商时，相关数据仍会发送给对应服务。
+# Loop Now
 
-## 你可以用它做什么
+Loop Now 是一个跑在本机、开源的工作台，让你的编程 Agent 组成一个团队一起干活。每个 Agent 有自己的文件夹、对话和工具；
+Manager 把活拆成任务，一步一步做，也可以几步同时做，中间的审查和返工你都看得见。Agent 用你已经在用的 CLI、用你自己的登录来跑，
+也可以用自带的 Pi 加上你的 API Key。东西都留在你的电脑上，手机也能接着用。
 
-| 能力 | 使用方式 |
+- 🤝 **用你已经付过钱的 Agent。** Claude Code、Codex、Antigravity、Grok、任何 ACP 命令，或者自带的 Pi。
+- 🧭 **看得见的任务。** Manager 写好流程，每一步都在自己的 git worktree 里做，最后提 PR。
+- 📱 **在哪都能用。** 手机扫码配对，你的电脑会有自己的地址 `https://<编号>.loop-now.app`。
+- 🧩 **能扩展。** 插件把 CLI 和 MCP 工具、事件钩子、账号和 Skills 打成一个有版本的包。
+
+### 下载桌面版
+
+适用于 Apple 芯片的 Mac。一个 DMG 里装着服务端、控制台、Node 和 Pi，别的都不用装。
+
+**[下载最新版 Loop Now for Mac →](https://github.com/AI-for-anyone/loop-now/releases/latest)**（`loop-now-desktop-<版本>-mac-arm64.dmg`）
+
+应用还没有经过苹果公证：第一次打开时，去 **系统设置 › 隐私与安全性**，点 **仍要打开**。
+
+<a id="让-agent-帮你装"></a>
+
+### 让 Agent 帮你装
+
+已经在用 Claude Code、Codex 或别的编程 Agent？把下面这段话发给它，让它来装：
+
+```text
+阅读 https://github.com/AI-for-anyone/loop-now/blob/main/docs/install.md ，按里面的说明在这台电脑上安装 Loop Now。替换任何东西、或者要用 sudo 之前先问我；macOS 弹出提示时，告诉我该点哪里。
+```
+
+它会按你的电脑选桌面版还是服务端发行包，用 `SHA256SUMS` 核对下载的文件，启动起来，再告诉你控制台的地址。
+[docs/install.md](docs/install.md) 是写给 Agent 看的，你也可以自己看。
+
+### 运行服务端发行包（macOS 或 Linux）
+
+```sh
+V=0.3.7; PLATFORM=linux-amd64      # darwin-arm64、darwin-amd64、linux-amd64、linux-arm64
+curl -fLO https://github.com/AI-for-anyone/loop-now/releases/download/v$V/loop-now-$V-$PLATFORM.tar.gz
+tar -xzf loop-now-$V-$PLATFORM.tar.gz && cd loop-now-$V-$PLATFORM
+LOOP_NOW_WORK_ROOT=/var/lib/loop-now ./loop-server     # 然后打开 http://127.0.0.1:8780/
+```
+
+发行包自带 Node 和 Pi，机器上只要有 Git。详细说明见 [安装和技术文档](#文档)。
+
+<a id="能拿它做什么"></a>
+
+## 🎬 能拿它做什么
+
+下面是一些常交给 Loop Now 的活。在控制台里跟你的 Manager——或者任何一个 Agent——这么说就行。
+
+| 你说 | 会发生什么 |
 | --- | --- |
-| **组建 Agent 团队** | 按项目组织 Agent，分别配置模型、思考等级、指令、Skills、仓库与工具权限，并指定 Manager 协调工作。 |
-| **保留工作上下文** | 持续使用 Agent 的常态会话与工作目录。任务使用独立副本，同一 Agent 在同一任务中连续复用自己的目录和会话。 |
-| **通过 Inbox 协作** | Agent 与人之间可以发消息、提问、回复；忙碌时选择排队或打断，sleep 等待中的 Agent 可被新消息唤醒。 |
-| **运行可观察的任务流程** | 查看节点、条件分支、有次数限制的审查回路、重试与成果。任务开始后固定流程和已捕获的配置。 |
-| **用插件扩展能力** | 在同一插件中组合 CLI、MCP、事件 Hook、账号、权限和 Skills，接入团队需要的工具与服务。 |
-| **看清执行过程** | 流式阅读回复、发送图片、渲染 Markdown 和 Mermaid，在每条回复的运行时间线中查看模型用量、工具命令、耗时和失败原因。 |
+| *“加上用 GitHub 登录。后端和控制台同时做，然后审查，再提 PR，CI 过了就合并。”* | Manager 写一个任务：两个分支同时在各自的 worktree 里做，在汇合那一步合到一起；负责审查的 Agent 实际跑一遍检查结果；最后一步提 PR，CI 过了就合并。 |
+| *“读一下还开着的 issue，给其中的 bug 写个修复计划。”* | 一个跑在 Claude Code 上的 Agent 用你自己的登录在仓库里干活，把计划写进它的文件夹；回复里显示成一张文件卡片，点一下就打开。 |
+| *“接着我昨天在 Codex 里聊的那段对话做。”* | 把 Codex（或 Claude Code）的对话导入进来，Agent 接着聊，用原来的 CLI 或换一个都行。 |
+| *“把完整的测试跑一遍，告诉我哪些挂了。”* | Agent 在后台跑；回复下面显示 `⟳ Bash 后台运行中`，跑完 Agent 会接着把结果告诉你——不管你在用哪台设备。 |
+| *“给我做一个鹈鹕骑自行车的动画网页。”* | 文件显示成一张卡片，点一下就在一个隔离的新页面里打开。 |
 
-### 一个例子：从开发到审查
+<p align="center"><img src="docs/assets/overview-en.png" width="100%" alt="Loop Now 概览：每个 Agent 的运行状态和今天的 token 用量"></p>
 
-创建 Manager、开发和审查三个 Agent，配置它们使用的仓库、模型和工具，然后对 Manager 说：
+<a id="为什么用-loop-now"></a>
 
-> 实现这个功能，让审查 Agent 检查后给我结果。需要我决定的事情通过 Inbox 提问。
+## ✨ 为什么用 Loop Now
 
-任务流程可以从开发进入审查，也可以在限定次数内返回修改。各成员在自己的任务上下文中工作，你能沿途查看消息和成果。具体开发、QA 或部署流程由项目指令与 Skills 定义，平台不预设某一种业务流程。
+### 1. 用你自己的 Agent
 
-## 核心能力：可扩展的插件体系
+一个 Agent 可以跑在下面任何一个上，每条消息都能换，对话会跟着过去：
 
-**新工具与项目特有的行为都放进插件。**一个插件就是一个目录，`package.json` 是它唯一的清单。插件最多有两侧，任一侧都可以没有：
+<p>
+  <img src="web/src/assets/runtime-logos/claude.svg" height="28" alt="Claude Code">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/openai.svg" height="28" alt="Codex">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/antigravity.svg" height="28" alt="Antigravity">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/grok.svg" height="28" alt="Grok">&nbsp;&nbsp;
+  <img src="web/src/assets/runtime-logos/pi.svg" height="28" alt="Pi">
+</p>
 
-- **Agent 侧**是标准的 [Pi 包](https://pi.dev/packages)：Pi 扩展、Skills、MCP 服务器和 CLI。每个获得授权的 Agent 在自己的 Pi 进程里加载它。现成的 Pi 包不用改就能装。
-- **平台侧**运行在服务端旁边一个常驻的 Node 插件宿主里，订阅平台事件，并用按权限签发的插件令牌调用平台接口。
-
-| 宿主提供 | 对插件意味着什么 |
+| 跑在哪 | 怎么跑 |
 | --- | --- |
-| **事件** | 事件目录里的全部观察类事件：执行轮次、任务、节点、收件箱、提问、sleep、Agent、Pi 进程、上下文文件夹、插件自身。事件先持久化，处理函数返回后才确认，失败重投，重启后续投。拦截、修改、认领类 Hook 各有超时和超时策略。 |
-| **状态与密钥** | 每个插件有自己的持久状态，分全局与项目级。`x-secret` 配置字段在控制台只写不回显，并在插件日志里遮蔽。 |
-| **配置表单** | `loopNow.configSchema` 就是 JSON Schema，控制台据此生成表单；标了 `x-scope: project` 的字段可以按项目覆盖。 |
-| **可靠的外发 HTTP** | SDK 的投递库带持久队列和退避重试，用 HMAC-SHA256 签名，并写下投递记录，插件页直接展示。 |
-| **日志与隔离** | 每个插件的输出进入它自己的日志。一个插件抛错、超时或加载失败，只影响它自己。 |
+| **Claude Code、Codex** | 用你电脑上装好的 CLI，用你自己的登录和订阅。Loop Now 不读、也不存你的登录信息。 |
+| **Antigravity、Grok、任何 ACP 命令** | 通过 Agent Client Protocol，用这个 CLI 自己的登录。 |
+| **Pi**（自带） | Loop Now 自带的引擎，用你在项目里加的模型账号和 API Key。 |
 
-清单说了算：订阅清单没有声明的事件、调用清单之外的接口范围都会失败。安装前，平台会把两侧各有什么、订阅哪些事件、要哪些权限展示给人看。
+- **用你自己的配置，或者一份干净的。** 打开 **用我本机的 CLI 配置**，跑在 CLI 上的 Agent 会加载你的设置、`CLAUDE.md`、插件、
+  Skills 和 MCP 服务，跟你在终端里一样；关着时，它只拿到 Loop Now 给的东西。
+- **权限模式。** *逐项批准*、*改文件不用问*、*自动审查*、*完全放开*。要你批准的操作会以卡片出现在对话里，哪台设备上都能点。
+- **后台的活看得见。** Agent 在后台开的长命令和子 Agent 都列出来，能停掉；跑完后 Agent 会接着说。
+- **AI 帮写。** 用你选的 CLI 帮你起草 Agent 的 Prompt。
 
-观察类事件、状态、密钥、配置和投递库已经可用。拦截与修改 Hook、控制台操作按钮、HTTP 入口、定时、渠道和插件账号已在 [`plugins/SPEC.md`](plugins/SPEC.md) 定稿，正在陆续上线。
+### 2. 看得见的任务，配上真正的 git 流程
 
-### 平台安装，项目启用，Agent 授权
+Manager Agent 把一个请求变成一个**任务**：由若干步骤组成的流程，每一步由一个 Agent 做，往下走有带名字的路（“验证通过”“要改”），
+返工的次数有上限。任务一开始流程就定死了，按你认可的样子跑。
 
-可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 侧的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
-
-随平台发布三个官方插件：
-
-- [**webhook**](plugins/official/webhook/README.md)：收件箱收到消息时，签名后 POST 到你的地址，失败重试，并记下投递记录。外部身份用它代替轮询收件箱。
-- [**playwright**](plugins/official/playwright/README.md)：给 Agent 一个专用的可见 Chromium，通过官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接你的日常 Chrome。
-- [**hello**](plugins/official/hello/README.md)：两侧齐全的最小插件，可以从它开始写自己的插件。
-
-### 几行代码写出平台侧
-
-```ts
-import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
-
-export default function register(api: PluginAPI) {
-  const delivery = createDelivery(api)
-  api.on('task.completed', async (event) => {
-    const { url } = api.config.get<{ url?: string }>(event.projectId)
-    if (url) await delivery.deliver({ target: url, body: event, eventId: event.id, eventType: event.type })
-  })
-}
-```
-
-```json
-{
-  "name": "task-notifier",
-  "version": "1.0.0",
-  "keywords": ["loop-now-plugin"],
-  "peerDependencies": { "@loop-now/plugin-sdk": "*" },
-  "loopNow": {
-    "id": "task-notifier",
-    "platform": "./platform.ts",
-    "events": ["task.completed"],
-    "permissions": ["state"],
-    "configSchema": { "type": "object", "properties": { "url": { "type": "string", "x-scope": "project" } } }
-  }
-}
-```
-
-宿主和 Pi 一样直接加载 TypeScript，并自己提供 `@loop-now/plugin-sdk`。用 `node plugins/host/dist/main.js validate <目录> --load` 检查目录：它报出清单错误，以及代码里超出 `loopNow.events` 的订阅。
-
-入门先看 [SDK 说明](plugins/sdk/README.md) 和官方插件。[`plugins/SPEC.md`](plugins/SPEC.md) 是完整合同，包括包格式、事件目录、Hook 种类与超时、权限和安装流程；[`api/plugin-host-protocol.md`](api/plugin-host-protocol.md) 是服务端与宿主之间的通信协议。平台不做沙箱：插件会执行代码，只安装可信来源。
-
-飞书用户身份执行另需[构建说明](scripts/lark-user-variant/README.md)中固定版本的平台发行包；普通对话不需要它。
-
-## 开始使用
-
-四种方式：**桌面版**（macOS，什么都不用装）、**服务端发行包**（Linux、macOS）、**Docker Compose** 一体化启动、从源码安装。主要验证环境是 macOS Apple Silicon；部分组件支持 Linux，但尚未完成同等范围的整套验证。飞书用户 CLI 运行组件目前仅支持 macOS arm64。
-
-### 桌面版（macOS Apple Silicon）
-
-一个 DMG 里带着服务端、控制台、Node 和 Pi，不需要另装任何东西。
-
-1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载 `loop-now-desktop-<版本>-mac-arm64.dmg`，打开后把 Loop Now 拖进"应用程序"。
-2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
-3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
-
-数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。从源码安装迁移过来、想沿用原来的工作根：先停掉源码安装的服务端并退出 Loop Now，在 `~/Library/Application Support/Loop Now/desktop.json` 里写上 `{"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}`（`dataDir`、`contextDir` 也可以这样指定，都写绝对路径），再打开；菜单栏图标里的配置一行会显示实际用的路径。基于 PostgreSQL 的安装还要先导入数据库，完整步骤见[快速上手](https://ai-for-anyone.github.io/loop-now/zh/guide/getting-started#moving-to-the-desktop-app)。
-
-更新：退出 Loop Now，用新的 DMG 替换"应用程序"里的 app，再打开，数据保留。菜单栏的"检查更新"会提示新版本并打开下载页；签名公证完成后才会改为自动安装。
-
-桌面版里的 Agent 用随包的 Pi 1.4.0 和 Node 24.21；模型账号、CLI 账号、插件都在控制台里配置，和源码安装相同。第一次打开时，Loop Now 会提示一次是否在终端安装 `loopctl` 命令行工具（之后随时可以从菜单栏 / 托盘图标 › “安装命令行工具…” 或 **全局设置** 里安装）。外部身份和 `loopctl` 用的对外 TLS 端口桌面版会自动开在本机（`127.0.0.1`，证书由服务端自动维护）；菜单栏 / 托盘图标 › “外部身份连接方式…” 会显示地址、证书路径和 `loopctl` 配置命令。
-
-### 服务端发行包（Linux / macOS）
-
-每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
-
-1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载对应平台的包和 `SHA256SUMS`，校验下载：
-
-   ```sh
-   sha256sum -c --ignore-missing SHA256SUMS        # Linux
-   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
-   ```
-
-2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。
-
-   ```sh
-   tar -xzf loop-now-<版本>-<平台>.tar.gz
-   cd loop-now-<版本>-<平台>
-   ```
-
-3. 设置数据目录和工作根后启动服务端。工作根的要求和创建方法与源码安装相同（见[第 2 步](#2-配置服务端)）：
-
-   ```sh
-   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
-   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS 用 /Users/Shared/loop-now
-   ./loop-server
-   ```
-
-4. 打开 **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**。控制台就在服务端口的根路径，不需要另起控制台。
-
-随包的 Node 和 Pi 会自动使用，不用另装；设置了 `LOOP_NOW_NODE_BIN` 等变量时仍以变量为准。凭证以明文保存在数据目录里，请保护好数据目录和备份。升级时停掉服务端，解开新版本的包，用同样的 `LOOP_NOW_DATA_DIR` 和 `LOOP_NOW_WORK_ROOT` 启动新目录里的 `loop-server`，然后删掉旧目录。
-
-
-### Docker Compose（本地一体化）
-
-首次启动会在本机构建服务端和控制台镜像，并启动这两者：
-
-```sh
-docker compose up --build -d
-```
-
-打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`，不要把这套配置暴露到外部。
-
-`loopdata` 命名卷保存数据库（SQLite，含每日备份）、Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
-
-容器中的 Agent 有一些边界：
-
-- 飞书用户 CLI 只支持 macOS arm64，不能在这套 Linux 容器里使用。
-- 容器不会自动看到宿主机目录。已有仓库或资料需要另外挂载到 `server` 容器，并在控制台配置挂载后的容器内路径；`loopdata` 只保存平台自己的工作区。
-- 容器不会共享宿主机上已经登录的 Pi 或 CLI 会话。请预先在项目中配置模型 API Key 和所需工具账号。
-
-### 原生 models.json
-
-在“全局设置 → 模型配置”中可以编辑固定版本 Pi 的原生 `models.json`，添加自定义 Provider 或覆盖内置 Provider。例如：
-
-```json
-{
-  "providers": {
-    "example": {
-      "baseUrl": "https://models.example.com/v1",
-      "api": "openai-completions",
-      "apiKey": "$EXAMPLE_KEY",
-      "headers": { "X-Client": "$EXAMPLE_CLIENT_HEADER" },
-      "models": [
-        { "id": "my-model", "input": ["text", "image"], "contextWindow": 128000, "maxTokens": 8192 }
-      ]
-    }
-  }
-}
-```
-
-`apiKey` 以及 Provider、模型和模型覆盖中的 `headers` 值只接受 `$NAME` 形式的环境变量引用；变量名由英文字母或下划线开头，后接字母、数字或下划线。不要填写明文密钥或 `!命令`。真实密钥仍在项目的模型账号中配置，不会写进 `models.json` 或回显到编辑器。
-
-保存后，常态 Agent 从下一条消息使用新目录，已启动任务继续使用创建时冻结的 Provider 配置。如果重启后已保存配置不再通过当前 Pi 校验，服务会暂时退回内置模型目录，并在设置页显示警告，让你仍能修正并重新保存。
-
-### 源码安装：1. 准备依赖
-
-| 依赖 | 仓库当前版本基线 |
+| | |
 | --- | --- |
-| Go | 1.27 或以上 |
-| Node.js / npm | **24.21.0 / 11.19.0**；Web 脚本会检查精确版本 |
-| Pi coding agent | **1.4.0** |
-| 其他工具 | Git |
+| **一个任务一个 worktree** | git 仓库里的任务有自己的 worktree 和分支；别的文件夹会复制一份、只读，结果存成产物。收尾时只在不会丢东西的情况下才删 worktree。 |
+| **并行步骤** | 流程可以分叉成几个分支同时跑，每个分支在自己的 worktree 里；汇合那一步把它们合起来，有冲突就在那一步解决。 |
+| **干净的步骤** | 每一步都从一段干净的对话开始，带着专门为这一步写的 Prompt，不用每次都重读一大段聊天记录。 |
+| **一个任务一个 PR** | 每一步都提交、推送到任务分支；最后一步可以提 PR、等 CI、合并——Manager 在流程里怎么写就怎么做。 |
+| **全程有记录** | 每一步的对话、工具调用、耗时、token 用量、提问和产物都跟着任务留下来。 |
 
-切换到要求的 Node 和 npm 后：
+### 3. 在哪都能用，手机也行
+
+打开 **全局设置 › 手机和其它设备 › 从手机访问**，登录一个 Loop Now 账号，你的电脑就会通过 Cloudflare 通道拿到一个公网地址
+`https://<编号>.loop-now.app`。手机扫一下配对二维码就进来了：聊天、批准操作、看任务进度，都是实时的。
+
+- 只有配对过的设备能进；每台设备都能随时移除，30 天没用的要重新配对。
+- 控制台和你的对话走的是 手机 → Cloudflare → 你的电脑。`relay.loop-now.app` 这个中转服务只负责发通道和地址，
+  看不到控制台的流量，也拿不到设备的登录。
+- 你的电脑要一直开着 Loop Now。在这台电脑上打开控制台不用登录。
+
+### 4. 能扩展：插件
+
+一个插件就是一个文件夹，`package.json` 就是它的清单，最多有两边：
+
+- **Agent 这边**：一个标准的 [Pi 包](https://pi.dev/packages)，可以带扩展、Skills、MCP 服务和 CLI；
+- **平台这边**：跑在服务端旁边的一个 Node 插件宿主里，订阅平台事件，用一把限定范围的令牌调用平台 API。
+
+装一次，按项目启用，按 Agent 授权。官方插件里有一个 webhook，把收件箱的事件 POST 到你的地址。
+看 [插件指南](https://ai-for-anyone.github.io/loop-now/zh/plugins/) 和 [插件规范](plugins/SPEC.md)。
+
+<p align="center"><img src="docs/assets/plugins-en.png" width="100%" alt="Loop Now 插件市场"></p>
+
+<a id="文档"></a>
+
+## 🛠 安装和技术文档
+
+完整文档：**[ai-for-anyone.github.io/loop-now/zh](https://ai-for-anyone.github.io/loop-now/zh/)**——
+[快速开始](https://ai-for-anyone.github.io/loop-now/zh/guide/getting-started)、
+[核心概念](https://ai-for-anyone.github.io/loop-now/zh/guide/concepts)、
+[架构](https://ai-for-anyone.github.io/loop-now/zh/guide/architecture)、
+[配置](https://ai-for-anyone.github.io/loop-now/zh/reference/configuration)。
+
+### 桌面版
+
+- **安装：** 打开 DMG，把 Loop Now 拖进“应用程序”。第一次打开：**系统设置 › 隐私与安全性 › 仍要打开**（应用只做了临时签名，
+  还没经过公证）。
+- **运行：** 菜单栏里有一个 Loop Now 图标。关掉窗口，服务端和 Agent 照样在后台跑；从菜单里选 **退出** 才会全部停掉。
+- **命令行：** 第一次打开时 Loop Now 会问要不要安装 `loopctl`（要输一次电脑密码）；之后也可以从菜单栏图标或 **全局设置** 里装。
+  外部身份通过一个只在本机的 TLS 端口连进来：菜单栏图标 › **外部身份连接方式…**。
+- **数据：** 数据库和每天的备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 的文件夹在
+  `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。
+- **更新：** 退出，用新 DMG 里的应用替换掉旧的，再打开；数据都在。有新版本时菜单栏图标会提示，并打开下载页面。
+
+### 服务端发行包（macOS、Linux）
+
+每个版本都有 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。
+包里有 `loop-server`（内置控制台）、`loopctl`、插件宿主、官方插件、Node 24.21 和 Pi 1.4.0。
 
 ```sh
-npm install -g @earendil-works/pi-coding-agent@1.4.0
-pi --version
-
-git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
-cd loop-now
+shasum -a 256 -c --ignore-missing SHA256SUMS     # Linux：sha256sum -c --ignore-missing SHA256SUMS
+tar -xzf loop-now-<版本>-<平台>.tar.gz           # 用 tar 解压；在 macOS 上用访达解压会被隔离
+export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+export LOOP_NOW_WORK_ROOT=/var/lib/loop-now      # macOS：/Users/Shared/loop-now
+./loop-server                                    # 控制台在 http://127.0.0.1:8780/
 ```
 
-### 2. 配置服务端
+工作根目录要放在主目录之外，上层不能有 `AGENTS.md` 或 `CLAUDE.md`，免得 Agent 继承不相干的说明。登录凭据以明文存在数据目录里，
+请保护好它和它的备份。
 
-以下命令在仓库根目录运行：
+### Docker Compose
 
 ```sh
-export LOOP_NOW_NODE_BIN="$(command -v node)"
-export LOOP_NOW_PI_BIN="$(command -v pi)"
+docker compose up --build -d      # 控制台在 http://localhost:5173
 ```
 
-服务端把数据库和每日备份放在数据目录里，默认是服务进程用户主目录下的 `~/.loop_now`（用 `LOOP_NOW_DATA_DIR` 修改），首次启动时自动建库。凭证以明文存在这个数据库里，请保护好数据目录和备份。服务端从进程环境变量读取配置，不会自动加载 `.env` 文件。
+端口只发布在 `127.0.0.1` 上。`loopdata` 卷里有数据库、Agent 文件夹和会话；`docker compose down -v` 会把它删掉。
+容器看不到宿主机的文件夹，也不共享宿主机上 CLI 的登录，除非你自己挂载进去。
 
-执行工作根目录必须持久保存，并位于**用户主目录之外**，它和上级目录不能包含 `AGENTS.md` 或 `CLAUDE.md`，以免 Pi 继承宿主上无关的指令。新安装默认使用 macOS 的 `/Users/Shared/loop-now`，或 Linux 的 `/var/lib/loop-now`：
+### 从源码运行
 
-```sh
-# macOS；Linux 改用 /var/lib/loop-now。
-export LOOP_NOW_WORK_ROOT='/Users/Shared/loop-now'
-sudo mkdir -p "$LOOP_NOW_WORK_ROOT"
-sudo chown "$(id -u):$(id -g)" "$LOOP_NOW_WORK_ROOT"
-chmod 700 "$LOOP_NOW_WORK_ROOT"
-```
-
-### 3. 构建并启动后端
-
-服务端和配套 `loopctl` 必须使用同一版本构建：
+需要 Go 1.27+、Node.js 24.21.0 / npm 11.19.0、Pi 1.4.0、Git。先构建服务端和配套的 `loopctl`，再起控制台：
 
 ```sh
-mkdir -p bin
+git clone --depth 1 https://github.com/AI-for-anyone/loop-now.git && cd loop-now
 go build -o bin/loop-server ./cmd/loop-server
-loop_version="$(bin/loop-server version)"
-go run ./cmd/loopctl-dist -version "$loop_version" -out "$PWD/.local-build/loopctl-dist"
-
-export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
-bin/loop-server
+go run ./cmd/loopctl-dist -version "$(bin/loop-server version)" -out "$PWD/.local-build/loopctl-dist"
+LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist" bin/loop-server
+cd web && ./bin/npm24 ci && ./bin/npm24 run dev      # 控制台在 http://localhost:5173
 ```
 
-启动时会检查依赖、执行待应用的数据库迁移，并创建默认组织和项目。API 监听 `127.0.0.1:8780`。一个数据目录同时只能由一个服务端使用；更新时保留数据目录和工作目录。从基于 PostgreSQL 的版本（到 v0.1.0 为止）迁移过来时，先检出 tag `pg-final`（PostgreSQL 版的最后一个提交），构建并启动一次，让旧库完成最后的迁移，停掉服务，然后把 `LOOP_NOW_DATABASE_URL` 指向旧库，运行一次 `loop-server import-postgres`，它会把全部数据复制到数据目录里的新库。
+工作根目录、Pi、模型和所有环境变量，见 [快速开始](https://ai-for-anyone.github.io/loop-now/zh/guide/getting-started)。
 
-插件需要 Node 插件宿主，从 `plugins/` 构建（Node 24.21.0）。设置了 `LOOP_NOW_PLUGIN_HOST_ENTRY` 时服务端才运行它；设置了 `LOOP_NOW_PLUGIN_OFFICIAL_DIR` 时，官方插件作为 `builtin` 安装来源提供：
-
-```sh
-(cd plugins && npm ci --ignore-scripts && npm run build)
-export LOOP_NOW_PLUGIN_HOST_ENTRY="$PWD/plugins/host/dist/main.js"
-export LOOP_NOW_PLUGIN_OFFICIAL_DIR="$PWD/plugins/official"
-```
-
-在启动 `bin/loop-server` 之前设置好。`dist/main.js` 是一个自带全部依赖的文件，可以复制到别处。可选工具集成可能还需要各自的依赖和凭证。
-
-### 4. 启动控制台
-
-打开第二个终端，从仓库根目录运行，确保当前 Node 为 24.21.0、npm 为 11.19.0：
-
-```sh
-cd web
-export LOOP_NOW_WEB_NODE_BIN="$(dirname "$(command -v node)")"
-./bin/npm24 ci
-./bin/npm24 run dev
-```
-
-访问 **[http://localhost:5173](http://localhost:5173)**。默认 API 地址已配置好；需要修改时参见 [`web/.env.example`](web/.env.example)。
-
-### 5. 给第一个 Agent 安排工作
-
-1. 进入项目，通过支持的登录方式或 API Key 添加模型账号。
-2. 创建 Agent，选择模型与账号，填写指令或添加 Skills。
-3. 添加需要的仓库和资料，启用插件，并明确授予工具权限。
-4. 开始对话。发送图片时，选择支持图片输入的模型。
-5. 需要协作时，再添加不同角色的 Agent，并指定项目 Manager。
-
-建议先让一个 Agent 完成小任务，再组合较长的工作流。
-
-## 系统如何组成
+### 整体结构
 
 ```mermaid
 flowchart LR
-    UI[Web 控制台] <-->|HTTP 与 SSE| Server[Go 服务端]
+    Phone[手机 / 其它设备] -->|Cloudflare 通道| Server
+    UI[网页控制台 / 桌面版] <-->|HTTP 和 SSE| Server[Go 服务端]
     Server <--> DB[(SQLite)]
-    Server -->|RPC| Pi[Pi 进程]
+    Server -->|RPC / stdio| Runtimes[Pi · Claude Code · Codex · ACP CLI]
     Server <-->|stdio| Host[Node 插件宿主]
-    Host -->|HTTP，插件令牌| Server
-    Pi --> CLI[按作用域配置的 CLI]
-    Pi --> Ext[插件扩展与 MCP 服务]
+    Server -.->|登录、通道| Relay[relay.loop-now.app]
 ```
 
-数据目录里的 SQLite 保存平台状态、凭证、消息、任务记录和排队；忙闲锁和实时流在服务端进程内，本地文件系统保存 Agent 工作目录、会话与已安装工具。这些组件组成一套本地安装，图中拆分不代表已经支持独立扩缩容。
-
-| 目录 | 用途 |
+| 目录 | 内容 |
 | --- | --- |
-| [`web/`](web/) | React、TypeScript、Vite 控制台 |
-| [`internal/server/`](internal/server/) | Go API、调度、存储和本机执行器 |
-| [`cmd/loopctl/`](cmd/loopctl/) | 平台 Agent 与外部身份使用的 JSON CLI |
-| [`plugins/`](plugins/) | 插件规范、Node 插件宿主、SDK 与官方插件 |
-| [`api/`](api/) | 控制台与 Agent 的 OpenAPI 契约 |
-| [`MAIN.md`](MAIN.md) | 维护者项目概览与当前实现状态 |
+| [`internal/server/`](internal/server/) | Go API、调度、任务、存储，以及各种 Agent 运行方式 |
+| [`web/`](web/) | React、TypeScript 和 Vite 写的控制台 |
+| [`desktop/`](desktop/) | Electron 桌面版 |
+| [`cmd/loopctl/`](cmd/loopctl/) | 给 Agent 和外部身份用的 JSON 命令行 |
+| [`plugins/`](plugins/) | 插件规范、宿主、SDK 和官方插件 |
+| [`api/`](api/) | 控制台和 Agent 用的 OpenAPI 接口约定 |
 
-## 配置与当前边界
+### 使用边界
 
-全部服务端配置和默认值见 [`internal/server/config/config.go`](internal/server/config/config.go)，常用项包括：
+Loop Now 现在是早期的个人版：一个人，一台电脑。
 
-| 环境变量 | 用途／默认值 |
-| --- | --- |
-| `LOOP_NOW_LISTEN_ADDR` | 控制台 API；默认 `127.0.0.1:8780` |
-| `LOOP_NOW_DATA_DIR` | 数据库（`db/`）和每日备份（`backups/`）；服务进程用户的 `~/.loop_now` |
-| `LOOP_NOW_WORK_ROOT` | 持久化 Agent 工作目录与运行文件 |
-| `LOOP_NOW_CONTEXT_DIR` | 项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认服务运行用户的 `~/.loop_now` |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台侧不运行 |
-| `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | 随平台发布的官方插件目录的绝对路径（每个插件一个子目录）；不设时没有 `builtin` 安装来源 |
-| `LOOP_NOW_PLUGIN_MARKET_URL` | 官方插件市场 `loop-now-market.json` 的 `https` 地址；默认是官方市场的索引地址，可改成别的地址 |
-| `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本机 Pi 进程数 |
-| `LOOP_NOW_PI_IDLE_TIMEOUT` | Pi 空闲退出时间；默认 `10m` |
-| `LOOP_NOW_CONSOLE_ORIGINS` | 浏览器来源白名单；默认本机 5173 端口 |
-| `LOOP_NOW_LARK_USER_BUNDLE_DIR` | 可选的已验证飞书用户 CLI 发行包 |
+- 在这台电脑上打开控制台不用登录；请只在本机访问。别的设备只能通过“远程入口”、以配对过的设备身份进来。
+- Agent 以你的系统用户身份在本机执行命令。任务文件夹不是安全沙箱；请选你信得过的权限模式和插件。
+- 模型和工具服务商仍然会收到你发给它们的内容。
+- 重启或更新会打断正在进行的回复；请在 Agent 都空闲时更新。
 
-当前版本面向可信的个人使用环境：
+## 🤝 参与贡献
 
-- 控制台没有身份认证，请保留回环监听，不要直接暴露到公网。
-- 手机和其它设备：**全局设置 › 手机和其它设备**可以打开第二个回环监听，即“远程入口”（默认关闭）。从这里进来的每个请求都要求设备已经配对：配对码只能在这台电脑上生成（二维码和链接，10 分钟内有效，只能用一次）；同一页面列出已配对的设备并可以移除，30 天没用过的设备要重新配对。在隧道接入之前（后续版本），远程入口只能在这台电脑上打开。详见[配置 › 手机和其它设备](https://ai-for-anyone.github.io/loop-now/zh/reference/configuration#phones-and-other-devices)。
-- Agent 使用服务端的操作系统用户执行本地命令，独立任务目录不等于操作系统安全沙箱。
-- 插件会执行代码，应只安装可信来源。模型和工具能访问什么，也取决于你提供的凭证与权限。
-- 工作流支持线性节点、条件分支和有次数限制的回路；并行汇合、多副本部署和弹性伸缩不属于当前个人版范围。
-- 会话记录会持久保存，但服务端重启不代表执行能无缝继续，也不保证自动重放进行中的工作；宜在 Agent 空闲时更新。
+欢迎提 Issue 和 PR。先读 [AGENTS.md](AGENTS.zh-CN.md) 里的工作约定（英文优先、接口以 `api/*.yaml` 为准、改动说明写在 PR 描述里），
+以及 [贡献指南](https://ai-for-anyone.github.io/loop-now/reference/contributing)。
+Loop Now 是用 Loop Now 开发的：大多数改动由它自己的 Agent 规划、实现、验证并合并。
 
-## 参与贡献
+### 许可证
 
-欢迎问题反馈、小范围修复、插件集成和文档改进。较大的行为改动请先开 [Issue](https://github.com/AI-for-anyone/loop-now/issues) 对齐范围。
+Loop Now 使用 [Apache-2.0](LICENSE) 许可证。自带的第三方组件（例如 Node.js 和 Pi）沿用它们各自的许可证。
 
-先阅读 [`AGENTS.md`](AGENTS.md) 和 [`MAIN.md`](MAIN.md)，保持改动聚焦，并运行与改动相关的检查：
+## Star History
 
-```sh
-# 后端，在仓库根目录运行
-go test ./cmd/... ./internal/... ./api/...
-
-# Web，在 web/ 中运行，沿用上文的 Node 路径设置
-./bin/npm24 run typecheck
-./bin/npm24 run api:check
-./bin/npm24 run lint
-./bin/npm24 test
-./bin/npm24 run build
-```
-
-后端测试不需要外部服务，每个测试使用自己的临时数据目录；只有一次性 PostgreSQL 导入器的测试需要通过 `LOOP_NOW_TEST_DATABASE_URL` 指向测试库。原生和浏览器测试有各自的夹具要求，跳过不等于集成验证通过。请勿在贡献中提交凭证、本地运行数据或构建产物。
-
-## 许可证
-
-Copyright 2026 Loop Now contributors.
-
-Loop Now 采用 [Apache License 2.0](LICENSE)。仓库内第三方代码与字体保留各自的许可证和声明。
+<a href="https://www.star-history.com/#AI-for-anyone/loop-now&Date">
+  <img src="https://api.star-history.com/svg?repos=AI-for-anyone/loop-now&type=Date" width="600" alt="Loop Now 的 Star 历史">
+</a>
