@@ -40,7 +40,7 @@ flowchart LR
 
 ## Boundaries of this edition
 
-- Linear steps, conditional branches, and bounded loops — no parallel joins, multi-replica deployment, or elastic scaling.
+- Linear steps, conditional branches, bounded loops and parallel branches that meet at a join (not nested) — no multi-replica deployment or elastic scaling.
 - One server per installation; the console is loopback-only and has no login.
 - Conversation history is persistent, but a server restart is not a promise of uninterrupted execution or automatic replay of in-flight work. Prefer updating when agents are idle.
 
