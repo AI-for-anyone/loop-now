@@ -119,4 +119,41 @@ describe('A background tool in a reply is a compact chip', () => {
     await renderChat({ messages: turn('Go', 'Started.', makeRun({ backgroundTasks: [task] })) })
     expect(screen.getByRole('button', { name: 'Command Stopping…: make' })).toBeInTheDocument()
   })
+
+  it('groups several running background tasks of the same tool on the quiet tool line and stops one from the group popover', async () => {
+    const run = makeRun({
+      tools: [
+        tool('toolu_read', 'Read'),
+        tool('toolu_a1', 'Agent'),
+        tool('toolu_a2', 'Agent'),
+        tool('toolu_a3', 'Agent'),
+      ],
+    })
+    const tasks = [
+      makeBackgroundTask({ id: 'bg-a1', kind: 'subagent', label: 'Audit harness', runId: run.id, toolCallId: 'toolu_a1', startedAt: '2026-10-12T08:00:30Z' }),
+      makeBackgroundTask({ id: 'bg-a2', kind: 'subagent', label: 'Audit SDK', runId: run.id, toolCallId: 'toolu_a2', startedAt: '2026-10-12T08:00:40Z' }),
+      makeBackgroundTask({ id: 'bg-a3', kind: 'subagent', label: 'Audit sandbox', runId: run.id, toolCallId: 'toolu_a3', startedAt: '2026-10-12T08:00:50Z' }),
+    ]
+    run.backgroundTasks = tasks
+    const stops: string[] = []
+    const { user, agent } = await renderChat({
+      messages: turn('Investigate', 'Started three sub-agents.', run),
+      handlers: [
+        http.post(apiUrl('/agents/:agentId/background-tasks/:taskId/stop'), ({ request }) => {
+          stops.push(new URL(request.url).pathname)
+          return HttpResponse.json({ ...tasks[1], stopRequestedAt: NOW.toISOString() })
+        }),
+      ],
+    })
+
+    const tools = screen.getByRole('list', { name: 'Tool calls' })
+    const groupBtn = within(tools).getByRole('button', { name: 'Agent Running in the background, 3 tasks' })
+    expect(groupBtn.querySelector('[data-tool-text]')).toHaveTextContent('Agent×3Running in the background')
+
+    await user.click(groupBtn)
+    const dialog = await screen.findByRole('dialog', { name: 'Agent Running in the background, 3 tasks' })
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(3)
+    await user.click(within(dialog).getByRole('button', { name: 'Stop background task: Audit SDK' }))
+    await waitFor(() => expect(stops).toEqual([`/api/v1/agents/${agent.id}/background-tasks/bg-a2/stop`]))
+  })
 })

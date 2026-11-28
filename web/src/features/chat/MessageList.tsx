@@ -20,6 +20,7 @@ import { runStartedAt } from './time'
 import { InboxReminder } from './InboxReminder'
 import { BackgroundFollowUpLine } from './BackgroundFollowUp'
 import { BackgroundToolChips } from './BackgroundToolChip'
+import { stopBackgroundTask } from '@/api/background-tasks'
 import { useRuntimeLookup } from '@/lib/runtime'
 import { MessageRuler } from './MessageRuler'
 import { turnPreview, useVisibleTurns } from './ruler'
@@ -114,8 +115,21 @@ function ReplyBubble({
           </p>
         )
       )}
-      {/* Tools that went on in the background are chips of their own, with how they ended and their details behind a click. */}
-      <ToolList tools={run.tools} unfinished={unfinishedTool(run)} exclude={backgroundTools} after={run.backgroundTasks?.length ? <BackgroundToolChips tasks={run.backgroundTasks} toolNames={toolNames} /> : undefined} />
+      {/* Tools that went on in the background join the tool line with their details and stop actions behind a click. */}
+      <ToolList
+        tools={run.tools}
+        unfinished={unfinishedTool(run)}
+        exclude={backgroundTools}
+        after={
+          run.backgroundTasks?.length ? (
+            <BackgroundToolChips
+              tasks={run.backgroundTasks}
+              toolNames={toolNames}
+              onStop={(taskId, actionId) => stopBackgroundTask(agent.id, taskId, actionId)}
+            />
+          ) : undefined
+        }
+      />
       {/* What the reply waits for a person to approve, where it asked. */}
       {requests.map((request) => (
         <PermissionRequestCard key={request.id} request={request} agentName={agent.name} />
