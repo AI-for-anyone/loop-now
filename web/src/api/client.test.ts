@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { apiUrl, errorBody } from '@/test/api'
 import { server } from '@/test/server'
-import { api, ApiError, call, rawBody, reachability, toApiError } from './client'
+import { api, ApiError, call, deviceAuth, rawBody, reachability, toApiError } from './client'
 
 describe('call', () => {
   it('returns the data on success', async () => {
@@ -25,7 +25,7 @@ describe('call', () => {
   })
 
   // Every code in the contract must survive parsing; these two were once missing and fell back to 'unknown'.
-  it.each(['cli_auth_in_progress', 'credential_selection_mode_conflict'] as const)('keeps the contract code %s instead of falling back to unknown', (code) => {
+  it.each(['cli_auth_in_progress', 'credential_selection_mode_conflict', 'remote_access_off', 'pairing_code_invalid', 'rate_limited'] as const)('keeps the contract code %s instead of falling back to unknown', (code) => {
     expect(toApiError(409, errorBody(code, 'conflict'))).toMatchObject({ status: 409, code, serverMessage: 'conflict' })
   })
 
@@ -141,5 +141,46 @@ describe('rawBody', () => {
       }),
     )
     expect(received).toEqual({ type: 'application/octet-stream', body: 'hello' })
+  })
+})
+
+describe('deviceAuth', () => {
+  it('marks unauthenticated when /context returns 401 before any door is known', async () => {
+    server.use(http.get(apiUrl('/context'), () => HttpResponse.json(errorBody('unauthenticated'), { status: 401 })))
+    await api.GET('/context')
+    expect(deviceAuth.isUnauthenticated()).toBe(true)
+  })
+
+  it('marks unauthenticated on any 401 once the remote door is known, and ignores stale 401s after pairing', async () => {
+    deviceAuth.noteDoor('remote')
+    let releaseStale: () => void = () => {}
+    const staleHeld = new Promise<void>((resolve) => {
+      releaseStale = resolve
+    })
+    server.use(
+      http.get(apiUrl('/projects'), async () => {
+        await staleHeld
+        return HttpResponse.json(errorBody('unauthenticated'), { status: 401 })
+      }),
+      http.get(apiUrl('/skills'), () => HttpResponse.json(errorBody('unauthenticated'), { status: 401 })),
+    )
+
+    const stale = api.GET('/projects')
+    await api.GET('/skills')
+    expect(deviceAuth.isUnauthenticated()).toBe(true)
+
+    deviceAuth.markAuthenticated()
+    expect(deviceAuth.isUnauthenticated()).toBe(false)
+
+    releaseStale()
+    await stale
+    expect(deviceAuth.isUnauthenticated()).toBe(false)
+  })
+
+  it('does not lock out the local door on an isolated 401', async () => {
+    deviceAuth.noteDoor('local')
+    server.use(http.get(apiUrl('/skills'), () => HttpResponse.json(errorBody('unauthenticated'), { status: 401 })))
+    await api.GET('/skills')
+    expect(deviceAuth.isUnauthenticated()).toBe(false)
   })
 })

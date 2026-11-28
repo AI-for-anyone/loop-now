@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { toastStore } from '@/lib/toast'
 import { cleanup } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
-import { reachability, serverVersionStore } from '@/api/client'
+import { deviceAuth, reachability, serverVersionStore } from '@/api/client'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
 import { useOwnEventStreams } from '@/api/events'
 import { resetThemeForTest } from '@/theme/store'
@@ -39,6 +39,7 @@ afterEach(() => {
   cleanup()
   server.resetHandlers()
   reachability.reset()
+  deviceAuth.reset()
   serverVersionStore.reset()
   inboxUnread.reset()
   inboxConnection.reset()

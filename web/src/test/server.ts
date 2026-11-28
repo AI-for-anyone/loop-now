@@ -65,6 +65,9 @@ export const server = setupServer(
   // nor Agents have registered local directories yet (tests that need them override with localModeBackend).
   http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
   http.get(apiUrl('/text-generation-settings'), () => HttpResponse.json(automaticSettings())),
+  // Remote door & paired devices: off and empty by default (local door tests override as needed).
+  http.get(apiUrl('/remote-access'), () => HttpResponse.json({ enabled: false, port: null, state: 'off', url: null, error: null })),
+  http.get(apiUrl('/devices'), () => HttpResponse.json({ devices: [] })),
   // Read wherever a path can be chosen (whether this computer's dialog can be shown in a browser): false unless a test says otherwise.
   http.get(apiUrl('/context'), () => HttpResponse.json(context)),
   http.get(apiUrl('/projects/:projectId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [] })),

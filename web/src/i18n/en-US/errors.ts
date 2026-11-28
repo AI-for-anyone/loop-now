@@ -60,6 +60,9 @@ export const errors = {
     path_picker_unavailable: "Can't choose a path here",
     // Word for word the server's message, so it is not repeated after this.
     path_picker_busy: 'A dialog to choose a path is already open; choose or cancel there first.',
+    remote_access_off: 'Turn on access from phones and other devices first',
+    pairing_code_invalid: 'This pairing code is invalid, expired, or already used',
+    rate_limited: 'Too many attempts; try again in a minute',
     background_task_not_found: 'No such background task',
     background_task_ended: 'This background task has already ended',
     permission_request_answered: 'This request has already been answered',

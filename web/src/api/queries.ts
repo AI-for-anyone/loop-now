@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { config } from '@/config'
 import { lastScope, PLATFORM, renamedHere, scopeQueryKey, type ScopeKey, type ScopeQuery } from '@/lib/scope'
-import { api, ApiError, archiveBody, call, requestIdOf, toApiError, type Schemas } from './client'
+import { api, ApiError, archiveBody, call, deviceAuth, requestIdOf, toApiError, type Schemas } from './client'
 import { sleepProjections } from '@/features/sleep/projection'
 
 export const keys = {
@@ -62,7 +62,15 @@ const agentPath = (agentId: string) => ({ params: { path: { agentId } } })
 
 // ---- Reads ----
 
-const contextQuery = { queryKey: keys.context, queryFn: () => call(api.GET('/context')), staleTime: Infinity }
+const contextQuery = {
+  queryKey: keys.context,
+  queryFn: async () => {
+    const data = await call(api.GET('/context'))
+    deviceAuth.noteDoor(data.door)
+    return data
+  },
+  staleTime: Infinity,
+}
 
 export function useContextInfo() {
   return useQuery(contextQuery)
