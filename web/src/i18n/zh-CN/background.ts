@@ -31,6 +31,11 @@ export const background = {
   card: {
     label: '后台任务',
     chipLabel: (tool: string, status: string, label: string) => `${tool} ${status}：${label}`,
+    groupLabel: (tool: string, status: string, count: number) => `${tool} ${status}，${count} 个`,
+    details: '详情',
+    detailsLabel: (label: string) => `查看详情：${label}`,
+    back: '返回',
+    backLabel: (tool: string, count: number) => `返回 ${tool} 列表（${count} 个）`,
     status: { running: '后台运行中', completed: '后台已完成', failed: '后台出错', stopped: '后台已停止', unknown: '后台结果未知' } satisfies Record<Task['status'], string>,
     exitCode: (code: number) => `退出码 ${code}`,
     took: (duration: string) => `用时 ${duration}`,

@@ -38,6 +38,7 @@ describe('ToolList', () => {
     expect(items.map(visualText)).toEqual(['execute×3', 'read', 'edit'])
     expect(items.map(srText)).toEqual(['execute Succeeded, 3 times', 'read Succeeded', 'edit Succeeded'])
     expect(items[0].querySelector('[data-slot="badge"]')).toBeNull()
+    expect(items[0].querySelector('[data-tool-text]')?.className).toContain('items-baseline')
   })
 
   it('shows failed groups in red with the state word and keeps running groups separate with spinner and state word', () => {

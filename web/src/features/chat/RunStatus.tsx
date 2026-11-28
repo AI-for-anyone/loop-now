@@ -8,6 +8,7 @@ import type { AgentRuntime } from '@/lib/runtime'
 import { cn } from '@/lib/utils'
 import { useSkin } from '@/theme/store'
 import { runStatusText, useRunRuntimeName } from './run-status-text'
+import { ToolListLeadingContext } from './tool-list-context'
 import { groupTools, shownState, type ShownToolState, type UnfinishedTool } from './tool-state'
 
 type Run = Schemas['Run']
@@ -91,19 +92,25 @@ export function ToolList({ tools: events, unfinished = 'running', exclude, after
             <li key={tool.toolCallId}>
               {state === 'interrupted' ? (
                 <Badge data-interrupted className="border border-dashed border-hairline-strong bg-surface-control text-ink-500">
-                  <span className="font-mono">{tool.toolName}</span>
-                  <span>{t.chat.toolInterrupted}</span>
+                  <span data-tool-text="" className="inline-flex items-baseline gap-1">
+                    <span className="font-mono">{tool.toolName}</span>
+                    <span>{t.chat.toolInterrupted}</span>
+                  </span>
                 </Badge>
               ) : state === 'no_result' ? (
                 <Badge data-no-result className="border border-hairline bg-surface-subtle text-ink-700">
-                  <span className="font-mono text-ink">{tool.toolName}</span>
-                  <span>{t.chat.tool.no_result}</span>
+                  <span data-tool-text="" className="inline-flex items-baseline gap-1">
+                    <span className="font-mono text-ink">{tool.toolName}</span>
+                    <span>{t.chat.tool.no_result}</span>
+                  </span>
                 </Badge>
               ) : (
                 <Badge tone={state === 'failed' ? 'danger' : state === 'succeeded' ? 'success' : 'info'}>
                   {state === 'started' && <ToolSpinner />}
-                  <span className="font-mono text-ink">{tool.toolName}</span>
-                  <span>{t.chat.tool[state]}</span>
+                  <span data-tool-text="" className="inline-flex items-baseline gap-1">
+                    <span className="font-mono text-ink">{tool.toolName}</span>
+                    <span>{t.chat.tool[state]}</span>
+                  </span>
                 </Badge>
               )}
             </li>
@@ -116,45 +123,49 @@ export function ToolList({ tools: events, unfinished = 'running', exclude, after
 
   const groups = groupTools(events, unfinished, exclude)
   return (
-    <ul
-      className="mt-1.5 -mb-1 flex flex-wrap items-center gap-y-1.5 text-[12.5px] leading-5 text-ink-500 [&>li:not([data-tool-group])]:ml-2 [&>li:first-child]:ml-0"
-      aria-label={t.chat.toolsLabel}
-    >
-      {groups.map((group, index) => {
-        const label = stateText(group.state)
-        return (
-          <li key={group.key} data-tool-group="" data-state={group.state} className="inline-flex items-center">
-            {index > 0 && (
-              <span aria-hidden="true" className="mx-1.5 text-ink-500/45 select-none">
-                {t.chat.metaSeparator}
-              </span>
-            )}
-            <span className="sr-only">{t.chat.toolGroupLabel(group.toolName, label, group.count)}</span>
-            <span
-              aria-hidden="true"
-              data-tool-visual=""
-              data-interrupted={group.state === 'interrupted' ? '' : undefined}
-              data-no-result={group.state === 'no_result' ? '' : undefined}
-              className={cn(
-                'inline-flex items-center gap-1',
-                group.state === 'failed' ? 'text-red-text' : 'text-ink-500',
-              )}
-            >
-              {group.state === 'started' && <ToolSpinner />}
-              <span className={cn('font-mono text-[12px] font-medium', group.state === 'succeeded' || group.state === 'started' ? 'text-ink-700' : undefined)}>
-                {group.toolName}
-              </span>
-              {group.state !== 'succeeded' && <span>{label}</span>}
-              {group.count > 1 && (
-                <span className={cn('tabular-nums', group.state === 'failed' ? 'text-red-text/75' : 'text-ink-500/70')}>
-                  ×{group.count}
+    <ToolListLeadingContext.Provider value={groups.length > 0}>
+      <ul
+        className="mt-1.5 -mb-1 flex flex-wrap items-center gap-y-1.5 text-[12.5px] leading-5 text-ink-500 [&>li:not([data-tool-group])]:ml-2 [&>li:first-child]:ml-0"
+        aria-label={t.chat.toolsLabel}
+      >
+        {groups.map((group, index) => {
+          const label = stateText(group.state)
+          return (
+            <li key={group.key} data-tool-group="" data-state={group.state} className="inline-flex items-center">
+              {index > 0 && (
+                <span aria-hidden="true" className="mx-1.5 text-ink-500/45 select-none">
+                  {t.chat.metaSeparator}
                 </span>
               )}
-            </span>
-          </li>
-        )
-      })}
-      {after}
-    </ul>
+              <span className="sr-only">{t.chat.toolGroupLabel(group.toolName, label, group.count)}</span>
+              <span
+                aria-hidden="true"
+                data-tool-visual=""
+                data-interrupted={group.state === 'interrupted' ? '' : undefined}
+                data-no-result={group.state === 'no_result' ? '' : undefined}
+                className={cn(
+                  'inline-flex items-center gap-1',
+                  group.state === 'failed' ? 'text-red-text' : 'text-ink-500',
+                )}
+              >
+                {group.state === 'started' && <ToolSpinner />}
+                <span data-tool-text="" className="inline-flex items-baseline gap-1">
+                  <span className={cn('font-mono text-[12px] font-medium', group.state === 'succeeded' || group.state === 'started' ? 'text-ink-700' : undefined)}>
+                    {group.toolName}
+                  </span>
+                  {group.state !== 'succeeded' && <span>{label}</span>}
+                  {group.count > 1 && (
+                    <span className={cn('tabular-nums', group.state === 'failed' ? 'text-red-text/75' : 'text-ink-500/70')}>
+                      ×{group.count}
+                    </span>
+                  )}
+                </span>
+              </span>
+            </li>
+          )
+        })}
+        {after}
+      </ul>
+    </ToolListLeadingContext.Provider>
   )
 }
