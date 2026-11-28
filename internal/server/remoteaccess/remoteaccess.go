@@ -124,8 +124,11 @@ func (d *Door) closeLocked() error {
 	if d.srv == nil {
 		return nil
 	}
-	// Close, not Shutdown: open event streams never end by themselves, and a door turned off must let nobody in.
+	// Close, not Shutdown: open event streams never end by themselves, and a door turned off must let nobody in. The
+	// listener is closed here too: when Serve has not started on it yet, srv.Close does not see it, and Serve would
+	// close it only later, so the port would still be taken by the time the door opens again.
 	err := d.srv.Close()
+	_ = d.ln.Close()
 	d.srv, d.ln = nil, nil
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
