@@ -453,7 +453,8 @@ func TestForkGitConflictGoesToTheJoinStep(t *testing.T) {
 			commitIn(t, git, instanceWorkspace(&r, n.AgentID, false), "README", "from "+n.StepID+"\n")
 		case n.StepID == "verify":
 			text := nodeText(t, f.s, n.ID)
-			if !strings.Contains(text, "Merging branch web (task/1-forked--web) into the task branch stopped on a conflict in: README") || !strings.Contains(text, "Already merged: server (task/1-forked--server)") {
+			if !strings.Contains(text, "Merging branch web (task/1-forked--web) into the task branch stopped on a conflict in: README") || !strings.Contains(text, "Already merged: server (task/1-forked--server)") ||
+				!strings.Contains(text, "commit the merge. No other branch is left to merge.") || strings.Contains(text, "none") {
 				t.Errorf("join message:\n%s", text)
 			}
 			if files, inProgress, err := gitworkspace.MergeInProgress(ctx, git, task); err != nil || !inProgress || len(files) != 1 {

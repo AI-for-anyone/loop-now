@@ -111,6 +111,13 @@ func (s *Service) mergeBranches(ctx context.Context, r taskmodel.Record) (joinRe
 		return strings.Join(parts, ", ")
 	}
 	how := " (for each, `git merge --no-ff <branch>`)"
+	// then says what is left to merge after the merge in progress.
+	then := func(items []item) string {
+		if len(items) == 0 {
+			return " No other branch is left to merge."
+		}
+		return fmt.Sprintf(" Then merge the branches not merged yet, in this order: %s%s.", names(items), how)
+	}
 	merged, rest := []item{}, []item{}
 	report := ""
 	if files, inProgress, err := gitworkspace.MergeInProgress(ctx, git, w.Path); err != nil {
@@ -124,7 +131,7 @@ func (s *Service) mergeBranches(ctx context.Context, r taskmodel.Record) (joinRe
 				rest, out.merges[it.step] = append(rest, it), taskmodel.BranchSkipped
 			}
 		}
-		report = fmt.Sprintf("Join: a merge is in progress in the task's worktree %s, with conflicts in: %s. Finish it (`git status` lists what is left), commit the merge, then merge the branches that are not in the task branch yet, in this order: %s%s. Already merged: %s.", w.Path, strings.Join(files, ", "), names(rest), how, names(merged))
+		report = fmt.Sprintf("Join: a merge is in progress in the task's worktree %s, with conflicts in: %s. Finish it (`git status` lists what is left) and commit the merge.%s Already merged: %s.", w.Path, strings.Join(files, ", "), then(rest), names(merged))
 	} else if dirty, err := gitworkspace.Uncommitted(ctx, git, w.Path); err != nil {
 		return out, err
 	} else if dirty > 0 {
@@ -147,7 +154,7 @@ func (s *Service) mergeBranches(ctx context.Context, r taskmodel.Record) (joinRe
 				for _, later := range order[i+1:] {
 					out.merges[later.step] = taskmodel.BranchSkipped
 				}
-				report = fmt.Sprintf("Join: every branch has arrived. Merging branch %s into the task branch stopped on a conflict in: %s. The merge is in progress in the task's worktree %s: resolve the conflicts there (`git status` lists them), commit the merge, then merge the branches not merged yet, in this order: %s%s. Already merged: %s.", names(order[i:i+1]), strings.Join(res.Conflicts, ", "), w.Path, names(order[i+1:]), how, names(merged))
+				report = fmt.Sprintf("Join: every branch has arrived. Merging branch %s into the task branch stopped on a conflict in: %s. The merge is in progress in the task's worktree %s: resolve the conflicts there (`git status` lists them) and commit the merge.%s Already merged: %s.", names(order[i:i+1]), strings.Join(res.Conflicts, ", "), w.Path, then(order[i+1:]), names(merged))
 				break
 			}
 			merged, out.merges[it.step] = append(merged, it), taskmodel.BranchMerged
