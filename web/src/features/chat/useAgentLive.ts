@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import { api, call, type Schemas } from '@/api/client'
+import { api, ApiError, call, type Schemas } from '@/api/client'
 import { connectAgentEvents, type AgentEvent } from '@/api/events'
 import { keys, updateRunInMessages, upsertMessage } from '@/api/queries'
 import { config } from '@/config'
@@ -154,6 +154,7 @@ export function useAgentLive(agentId: string) {
           await call(api.GET('/agents/{agentId}', { params: { path: { agentId } } }))
           return true
         } catch (error) {
+          if (error instanceof ApiError && error.status === 401) return false
           if (!isNotFound(error)) return true
           await client.invalidateQueries({ queryKey: keys.agent(agentId) })
           return false

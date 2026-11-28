@@ -23,6 +23,7 @@ import {
   ScopeIndexRedirect,
 } from '@/features/projects/ScopeRoute'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { PairPage } from '@/features/devices/PairPage'
 import { ImportPage } from '@/features/importing/ImportPage'
 import { AgentFolderTab, ProjectFolderPage } from '@/features/folders/FolderSections'
 import { NewSkillSheet, SkillDetailSheet, SkillsPage } from '@/features/skills-library/SkillsPage'
@@ -52,6 +53,8 @@ const agentsRoute = (): RouteObject => ({
 })
 
 export const routes: RouteObject[] = [
+  // Device pairing runs outside AppLayout so opening /pair#<code> on the remote door never fires authenticated console requests first.
+  { path: '/pair', element: <PairPage />, errorElement: <RouteErrorBoundary /> },
   {
     path: '/',
     element: <AppLayout />,

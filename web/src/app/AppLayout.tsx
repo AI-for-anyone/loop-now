@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { Settings } from 'lucide-react'
-import type { Schemas } from '@/api/client'
+import { deviceAuth, type Schemas } from '@/api/client'
 import { useProjects } from '@/api/queries'
 import { BrandWordmark } from '@/components/BrandWordmark'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { mac } from '@/features/chat/composer-style'
 import { hasInsetTitleBar, useDesktopNavigation } from '@/features/desktop/desktop'
+import { PairPage } from '@/features/devices/PairPage'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
@@ -83,9 +84,17 @@ function remembered(list: Schemas['Project'][] | undefined): Kept {
 // Matches the width at which the sidebar switches between the wide and narrow layouts (--breakpoint-nav in index.css).
 const wide = '(min-width: 56.3125rem)'
 
-// The console's frame: the draggable, collapsible sidebar plus the main area. The sidebar's scope comes from the URL (project pages and
-// the overview); global pages carry no scope and keep the previous one. At widths ≤ 900 the sidebar folds into a drawer.
+// The console's frame: replaces the shell with the pairing gate as soon as the remote door rejects requests as unauthenticated (401),
+// unmounting live streams and polls until the device pairs again.
 export function AppLayout() {
+  const unauthenticated = useSyncExternalStore(deviceAuth.subscribe, deviceAuth.isUnauthenticated)
+  if (unauthenticated) return <PairPage mode="gate" />
+  return <AppLayoutShell />
+}
+
+// The authenticated console frame: the draggable, collapsible sidebar plus the main area. The sidebar's scope comes from the URL (project
+// pages and the overview); global pages carry no scope and keep the previous one. At widths ≤ 900 the sidebar folds into a drawer.
+function AppLayoutShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const projects = useProjects()

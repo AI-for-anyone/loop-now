@@ -72,19 +72,22 @@ export function createDeviceSession(body: Schemas['DeviceSessionRequest']): Prom
 }
 
 // Auto-redemption from /pair#<code> runs in an effect, which React StrictMode invokes twice in development.
-// Cache the in-flight or settled request per code so a one-time code is never posted twice.
-// Network-unreachable failures are evicted so the user can retry once connectivity returns.
-const redemptions = new Map<string, Promise<Schemas['Device']>>()
+// Deduplicate calls for the same code within a short window so StrictMode never posts a one-time code twice, while a later visit
+// attempting to reuse the code still hits the server and receives pairing_code_invalid.
+// Network-unreachable failures are evicted right away so the user can retry once connectivity returns.
+const REDEMPTION_DEDUP_MS = 2000
+const redemptions = new Map<string, { promise: Promise<Schemas['Device']>; at: number }>()
 
 export function redeemPairingCode(code: string, name?: string): Promise<Schemas['Device']> {
+  const now = Date.now()
   const existing = redemptions.get(code)
-  if (existing) return existing
+  if (existing && now - existing.at < REDEMPTION_DEDUP_MS) return existing.promise
   const body: Schemas['DeviceSessionRequest'] = name ? { code, name } : { code }
   const promise = createDeviceSession(body).catch((error) => {
     if (error instanceof ApiError && error.code === 'unreachable') redemptions.delete(code)
     throw error
   })
-  redemptions.set(code, promise)
+  redemptions.set(code, { promise, at: now })
   return promise
 }
 

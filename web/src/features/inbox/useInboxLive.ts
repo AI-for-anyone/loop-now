@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import type { Schemas } from '@/api/client'
+import { deviceAuth, type Schemas } from '@/api/client'
+import { checkDeviceSession } from '@/api/devices'
 import { connectInboxEvents, type InboxEvent } from '@/api/events'
 import type { MessagePages } from '@/api/inbox'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
@@ -97,6 +98,7 @@ export function applyInboxEvent(client: QueryClient, event: InboxEvent) {
 export function useInboxLive() {
   const client = useQueryClient()
   useEffect(() => {
+    let wasOpen = false
     let interrupted = false
     const stop = connectInboxEvents({
       onEvent: (event) => {
@@ -105,13 +107,20 @@ export function useInboxLive() {
       },
       onState: (state) => {
         inboxConnection.set(state)
-        if (state === 'reconnecting') interrupted = true
-        if (state === 'open' && interrupted) {
-          interrupted = false
-          refreshInboxViews(client)
+        if (state === 'reconnecting') {
+          interrupted = true
+          // At the remote door, removing a device cancels its open event stream; probe at once so the UI locks out immediately.
+          if (wasOpen && deviceAuth.door() !== 'local') void checkDeviceSession()
+        }
+        if (state === 'open') {
+          wasOpen = true
+          if (interrupted) {
+            interrupted = false
+            refreshInboxViews(client)
+          }
         }
       },
-      onClosed: async () => true,
+      onClosed: async () => (deviceAuth.door() !== 'local' ? checkDeviceSession() : true),
     })
     const onFocus = () => refreshInboxViews(client)
     window.addEventListener('focus', onFocus)
