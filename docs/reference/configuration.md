@@ -60,11 +60,21 @@ When `LOOP_NOW_NODE_BIN`, `LOOP_NOW_PI_BIN`, `LOOP_NOW_LOOPCTL_DIST_DIR`, `LOOP_
 
 Exit codes of `loop-server`: `0` normal shutdown, `1` other startup failure or an error while shutting down, `2` invalid configuration, `3` the data directory or the work root is used by another instance, `4` a listen address is already in use.
 
+## Phones and other devices {#phones-and-other-devices}
+
+**Global settings › Phones and other devices** opens a second listener, the remote door, so a phone or another computer can use the same console; a tunnel will forward to it in a later release, and until then it opens only on this computer. The listener a request arrives on decides what it may do, never the request's headers.
+
+- **Off by default.** When on, it listens on `127.0.0.1` at a port the server picks and keeps across restarts, or at a port you set (`GET` / `PUT /api/v1/remote-access`). Turning it off closes every connection on it.
+- **Pairing.** "Add device" makes a one-time code, valid for 10 minutes, shown as a QR code and a link `<remote door address>/pair#<code>`; the code sits in the link's fragment, so it never reaches a server as a path or query and is never logged. Only this computer can make codes. After 10 wrong codes in a minute, pairing waits a minute.
+- **Sessions.** A paired device gets full access to the console. Its session lives in a cookie (HttpOnly, SameSite=Strict, Secure over HTTPS); the server keeps only a hash of it. A device unused for 30 days must pair again; removing a device ends its session at once and closes its open event streams.
+- **What the remote door refuses.** Every API request without a device session, except pairing (the console's own files are served to anyone, so the pairing page can load); making pairing codes, the device list and the remote door setting, even with a session; requests whose `Origin` is not the remote door's own, `Origin: null` included, and changes without an `Origin`; tokens in an `Authorization` header; the Agent API and plugin hooks. The dialog to choose a path is not offered there, since it would open on this computer's screen.
+- The local console listener and the external TLS port for external identities and `loopctl` are unchanged.
+
 ## Security boundaries
 
 The current release is intended for **trusted personal use**:
 
-- The console has no authentication. Keep it on loopback rather than exposing it to a public network.
+- The console has no authentication. Keep it on loopback rather than exposing it to a public network. Phones and other devices use the remote door above, which needs a paired device.
 - Agents execute local commands under the server's operating-system user. A separate task directory is not an OS security sandbox.
 - Plugins execute code; install sources you trust. Model and tool access also depends on the credentials and permissions you provide.
 - Conversation history is persistent, but a server restart is not a promise of uninterrupted execution or automatic replay of in-flight work. Prefer updating when agents are idle.
