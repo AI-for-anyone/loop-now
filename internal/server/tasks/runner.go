@@ -37,11 +37,11 @@ func (s *Service) Start(ctx context.Context) error {
 	for _, id := range ids {
 		_, err = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 			m.Unchanged()
-			consoleSource, e := s.Store.TaskConsoleRecoverySourceTx(ctx, m)
+			sources, e := s.Store.TaskConsoleRecoverySourcesTx(ctx, m)
 			if e != nil {
 				return nil, e
 			}
-			count, currentInterrupted, e := s.Store.RecoverTaskTurns(ctx, m)
+			count, interrupted, e := s.Store.RecoverTaskTurnsOf(ctx, m)
 			if e != nil {
 				return nil, e
 			}
@@ -49,19 +49,25 @@ func (s *Service) Start(ctx context.Context) error {
 				return nil, nil
 			}
 			m.Changed()
-			if !currentInterrupted {
-				return nil, nil
+			// Every current node whose turn the restart ended is blocked: the one node, or each branch of a fork.
+			for _, id := range interrupted {
+				block(m.Record, m.Record.ActiveNode(id), "The node was running when the server restarted. Retry the current node or cancel the task.")
 			}
-			block(m.Record, "The node was running when the server restarted. Retry the current node or cancel the task.")
-			if consoleSource != uuid.Nil {
-				if e = s.Store.RecordTaskConsoleEligibilityTx(ctx, m, consoleSource); e != nil {
+			for _, source := range sources {
+				if e = s.Store.RecordTaskConsoleEligibilityTx(ctx, m, source); e != nil {
 					return nil, e
 				}
 			}
-			if e = s.queueNotice(ctx, m, "blocked"); e != nil {
-				return nil, e
+			for _, id := range interrupted {
+				n := m.Record.ActiveNode(id)
+				if e = s.queueNotice(ctx, m, n, "blocked"); e != nil {
+					return nil, e
+				}
+				if e = m.Emit("node.updated", map[string]any{"node": n}); e != nil {
+					return nil, e
+				}
 			}
-			return nil, m.Emit("node.updated", map[string]any{"node": m.Record.Current()})
+			return nil, nil
 		})
 		if err != nil {
 			return err
@@ -117,13 +123,30 @@ func (s *Service) KickTaskResponse(data json.RawMessage) {
 }
 func (s *Service) Kick(id uuid.UUID) {
 	s.mu.Lock()
-	if !s.started || s.ctx.Err() != nil || s.drivers[id] {
+	if !s.started || s.ctx.Err() != nil {
+		s.mu.Unlock()
+		return
+	}
+	if s.drivers[id] {
+		// A driver inside a fork waits on its branches: it looks again, so a branch with new work (a retry, a message)
+		// starts without waiting for the others.
+		if poke := s.pokes[id]; poke != nil {
+			select {
+			case poke <- struct{}{}:
+			default:
+			}
+		}
 		s.mu.Unlock()
 		return
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.drivers[id] = true
 	s.cancels[id] = cancel
+	poke := make(chan struct{}, 1)
+	if s.pokes == nil {
+		s.pokes = map[uuid.UUID]chan struct{}{}
+	}
+	s.pokes[id] = poke
 	s.wg.Add(1)
 	s.mu.Unlock()
 	go func() {
@@ -134,6 +157,7 @@ func (s *Service) Kick(id uuid.UUID) {
 			s.mu.Lock()
 			delete(s.drivers, id)
 			delete(s.cancels, id)
+			delete(s.pokes, id)
 			s.mu.Unlock()
 			// When a message is committed between the last empty-queue check and exiting, its immediate wake-up must
 			// not be lost.
@@ -142,13 +166,13 @@ func (s *Service) Kick(id uuid.UUID) {
 					return
 				}
 				var pending bool
-				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND q.node_run_id=t.document->'view'->'task'->>'currentNodeRunId')`, id).Scan(&pending)
+				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND `+store.CurrentNodeSQL("t.document", "q.node_run_id")+`)`, id).Scan(&pending)
 				if err == nil && pending {
 					s.Kick(id)
 				}
 			}
 		}()
-		driveErr = s.drive(ctx, id)
+		driveErr = s.drive(ctx, id, poke)
 		if driveErr != nil && ctx.Err() == nil && s.Log != nil {
 			s.Log.Error("task coordination failed", "task_id", id, "error", driveErr)
 		}
@@ -180,7 +204,12 @@ func (s *Service) reconcile() {
 	}
 	s.deliverNotices(s.ctx)
 }
-func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
+
+// drive advances the task until there is nothing to do: one step at a time outside a fork; inside one, every branch
+// at once (driveFork). poke tells it to look again while it waits on branches.
+func (s *Service) drive(ctx context.Context, id uuid.UUID, poke <-chan struct{}) error {
+	l := newLanes()
+	defer l.wait()
 	for ctx.Err() == nil {
 		r, err := s.Store.GetTask(ctx, id)
 		if err != nil {
@@ -191,6 +220,13 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 				return s.cleanup(ctx, id)
 			}
 			return nil
+		}
+		if r.Fork != nil {
+			more, err := s.driveFork(ctx, id, &r, l, poke)
+			if err != nil || !more {
+				return err
+			}
+			continue
 		}
 		if n := r.Current(); n != nil && s.larkDispatchPaused(n.RuntimeID) {
 			return nil
@@ -211,7 +247,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 					if ctx.Err() != nil {
 						return ctx.Err()
 					}
-					return s.blockTask(ctx, id, "Could not prepare the task fork or its directories.")
+					return s.blockTask(ctx, id, uuid.Nil, "Could not prepare the task fork or its directories.")
 				}
 			}
 			created, e := s.prepareWorkspace(ctx, r)
@@ -223,7 +259,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 				if w := r.View.Workspace; w != nil && w.Mode == taskmodel.WorkspaceModeCopy {
 					what = "Could not copy the task's folder: "
 				}
-				return s.blockTask(ctx, id, what+e.Error())
+				return s.blockTask(ctx, id, uuid.Nil, what+e.Error())
 			}
 			_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 				if m.Record.Ended() || m.Record.View.Task.Status != "preparing" {
@@ -232,7 +268,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 				}
 				activateWorkspace(m.Record, created)
 				m.Record.View.Task.Status = "running"
-				return nil, s.prepareNode(ctx, m, "")
+				return nil, s.prepareNode(ctx, m, m.Record.Current(), "", "")
 			})
 			if e != nil {
 				return e
@@ -243,91 +279,105 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		if n == nil {
 			return errors.New("the task has no current node")
 		}
-		if n.Status == "queued" && s.Hooks != nil {
-			// node.before_start (plugins/SPEC.md §4): ask plugins before a node first starts, without waiting inside
-			// the task transaction; when blocked, the task becomes blocked with the reason written down.
-			project, agent, task, node := r.View.Task.ProjectID, n.AgentID, id, n.ID
-			o, e := s.Hooks.Hook(ctx, pluginhost.Intercept, pluginhost.Event("node.before_start", &project, &agent, &task, nil,
-				map[string]any{"nodeRunId": node, "stepId": n.StepID}), &project)
-			if e != nil {
-				return e
-			}
-			if o.Blocked {
-				reason := o.Reason
-				if reason == "" {
-					reason = "No reason given."
-				}
-				return s.blockTask(ctx, id, "Plugin "+o.Plugin+" blocked the node from starting: "+reason)
-			}
-		}
-		turn, found, e := s.Store.ClaimTaskTurn(ctx, id, n.RuntimeID)
-		if e != nil {
+		ran, e := s.runTurn(ctx, id, r.View.Task.ProjectID, n)
+		if e != nil || !ran {
 			return e
-		}
-		if !found {
-			return nil
-		}
-		sink := &turnSink{service: s, ctx: ctx, turn: turn}
-		result, e := s.executeTurn(ctx, turn, sink)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if e != nil {
-			result.Outcome = executor.OutcomeFailed
-			result.ErrorCode = executor.ErrInternal
-			result.ErrorMessage = "The execution infrastructure failed."
-		}
-		var code, message *string
-		if result.ErrorCode != "" {
-			code = &result.ErrorCode
-		}
-		if result.ErrorMessage != "" {
-			message = &result.ErrorMessage
-		}
-		if result.Outcome != "completed" && result.Outcome != "failed" && result.Outcome != "interrupted" {
-			result.Outcome = "failed"
-		}
-		_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
-			code, message, err := stoppedError(ctx, m, turn.ID, result.Outcome, code, message)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := s.Store.UpdateTaskTurnTx(ctx, m, turn.ID, result.Outcome, result.Text, code, message); err != nil {
-				return nil, err
-			}
-			waiting, err := s.Store.FinishSleepTx(ctx, m.Tx, m, turn.ID, result.Outcome)
-			if err != nil {
-				return nil, err
-			}
-			n := m.Record.Current()
-			if waiting && result.Outcome == "completed" && !m.Record.Ended() && n != nil && n.ID == turn.NodeRunID && n.Output == nil {
-				n.Status = "waiting"
-				m.Record.View.Task.Status = "waiting"
-				return nil, m.Emit("node.updated", map[string]any{"node": n})
-			}
-			return s.settleTx(ctx, m, turn, result)
-		})
-		if e != nil {
-			return e
-		}
-		s.KickInbox(turn.RuntimeID)
-		if record, e := s.Store.GetTask(ctx, id); e == nil && record.Ended() {
-			s.interruptOldTurns(ctx, id)
 		}
 	}
 	return ctx.Err()
 }
-func (s *Service) blockTask(ctx context.Context, id uuid.UUID, reason string) error {
+
+// runTurn runs the next queued turn of current node n, if it has one, and settles it; ran is false when there was
+// none to claim.
+func (s *Service) runTurn(ctx context.Context, id, project uuid.UUID, n *taskmodel.NodeRun) (ran bool, err error) {
+	if n.Status == "queued" && s.Hooks != nil {
+		// node.before_start (plugins/SPEC.md §4): ask plugins before a node first starts, without waiting inside the
+		// task transaction; when blocked, the node becomes blocked with the reason written down.
+		agent, task, node := n.AgentID, id, n.ID
+		o, e := s.Hooks.Hook(ctx, pluginhost.Intercept, pluginhost.Event("node.before_start", &project, &agent, &task, nil,
+			map[string]any{"nodeRunId": node, "stepId": n.StepID}), &project)
+		if e != nil {
+			return false, e
+		}
+		if o.Blocked {
+			reason := o.Reason
+			if reason == "" {
+				reason = "No reason given."
+			}
+			return false, s.blockTask(ctx, id, n.ID, "Plugin "+o.Plugin+" blocked the node from starting: "+reason)
+		}
+	}
+	turn, found, e := s.Store.ClaimTaskTurn(ctx, id, n.RuntimeID)
+	if e != nil || !found {
+		return false, e
+	}
+	sink := &turnSink{service: s, ctx: ctx, turn: turn}
+	result, e := s.executeTurn(ctx, turn, sink)
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if e != nil {
+		result.Outcome = executor.OutcomeFailed
+		result.ErrorCode = executor.ErrInternal
+		result.ErrorMessage = "The execution infrastructure failed."
+	}
+	var code, message *string
+	if result.ErrorCode != "" {
+		code = &result.ErrorCode
+	}
+	if result.ErrorMessage != "" {
+		message = &result.ErrorMessage
+	}
+	if result.Outcome != "completed" && result.Outcome != "failed" && result.Outcome != "interrupted" {
+		result.Outcome = "failed"
+	}
+	_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
+		code, message, err := stoppedError(ctx, m, turn.ID, result.Outcome, code, message)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := s.Store.UpdateTaskTurnTx(ctx, m, turn.ID, result.Outcome, result.Text, code, message); err != nil {
+			return nil, err
+		}
+		waiting, err := s.Store.FinishSleepTx(ctx, m.Tx, m, turn.ID, result.Outcome)
+		if err != nil {
+			return nil, err
+		}
+		n := m.Record.ActiveNode(turn.NodeRunID)
+		if waiting && result.Outcome == "completed" && !m.Record.Ended() && n != nil && n.Output == nil {
+			n.Status = "waiting"
+			m.Record.View.Task.Status = "waiting"
+			return nil, m.Emit("node.updated", map[string]any{"node": n})
+		}
+		return s.settleTx(ctx, m, turn, result)
+	})
+	if e != nil {
+		return false, e
+	}
+	s.KickInbox(turn.RuntimeID)
+	if record, e := s.Store.GetTask(ctx, id); e == nil && record.Ended() {
+		s.interruptOldTurns(ctx, id)
+	}
+	return true, nil
+}
+
+// blockTask blocks the current node node (the one current node when uuid.Nil) with the reason, and the task with it
+// (inside a fork only that branch stops).
+func (s *Service) blockTask(ctx context.Context, id, node uuid.UUID, reason string) error {
 	_, err := s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 		if m.Record.Ended() {
 			m.Unchanged()
 			return nil, nil
 		}
-		block(m.Record, reason)
-		if e := s.queueNotice(ctx, m, "blocked"); e != nil {
+		n := m.Record.Current()
+		if node != uuid.Nil {
+			n = m.Record.ActiveNode(node)
+		}
+		block(m.Record, n, reason)
+		if e := s.queueNotice(ctx, m, n, "blocked"); e != nil {
 			return nil, e
 		}
-		return nil, m.Emit("node.updated", map[string]any{"node": m.Record.Current()})
+		return nil, m.Emit("node.updated", map[string]any{"node": n})
 	})
 	return err
 }
@@ -336,14 +386,14 @@ func (s *Service) settle(ctx context.Context, t store.TaskTurn, result executor.
 	return err
 }
 func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.TaskTurn, result executor.Result) (any, error) {
-	n := m.Record.Current()
-	if m.Record.Ended() || n == nil || n.ID != t.NodeRunID || n.Status == "blocked" {
+	n := m.Record.ActiveNode(t.NodeRunID)
+	if m.Record.Ended() || n == nil || n.Status == "blocked" {
 		m.Unchanged()
 		return nil, nil
 	}
 	blocked := func(reason string) (any, error) {
-		block(m.Record, reason)
-		if e := s.queueNotice(ctx, m, "blocked"); e != nil {
+		block(m.Record, n, reason)
+		if e := s.queueNotice(ctx, m, n, "blocked"); e != nil {
 			return nil, e
 		}
 		return nil, m.Emit("node.updated", map[string]any{"node": n})
@@ -379,9 +429,9 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 			return nil, m.Emit("node.updated", map[string]any{"node": n})
 		}
 		if stopped {
-			block(m.Record, "Stopped by a person.")
+			block(m.Record, n, "Stopped by a person.")
 		} else {
-			block(m.Record, "The node run ended abnormally. Any submitted result is kept, but the task does not advance.")
+			block(m.Record, n, "The node run ended abnormally. Any submitted result is kept, but the task does not advance.")
 		}
 		var executed bool
 		if e := m.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type=$2)`, t.ID, store.EventRunRunning).Scan(&executed); e != nil {
@@ -392,7 +442,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 				return nil, e
 			}
 		}
-		if e := s.queueNotice(ctx, m, "blocked"); e != nil {
+		if e := s.queueNotice(ctx, m, n, "blocked"); e != nil {
 			return nil, e
 		}
 		return nil, m.Emit("node.updated", map[string]any{"node": n})
@@ -425,20 +475,24 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		}
 		return blocked("The node's turn ended without submitting a result or leaving an open question.")
 	}
-	exit, e := m.Record.View.Workflow.SelectExit(n.StepID, n.EdgeID, m.Record.EdgeCounts)
+	def := m.Record.View.Workflow
+	exit, e := def.SelectExit(n.StepID, n.EdgeID, m.Record.EdgeCounts)
 	if e != nil {
 		return blocked(e.Error())
 	}
-	if exit.Fork != nil {
-		return blocked("This server cannot run forks yet.")
-	}
 	edge := exit.Edge
+	// A branch's edge into its join: the branch has arrived, and the join waits for the others.
+	arrival := edge != nil && n.Branch != nil && m.Record.Fork != nil && edge.To == def.JoinOf(*n.Branch) && m.Record.Fork.BranchRun(*n.Branch) != nil
 	// Once the node has submitted its result, close any still-unanswered question; the original message history is
 	// kept.
 	if e = s.closeQuestion(ctx, m, n, "node_completed"); e != nil {
 		return nil, e
 	}
-	if edge != nil && len(m.Record.View.Nodes) >= s.Options.MaxVisits {
+	added := len(exit.Edges)
+	if edge != nil && !arrival {
+		added = 1
+	}
+	if added > 0 && len(m.Record.View.Nodes)+added > s.Options.MaxVisits {
 		return blocked("The task reached its limit of node visits.")
 	}
 	if e = s.Store.InterruptTaskTurns(ctx, m, n.ID); e != nil {
@@ -450,19 +504,54 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 	if e = m.Emit("node.updated", map[string]any{"node": n}); e != nil {
 		return nil, e
 	}
-	if edge == nil {
+	if edge == nil && exit.Fork == nil {
 		if e := s.Store.InterruptAllTaskConversations(ctx, m); e != nil {
 			return nil, e
 		}
 		m.Record.View.Task.Status = "completed"
 		m.Record.View.Task.EndedAt = &now
 		m.Record.View.Cleanup = "pending"
-		return nil, s.queueNotice(ctx, m, "completed")
+		return nil, s.queueNotice(ctx, m, n, "completed")
+	}
+	if exit.Fork != nil {
+		// The branches start as the driver makes their workspaces (taking the limit on branches at once into account).
+		f := &taskmodel.ForkRun{ID: exit.Fork.ID, Join: exit.Fork.Join, SourceNodeRunID: n.ID, Branches: []taskmodel.BranchRun{}}
+		for _, fe := range exit.Edges {
+			m.Record.EdgeCounts[fe.ID]++
+			f.Branches = append(f.Branches, taskmodel.BranchRun{Step: fe.To, EdgeID: fe.ID, State: taskmodel.BranchWaiting})
+		}
+		m.Record.Fork = f
+		m.Record.RemoveCurrent(n.ID)
+		m.Record.View.Task.Status = "running"
+		return nil, s.keepUnreadInbox(ctx, m, n)
 	}
 	m.Record.EdgeCounts[edge.ID]++
-	step, _ := m.Record.View.Workflow.Step(edge.To)
+	if arrival {
+		b := m.Record.Fork.BranchRun(*n.Branch)
+		b.State = taskmodel.BranchArrived
+		arrived := n.ID
+		b.ArrivedNodeRunID = &arrived
+		m.Record.RemoveCurrent(n.ID)
+		return nil, s.keepUnreadInbox(ctx, m, n)
+	}
+	node, e := s.newNode(ctx, m, edge.To)
+	if e != nil {
+		return nil, e
+	}
+	m.Record.ReplaceCurrent(n.ID, *node)
+	if n.RuntimeID != node.RuntimeID {
+		if e = s.keepUnreadInbox(ctx, m, n); e != nil {
+			return nil, e
+		}
+	}
+	return nil, s.prepareNode(ctx, m, node, "", "")
+}
+
+// newNode adds the next visit of the step to the task's nodes (not yet current) and returns it.
+func (s *Service) newNode(ctx context.Context, m *store.TaskMutation, stepID string) (*taskmodel.NodeRun, error) {
+	step, _ := m.Record.View.Workflow.Step(stepID)
 	var inst store.TaskInstance
-	e = m.Tx.QueryRow(ctx, `SELECT id,agent_id,agent_name FROM task_instances WHERE task_id=$1 AND agent_id=$2`, t.TaskID, step.AgentID).Scan(&inst.ID, &inst.AgentID, &inst.AgentName)
+	e := m.Tx.QueryRow(ctx, `SELECT id,agent_id,agent_name FROM task_instances WHERE task_id=$1 AND agent_id=$2`, m.Record.View.Task.ID, step.AgentID).Scan(&inst.ID, &inst.AgentID, &inst.AgentName)
 	if e != nil {
 		return nil, e
 	}
@@ -472,25 +561,26 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 			visit = old.Visit + 1
 		}
 	}
-	node := freshNode(t.TaskID, step, inst, visit, 1)
-	m.Record.View.Nodes = append(m.Record.View.Nodes, node)
-	m.Record.SetCurrent(node)
-	if n.RuntimeID != node.RuntimeID {
-		// A queued reminder cancelled with the old node still represents unread mail.
-		// Rebind the notification to an unbound Inbox round, never to another node.
-		var trigger uuid.UUID
-		e := m.Tx.QueryRow(ctx, `SELECT t.trigger_inbox_message_id FROM task_turns t JOIN inbox_messages i ON i.id=t.trigger_inbox_message_id WHERE t.task_id=$1 AND t.node_run_id=$2 AND t.origin='inbox_reminder' AND t.inbox_scope_node_id IS NULL AND t.status='interrupted' AND t.started_at IS NULL AND i.read_at IS NULL AND i.cancelled_at IS NULL ORDER BY t.queue_seq LIMIT 1`, t.TaskID, n.ID).Scan(&trigger)
-		if e != nil && !store.IsNotFound(e) {
-			return nil, e
-		}
-		if e == nil {
-			old := store.TaskInstance{ID: n.RuntimeID, TaskID: t.TaskID, AgentID: n.AgentID, AgentName: n.AgentName}
-			if _, e = s.Store.EnqueueTaskInboxTurn(ctx, m, old, "You have unhandled task Inbox messages. List the summaries, then read and reply to them one by one; for now only handle the conversation and do not advance any other workflow node.", 1, &trigger); e != nil {
-				return nil, e
-			}
+	m.Record.View.Nodes = append(m.Record.View.Nodes, freshNode(m.Record.View.Workflow, m.Record.View.Task.ID, step, inst, visit, 1))
+	return &m.Record.View.Nodes[len(m.Record.View.Nodes)-1], nil
+}
+
+// keepUnreadInbox is called when node n ends and its instance has no next node: a queued reminder cancelled with the
+// old node still represents unread mail, so the notification is rebound to an unbound Inbox round, never to another
+// node.
+func (s *Service) keepUnreadInbox(ctx context.Context, m *store.TaskMutation, n *taskmodel.NodeRun) error {
+	var trigger uuid.UUID
+	e := m.Tx.QueryRow(ctx, `SELECT t.trigger_inbox_message_id FROM task_turns t JOIN inbox_messages i ON i.id=t.trigger_inbox_message_id WHERE t.task_id=$1 AND t.node_run_id=$2 AND t.origin='inbox_reminder' AND t.inbox_scope_node_id IS NULL AND t.status='interrupted' AND t.started_at IS NULL AND i.read_at IS NULL AND i.cancelled_at IS NULL ORDER BY t.queue_seq LIMIT 1`, m.Record.View.Task.ID, n.ID).Scan(&trigger)
+	if e != nil && !store.IsNotFound(e) {
+		return e
+	}
+	if e == nil {
+		old := store.TaskInstance{ID: n.RuntimeID, TaskID: m.Record.View.Task.ID, AgentID: n.AgentID, AgentName: n.AgentName}
+		if _, e = s.Store.EnqueueTaskInboxTurn(ctx, m, old, "You have unhandled task Inbox messages. List the summaries, then read and reply to them one by one; for now only handle the conversation and do not advance any other workflow node.", 1, &trigger); e != nil {
+			return e
 		}
 	}
-	return nil, s.prepareNode(ctx, m, "")
+	return nil
 }
 
 func (s *Service) interruptOldTurns(ctx context.Context, id uuid.UUID) {

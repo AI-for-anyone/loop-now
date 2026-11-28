@@ -167,3 +167,8 @@ func DeleteMergedBranch(ctx context.Context, git, repository, branch, into strin
 	_, err = run(ctx, git, "-C", repository, "update-ref", "-d", "refs/heads/"+branch, tip)
 	return err
 }
+
+// IsMerged reports whether every commit of branch is in the HEAD of the worktree at path.
+func IsMerged(ctx context.Context, git, path, branch string) (bool, error) {
+	return ok(ctx, git, "-C", path, "merge-base", "--is-ancestor", "refs/heads/"+branch, "HEAD")
+}

@@ -206,7 +206,7 @@ func taskNodeInboxVisibleSQL(alias string, p Party) string {
 	if p.Kind != "agent" || p.RuntimeID == uuid.Nil {
 		return "true"
 	}
-	return `NOT EXISTS(SELECT 1 FROM task_node_inbox_messages nb JOIN task_records nt ON nt.id=nb.task_id WHERE nb.message_id=` + alias + `.id AND (nt.ended_at IS NOT NULL OR nb.not_executed_at IS NOT NULL OR nt.document->'view'->'task'->>'currentNodeRunId' IS NOT nb.node_run_id OR (CASE WHEN EXISTS(SELECT 1 FROM json_each(nt.document,'$.view.nodes') vn WHERE vn.value->>'id'=nb.node_run_id AND vn.value->>'status'='blocked') THEN 'task_conversation' ELSE 'task_node' END)<>nb.execution_mode))`
+	return `NOT EXISTS(SELECT 1 FROM task_node_inbox_messages nb JOIN task_records nt ON nt.id=nb.task_id WHERE nb.message_id=` + alias + `.id AND (nt.ended_at IS NOT NULL OR nb.not_executed_at IS NOT NULL OR NOT ` + CurrentNodeSQL("nt.document", "nb.node_run_id") + ` OR (CASE WHEN EXISTS(SELECT 1 FROM json_each(nt.document,'$.view.nodes') vn WHERE vn.value->>'id'=nb.node_run_id AND vn.value->>'status'='blocked') THEN 'task_conversation' ELSE 'task_node' END)<>nb.execution_mode))`
 }
 
 func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node uuid.UUID, cursor string, limit int) (taskmodel.TaskNodeInboxPage, error) {
@@ -350,7 +350,7 @@ func (s *Store) enqueueTaskNodeInboxTx(ctx context.Context, m *TaskMutation, tar
 		return out, nil, TaskConsoleConflict(m, target, reason)
 	}
 	mode := "task_node"
-	if m.Record.Current().Status == "blocked" {
+	if m.Record.ActiveNode(target.NodeRunID).Status == "blocked" {
 		mode = "task_conversation"
 	}
 	target.ExecutionMode = mode
@@ -433,7 +433,7 @@ func (s *Store) findTaskNodeReminderTx(ctx context.Context, m *TaskMutation, tar
 
 // newTaskNodeReminderTx queues a fresh node notification turn for trigger.
 func (s *Store) newTaskNodeReminderTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, mode string, priority int, trigger uuid.UUID) (TaskTurn, error) {
-	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,execution_mode,inbox_scope_node_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10,$4,$11`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, taskNodeReminderPrompt, trigger, mode, taskRequestID(ctx, m, "inbox_reminder"))
+	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,execution_mode,inbox_scope_node_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10,$4,$11`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, taskNodeReminderPrompt, trigger, mode, taskRequestID(ctx, m, nil, "inbox_reminder"))
 	if e != nil {
 		return turn, e
 	}
@@ -443,7 +443,9 @@ func (s *Store) newTaskNodeReminderTx(ctx context.Context, m *TaskMutation, targ
 	if e = s.taskLifecycle(ctx, m.Tx, turn, EventRunQueued, nil); e != nil {
 		return turn, e
 	}
-	m.Record.Current().RunIDs = append(m.Record.Current().RunIDs, turn.ID)
+	if n := m.Record.Node(target.NodeRunID); n != nil {
+		n.RunIDs = append(n.RunIDs, turn.ID)
+	}
 	return turn, m.Emit("message.created", taskMessage(turn, false))
 }
 
@@ -516,7 +518,7 @@ func (s *Store) TaskNodeQueueTx(ctx context.Context, m *TaskMutation, node uuid.
 // emits task.node.queue.updated only for those whose queue changed.
 func (s *Store) emitTaskNodeQueuesTx(ctx context.Context, m *TaskMutation) error {
 	nodes := []uuid.UUID{}
-	if n := m.Record.Current(); n != nil {
+	for _, n := range m.Record.Active() {
 		nodes = append(nodes, n.ID)
 	}
 	for id := range m.Record.NodeQueueDigests {
@@ -577,15 +579,21 @@ func (s *Store) BindTaskNodeInboxBatchTx(ctx context.Context, m *TaskMutation, t
 }
 
 func (s *Store) ExpireTaskNodeInboxTx(ctx context.Context, m *TaskMutation) error {
-	var current *uuid.UUID
-	mode := "task_node"
-	if n := m.Record.Current(); n != nil && !m.Record.Ended() {
-		current = &n.ID
-		if n.Status == "blocked" {
-			mode = "task_conversation"
+	// Each current node with the mode its messages run in: task_conversation while it is blocked.
+	modes := map[string]string{}
+	if !m.Record.Ended() {
+		for _, n := range m.Record.Active() {
+			modes[n.ID.String()] = "task_node"
+			if n.Status == "blocked" {
+				modes[n.ID.String()] = "task_conversation"
+			}
 		}
 	}
-	rows, e := m.Tx.Query(ctx, `SELECT b.message_id FROM task_node_inbox_messages b JOIN task_turns t ON b.reminder_run_id=t.id WHERE b.task_id=$1 AND b.not_executed_at IS NULL AND (t.status='interrupted' OR $2 IS NULL OR b.node_run_id<>$2 OR b.execution_mode<>$3) AND NOT EXISTS(SELECT 1 FROM task_node_inbox_run_links l WHERE l.message_id=b.message_id AND l.role IN ('read','reply'))`, m.Record.View.Task.ID, current, mode)
+	current, e := json.Marshal(modes)
+	if e != nil {
+		return e
+	}
+	rows, e := m.Tx.Query(ctx, `SELECT b.message_id FROM task_node_inbox_messages b JOIN task_turns t ON b.reminder_run_id=t.id WHERE b.task_id=$1 AND b.not_executed_at IS NULL AND (t.status='interrupted' OR json_extract($2, '$."' || b.node_run_id || '"') IS NOT b.execution_mode) AND NOT EXISTS(SELECT 1 FROM task_node_inbox_run_links l WHERE l.message_id=b.message_id AND l.role IN ('read','reply'))`, m.Record.View.Task.ID, string(current))
 	if e != nil {
 		return e
 	}

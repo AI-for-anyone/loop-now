@@ -337,12 +337,30 @@ func (s *Service) cleanupWorkspace(ctx context.Context, id uuid.UUID) error {
 	if !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
 		return errors.New("the recorded workspace is not under Loop Now's worktree folder; it is left alone")
 	}
+	// The branches' workspaces first: they lie in the task's folder beside the task's own.
+	branchKept := taskmodel.WorkspaceKept{}
+	branches, err := s.cleanupBranches(ctx, r, &branchKept)
+	if err != nil {
+		return err
+	}
+	withBranches := func(kept *taskmodel.WorkspaceKept) *taskmodel.WorkspaceKept {
+		if branchKept == (taskmodel.WorkspaceKept{}) {
+			return kept
+		}
+		sum := branchKept
+		if kept != nil {
+			sum.UncommittedFiles += kept.UncommittedFiles
+			sum.UnpushedCommits += kept.UnpushedCommits
+			sum.ChangedFiles += kept.ChangedFiles
+		}
+		return &sum
+	}
 	var kept *taskmodel.WorkspaceKept
 	if w.Mode == taskmodel.WorkspaceModeCopy {
 		if kept, err = cleanupCopy(r.View.Task.Status, w.Path); err != nil {
 			return err
 		}
-		return s.settleWorkspace(ctx, id, kept)
+		return s.settleWorkspace(ctx, id, withBranches(kept), branches)
 	}
 	g := w.Git
 	if g == nil {
@@ -380,7 +398,7 @@ func (s *Service) cleanupWorkspace(ctx context.Context, id uuid.UUID) error {
 	if kept == nil {
 		_ = os.Remove(filepath.Dir(w.Path)) // <worktrees>/<task id>, when empty
 	}
-	return s.settleWorkspace(ctx, id, kept)
+	return s.settleWorkspace(ctx, id, withBranches(kept), branches)
 }
 
 // cleanupCopy settles the copy of an ended task: a completed task's copy is removed (its results are artifacts); a
@@ -402,13 +420,19 @@ func cleanupCopy(status, path string) (*taskmodel.WorkspaceKept, error) {
 	return nil, copyworkspace.Remove(path)
 }
 
-// settleWorkspace records the end state of the workspace: kept with what removing it would lose, or removed.
-func (s *Service) settleWorkspace(ctx context.Context, id uuid.UUID, kept *taskmodel.WorkspaceKept) error {
+// settleWorkspace records the end state of the workspace: kept with what removing it would lose, or removed; and the
+// end state of each branch's workspace that cleanup settled.
+func (s *Service) settleWorkspace(ctx context.Context, id uuid.UUID, kept *taskmodel.WorkspaceKept, branches map[string]string) error {
 	_, err := s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 		cur := m.Record.View.Workspace
 		if cur == nil || cur.State == taskmodel.WorkspaceStateRemoved || cur.State == taskmodel.WorkspaceStateKept {
 			m.Unchanged()
 			return nil, nil
+		}
+		for i := range cur.Branches {
+			if state, ok := branches[cur.Branches[i].Step]; ok {
+				cur.Branches[i].State = state
+			}
 		}
 		cur.Kept = kept
 		cur.State = taskmodel.WorkspaceStateRemoved
@@ -438,6 +462,11 @@ func (s *Service) RemoveWorkspace(ctx context.Context, p auth.Principal, id uuid
 			return nil, notKept()
 		}
 		w.State, w.Kept = taskmodel.WorkspaceStateRemoved, nil
+		for i := range w.Branches {
+			if w.Branches[i].State == taskmodel.WorkspaceStateKept {
+				w.Branches[i].State = taskmodel.WorkspaceStateRemoved
+			}
+		}
 		return m.Record.View, nil
 	}
 	if recorded, err := s.ActionRecorded(ctx, p, in.ActionID); err != nil {
@@ -455,6 +484,12 @@ func (s *Service) RemoveWorkspace(ctx context.Context, p auth.Principal, id uuid
 	}
 	if s.Source == nil || !within(s.Source.WorktreeRoot(), w.Path) || w.Path == s.Source.WorktreeRoot() {
 		return nil, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The recorded workspace is not under Loop Now's worktree folder; it is not removed.")
+	}
+	if w.Mode == taskmodel.WorkspaceModeGit && w.Git == nil {
+		return nil, apperr.Conflict(apperr.CodeTaskWorkspaceNotKept, "The recorded git workspace has no repository; it is not removed.")
+	}
+	if err := s.removeBranches(ctx, *w); err != nil {
+		return nil, err
 	}
 	if w.Mode == taskmodel.WorkspaceModeCopy {
 		if err := copyworkspace.Remove(w.Path); err != nil {

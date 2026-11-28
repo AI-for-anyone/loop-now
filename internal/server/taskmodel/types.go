@@ -317,6 +317,8 @@ const (
 	// BranchWaiting: not started yet (its workspace is made, then its first node, when the limit on branches at once
 	// allows it).
 	BranchWaiting = "waiting"
+	// BranchStarting: its node is current, but its workspace is not made yet and its node message not queued.
+	BranchStarting = "starting"
 	// BranchRunning: its node is current.
 	BranchRunning = "running"
 	// BranchArrived: it submitted an edge into the join.
@@ -480,6 +482,37 @@ func (r *Record) syncCurrent() {
 	id, step, agent := c.NodeRunID, c.StepID, c.AgentID
 	t.CurrentNodeRunID, t.CurrentStepID, t.CurrentAgentID = &id, &step, &agent
 	t.CurrentStepTitle = r.View.stepTitle(&step)
+}
+
+// SettleForkStatus sets the status of a task inside a fork from its current nodes, each a branch: running while any
+// branch has work to do (or none has a node yet), else waiting while any waits, else blocked with the reason of the
+// first blocked node. Outside a fork, and for a task that is preparing or has ended, it changes nothing.
+func (r *Record) SettleForkStatus() {
+	if r.Fork == nil || r.Ended() || r.View.Task.Status == "preparing" {
+		return
+	}
+	run, wait := len(r.Active()) == 0, false
+	var reason *string
+	for _, n := range r.Active() {
+		switch n.Status {
+		case "waiting":
+			wait = true
+		case "blocked":
+			if reason == nil {
+				reason = n.Reason
+			}
+		default:
+			run = true
+		}
+	}
+	switch {
+	case run:
+		r.View.Task.Status, r.View.Task.Reason = "running", nil
+	case wait:
+		r.View.Task.Status, r.View.Task.Reason = "waiting", nil
+	default:
+		r.View.Task.Status, r.View.Task.Reason = "blocked", reason
+	}
 }
 
 func (r *Record) Ended() bool {

@@ -219,9 +219,8 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 // stepPrompt is the Manager's prompt for the step the instance is doing: the current node's when the instance runs it,
 // otherwise the instance's latest node (for example when it answers an Inbox message after its step ended).
 func stepPrompt(r *taskmodel.Record, runtimeID uuid.UUID) string {
-	n := r.Current()
-	if n == nil || n.RuntimeID != runtimeID {
-		n = nil
+	n := r.ActiveFor(runtimeID)
+	if n == nil {
 		for i := len(r.View.Nodes) - 1; i >= 0 && n == nil; i-- {
 			if r.View.Nodes[i].RuntimeID == runtimeID {
 				n = &r.View.Nodes[i]
@@ -242,10 +241,12 @@ func (s *Source) workspaceSnapshot(ctx context.Context, inst store.TaskInstance,
 	if w == nil || w.State != taskmodel.WorkspaceStateActive {
 		return nil
 	}
-	if !within(s.WorktreeRoot(), w.Path) {
+	// A step in a parallel branch works in its branch's own worktree or copy.
+	path := instanceWorkspace(r, inst.AgentID, false)
+	if !within(s.WorktreeRoot(), path) {
 		return errors.New("the task's workspace is not under Loop Now's worktree folder")
 	}
-	out.TaskWorkspace = w.Path
+	out.TaskWorkspace = path
 	if w.Mode == taskmodel.WorkspaceModeCopy {
 		out.TaskWorkspaceCopyOf = w.Folder
 	}

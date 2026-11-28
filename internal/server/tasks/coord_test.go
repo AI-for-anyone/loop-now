@@ -47,7 +47,7 @@ func TestSameAgentTasksHaveIndependentLocks(t *testing.T) {
 	other.View.Task.ID = second
 	other.View.Task.Status = "preparing"
 	other.View.Task.Version = 1
-	node := freshNode(second, r.View.Workflow.Steps[0], inst, 1, 1)
+	node := freshNode(r.View.Workflow, second, r.View.Workflow.Steps[0], inst, 1, 1)
 	other.View.Nodes = []taskmodel.NodeRun{node}
 	other.SetCurrent(node)
 	_, e := s.Store.CreateTask(ctx, r.View.Task.ProjectID, p.ID, store.TaskAction{ActorKey: "fixture2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
@@ -63,7 +63,7 @@ func TestSameAgentTasksHaveIndependentLocks(t *testing.T) {
 	for _, id := range []uuid.UUID{first, second} {
 		_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 			m.Record.View.Task.Status = "running"
-			return nil, s.prepareNode(ctx, m, "")
+			return nil, s.prepareNode(ctx, m, m.Record.Current(), "", "")
 		})
 		if e != nil {
 			t.Fatal(e)

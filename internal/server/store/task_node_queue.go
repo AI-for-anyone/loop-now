@@ -98,8 +98,8 @@ func taskNodeTargetGuard(m *TaskMutation, target TaskConsoleLineage) string {
 	if m.Record.Ended() {
 		return "task_ended"
 	}
-	n := m.Record.Current()
-	if n == nil || n.ID != target.NodeRunID {
+	n := m.Record.ActiveNode(target.NodeRunID)
+	if n == nil {
 		return "node_changed"
 	}
 	if target.TaskID != m.Record.View.Task.ID || n.AgentID != target.AgentID || n.RuntimeID != target.RuntimeID {
@@ -132,7 +132,7 @@ func (s *Store) PromoteTaskNodeMessageTx(ctx context.Context, m *TaskMutation, t
 		return out, TaskConsoleConflict(m, target, reason)
 	}
 	current := "task_node"
-	if m.Record.Current().Status == "blocked" {
+	if m.Record.ActiveNode(target.NodeRunID).Status == "blocked" {
 		current = "task_conversation"
 	}
 	target.ExecutionMode = current

@@ -129,7 +129,7 @@ func (s *Store) RequestSleep(ctx context.Context, p auth.Principal, in sleepmode
 			rec.TaskID = &p.TaskID
 			rec.RuntimeID = &p.RuntimeID
 			rec.Mode = "task_conversation"
-			n := m.Record.Current()
+			n := m.Record.ActiveFor(p.RuntimeID)
 			if turn.ExecutionMode == "task_node" {
 				if err := s.CheckTaskLarkRunTx(ctx, m, turn.NodeRunID, p.RuntimeID, in.RunID); err != nil {
 					return err

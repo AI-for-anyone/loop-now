@@ -1,6 +1,10 @@
 package workflow
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 // A fork is a set of edges leaving one step that the step takes together by submitting the fork's id; each edge starts a
 // branch. A branch is the steps reachable from its first step (the fork edge's target) without passing the fork's join;
@@ -46,6 +50,20 @@ func (d Definition) JoinOf(branch string) string {
 	lanes, _ := d.branches()
 	if l, ok := lanes[branch]; ok && l.entry == branch {
 		return l.join
+	}
+	return ""
+}
+
+// AgentBranch is the branch whose steps the Agent does; "" for an Agent whose steps are all outside every branch (an
+// Agent that does a step in a branch does steps only in that branch).
+func (d Definition) AgentBranch(agent uuid.UUID) string {
+	lanes, _ := d.branches()
+	for _, s := range d.Steps {
+		if s.AgentID == agent {
+			if l, ok := lanes[s.ID]; ok {
+				return l.entry
+			}
+		}
 	}
 	return ""
 }

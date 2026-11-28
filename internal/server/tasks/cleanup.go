@@ -88,7 +88,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 		if exists {
 			continue
 		}
-		data, e := s.Source.archiveSession(ctx, inst, worktree)
+		data, e := s.Source.archiveSession(ctx, inst, instanceWorkspace(&record, inst.AgentID, true))
 		if e != nil {
 			return e
 		}
@@ -130,8 +130,16 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	// Every step has been released: what Claude Code keeps for the worktree (the steps' session records, archived
 	// above) belongs to this task alone.
 	if worktree != "" && s.Source.PurgeClaudeFolder != nil {
-		if e := s.Source.PurgeClaudeFolder(ctx, worktree); e != nil && s.Log != nil {
-			s.Log.Warn("could not clean up Claude Code's data for the task's worktree", "task_id", id, "error", e)
+		folders := []string{worktree}
+		for _, b := range record.View.Workspace.Branches {
+			if within(s.Source.WorktreeRoot(), b.Path) {
+				folders = append(folders, b.Path)
+			}
+		}
+		for _, folder := range folders {
+			if e := s.Source.PurgeClaudeFolder(ctx, folder); e != nil && s.Log != nil {
+				s.Log.Warn("could not clean up Claude Code's data for the task's worktree", "task_id", id, "error", e)
+			}
 		}
 	}
 	if err = s.cleanupWorkspace(ctx, id); err != nil {

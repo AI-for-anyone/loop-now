@@ -26,11 +26,11 @@ func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst 
 		return TaskTurn{}, e
 	}
 	var nodeID *uuid.UUID
-	n := m.Record.Current()
-	if n != nil && n.RuntimeID == inst.ID && n.Status == "blocked" {
+	n := m.Record.ActiveFor(inst.ID)
+	if n != nil && n.Status == "blocked" {
 		nodeID = &n.ID
 	}
-	t, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, "inbox_reminder"))
+	t, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, nil, "inbox_reminder"))
 	if e != nil {
 		return t, e
 	}
@@ -64,8 +64,7 @@ func (s *Store) ClaimTaskInboxTurn(ctx context.Context, taskID, runtime uuid.UUI
 		if m.Record.Ended() || m.Record.View.Task.Status == "preparing" {
 			return nil, nil
 		}
-		n := m.Record.Current()
-		if n != nil && n.RuntimeID == runtime && n.Status != "blocked" {
+		if n := m.Record.ActiveFor(runtime); n != nil && n.Status != "blocked" {
 			return nil, nil
 		}
 		var ready, active bool

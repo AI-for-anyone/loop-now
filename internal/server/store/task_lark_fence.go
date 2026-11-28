@@ -58,8 +58,9 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 	if !errors.Is(err, db.ErrNoRows) {
 		return false, err
 	}
+	// Not inside a fork: the switch replaces the task's one current node.
 	n := m.Record.Current()
-	if m.Record.Ended() || m.Record.View.Task.Status != "blocked" || n == nil || n.ID != in.NodeRunID || n.Status != "blocked" || m.Record.View.Task.Version != in.ExpectedTaskVersion {
+	if m.Record.Ended() || m.Record.Fork != nil || m.Record.View.Task.Status != "blocked" || n == nil || n.ID != in.NodeRunID || n.Status != "blocked" || m.Record.View.Task.Version != in.ExpectedTaskVersion {
 		return false, apperr.Conflict("task_conflict", "The blocked node or the task version has changed.")
 	}
 	if in.Capture != nil {

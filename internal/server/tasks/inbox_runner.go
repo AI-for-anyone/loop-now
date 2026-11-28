@@ -52,8 +52,7 @@ func (s *Service) KickInbox(runtime uuid.UUID) {
 			if e != nil || r.Ended() || r.View.Task.Status == "preparing" {
 				return
 			}
-			n := r.Current()
-			if n != nil && n.RuntimeID == runtime && n.Status != "blocked" {
+			if n := r.ActiveFor(runtime); n != nil && n.Status != "blocked" {
 				return
 			}
 			var pending bool

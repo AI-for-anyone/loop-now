@@ -29,7 +29,7 @@ func lastTurnText(t *testing.T, s *Service, id uuid.UUID, change func(r *taskmod
 		if change != nil {
 			change(m.Record)
 		}
-		return nil, s.prepareNode(ctx, m, "")
+		return nil, s.prepareNode(ctx, m, m.Record.Current(), "", "")
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -110,33 +110,48 @@ func (s *Store) taskAbortEvent(ctx context.Context, m *TaskMutation, t TaskTurn)
 	return nil
 }
 
+// RecoverTaskTurns ends the task's turns that were running when the server stopped; it reports how many, and whether
+// one was a current node's.
 func (s *Store) RecoverTaskTurns(ctx context.Context, m *TaskMutation) (int, bool, error) {
+	count, nodes, err := s.RecoverTaskTurnsOf(ctx, m)
+	return count, len(nodes) > 0, err
+}
+
+// RecoverTaskTurnsOf is RecoverTaskTurns giving the current nodes (not blocked) whose turn was ended, in the order of
+// the current nodes.
+func (s *Store) RecoverTaskTurnsOf(ctx context.Context, m *TaskMutation) (int, []uuid.UUID, error) {
 	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET status='interrupted',ended_at=now(),error_code='server_restarted',error_message='The server restarted. The turn was not replayed.' WHERE task_id=$1 AND status IN ('starting','running','aborting') RETURNING `+taskTurnColumns, m.Record.View.Task.ID)
 	if e != nil {
-		return 0, false, e
+		return 0, nil, e
 	}
 	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
-		return 0, false, e
+		return 0, nil, e
 	}
-	currentInterrupted := false
+	hit := map[uuid.UUID]bool{}
 	for _, t := range turns {
 		if _, e = s.FinishSleepTx(ctx, m.Tx, m, t.ID, "interrupted"); e != nil {
-			return 0, false, e
+			return 0, nil, e
 		}
-		if n := m.Record.Current(); n != nil && n.ID == t.NodeRunID && n.Status != "blocked" {
-			currentInterrupted = true
+		if n := m.Record.ActiveNode(t.NodeRunID); n != nil && n.Status != "blocked" {
+			hit[n.ID] = true
 		}
 		if e = s.taskEndedEvent(ctx, m, t); e != nil {
-			return 0, false, e
+			return 0, nil, e
 		}
 		if t.NodeRunID != uuid.Nil {
 			if e = m.Emit("message.created", taskMessage(t, true)); e != nil {
-				return 0, false, e
+				return 0, nil, e
 			}
 		}
 	}
-	return len(turns), currentInterrupted, nil
+	interrupted := []uuid.UUID{}
+	for _, n := range m.Record.Active() {
+		if hit[n.ID] {
+			interrupted = append(interrupted, n.ID)
+		}
+	}
+	return len(turns), interrupted, nil
 }
 
 func (s *Store) cancelUnboundInboxQueue(ctx context.Context, m *TaskMutation, runtime uuid.UUID) error {

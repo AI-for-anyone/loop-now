@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	"loop-now/internal/server/taskmodel"
 	"sync"
 	"time"
 
@@ -111,8 +112,8 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 				if err = s.ExpireTaskConsoleTurnsTx(ctx, m, valueUUID(r.RuntimeID)); err != nil {
 					return err
 				}
-				n := m.Record.Current()
-				if r.Mode == "task_node" && (n == nil || r.NodeRunID == nil || n.ID != *r.NodeRunID || n.Status == "blocked" || n.Output != nil) {
+				n := sleepNode(m, r)
+				if r.Mode == "task_node" && (n == nil || n.Status == "blocked" || n.Output != nil) {
 					return s.cancelSleepTx(ctx, scope.Tx, m, &r, "node_changed")
 				}
 				if err = scope.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns WHERE runtime_id=$1 AND status IN ('starting','running','aborting'))`, r.RuntimeID).Scan(&active); err != nil {
@@ -163,8 +164,10 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 				if err == nil {
 					_, err = s.InheritTaskConsoleLineageTx(ctx, m, r.SourceRunID, turn)
 				}
-				if err == nil && node != nil {
-					m.Record.Current().RunIDs = append(m.Record.Current().RunIDs, turn.ID)
+				if bound := (*taskmodel.NodeRun)(nil); err == nil && node != nil {
+					if bound = m.Record.Node(*node); bound != nil {
+						bound.RunIDs = append(bound.RunIDs, turn.ID)
+					}
 					err = m.Emit("message.created", taskMessage(turn, false))
 				}
 			}

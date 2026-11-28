@@ -100,6 +100,7 @@ func recordAction(ctx context.Context, tx *db.Tx, a TaskAction, taskID uuid.UUID
 	return stored, err
 }
 func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {
+	r.SettleForkStatus()
 	r.View.Task.Version++
 	r.View.Task.UpdatedAt = time.Now().UTC()
 	b, err := json.Marshal(r)
@@ -586,4 +587,10 @@ func (s *Store) TaskSnapshot(ctx context.Context, id uuid.UUID) (taskmodel.Detai
 		return nil, m.Tx.QueryRow(ctx, `SELECT coalesce(max(id),0) FROM task_events WHERE task_id=$1`, id).Scan(&position)
 	})
 	return detail, position, err
+}
+
+// CurrentNodeSQL is an SQL condition that the node run id expression node is a current node of the task whose stored
+// document is doc: in its list of current nodes, or its one current node for a document stored before forks.
+func CurrentNodeSQL(doc, node string) string {
+	return `(` + doc + `->'view'->'task'->>'currentNodeRunId' IS ` + node + ` OR EXISTS(SELECT 1 FROM json_each(` + doc + `,'$.view.task.currentNodes') cn WHERE cn.value->>'nodeRunId' IS ` + node + `))`
 }
