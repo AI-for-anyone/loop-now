@@ -4,6 +4,7 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { makeAgent, makeBackgroundTask, makeMessage, makeRun } from '@/test/api'
 import { renderChat } from '@/test/chat'
+import { resetThemeForTest, setSkin } from '@/theme/store'
 import { buildSteps } from './timeline-steps'
 import { runtimeName } from '@/test/runtimes'
 import { turnPreview } from './ruler'
@@ -20,7 +21,11 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  window.localStorage.clear()
+  resetThemeForTest()
+})
 
 describe('Background work in the replies', () => {
   it('a reply the CLI wrote by itself shows one compact chip instead of the command, with its details on click and the time at the end', async () => {
@@ -111,6 +116,8 @@ describe('Background work in the replies', () => {
 
     const more = within(note).getByRole('button', { name: 'Show 2 more ended background tasks' })
     expect(more).toHaveTextContent('+2')
+    expect(more.className).not.toContain('rounded-full')
+    expect(more.className).toContain('focus-visible:ring-inset')
     await user.click(more)
     const rest = await screen.findByRole('dialog', { name: '2 more background tasks' })
     expect(rest).toHaveTextContent('make c --verbose')
@@ -136,6 +143,91 @@ describe('Background work in the replies', () => {
     const time = note.querySelector('time')
     expect(time).toHaveAttribute('datetime', followUpAt)
     expect(time).toHaveTextContent(t.chat.time(followUpAt))
+  })
+
+  it('uses the quiet tool-line style and groups same-name tasks with ×N in the default mono skin', async () => {
+    const first = makeRun({
+      tools: [tool('toolu_a1', 'Agent'), tool('toolu_a2', 'Agent'), tool('toolu_a3', 'Agent'), tool('toolu_b1', 'Bash')],
+    })
+    const tasks = [
+      makeBackgroundTask({ id: 'bg-a1', kind: 'subagent', label: 'Wait A', runId: first.id, toolCallId: 'toolu_a1', startedAt: '2026-10-12T08:00:10Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:00Z', output: 'done A' }),
+      makeBackgroundTask({ id: 'bg-a2', kind: 'subagent', label: 'Wait B', runId: first.id, toolCallId: 'toolu_a2', startedAt: '2026-10-12T08:00:20Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:05Z', output: 'done B' }),
+      makeBackgroundTask({ id: 'bg-a3', kind: 'subagent', label: 'Wait C', runId: first.id, toolCallId: 'toolu_a3', startedAt: '2026-10-12T08:00:30Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:10Z', output: 'done C' }),
+      makeBackgroundTask({ id: 'bg-b1', kind: 'command', label: 'npm run lint', runId: first.id, toolCallId: 'toolu_b1', startedAt: '2026-10-12T08:00:40Z', status: 'failed', exitCode: 1, endedAt: '2026-10-12T08:01:15Z', output: 'lint failed' }),
+    ]
+    first.backgroundTasks = tasks
+    const followUp = makeRun({ triggerBackgroundTasks: tasks })
+    const { user } = await renderChat({
+      messages: [
+        ...turn('Start work', 'Started.', first),
+        ...turn('generated', 'All finished.', followUp, 'background'),
+      ],
+    })
+
+    const note = await screen.findByRole('note')
+    const buttons = within(note).getAllByRole('button')
+    expect(buttons).toHaveLength(2)
+
+    const agentGroup = within(note).getByRole('button', { name: 'Agent Finished in the background, 3 tasks' })
+    expect(agentGroup.querySelector('[data-tool-text]')).toHaveTextContent('Agent×3Finished in the background')
+    expect(agentGroup.querySelector('[data-tool-text] span')?.className).toContain('font-mono')
+    expect(agentGroup.className).not.toContain('rounded-full')
+    expect(agentGroup.className).not.toContain('bg-tint-green')
+    expect(agentGroup.className).toContain('text-ink-500')
+    expect(agentGroup.className).toContain('focus-visible:ring-inset')
+
+    const bashItem = within(note).getByRole('button', { name: 'Bash Failed in the background: npm run lint' })
+    expect(bashItem.querySelector('[data-tool-text]')).toHaveTextContent('BashFailed in the background')
+    expect(bashItem.className).not.toContain('rounded-full')
+    expect(bashItem.className).toContain('text-red-text')
+    expect(note.querySelectorAll('[data-tool-separator]')).toHaveLength(1)
+
+    // Clicking the grouped entry opens the group list; Details -> Back restores focus to that task's Details button.
+    await user.click(agentGroup)
+    const dialog = await screen.findByRole('dialog', { name: 'Agent Finished in the background, 3 tasks' })
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(3)
+    await user.click(within(dialog).getByRole('button', { name: 'View details: Wait B' }))
+    expect(dialog).toHaveTextContent('done B')
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Agent list (3)' }))
+    expect(within(dialog).getByRole('button', { name: 'View details: Wait B' })).toHaveFocus()
+  })
+
+  it('keeps individual pills and the pill +N button in the follow-up heading in Plate skin', async () => {
+    setSkin('plate')
+    const first = makeRun({
+      tools: [tool('toolu_a1', 'Agent'), tool('toolu_a2', 'Agent'), tool('toolu_a3', 'Agent')],
+    })
+    const tasks = [
+      makeBackgroundTask({ id: 'bg-a1', kind: 'subagent', label: 'Wait A', runId: first.id, toolCallId: 'toolu_a1', startedAt: '2026-10-12T08:00:10Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:00Z' }),
+      makeBackgroundTask({ id: 'bg-a2', kind: 'subagent', label: 'Wait B', runId: first.id, toolCallId: 'toolu_a2', startedAt: '2026-10-12T08:00:20Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:05Z' }),
+      makeBackgroundTask({ id: 'bg-a3', kind: 'subagent', label: 'Wait C', runId: first.id, toolCallId: 'toolu_a3', startedAt: '2026-10-12T08:00:30Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:10Z' }),
+    ]
+    first.backgroundTasks = tasks
+    const followUp = makeRun({ triggerBackgroundTasks: tasks })
+    const { user } = await renderChat({
+      messages: [
+        ...turn('Start work', 'Started.', first),
+        ...turn('generated', 'All finished.', followUp, 'background'),
+      ],
+    })
+
+    const note = await screen.findByRole('note')
+    const buttons = within(note).getAllByRole('button')
+    expect(buttons).toHaveLength(3)
+    expect(note.querySelector('[data-tool-separator]')).toBeNull()
+
+    const firstChip = within(note).getByRole('button', { name: 'Agent Finished in the background: Wait A' })
+    const secondChip = within(note).getByRole('button', { name: 'Agent Finished in the background: Wait B' })
+    const moreChip = within(note).getByRole('button', { name: 'Show 1 more ended background task' })
+    expect(firstChip.className).toContain('rounded-full')
+    expect(firstChip.className).toContain('bg-tint-green')
+    expect(secondChip.className).toContain('rounded-full')
+    expect(moreChip.className).toContain('rounded-full')
+
+    await user.click(firstChip)
+    const dialog = await screen.findByRole('dialog', { name: 'Background task' })
+    expect(dialog).toHaveTextContent('Wait A')
+    expect(dialog).not.toHaveTextContent('Wait B')
   })
 })
 
