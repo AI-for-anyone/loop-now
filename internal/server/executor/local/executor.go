@@ -635,9 +635,9 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 }
 
 // reusable reports whether the live process p can take a message with the config snap: nothing that needs a restart
-// changed since it started.
+// changed since it started, the folder it works in included (a task instance moving to a parallel branch's worktree).
 func (e *Executor) reusable(p *proc, snap agentconfig.Snapshot) bool {
-	return p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity &&
+	return p.cwd == workDir(snap, p.dirs) && p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity &&
 		p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == promptIdentity(snap) && p.localIdentity == snap.Local.Identity() &&
 		p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p)
 }
