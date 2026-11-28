@@ -15671,6 +15671,9 @@ components:
             - integer
             - 'null'
           minimum: 1
+        fork:
+          description: "The fork (TaskWorkflow.forks) this edge belongs to; omit it for an ordinary edge. A fork's edges all leave the same step, which takes them together by submitting the fork's id as its edgeId (not the id of one of its edges): each edge then starts a branch, and the branches run at the same time. Each fork edge has its own maxTraversals."
+          type: string
     TaskWorkflow:
       type: object
       additionalProperties: false
@@ -15690,6 +15693,31 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TaskWorkflowEdge'
+        forks:
+          description: "Parallel branches; omit for a flow that does one step at a time. A fork is two or more edges leaving one step (the edges whose fork is the fork's id); the step takes them all at once by submitting the fork's id as its edgeId, and each edge starts a branch: the steps reachable from the edge's target without passing the join, named by that first step. The branches run at the same time and meet at join, a step that starts once every branch has arrived (submitted an edge into the join); the join's inputs can map the outputs of the branches' steps. Checked when the task is created: forks are not nested (a fork leaves a step outside every branch, and its join lies outside every branch); a branch is entered only through its fork, and its edges lead only to its own steps or to its join; a branch has no step without outgoing edges, and every step of it can reach the join; branches share no steps, though a second fork may start the same branches with the same join (for example a way back from the join that sends every branch back); an Agent that does a step in a branch does steps only in that branch (a task has one instance per Agent, with one conversation and one working folder). Loops inside a branch and loops around a whole fork need maxTraversals like any other loop. With a git workspace, each branch works in its own worktree on its own branch (<task branch>--<first step>) cut from the task branch when the fork is taken; when every branch has arrived, Loop Now merges the branches into the task branch in the order of the fork's edges, and a conflict stops the merge and is handed to the join step's Agent in the task's worktree. With a copy workspace, each branch works in its own copy of the task's copy, and nothing is merged back. A branch that blocks blocks only itself: the others go on, and the join waits for it."
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskWorkflowFork'
+        maxParallelBranches:
+          description: How many branches of a fork run at once; the others start, in the order of the fork's edges, as running ones arrive at the join. Omitted or null means all of them.
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+    TaskWorkflowFork:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - join
+      properties:
+        id:
+          description: The fork's id, which the step its edges leave submits as edgeId; unique among the forks and not also an edge id.
+          type: string
+          pattern: ^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$
+        join:
+          description: The step where the fork's branches meet; it starts once every branch has arrived.
+          type: string
     TaskQuestionRef:
       type: object
       additionalProperties: false
@@ -15734,6 +15762,7 @@ components:
         - currentStepId
         - currentStepTitle
         - currentAgentId
+        - currentNodes
         - reason
         - createdAt
         - updatedAt
@@ -15776,6 +15805,11 @@ components:
             - string
             - 'null'
           format: uuid
+        currentNodes:
+          description: "Every current node of the task, in the order they became current: the one step outside a fork; inside a fork, one per branch whose step is running, waiting or blocked (a branch that has arrived at the join, or has not started yet, has none). currentNodeRunId, currentStepId, currentStepTitle and currentAgentId name the current node when there is exactly one and are null when there are several. Empty for a moment while a fork's branches start or a join merges them; kept as they were when the task ended."
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskCurrentNode'
         reason:
           type:
             - string
@@ -15811,6 +15845,33 @@ components:
             - copy
             - null
       description: currentAgentId is the Agent responsible for the current node; it is kept while waiting or blocked and does not mean Pi is running. For what is actually running, see the node's messages and run status.
+    TaskCurrentNode:
+      type: object
+      additionalProperties: false
+      description: A current node of the task.
+      required:
+        - nodeRunId
+        - stepId
+        - stepTitle
+        - agentId
+        - branch
+      properties:
+        nodeRunId:
+          type: string
+          format: uuid
+        stepId:
+          type: string
+        stepTitle:
+          description: The step's title in the task's frozen workflow.
+          type: string
+        agentId:
+          type: string
+          format: uuid
+        branch:
+          description: The branch the step is in, named by the branch's first step; null for a step outside every branch.
+          type:
+            - string
+            - 'null'
     TaskNodeRun:
       type: object
       additionalProperties: false
@@ -15835,7 +15896,13 @@ components:
         - endedAt
         - inputVersions
         - agentName
+        - branch
       properties:
+        branch:
+          description: The branch the node's step is in, named by the branch's first step; null for a step outside every branch.
+          type:
+            - string
+            - 'null'
         sleep:
           description: The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting
           oneOf:
@@ -16755,6 +16822,7 @@ components:
         - modeNote
         - git
         - copy
+        - branches
       properties:
         mode:
           description: git, a worktree on the task's branch; copy, a copy of the folder that steps work in while the original is never written.
@@ -16793,6 +16861,63 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/TaskWorkspaceCopy'
+        branches:
+          description: The workspaces of the task's parallel branches (TaskWorkflow.forks), one per branch in the order they first started; empty for a task whose forks have not run. Taking a fork again starts its branches afresh in the same entries. A kept workspace's counts include its branches, and removing it removes them too.
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskWorkspaceBranch'
+    TaskWorkspaceBranch:
+      type: object
+      additionalProperties: false
+      description: The workspace of one parallel branch. git is non-null exactly in git mode.
+      required:
+        - step
+        - path
+        - state
+        - merge
+        - git
+      properties:
+        step:
+          description: The branch's first step, which names the branch.
+          type: string
+        path:
+          description: The branch's own worktree (git mode) or copy of the task's copy (copy mode), under Loop Now's own data folder.
+          type: string
+        state:
+          description: active while the worktree or copy exists; removed once Loop Now removed it (a worktree after its branch merged cleanly at the join, the rest when the task ended); kept when it was left in place at the task's end because removing it would lose uncommitted changes.
+          type: string
+          enum:
+            - active
+            - removed
+            - kept
+        merge:
+          description: Git mode, set at the join. merged when the branch was merged into the task branch; conflict when merging it stopped on a conflict, which the join step resolves in the task's worktree; skipped when it was not merged because an earlier branch conflicted or the task's worktree had uncommitted changes, which the join step merges. null before the join and in copy mode.
+          type:
+            - string
+            - 'null'
+          enum:
+            - merged
+            - conflict
+            - skipped
+            - null
+        git:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TaskWorkspaceBranchGit'
+    TaskWorkspaceBranchGit:
+      type: object
+      additionalProperties: false
+      description: The git side of a branch's workspace.
+      required:
+        - branch
+        - baseCommit
+      properties:
+        branch:
+          description: The branch's own git branch, <task branch>--<first step>.
+          type: string
+        baseCommit:
+          description: The task branch's commit the branch was cut from.
+          type: string
     TaskWorkspaceGit:
       type: object
       additionalProperties: false
@@ -16873,6 +16998,7 @@ components:
           type: object
           additionalProperties: true
         edgeId:
+          description: The exit taken, one of the step's outgoing edges or the id of a fork leaving the step (which takes all of the fork's edges); null exactly for a step without outgoing edges, which ends the task.
           type:
             - string
             - 'null'

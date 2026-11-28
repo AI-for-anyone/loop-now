@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"loop-now/internal/server/sleepmodel"
+	"loop-now/internal/server/taskmodel"
 	"time"
 
 	"loop-now/internal/server/db"
@@ -108,7 +109,7 @@ func (s *Store) FinishSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r
 	if !saved {
 		return false, ErrSleepSessionNotSaved
 	}
-	if m != nil && (m.Record.Ended() || r.Mode == "task_node" && (m.Record.Current() == nil || r.NodeRunID == nil || m.Record.Current().ID != *r.NodeRunID || m.Record.Current().Status == "blocked")) {
+	if m != nil && (m.Record.Ended() || r.Mode == "task_node" && (sleepNode(m, r) == nil || sleepNode(m, r).Status == "blocked")) {
 		why := "node_changed"
 		if m.Record.Ended() {
 			why = "task_ended"
@@ -210,12 +211,12 @@ func (s *Store) CancelSleepsTx(ctx context.Context, tx *db.Tx, m *TaskMutation, 
 			if strict && valid && r.Mode == "task_conversation" {
 				continue
 			}
-			if (!strict || valid) && (r.Mode != "task_node" && !strict || r.Mode == "task_node" && m.Record.Current() != nil && r.NodeRunID != nil && *r.NodeRunID == m.Record.Current().ID && m.Record.Current().Status != "blocked" && m.Record.Current().Output == nil) {
+			if (!strict || valid) && (r.Mode != "task_node" && !strict || r.Mode == "task_node" && sleepNode(m, r) != nil && sleepNode(m, r).Status != "blocked" && sleepNode(m, r).Output == nil) {
 				continue
 			}
 		}
 		cancelWhy := why
-		if m != nil && r.Mode == "task_node" && m.Record.Current() != nil && r.NodeRunID != nil && *r.NodeRunID == m.Record.Current().ID && m.Record.Current().Status == "blocked" {
+		if m != nil && r.Mode == "task_node" && sleepNode(m, r) != nil && sleepNode(m, r).Status == "blocked" {
 			cancelWhy = "execution_failed"
 		}
 		if e = s.cancelSleepTx(ctx, tx, m, &r, cancelWhy); e != nil {
@@ -256,4 +257,12 @@ func (s *Store) ValidateTaskSleepsTx(ctx context.Context, m *TaskMutation) error
 		return s.CancelSleepsTx(ctx, m.Tx, m, uuid.Nil, "task_ended")
 	}
 	return s.CancelSleepsTx(ctx, m.Tx, m, uuid.Nil, "node_changed")
+}
+
+// sleepNode is the node a task-node sleep belongs to while it is a current node of the task; nil otherwise.
+func sleepNode(m *TaskMutation, r Sleep) *taskmodel.NodeRun {
+	if m == nil || r.NodeRunID == nil {
+		return nil
+	}
+	return m.Record.ActiveNode(*r.NodeRunID)
 }

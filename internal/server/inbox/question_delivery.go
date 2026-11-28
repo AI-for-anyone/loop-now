@@ -196,8 +196,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 		}
 		if binding != nil && !wake {
 			m := scope.Tasks[binding.TaskID]
-			current := m.Record.Current()
-			if m.Record.Ended() || current == nil || current.ID != binding.NodeRunID {
+			if m.Record.Ended() || m.Record.ActiveNode(binding.NodeRunID) == nil {
 				_, err = scope.Tx.Exec(ctx, `UPDATE inbox_questions SET notice_state='skipped' WHERE message_id=$1`, qid)
 				return err
 			}

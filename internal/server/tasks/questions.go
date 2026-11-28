@@ -20,13 +20,13 @@ import (
 // question/Inbox data; it must not call back into this service to take the task lock again.
 func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uuid.UUID, create func(*db.Tx) (taskmodel.Question, error)) (json.RawMessage, error) {
 	return s.Store.MutateTask(ctx, p.TaskID, nil, func(m *store.TaskMutation) (any, error) {
-		if e := nodeActor(p, m, nodeID); e != nil {
+		n, e := nodeActor(p, m, nodeID)
+		if e != nil {
 			return nil, e
 		}
 		if e := s.Store.CheckTaskLarkRunTx(ctx, m, nodeID, p.RuntimeID, uuid.Nil); e != nil {
 			return nil, e
 		}
-		n := m.Record.Current()
 		if m.Record.Ended() || n.Status == "blocked" || n.Output != nil {
 			return nil, conflict("The current node cannot ask a question: the task has ended, the node is blocked, or it has already submitted.")
 		}
@@ -67,9 +67,9 @@ func (s *Service) QuestionChanged(ctx context.Context, taskID, questionID uuid.U
 		}
 		node.Question.Status = status
 		node.Question.CanAnswer = false
-		if !m.Record.Ended() && m.Record.Current() != nil && m.Record.Current().ID == node.ID && node.Status != "blocked" {
+		if !m.Record.Ended() && m.Record.ActiveNode(node.ID) != nil && node.Status != "blocked" {
 			text := fmt.Sprintf("The question %s you asked is now %s. Read the original question and its replies from the Inbox, then continue the current node; do not treat ordinary messages as answers to the options.", questionID, status)
-			turn, e := s.Store.EnqueueTaskTurn(ctx, m, text, "inbox_reminder", 1, &node.Question.MessageID)
+			turn, e := s.Store.EnqueueTaskTurnFor(ctx, m, node, text, "inbox_reminder", 1, &node.Question.MessageID)
 			if e != nil {
 				return nil, e
 			}

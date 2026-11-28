@@ -11,7 +11,7 @@ import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
 import { makeSleep } from '@/test/sleep'
-import { makeTaskDetail, makeTaskMessage, makeTaskWorkspace, nodeId, oldNodeId, taskId } from '@/test/tasks'
+import { forkPlanNodeId, forkServerNodeId, forkWebNodeId, makeForkTaskDetail, makeTaskDetail, makeTaskMessage, makeTaskWorkspace, nodeId, oldNodeId, taskId } from '@/test/tasks'
 import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
 import type { Schemas } from '@/api/client'
@@ -720,5 +720,105 @@ describe('task list on the sheet', () => {
     await renderDetail()
     expect(screen.queryByRole('region', { name: 'Step prompt' })).not.toBeInTheDocument()
     expect(screen.queryByText('With conversation')).not.toBeInTheDocument()
+  })
+})
+
+describe('parallel fork/join task detail', () => {
+  it('shows parallel branches side by side, lists every running step in the active strip, lets both be interacted with, and links back from history', async () => {
+    const detail = makeForkTaskDetail(defaultProject.id, defaultProject.name)
+    server.use(
+      ...baseHandlers([]),
+      http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
+      http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
+      http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => {
+        const currentNode = detail.nodes.find((n) => n.id === String(params.node)) ?? detail.nodes[1]
+        return HttpResponse.json({ taskId, nodeRunId: currentNode.id, agentId: currentNode.agentId, runtimeId: currentNode.runtimeId, canSend: true, reason: null, handlingHint: null })
+      }),
+      http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params }) => {
+        const id = String(params.node)
+        const text = id === forkServerNodeId ? 'Server branch reply' : id === forkWebNodeId ? 'Web branch reply' : 'Plan step reply'
+        return HttpResponse.json({ messages: [makeTaskMessage(id, text, `msg-${id}`)], nextCursor: null })
+      }),
+    )
+    renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { level: 1, name: 'Build parallel feature' })
+    expect(await screen.findByText('Server branch reply')).toBeVisible()
+
+    // Active branches switcher bar shows every running branch.
+    const activeBar = screen.getByRole('region', { name: '2 branches running' })
+    const serverPill = within(activeBar).getByRole('button', { name: /Server/ })
+    const webPill = within(activeBar).getByRole('button', { name: /Web/ })
+    expect(serverPill).toHaveAttribute('aria-pressed', 'true')
+    expect(webPill).toHaveAttribute('aria-pressed', 'false')
+
+    // Branch worktrees appear in the workspace section.
+    const workspace = screen.getByRole('region', { name: 'Worktree' })
+    expect(within(workspace).getByText('Branch worktrees')).toBeVisible()
+    expect(within(workspace).getByText('task/12-general-task-acceptance--server')).toBeVisible()
+    expect(within(workspace).getByText('task/12-general-task-acceptance--web')).toBeVisible()
+
+    // Currently viewed branch node is writable (current) and carries its branch badge.
+    const status = document.querySelector<HTMLElement>('[data-node-status]')!
+    expect(within(status).getByText('Current node')).toBeVisible()
+    expect(within(status).getByText('Branch · Server')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Message draft' })).not.toHaveAttribute('readonly')
+
+    // Switching to the second parallel branch via the active bar loads its conversation and keeps it writable too.
+    const user = userEvent.setup()
+    await user.click(webPill)
+    expect(await screen.findByText('Web branch reply')).toBeVisible()
+    expect(within(document.querySelector<HTMLElement>('[data-node-status]')!).getByText('Branch · Web')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Message draft' })).not.toHaveAttribute('readonly')
+
+    // Viewing the completed Plan step shows the history bar with jump buttons for both active branches.
+    const rail = screen.getByRole('navigation', { name: 'Workflow' })
+    await user.click(within(rail).getByRole('button', { name: /Plan/ }))
+    expect(await screen.findByText('Plan step reply')).toBeVisible()
+    expect(screen.getByText('Viewing history')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'View Server' }))
+    expect(await screen.findByText('Server branch reply')).toBeVisible()
+  })
+
+  it('retries a blocked branch independently while the other branch keeps running', async () => {
+    const detail = makeForkTaskDetail(defaultProject.id, defaultProject.name)
+    // Branch "server" is blocked while "web" keeps running -> overall task status remains "running".
+    detail.nodes[1] = { ...detail.nodes[1], status: 'blocked', reason: 'Tests failed in server branch' }
+    const retryBodies: Schemas['TaskRetryInput'][] = []
+    server.use(
+      ...baseHandlers([]),
+      http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
+      http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)),
+      http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => {
+        const currentNode = detail.nodes.find((n) => n.id === String(params.node)) ?? detail.nodes[1]
+        return HttpResponse.json({ taskId, nodeRunId: currentNode.id, agentId: currentNode.agentId, runtimeId: currentNode.runtimeId, canSend: false, reason: 'Blocked', handlingHint: 'Retry' })
+      }),
+      http.get(apiUrl(`/tasks/${taskId}/nodes/:node/messages`), ({ params }) =>
+        HttpResponse.json({ messages: [makeTaskMessage(String(params.node), 'branch output', `m-${String(params.node)}`)], nextCursor: null }),
+      ),
+      http.post(apiUrl(`/tasks/${taskId}/retry`), async ({ request }) => {
+        retryBodies.push((await request.json()) as Schemas['TaskRetryInput'])
+        return HttpResponse.json(detail)
+      }),
+    )
+    renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { level: 1, name: 'Build parallel feature' })
+    act(() => FakeEventSource.instances.forEach((es) => es.open()))
+
+    // On the blocked server branch, Retry is available even though task.status is still "running".
+    const retryBtn = await screen.findByRole('button', { name: 'Retry current node' })
+    expect(retryBtn).toBeEnabled()
+    const user = userEvent.setup()
+    await user.click(retryBtn)
+    const dialog = screen.getByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Retry current node' }))
+    await waitFor(() => expect(retryBodies).toHaveLength(1))
+    expect(retryBodies[0].expectedNodeRunId).toBe(forkServerNodeId)
+
+    // Switching to the still-running web branch does not offer Retry.
+    const activeBar = screen.getByRole('region', { name: '2 branches running' })
+    await user.click(within(activeBar).getByRole('button', { name: /Web/ }))
+    await waitFor(() => expect(within(document.querySelector<HTMLElement>('[data-node-status]')!).getByText('Branch · Web')).toBeVisible())
+    expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
+    expect(forkPlanNodeId).toBeTruthy()
   })
 })

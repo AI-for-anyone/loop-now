@@ -24,7 +24,7 @@ const memberKey = (member: Participant) => JSON.stringify([member.agentId, membe
 export function TaskLarkSwitchController({ detail, node, disabled, children = stacked }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; disabled: boolean; children?: (parts: { toggle: ReactNode; panel: ReactNode }) => ReactNode }) {
   const locator = useOriginalActionLocator(taskLarkSwitchLocatorKey(detail.task.id)), client = useQueryClient()
   const [error, setError] = useState<unknown>(null)
-  const current = detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
+  const current = !node.branch && detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
   const participants = detail.larkSwitchParticipants
   // Retain view drafts during shared-SSE/HTTP calibration, never permission.
   // Only the current console projection can enable a new submission.

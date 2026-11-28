@@ -39,7 +39,7 @@ func TestNodeBeforeStartBlocksTask(t *testing.T) {
 	if node.Status != "queued" {
 		t.Fatalf("the node should not have started yet: %s", node.Status)
 	}
-	if e := s.drive(ctx, id); e != nil {
+	if e := s.drive(ctx, id, nil); e != nil {
 		t.Fatal(e)
 	}
 	r := current(t, s, id)

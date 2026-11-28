@@ -2,6 +2,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router'
 import { counterpartOf, useConsoleThread } from '@/api/console-inbox'
 import { useProjects } from '@/api/queries'
 import { tasksPath, useTask } from '@/api/tasks'
+import { currentNodesOf } from '@/features/tasks/workflow-steps'
 import { t } from '@/i18n'
 
 // The inbox page has been removed; old /inbox/<thread> URLs redirect to where the messages live now: a task instance's thread
@@ -30,7 +31,8 @@ function TaskRedirect({ taskId, nodeRunId }: { taskId: string; nodeRunId: string
   if (!task.data || !projects.data) return <p className="p-6 text-[14px] text-ink-500">{t.common.loading}</p>
   const project = projects.data.projects.find((p) => p.id === task.data.task.projectId)
   if (!project) return <Navigate replace to="/" />
-  const node = task.data.nodes.find((n) => n.id === (nodeRunId ?? task.data.task.currentNodeRunId))
+  const targetNodeId = nodeRunId ?? currentNodesOf(task.data.task)[0]?.nodeRunId
+  const node = task.data.nodes.find((n) => n.id === targetNodeId)
   const query = node ? `?${new URLSearchParams({ step: node.stepId, record: node.id })}` : ''
   return <Navigate replace to={`${tasksPath(project.name)}/${taskId}${query}`} />
 }

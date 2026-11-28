@@ -48,7 +48,7 @@ func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 		def.Edges = []workflow.Edge{{ID: "again", From: "work", To: "work", MaxTraversals: &limit}}
 	}
 	inst := store.TaskInstance{ID: runtime, TaskID: id, AgentID: a.ID, AgentName: a.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}
-	node := freshNode(id, def.Steps[0], inst, 1, 1)
+	node := freshNode(def, id, def.Steps[0], inst, 1, 1)
 	record := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: dc.Project.ID, Title: "Task", Status: "preparing", CreatedAt: now, UpdatedAt: now, Version: 1}, Request: map[string]any{}, Workflow: def, Nodes: []taskmodel.NodeRun{node}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 	record.SetCurrent(node)
 	_, e = st.CreateTask(ctx, dc.Project.ID, a.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
@@ -223,7 +223,7 @@ func TestOpenQuestionRequiresPersistentClose(t *testing.T) {
 	s, id, _ := fixture(t, false)
 	ctx := context.Background()
 	_, e := s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
-		block(m.Record, "wait")
+		block(m.Record, m.Record.Current(), "wait")
 		m.Record.Current().Question = &taskmodel.Question{ID: uuid.New(), Status: "open", CanAnswer: true}
 		return nil, nil
 	})
@@ -366,7 +366,7 @@ func TestQuestionOneOpenWaitingAndLateAnswerDoesNotWakeNewAttempt(t *testing.T) 
 	if r.Current().Question.Status != "open" {
 		t.Fatal("ordinary message answered question")
 	}
-	if e := s.blockTask(ctx, id, "retry requested"); e != nil {
+	if e := s.blockTask(ctx, id, uuid.Nil, "retry requested"); e != nil {
 		t.Fatal(e)
 	}
 	closed := 0
@@ -401,7 +401,7 @@ func TestManagerHandoffAndStaleRetry(t *testing.T) {
 	if _, e = s.Store.SetProjectManager(ctx, r.View.Task.ProjectID, a.ID); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.blockTask(ctx, id, "blocked"); e != nil {
+	if e = s.blockTask(ctx, id, uuid.Nil, "blocked"); e != nil {
 		t.Fatal(e)
 	}
 	nodeID := r.Current().ID
@@ -591,7 +591,7 @@ func TestMissingRequiredInputBlocksBeforeDispatch(t *testing.T) {
 		step := &m.Record.View.Workflow.Steps[0]
 		step.InputFields = []workflow.Field{{Name: "required", Type: "string", Required: true}}
 		step.Inputs = map[string]workflow.Source{"required": {Kind: "request", Field: "missing"}}
-		return nil, s.prepareNode(ctx, m, "")
+		return nil, s.prepareNode(ctx, m, m.Record.Current(), "", "")
 	})
 	if e != nil {
 		t.Fatal(e)
@@ -610,7 +610,7 @@ func TestRetryPreservesQuestionAnsweredDuringClose(t *testing.T) {
 	s, id, _ := fixture(t, false)
 	ctx := context.Background()
 	_, e := s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
-		block(m.Record, "blocked")
+		block(m.Record, m.Record.Current(), "blocked")
 		m.Record.Current().Question = &taskmodel.Question{ID: uuid.New(), ThreadID: uuid.New(), MessageID: uuid.New(), Status: "open"}
 		return nil, nil
 	})

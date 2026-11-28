@@ -36,13 +36,14 @@ func (s *Service) Publish(ctx context.Context, p auth.Principal, taskID, nodeID,
 	}{nodeID, name, contentType, sha})
 	action.Authorize = func(m *store.TaskMutation) error { return historyActor(p, m, nodeID) }
 	return s.Store.MutateTask(ctx, taskID, action, func(m *store.TaskMutation) (any, error) {
-		if e := nodeActor(p, m, nodeID); e != nil {
+		n, e := nodeActor(p, m, nodeID)
+		if e != nil {
 			return nil, e
 		}
-		if m.Record.Ended() || m.Record.Current().Status == "blocked" {
+		if m.Record.Ended() || n.Status == "blocked" {
 			return nil, conflict("The current node cannot publish artifacts: the task has ended or the node is blocked.")
 		}
-		_, e := m.Tx.Exec(ctx, `INSERT INTO blobs(sha256,size,data) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, sha, len(data), data)
+		_, e = m.Tx.Exec(ctx, `INSERT INTO blobs(sha256,size,data) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, sha, len(data), data)
 		if e != nil {
 			return nil, e
 		}

@@ -57,7 +57,7 @@ func (s *Service) ConsoleMessageCapability(ctx context.Context, p auth.Principal
 				message = "The original node does not belong to this runtime instance."
 			case "chat_unavailable":
 				message = "The originally captured model configuration or login is not available right now. Check the original run resources."
-				if m.Record.Current() != nil && m.Record.Current().Status == "blocked" {
+				if n := m.Record.ActiveNode(node); n != nil && n.Status == "blocked" {
 					eligible, e := s.Store.TaskConsoleEligibleTx(ctx, m, node)
 					if e != nil {
 						return nil, e

@@ -127,8 +127,8 @@ func TestEdgeSelectionDoesNotCountRetries(t *testing.T) {
 	counts := map[string]int{"revise": 1}
 	before := map[string]int{"revise": 1}
 	for range 3 {
-		edge, err := d.SelectEdge("check", ptr("revise"), counts)
-		if err != nil || edge.To != "draft" {
+		exit, err := d.SelectExit("check", ptr("revise"), counts)
+		if err != nil || exit.Edge.To != "draft" {
 			t.Fatal(err)
 		}
 	}
@@ -136,13 +136,13 @@ func TestEdgeSelectionDoesNotCountRetries(t *testing.T) {
 		t.Fatal("selecting/retrying modified traversal counters")
 	}
 	counts["revise"] = 2
-	if _, err := d.SelectEdge("check", ptr("revise"), counts); err == nil {
+	if _, err := d.SelectExit("check", ptr("revise"), counts); err == nil {
 		t.Fatal("loop limit ignored")
 	}
-	if _, err := d.SelectEdge("draft", ptr("finish"), nil); err == nil {
+	if _, err := d.SelectExit("draft", ptr("finish"), nil); err == nil {
 		t.Fatal("other node edge accepted")
 	}
-	if e, err := d.SelectEdge("finish", nil, nil); err != nil || e != nil {
+	if e, err := d.SelectExit("finish", nil, nil); err != nil || e.Edge != nil || e.Fork != nil {
 		t.Fatal("terminal node requires no edge")
 	}
 }

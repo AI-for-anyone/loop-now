@@ -5,21 +5,35 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 const copy = t.tasks.workspace
 const stateTone = { pending: 'busy', active: 'info', removed: 'neutral', kept: 'warning' } as const
+const mergeTone = { merged: 'success', conflict: 'danger', skipped: 'warning' } as const
 
 // The task's workspace, between the header and the sheet. Git mode: one strip with the branch and where it started, then the repository
 // and the worktree folder. Copy mode: the folder that was copied and how much, the copy's folder, and a line saying the original is not
-// changed. Either may carry the server's note on why the mode is not the one the folder suggests. A kept workspace adds a yellow notice
+// changed. Either may carry the server's note on why the mode is not the one the folder suggests. Parallel branch workspaces (worktrees
+// or copies) appear side by side below with their state and merge outcome. A kept workspace adds a yellow notice
 // that says in numbers what removing it would lose, with the person's Remove action. A task without a workspace renders nothing, so its
 // page looks as it always did.
-export function TaskWorkspace({ taskId, projectId, workspace }: { taskId: string; projectId: string; workspace: Schemas['TaskWorkspace'] | null }) {
+export function TaskWorkspace({
+  taskId,
+  projectId,
+  workspace,
+  steps,
+}: {
+  taskId: string
+  projectId: string
+  workspace: Schemas['TaskWorkspace'] | null
+  steps?: Schemas['TaskWorkflowStep'][]
+}) {
   if (!workspace) return null
   const git = workspace.git
   const isCopy = workspace.mode === 'copy'
   const from = git?.baseBranch ? copy.from(git.baseBranch, git.baseCommit?.slice(0, 7) ?? null) : null
   const label = isCopy ? copy.copyLabel : copy.label
+  const branches = workspace.branches ?? []
   return <section aria-label={label} className="mb-2.5 grid min-w-0 gap-2 rounded-card border border-hairline-strong bg-surface-elevated px-4 py-3 shadow-surface">
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       <h2 className="text-[13.5px] font-semibold text-ink">{label}</h2>
@@ -39,6 +53,42 @@ export function TaskWorkspace({ taskId, projectId, workspace }: { taskId: string
       </dd>
     </dl>
     {isCopy && workspace.state !== 'removed' && <p className="text-[12px] text-ink-500">{copy.copyHint}</p>}
+    {branches.length > 0 && (
+      <div data-workspace-branches className="grid min-w-0 gap-1.5 border-t border-hairline pt-2">
+        <h3 className="text-[12px] font-semibold text-ink-700">{isCopy ? copy.branchCopies : copy.branchWorkspaces}</h3>
+        <ul className={cn('grid min-w-0 gap-2', branches.length > 1 && 'sm:grid-cols-2')}>
+          {branches.map((branch) => {
+            const stepTitle = steps?.find((s) => s.id === branch.step)?.title || branch.step
+            const removed = branch.state === 'removed'
+            return (
+              <li
+                key={branch.step}
+                data-workspace-branch={branch.step}
+                className="grid min-w-0 gap-1 rounded-input border border-hairline bg-surface-subtle/50 px-3 py-2 text-[12px]"
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold text-ink" title={branch.step}>{stepTitle}</span>
+                  <Badge variant="chip" tone={stateTone[branch.state]}>{copy.states[branch.state]}</Badge>
+                  {branch.merge && <Badge variant="chip" tone={mergeTone[branch.merge]}>{copy.mergeStates[branch.merge]}</Badge>}
+                </div>
+                {branch.git && (
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 font-mono text-[11.5px]">
+                    <span className="min-w-0 font-semibold break-all text-riso-blue">{branch.git.branch}</span>
+                    {branch.git.baseCommit && <span className="shrink-0 text-ink-500">@ {branch.git.baseCommit.slice(0, 7)}</span>}
+                  </div>
+                )}
+                <div className="flex min-w-0 items-start gap-2">
+                  <span className={cn('min-w-0 font-mono text-[11.5px] break-all', removed ? 'text-ink-500 line-through' : 'text-ink-700 select-all')} title={branch.path}>
+                    {branch.path}
+                  </span>
+                  {!removed && <CopyPath path={branch.path} />}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    )}
     {workspace.state === 'kept' && <Kept taskId={taskId} projectId={projectId} workspace={workspace} />}
   </section>
 }

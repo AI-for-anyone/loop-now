@@ -56,27 +56,29 @@ type Service struct {
 	// Hooks calls plugins' node.before_start before a task node first starts; when nil, nothing is called.
 	Hooks pluginhost.Hooker
 	// Native gate is supplied only by the actual runtime manager at composition.
-	LarkSwitchNative    TaskLarkNativeManager
-	larkMu              sync.Mutex
-	larkHeld            map[larkSwitchKey]*taskLarkHeld
-	inboxDrivers        map[uuid.UUID]bool
-	inboxCancels        map[uuid.UUID]context.CancelFunc
-	queueMu             sync.Mutex
-	eventsMu            sync.Mutex
-	eventPosition       int64
-	Coord               *coord.Coord
-	Store               *store.Store
-	Config              *agentconfig.Service
-	Executor            executor.Executor
-	Options             Options
-	Log                 *slog.Logger
-	Source              *Source
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	wg                  sync.WaitGroup
-	mu                  sync.Mutex
-	drivers             map[uuid.UUID]bool
-	cancels             map[uuid.UUID]context.CancelFunc
+	LarkSwitchNative TaskLarkNativeManager
+	larkMu           sync.Mutex
+	larkHeld         map[larkSwitchKey]*taskLarkHeld
+	inboxDrivers     map[uuid.UUID]bool
+	inboxCancels     map[uuid.UUID]context.CancelFunc
+	queueMu          sync.Mutex
+	eventsMu         sync.Mutex
+	eventPosition    int64
+	Coord            *coord.Coord
+	Store            *store.Store
+	Config           *agentconfig.Service
+	Executor         executor.Executor
+	Options          Options
+	Log              *slog.Logger
+	Source           *Source
+	ctx              context.Context
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	mu               sync.Mutex
+	drivers          map[uuid.UUID]bool
+	cancels          map[uuid.UUID]context.CancelFunc
+	// pokes wake a running driver to look at its task again (Kick while it runs).
+	pokes               map[uuid.UUID]chan struct{}
 	started             bool
 	QuestionMaintenance func(context.Context) error
 	SystemNotice        func(context.Context, uuid.UUID, uuid.UUID, string) error
@@ -87,7 +89,7 @@ type Service struct {
 
 func New(st *store.Store, cfg *agentconfig.Service, ex executor.Executor, o Options, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{Store: st, Config: cfg, Executor: ex, Options: o, Log: log, ctx: ctx, cancel: cancel, inboxDrivers: map[uuid.UUID]bool{}, inboxCancels: map[uuid.UUID]context.CancelFunc{}, drivers: map[uuid.UUID]bool{}, cancels: map[uuid.UUID]context.CancelFunc{}}
+	return &Service{Store: st, Config: cfg, Executor: ex, Options: o, Log: log, ctx: ctx, cancel: cancel, inboxDrivers: map[uuid.UUID]bool{}, inboxCancels: map[uuid.UUID]context.CancelFunc{}, drivers: map[uuid.UUID]bool{}, cancels: map[uuid.UUID]context.CancelFunc{}, pokes: map[uuid.UUID]chan struct{}{}}
 }
 
 func conflict(message string) error { return apperr.Conflict(apperr.CodeTaskConflict, message) }
@@ -133,15 +135,20 @@ func historyActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) err
 	}
 	return apperr.Forbidden("The node does not belong to the current task instance.")
 }
-func nodeActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) error {
-	n := m.Record.Current()
-	if p.Kind != auth.KindAgent || p.TaskID != m.Record.View.Task.ID || n == nil || p.RuntimeID != n.RuntimeID || p.ID != n.AgentID {
-		return apperr.Forbidden("Only the task instance running the current node can do this.")
+
+// nodeActor checks that the caller is the task instance whose current node is nodeID, and returns that node.
+func nodeActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) (*taskmodel.NodeRun, error) {
+	var n *taskmodel.NodeRun
+	if p.Kind == auth.KindAgent && p.TaskID == m.Record.View.Task.ID {
+		n = m.Record.ActiveFor(p.RuntimeID)
+	}
+	if n == nil || p.ID != n.AgentID {
+		return nil, apperr.Forbidden("Only the task instance running the current node can do this.")
 	}
 	if n.ID != nodeID {
-		return conflict("The node run has changed. Read the task again.")
+		return nil, conflict("The node run has changed. Read the task again.")
 	}
-	return nil
+	return n, nil
 }
 
 func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.CreateInput) (json.RawMessage, error) {
@@ -337,7 +344,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				inst = i
 			}
 		}
-		n := freshNode(id, start, inst, 1, 1)
+		n := freshNode(in.Workflow, id, start, inst, 1, 1)
 		r.View.Nodes = append(r.View.Nodes, n)
 		r.SetCurrent(r.View.Nodes[0])
 		return r, instances, nil
@@ -348,8 +355,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 	return out, err
 }
 
-func freshNode(taskID uuid.UUID, step workflow.Step, inst store.TaskInstance, visit, attempt int) taskmodel.NodeRun {
-	return taskmodel.NodeRun{ID: uuid.Must(uuid.NewV7()), TaskID: taskID, StepID: step.ID, Visit: visit, Attempt: attempt, AgentID: step.AgentID, AgentName: inst.AgentName, RuntimeID: inst.ID, Status: "queued", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
+func freshNode(def workflow.Definition, taskID uuid.UUID, step workflow.Step, inst store.TaskInstance, visit, attempt int) taskmodel.NodeRun {
+	n := taskmodel.NodeRun{ID: uuid.Must(uuid.NewV7()), TaskID: taskID, StepID: step.ID, Visit: visit, Attempt: attempt, AgentID: step.AgentID, AgentName: inst.AgentName, RuntimeID: inst.ID, Status: "queued", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
+	if b := def.Branch(step.ID); b != "" {
+		n.Branch = &b
+	}
+	return n
 }
 func successful(r *taskmodel.Record) []workflow.SuccessfulResult {
 	out := []workflow.SuccessfulResult{}
@@ -360,10 +371,13 @@ func successful(r *taskmodel.Record) []workflow.SuccessfulResult {
 	}
 	return out
 }
-func block(r *taskmodel.Record, reason string) {
+
+// block blocks node n and the task. Inside a fork only the branch of n stops: saving the task settles its status from
+// its branches (taskmodel.Record.SettleForkStatus).
+func block(r *taskmodel.Record, n *taskmodel.NodeRun, reason string) {
 	r.View.Task.Status = "blocked"
 	r.View.Task.Reason = &reason
-	if n := r.Current(); n != nil {
+	if n != nil {
 		n.Status = "blocked"
 		n.Reason = &reason
 	}
@@ -412,10 +426,10 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 	}{nodeID, in})
 	action.Authorize = func(m *store.TaskMutation) error { return historyActor(p, m, nodeID) }
 	return s.Store.MutateTask(ctx, id, action, func(m *store.TaskMutation) (any, error) {
-		if e := nodeActor(p, m, nodeID); e != nil {
+		n, e := nodeActor(p, m, nodeID)
+		if e != nil {
 			return nil, e
 		}
-		n := m.Record.Current()
 		if m.Record.Ended() || n.Status == "blocked" || n.Status == "completed" || n.Output != nil {
 			return nil, conflict("The current node cannot submit again: the task has ended, or the node is blocked or has already submitted.")
 		}
@@ -437,7 +451,7 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 		if err := workflow.ValidateValues(step.OutputFields, in.Output); err != nil {
 			return nil, fieldError(err)
 		}
-		if _, err := m.Record.View.Workflow.SelectEdge(n.StepID, in.EdgeID, nil); err != nil {
+		if _, err := m.Record.View.Workflow.SelectExit(n.StepID, in.EdgeID, nil); err != nil {
 			return nil, fieldError(err)
 		}
 		for _, field := range step.OutputFields {
@@ -487,24 +501,24 @@ func (s *Service) Fail(ctx context.Context, p auth.Principal, id, nodeID uuid.UU
 	}{nodeID, in})
 	action.Authorize = func(m *store.TaskMutation) error { return historyActor(p, m, nodeID) }
 	return s.Store.MutateTask(ctx, id, action, func(m *store.TaskMutation) (any, error) {
-		if e := nodeActor(p, m, nodeID); e != nil {
+		n, e := nodeActor(p, m, nodeID)
+		if e != nil {
 			return nil, e
 		}
-		if m.Record.Ended() || m.Record.Current().Status == "blocked" {
+		if m.Record.Ended() || n.Status == "blocked" {
 			return nil, conflict("The task has ended.")
 		}
 		var runID uuid.UUID
 		if in.RunID != nil {
 			runID = *in.RunID
 		}
-		if err := s.Store.CheckTaskLarkRunTx(ctx, m, nodeID, m.Record.Current().RuntimeID, runID); err != nil {
+		if err := s.Store.CheckTaskLarkRunTx(ctx, m, nodeID, n.RuntimeID, runID); err != nil {
 			return nil, err
 		}
-		block(m.Record, in.Reason)
-		if err := s.queueNotice(ctx, m, "blocked"); err != nil {
+		block(m.Record, n, in.Reason)
+		if err := s.queueNotice(ctx, m, n, "blocked"); err != nil {
 			return nil, err
 		}
-		n := m.Record.Current()
 		if err := m.Emit("node.updated", map[string]any{"node": n}); err != nil {
 			return nil, err
 		}
@@ -516,8 +530,13 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 	action := bodyAction(p, in.ActionID, "retryTask", in)
 	action.Authorize = func(m *store.TaskMutation) error { return manager(p, m) }
 	out, err := s.Store.MutateTask(ctx, id, action, func(m *store.TaskMutation) (any, error) {
-		old := m.Record.Current()
-		if m.Record.View.Task.Status != "blocked" || old == nil || old.ID != in.ExpectedNodeRunID {
+		// Inside a fork, a blocked branch is retried while the others go on.
+		old := m.Record.ActiveNode(in.ExpectedNodeRunID)
+		blocked := m.Record.View.Task.Status == "blocked"
+		if m.Record.Fork != nil {
+			blocked = old != nil && old.Status == "blocked"
+		}
+		if !blocked || old == nil {
 			return nil, conflict("The task or its current blocked node has changed.")
 		}
 		if fenced, err := s.Store.TaskLarkRuntimeFencedTx(ctx, m, old.RuntimeID); err != nil || fenced {
@@ -545,11 +564,17 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 		}
 		step, _ := m.Record.View.Workflow.Step(old.StepID)
 		inst := store.TaskInstance{ID: old.RuntimeID, AgentID: old.AgentID, AgentName: old.AgentName}
-		node := freshNode(id, step, inst, old.Visit, old.Attempt+1)
+		node := freshNode(m.Record.View.Workflow, id, step, inst, old.Visit, old.Attempt+1)
 		m.Record.View.Nodes = append(m.Record.View.Nodes, node)
-		m.Record.SetCurrent(node)
+		m.Record.ReplaceCurrent(old.ID, node)
 		m.Record.View.Task.Reason = nil
 		m.Record.View.Task.Status = "running"
+		if f := m.Record.Fork; f != nil && node.Branch != nil {
+			if b := f.BranchRun(*node.Branch); b != nil && b.State == taskmodel.BranchStarting {
+				// Its workspace is not made yet: the driver makes it, then queues the node message.
+				return m.Record.View, nil
+			}
+		}
 		var prepared bool
 		if e := m.Tx.QueryRow(ctx, `SELECT prepared FROM task_instances WHERE id=$1`, node.RuntimeID).Scan(&prepared); e != nil {
 			return nil, e
@@ -558,7 +583,7 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 			m.Record.View.Task.Status = "preparing"
 			return m.Record.View, nil
 		}
-		if err := s.prepareNode(ctx, m, in.Note); err != nil {
+		if err := s.prepareNode(ctx, m, m.Record.Node(node.ID), in.Note, ""); err != nil {
 			return nil, err
 		}
 		return m.Record.View, nil
@@ -604,7 +629,7 @@ func (s *Service) Cancel(ctx context.Context, p auth.Principal, id uuid.UUID, in
 		m.Record.View.Task.Status = "cancelled"
 		m.Record.View.Task.EndedAt = &now
 		m.Record.View.Cleanup = "pending"
-		if err := s.queueNotice(ctx, m, "cancelled"); err != nil {
+		if err := s.queueNotice(ctx, m, m.Record.Current(), "cancelled"); err != nil {
 			return nil, err
 		}
 		return m.Record.View, nil
@@ -616,16 +641,17 @@ func (s *Service) Cancel(ctx context.Context, p auth.Principal, id uuid.UUID, in
 	return out, err
 }
 
-func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note string) error {
-	n := m.Record.Current()
-	if n == nil {
+// prepareNode queues the node message of current node n: the step's description, its inputs and where it works, then
+// what the join merged (joined, for the first node of a join) and the retry note.
+func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, n *taskmodel.NodeRun, note, joined string) error {
+	if n == nil || m.Record.ActiveNode(n.ID) == nil {
 		return conflict("The task has no current node.")
 	}
 	step, _ := m.Record.View.Workflow.Step(n.StepID)
 	inputs, versions, err := workflow.ResolveInputs(step, m.Record.View.Request, successful(m.Record))
 	if err != nil {
-		block(m.Record, err.Error())
-		if e := s.queueNotice(ctx, m, "blocked"); e != nil {
+		block(m.Record, n, err.Error())
+		if e := s.queueNotice(ctx, m, n, "blocked"); e != nil {
 			return e
 		}
 		return m.Emit("node.updated", map[string]any{"node": n})
@@ -635,12 +661,23 @@ func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note s
 	where := "The current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder."
 	if w := m.Record.View.Workspace; w != nil && w.State == taskmodel.WorkspaceStateActive {
 		where = workspaceBlock(*w)
+		if n.Branch != nil {
+			if b := w.Branch(*n.Branch); b != nil && b.State == taskmodel.WorkspaceStateActive {
+				where = branchWorkspaceBlock(*w, *b, m.Record.View.Workflow.JoinOf(*n.Branch))
+			}
+		}
+	}
+	if n.Branch != nil {
+		where += " " + branchBlock(m.Record.View.Workflow, *n.Branch)
 	}
 	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\n%s Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data), where)
+	if joined != "" {
+		text += joined + "\n"
+	}
 	if note != "" {
 		text += "Retry note: " + note
 	}
-	if _, err = s.Store.EnqueueTaskTurn(ctx, m, text, "task_node", 1, nil); err != nil {
+	if _, err = s.Store.EnqueueTaskTurnFor(ctx, m, n, text, "task_node", 1, nil); err != nil {
 		return err
 	}
 	return m.Emit("node.updated", map[string]any{"node": n})
@@ -668,14 +705,21 @@ func (s *Service) closeQuestion(ctx context.Context, m *store.TaskMutation, n *t
 	n.Question.CanAnswer = false
 	return nil
 }
-func (s *Service) queueNotice(ctx context.Context, m *store.TaskMutation, kind string) error {
+
+// queueNotice queues a notice to the Manager about the task, for node n (nil for none).
+func (s *Service) queueNotice(ctx context.Context, m *store.TaskMutation, n *taskmodel.NodeRun, kind string) error {
 	var nodeID *uuid.UUID
-	if n := m.Record.Current(); n != nil {
+	if n != nil {
 		nodeID = &n.ID
 	}
 	text := fmt.Sprintf("Task %s: %s.", m.Record.View.Task.Title, kind)
 	if m.Record.View.Task.Reason != nil {
 		text += " Reason: " + *m.Record.View.Task.Reason
+	}
+	if m.Record.Fork != nil && kind == "blocked" && n != nil && n.Reason != nil {
+		// Inside a fork only that branch stopped.
+		step, _ := m.Record.View.Workflow.Step(n.StepID)
+		text = fmt.Sprintf("Task %s: the step %s, in a parallel branch, is blocked; the other branches go on. Reason: %s", m.Record.View.Task.Title, step.Title, *n.Reason)
 	}
 	_, err := m.Tx.Exec(ctx, `INSERT INTO task_notifications(id,task_id,node_run_id,kind,message_id,text) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, uuid.Must(uuid.NewV7()), m.Record.View.Task.ID, nodeID, kind, uuid.Must(uuid.NewV7()), text)
 	return err

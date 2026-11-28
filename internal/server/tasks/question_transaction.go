@@ -12,17 +12,17 @@ import (
 // CheckQuestionRunTx is the wait/question counterpart of submit/fail. It is
 // invoked before writing a real question, under the existing Inbox task lock.
 func (s *Service) CheckQuestionRunTx(ctx context.Context, m *store.TaskMutation, p auth.Principal, node, run uuid.UUID) error {
-	if err := nodeActor(p, m, node); err != nil {
+	if _, err := nodeActor(p, m, node); err != nil {
 		return err
 	}
 	return s.Store.CheckTaskLarkRunTx(ctx, m, node, p.RuntimeID, run)
 }
 
 func (s *Service) BindQuestionTx(ctx context.Context, m *store.TaskMutation, p auth.Principal, nodeID uuid.UUID, q taskmodel.Question) error {
-	if err := nodeActor(p, m, nodeID); err != nil {
+	n, err := nodeActor(p, m, nodeID)
+	if err != nil {
 		return err
 	}
-	n := m.Record.Current()
 	if m.Record.Ended() || n.Status == "blocked" || n.Output != nil {
 		return conflict("The current node cannot ask a question: the task has ended, the node is blocked, or it has already submitted.")
 	}
@@ -69,7 +69,7 @@ func (s *Service) SyncQuestionTx(ctx context.Context, m *store.TaskMutation, id 
 		n.Question.Status = status
 		n.Question.CanAnswer = false
 		m.Changed()
-		wake := !m.Record.Ended() && m.Record.Current() != nil && m.Record.Current().ID == n.ID && n.Status != "blocked" && status != "closed"
+		wake := !m.Record.Ended() && m.Record.ActiveNode(n.ID) != nil && n.Status != "blocked" && status != "closed"
 		return wake, m.Emit("node.updated", map[string]any{"node": n})
 	}
 	return false, nil

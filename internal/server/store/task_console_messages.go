@@ -15,17 +15,38 @@ import (
 
 // TaskConsoleRecoverySourceTx captures the actual active node run BEFORE
 // RecoverTaskTurns changes its status. Never infer causality from old failures.
+// It is the run of the first current node; TaskConsoleRecoverySourcesTx gives
+// those of every current node (the branches of a fork).
 func (s *Store) TaskConsoleRecoverySourceTx(ctx context.Context, m *TaskMutation) (uuid.UUID, error) {
-	n := m.Record.Current()
-	if n == nil || n.Status == "blocked" || m.Record.Ended() {
-		return uuid.Nil, nil
+	sources, err := s.TaskConsoleRecoverySourcesTx(ctx, m)
+	if err != nil || len(sources) == 0 {
+		return uuid.Nil, err
 	}
-	var source uuid.UUID
-	err := m.Tx.QueryRow(ctx, `SELECT id FROM task_turns WHERE task_id=$1 AND node_run_id=$2 AND runtime_id=$3 AND execution_mode='task_node' AND status IN ('starting','running','aborting') ORDER BY queue_seq LIMIT 1`, m.Record.View.Task.ID, n.ID, n.RuntimeID).Scan(&source)
-	if err == db.ErrNoRows {
-		return uuid.Nil, nil
+	return sources[0], nil
+}
+
+// TaskConsoleRecoverySourcesTx is TaskConsoleRecoverySourceTx for every
+// current node that is not blocked, in the order of the current nodes.
+func (s *Store) TaskConsoleRecoverySourcesTx(ctx context.Context, m *TaskMutation) ([]uuid.UUID, error) {
+	out := []uuid.UUID{}
+	if m.Record.Ended() {
+		return out, nil
 	}
-	return source, err
+	for _, n := range m.Record.Active() {
+		if n.Status == "blocked" {
+			continue
+		}
+		var source uuid.UUID
+		err := m.Tx.QueryRow(ctx, `SELECT id FROM task_turns WHERE task_id=$1 AND node_run_id=$2 AND runtime_id=$3 AND execution_mode='task_node' AND status IN ('starting','running','aborting') ORDER BY queue_seq LIMIT 1`, m.Record.View.Task.ID, n.ID, n.RuntimeID).Scan(&source)
+		if err == db.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, source)
+	}
+	return out, nil
 }
 
 // TaskConsoleGuardTx is the single predicate for capability, POST and strict
@@ -34,8 +55,8 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 	if m.Record.Ended() {
 		return "task_ended", nil
 	}
-	n := m.Record.Current()
-	if n == nil || n.ID != target.NodeRunID {
+	n := m.Record.ActiveNode(target.NodeRunID)
+	if n == nil {
 		return "node_changed", nil
 	}
 	if target.TaskID != m.Record.View.Task.ID || n.AgentID != target.AgentID || n.RuntimeID != target.RuntimeID {
@@ -149,7 +170,13 @@ func TaskConsoleConflict(m *TaskMutation, target TaskConsoleLineage, reason stri
 // RecordTaskConsoleEligibilityTx is called only at the two reviewed block
 // branches, in the same transaction that makes the current node blocked.
 func (s *Store) RecordTaskConsoleEligibilityTx(ctx context.Context, m *TaskMutation, source uuid.UUID) error {
-	n := m.Record.Current()
+	var node uuid.UUID
+	if source != uuid.Nil {
+		if err := m.Tx.QueryRow(ctx, `SELECT coalesce(node_run_id,'00000000-0000-0000-0000-000000000000') FROM task_turns WHERE id=$1 AND task_id=$2`, source, m.Record.View.Task.ID).Scan(&node); err != nil && err != db.ErrNoRows {
+			return err
+		}
+	}
+	n := m.Record.ActiveNode(node)
 	if n == nil || n.Status != "blocked" || m.Record.Ended() || source == uuid.Nil {
 		return apperr.Conflict(apperr.CodeTaskConflict, "The source of the run failure does not match.")
 	}
@@ -214,15 +241,16 @@ func (s *Store) EnqueueTaskConsoleMessageTx(ctx context.Context, m *TaskMutation
 	if reason != "" {
 		return receipt, nil, TaskConsoleConflict(m, target, reason)
 	}
+	node := m.Record.ActiveNode(target.NodeRunID)
 	mode := "task_node"
-	if m.Record.Current().Status == "blocked" {
+	if node.Status == "blocked" {
 		mode = "task_conversation"
 	}
 	priority := 1
 	if whenBusy == "interrupt" {
 		priority = 0
 	}
-	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, "console_node"), mode)
+	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, nil, "console_node"), mode)
 	if e != nil {
 		return receipt, nil, e
 	}
@@ -259,7 +287,7 @@ func (s *Store) EnqueueTaskConsoleMessageTx(ctx context.Context, m *TaskMutation
 			}
 		}
 	}
-	m.Record.Current().RunIDs = append(m.Record.Current().RunIDs, turn.ID)
+	node.RunIDs = append(node.RunIDs, turn.ID)
 	if e = m.Emit("message.created", taskMessage(turn, false)); e != nil {
 		return receipt, nil, e
 	}

@@ -31,7 +31,8 @@ Agents and people coordinate through the **Inbox**:
 
 A task is a fixed **workflow** of nodes executed by agents. Workflows support:
 
-- linear sequences, conditional branches, and bounded review loops (parallel join is not supported yet),
+- linear sequences, conditional branches, and bounded review loops,
+- **parallel branches**: a step can fork into several branches that run at the same time and meet at a join step, which starts once all of them have arrived,
 - retries, cancellation, and saved artifacts per node,
 - **questions** that pause a node until a person answers,
 - node conversations: each task node has its own message thread with the people and agents involved.
@@ -40,7 +41,7 @@ The workflow and captured configuration are **frozen** when the task starts. Ord
 
 Each step starts from a **clean conversation**: its agent gets its own Prompt, its instruction files and memory, the task request, and the prompt the Manager wrote for that step, but not its regular chat history. A step that truly needs the agent's chat can ask to start from a copy of it. Creating a task does not wait for its agents to be idle, unless a step asks for the conversation.
 
-A task that works on code can carry a **workspace**: the Manager names a git repository on this computer, and the platform creates one worktree on one new branch for the task. Every step works in it, as the Agent does in its regular conversation, so several tasks can run on one repository at once. When the task ends, the worktree is removed if nothing would be lost; otherwise it is kept and the task page says why.
+A task that works on code can carry a **workspace**: the Manager names a git repository on this computer, and the platform creates one worktree on one new branch for the task. Every step works in it, as the Agent does in its regular conversation, so several tasks can run on one repository at once. When the task ends, the worktree is removed if nothing would be lost; otherwise it is kept and the task page says why. Parallel branches each get their own worktree on their own branch, cut from the task's branch; at the join the platform merges them back into the task's branch, and a conflict is handed to the join step's agent. A task on a folder that is copied (not git) gives each branch its own copy, and nothing is merged back.
 
 ## Accounts and permissions
 

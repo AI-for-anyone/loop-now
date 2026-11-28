@@ -235,7 +235,7 @@ func TestTaskReplyLogsAndUsageShareExactScope(t *testing.T) {
 func TestBlockedTaskInboxReplyDoesNotResumeWorkflow(t *testing.T) {
 	s, id, p := fixture(t, false)
 	ctx := context.Background()
-	if e := s.blockTask(ctx, id, "needs a retry"); e != nil {
+	if e := s.blockTask(ctx, id, uuid.Nil, "needs a retry"); e != nil {
 		t.Fatal(e)
 	}
 	before := current(t, s, id)

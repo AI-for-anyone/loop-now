@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CircleAlertIcon, DownloadIcon, FileTextIcon, InfoIcon, ScissorsIcon } from 'lucide-react'
+import { CircleAlertIcon, DownloadIcon, FileTextIcon, GitForkIcon, InfoIcon, ScissorsIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { stopAllTaskNodeBackgroundTasks, stopTaskNodeBackgroundTask, useTaskNodeBackgroundTasks } from '@/api/background-tasks'
 import type { Schemas } from '@/api/client'
@@ -41,7 +41,7 @@ import { TaskBadge } from './TaskBadge'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
 import { TaskLarkSwitchController } from './TaskLarkSwitchController'
 import { TaskMessageBubble } from './TaskMessageBubble'
-import { stepNumber } from './workflow-steps'
+import { currentNodesOf, isCurrentNode, stepNumber } from './workflow-steps'
 
 const inboxCopy = t.taskInbox
 
@@ -140,8 +140,9 @@ export function NodeRecordPanel({
   const [newMessagesFor, setNewMessagesFor] = useState<string | null>(null)
   const newMessages = newMessagesFor === node.id
 
-  const current = node.id === detail.task.currentNodeRunId && !['completed', 'cancelled'].includes(detail.task.status)
-  const isHistory = Boolean(detail.task.currentNodeRunId && node.id !== detail.task.currentNodeRunId)
+  const currentNodes = currentNodesOf(detail.task)
+  const current = isCurrentNode(detail.task, node.id)
+  const isHistory = currentNodes.length > 0 && !currentNodes.some((c) => c.nodeRunId === node.id)
   const context = useContextInfo()
   const capability = useNodeMessageCapability(detail.task.id, node.id, current)
   const inbox = useTaskInboxMessages(detail.task.id, node.id, node.agentId, node.runtimeId)
@@ -265,8 +266,8 @@ export function NodeRecordPanel({
     })
   }
 
-  const showRetryAction = current && detail.task.status === 'blocked' && Boolean(detail.task.currentNodeRunId)
-  const showLarkAction = detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
+  const showRetryAction = current && (node.status === 'blocked' || (currentNodes.length === 1 && detail.task.status === 'blocked'))
+  const showLarkAction = !node.branch && detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
   const hasActionRow = Boolean(statusReason || showRetryAction || showLarkAction)
   const targetPlaceholder = `${t.tasks.draftPlaceholder(draft.agentName)} · ${number} ${stepTitle} (${t.tasks.page.version(node.visit, node.attempt)})`
   const targetDetailsToggle = (
@@ -329,6 +330,15 @@ export function NodeRecordPanel({
             ) : (
               <span className="shrink-0 text-[11.5px] font-medium text-ink-500">{t.tasks.readonly}</span>
             )}
+            {node.branch && (
+              <span
+                data-node-branch={node.branch}
+                className="inline-flex shrink-0 items-center gap-1 rounded-stamp border border-hairline bg-surface-subtle px-1.5 py-0.5 text-[11px] leading-4 font-medium text-ink-700"
+              >
+                <GitForkIcon aria-hidden="true" className="size-3 shrink-0 text-ink-500" strokeWidth={2.2} />
+                <span>{t.tasks.branchTag(detail.workflow.steps.find((s) => s.id === node.branch)?.title || node.branch)}</span>
+              </span>
+            )}
             {step?.withConversation && <WithConversationBadge />}
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
@@ -385,10 +395,19 @@ export function NodeRecordPanel({
         {isHistory && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline bg-surface-subtle/50 px-4 py-1.5 text-[12px] text-ink-700 sm:px-5">
             <span className="font-medium">{t.tasks.history}</span>
-            {onSelectRecord && detail.task.currentStepId && detail.task.currentNodeRunId && (
-              <Button variant="secondary" size="xs" className="h-6 px-2.5 text-[12px]" onClick={() => onSelectRecord(detail.task.currentStepId!, detail.task.currentNodeRunId!)}>
+            {onSelectRecord && currentNodes.length === 1 && (
+              <Button variant="secondary" size="xs" className="h-6 px-2.5 text-[12px]" onClick={() => onSelectRecord(currentNodes[0].stepId, currentNodes[0].nodeRunId)}>
                 {t.tasks.currentChanged}
               </Button>
+            )}
+            {onSelectRecord && currentNodes.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {currentNodes.map((active) => (
+                  <Button key={active.nodeRunId} variant="secondary" size="xs" className="h-6 px-2.5 text-[12px]" onClick={() => onSelectRecord(active.stepId, active.nodeRunId)}>
+                    {t.tasks.viewNode(active.stepTitle || active.stepId)}
+                  </Button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -417,7 +436,7 @@ export function NodeRecordPanel({
                       )}
                       {(showRetryAction || showLarkAction) && (
                         <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                          <TaskActions task={detail.task} showRetry={current} showCancel={false} disabled={disabled} />
+                          <TaskActions task={detail.task} node={node} showRetry={showRetryAction} showCancel={false} disabled={disabled} />
                           {lark.toggle}
                         </div>
                       )}
@@ -773,7 +792,7 @@ function MessageSegment({
   const replyFolder = useTaskNodeReplyFolder(detail.task.id, node.id, maxImageBytes)
   // Like normal chat, a message still waiting in the node's queue is shown only in the queue tray; it joins the flow once it starts.
   // Cancelled or not-executed messages have left the queue and keep showing their final status here.
-  const queue = useTaskNodeQueue(detail.task.id, node.id, node.id === detail.task.currentNodeRunId)
+  const queue = useTaskNodeQueue(detail.task.id, node.id, isCurrentNode(detail.task, node.id))
   const queued = new Set(queue.data?.runtimeId === node.runtimeId ? queue.data.items.map((item) => item.messageId) : [])
   // A turn still queued is not in the flow yet, nor is one voided before it ran (its messages promoted, cancelled, or already read):
   // both its prompt and its empty reply are hidden. A queued turn joins the flow once it starts.

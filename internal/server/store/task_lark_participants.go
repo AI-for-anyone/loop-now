@@ -97,8 +97,8 @@ func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmod
 		if v.fenced {
 			deny("handoff_in_progress")
 		}
-		current := r.Current()
-		future := (current == nil || current.RuntimeID != v.runtime) && !v.hadTurn && v.sessionState == "none" && v.sessionFile == nil
+		current := r.ActiveFor(v.runtime)
+		future := current == nil && !v.hadTurn && v.sessionState == "none" && v.sessionFile == nil
 		if !future {
 			if v.sessionState != "active" || v.sessionFile == nil || *v.sessionFile == "" {
 				deny("session_unavailable")

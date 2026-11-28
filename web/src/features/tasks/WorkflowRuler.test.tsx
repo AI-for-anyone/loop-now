@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { makeTaskDetail, nodeId, oldNodeId } from '@/test/tasks'
+import { forkServerNodeId, forkWebNodeId, makeForkTaskDetail, makeTaskDetail, nodeId, oldNodeId } from '@/test/tasks'
 import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
 import { edgeUses, workflowPosition, workflowSteps } from './workflow-steps'
 
@@ -124,5 +124,84 @@ describe('small step tags on narrow screens', () => {
     const mark = finish.querySelector('[data-step-with-conversation]')!
     expect(mark).not.toBeNull()
     expect(mark).toHaveTextContent('With conversation')
+  })
+
+  it('groups parallel branch chips and marks every running branch as current on narrow screens', () => {
+    const detail = makeForkTaskDetail('project')
+    render(<WorkflowChips detail={detail} selected="server" record={forkServerNodeId} onSelect={() => {}} onRecord={() => {}} />)
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    const forkGroup = nav.querySelector<HTMLElement>('[data-chips-fork="build"]')!
+    expect(forkGroup).not.toBeNull()
+    const currentSteps = within(nav).getAllByRole('button', { current: 'step' })
+    expect(currentSteps.map((b) => b.getAttribute('title'))).toEqual(['server', 'web'])
+    expect(within(forkGroup).getByRole('button', { name: /Server/ })).toHaveClass('bg-tint-yellow')
+    expect(within(forkGroup).getByRole('button', { name: /Web/ })).toHaveClass('bg-tint-yellow')
+  })
+})
+
+describe('parallel branches in the workflow ruler', () => {
+  it('draws parallel branches side by side in a 2-column grid, marks every running branch as current, and shows the active count and join badge', async () => {
+    const detail = makeForkTaskDetail('project')
+    const onSelect = vi.fn()
+    render(<WorkflowRuler detail={detail} selected="server" record={forkServerNodeId} onSelect={onSelect} onRecord={() => {}} agentName={(id) => id} />)
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    expect(nav).toHaveAttribute('data-has-forks', 'true')
+    expect(nav).toHaveClass('w-[344px]')
+
+    // Header shows how many steps are running in parallel.
+    expect(within(nav).getByText('2 active')).toHaveAttribute('title', 'running in parallel: Server, Web')
+
+    // Fork block renders both branches side by side in a 2-column grid.
+    const forkBlock = nav.querySelector<HTMLElement>('[data-fork-block="build"]')!
+    expect(forkBlock).not.toBeNull()
+    const lanesGrid = forkBlock.querySelector<HTMLElement>('[data-fork-lanes]')!
+    expect(lanesGrid).toHaveClass('grid', 'grid-cols-2')
+    const lanes = [...forkBlock.querySelectorAll<HTMLElement>('[data-branch-lane]')]
+    expect(lanes.map((el) => [el.dataset.branchLane, el.dataset.branchState])).toEqual([
+      ['server', 'active'],
+      ['web', 'active'],
+    ])
+    expect(within(lanes[0]).getByText('Backend')).toBeVisible()
+    expect(within(lanes[1]).getByText('Frontend')).toBeVisible()
+
+    // Both running branch steps carry aria-current="step".
+    const currentButtons = within(nav).getAllByRole('button', { current: 'step' })
+    expect(currentButtons.map((b) => b.getAttribute('title'))).toEqual(['server', 'web'])
+
+    // Join step carries a join badge showing arrived count while the fork is active.
+    const joinStep = nav.querySelector<HTMLElement>('[data-join-step="verify"]')!
+    expect(within(joinStep).getByText('0/2 arrived')).toBeVisible()
+
+    // Clicking the other parallel branch selects it.
+    await userEvent.click(within(lanes[1]).getByRole('button', { name: /Web/ }))
+    expect(onSelect).toHaveBeenCalledWith('web')
+  })
+
+  it('shows blocked state on a blocked branch, arrived state on the finished branch, merge conflict tags, and maxParallelBranches cap', () => {
+    const detail = makeForkTaskDetail('project')
+    detail.workflow.maxParallelBranches = 2
+    detail.nodes[1] = { ...detail.nodes[1], status: 'completed', edgeId: 'server_done', endedAt: '2026-10-14T08:04:00Z' }
+    detail.nodes[2] = { ...detail.nodes[2], status: 'blocked', reason: 'Build failed' }
+    detail.task.status = 'blocked'
+    detail.task.currentNodes = [detail.task.currentNodes[1]]
+    detail.task.currentNodeRunId = forkWebNodeId
+    detail.task.currentStepId = 'web'
+    detail.task.currentStepTitle = 'Web'
+    detail.task.currentAgentId = detail.nodes[2].agentId
+    detail.workspace!.branches[0].merge = 'merged'
+    detail.workspace!.branches[1].merge = 'conflict'
+
+    render(<WorkflowRuler detail={detail} selected="web" record={forkWebNodeId} onSelect={() => {}} onRecord={() => {}} agentName={(id) => id} />)
+    const nav = screen.getByRole('navigation', { name: 'Workflow' })
+    const forkBlock = nav.querySelector<HTMLElement>('[data-fork-block="build"]')!
+    expect(within(forkBlock).getByText('max 2 at once')).toBeVisible()
+    expect(within(forkBlock).getAllByText('1/2 arrived').length).toBeGreaterThanOrEqual(1)
+
+    const serverLane = forkBlock.querySelector<HTMLElement>('[data-branch-lane="server"]')!
+    const webLane = forkBlock.querySelector<HTMLElement>('[data-branch-lane="web"]')!
+    expect(serverLane).toHaveAttribute('data-branch-state', 'arrived')
+    expect(webLane).toHaveAttribute('data-branch-state', 'blocked')
+    expect(within(serverLane).getByText('merged')).toBeVisible()
+    expect(within(webLane).getByText('merge conflict')).toBeVisible()
   })
 })

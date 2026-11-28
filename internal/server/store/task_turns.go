@@ -50,9 +50,14 @@ func scanTaskTurn(r db.Scanner) (TaskTurn, error) {
 	return t, e
 }
 
+// EnqueueTaskTurn queues a turn for the task's current node (EnqueueTaskTurnFor with the one current node).
 func (s *Store) EnqueueTaskTurn(ctx context.Context, m *TaskMutation, text, origin string, priority int, trigger *uuid.UUID) (TaskTurn, error) {
-	node := m.Record.Current()
-	if node == nil || m.Record.Ended() {
+	return s.EnqueueTaskTurnFor(ctx, m, m.Record.Current(), text, origin, priority, trigger)
+}
+
+// EnqueueTaskTurnFor queues a turn for node, which must be a current node of the task.
+func (s *Store) EnqueueTaskTurnFor(ctx context.Context, m *TaskMutation, node *taskmodel.NodeRun, text, origin string, priority int, trigger *uuid.UUID) (TaskTurn, error) {
+	if node == nil || m.Record.ActiveNode(node.ID) == nil || m.Record.Ended() {
 		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "There is no current task node that can receive messages.")
 	}
 	if origin == "task_node" {
@@ -76,7 +81,7 @@ func (s *Store) EnqueueTaskTurn(ctx context.Context, m *TaskMutation, text, orig
 		}
 	}
 	id, user, assistant := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	t, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11`, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, origin))
+	t, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11`, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, node, origin))
 	if err != nil {
 		return t, err
 	}
@@ -124,11 +129,11 @@ func (s *Store) ClaimTaskTurn(ctx context.Context, taskID, runtimeID uuid.UUID) 
 		if e := s.ExpireTaskConsoleTurnsTx(ctx, m, runtimeID); e != nil {
 			return nil, e
 		}
-		if m.Record.Ended() || m.Record.Current() == nil {
+		if m.Record.Ended() {
 			return nil, nil
 		}
-		node := m.Record.Current()
-		if node.RuntimeID != runtimeID || node.Status == "blocked" {
+		node := m.Record.ActiveFor(runtimeID)
+		if node == nil || node.Status == "blocked" {
 			return nil, nil
 		}
 		var active bool
@@ -325,11 +330,13 @@ func (s *Store) InterruptTaskTurns(ctx context.Context, m *TaskMutation, nodeRun
 	return nil
 }
 
-func taskRequestID(ctx context.Context, m *TaskMutation, origin string) *uuid.UUID {
+// taskRequestID is the request a turn for node n belongs to: the one in progress, else, for the first message of the
+// start step, the request that created the task.
+func taskRequestID(ctx context.Context, m *TaskMutation, n *taskmodel.NodeRun, origin string) *uuid.UUID {
 	if id, e := uuid.Parse(reqid.From(ctx)); e == nil {
 		return &id
 	}
-	if n := m.Record.Current(); origin == "task_node" && n != nil && n.StepID == m.Record.View.Workflow.StartStepID && n.Visit == 1 && n.Attempt == 1 {
+	if origin == "task_node" && n != nil && n.StepID == m.Record.View.Workflow.StartStepID && n.Visit == 1 && n.Attempt == 1 {
 		return m.Record.CreationRequestID
 	}
 	return nil
