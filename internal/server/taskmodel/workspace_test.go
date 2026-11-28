@@ -18,7 +18,7 @@ func TestWorkspaceReadsTheStage1Shape(t *testing.T) {
 	commit := "abc123"
 	want := Workspace{Mode: WorkspaceModeGit, Folder: "/code/app", Path: "/data/worktrees/t/app", State: WorkspaceStateKept,
 		Kept: &WorkspaceKept{UncommittedFiles: 2, UnpushedCommits: 1},
-		Git:  &WorkspaceGit{Repository: "/code/app", Branch: "task/3-fix", BaseBranch: "main", BaseCommit: &commit}}
+		Git:  &WorkspaceGit{Repository: "/code/app", Branch: "task/3-fix", BaseBranch: "main", BaseCommit: &commit}, Branches: []WorkspaceBranch{}}
 	if !reflect.DeepEqual(w, want) {
 		t.Fatalf("got %+v\nwant %+v", w, want)
 	}
@@ -36,9 +36,12 @@ func TestWorkspaceRoundTrips(t *testing.T) {
 	note := "No working git on this computer, so the folder was copied."
 	for _, w := range []Workspace{
 		{Mode: WorkspaceModeGit, Folder: "/code/app/web", Path: "/p", State: WorkspaceStateActive,
-			Git: &WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}},
+			Git: &WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}, Branches: []WorkspaceBranch{}},
 		{Mode: WorkspaceModeCopy, Folder: "/docs", Path: "/p", State: WorkspaceStateKept, ModeNote: &note,
-			Kept: &WorkspaceKept{ChangedFiles: 1}, Copy: &WorkspaceCopy{Files: 3, Bytes: 1200}},
+			Kept: &WorkspaceKept{ChangedFiles: 1}, Copy: &WorkspaceCopy{Files: 3, Bytes: 1200}, Branches: []WorkspaceBranch{}},
+		{Mode: WorkspaceModeGit, Folder: "/code/app", Path: "/p", State: WorkspaceStateActive,
+			Git: &WorkspaceGit{Repository: "/code/app", Branch: "b", BaseBranch: "main"}, Branches: []WorkspaceBranch{
+				{Step: "server", Path: "/p--server", State: WorkspaceStateActive, Merge: ptr(BranchConflict), Git: &WorkspaceBranchGit{Branch: "b--server", BaseCommit: "abc"}}}},
 	} {
 		b, err := json.Marshal(w)
 		if err != nil {

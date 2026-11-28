@@ -3,6 +3,7 @@ package taskmodel
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,16 +25,37 @@ type Summary struct {
 	// CurrentStepTitle is the title of the current step in the frozen workflow; nil when there is no current step.
 	CurrentStepTitle *string    `json:"currentStepTitle"`
 	CurrentAgentID   *uuid.UUID `json:"currentAgentId"`
-	Reason           *string    `json:"reason"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
-	EndedAt          *time.Time `json:"endedAt"`
-	Link             string     `json:"link"`
-	Version          int64      `json:"version"`
+	// CurrentNodes are every current node, in the order they became current: one outside a fork, one per branch
+	// with a node inside a fork. The Current* fields above name the current node when there is exactly one.
+	CurrentNodes []CurrentNode `json:"currentNodes"`
+	Reason       *string       `json:"reason"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	EndedAt      *time.Time    `json:"endedAt"`
+	Link         string        `json:"link"`
+	Version      int64         `json:"version"`
 	// Branch is the branch of the task's workspace; nil for a task without one.
 	Branch *string `json:"branch"`
 	// WorkspaceMode is the mode of the task's workspace (Workspace.Mode); nil for a task without one.
 	WorkspaceMode *string `json:"workspaceMode"`
+}
+
+// MarshalJSON writes currentNodes as a list, empty when there is no current node.
+func (t Summary) MarshalJSON() ([]byte, error) {
+	type plain Summary
+	if t.CurrentNodes == nil {
+		t.CurrentNodes = []CurrentNode{}
+	}
+	return json.Marshal(plain(t))
+}
+
+// CurrentNode is a current node of a task (TaskCurrentNode).
+type CurrentNode struct {
+	NodeRunID uuid.UUID `json:"nodeRunId"`
+	StepID    string    `json:"stepId"`
+	StepTitle string    `json:"stepTitle"`
+	AgentID   uuid.UUID `json:"agentId"`
+	Branch    *string   `json:"branch"`
 }
 
 type Question struct {
@@ -46,6 +68,8 @@ type Question struct {
 }
 
 type NodeRun struct {
+	// Branch is the branch the node's step is in (named by its first step); nil outside every branch.
+	Branch        *string                 `json:"branch"`
 	Sleep         *sleepmodel.Record      `json:"sleep"`
 	SleepRevision int64                   `json:"sleepRevision"`
 	ID            uuid.UUID               `json:"id"`
@@ -112,6 +136,20 @@ func (d *Detail) UnmarshalJSON(b []byte) error {
 		d.Task.WorkspaceMode = &mode
 	}
 	d.Task.CurrentStepTitle = d.stepTitle(d.Task.CurrentStepID)
+	if d.Task.CurrentNodes == nil {
+		// Stored before forks: the one current node, if any.
+		d.Task.CurrentNodes = []CurrentNode{}
+		if d.Task.CurrentNodeRunID != nil && d.Task.CurrentStepID != nil && d.Task.CurrentAgentID != nil {
+			d.Task.CurrentNodes = append(d.Task.CurrentNodes, CurrentNode{NodeRunID: *d.Task.CurrentNodeRunID, StepID: *d.Task.CurrentStepID, AgentID: *d.Task.CurrentAgentID})
+		}
+	}
+	for i := range d.Task.CurrentNodes {
+		c := &d.Task.CurrentNodes[i]
+		c.StepTitle = c.StepID
+		if t := d.stepTitle(&c.StepID); t != nil {
+			c.StepTitle = *t
+		}
+	}
 	return nil
 }
 
@@ -145,6 +183,53 @@ type Workspace struct {
 	ModeNote *string        `json:"modeNote"`
 	Git      *WorkspaceGit  `json:"git"`
 	Copy     *WorkspaceCopy `json:"copy"`
+	// Branches are the workspaces of the task's parallel branches, one per branch in the order they first started.
+	Branches []WorkspaceBranch `json:"branches"`
+}
+
+// MarshalJSON writes branches as a list, empty for a workspace made before forks.
+func (w Workspace) MarshalJSON() ([]byte, error) {
+	type plain Workspace
+	if w.Branches == nil {
+		w.Branches = []WorkspaceBranch{}
+	}
+	return json.Marshal(plain(w))
+}
+
+// WorkspaceBranch is the workspace of one parallel branch (TaskWorkspaceBranch): its own worktree in git mode, its own
+// copy of the task's copy in copy mode.
+type WorkspaceBranch struct {
+	Step  string              `json:"step"`
+	Path  string              `json:"path"`
+	State string              `json:"state"`
+	Merge *string             `json:"merge"`
+	Git   *WorkspaceBranchGit `json:"git"`
+}
+
+// WorkspaceBranchGit is the git side of a branch's workspace (TaskWorkspaceBranchGit).
+type WorkspaceBranchGit struct {
+	Branch     string `json:"branch"`
+	BaseCommit string `json:"baseCommit"`
+}
+
+// Merge results of a branch at its join (TaskWorkspaceBranch.merge).
+const (
+	BranchMerged   = "merged"
+	BranchConflict = "conflict"
+	BranchSkipped  = "skipped"
+)
+
+// Branch returns the workspace of the branch with this first step, nil when there is none.
+func (w *Workspace) Branch(step string) *WorkspaceBranch {
+	if w == nil {
+		return nil
+	}
+	for i := range w.Branches {
+		if w.Branches[i].Step == step {
+			return &w.Branches[i]
+		}
+	}
+	return nil
 }
 
 // WorkspaceGit is the git side of a git-mode workspace (TaskWorkspaceGit).
@@ -176,6 +261,9 @@ func (w *Workspace) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	*w = Workspace(v.plain)
+	if w.Branches == nil {
+		w.Branches = []WorkspaceBranch{}
+	}
 	if w.Mode == "" && v.Repository != nil {
 		w.Mode, w.Folder = WorkspaceModeGit, *v.Repository
 		w.Git = &WorkspaceGit{Repository: *v.Repository, Branch: v.Branch, BaseBranch: v.BaseBranch, BaseCommit: v.BaseCommit}
@@ -210,26 +298,188 @@ type Record struct {
 	// NodeQueueDigests is internal: the last emitted node queue per node, so a
 	// task.node.queue.updated event is written only when the queue changes.
 	NodeQueueDigests map[uuid.UUID]string `json:"nodeQueueDigests,omitempty"`
+	// Fork is internal: the fork whose branches are running; nil outside a fork.
+	Fork *ForkRun `json:"fork,omitempty"`
 }
 
+// ForkRun is a fork taken and not yet joined: its branches in the order of the fork's edges.
+type ForkRun struct {
+	ID string `json:"id"`
+	// Join is the step where the branches meet.
+	Join string `json:"join"`
+	// SourceNodeRunID is the node that took the fork.
+	SourceNodeRunID uuid.UUID   `json:"sourceNodeRunId"`
+	Branches        []BranchRun `json:"branches"`
+}
+
+// Branch states of a running fork.
+const (
+	// BranchWaiting: not started yet (its workspace is made, then its first node, when the limit on branches at once
+	// allows it).
+	BranchWaiting = "waiting"
+	// BranchRunning: its node is current.
+	BranchRunning = "running"
+	// BranchArrived: it submitted an edge into the join.
+	BranchArrived = "arrived"
+)
+
+// BranchRun is one branch of a running fork.
+type BranchRun struct {
+	// Step is the branch's first step, which names it.
+	Step string `json:"step"`
+	// EdgeID is the fork edge that starts it.
+	EdgeID string `json:"edgeId"`
+	State  string `json:"state"`
+	// ArrivedNodeRunID is the node that submitted the edge into the join.
+	ArrivedNodeRunID *uuid.UUID `json:"arrivedNodeRunId,omitempty"`
+}
+
+// Joined reports whether every branch of the fork has arrived at its join.
+func (f *ForkRun) Joined() bool {
+	for _, b := range f.Branches {
+		if b.State != BranchArrived {
+			return false
+		}
+	}
+	return true
+}
+
+// BranchRun returns the branch with this first step, nil when the fork has none.
+func (f *ForkRun) BranchRun(step string) *BranchRun {
+	for i := range f.Branches {
+		if f.Branches[i].Step == step {
+			return &f.Branches[i]
+		}
+	}
+	return nil
+}
+
+// Current is the task's current node when it has exactly one; nil when it has none or several (inside a fork).
 func (r *Record) Current() *NodeRun {
 	if r.View.Task.CurrentNodeRunID == nil {
 		return nil
 	}
+	return r.Node(*r.View.Task.CurrentNodeRunID)
+}
+
+// Node is the node run with this id, nil when the task has none.
+func (r *Record) Node(id uuid.UUID) *NodeRun {
 	for i := range r.View.Nodes {
-		if r.View.Nodes[i].ID == *r.View.Task.CurrentNodeRunID {
+		if r.View.Nodes[i].ID == id {
 			return &r.View.Nodes[i]
 		}
 	}
 	return nil
 }
 
-// SetCurrent makes n the task's current node: its node run, step (id and title) and Agent.
+// Active are the task's current nodes: the one current node outside a fork, one per branch with a node inside one.
+func (r *Record) Active() []*NodeRun {
+	out := []*NodeRun{}
+	for _, c := range r.View.Task.CurrentNodes {
+		if n := r.Node(c.NodeRunID); n != nil {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 && len(r.View.Task.CurrentNodes) == 0 {
+		if n := r.Current(); n != nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// ActiveNode is the node run with this id when it is a current node; nil otherwise.
+func (r *Record) ActiveNode(id uuid.UUID) *NodeRun {
+	for _, n := range r.Active() {
+		if n.ID == id {
+			return n
+		}
+	}
+	return nil
+}
+
+// ActiveFor is the current node of the task instance runtime; nil when the instance has none. An instance has at most
+// one: an Agent working in a branch works only in that branch.
+func (r *Record) ActiveFor(runtime uuid.UUID) *NodeRun {
+	for _, n := range r.Active() {
+		if n.RuntimeID == runtime {
+			return n
+		}
+	}
+	return nil
+}
+
+// SetCurrent makes n the task's only current node: its node run, step (id and title) and Agent.
 func (r *Record) SetCurrent(n NodeRun) {
-	r.View.Task.CurrentNodeRunID = &n.ID
-	r.View.Task.CurrentStepID = &n.StepID
-	r.View.Task.CurrentStepTitle = r.View.stepTitle(&n.StepID)
-	r.View.Task.CurrentAgentID = &n.AgentID
+	r.View.Task.CurrentNodes = []CurrentNode{r.currentNode(n)}
+	r.syncCurrent()
+}
+
+// ReplaceCurrent puts next in place of the current node old (a branch moving on, a retry); next becomes current at the
+// end when old is not current.
+func (r *Record) ReplaceCurrent(old uuid.UUID, next NodeRun) {
+	list := r.currentList()
+	for i, c := range list {
+		if c.NodeRunID == old {
+			list[i] = r.currentNode(next)
+			r.View.Task.CurrentNodes = list
+			r.syncCurrent()
+			return
+		}
+	}
+	r.View.Task.CurrentNodes = append(list, r.currentNode(next))
+	r.syncCurrent()
+}
+
+// AddCurrent makes n one more current node (a branch starting).
+func (r *Record) AddCurrent(n NodeRun) {
+	r.View.Task.CurrentNodes = append(r.currentList(), r.currentNode(n))
+	r.syncCurrent()
+}
+
+// RemoveCurrent takes the node out of the current nodes (a branch arriving at its join).
+func (r *Record) RemoveCurrent(id uuid.UUID) {
+	list := []CurrentNode{}
+	for _, c := range r.currentList() {
+		if c.NodeRunID != id {
+			list = append(list, c)
+		}
+	}
+	r.View.Task.CurrentNodes = list
+	r.syncCurrent()
+}
+
+// currentList is the list of current nodes, filled from the single current node of a record stored before forks.
+func (r *Record) currentList() []CurrentNode {
+	if len(r.View.Task.CurrentNodes) == 0 {
+		if n := r.Current(); n != nil {
+			return []CurrentNode{r.currentNode(*n)}
+		}
+		return []CurrentNode{}
+	}
+	return slices.Clone(r.View.Task.CurrentNodes)
+}
+
+func (r *Record) currentNode(n NodeRun) CurrentNode {
+	c := CurrentNode{NodeRunID: n.ID, StepID: n.StepID, StepTitle: n.StepID, AgentID: n.AgentID, Branch: n.Branch}
+	if t := r.View.stepTitle(&n.StepID); t != nil {
+		c.StepTitle = *t
+	}
+	return c
+}
+
+// syncCurrent sets the single current fields from the list: they name the current node when there is exactly one, and
+// are nil otherwise.
+func (r *Record) syncCurrent() {
+	t := &r.View.Task
+	if len(t.CurrentNodes) != 1 {
+		t.CurrentNodeRunID, t.CurrentStepID, t.CurrentStepTitle, t.CurrentAgentID = nil, nil, nil, nil
+		return
+	}
+	c := t.CurrentNodes[0]
+	id, step, agent := c.NodeRunID, c.StepID, c.AgentID
+	t.CurrentNodeRunID, t.CurrentStepID, t.CurrentAgentID = &id, &step, &agent
+	t.CurrentStepTitle = r.View.stepTitle(&step)
 }
 
 func (r *Record) Ended() bool {
