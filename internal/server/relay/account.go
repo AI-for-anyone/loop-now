@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -127,7 +128,8 @@ func (a *Account) Load() error {
 			return fmt.Errorf("read %s: %w", a.Path, err)
 		}
 		a.file = f
-		if info, err := os.Stat(a.Path); err == nil && info.Mode().Perm()&0o077 != 0 {
+		// Windows has no such modes (files read as 0666); the user's profile folder keeps the file private there.
+		if info, err := os.Stat(a.Path); err == nil && runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			a.log().Warn("the relay file was readable by other users; making it private", "path", a.Path)
 			_ = os.Chmod(a.Path, 0o600)
 		}
