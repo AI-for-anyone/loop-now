@@ -111,11 +111,14 @@ func (p *phone) do(method, path string, body any, hdr ...string) (int, []byte, h
 		req.Header.Set("Origin", p.r.base)
 	}
 	for i := 0; i+1 < len(hdr); i += 2 {
-		if hdr[i+1] == "" {
+		switch {
+		case hdr[i] == "Host":
+			req.Host = hdr[i+1]
+		case hdr[i+1] == "":
 			req.Header.Del(hdr[i])
-			continue
+		default:
+			req.Header.Set(hdr[i], hdr[i+1])
 		}
-		req.Header.Set(hdr[i], hdr[i+1])
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -360,7 +363,8 @@ func TestRemoteDoorPairingRateLimit(t *testing.T) {
 
 func TestRemoteDoorSecureCookie(t *testing.T) {
 	r := newRemoteEnv(t)
-	for _, hdr := range [][]string{{"Origin", "https://" + strings.TrimPrefix(r.base, "http://")}, {"X-Forwarded-Proto", "https"}} {
+	r.api.Relay = &stubRelay{origin: publicOrigin}
+	for _, hdr := range [][]string{{"Origin", publicOrigin}, {"X-Forwarded-Proto", "https"}} {
 		ph := r.phone()
 		status, body, h := ph.do("POST", "/device-sessions", map[string]any{"code": r.newCode(), "name": "Tablet"}, hdr...)
 		if status != 201 {

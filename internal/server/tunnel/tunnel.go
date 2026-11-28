@@ -496,3 +496,12 @@ func (m *Manager) attempt(ctx context.Context, r *run) failure {
 	m.set(r, func(s *status) { *s = status{state: StateConnecting, cloudflared: &bin} })
 	return m.runCloudflared(ctx, r, bin, token)
 }
+
+// AccountStatus reports the Loop Now account.
+func (m *Manager) AccountStatus() relay.Status { return m.Account.Status() }
+
+// StartSignIn starts signing in to a Loop Now account in the system browser.
+func (m *Manager) StartSignIn() (relay.SignIn, error) { return m.Account.StartSignIn() }
+
+// CancelSignIn stops waiting for the browser.
+func (m *Manager) CancelSignIn() { m.Account.CancelSignIn() }

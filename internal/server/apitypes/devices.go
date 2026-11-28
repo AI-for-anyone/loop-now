@@ -23,7 +23,16 @@ type DeviceList struct {
 
 // DevicePairing mirrors the DevicePairing schema: a one-time code and its pairing link.
 type DevicePairing struct {
+	ID        uuid.UUID `json:"id"`
 	Code      string    `json:"code"`
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// DevicePairingStatus mirrors the DevicePairingStatus schema: whether a code was used, and by which device.
+type DevicePairingStatus struct {
+	ID        uuid.UUID `json:"id"`
+	State     string    `json:"state"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Device    *Device   `json:"device"`
 }

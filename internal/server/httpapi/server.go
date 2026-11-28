@@ -98,6 +98,8 @@ type Server struct {
 	// there is no remote door: no device is listed and no pairing code can be made.
 	Devices      *devices.Service
 	RemoteAccess RemoteAccessController
+	// Relay is the Loop Now account and the tunnel for phones; when nil this server cannot sign in or open a tunnel.
+	Relay RelayController
 	// ConvImport finds conversations of the local CLIs and imports them as Agents; nil leaves the endpoints failing.
 	ConvImport *convimport.Service
 	// Permissions answers permission requests; nil leaves answering failing.
@@ -193,6 +195,14 @@ func (s *Server) Routes() []Route {
 		{"GET", "/remote-access", "getRemoteAccess", LocalOnly, s.getRemoteAccess},
 		{"PUT", "/remote-access", "putRemoteAccess", LocalOnly, s.putRemoteAccess},
 		{"POST", "/device-pairings", "createDevicePairing", LocalOnly, s.createDevicePairing},
+		{"GET", "/device-pairings/{pairingId}", "getDevicePairing", LocalOnly, s.getDevicePairing},
+		{"GET", "/relay-account", "getRelayAccount", LocalOnly, s.getRelayAccount},
+		{"DELETE", "/relay-account", "signOutRelayAccount", LocalOnly, s.signOutRelayAccount},
+		{"POST", "/relay-account/sign-in", "startRelaySignIn", LocalOnly, s.startRelaySignIn},
+		{"DELETE", "/relay-account/sign-in", "cancelRelaySignIn", LocalOnly, s.cancelRelaySignIn},
+		{"GET", "/tunnel", "getTunnel", LocalOnly, s.getTunnel},
+		{"PUT", "/tunnel", "putTunnel", LocalOnly, s.putTunnel},
+		{"DELETE", "/tunnel/address", "releaseTunnelAddress", LocalOnly, s.releaseTunnelAddress},
 		{"POST", "/device-sessions", "createDeviceSession", Pairing, s.createDeviceSession},
 		{"GET", "/devices", "listDevices", LocalOnly, s.listDevices},
 		{"PATCH", "/devices/{deviceId}", "updateDevice", LocalOnly, s.updateDevice},
