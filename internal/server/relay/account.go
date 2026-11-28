@@ -426,7 +426,7 @@ func (a *Account) Forget(credential string) {
 		a.mu.Unlock()
 		return
 	}
-	a.dropCredentialLocked()
+	a.dropCredentialLocked(false)
 	a.lastErr = "The Loop Now account signed this computer out. Sign in again."
 	a.mu.Unlock()
 	a.log().Warn("the Loop Now relay no longer accepts this computer's credential; signed out")
@@ -435,9 +435,13 @@ func (a *Account) Forget(credential string) {
 	}
 }
 
-func (a *Account) dropCredentialLocked() {
+// dropCredentialLocked deletes the credential; turnOff also turns the switch "access from phones" off (signing out
+// does; a credential the relay refused keeps it on, so the tunnel comes back after signing in again).
+func (a *Account) dropCredentialLocked(turnOff bool) {
 	a.file.Credential, a.file.CredentialID, a.file.AccountID, a.file.SignedInAt = "", "", "", nil
-	a.file.TunnelEnabled = false
+	if turnOff {
+		a.file.TunnelEnabled = false
+	}
 	if err := a.saveLocked(); err != nil {
 		a.log().Error("could not delete the credential from the data folder", "path", a.Path, "err", err)
 	}
@@ -450,7 +454,7 @@ func (a *Account) SignOut(ctx context.Context) {
 	a.endPendingLocked()
 	credential := a.file.Credential
 	if credential != "" {
-		a.dropCredentialLocked()
+		a.dropCredentialLocked(true)
 	}
 	a.lastErr = ""
 	a.mu.Unlock()

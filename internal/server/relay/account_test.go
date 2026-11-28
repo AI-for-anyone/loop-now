@@ -304,14 +304,15 @@ func TestForgetOnlyTheRefusedCredential(t *testing.T) {
 	e := newAccount(t)
 	e.signIn("acct-1")
 	<-e.changes
+	_ = e.acc.SetTunnelEnabled(true)
 	e.acc.Forget("lnh_some-older-credential")
 	if !e.acc.Status().SignedIn {
 		t.Fatal("an older credential's refusal signed the newer one out")
 	}
 	e.acc.Forget(e.acc.Credential())
 	st := e.acc.Status()
-	if st.SignedIn || st.Error == nil {
-		t.Fatalf("after Forget: %+v", st)
+	if st.SignedIn || st.Error == nil || !e.acc.TunnelEnabled() {
+		t.Fatalf("after Forget (the switch stays on): %+v", st)
 	}
 	select {
 	case <-e.changes:
