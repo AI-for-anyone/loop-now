@@ -39,6 +39,24 @@ function apiHost(apiBase: string): string {
   }
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]'
+}
+
+export function isRemoteDoorConnection(door: string | null | undefined, apiBase: string, origin: string): boolean {
+  if (door === 'remote') return true
+  if (door === 'local') return false
+  // Before /context has answered (e.g. a phone opening https://<id>.loop-now.app while the host is already offline),
+  // a same-origin console on a non-loopback host is served by the remote door through a tunnel.
+  try {
+    const pageUrl = new URL(origin)
+    const apiUrl = new URL(apiBase)
+    return pageUrl.origin === apiUrl.origin && !isLoopbackHost(pageUrl.hostname)
+  } catch {
+    return false
+  }
+}
+
 export function useConnectionStatus() {
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const health = useHealth()

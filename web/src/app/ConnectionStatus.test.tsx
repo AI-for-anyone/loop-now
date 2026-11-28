@@ -7,7 +7,7 @@ import { apiUrl, context, defaultAgentsPath, errorBody } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
-import { isRemoteDoorConnection } from './ConnectionBanner'
+import { isRemoteDoorConnection } from './connection-status'
 import { routes } from './routes'
 
 // The connection status area in the top bar. “Database unavailable” also
