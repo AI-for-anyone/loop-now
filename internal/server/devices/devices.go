@@ -66,9 +66,19 @@ type Service struct {
 	Now func() time.Time
 
 	mu       sync.Mutex
-	codes    map[[sha256.Size]byte]time.Time // hash of an open code -> when it expires
+	codes    map[[sha256.Size]byte]*pairing // hash of an open code -> its pairing
+	pairings map[uuid.UUID]*pairing         // every code made in the last PairingTTL after its expiry, open or not
 	failures []time.Time
 	live     map[uuid.UUID]map[*tracked]struct{}
+}
+
+// pairing is what the server remembers of a code: not the code, only when it expires and who used it.
+type pairing struct {
+	id        uuid.UUID
+	expiresAt time.Time
+	// usedBy is the device that paired with it; evicted marks a code pushed out by newer ones (it reads as expired).
+	usedBy  *store.DeviceSession
+	evicted bool
 }
 
 type tracked struct{ cancel context.CancelFunc }
@@ -80,10 +90,27 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-// Pairing is a new one-time code; Code is shown only now.
+// Pairing is a new one-time code; Code is shown only now. ID names it for PairingStatus.
 type Pairing struct {
+	ID        uuid.UUID
 	Code      string
 	ExpiresAt time.Time
+}
+
+// The states of a pairing code.
+const (
+	PairingOpen    = "open"
+	PairingUsed    = "used"
+	PairingExpired = "expired"
+)
+
+// PairingStatus is whether a code was used, and by which device.
+type PairingStatus struct {
+	ID        uuid.UUID
+	State     string
+	ExpiresAt time.Time
+	// Device paired with the code (state used).
+	Device *store.DeviceSession
 }
 
 // NewPairing makes a one-time pairing code.
@@ -93,39 +120,85 @@ func (s *Service) NewPairing() (Pairing, error) {
 		return Pairing{}, err
 	}
 	code := base64.RawURLEncoding.EncodeToString(raw)
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Pairing{}, err
+	}
 	now := s.now()
-	p := Pairing{Code: code, ExpiresAt: now.Add(PairingTTL)}
+	p := Pairing{ID: id, Code: code, ExpiresAt: now.Add(PairingTTL)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneCodes(now)
 	if s.codes == nil {
-		s.codes = map[[sha256.Size]byte]time.Time{}
+		s.codes = map[[sha256.Size]byte]*pairing{}
+		s.pairings = map[uuid.UUID]*pairing{}
 	}
 	for len(s.codes) >= maxOpenCodes {
 		var oldest [sha256.Size]byte
 		var at time.Time
-		for h, exp := range s.codes {
-			if at.IsZero() || exp.Before(at) {
-				oldest, at = h, exp
+		for h, pr := range s.codes {
+			if at.IsZero() || pr.expiresAt.Before(at) {
+				oldest, at = h, pr.expiresAt
 			}
 		}
+		s.codes[oldest].evicted = true
 		delete(s.codes, oldest)
 	}
-	s.codes[sha256.Sum256([]byte(code))] = p.ExpiresAt
+	pr := &pairing{id: id, expiresAt: p.ExpiresAt}
+	s.codes[sha256.Sum256([]byte(code))] = pr
+	s.pairings[id] = pr
 	return p, nil
 }
 
+// pruneCodes forgets expired codes, and their records PairingTTL after they expired.
 func (s *Service) pruneCodes(now time.Time) {
-	for h, exp := range s.codes {
-		if !now.Before(exp) {
+	for h, pr := range s.codes {
+		if !now.Before(pr.expiresAt) {
 			delete(s.codes, h)
+		}
+	}
+	for id, pr := range s.pairings {
+		if !now.Before(pr.expiresAt.Add(PairingTTL)) {
+			delete(s.pairings, id)
 		}
 	}
 }
 
-// takeCode uses a code up; it fails when the code is wrong, has expired or was used, and while too many wrong codes
-// came in the last minute.
-func (s *Service) takeCode(code string) error {
+// PairingStatus reports whether a code is open, used (and by which device, as it is now when it is still paired) or
+// expired; NotFound once the server no longer remembers it (PairingTTL after it expired, or after a restart).
+func (s *Service) PairingStatus(ctx context.Context, id uuid.UUID) (PairingStatus, error) {
+	now := s.now()
+	s.mu.Lock()
+	s.pruneCodes(now)
+	pr := s.pairings[id]
+	var st PairingStatus
+	if pr != nil {
+		st = PairingStatus{ID: pr.id, ExpiresAt: pr.expiresAt, State: PairingOpen}
+		switch {
+		case pr.usedBy != nil:
+			d := *pr.usedBy
+			st.State, st.Device = PairingUsed, &d
+		case pr.evicted || !now.Before(pr.expiresAt):
+			st.State = PairingExpired
+		}
+	}
+	s.mu.Unlock()
+	if pr == nil {
+		return PairingStatus{}, apperr.NotFound("Pairing code")
+	}
+	if st.Device != nil {
+		if d, _, err := s.Store.LookupDeviceSession(ctx, st.Device.ID); err == nil {
+			st.Device = &d
+		} else if !store.IsNotFound(err) {
+			return PairingStatus{}, err
+		}
+	}
+	return st, nil
+}
+
+// takeCode uses a code up and returns its pairing; it fails when the code is wrong, has expired or was used, and
+// while too many wrong codes came in the last minute.
+func (s *Service) takeCode(code string) (*pairing, error) {
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -137,17 +210,18 @@ func (s *Service) takeCode(code string) error {
 	}
 	s.failures = kept
 	if len(s.failures) >= failureLimit {
-		return &apperr.Error{Status: http.StatusTooManyRequests, Code: apperr.CodeRateLimited, Message: "Too many wrong pairing codes. Try again in a minute."}
+		return nil, &apperr.Error{Status: http.StatusTooManyRequests, Code: apperr.CodeRateLimited, Message: "Too many wrong pairing codes. Try again in a minute."}
 	}
 	s.pruneCodes(now)
 	h := sha256.Sum256([]byte(code))
-	if _, ok := s.codes[h]; !ok {
+	pr, ok := s.codes[h]
+	if !ok {
 		s.failures = append(s.failures, now)
-		return &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodePairingCodeInvalid,
+		return nil, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodePairingCodeInvalid,
 			Message: "The pairing code is wrong, has expired or was already used. Make a new one in Settings on the computer."}
 	}
 	delete(s.codes, h)
-	return nil
+	return pr, nil
 }
 
 // CleanName trims a device name and checks it: 1 to 64 characters, no control characters.
@@ -176,7 +250,8 @@ func (s *Service) Pair(ctx context.Context, code, name, userAgent string, addres
 	} else {
 		name = NameFromUserAgent(userAgent)
 	}
-	if err := s.takeCode(code); err != nil {
+	pr, err := s.takeCode(code)
+	if err != nil {
 		return store.DeviceSession{}, "", err
 	}
 	tok, err := auth.NewToken(auth.DevicePrefix)
@@ -188,6 +263,10 @@ func (s *Service) Pair(ctx context.Context, code, name, userAgent string, addres
 	if err != nil {
 		return store.DeviceSession{}, "", err
 	}
+	s.mu.Lock()
+	used := d
+	pr.usedBy = &used
+	s.mu.Unlock()
 	return d, tok.Plain, nil
 }
 

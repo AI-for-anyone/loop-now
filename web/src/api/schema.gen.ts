@@ -863,11 +863,11 @@ export interface paths {
         };
         /**
          * Read the remote door, the listener phones and other devices use
-         * @description The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. A tunnel
-         *     (a later step) forwards to it; until then it can be opened only on this computer. It serves the same console,
-         *     and every API request on it needs a paired device's session (see the access scope in the description of this
-         *     file). url is the remote door's own address while it listens, which pairing links use until there is a public
-         *     address.
+         * @description The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. The
+         *     tunnel (GET /tunnel) forwards to it; without the tunnel it can be opened only on this computer. It serves the
+         *     same console, and every API request on it needs a paired device's session (see the access scope in the
+         *     description of this file). url is the remote door's own address while it listens, which pairing links use
+         *     while the tunnel is not online.
          */
         get: operations["getRemoteAccess"];
         /**
@@ -876,7 +876,9 @@ export interface paths {
          *     omitted, at a port the server picks and keeps across restarts while it is free. Turning it off or changing the
          *     port closes the old listener and every connection on it, open event streams included. When the server cannot
          *     listen (for example the port is in use) the setting is still saved and state is failed with the reason; the
-         *     next start tries again. Paired devices stay paired while the door is off.
+         *     next start tries again. Paired devices stay paired while the door is off. Turning it off also turns access
+         *     from phones (PUT /tunnel) off; changing the port while the tunnel runs brings the tunnel up again at the new
+         *     port.
          */
         put: operations["putRemoteAccess"];
         post?: never;
@@ -898,12 +900,40 @@ export interface paths {
         /**
          * Make a one-time code that pairs a phone or another device
          * @description The code works once, for 10 minutes, at the remote door's POST /device-sessions. url is the pairing link,
-         *     `<remote door address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or
-         *     query and is never logged; the console shows it as a QR code and a link. Several codes may be open at a time.
-         *     The server keeps only a hash of each code, in memory: a restart ends all open codes.
+         *     `<address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or query and
+         *     is never logged; the console shows it as a QR code and a link. The address is the tunnel's public address
+         *     (`https://<hostname>`, see GET /tunnel) while the tunnel is online, otherwise the remote door's own loopback
+         *     address. Several codes may be open at a time. The server keeps only a hash of each code, in memory: a restart
+         *     ends all open codes. id names this code for GET /device-pairings/{pairingId}, which tells when it was used and
+         *     by which device.
          *     Errors: 409 remote_access_off when the remote door is not listening.
          */
         post: operations["createDevicePairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/device-pairings/{pairingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pairingId: components["parameters"]["PairingId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read whether a pairing code was used, and by which device
+         * @description state is open while the code can still be used, used once a device paired with it (device is that device),
+         *     expired when its 10 minutes passed unused. The console's add-device dialog reads it to name the device that
+         *     used this code and to stop showing a used code. The server remembers a code for 10 minutes after it expires;
+         *     after that, and after a restart, it returns 404.
+         */
+        get: operations["getDevicePairing"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -982,6 +1012,124 @@ export interface paths {
         head?: never;
         /** Rename a paired device */
         patch: operations["updateDevice"];
+        trace?: never;
+    };
+    "/relay-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read which Loop Now account this computer is signed in to
+         * @description A Loop Now account (at the relay, relayUrl) gives this computer a tunnel address for phones (see GET /tunnel).
+         *     The relay reports only the account's id. signIn is the sign-in waiting for the browser, if any; error says why
+         *     the last sign-in did not finish. The host credential the relay issued is kept in the data folder, readable only
+         *     by the user the server runs as, and never shown or logged.
+         */
+        get: operations["getRelayAccount"];
+        put?: never;
+        post?: never;
+        /**
+         * Sign out of the Loop Now account
+         * @description Stops the tunnel (cloudflared), turns access from phones off, asks the relay to revoke the credential and
+         *     deletes it from the data folder, even when the relay cannot be reached. The tunnel address stays reserved for
+         *     this computer at the relay: signing in to the same account again brings it back. Signing out when not signed
+         *     in does nothing.
+         */
+        delete: operations["signOutRelayAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relay-account/sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start signing in to a Loop Now account in the system browser
+         * @description The server makes a PKCE verifier and a state, listens once on 127.0.0.1 at a free port for the browser's
+         *     return, and answers with url, the relay's sign-in page to open in the system browser (the desktop app opens it
+         *     with the system browser; in a browser the console opens it in a new tab; the server also writes it to its
+         *     log). After the person signs in and approves there, the browser returns to the server, which checks the state,
+         *     exchanges the code for the host credential and stores it; GET /relay-account then reads signedIn true. The
+         *     server waits until expiresAt (10 minutes). Starting again replaces a sign-in that is still waiting.
+         *     Errors: 409 relay_signed_in when already signed in (sign out first).
+         */
+        post: operations["startRelaySignIn"];
+        /**
+         * Stop waiting for the browser
+         * @description Closes the sign-in's loopback listener; a browser that returns later finds nothing. Does nothing when no sign-in waits.
+         */
+        delete: operations["cancelRelaySignIn"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tunnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the tunnel that lets phones reach this computer
+         * @description With access from phones on, this computer has an address `https://<hostname>` at the relay and runs
+         *     `cloudflared`, which keeps a Cloudflare Tunnel open from this computer to Cloudflare and forwards to the remote
+         *     door. state tells how far it got; error and errorCode why it failed; retryAt when the server tries again.
+         */
+        get: operations["getTunnel"];
+        /**
+         * Turn access from phones on or off
+         * @description Saved and applied at once; the answer comes before the tunnel is up (poll GET /tunnel). On (needs a signed-in
+         *     account): turns the remote door on, registers this computer at the relay once (its address stays the same
+         *     from then on), brings the tunnel up, gets cloudflared (a configured path, one on PATH, or a pinned release
+         *     downloaded from Cloudflare's GitHub releases into the data folder with its SHA-256 checked) and runs it. When
+         *     cloudflared exits, the server brings the tunnel up again and restarts it, waiting longer after each quick
+         *     failure (up to a minute). At start-up with the switch on, it does the same. Off: stops cloudflared; the remote
+         *     door stays as it is, and the address stays reserved. Turning the remote door off (PUT /remote-access) turns
+         *     this off too.
+         *     Errors: 409 relay_signed_out when turning it on without a signed-in account.
+         */
+        put: operations["putTunnel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tunnel/address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Release this computer's tunnel address
+         * @description Turns access from phones off, stops cloudflared and asks the relay to delete the tunnel, its DNS record and the
+         *     address; then forgets the address. The address does not come back: turning access on again gets a new one, and
+         *     paired devices must open the new address. Releasing when there is no address does nothing.
+         *     Errors: 409 relay_signed_out when not signed in (the address stays; sign in to release it); 502 relay_failed
+         *     when the relay refused or could not be reached (the address stays; try again).
+         */
+        delete: operations["releaseTunnelAddress"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/model-providers/{providerId}/models": {
@@ -4360,10 +4508,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - remote_access_off: a pairing code needs the remote door to be listening (409) - pairing_code_invalid: the pairing code is wrong, has expired or was already used (403) - rate_limited: too many attempts; try again in a minute (429) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - remote_access_off: a pairing code needs the remote door to be listening (409) - pairing_code_invalid: the pairing code is wrong, has expired or was already used (403) - rate_limited: too many attempts; try again in a minute (429) - relay_signed_in: this computer is already signed in to a Loop Now account; sign out first (409) - relay_signed_out: this needs a signed-in Loop Now account (409) - relay_failed: the Loop Now relay refused the request or could not be reached; the message carries its reason (502) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "remote_access_off" | "pairing_code_invalid" | "rate_limited" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "remote_access_off" | "pairing_code_invalid" | "rate_limited" | "relay_signed_in" | "relay_signed_out" | "relay_failed" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -4827,12 +4975,30 @@ export interface components {
             error: string | null;
         };
         DevicePairing: {
+            /**
+             * Format: uuid
+             * @description Names this code for GET /device-pairings/{pairingId}
+             */
+            id: string;
             /** @description The one-time code */
             code: string;
-            /** @description The pairing link: <remote door address>/pair#<code> */
+            /** @description The pairing link: <address>/pair#<code>, the tunnel's public address while it is online */
             url: string;
             /** Format: date-time */
             expiresAt: string;
+        };
+        DevicePairingStatus: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description open while the code can be used; used once a device paired with it; expired when its time passed unused
+             * @enum {string}
+             */
+            state: "open" | "used" | "expired";
+            /** Format: date-time */
+            expiresAt: string;
+            /** @description The device that paired with this code when state is used (as it was when it paired); null otherwise */
+            device: components["schemas"]["Device"] | null;
         };
         DeviceSessionRequest: {
             code: string;
@@ -4869,6 +5035,91 @@ export interface components {
         };
         DevicePatch: {
             name: string;
+        };
+        RelayAccount: {
+            /** @description The relay this server signs in to, such as https://relay.loop-now.app */
+            relayUrl: string;
+            signedIn: boolean;
+            /** @description The account's id at the relay while signed in (the relay reports no name or email yet); null otherwise */
+            accountId: string | null;
+            /**
+             * Format: date-time
+             * @description When this computer signed in; null when signed out
+             */
+            signedInAt: string | null;
+            /** @description The sign-in waiting for the browser; null when none waits */
+            signIn: components["schemas"]["RelaySignIn"] | null;
+            /**
+             * @description Why the last sign-in did not finish (cancelled in the browser, timed out, or refused by the relay), in
+             *     English; null after a sign-in succeeded and while a new one waits
+             */
+            error: string | null;
+        };
+        RelaySignIn: {
+            /** @description The relay's sign-in page (…/connect?redirect_uri=…), to open in the system browser */
+            url: string;
+            /**
+             * Format: date-time
+             * @description When the server stops waiting for the browser
+             */
+            expiresAt: string;
+        };
+        TunnelSettings: {
+            /** @description Access from phones through the tunnel */
+            enabled: boolean;
+        };
+        Tunnel: {
+            /** @description The saved switch "access from phones" */
+            enabled: boolean;
+            /**
+             * @description off: the switch is off. starting: registering this computer or bringing the tunnel up at the relay, or
+             *     finding cloudflared. downloading: downloading cloudflared (see download). connecting: cloudflared runs and
+             *     has no connection to Cloudflare yet. online: cloudflared has a connection and url reaches this computer.
+             *     failed: see error and errorCode; when retryAt is set the server tries again then, otherwise it waits for
+             *     the person (sign in again, release an address, change the setting).
+             * @enum {string}
+             */
+            state: "off" | "starting" | "downloading" | "connecting" | "online" | "failed";
+            /** @description This computer's address at the relay, such as k3v9q2x7m4tb.loop-now.app; known after the first registration and kept until it is released */
+            hostname: string | null;
+            /** @description https://<hostname>, the address phones open; null while there is no hostname */
+            url: string | null;
+            /** @description What went wrong last, in English; null while nothing is wrong */
+            error: string | null;
+            /**
+             * @description Why it failed, for the console to explain; null while nothing is wrong. signed_out: the relay no longer
+             *     accepts this computer's credential (sign in again; the switch stays on). host_limit_reached: the account
+             *     has as many computers as it may (release one on another computer). relay_unavailable: the relay could not
+             *     be reached or failed. cloudflared_unavailable: cloudflared could not be found or downloaded, or this
+             *     platform has no pinned release. cloudflared_failed: cloudflared exited or could not connect.
+             *     remote_door_failed: the remote door could not listen (see GET /remote-access).
+             */
+            errorCode: ("signed_out" | "host_limit_reached" | "relay_unavailable" | "cloudflared_unavailable" | "cloudflared_failed" | "remote_door_failed") | null;
+            /**
+             * Format: date-time
+             * @description When the server tries again after a failure; null when it does not
+             */
+            retryAt: string | null;
+            /** @description The cloudflared download in progress while state is downloading; null otherwise */
+            download: components["schemas"]["TunnelDownload"] | null;
+            /** @description The cloudflared the server runs or last ran; null before it found one */
+            cloudflared: components["schemas"]["Cloudflared"] | null;
+        };
+        TunnelDownload: {
+            /** @description The pinned cloudflared release being downloaded */
+            version: string;
+            receivedBytes: number;
+            /** @description The download's size; null when the server did not say */
+            totalBytes: number | null;
+        };
+        Cloudflared: {
+            path: string;
+            version: string;
+            /**
+             * @description configured: LOOP_NOW_CLOUDFLARED_PATH; path: found on PATH; downloaded: the pinned release in the data folder
+             * @enum {string}
+             */
+            source: "configured" | "path" | "downloaded";
         };
         PathPick: {
             /** @description The full path chosen, on the computer the server runs on; null when the person cancelled */
@@ -10165,7 +10416,7 @@ export interface components {
          *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
          *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
          *     `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
-         *     `path_picker_busy`, `remote_access_off`.
+         *     `path_picker_busy`, `remote_access_off`, `relay_signed_in`, `relay_signed_out`.
          */
         Conflict: {
             headers: {
@@ -10282,6 +10533,7 @@ export interface components {
         SkillId: string;
         AgentSkillId: string;
         DeviceId: string;
+        PairingId: string;
         ProviderId: string;
         CliName: components["schemas"]["CliName"];
         MessageId: string;
@@ -12769,6 +13021,33 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    getDevicePairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pairingId: components["parameters"]["PairingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The code's state */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePairingStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     createDeviceSession: {
         parameters: {
             query?: never;
@@ -12880,6 +13159,187 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getRelayAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    signOutRelayAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out */
+            204: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    startRelaySignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sign-in, waiting for the browser */
+            201: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelaySignIn"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelRelaySignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped */
+            204: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getTunnel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The switch and what the tunnel does now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tunnel"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putTunnel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TunnelSettings"];
+            };
+        };
+        responses: {
+            /** @description The switch and what the tunnel does now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tunnel"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    releaseTunnelAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released */
+            204: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The relay refused or could not be reached (relay_failed); the message carries its reason */
+            502: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listModels: {

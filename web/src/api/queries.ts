@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { config } from '@/config'
 import { lastScope, PLATFORM, renamedHere, scopeQueryKey, type ScopeKey, type ScopeQuery } from '@/lib/scope'
-import { api, ApiError, archiveBody, call, deviceAuth, requestIdOf, toApiError, type Schemas } from './client'
+import { api, ApiError, archiveBody, call, deviceAuth, isUnreachableResponse, requestIdOf, toApiError, type Schemas } from './client'
 import { sleepProjections } from '@/features/sleep/projection'
 
 export const keys = {
@@ -91,8 +91,11 @@ export function useHealth() {
       } catch {
         throw new ApiError({ status: 0, code: 'unreachable' })
       }
+      if (isUnreachableResponse(result.response)) throw new ApiError({ status: 0, code: 'unreachable' })
       if (result.response.ok && result.data) return result.data
-      if (result.response.status === 503 && result.error) return result.error as Schemas['Health']
+      if (result.response.status === 503 && typeof result.error === 'object' && result.error !== null && 'database' in result.error) {
+        return result.error as Schemas['Health']
+      }
       throw toApiError(result.response.status, result.error, requestIdOf(result.response))
     },
   })

@@ -53,6 +53,9 @@ func (s *Server) putRemoteAccess(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if s.Relay != nil {
+		s.Relay.DoorChanged(st)
+	}
 	writeJSON(w, http.StatusOK, st)
 }
 
@@ -71,7 +74,14 @@ func (s *Server) createDevicePairing(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, apitypes.DevicePairing{Code: p.Code, URL: *st.URL + "/pair#" + p.Code, ExpiresAt: p.ExpiresAt.UTC()})
+	// The tunnel's public address while it is online; the remote door's own loopback address otherwise.
+	base := *st.URL
+	if s.Relay != nil {
+		if u, ok := s.Relay.OnlineURL(); ok {
+			base = u
+		}
+	}
+	writeJSON(w, http.StatusCreated, apitypes.DevicePairing{ID: p.ID, Code: p.Code, URL: base + "/pair#" + p.Code, ExpiresAt: p.ExpiresAt.UTC()})
 }
 
 func (s *Server) createDeviceSession(w http.ResponseWriter, r *http.Request) {

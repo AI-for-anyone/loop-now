@@ -12,4 +12,6 @@ export const connection = {
   unreachableTitle: '无法连接到服务端',
   unreachableBody: (apiBase: string, origin: string) =>
     `控制台访问的服务端地址是 ${apiBase}。可能的原因：服务端没有启动；或者当前控制台地址 ${origin} 不在服务端允许的来源中（LOOP_NOW_CONSOLE_ORIGINS）。`,
+  unreachableBodyRemote: (origin: string) =>
+    `无法连接到 ${origin}。运行 Loop Now 的电脑可能已离线、休眠，或者“允许从手机访问”已关闭。`,
 } as const

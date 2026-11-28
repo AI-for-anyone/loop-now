@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, ApiError, call, rawBody, REQUEST_ID_HEADER, toApiError, type Schemas } from './client'
+import { api, ApiError, call, isUnreachableHttpResponse, rawBody, REQUEST_ID_HEADER, toApiError, VERSION_HEADER, type Schemas } from './client'
 import { config } from '@/config'
 import type { FolderSource, UploadItem } from '@/features/folders/folder-source'
 import { joinPath } from '@/features/folders/folder-source'
@@ -78,6 +78,16 @@ function putContent(scope: FolderScope, path: string, body: Blob, create: boolea
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     if (onProgress) xhr.upload.onprogress = (event) => onProgress(event.loaded)
     xhr.onload = () => {
+      if (
+        isUnreachableHttpResponse({
+          status: xhr.status,
+          contentType: xhr.getResponseHeader('Content-Type'),
+          hasVersionHeader: Boolean(xhr.getResponseHeader(VERSION_HEADER)),
+        })
+      ) {
+        reject(new ApiError({ status: 0, code: 'unreachable' }))
+        return
+      }
       let parsed: unknown = xhr.responseText
       try { parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null } catch { /* Error bodies that are not JSON are kept as they are */ }
       if (xhr.status >= 200 && xhr.status < 300) resolve(parsed as Entry)

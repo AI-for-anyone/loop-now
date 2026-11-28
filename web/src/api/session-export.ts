@@ -1,5 +1,5 @@
 import { config } from '@/config'
-import { ApiError, requestIdOf, toApiError } from './client'
+import { ApiError, isUnreachableResponse, requestIdOf, toApiError } from './client'
 
 export type SessionExportFormat = 'html' | 'jsonl'
 
@@ -31,6 +31,9 @@ export async function downloadAgentSession(agentId: string, format: SessionExpor
   try {
     response = await fetch(`${config.apiBase}/agents/${encodeURIComponent(agentId)}/session/export?format=${encodeURIComponent(format)}`)
   } catch {
+    throw new ApiError({ status: 0, code: 'unreachable' })
+  }
+  if (isUnreachableResponse(response)) {
     throw new ApiError({ status: 0, code: 'unreachable' })
   }
   if (!response.ok) {

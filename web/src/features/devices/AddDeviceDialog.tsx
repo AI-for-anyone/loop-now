@@ -1,13 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { CheckIcon, CopyIcon, RefreshCwIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
-import { useCreateDevicePairing, useDevices } from '@/api/devices'
+import { deviceKeys, useCreateDevicePairing, useDevicePairingStatus } from '@/api/devices'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { t } from '@/i18n'
 import { copyText } from '@/lib/clipboard'
+import { isNotFound } from '@/lib/errors'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import { QrCode } from './QrCode'
@@ -21,29 +23,42 @@ function isLocalhostUrl(raw: string): boolean {
   }
 }
 
-// One-time QR code and pairing link dialog. The code and link live only in component state (never in query cache or storage) and are
-// cleared on close. While open, the paired-devices list refreshes every 2 seconds so a newly paired device is confirmed live.
+// One-time QR code and pairing link dialog. The secret code and link live only in component state (never in query cache or storage) and
+// are cleared on close or as soon as this code is used. While open, GET /device-pairings/{pairingId} tracks this exact code so the paired
+// notice always names the device that redeemed it and the used QR disappears immediately.
 export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
   const copy = t.devices.addDialog
+  const queryClient = useQueryClient()
   const createPairing = useCreateDevicePairing()
-  const devices = useDevices(true, { refetchInterval: 2000 })
   const [pairing, setPairing] = useState<Schemas['DevicePairing'] | null>(null)
+  const [paired, setPaired] = useState<{ pairingId: string; device: Schemas['Device'] | null } | null>(null)
   const [copied, setCopied] = useState(false)
   const linkLabelId = useId()
   const startedRef = useRef(false)
-  const [initialIds, setInitialIds] = useState<Set<string> | null>(null)
+  const invalidatedRef = useRef<string | null>(null)
 
-  // Capture the devices already present when the dialog opened so we can highlight a device that pairs while it is open.
-  if (initialIds === null && devices.data) {
-    setInitialIds(new Set(devices.data.devices.map((d) => d.id)))
+  const pairingStatus = useDevicePairingStatus(pairing?.id ?? null)
+  const currentStatus = pairing && pairingStatus.data?.id === pairing.id ? pairingStatus.data : null
+
+  if (pairing && currentStatus?.state === 'used') {
+    setPaired({ pairingId: pairing.id, device: currentStatus.device })
+    setPairing(null)
+    setCopied(false)
   }
 
-  const newlyPaired = initialIds ? devices.data?.devices.find((d) => !initialIds.has(d.id)) ?? null : null
+  useEffect(() => {
+    if (!paired || invalidatedRef.current === paired.pairingId) return
+    invalidatedRef.current = paired.pairingId
+    void queryClient.invalidateQueries({ queryKey: deviceKeys.devices })
+  }, [paired, queryClient])
 
   const generate = () => {
     setCopied(false)
     createPairing.mutate(undefined, {
-      onSuccess: (created) => setPairing(created),
+      onSuccess: (created) => {
+        setPaired(null)
+        setPairing(created)
+      },
     })
   }
 
@@ -51,7 +66,10 @@ export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
     if (startedRef.current) return
     startedRef.current = true
     createPairing.mutate(undefined, {
-      onSuccess: (created) => setPairing(created),
+      onSuccess: (created) => {
+        setPaired(null)
+        setPairing(created)
+      },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -59,7 +77,9 @@ export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
   const expiresAtMs = pairing ? Date.parse(pairing.expiresAt) : null
   const now = useNow(1000, expiresAtMs !== null)
   const remainingMs = expiresAtMs !== null ? Math.max(0, expiresAtMs - now) : 0
-  const expired = expiresAtMs !== null && remainingMs === 0
+  const expired =
+    pairing !== null &&
+    (currentStatus?.state === 'expired' || isNotFound(pairingStatus.error) || (expiresAtMs !== null && remainingMs === 0))
 
   const handleCopy = async () => {
     if (!pairing) return
@@ -69,6 +89,7 @@ export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
 
   const close = () => {
     setPairing(null)
+    setPaired(null)
     onClose()
   }
 
@@ -80,19 +101,22 @@ export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
           <DialogDescription>{copy.intro}</DialogDescription>
         </DialogHeader>
 
-        {newlyPaired && (
-          <div
-            role="status"
-            className="flex items-center gap-2 rounded-card border border-green-text/25 bg-tint-green px-3.5 py-2.5 text-[13.5px] font-medium text-green-text"
-          >
-            <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
-            <span>{copy.pairedNotice(newlyPaired.name)}</span>
+        {paired && (
+          <div className="flex flex-col gap-3 py-2">
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-card border border-green-text/25 bg-tint-green px-3.5 py-2.5 text-[13.5px] font-medium text-green-text"
+            >
+              <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
+              <span>{paired.device ? copy.pairedNotice(paired.device.name) : copy.pairedGeneric}</span>
+            </div>
+            <p className="text-[13px] leading-[1.6] text-ink-700">{copy.usedHint}</p>
           </div>
         )}
 
         <ErrorAlert error={createPairing.error} />
 
-        {createPairing.isPending && !pairing && (
+        {createPairing.isPending && !pairing && !paired && (
           <p className="py-8 text-center text-[14px] text-ink-500">{copy.generating}</p>
         )}
 

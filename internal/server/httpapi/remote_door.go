@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -63,22 +64,23 @@ func (s *Server) RemoteHandler() http.Handler {
 	if s.O.Console != nil {
 		root.Handle("/", s.O.Console)
 	}
-	return withCommonHeaders(s.logRequests(withDoor(DoorRemote, remoteOrigin(root))))
+	return withCommonHeaders(s.logRequests(withDoor(DoorRemote, s.remoteOrigin(root))))
 }
 
 func isWrite(method string) bool {
 	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
 }
 
-// remoteOrigin refuses requests whose Origin is not the remote door's own (http or https with this request's Host),
-// `Origin: null` included, and writes without an Origin. Browsers send Origin on every write and on cross-origin
-// reads, and pages cannot change Host, so a page from another site, a sibling subdomain or a sandboxed file view cannot
-// act as the console here even when its requests carry the session cookie.
-func remoteOrigin(next http.Handler) http.Handler {
+// remoteOrigin refuses requests whose Origin is not one of the remote door's own, `Origin: null` included, and writes
+// without an Origin. Browsers send Origin on every write and on cross-origin reads, so a page from another site, a
+// sibling subdomain or a sandboxed file view cannot act as the console here even when its requests carry the session
+// cookie. The door's own origins come from what it knows, never from the request: its loopback address, and the
+// tunnel's https://<hostname> as the relay gave it (a tunnel may or may not pass the public Host on).
+func (s *Server) remoteOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		switch {
-		case origin != "" && !remoteSameOrigin(r, origin):
+		case origin != "" && !s.remoteOwnOrigin(r, origin):
 			writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "The remote door accepts requests only from its own pages."})
 			return
 		case origin == "" && isWrite(r.Method):
@@ -89,12 +91,25 @@ func remoteOrigin(next http.Handler) http.Handler {
 	})
 }
 
-func remoteSameOrigin(r *http.Request, origin string) bool {
+func (s *Server) remoteOwnOrigin(r *http.Request, origin string) bool {
 	u, err := url.Parse(origin)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 		return false
 	}
-	return strings.EqualFold(u.Host, r.Host)
+	if s.Relay != nil {
+		if own := s.Relay.PublicOrigin(); own != "" && strings.EqualFold(origin, own) {
+			return true
+		}
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	addr, ok := r.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr)
+	if !ok {
+		return false
+	}
+	port := strconv.Itoa(addr.Port)
+	return strings.EqualFold(u.Host, net.JoinHostPort(remoteaccess.Host, port)) || strings.EqualFold(u.Host, net.JoinHostPort("localhost", port))
 }
 
 func deviceRequired() error {

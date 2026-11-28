@@ -2,11 +2,12 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useQueryClient, type Query, type QueryClient } from '@tanstack/react-query'
 import { RotateCwIcon, WifiOffIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { api, reachability } from '@/api/client'
-import { useContextInfo } from '@/api/queries'
+import { api, deviceAuth, reachability } from '@/api/client'
+import { useContextInfo, useHealth } from '@/api/queries'
 import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { isUnreachable } from '@/lib/errors'
+import { isRemoteDoorConnection } from './connection-status'
 
 const failedToConnect = (query: Query) => isUnreachable(query.state.error)
 
@@ -22,8 +23,10 @@ async function retry(client: QueryClient) {
 
 // Show the global connection notice when any request does not reach the server; it disappears as soon as any later request gets a response.
 export function ConnectionBanner() {
-  // Read the default context at startup, which also serves as the first connection probe.
-  useContextInfo()
+  // Read the default context at startup, and keep /health polling active even when the sidebar is collapsed so disconnections and
+  // recoveries are detected automatically.
+  const context = useContextInfo()
+  useHealth()
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const client = useQueryClient()
   const wasReachable = useRef(reachable)
@@ -35,6 +38,9 @@ export function ConnectionBanner() {
   }, [reachable, client])
 
   if (reachable) return null
+  const apiBase = absoluteApiBase()
+  const origin = window.location.origin
+  const remoteDoor = isRemoteDoorConnection(context.data?.door ?? deviceAuth.door(), apiBase, origin)
   // Full-width unreachable banner driven by semantic theme tokens.
   return (
     <div
@@ -52,7 +58,7 @@ export function ConnectionBanner() {
           {t.connection.unreachableTitle}
         </h2>
         <p className="text-[13.5px] leading-relaxed break-words text-ink-700">
-          {t.connection.unreachableBody(absoluteApiBase(), window.location.origin)}
+          {remoteDoor ? t.connection.unreachableBodyRemote(origin) : t.connection.unreachableBody(apiBase, origin)}
         </p>
       </div>
       <Button variant="ink" size="lg" className="flex-none" onClick={() => void retry(client)}>

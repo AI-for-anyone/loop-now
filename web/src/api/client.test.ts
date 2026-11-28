@@ -50,9 +50,13 @@ describe('call', () => {
     expect(error).toMatchObject({ status, code })
   })
 
-  it('an error outside the contract format maps to unknown', async () => {
+  it('an error outside the contract format maps to unknown, and raw HTML is never exposed as serverMessage', async () => {
     server.use(http.get(apiUrl('/skills'), () => new HttpResponse('Forbidden', { status: 403 })))
     await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 403, code: 'unknown', serverMessage: 'Forbidden' })
+
+    const html = '<!doctype html><!--[if lt IE 7]><html><body>Bad gateway · Ray ID: 12345</body></html>'
+    expect(toApiError(502, html)).toMatchObject({ status: 502, code: 'unknown', serverMessage: null })
+    expect(toApiError(500, '  <!-- proxy --> <html><body>Oops</body></html>')).toMatchObject({ status: 500, code: 'unknown', serverMessage: null })
   })
 
   it('a network error maps to unreachable', async () => {
@@ -122,6 +126,70 @@ describe('reachability', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     expect(reachability.isReachable()).toBe(true)
     releaseOld(false)
+  })
+
+  it('at the remote door, Cloudflare/gateway 530, 502 HTML, 503/504/52x and responses missing Loop-Now-Version count as unreachable, and recovery clears it', async () => {
+    deviceAuth.noteDoor('remote')
+    const cloudflareHtml = '<!doctype html><!--[if lt IE 7]><html><body>Bad gateway Ray ID: cf-999</body></html>'
+
+    // First reach a real Loop Now server that sends Loop-Now-Version.
+    server.use(
+      http.get(apiUrl('/skills'), () => HttpResponse.json({ skills: [] }, { headers: { 'Loop-Now-Version': '0.3.6' } })),
+    )
+    await expect(call(api.GET('/skills'))).resolves.toEqual({ skills: [] })
+    expect(reachability.isReachable()).toBe(true)
+
+    // Tunnel turned off: Cloudflare returns 530 text/plain without Loop-Now-Version.
+    server.use(
+      http.get(apiUrl('/skills'), () => new HttpResponse('error code: 1033', { status: 530, headers: { 'Content-Type': 'text/plain' } })),
+    )
+    await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 0, code: 'unreachable' })
+    expect(reachability.isReachable()).toBe(false)
+
+    // Server stopped: Cloudflare returns 502 HTML without Loop-Now-Version.
+    server.use(
+      http.post(apiUrl('/agents/a1/messages'), () => new HttpResponse(cloudflareHtml, { status: 502, headers: { 'Content-Type': 'text/html' } })),
+    )
+    const err = await call(api.POST('/agents/{agentId}/messages', { params: { path: { agentId: 'a1' } }, body: { text: 'hi' } })).catch((e) => e)
+    expect(err).toMatchObject({ status: 0, code: 'unreachable', serverMessage: null })
+    expect(reachability.isReachable()).toBe(false)
+
+    // A proxy 401 without Loop-Now-Version after seeing a real server must not lock out the device session.
+    server.use(
+      http.get(apiUrl('/skills'), () => new HttpResponse('Proxy auth required', { status: 401, headers: { 'Content-Type': 'text/plain' } })),
+    )
+    await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 0, code: 'unreachable' })
+    expect(deviceAuth.isUnauthenticated()).toBe(false)
+
+    // Genuine Loop Now 502 (with Loop-Now-Version) still surfaces its contract error code and marks reachable.
+    server.use(
+      http.get(apiUrl('/skills'), () =>
+        HttpResponse.json(errorBody('plugin_failed', 'plugin crashed'), { status: 502, headers: { 'Loop-Now-Version': '0.3.6' } }),
+      ),
+    )
+    await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 502, code: 'plugin_failed', serverMessage: 'plugin crashed' })
+    expect(reachability.isReachable()).toBe(true)
+
+    // Genuine Loop Now 401 (with Loop-Now-Version) locks out the remote device immediately.
+    server.use(
+      http.get(apiUrl('/skills'), () =>
+        HttpResponse.json(errorBody('unauthenticated'), { status: 401, headers: { 'Loop-Now-Version': '0.3.6' } }),
+      ),
+    )
+    await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 401, code: 'unauthenticated' })
+    expect(deviceAuth.isUnauthenticated()).toBe(true)
+  })
+
+  it('at the remote door even before any Loop-Now-Version was seen, 502/503/504/52x/530 and non-JSON errors count as unreachable', async () => {
+    deviceAuth.noteDoor('remote')
+    for (const status of [502, 503, 504, 522, 530]) {
+      reachability.reset()
+      server.use(
+        http.get(apiUrl('/skills'), () => new HttpResponse('<html>gateway error</html>', { status, headers: { 'Content-Type': 'text/html' } })),
+      )
+      await expect(call(api.GET('/skills'))).rejects.toMatchObject({ status: 0, code: 'unreachable' })
+      expect(reachability.isReachable()).toBe(false)
+    }
   })
 })
 

@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react'
-import { reachability } from '@/api/client'
+import { isRemoteDoorOrigin, reachability } from '@/api/client'
 import { useHealth } from '@/api/queries'
 import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
+
+export { isRemoteDoorOrigin as isRemoteDoorConnection }
 
 export type ConnectionState = 'checking' | 'connected' | 'degraded' | 'unreachable'
 

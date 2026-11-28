@@ -75,6 +75,12 @@ const (
 	EnvPluginOfficialDir   = "LOOP_NOW_PLUGIN_OFFICIAL_DIR"
 	EnvPluginMarketURL     = "LOOP_NOW_PLUGIN_MARKET_URL"
 	EnvPiAIDir             = "LOOP_NOW_PI_AI_DIR"
+	// EnvRelayURL is the Loop Now relay this server signs in to for its tunnel (https; http only on a loopback host,
+	// for a relay in local development).
+	EnvRelayURL = "LOOP_NOW_RELAY_URL"
+	// EnvCloudflaredPath is the cloudflared to run for the tunnel; when set it is the only one used (no PATH lookup,
+	// no download).
+	EnvCloudflaredPath = "LOOP_NOW_CLOUDFLARED_PATH"
 
 	EnvReconcileInterval = "LOOP_NOW_RECONCILE_INTERVAL"
 	EnvSSEKeepalive      = "LOOP_NOW_SSE_KEEPALIVE"
@@ -191,6 +197,10 @@ type Config struct {
 	// PluginMarketURL is the https URL of the official plugin market's loop-now-market.json; it defaults to the official
 	// market's index URL and can be changed to another URL.
 	PluginMarketURL string
+	// RelayURL is the Loop Now relay's origin (see EnvRelayURL), without a trailing slash.
+	RelayURL string
+	// CloudflaredPath is EnvCloudflaredPath; empty looks on PATH, then downloads the pinned release.
+	CloudflaredPath string
 
 	ReconcileInterval time.Duration
 	SSEKeepalive      time.Duration
@@ -285,6 +295,9 @@ func bundled(rel, fallback string) string {
 	}
 	return p
 }
+
+// DefaultRelayURL is the Loop Now relay (relay.DefaultURL; repeated here so config imports nothing of the server).
+const DefaultRelayURL = "https://relay.loop-now.app"
 
 // DefaultPluginMarketURL is loop-now-market.json in AI-for-anyone/loop-now-market, the official plugin market's
 // index repository.
@@ -412,6 +425,15 @@ func Load(getenv func(string) string) (*Config, error) {
 	if c.PluginMarketURL != "" {
 		p.checkURL(EnvPluginMarketURL, c.PluginMarketURL, "https")
 	}
+	c.RelayURL = strings.TrimRight(p.str(EnvRelayURL, DefaultRelayURL), "/")
+	if u, err := url.Parse(c.RelayURL); err != nil || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" ||
+		!(u.Scheme == "https" || (u.Scheme == "http" && IsLoopbackHost(u.Hostname()))) {
+		p.fail(EnvRelayURL, "Must be an https origin such as %s (http only on a loopback host); got %q.", DefaultRelayURL, c.RelayURL)
+	}
+	c.CloudflaredPath = p.str(EnvCloudflaredPath, "")
+	if c.CloudflaredPath != "" && (!filepath.IsAbs(c.CloudflaredPath) || filepath.Clean(c.CloudflaredPath) != c.CloudflaredPath) {
+		p.fail(EnvCloudflaredPath, "Must be a clean absolute path (got %q).", c.CloudflaredPath)
+	}
 
 	c.Warnings = append(c.Warnings, p.checkListenAddr(c.ListenAddr)...)
 	p.checkExternal(c)
@@ -472,6 +494,8 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("pluginHostEntry", c.PluginHostEntry),
 		slog.String("pluginOfficialDir", c.PluginOfficialDir),
 		slog.String("pluginMarketURL", c.PluginMarketURL),
+		slog.String("relayURL", c.RelayURL),
+		slog.String("cloudflaredPath", c.CloudflaredPath),
 		slog.String("piBin", c.PiBin),
 		slog.String("piVersion", c.PiVersion),
 		slog.Int("piMaxProcesses", c.PiMaxProcesses),

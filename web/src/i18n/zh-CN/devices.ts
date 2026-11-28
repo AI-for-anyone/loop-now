@@ -1,15 +1,94 @@
-import { formatElapsed } from './format'
+import type { components } from '@/api/schema.gen'
+import { formatBytes, formatElapsed } from './format'
+
+type TunnelSchema = components['schemas']['Tunnel']
+type TunnelErrorCode = NonNullable<TunnelSchema['errorCode']>
+type CloudflaredSource = components['schemas']['Cloudflared']['source']
 
 export const devices = {
   title: '手机和其它设备',
   localOnly: {
-    body: '手机和其它设备以及远程访问只能在运行 Loop Now 的那台电脑上管理。请在电脑上打开 Loop Now 来开关远程访问、添加或移除设备。',
+    body: '手机和其它设备、Loop Now 账号以及远程访问只能在运行 Loop Now 的那台电脑上管理。请在电脑上打开 Loop Now 来登录账号、开关访问、添加或移除设备。',
+  },
+  account: {
+    title: 'Loop Now 账号',
+    intro: '登录 Loop Now 账号后，中继服务会为这台电脑分配一个专属的公网地址（https://<编号>.loop-now.app），方便手机随时连回来。对话和设备登录不会经过中继服务。',
+    signIn: '登录 Loop Now 账号',
+    startingSignIn: '正在打开登录页面…',
+    signedIn: '已登录',
+    accountId: '账号 ID',
+    signedInAt: '登录时间',
+    relayUrl: '中继服务',
+    signOut: '退出登录',
+    signingOut: '正在退出…',
+    signOutHint: '退出登录会立即停止手机访问，但会保留这台电脑的公网地址；之后重新登录同一账号即可恢复使用。',
+    waitingTitle: '正在等待浏览器完成登录…',
+    waitingBody: '请在打开的浏览器窗口中登录 Loop Now 账号并确认授权，完成后这里会自动更新。',
+    expiresIn: (ms: number) => `${formatElapsed(ms)}后过期`,
+    expiredWaiting: '登录请求即将过期，如未完成可取消后重试。',
+    popupBlocked: '浏览器拦截了新窗口，请点击下方“打开登录页面”，或复制链接在当前电脑的浏览器中打开。',
+    openSignInPage: '打开登录页面',
+    copySignInLink: '复制链接',
+    signInLinkLabel: '登录链接（也可在本机浏览器中手动打开）',
+    cancelSignIn: '取消登录',
+    cancellingSignIn: '正在取消…',
+    lastSignInError: '上次登录未完成',
+    windowTitle: '正在前往 Loop Now 登录页面…',
+    windowBody: '正在准备登录链接，请稍候…',
+  },
+  tunnel: {
+    title: '从手机访问',
+    intro: '打开后会自动注册这台电脑、开启 Cloudflare 通道并获得公网地址，配对二维码也会改用这个地址。手机访问时需要这台电脑保持运行 Loop Now（桌面版关闭窗口后会留在后台继续运行，退出应用则会停止访问）。',
+    switchLabel: '允许从手机访问',
+    switchDescription: '打开后会自动开启本机远程入口、注册这台电脑并运行 cloudflared；关闭后会停止通道，已分配的地址会保留。',
+    signInFirst: '请先在上方登录 Loop Now 账号，再打开“允许从手机访问”。',
+    on: '开',
+    off: '关',
+    state: {
+      off: '已关闭',
+      starting: '正在启动…',
+      downloading: '正在下载 cloudflared…',
+      connecting: '正在连接…',
+      online: '已在线',
+      failed: '连接失败',
+    } satisfies Record<TunnelSchema['state'], string>,
+    publicAddress: '公网地址',
+    reservedAddress: '已保留地址',
+    downloadProgressLabel: 'cloudflared 下载进度',
+    downloadingDetail: (version: string, receivedBytes: number, totalBytes: number | null) =>
+      totalBytes && totalBytes > 0
+        ? `正在下载 cloudflared ${version}：${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}（${Math.min(100, Math.round((receivedBytes / totalBytes) * 100))}%）`
+        : `正在下载 cloudflared ${version}：已下载 ${formatBytes(receivedBytes)}`,
+    cloudflaredSource: {
+      configured: '已配置路径',
+      path: '系统 PATH',
+      downloaded: '自动下载',
+    } satisfies Record<CloudflaredSource, string>,
+    cloudflaredInfo: (version: string, source: string) => `cloudflared ${version}（${source}）`,
+    errorFallback: '通道启动或连接失败。',
+    errorCodes: {
+      signed_out: 'Loop Now 账号登录已失效，请在上方重新登录；开关已保持打开，重新登录后会自动恢复连接。',
+      host_limit_reached: '当前账号绑定的电脑数量已达上限。请先在其它电脑上点击“释放地址”，再重试。',
+      relay_unavailable: '暂时无法连接 Loop Now 中继服务。',
+      cloudflared_unavailable: '无法找到或下载 cloudflared，或者当前系统暂不支持自动下载。',
+      cloudflared_failed: 'cloudflared 已退出或暂时无法连接到 Cloudflare。',
+      remote_door_failed: '本机远程入口启动失败，请检查下方的本机端口设置。',
+    } satisfies Record<TunnelErrorCode, string>,
+    retryingIn: (ms: number) => `将在 ${formatElapsed(ms)} 后自动重试`,
+    retryingSoon: '即将自动重试…',
+    release: '释放地址',
+    releaseNeedsSignIn: '请先重新登录对应账号，才能释放这个地址。',
+    releaseTitle: '释放这台电脑的公网地址？',
+    releaseBody: (url: string) =>
+      `将关闭手机访问，并在中继服务中永久删除通道、DNS 记录和地址 ${url}。释放后这个地址不会再回来，下次打开会分配新地址，已配对的设备需要改用新地址访问。`,
+    releaseBodyGeneric:
+      '将关闭手机访问，并在中继服务中永久删除通道、DNS 记录和公网地址。释放后这个地址不会再回来，下次打开会分配新地址，已配对的设备需要改用新地址访问。',
   },
   remote: {
-    title: '远程访问',
-    intro: '在本机打开第二个回环端口，专门接待手机和其它设备（后续会通过隧道转到这个端口；在接入隧道之前只能在这台电脑上打开）。从这里进来的每次请求都必须来自已配对的设备。',
-    switchLabel: '允许从手机和其它设备访问',
-    switchDescription: '打开后开始监听远程入口；关闭后会立刻断开已连上的设备，再次打开时已配对的设备仍然有效。',
+    title: '本机远程入口',
+    intro: '本机回环端口，供 Cloudflare 通道转发进来（也可仅在本机直接打开测试）。打开“允许从手机访问”时会自动开启；关闭这里也会同时关闭手机访问。',
+    switchLabel: '启用本机远程入口',
+    switchDescription: '关闭后会立刻断开已连上的设备并停止通道，再次打开时已配对的设备仍然有效。',
     on: '开',
     off: '关',
     state: {
@@ -17,11 +96,11 @@ export const devices = {
       listening: '运行中',
       failed: '启动失败',
     },
-    address: '远程入口地址',
+    address: '本机入口地址',
     port: {
       label: '端口',
       placeholder: '自动分配',
-      hint: '留空由服务端自动挑选端口，重启后会尽量继续使用同一个端口。修改后立刻生效。',
+      hint: '留空由服务端自动挑选端口，重启后会尽量继续使用同一个端口。修改后立刻生效，通道运行中会自动重新指向新端口。',
       invalid: '请填写 1 到 65535 之间的整数，或留空自动分配。',
       save: '保存端口',
     },
@@ -30,7 +109,8 @@ export const devices = {
     title: '已配对的设备',
     intro: '已配对的设备拥有 Loop Now 的完整访问权限。连续 30 天没有使用会自动失效，需要重新配对。',
     add: '添加设备',
-    turnOnFirst: '请先打开上面的远程访问，再添加设备。',
+    turnOnFirst: '请先打开上面的“允许从手机访问”（或启用本机远程入口），再添加设备。',
+    tunnelStartingHint: '通道尚未在线，建议等上方显示“已在线”后再点击“添加设备”，这样二维码会直接使用公网地址。',
     empty: '还没有已配对的设备。',
     createdAt: '配对时间',
     lastSeenAt: '最近使用',
@@ -52,13 +132,15 @@ export const devices = {
     qrLabel: '设备配对二维码',
     linkLabel: '配对链接',
     copyLink: '复制链接',
-    localHint: '当前链接指向本机地址，在接入隧道之前只能在这台电脑的浏览器里打开。',
+    localHint: '当前链接指向本机地址，只能在这台电脑的浏览器里打开。要从手机扫码配对，请先打开上面的“允许从手机访问”，等通道在线后再重新生成。',
     generating: '正在生成配对码…',
     validFor: (ms: number) => `${formatElapsed(ms)}后过期 · 仅可使用一次`,
     expired: '配对码已过期',
     expiredHint: '点击“重新生成”获取新的二维码和链接。',
     regenerate: '重新生成',
     pairedNotice: (name: string) => `已配对：${name}`,
+    pairedGeneric: '设备已配对',
+    usedHint: '这个一次性配对码已使用并失效。可以关闭窗口，或点击“重新生成”继续配对另一台设备。',
   },
   pair: {
     title: '配对这台设备',

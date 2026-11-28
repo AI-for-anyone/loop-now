@@ -23,13 +23,15 @@ info:
       open to external identities; `local` is the console at the local door only (the person at this computer); `pairing`
       is the console, and at the remote door it needs no device session (pairing a device).
       - Remote door (off by default, `GET /remote-access`): a second loopback listener for phones and other devices,
-        reached later through a tunnel. It serves the same console files and `/api/v1`, but every API request needs a
+        reached through the tunnel (`GET /tunnel`). It serves the same console files and `/api/v1`, but every API request needs a
         device session (the `loop_now_device` cookie, or `__Host-loop_now_device` over HTTPS, from
         `POST /device-sessions`) except the `x-access: pairing` operations; a missing, removed or expired session returns
         401 `unauthenticated`. `x-access: local` operations return 403 `forbidden` there even with a session. The
-        listener a request arrived on decides this, never its headers. Requests whose `Origin` is not the remote door's
-        own (`http(s)://` + its Host) return 403 `forbidden_origin`, `Origin: null` included; writes (anything but GET,
-        HEAD and OPTIONS) without an `Origin` do too. `Authorization` headers are refused (403 `forbidden`); `/agent/v1`
+        listener a request arrived on decides this, never its headers. Requests whose `Origin` is not one of the remote
+        door's own return 403 `forbidden_origin`, `Origin: null` included; writes (anything but GET, HEAD and OPTIONS)
+        without an `Origin` do too. Its own origins are its loopback address (`http://127.0.0.1:<port>` and
+        `http://localhost:<port>`) and, once this computer has a tunnel address, `https://<hostname>` as the relay gave
+        it; the request's Host header does not count. `Authorization` headers are refused (403 `forbidden`); `/agent/v1`
         and the plugin `/hooks` entry are not served there.
       - Console: `/api/v1` on the loopback listener, no login; a request with an `Authorization` header (for example with an
         `lna_` or `lne_` token) returns 403 `forbidden`;
@@ -2228,11 +2230,11 @@ paths:
       x-access: local
       summary: Read the remote door, the listener phones and other devices use
       description: |
-        The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. A tunnel
-        (a later step) forwards to it; until then it can be opened only on this computer. It serves the same console,
-        and every API request on it needs a paired device's session (see the access scope in the description of this
-        file). url is the remote door's own address while it listens, which pairing links use until there is a public
-        address.
+        The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. The
+        tunnel (GET /tunnel) forwards to it; without the tunnel it can be opened only on this computer. It serves the
+        same console, and every API request on it needs a paired device's session (see the access scope in the
+        description of this file). url is the remote door's own address while it listens, which pairing links use
+        while the tunnel is not online.
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -2252,7 +2254,9 @@ paths:
         omitted, at a port the server picks and keeps across restarts while it is free. Turning it off or changing the
         port closes the old listener and every connection on it, open event streams included. When the server cannot
         listen (for example the port is in use) the setting is still saved and state is failed with the reason; the
-        next start tries again. Paired devices stay paired while the door is off.
+        next start tries again. Paired devices stay paired while the door is off. Turning it off also turns access
+        from phones (PUT /tunnel) off; changing the port while the tunnel runs brings the tunnel up again at the new
+        port.
       requestBody:
         required: true
         content:
@@ -2277,9 +2281,12 @@ paths:
       summary: Make a one-time code that pairs a phone or another device
       description: |
         The code works once, for 10 minutes, at the remote door's POST /device-sessions. url is the pairing link,
-        `<remote door address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or
-        query and is never logged; the console shows it as a QR code and a link. Several codes may be open at a time.
-        The server keeps only a hash of each code, in memory: a restart ends all open codes.
+        `<address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or query and
+        is never logged; the console shows it as a QR code and a link. The address is the tunnel's public address
+        (`https://<hostname>`, see GET /tunnel) while the tunnel is online, otherwise the remote door's own loopback
+        address. Several codes may be open at a time. The server keeps only a hash of each code, in memory: a restart
+        ends all open codes. id names this code for GET /device-pairings/{pairingId}, which tells when it was used and
+        by which device.
         Errors: 409 remote_access_off when the remote door is not listening.
       responses:
         "201":
@@ -2291,6 +2298,30 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /device-pairings/{pairingId}:
+    parameters:
+      - $ref: "#/components/parameters/PairingId"
+    get:
+      tags: [devices]
+      operationId: getDevicePairing
+      x-access: local
+      summary: Read whether a pairing code was used, and by which device
+      description: |
+        state is open while the code can still be used, used once a device paired with it (device is that device),
+        expired when its 10 minutes passed unused. The console's add-device dialog reads it to name the device that
+        used this code and to stop showing a used code. The server remembers a code for 10 minutes after it expires;
+        after that, and after a restart, it returns 404.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The code's state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DevicePairingStatus" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /device-sessions:
     post:
@@ -2390,6 +2421,157 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /relay-account:
+    get:
+      tags: [devices]
+      operationId: getRelayAccount
+      x-access: local
+      summary: Read which Loop Now account this computer is signed in to
+      description: |
+        A Loop Now account (at the relay, relayUrl) gives this computer a tunnel address for phones (see GET /tunnel).
+        The relay reports only the account's id. signIn is the sign-in waiting for the browser, if any; error says why
+        the last sign-in did not finish. The host credential the relay issued is kept in the data folder, readable only
+        by the user the server runs as, and never shown or logged.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelayAccount" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [devices]
+      operationId: signOutRelayAccount
+      x-access: local
+      summary: Sign out of the Loop Now account
+      description: |
+        Stops the tunnel (cloudflared), turns access from phones off, asks the relay to revoke the credential and
+        deletes it from the data folder, even when the relay cannot be reached. The tunnel address stays reserved for
+        this computer at the relay: signing in to the same account again brings it back. Signing out when not signed
+        in does nothing.
+      responses:
+        "204":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Signed out
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /relay-account/sign-in:
+    post:
+      tags: [devices]
+      operationId: startRelaySignIn
+      x-access: local
+      summary: Start signing in to a Loop Now account in the system browser
+      description: |
+        The server makes a PKCE verifier and a state, listens once on 127.0.0.1 at a free port for the browser's
+        return, and answers with url, the relay's sign-in page to open in the system browser (the desktop app opens it
+        with the system browser; in a browser the console opens it in a new tab; the server also writes it to its
+        log). After the person signs in and approves there, the browser returns to the server, which checks the state,
+        exchanges the code for the host credential and stores it; GET /relay-account then reads signedIn true. The
+        server waits until expiresAt (10 minutes). Starting again replaces a sign-in that is still waiting.
+        Errors: 409 relay_signed_in when already signed in (sign out first).
+      responses:
+        "201":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The sign-in, waiting for the browser
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelaySignIn" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [devices]
+      operationId: cancelRelaySignIn
+      x-access: local
+      summary: Stop waiting for the browser
+      description: Closes the sign-in's loopback listener; a browser that returns later finds nothing. Does nothing when no sign-in waits.
+      responses:
+        "204":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Stopped
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /tunnel:
+    get:
+      tags: [devices]
+      operationId: getTunnel
+      x-access: local
+      summary: Read the tunnel that lets phones reach this computer
+      description: |
+        With access from phones on, this computer has an address `https://<hostname>` at the relay and runs
+        `cloudflared`, which keeps a Cloudflare Tunnel open from this computer to Cloudflare and forwards to the remote
+        door. state tells how far it got; error and errorCode why it failed; retryAt when the server tries again.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The switch and what the tunnel does now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tunnel" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [devices]
+      operationId: putTunnel
+      x-access: local
+      summary: Turn access from phones on or off
+      description: |
+        Saved and applied at once; the answer comes before the tunnel is up (poll GET /tunnel). On (needs a signed-in
+        account): turns the remote door on, registers this computer at the relay once (its address stays the same
+        from then on), brings the tunnel up, gets cloudflared (a configured path, one on PATH, or a pinned release
+        downloaded from Cloudflare's GitHub releases into the data folder with its SHA-256 checked) and runs it. When
+        cloudflared exits, the server brings the tunnel up again and restarts it, waiting longer after each quick
+        failure (up to a minute). At start-up with the switch on, it does the same. Off: stops cloudflared; the remote
+        door stays as it is, and the address stays reserved. Turning the remote door off (PUT /remote-access) turns
+        this off too.
+        Errors: 409 relay_signed_out when turning it on without a signed-in account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TunnelSettings" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The switch and what the tunnel does now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tunnel" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /tunnel/address:
+    delete:
+      tags: [devices]
+      operationId: releaseTunnelAddress
+      x-access: local
+      summary: Release this computer's tunnel address
+      description: |
+        Turns access from phones off, stops cloudflared and asks the relay to delete the tunnel, its DNS record and the
+        address; then forgets the address. The address does not come back: turning access on again gets a new one, and
+        paired devices must open the new address. Releasing when there is no address does nothing.
+        Errors: 409 relay_signed_out when not signed in (the address stays; sign in to release it); 502 relay_failed
+        when the relay refused or could not be reached (the address stays; try again).
+      responses:
+        "204":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Released
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "502":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The relay refused or could not be reached (relay_failed); the message carries its reason
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -10946,6 +11128,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PairingId:
+      name: pairingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ProviderId:
       name: providerId
       in: path
@@ -11029,7 +11216,7 @@ components:
         `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
         project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
         `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
-        `path_picker_busy`, `remote_access_off`.
+        `path_picker_busy`, `remote_access_off`, `relay_signed_in`, `relay_signed_out`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -11326,6 +11513,9 @@ components:
 - remote_access_off: a pairing code needs the remote door to be listening (409)
 - pairing_code_invalid: the pairing code is wrong, has expired or was already used (403)
 - rate_limited: too many attempts; try again in a minute (429)
+- relay_signed_in: this computer is already signed in to a Loop Now account; sign out first (409)
+- relay_signed_out: this needs a signed-in Loop Now account (409)
+- relay_failed: the Loop Now relay refused the request or could not be reached; the message carries its reason (502)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -11388,6 +11578,9 @@ components:
           "remote_access_off",
           "pairing_code_invalid",
           "rate_limited",
+          "relay_signed_in",
+          "relay_signed_out",
+          "relay_failed",
           "background_task_not_found",
           "background_task_ended",
           "permission_request_answered",
@@ -12026,12 +12219,30 @@ components:
 
     DevicePairing:
       type: object
-      required: [code, url, expiresAt]
+      required: [id, code, url, expiresAt]
       additionalProperties: false
       properties:
+        id: { type: string, format: uuid, description: "Names this code for GET /device-pairings/{pairingId}" }
         code: { type: string, minLength: 1, description: The one-time code }
-        url: { type: string, minLength: 1, description: "The pairing link: <remote door address>/pair#<code>" }
+        url: { type: string, minLength: 1, description: "The pairing link: <address>/pair#<code>, the tunnel's public address while it is online" }
         expiresAt: { type: string, format: date-time }
+
+    DevicePairingStatus:
+      type: object
+      required: [id, state, expiresAt, device]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [open, used, expired]
+          description: open while the code can be used; used once a device paired with it; expired when its time passed unused
+        expiresAt: { type: string, format: date-time }
+        device:
+          description: The device that paired with this code when state is used (as it was when it paired); null otherwise
+          oneOf:
+            - { $ref: "#/components/schemas/Device" }
+            - { type: "null" }
 
     DeviceSessionRequest:
       type: object
@@ -12076,6 +12287,118 @@ components:
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 64 }
+
+    RelayAccount:
+      type: object
+      required: [relayUrl, signedIn, accountId, signedInAt, signIn, error]
+      additionalProperties: false
+      properties:
+        relayUrl: { type: string, minLength: 1, description: "The relay this server signs in to, such as https://relay.loop-now.app" }
+        signedIn: { type: boolean }
+        accountId:
+          type: [string, "null"]
+          description: The account's id at the relay while signed in (the relay reports no name or email yet); null otherwise
+        signedInAt:
+          type: [string, "null"]
+          format: date-time
+          description: When this computer signed in; null when signed out
+        signIn:
+          description: The sign-in waiting for the browser; null when none waits
+          oneOf:
+            - { $ref: "#/components/schemas/RelaySignIn" }
+            - { type: "null" }
+        error:
+          type: [string, "null"]
+          description: |
+            Why the last sign-in did not finish (cancelled in the browser, timed out, or refused by the relay), in
+            English; null after a sign-in succeeded and while a new one waits
+
+    RelaySignIn:
+      type: object
+      required: [url, expiresAt]
+      additionalProperties: false
+      properties:
+        url: { type: string, minLength: 1, description: "The relay's sign-in page (…/connect?redirect_uri=…), to open in the system browser" }
+        expiresAt: { type: string, format: date-time, description: When the server stops waiting for the browser }
+
+    TunnelSettings:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean, description: Access from phones through the tunnel }
+
+    Tunnel:
+      type: object
+      required: [enabled, state, hostname, url, error, errorCode, retryAt, download, cloudflared]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean, description: The saved switch "access from phones" }
+        state:
+          type: string
+          enum: [off, starting, downloading, connecting, online, failed]
+          description: |
+            off: the switch is off. starting: registering this computer or bringing the tunnel up at the relay, or
+            finding cloudflared. downloading: downloading cloudflared (see download). connecting: cloudflared runs and
+            has no connection to Cloudflare yet. online: cloudflared has a connection and url reaches this computer.
+            failed: see error and errorCode; when retryAt is set the server tries again then, otherwise it waits for
+            the person (sign in again, release an address, change the setting).
+        hostname:
+          type: [string, "null"]
+          description: This computer's address at the relay, such as k3v9q2x7m4tb.loop-now.app; known after the first registration and kept until it is released
+        url:
+          type: [string, "null"]
+          description: "https://<hostname>, the address phones open; null while there is no hostname"
+        error:
+          type: [string, "null"]
+          description: What went wrong last, in English; null while nothing is wrong
+        errorCode:
+          description: |
+            Why it failed, for the console to explain; null while nothing is wrong. signed_out: the relay no longer
+            accepts this computer's credential (sign in again; the switch stays on). host_limit_reached: the account
+            has as many computers as it may (release one on another computer). relay_unavailable: the relay could not
+            be reached or failed. cloudflared_unavailable: cloudflared could not be found or downloaded, or this
+            platform has no pinned release. cloudflared_failed: cloudflared exited or could not connect.
+            remote_door_failed: the remote door could not listen (see GET /remote-access).
+          oneOf:
+            - type: string
+              enum: [signed_out, host_limit_reached, relay_unavailable, cloudflared_unavailable, cloudflared_failed, remote_door_failed]
+            - { type: "null" }
+        retryAt:
+          type: [string, "null"]
+          format: date-time
+          description: When the server tries again after a failure; null when it does not
+        download:
+          description: The cloudflared download in progress while state is downloading; null otherwise
+          oneOf:
+            - { $ref: "#/components/schemas/TunnelDownload" }
+            - { type: "null" }
+        cloudflared:
+          description: The cloudflared the server runs or last ran; null before it found one
+          oneOf:
+            - { $ref: "#/components/schemas/Cloudflared" }
+            - { type: "null" }
+
+    TunnelDownload:
+      type: object
+      required: [version, receivedBytes, totalBytes]
+      additionalProperties: false
+      properties:
+        version: { type: string, minLength: 1, description: The pinned cloudflared release being downloaded }
+        receivedBytes: { type: integer, minimum: 0 }
+        totalBytes: { type: [integer, "null"], minimum: 0, description: "The download's size; null when the server did not say" }
+
+    Cloudflared:
+      type: object
+      required: [path, version, source]
+      additionalProperties: false
+      properties:
+        path: { type: string, minLength: 1 }
+        version: { type: string, minLength: 1 }
+        source:
+          type: string
+          enum: [configured, path, downloaded]
+          description: "configured: LOOP_NOW_CLOUDFLARED_PATH; path: found on PATH; downloaded: the pinned release in the data folder"
 
     PathPick:
       type: object

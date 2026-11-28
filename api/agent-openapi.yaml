@@ -2534,6 +2534,9 @@ components:
 - remote_access_off: a pairing code needs the remote door to be listening (409)
 - pairing_code_invalid: the pairing code is wrong, has expired or was already used (403)
 - rate_limited: too many attempts; try again in a minute (429)
+- relay_signed_in: this computer is already signed in to a Loop Now account; sign out first (409)
+- relay_signed_out: this needs a signed-in Loop Now account (409)
+- relay_failed: the Loop Now relay refused the request or could not be reached; the message carries its reason (502)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -2596,6 +2599,9 @@ components:
           "remote_access_off",
           "pairing_code_invalid",
           "rate_limited",
+          "relay_signed_in",
+          "relay_signed_out",
+          "relay_failed",
           "background_task_not_found",
           "background_task_ended",
           "permission_request_answered",

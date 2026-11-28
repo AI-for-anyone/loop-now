@@ -223,3 +223,73 @@ func TestRemoveCancelsTrackedRequests(t *testing.T) {
 		t.Fatalf("an unknown device: %v", err)
 	}
 }
+
+func TestPairingStatusNamesTheDeviceThatUsedThisCode(t *testing.T) {
+	s, c, _ := newService(t)
+	ctx := context.Background()
+	mine, _ := s.NewPairing()
+	other, _ := s.NewPairing()
+	if mine.ID == uuid.Nil || mine.ID == other.ID {
+		t.Fatalf("pairing ids: %v %v", mine.ID, other.ID)
+	}
+	st, err := s.PairingStatus(ctx, mine.ID)
+	if err != nil || st.State != devices.PairingOpen || st.Device != nil || !st.ExpiresAt.Equal(mine.ExpiresAt) {
+		t.Fatalf("open: %+v %v", st, err)
+	}
+	// Another device pairs with the other code first: this code is still open.
+	if _, _, err := s.Pair(ctx, other.Code, "Kitchen iPad", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.PairingStatus(ctx, mine.ID); st.State != devices.PairingOpen {
+		t.Fatalf("someone else's pairing changed this code: %+v", st)
+	}
+	d, _, err := s.Pair(ctx, mine.Code, "", iPhoneSafari, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err = s.PairingStatus(ctx, mine.ID)
+	if err != nil || st.State != devices.PairingUsed || st.Device == nil || st.Device.ID != d.ID || st.Device.Name != "iPhone · Safari" {
+		t.Fatalf("used: %+v %v", st, err)
+	}
+	// Renamed since: the status shows the device as it is now.
+	if _, err := s.Rename(ctx, d.ID, "My phone"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.PairingStatus(ctx, mine.ID); st.Device == nil || st.Device.Name != "My phone" {
+		t.Fatalf("after rename: %+v", st)
+	}
+	// Removed since: still named as it was.
+	if err := s.Remove(ctx, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := s.PairingStatus(ctx, mine.ID); err != nil || st.Device == nil || st.Device.ID != d.ID {
+		t.Fatalf("after removal: %+v %v", st, err)
+	}
+	unused, _ := s.NewPairing()
+	c.add(10*time.Minute + time.Second)
+	if st, err := s.PairingStatus(ctx, unused.ID); err != nil || st.State != devices.PairingExpired || st.Device != nil {
+		t.Fatalf("expired: %+v %v", st, err)
+	}
+	c.add(10 * time.Minute)
+	if _, err := s.PairingStatus(ctx, unused.ID); !apperr.Is(err, apperr.CodeNotFound) {
+		t.Fatalf("forgotten 10 minutes after it expired: %v", err)
+	}
+	if _, err := s.PairingStatus(ctx, uuid.Must(uuid.NewV7())); !apperr.Is(err, apperr.CodeNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+}
+
+func TestAnEvictedCodeReadsAsExpired(t *testing.T) {
+	s, c, _ := newService(t)
+	first, _ := s.NewPairing()
+	for range 20 {
+		c.add(time.Second)
+		_, _ = s.NewPairing()
+	}
+	if st, err := s.PairingStatus(context.Background(), first.ID); err != nil || st.State != devices.PairingExpired {
+		t.Fatalf("evicted: %+v %v", st, err)
+	}
+	if _, _, err := s.Pair(context.Background(), first.Code, "", "", nil); !apperr.Is(err, apperr.CodePairingCodeInvalid) {
+		t.Fatalf("an evicted code works: %v", err)
+	}
+}
