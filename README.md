@@ -40,7 +40,7 @@ The platform runs on your computer. Each agent runs on the bundled [Pi](https://
 | **Keep work in context** | Continue an agent's regular conversation in its own workspace or a folder you pick. Import your Claude Code and Codex conversations and carry on. Work a CLI moves to the background stays visible and can be stopped. |
 | **Coordinate through Inbox** | Agents and people exchange messages, ask questions, and reply. Choose queue or interrupt when an agent is busy; sleeping agents can wake when messages arrive. |
 | **Run visible workflows** | Follow task steps, conditional branches, bounded review loops, parallel branches that meet at a join, retries, and saved artifacts. A task can work in its own git worktree and branch, or in a copy of any folder. |
-| **Reach it from your phone** | Pair a phone with a one-time QR code. Sign this computer in to a Loop Now account and it gets `https://<id>.loop-now.app` through a Cloudflare Tunnel, with no router setup. |
+| **Reach it from your phone** | Pair a phone with a one-time QR code. Sign this computer in to a Loop Now account and allow access from phones: it gets `https://<id>.loop-now.app` through a Cloudflare Tunnel, with no router setup. |
 | **Extend through plugins** | Bring CLI and MCP tools, event hooks, accounts, permissions, and Skills into one package. Add the integrations your team needs. |
 | **See what happened** | Stream replies, send images, render Markdown and Mermaid, open the pictures and files an agent names, and inspect model usage, tool commands, timing, and failures in each reply's run timeline. |
 
@@ -77,7 +77,7 @@ Every agent runs on one runtime. Choose it with the **Runs on** picker when you 
 
 - Every agent has a permission mode: **Supervised** (asks before running commands and changing files), **Auto-accept edits**, **Auto** (the CLI's own review approves routine actions and asks about the rest), or **Full access** (asks nothing). Full access is the default. Choose it in the message box or on the config page; the default for new agents is in **Global settings › General & Appearance**.
 - A request appears in the reply that asked, with Approve, Reject, and a reason; also in the Inbox and as a desktop notification, since agents also run when nobody is watching. Stopping the reply rejects what is still pending.
-- Claude Code and Codex ask about every action their mode does not allow. Grok, Antigravity, and ACP commands decide by their own permission rules what to ask about, so some commands run without asking. Pi runs with Full access only.
+- Claude Code and Codex ask about every action their mode does not allow. Grok, Antigravity, and ACP commands decide by their own permission rules what to ask about, so some commands run without asking. ACP commands you add offer only Supervised and Full access, and Pi runs with Full access only.
 - A task step uses its agent's mode as it was when the task started.
 
 ### Conversations
@@ -99,11 +99,11 @@ Every agent runs on one runtime. Choose it with the **Runs on** picker when you 
 
 Everything is on one page, **Global settings › Phones and other devices**, and only this computer can change it:
 
-1. **Sign in to Loop Now.** The sign-in page of the Loop Now relay (`relay.loop-now.app`) opens in your browser. This computer gets its own address, `https://<id>.loop-now.app`, kept for it even after you sign out.
-2. **Allow access from phones.** Loop Now runs `cloudflared` (from your `PATH`, or a pinned version it downloads and checks) and keeps a Cloudflare Tunnel open from this computer to the remote door, a second listener on `127.0.0.1`. No router setup is needed, and the tunnel comes back by itself after a crash or a restart.
+1. **Sign in to Loop Now.** The sign-in page of the Loop Now relay (`relay.loop-now.app`) opens in your browser. Access from phones needs a signed-in account.
+2. **Allow access from phones.** The first time, Loop Now registers this computer at the relay, which gives it its own address, `https://<id>.loop-now.app`. Turning access off or signing out keeps the address; "Release address" gives it up (and so does signing in with another account), and the next turn-on gets a new one. Loop Now runs `cloudflared` (from your `PATH`, or a pinned version it downloads and checks) and keeps a Cloudflare Tunnel open from this computer to the remote door, a second listener on `127.0.0.1`. No router setup is needed, and the tunnel comes back by itself after a crash or a restart.
 3. **Add device.** A QR code and a link carry a one-time code, valid for 10 minutes; open it on the phone and it is paired. The page lists the paired devices and removes them at once; a device unused for 30 days must pair again. The console can be added to a phone's home screen.
 
-Requests from a phone travel through Cloudflare's network and the tunnel to this computer. The relay only signs this computer in and registers its address and tunnel; your conversations and device sessions never pass through it. This computer must keep Loop Now running: closing the desktop app's window keeps it running, quitting stops it, and a phone then shows that it cannot connect. Without an account, the remote door can still be turned on, but only this computer can reach it. Details: [Configuration › Phones and other devices](https://ai-for-anyone.github.io/loop-now/reference/configuration#phones-and-other-devices).
+Requests from a phone travel over HTTPS to Cloudflare, whose edge decrypts them as it does for any site it proxies, and on through the tunnel to this computer. The relay only signs this computer in and sets up its address and tunnel (the DNS record and the tunnel at Cloudflare); your conversations and device sessions never pass through it. This computer must keep Loop Now running: closing the desktop app's window keeps it running, quitting stops it, and a phone then shows that it cannot connect. Without an account, the remote door can still be turned on, but only this computer can reach it. Details: [Configuration › Phones and other devices](https://ai-for-anyone.github.io/loop-now/reference/configuration#phones-and-other-devices).
 
 ## Built to extend: the plugin system
 
