@@ -9,6 +9,7 @@ import { common } from './common'
 import { config } from './config'
 import { consoleInbox } from './console-inbox'
 import { credentials } from './credentials'
+import { devices } from './devices'
 import { errors } from './errors'
 import { folders } from './folders'
 import { identities } from './identities'
@@ -56,6 +57,7 @@ export const enUS: Messages = {
   timeline,
   plugins,
   credentials,
+  devices,
   consoleInbox,
   taskInbox,
   images,

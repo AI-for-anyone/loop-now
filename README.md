@@ -344,6 +344,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 The current release is intended for trusted personal use:
 
 - The console has no authentication. Keep it on loopback rather than exposing it to a public network.
+- Phones and other devices: **Global settings › Phones and other devices** turns on a second loopback listener, the remote door (off by default). Every request there needs a device paired with a one-time code that only this computer can make (a QR code and a link, valid for 10 minutes); the same page lists the devices and removes them, and a device unused for 30 days must pair again. Until a tunnel reaches it (a later release), the remote door opens only on this computer. Details: [Configuration › Phones and other devices](https://ai-for-anyone.github.io/loop-now/reference/configuration#phones-and-other-devices).
 - Agents execute local commands under the server's operating-system user. A separate task directory is not an OS security sandbox.
 - Plugins execute code; install sources you trust. Model and tool access also depends on the credentials and permissions you provide.
 - Workflows support linear steps, conditional branches, and bounded loops. Parallel joins, multi-replica deployment, and elastic scaling are outside this edition's current scope.

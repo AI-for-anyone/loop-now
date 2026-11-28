@@ -8,7 +8,7 @@ import (
 )
 
 func TestTokenRoundTrip(t *testing.T) {
-	for _, prefix := range []string{AgentPrefix, ExternalPrefix} {
+	for _, prefix := range []string{AgentPrefix, ExternalPrefix, DevicePrefix} {
 		tok, err := NewToken(prefix)
 		if err != nil {
 			t.Fatal(err)

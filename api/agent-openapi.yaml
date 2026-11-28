@@ -2531,6 +2531,9 @@ components:
 - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
 - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409)
 - path_picker_busy: a dialog to choose a path is already open (409)
+- remote_access_off: a pairing code needs the remote door to be listening (409)
+- pairing_code_invalid: the pairing code is wrong, has expired or was already used (403)
+- rate_limited: too many attempts; try again in a minute (429)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -2590,6 +2593,9 @@ components:
           "text_generation_failed",
           "path_picker_unavailable",
           "path_picker_busy",
+          "remote_access_off",
+          "pairing_code_invalid",
+          "rate_limited",
           "background_task_not_found",
           "background_task_ended",
           "permission_request_answered",

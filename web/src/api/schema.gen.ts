@@ -843,7 +843,8 @@ export interface paths {
          *     defaultPath, such as the field's current value, is where the dialog opens when, without surrounding spaces, it is
          *     an absolute path that exists (a file opens its folder); anything else opens the dialog where it usually opens.
          *     Only macOS for now, in a logged-in desktop session; Context.pathPicker says whether it works here.
-         *     Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why); 409
+         *     Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why), and always
+         *     at the remote door, where the dialog would open on this computer's screen instead of the device's; 409
          *     path_picker_busy when a dialog is already open; 422 when defaultPath holds a NUL character.
          */
         post: operations["createPathPick"];
@@ -851,6 +852,136 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/remote-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the remote door, the listener phones and other devices use
+         * @description The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. A tunnel
+         *     (a later step) forwards to it; until then it can be opened only on this computer. It serves the same console,
+         *     and every API request on it needs a paired device's session (see the access scope in the description of this
+         *     file). url is the remote door's own address while it listens, which pairing links use until there is a public
+         *     address.
+         */
+        get: operations["getRemoteAccess"];
+        /**
+         * Turn the remote door on or off, or change its port
+         * @description Saved and applied at once. Turning it on starts listening on 127.0.0.1 at port, or, when port is null or
+         *     omitted, at a port the server picks and keeps across restarts while it is free. Turning it off or changing the
+         *     port closes the old listener and every connection on it, open event streams included. When the server cannot
+         *     listen (for example the port is in use) the setting is still saved and state is failed with the reason; the
+         *     next start tries again. Paired devices stay paired while the door is off.
+         */
+        put: operations["putRemoteAccess"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/device-pairings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a one-time code that pairs a phone or another device
+         * @description The code works once, for 10 minutes, at the remote door's POST /device-sessions. url is the pairing link,
+         *     `<remote door address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or
+         *     query and is never logged; the console shows it as a QR code and a link. Several codes may be open at a time.
+         *     The server keeps only a hash of each code, in memory: a restart ends all open codes.
+         *     Errors: 409 remote_access_off when the remote door is not listening.
+         */
+        post: operations["createDevicePairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/device-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pair this device with a code and start its session (the pair page calls it at the remote door)
+         * @description Only at the remote door; the local door returns 403 forbidden, as it needs no session. The code is used up. The
+         *     answer sets the session cookie: `loop_now_device`, or `__Host-loop_now_device` when the page is HTTPS (the
+         *     request came over TLS, its Origin is https, or the tunnel says so in X-Forwarded-Proto); HttpOnly,
+         *     SameSite=Strict, Path=/, Secure over HTTPS, kept by the browser for 400 days. The server keeps only a hash of
+         *     the session secret. A session that is not used for 30 days expires; the device must pair again.
+         *     name, when given, names the device; otherwise the name comes from the browser's User-Agent, such as
+         *     "iPhone · Safari". It can be changed later with PATCH /devices/{deviceId}.
+         *     Errors: 403 pairing_code_invalid when the code is wrong, has expired or was already used (the three are not told
+         *     apart); 429 rate_limited after too many wrong codes in a minute (10, counted for the whole remote door, since
+         *     every request comes through the same tunnel); 422 when the body is invalid.
+         */
+        post: operations["createDeviceSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the paired devices
+         * @description Devices whose session is live, the most recently seen first. A session not used for 30 days has expired and is
+         *     no longer listed.
+         */
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a paired device
+         * @description Ends its session at once: its requests in flight are cancelled and its open event streams close; its next
+         *     request returns 401 and it must pair again.
+         */
+        delete: operations["deleteDevice"];
+        options?: never;
+        head?: never;
+        /** Rename a paired device */
+        patch: operations["updateDevice"];
         trace?: never;
     };
     "/model-providers/{providerId}/models": {
@@ -4229,10 +4360,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - internal_error: internal server error (500)
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - runtime_in_use: a local ACP command cannot be removed while Agents run on it (409, details is RuntimeInUseDetails) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - background_task_not_found: the Agent has no background task with this id (404) - background_task_ended: the background task to stop has already ended (409, details is BackgroundTaskEndedDetails) - permission_request_answered: the permission request has already been answered or cancelled (409, details is PermissionRequestAnsweredDetails) - task_workspace_not_kept: the task's workspace can be removed only after the task has ended and when the workspace was kept (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - text_generation_unavailable: no runtime that writes with AI is ready on this computer; the message says how to set one up (409) - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502) - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409) - path_picker_busy: a dialog to choose a path is already open (409) - remote_access_off: a pairing code needs the remote door to be listening (409) - pairing_code_invalid: the pairing code is wrong, has expired or was already used (403) - rate_limited: too many attempts; try again in a minute (429) - internal_error: internal server error (500)
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout" | "runtime_in_use" | "text_generation_unavailable" | "text_generation_failed" | "path_picker_unavailable" | "path_picker_busy" | "remote_access_off" | "pairing_code_invalid" | "rate_limited" | "background_task_not_found" | "background_task_ended" | "permission_request_answered" | "task_workspace_not_kept";
         /**
          * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
          *     - cli_install_failed: installing the CLI failed
@@ -4289,9 +4420,17 @@ export interface components {
             limits: components["schemas"]["Limits"];
             /**
              * @description Whether POST /path-picks can show this computer's own dialog to choose a folder or file: true on macOS in a
-             *     logged-in desktop session (other systems later). Always false for an external identity, which may not call it.
+             *     logged-in desktop session (other systems later). Always false for an external identity, which may not call it,
+             *     and at the remote door, where the dialog would open on this computer's screen instead of the device's.
              */
             pathPicker: boolean;
+            /**
+             * @description Which listener the request came in on: local, the console on this computer (no login); remote, the remote door
+             *     with a paired device's session, where the `x-access: local` operations (pairing codes, devices, the remote door
+             *     setting) are refused; external, the external port with an external identity's token.
+             * @enum {string}
+             */
+            door: "local" | "remote" | "external";
         };
         Limits: {
             /** @description Byte limit for a single uploaded file */
@@ -4666,6 +4805,70 @@ export interface components {
             /** @enum {string} */
             kind: "directory" | "file";
             defaultPath?: string;
+        };
+        RemoteAccessSettings: {
+            enabled: boolean;
+            /** @description The loopback port to listen on; null or omitted lets the server pick one and keep it */
+            port?: number | null;
+        };
+        RemoteAccess: {
+            /** @description The saved switch */
+            enabled: boolean;
+            /** @description The port that was set; null when the server picks one */
+            port: number | null;
+            /**
+             * @description off when the switch is off; listening when the remote door is open; failed when it is on but the server could not listen
+             * @enum {string}
+             */
+            state: "off" | "listening" | "failed";
+            /** @description The remote door's own address while it listens, such as http://127.0.0.1:53124; null otherwise */
+            url: string | null;
+            /** @description Why the server could not listen, when state is failed; null otherwise */
+            error: string | null;
+        };
+        DevicePairing: {
+            /** @description The one-time code */
+            code: string;
+            /** @description The pairing link: <remote door address>/pair#<code> */
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        DeviceSessionRequest: {
+            code: string;
+            /** @description The device's name; omitted means one is made from the User-Agent */
+            name?: string;
+        };
+        Device: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: date-time
+             * @description When it was paired
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Its last request, recorded at most once a minute
+             */
+            lastSeenAt: string;
+            /**
+             * @description The address its last request came from, as the tunnel reports it (CF-Connecting-IP or the first
+             *     X-Forwarded-For entry), else the connection's own; only for showing, never trusted for access
+             */
+            lastAddress: string | null;
+            /**
+             * Format: date-time
+             * @description When the session expires if it is not used again (30 days after lastSeenAt)
+             */
+            expiresAt: string;
+        };
+        DeviceList: {
+            devices: components["schemas"]["Device"][];
+        };
+        DevicePatch: {
+            name: string;
         };
         PathPick: {
             /** @description The full path chosen, on the computer the server runs on; null when the person cancelled */
@@ -9859,7 +10062,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description The token is missing, invalid, expired or revoked, or its identity has been deleted (`unauthenticated`). Occurs only on the external port and on Agent-only endpoints; the error message never echoes the token */
+        /** @description The token is missing, invalid, expired or revoked, or its identity has been deleted (`unauthenticated`). Occurs only on the external port, on Agent-only endpoints, and at the remote door when the device session is missing, removed or expired; the error message never echoes the token */
         Unauthenticated: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9875,7 +10078,10 @@ export interface components {
          *     - `forbidden`: the identity is valid but not allowed to do this: an external identity called an
          *       `x-access: console` operation, a cross-organization send was rejected, or a token was sent to a console
          *       endpoint;
-         *     - `forbidden_origin`, `invalid_host`: the Origin or Host of a console endpoint request is not on the allowlist.
+         *     - `forbidden_origin`, `invalid_host`: the Origin or Host of a console endpoint request is not on the allowlist,
+         *       or at the remote door the Origin is not the remote door's own;
+         *     - `forbidden` at the remote door: an `x-access: local` operation, or a request with an `Authorization` header;
+         *     - `pairing_code_invalid`: the pairing code is wrong, has expired or was already used.
          */
         Forbidden: {
             headers: {
@@ -9903,7 +10109,7 @@ export interface components {
          *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
          *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
          *     `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
-         *     `path_picker_busy`.
+         *     `path_picker_busy`, `remote_access_off`.
          */
         Conflict: {
             headers: {
@@ -9928,6 +10134,17 @@ export interface components {
         };
         /** @description If-Match does not match the current content */
         PreconditionFailed: {
+            headers: {
+                "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                "Loop-Now-Version": components["headers"]["Version"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Too many attempts; try again in a minute (`rate_limited`) */
+        RateLimited: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
                 "Loop-Now-Version": components["headers"]["Version"];
@@ -10008,6 +10225,7 @@ export interface components {
         FolderRawPath: string;
         SkillId: string;
         AgentSkillId: string;
+        DeviceId: string;
         ProviderId: string;
         CliName: components["schemas"]["CliName"];
         MessageId: string;
@@ -12414,6 +12632,197 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getRemoteAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The setting and what the listener does now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteAccess"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putRemoteAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteAccessSettings"];
+            };
+        };
+        responses: {
+            /** @description The setting and what the listener does now */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteAccess"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    createDevicePairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new code; shown only now */
+            201: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePairing"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    createDeviceSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The paired device */
+            201: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    /** @description The device session cookie */
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paired devices */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: components["parameters"]["DeviceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePatch"];
+            };
+        };
+        responses: {
+            /** @description The device after the change */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
         };
     };

@@ -71,15 +71,67 @@ function noteVersion(response: Response) {
   versionListeners.forEach((listener) => listener())
 }
 
+// Whether the remote door rejected a request as unauthenticated (401): missing, removed or expired device session.
+// On the local door no route requires a device session (door === 'local'), so an isolated 401 never locks out the console.
+// authEpoch stops a stale 401 from before pairing from locking a newly paired session.
+type Door = Schemas['Context']['door']
+let unauthenticated = false
+let knownDoor: Door | null = null
+let authEpoch = 0
+const authListeners = new Set<() => void>()
+
+function setUnauthenticated(next: boolean) {
+  if (unauthenticated === next) return
+  unauthenticated = next
+  authListeners.forEach((listener) => listener())
+}
+
+function isContextRequest(url: string): boolean {
+  try {
+    return new URL(url, 'http://localhost').pathname.endsWith('/context')
+  } catch {
+    return url.endsWith('/context')
+  }
+}
+
+export const deviceAuth = {
+  isUnauthenticated: () => unauthenticated,
+  door: () => knownDoor,
+  noteDoor: (door: Door) => {
+    knownDoor = door
+  },
+  markUnauthenticated: () => setUnauthenticated(true),
+  markAuthenticated: () => {
+    authEpoch += 1
+    setUnauthenticated(false)
+  },
+  subscribe(listener: () => void) {
+    authListeners.add(listener)
+    return () => {
+      authListeners.delete(listener)
+    }
+  },
+  // Only for tests, to reset between cases.
+  reset: () => {
+    authEpoch += 1
+    knownDoor = null
+    setUnauthenticated(false)
+  },
+}
+
 export const api = createClient<paths>({
   baseUrl: config.apiBase,
   // Read globalThis.fetch on every request so that a fetch replaced in tests takes effect.
   fetch: async (request) => {
     const order = ++started
+    const epoch = authEpoch
     try {
       const response = await globalThis.fetch(request)
       settle(order, true)
       noteVersion(response)
+      if (response.status === 401 && epoch === authEpoch && (knownDoor === 'remote' || (knownDoor === null && isContextRequest(request.url)))) {
+        setUnauthenticated(true)
+      }
       return response
     } catch (cause) {
       // A request we aborted ourselves says nothing about whether the server is reachable. Check the request's own signal: the DOMException
@@ -184,6 +236,9 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   text_generation_failed: true,
   path_picker_unavailable: true,
   path_picker_busy: true,
+  remote_access_off: true,
+  pairing_code_invalid: true,
+  rate_limited: true,
   background_task_not_found: true,
   background_task_ended: true,
   task_workspace_not_kept: true,

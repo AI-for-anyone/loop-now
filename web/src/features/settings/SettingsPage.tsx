@@ -19,6 +19,7 @@ import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/
 import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { cn } from '@/lib/utils'
 import { ContextFolderBody } from '@/features/folders/FolderSections'
+import { DevicesSettings } from '@/features/devices/DevicesSettings'
 import { AppearanceCard } from '@/features/settings/AppearanceCard'
 import { CliToolRow } from '@/features/settings/CliToolRow'
 import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
@@ -27,8 +28,8 @@ import { WritingSettings } from '@/features/writing/WritingSettings'
 import { LOCAL_MODE_ANCHOR, LocalModeCard } from '@/features/local-mode/LocalModeCard'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 
-type GlobalSettingsTab = 'general' | 'runtimes' | 'workspace' | 'server'
-const VALID_TABS = new Set<GlobalSettingsTab>(['general', 'runtimes', 'workspace', 'server'])
+type GlobalSettingsTab = 'general' | 'runtimes' | 'workspace' | 'devices' | 'server'
+const VALID_TABS = new Set<GlobalSettingsTab>(['general', 'runtimes', 'workspace', 'devices', 'server'])
 
 // Legacy hash redirects when landing on /settings so old bookmarks and deep links land on the owning tab.
 const LEGACY_HASH_REDIRECT: Record<string, string> = {
@@ -222,6 +223,7 @@ export function SettingsPage() {
     { key: 'general', label: tabsCopy.general, to: '/settings', end: true },
     { key: 'runtimes', label: tabsCopy.runtimes, to: '/settings/runtimes' },
     { key: 'workspace', label: tabsCopy.workspace, to: '/settings/workspace' },
+    { key: 'devices', label: tabsCopy.devices, to: '/settings/devices' },
     { key: 'server', label: tabsCopy.server, to: '/settings/server' },
   ]
 
@@ -266,6 +268,7 @@ export function SettingsPage() {
           )}
           {activeTab === 'runtimes' && <RuntimesAndModelsTab hash={hash} />}
           {activeTab === 'workspace' && <WorkspaceAndLocalModeTab hash={hash} />}
+          {activeTab === 'devices' && <DevicesSettings />}
           {activeTab === 'server' && (
             <PageBody width="narrow" innerClassName="flex flex-col gap-6 pb-12">
               <StickyNote>{t.settings.readonlyHint}</StickyNote>

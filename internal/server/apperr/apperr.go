@@ -58,6 +58,8 @@ const (
 	CodePermissionRequestAnswered       = "permission_request_answered"
 	CodeTaskWorkspaceNotKept            = "task_workspace_not_kept"
 	CodeRateLimited                     = "rate_limited"
+	CodeRemoteAccessOff                 = "remote_access_off"
+	CodePairingCodeInvalid              = "pairing_code_invalid"
 )
 
 // FieldError is a field-level error.

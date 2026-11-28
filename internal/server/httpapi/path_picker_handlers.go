@@ -23,6 +23,10 @@ func (s *Server) createPathPick(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, apperr.Invalid("kind", "Required: directory or file."))
 		return
 	}
+	if doorOf(r) == DoorRemote {
+		s.fail(w, r, apperr.Conflict(apperr.CodePathPickerUnavailable, "The dialog would open on the computer's screen, not on this device; type the path instead."))
+		return
+	}
 	if s.PathPicker == nil {
 		s.fail(w, r, apperr.Conflict(apperr.CodePathPickerUnavailable, "This server can't show a dialog to choose a path; type the path instead."))
 		return

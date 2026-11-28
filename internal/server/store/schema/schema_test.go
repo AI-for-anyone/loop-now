@@ -81,9 +81,10 @@ func TestBaselineShape(t *testing.T) {
 	}
 	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables),
 	// migration 2 adds the 3 tables for local mode, migration 13 the local ACP commands, and migration 15 who writes
-	// with AI, migration 16 background tasks, migration 18 permission settings and requests.
-	if len(ts) != 98 {
-		t.Errorf("%d tables in total, want 98", len(ts))
+	// with AI, migration 16 background tasks, migration 18 permission settings and requests, migration 19 the remote
+	// door setting and device sessions.
+	if len(ts) != 100 {
+		t.Errorf("%d tables in total, want 100", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
@@ -128,7 +129,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion is the version of the last migration; update it when adding a migration.
-const latestVersion = 18
+const latestVersion = 19
 
 // TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
 // after the baseline), then to the latest.
@@ -829,4 +830,50 @@ func oldAgent(ctx context.Context, d *db.DB, projectID uuid.UUID) (struct{ ID uu
 	}
 	_, err := d.Exec(ctx, `INSERT INTO agent_sessions (agent_id) VALUES ($1)`, a.ID)
 	return a, err
+}
+
+// TestDeviceSessionsMigration: migration 19 adds the remote door setting (one row, off, no port) and device sessions
+// that keep only a 32-byte hash and a 1–64 character name.
+func TestDeviceSessionsMigration(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 18); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(ctx, `SELECT 1 FROM device_sessions`); err == nil {
+		t.Fatal("version 18 has no device sessions")
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	var enabled bool
+	var port, picked *int64
+	if err := d.QueryRow(ctx, `SELECT enabled, port, picked_port FROM remote_access_settings WHERE singleton`).Scan(&enabled, &port, &picked); err != nil || enabled || port != nil || picked != nil {
+		t.Fatalf("the remote door starts off with no port: %v %v %v %v", enabled, port, picked, err)
+	}
+	if _, err := d.Exec(ctx, `UPDATE remote_access_settings SET port = 70000`); err == nil {
+		t.Fatal("a port above 65535 is refused")
+	}
+	insert := func(name string, hash []byte) error {
+		_, err := d.Exec(ctx, `INSERT INTO device_sessions (id, name, secret_hash, created_at, last_seen_at) VALUES ($1, $2, $3, now(), now())`,
+			uuid.New(), name, hash)
+		return err
+	}
+	if err := insert("iPhone · Safari", make([]byte, 32)); err != nil {
+		t.Fatal(err)
+	}
+	if err := insert("", make([]byte, 32)); err == nil {
+		t.Fatal("an empty name is refused")
+	}
+	if err := insert(strings.Repeat("x", 65), make([]byte, 32)); err == nil {
+		t.Fatal("a name over 64 characters is refused")
+	}
+	if err := insert("phone", make([]byte, 16)); err == nil {
+		t.Fatal("only a 32-byte hash is kept")
+	}
 }

@@ -26,6 +26,7 @@ import (
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/devices"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/inbox"
@@ -93,6 +94,10 @@ type Server struct {
 	TextGeneration *textgen.Service
 	// PathPicker shows this computer's own dialog to choose a path (POST /path-picks); when nil there is none.
 	PathPicker *pathpicker.Picker
+	// Devices pairs devices and checks their sessions at the remote door; RemoteAccess runs the remote door. When nil
+	// there is no remote door: no device is listed and no pairing code can be made.
+	Devices      *devices.Service
+	RemoteAccess RemoteAccessController
 	// ConvImport finds conversations of the local CLIs and imports them as Agents; nil leaves the endpoints failing.
 	ConvImport *convimport.Service
 	// Permissions answers permission requests; nil leaves answering failing.
@@ -111,12 +116,22 @@ type Access int
 const (
 	ConsoleOnly        Access = iota // console only (x-access: console in the contract)
 	ConsoleAndExternal               // console and external identities (x-access: console-and-external in the contract)
+	// LocalOnly is the console at the local door only, the person at this computer (x-access: local): the remote door
+	// refuses it even with a device session.
+	LocalOnly
+	// Pairing is the console, and at the remote door it needs no device session (x-access: pairing).
+	Pairing
 )
 
 // String returns how x-access is written in the contract.
 func (a Access) String() string {
-	if a == ConsoleAndExternal {
+	switch a {
+	case ConsoleAndExternal:
 		return "console-and-external"
+	case LocalOnly:
+		return "local"
+	case Pairing:
+		return "pairing"
 	}
 	return "console"
 }
@@ -175,6 +190,13 @@ func (s *Server) Routes() []Route {
 		{"PUT", "/text-generation-settings", "putTextGenerationSettings", ConsoleOnly, s.putTextGenerationSettings},
 		{"POST", "/prompt-drafts", "createPromptDraft", ConsoleOnly, s.createPromptDraft},
 		{"POST", "/path-picks", "createPathPick", ConsoleOnly, s.createPathPick},
+		{"GET", "/remote-access", "getRemoteAccess", LocalOnly, s.getRemoteAccess},
+		{"PUT", "/remote-access", "putRemoteAccess", LocalOnly, s.putRemoteAccess},
+		{"POST", "/device-pairings", "createDevicePairing", LocalOnly, s.createDevicePairing},
+		{"POST", "/device-sessions", "createDeviceSession", Pairing, s.createDeviceSession},
+		{"GET", "/devices", "listDevices", LocalOnly, s.listDevices},
+		{"PATCH", "/devices/{deviceId}", "updateDevice", LocalOnly, s.updateDevice},
+		{"DELETE", "/devices/{deviceId}", "deleteDevice", LocalOnly, s.deleteDevice},
 		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
 		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},
 		{"GET", "/agents/{agentId}/local-directories", "getAgentLocalDirectories", ConsoleOnly, s.getAgentLocalDirectories},

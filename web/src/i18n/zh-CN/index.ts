@@ -8,6 +8,7 @@ import { permissions } from './permissions'
 import { common } from './common'
 import { config } from './config'
 import { credentials } from './credentials'
+import { devices } from './devices'
 import { errors } from './errors'
 import { folders } from './folders'
 import { identities } from './identities'
@@ -56,6 +57,7 @@ export const zhCN = {
   timeline,
   plugins,
   credentials,
+  devices,
   consoleInbox,
   taskInbox,
   images,
