@@ -4,6 +4,58 @@
 
 User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md. A change does not edit this file: its notes are in its pull request description (see `.github/pull_request_template.md`), and `scripts/release/collect-pr-notes.sh` writes them into the version's section when a release is cut.
 
+## v0.3.7
+
+Loop Now can now be reached from your phone: pair a phone with a one-time QR code, sign this computer in to a Loop Now account and let it open its own tunnel at `https://<id>.loop-now.app`, with no router setup. Task workflows can fork into steps that run at the same time and join again, each branch in its own worktree and merged at the join. Files named in replies show as cards and open in a sandboxed new tab, background tools join the quiet tool line, and the desktop app offers to install `loopctl` on first launch. One database migration (00019, paired devices and pairing codes).
+
+### Reach Loop Now from your phone anywhere (#127)
+
+- **Global settings › Phones and other devices** now signs this computer in to a Loop Now account (in your browser) and gets it its own address, `https://<id>.loop-now.app`. Signing out keeps the address for this computer.
+- **Allow access from phones** opens a Cloudflare Tunnel from this computer, with no router setup. Loop Now uses `cloudflared` from your PATH, or downloads the right version itself and checks it. The page shows connecting / online / the reason it failed, and the tunnel comes back by itself after a crash or a restart. **Release address** gives the address up.
+- The pairing QR code and link use the public address while the tunnel is online. The "Paired" notice names the device that used this code, and a used code disappears. When the computer is offline, a phone shows "cannot connect" instead of an error page.
+
+### Parallel steps in task workflows: fork and join (#126)
+
+- A task's flow can now fork: one step starts several branches that run at the same time, and they meet again at a join step, which starts once every branch has arrived. Tasks without forks work as before.
+- In a task on a git repository, each branch works in its own worktree on its own branch; at the join, Loop Now merges the branches into the task branch, and a conflict is handed to the join step's Agent to resolve. In a task on a copied folder, each branch works in its own copy and nothing is merged back.
+- The task page draws parallel branches side by side and shows every running step; a blocked branch stops only itself and is retried on its own while the others go on.
+
+### Use Loop Now from a phone or another device (pairing) (#125)
+
+- **Global settings › Phones and other devices** turns on a second, separate entrance for other devices (the remote door, off by default). "Add device" shows a QR code and a link: a one-time code that works for 10 minutes. The phone opens it and is signed in; only this computer can make codes.
+- The same page lists paired devices (name, when paired, last seen, last address) and removes them; removing a device locks it out at once, and a device unused for 30 days must pair again. Opening Loop Now on this computer still needs no login.
+- The console can be added to a phone's home screen and opens full screen. Until a tunnel reaches it (a later release), the remote door can be opened only on this computer.
+
+### Background tool line focus and follow-up heading polish (#124)
+
+- Returning from a task's Details view with Back inside a background tool group popover now restores keyboard focus to that task's Details button instead of dropping focus to the page body.
+- Keyboard focus rings on grouped background tool buttons in the default theme now sit inside the button's padding so they stay visible without covering the `·` separators on either side, while keeping unfocused spacing unchanged.
+- In the default theme, the "After background work ended…" follow-up heading now shows ended tasks in the same quiet grouped tool-line style (monospace name, muted state, red when failed, `×N` grouping, clickable popovers, and a quiet `+N` overflow button), while the Plate theme keeps its pills unchanged.
+
+### Background tools join the quiet tool line (#123)
+
+- In the default theme, tools that continue in the background now appear on the same quiet muted line after the reply's other tools instead of separate pills, grouped by tool name and state in start order (for example, `Agent ×3 Running in the background` with a spinner while running, muted when finished, red when failed, gray when stopped or unknown).
+- Clicking a single background tool opens its details popover as before; clicking a grouped entry opens a popover listing each task (label, status, and elapsed time or duration) with per-task Details (with a Back button) and Stop actions.
+- Fixed vertical misalignment between monospace tool names and status text so name, count, and state share one baseline in both the default and Plate themes; Plate keeps its individual pills unchanged apart from alignment.
+
+### Files named in replies show as cards (#122)
+
+- When an Agent names a file in its folder (a Markdown link, inline code, bare path, or a fenced code block holding only that path), a compact ChatGPT-style card appears right below that block with a colored kind icon, file name, kind, and size; a path-only fenced block is replaced by the card.
+- Clicking a card opens the file in a sandboxed new tab (or downloads kinds the browser cannot display, such as archives). Hovering or focusing the card reveals "Show in folder" and "Open in new tab" icon actions.
+- Files that have been deleted show a muted gray non-clickable card ("No longer in folder"). Images keep their thumbnails without cards, repeated references in the same reply show one card, and more than 6 cards in one place collapse behind a "N more files" button.
+
+### Links to files in replies open the file in a new tab (#121)
+
+- A link or path in a reply that points to a file in the Agent's folder (or the task step's folder) now opens the file in a new tab instead of replacing the console. HTML pages are shown as pages: their animations, scripts, styles and images work.
+- The page is sandboxed: it cannot read the console's data or use Loop Now's API. In the desktop app it opens in the system browser.
+- Paths outside the folder, and files that no longer exist, are shown as plain text with a note saying why. The folder page's file preview has an "Open in new tab" action.
+
+### First-launch prompt and settings row for installing `loopctl` (#120)
+
+- On first launch of the desktop app, Loop Now now prompts once to install `loopctl` for your terminal ("Install" / "Later"; macOS asks once for an administrator password, Windows adds the bundled `bin` folder to your user PATH with no password) and remembers your choice so it never nags.
+- **Global settings** now includes a **Command line tool (`loopctl`)** row showing whether `loopctl` is installed, not installed, or pointing elsewhere (with the path) with one-click Install / Replace in the desktop app, or its bundle path and a copyable PATH command in a plain browser.
+- After installation, both the completion dialog and the settings row explain the next step: connect `loopctl` as an external identity and open **External Identity Connection…** from the menu bar / tray for the setup command.
+
 ## v0.3.6
 
 Each step of a new task starts from a clean conversation with a prompt of its own, so steps no longer drag in their Agent's chat history, and creating a task no longer waits for busy Agents. Replies read better: system fonts, plain bold, tool calls grouped onto one quiet line and a compact run log line; bold, italic and strikethrough next to Chinese punctuation now render. No database migrations this time.
