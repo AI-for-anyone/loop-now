@@ -60,6 +60,9 @@ const (
 	CodeRateLimited                     = "rate_limited"
 	CodeRemoteAccessOff                 = "remote_access_off"
 	CodePairingCodeInvalid              = "pairing_code_invalid"
+	CodeRelaySignedIn                   = "relay_signed_in"
+	CodeRelaySignedOut                  = "relay_signed_out"
+	CodeRelayFailed                     = "relay_failed"
 )
 
 // FieldError is a field-level error.
