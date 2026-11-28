@@ -393,7 +393,8 @@ function BackgroundToolGroupItem({
           aria-label={ariaLabel}
           title={single ? single.label : ariaLabel}
           className={cn(
-            'group/bg-tool -mx-1 inline-flex cursor-pointer items-center gap-1 rounded-stamp px-1 text-left transition-colors outline-none focus-visible:shadow-focus',
+            // Keep the focus ring inset inside the 4px horizontal padding so it never paints over the adjacent 6px-spaced dot separators.
+            'group/bg-tool -mx-1 -my-0.5 inline-flex cursor-pointer items-center gap-1 rounded-stamp px-1 py-0.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-riso-blue',
             group.status === 'failed'
               ? 'text-red-text hover:bg-tint-red/70 aria-expanded:bg-tint-red/70'
               : 'text-ink-500 hover:bg-surface-hover hover:text-ink aria-expanded:bg-surface-hover aria-expanded:text-ink',
