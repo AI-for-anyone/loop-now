@@ -51,6 +51,8 @@ type Door struct {
 	srv      *http.Server
 	ln       net.Listener
 	err      string
+	// closed is set by Close: a setting saved by a request still running during shutdown opens nothing.
+	closed bool
 }
 
 // Start reads the saved setting and opens the door when it is on. A door that cannot listen is reported in State,
@@ -88,10 +90,11 @@ func (d *Door) State() State {
 	return d.stateLocked()
 }
 
-// Close closes the listener and every connection on it, without changing the setting (for server shutdown).
+// Close closes the listener and every connection on it for good, without changing the setting (for server shutdown).
 func (d *Door) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.closed = true
 	return d.closeLocked()
 }
 
@@ -140,6 +143,10 @@ func (d *Door) applyLocked(ctx context.Context) error {
 	}
 	d.err = ""
 	if !s.Enabled {
+		return nil
+	}
+	if d.closed {
+		d.err = "The server is shutting down."
 		return nil
 	}
 	var ln net.Listener

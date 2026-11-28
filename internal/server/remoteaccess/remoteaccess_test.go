@@ -102,6 +102,9 @@ func TestDoorStartsOffAndOpensOnLoopback(t *testing.T) {
 	if err := d.Close(); err != nil {
 		t.Fatal(err)
 	}
+	if s, err := d.Apply(ctx, true, nil); err != nil || s.State != remoteaccess.StateFailed {
+		t.Fatalf("a closed door opens nothing: %+v %v", s, err)
+	}
 	restarted := again()
 	if err := restarted.Start(ctx); err != nil {
 		t.Fatal(err)

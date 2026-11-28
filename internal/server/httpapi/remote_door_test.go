@@ -268,7 +268,10 @@ func TestRemoteDoorPairing(t *testing.T) {
 	if who := decode[map[string]any](t, ph.expect(200, "GET", "/whoami", nil)); who["kind"] != "console" {
 		t.Fatalf("a paired device acts as the console operator: %v", who)
 	}
-	ph.expect(201, "POST", r.agents(), map[string]any{"name": "from-phone", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}})
+	created := decode[apitypes.Agent](t, ph.expect(201, "POST", r.agents(), map[string]any{"name": "from-phone", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
+	if _, _, h := ph.do("GET", "/agents/"+created.ID.String()+"/folder/raw/page.html", nil); h.Get("Content-Security-Policy") != httpapi.RawFileSandbox {
+		t.Fatalf("raw file views keep their sandbox at the remote door: %v", h)
+	}
 	if b := ph.expect(409, "POST", "/path-picks", map[string]any{"kind": "directory"}); errorCode(t, b) != "path_picker_unavailable" {
 		t.Fatalf("the path dialog would open on the computer, not the phone: %s", b)
 	}
