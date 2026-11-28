@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/prompts"
@@ -31,6 +32,12 @@ func taskConsoleStore(t *testing.T) *store.Store {
 
 func taskConsoleRecord(t *testing.T, s *store.Store) (uuid.UUID, uuid.UUID, uuid.UUID, store.TaskTurn) {
 	t.Helper()
+	return taskConsoleRecordWith(t, s, "openai", map[string]string{"OPENAI_API_KEY": "synthetic-model-key"})
+}
+
+// taskConsoleRecordWith is taskConsoleRecord for an Agent whose task captured provider and the model environment model.
+func taskConsoleRecordWith(t *testing.T, s *store.Store, provider string, model map[string]string) (uuid.UUID, uuid.UUID, uuid.UUID, store.TaskTurn) {
+	t.Helper()
 	ctx := context.Background()
 	d, err := s.EnsureDefaults(ctx, "org", "project")
 	if err != nil {
@@ -46,7 +53,7 @@ func taskConsoleRecord(t *testing.T, s *store.Store) (uuid.UUID, uuid.UUID, uuid
 	id, node, runtime := uuid.New(), uuid.New(), uuid.New()
 	now := time.Now().UTC()
 	scope, _ := taskruntime.TaskScope(a.ID, id)
-	snap, err := taskruntime.Capture(scope, uuid.New(), taskruntime.CaptureInput{Configuration: taskruntime.Configuration{AgentID: a.ID, ConfigVersion: 1, Provider: "openai", ModelID: "fixture", Prompts: &prompts.Layers{Format: prompts.FormatV1, AgentVersion: 1}, Skills: []taskruntime.Skill{}, CLIs: []string{}}, Credentials: taskruntime.Credentials{Model: map[string]string{"OPENAI_API_KEY": "synthetic-model-key"}, CLI: map[string]taskruntime.CredentialPayload{}}})
+	snap, err := taskruntime.Capture(scope, uuid.New(), taskruntime.CaptureInput{Configuration: taskruntime.Configuration{AgentID: a.ID, ConfigVersion: 1, Provider: provider, ModelID: "fixture", Prompts: &prompts.Layers{Format: prompts.FormatV1, AgentVersion: 1}, Skills: []taskruntime.Skill{}, CLIs: []string{}}, Credentials: taskruntime.Credentials{Model: model, CLI: map[string]taskruntime.CredentialPayload{}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,6 +220,91 @@ func TestTaskConsoleLineageImmutable(t *testing.T) {
 	if !apperr.Is(err, apperr.CodeTaskConflict) {
 		t.Fatal("wrong Agent accepted", err)
 	}
+}
+
+// taskConsoleGuard is the reason TaskConsoleGuardTx gives for target, after change (if any) ran in the same transaction.
+func taskConsoleGuard(t *testing.T, s *store.Store, target store.TaskConsoleLineage, change func(*store.TaskMutation) error) string {
+	t.Helper()
+	ctx := context.Background()
+	var reason string
+	_, err := s.MutateTask(ctx, target.TaskID, nil, func(m *store.TaskMutation) (any, error) {
+		m.Unchanged()
+		if change != nil {
+			if e := change(m); e != nil {
+				return nil, e
+			}
+		}
+		var e error
+		reason, e = s.TaskConsoleGuardTx(ctx, m, target)
+		return nil, e
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reason
+}
+
+// A task step of an Agent on a CLI that uses its own login on this computer (Claude Code, Codex, a local ACP command)
+// captured no model credential, and its node still takes console messages. Every other check still applies to it, and
+// a Pi Agent without its captured model credential still cannot be messaged.
+func TestTaskConsoleGuardLocalAccountsNeedNoCapturedModelCredential(t *testing.T) {
+	acp := uuid.New()
+	agentruntime.SetLocalCommands([]agentruntime.Runtime{agentruntime.LocalCommandRuntime(acp, "Mine", agentruntime.LocalCommand{Command: "mine"})})
+	t.Cleanup(func() { agentruntime.SetLocalCommands(nil) })
+	ctx := context.Background()
+	for _, provider := range []string{agentruntime.ClaudeCodeProvider, agentruntime.CodexProvider, agentruntime.LocalCommandRuntimeID(acp)} {
+		t.Run(provider, func(t *testing.T) {
+			s := taskConsoleStore(t)
+			id, node, agent, turn := taskConsoleRecordWith(t, s, provider, map[string]string{})
+			target := store.TaskConsoleLineage{TaskID: id, NodeRunID: node, AgentID: agent, RuntimeID: turn.RuntimeID}
+			if reason := taskConsoleGuard(t, s, target, nil); reason != "" {
+				t.Fatalf("running node of a local-login Agent: reason %q, want available", reason)
+			}
+			svc := tasks.New(s, nil, nil, tasks.Options{}, quietLogger())
+			t.Cleanup(func() { _ = svc.Stop(ctx) })
+			capability, err := svc.ConsoleMessageCapability(ctx, auth.Principal{Kind: auth.KindConsole}, id, node)
+			if err != nil || !capability.CanSend || capability.Reason != nil {
+				t.Fatal("console capability of a local-login Agent's running node", capability, err)
+			}
+
+			other := target
+			other.ExecutionMode = "task_conversation"
+			if reason := taskConsoleGuard(t, s, other, nil); reason != "chat_unavailable" {
+				t.Fatalf("mode mismatch: reason %q", reason)
+			}
+			other = target
+			other.RuntimeID = uuid.New()
+			if reason := taskConsoleGuard(t, s, other, nil); reason != "target_mismatch" {
+				t.Fatalf("other runtime: reason %q", reason)
+			}
+			blocked := func(m *store.TaskMutation) error { m.Record.Current().Status = "blocked"; return nil }
+			if reason := taskConsoleGuard(t, s, target, blocked); reason != "chat_unavailable" {
+				t.Fatalf("blocked node without a confirmed run failure: reason %q", reason)
+			}
+			broken := func(m *store.TaskMutation) error {
+				_, e := m.Tx.Exec(ctx, `UPDATE task_instances SET snapshot=$1 WHERE id=$2`, []byte(`{}`), turn.RuntimeID)
+				return e
+			}
+			if reason := taskConsoleGuard(t, s, target, broken); reason != "chat_unavailable" {
+				t.Fatalf("unreadable captured configuration: reason %q", reason)
+			}
+			retired := func(m *store.TaskMutation) error {
+				_, e := m.Tx.Exec(ctx, `UPDATE task_instances SET retired=true WHERE id=$1`, turn.RuntimeID)
+				return e
+			}
+			if reason := taskConsoleGuard(t, s, target, retired); reason != "instance_unavailable" {
+				t.Fatalf("retired instance: reason %q", reason)
+			}
+		})
+	}
+	t.Run("pi without its captured model credential", func(t *testing.T) {
+		s := taskConsoleStore(t)
+		id, node, agent, turn := taskConsoleRecordWith(t, s, "openai", map[string]string{})
+		target := store.TaskConsoleLineage{TaskID: id, NodeRunID: node, AgentID: agent, RuntimeID: turn.RuntimeID}
+		if reason := taskConsoleGuard(t, s, target, nil); reason != "chat_unavailable" {
+			t.Fatalf("Pi Agent without a model credential: reason %q, want chat_unavailable", reason)
+		}
+	})
 }
 
 func TestTaskConsoleServiceAtomicIdempotenceAndGuard(t *testing.T) {
