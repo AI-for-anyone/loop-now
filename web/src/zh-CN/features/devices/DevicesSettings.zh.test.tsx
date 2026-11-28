@@ -31,6 +31,7 @@ describe('Phones and other devices settings in Chinese UI', () => {
       http.post(apiUrl('/device-pairings'), () =>
         HttpResponse.json(
           {
+            id: '01900000-0000-7000-8000-000000000101',
             code: 'zh-secret',
             url: 'http://127.0.0.1:53124/pair#zh-secret',
             expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),

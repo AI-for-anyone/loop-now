@@ -3,10 +3,11 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { config } from '@/config'
-import { apiUrl, defaultAgentsPath, errorBody } from '@/test/api'
+import { apiUrl, context, defaultAgentsPath, errorBody } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
+import { isRemoteDoorConnection } from './ConnectionBanner'
 import { routes } from './routes'
 
 // The connection status area in the top bar. “Database unavailable” also
@@ -133,5 +134,35 @@ describe('top bar connection status', () => {
     focusManager.setFocused(true)
     await waitFor(() => expect(within(topStatus()).getByText('Database unavailable')).toBeInTheDocument())
     focusManager.setFocused(undefined)
+  })
+
+  it('on the remote door, the cannot-connect banner explains the host is unreachable without mentioning LOOP_NOW_CONSOLE_ORIGINS', async () => {
+    let up = true
+    server.use(
+      http.get(apiUrl('/context'), () => (up ? HttpResponse.json({ ...context, door: 'remote' }) : HttpResponse.error())),
+      http.get(apiUrl('/health'), () => (up ? HttpResponse.json({ ok: true, database: { ok: true } }) : HttpResponse.error())),
+      ...baseHandlers([]),
+    )
+    renderRoutes(routes, defaultAgentsPath)
+    expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
+
+    up = false
+    focusManager.setFocused(false)
+    focusManager.setFocused(true)
+    try {
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/Can't connect to/)
+      expect(alert).not.toHaveTextContent('LOOP_NOW_CONSOLE_ORIGINS')
+    } finally {
+      focusManager.setFocused(undefined)
+    }
+  })
+
+  it('identifies a same-origin non-loopback console as the remote door even before /context responds', () => {
+    expect(isRemoteDoorConnection('remote', 'http://127.0.0.1:53124/api/v1', 'http://127.0.0.1:53124')).toBe(true)
+    expect(isRemoteDoorConnection('local', 'https://abc.loop-now.app/api/v1', 'https://abc.loop-now.app')).toBe(false)
+    expect(isRemoteDoorConnection(null, 'https://abc.loop-now.app/api/v1', 'https://abc.loop-now.app')).toBe(true)
+    expect(isRemoteDoorConnection(null, 'http://127.0.0.1:8780/api/v1', 'http://localhost:5173')).toBe(false)
+    expect(isRemoteDoorConnection(null, 'http://127.0.0.1:8780/api/v1', 'http://127.0.0.1:8780')).toBe(false)
   })
 })

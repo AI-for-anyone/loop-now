@@ -70,9 +70,15 @@ describe('Phones and other devices settings', () => {
     expect(screen.getByRole('button', { name: 'Add device' })).toBeDisabled()
   })
 
-  it('opens Add device dialog with QR code and fragment pairing link, supports regenerate, and detects a newly paired device', async () => {
+  it('opens Add device dialog with QR code and fragment pairing link, ignores unrelated devices, names the device that used this code and hides the used QR', async () => {
     let seq = 0
     const devices: Schemas['Device'][] = []
+    const statuses = new Map<string, Schemas['DevicePairingStatus']>()
+    const unrelatedDevice: Schemas['Device'] = {
+      ...deviceOne,
+      id: '01900000-0000-7000-8000-000000000099',
+      name: 'Other Tablet · Chrome',
+    }
     server.use(
       http.get(apiUrl('/remote-access'), () =>
         HttpResponse.json({ enabled: true, port: null, state: 'listening', url: 'http://127.0.0.1:53124', error: null }),
@@ -80,15 +86,23 @@ describe('Phones and other devices settings', () => {
       http.get(apiUrl('/devices'), () => HttpResponse.json({ devices })),
       http.post(apiUrl('/device-pairings'), () => {
         seq += 1
+        const id = `01900000-0000-7000-8000-00000000010${seq}`
         const code = `code-${seq}-secret`
+        const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString()
+        statuses.set(id, { id, state: 'open', expiresAt, device: null })
         return HttpResponse.json(
           {
+            id,
             code,
             url: `http://127.0.0.1:53124/pair#${code}`,
-            expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+            expiresAt,
           },
           { status: 201 },
         )
+      }),
+      http.get(apiUrl('/device-pairings/:pairingId'), ({ params }) => {
+        const status = statuses.get(String(params.pairingId))
+        return status ? HttpResponse.json(status) : new HttpResponse(null, { status: 404 })
       }),
       ...baseHandlers([]),
     )
@@ -113,21 +127,42 @@ describe('Phones and other devices settings', () => {
     await user.click(within(dialog).getByRole('button', { name: 'New code' }))
     expect(await within(dialog).findByText('http://127.0.0.1:53124/pair#code-2-secret')).toBeInTheDocument()
 
-    // Simulate the phone redeeming the code; the dialog's focus/poll refresh confirms the paired device.
-    devices.push(deviceOne)
+    // An unrelated device pairing through another code must not trigger this dialog's paired notice.
+    devices.push(unrelatedDevice)
     focusManager.setFocused(false)
     focusManager.setFocused(true)
     try {
+      await waitFor(() => expect(screen.getByText('Other Tablet · Chrome')).toBeInTheDocument())
+      expect(within(dialog).queryByText(/Paired:/)).toBeNull()
+      expect(within(dialog).getByRole('img', { name: 'Device pairing QR code' })).toBeInTheDocument()
+
+      // Now simulate the phone redeeming THIS code (code 2).
+      const id2 = '01900000-0000-7000-8000-000000000102'
+      devices.push(deviceOne)
+      statuses.set(id2, { ...statuses.get(id2)!, state: 'used', device: deviceOne })
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
       expect(await within(dialog).findByText('Paired: iPhone · Safari')).toBeInTheDocument()
+      // The used QR code and one-time link must disappear immediately.
+      expect(within(dialog).queryByRole('img', { name: 'Device pairing QR code' })).toBeNull()
+      expect(within(dialog).queryByText('http://127.0.0.1:53124/pair#code-2-secret')).toBeNull()
     } finally {
       focusManager.setFocused(undefined)
     }
+
+    // Generating a new code after one was used brings back a fresh QR code.
+    await user.click(within(dialog).getByRole('button', { name: 'New code' }))
+    expect(await within(dialog).findByText('http://127.0.0.1:53124/pair#code-3-secret')).toBeInTheDocument()
+    expect(within(dialog).getByRole('img', { name: 'Device pairing QR code' })).toBeInTheDocument()
+    expect(within(dialog).queryByText('Paired: iPhone · Safari')).toBeNull()
 
     await user.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('shows the expired badge when a pairing code has already expired', async () => {
+    const expiredId = '01900000-0000-7000-8000-000000000199'
+    const expiresAt = new Date(Date.now() - 1000).toISOString()
     server.use(
       http.get(apiUrl('/remote-access'), () =>
         HttpResponse.json({ enabled: true, port: null, state: 'listening', url: 'http://127.0.0.1:53124', error: null }),
@@ -135,12 +170,16 @@ describe('Phones and other devices settings', () => {
       http.post(apiUrl('/device-pairings'), () =>
         HttpResponse.json(
           {
+            id: expiredId,
             code: 'expired-secret',
             url: 'http://127.0.0.1:53124/pair#expired-secret',
-            expiresAt: new Date(Date.now() - 1000).toISOString(),
+            expiresAt,
           },
           { status: 201 },
         ),
+      ),
+      http.get(apiUrl(`/device-pairings/${expiredId}`), () =>
+        HttpResponse.json({ id: expiredId, state: 'expired', expiresAt, device: null }),
       ),
       ...baseHandlers([]),
     )

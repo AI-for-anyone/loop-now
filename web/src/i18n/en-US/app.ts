@@ -10,4 +10,6 @@ export const connection = {
   unreachableTitle: "Can't reach the server",
   unreachableBody: (apiBase: string, origin: string) =>
     `The console talks to the server at ${apiBase}. Either the server isn't running, or this console's address ${origin} isn't one of the server's allowed origins (LOOP_NOW_CONSOLE_ORIGINS).`,
+  unreachableBodyRemote: (origin: string) =>
+    `Can't connect to ${origin}. The computer running Loop Now may be offline or asleep, or access from phones may be turned off.`,
 } satisfies Messages['connection']
