@@ -1,8 +1,10 @@
 // Package auth defines the request identity (Principal) and the format of platform tokens.
 //
-// A token is `lna_` (Agent) or `lne_` (external identity) followed by
+// A token is `lna_` (Agent), `lne_` (external identity), `lnp_` (plugin) or `lnd_` (a paired device's session, carried
+// in a cookie at the remote door) followed by
 // `<token ID as 32 hex digits>_<base64url of 32 random bytes>`. The server stores only the sha256 of the secret part,
-// looks the token up by ID and compares in constant time; tokens are read only from `Authorization: Bearer`.
+// looks the token up by ID and compares in constant time; tokens are read only from `Authorization: Bearer`, device
+// sessions only from their cookie.
 package auth
 
 import (
@@ -46,6 +48,8 @@ type Principal struct {
 	// Plugin and Scopes: the plugin a plugin token belongs to, and its API scopes.
 	Plugin string
 	Scopes []string
+	// Device is the paired device a console request came from at the remote door; uuid.Nil at the local door.
+	Device uuid.UUID
 }
 
 // PluginPrincipal returns the identity of a plugin token.
@@ -81,6 +85,7 @@ const (
 	AgentPrefix    = "lna_"
 	ExternalPrefix = "lne_"
 	PluginPrefix   = "lnp_"
+	DevicePrefix   = "lnd_"
 )
 
 const secretBytes = 32
@@ -108,7 +113,7 @@ func NewToken(prefix string) (Token, error) {
 
 // ParseToken splits a token; ok is false when the format is wrong. It only checks the format, without a database lookup.
 func ParseToken(s string) (prefix string, id uuid.UUID, secret string, ok bool) {
-	for _, p := range []string{AgentPrefix, ExternalPrefix, PluginPrefix} {
+	for _, p := range []string{AgentPrefix, ExternalPrefix, PluginPrefix, DevicePrefix} {
 		if rest, found := strings.CutPrefix(s, p); found {
 			idHex, sec, found := strings.Cut(rest, "_")
 			if !found || len(idHex) != 32 || len(sec) != base64.RawURLEncoding.EncodedLen(secretBytes) {
