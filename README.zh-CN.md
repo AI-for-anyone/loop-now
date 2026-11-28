@@ -2,7 +2,7 @@
 
 <p align="center"><strong>你的编程 Agent，一个工作台。Claude Code、Codex、Antigravity、Grok 和 Pi 一起干活——跑在你自己的电脑上，手机也能接着用。</strong></p>
 
-<p align="center"><img src="docs/assets/console.png" width="100%" alt="Loop Now 控制台：一个 Agent 的对话、工具调用、运行记录和输入框"></p>
+<p align="center"><img src="docs/readme/hero.zh-CN.png" width="100%" alt="Loop Now 控制台：Claude Code 上的 Agent 写修复计划，回复里有文件卡片、代码补丁、工具行和运行记录"></p>
 
 <p align="center">
   <a href="https://github.com/AI-for-anyone/loop-now/releases/latest"><img src="https://img.shields.io/github/v/release/AI-for-anyone/loop-now?label=release" alt="最新版本"></a>
@@ -76,17 +76,40 @@ LOOP_NOW_WORK_ROOT=/var/lib/loop-now ./loop-server     # 然后打开 http://127
 
 ## 🎬 能拿它做什么
 
-下面是一些常交给 Loop Now 的活。在控制台里跟你的 Manager——或者任何一个 Agent——这么说就行。
+下面都是用一个示例项目真实录下来的。在控制台里跟你的 Manager——或者任何一个 Agent——这么说就行。
 
-| 你说 | 会发生什么 |
-| --- | --- |
-| *“加上用 GitHub 登录。后端和控制台同时做，然后审查，再提 PR，CI 过了就合并。”* | Manager 写一个任务：两个分支同时在各自的 worktree 里做，在汇合那一步合到一起；负责审查的 Agent 实际跑一遍检查结果；最后一步提 PR，CI 过了就合并。 |
-| *“读一下还开着的 issue，给其中的 bug 写个修复计划。”* | 一个跑在 Claude Code 上的 Agent 用你自己的登录在仓库里干活，把计划写进它的文件夹；回复里显示成一张文件卡片，点一下就打开。 |
-| *“接着我昨天在 Codex 里聊的那段对话做。”* | 把 Codex（或 Claude Code）的对话导入进来，Agent 接着聊，用原来的 CLI 或换一个都行。 |
-| *“把完整的测试跑一遍，告诉我哪些挂了。”* | Agent 在后台跑；回复下面显示 `⟳ Bash 后台运行中`，跑完 Agent 会接着把结果告诉你——不管你在用哪台设备。 |
-| *“给我做一个鹈鹕骑自行车的动画网页。”* | 文件显示成一张卡片，点一下就在一个隔离的新页面里打开。 |
-
-<p align="center"><img src="docs/assets/overview-en.png" width="100%" alt="Loop Now 概览：每个 Agent 的运行状态和今天的 token 用量"></p>
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/01-task-fork-join.gif" width="100%" alt="Manager 把一句话变成任务：后端和网页并行，合并、审查后合入">
+<p><strong>一句话变成一个任务。</strong><br><em>“加一个‘置顶笔记’功能。后端和网页同时做，然后审查，再提 PR。”</em><br>两个分支在各自的 worktree 里同时做，在汇合那一步合到一起，经过审查和一次返工，最后合入。</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/02-background.gif" width="100%" alt="测试在后台运行，结束后 Agent 跟进失败原因">
+<p><strong>长活放到后台。</strong><br><em>“在后台把测试跑一遍，告诉我哪些挂了。”</em><br>测试还在跑，这一轮回复就先结束了；跑完后 Agent 自己回来报结果。</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/03-file-card.gif" width="100%" alt="Agent 做了动画网页，点文件卡片在沙箱标签页打开">
+<p><strong>做出来的文件，点开就能看。</strong><br><em>“给我做一个鹈鹕骑自行车的动画网页。”</em><br>Agent 写的文件显示成卡片，点一下就在一个隔离的新页面里打开。</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/04-phone.gif" width="100%" alt="配对手机，在手机上聊天并批准请求">
+<p><strong>手机几秒钟配好。</strong><br>扫一下二维码，就能在手机上聊天、看任务进度、批准 Agent 的操作。</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/05-switch-runtime.gif" width="100%" alt="对话中途把 Agent 从 Claude Code 换到 Codex，之前的对话一起带过去">
+<p><strong>换一个来干。</strong><br>聊到一半，把对话从 Claude Code 换到 Codex，前面说过的都会带过去。在 Claude Code 或 Codex 里聊过的对话，也能导入进来接着聊。</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/overview.png" width="100%" alt="Loop Now 概览：每个 Agent 的运行状态、待批准的请求、后台任务和今天的 token 用量">
+<p><strong>大家在干什么，一眼看清。</strong><br>谁在干活、谁在等你、后台在跑什么，还有今天用了多少 token。</p>
+</td>
+</tr>
+</table>
 
 <a id="为什么用-loop-now"></a>
 
@@ -110,6 +133,8 @@ LOOP_NOW_WORK_ROOT=/var/lib/loop-now ./loop-server     # 然后打开 http://127
 | **Antigravity、Grok、任何 ACP 命令** | 通过 Agent Client Protocol，用这个 CLI 自己的登录。 |
 | **Pi**（自带） | Loop Now 自带的引擎，用你在项目里加的模型账号和 API Key。 |
 
+<p align="center"><img src="docs/readme/runtimes.png" width="100%" alt="输入框里的运行方选择，刚从 Claude Code 交接给 Codex"></p>
+
 - **用你自己的配置，或者一份干净的。** 打开 **用我本机的 CLI 配置**，跑在 CLI 上的 Agent 会加载你的设置、`CLAUDE.md`、插件、
   Skills 和 MCP 服务，跟你在终端里一样；关着时，它只拿到 Loop Now 给的东西。
 - **权限模式。** *逐项批准*、*改文件不用问*、*自动审查*、*完全放开*。要你批准的操作会以卡片出现在对话里，哪台设备上都能点。
@@ -129,6 +154,8 @@ Manager Agent 把一个请求变成一个**任务**：由若干步骤组成的�
 | **一个任务一个 PR** | 每一步都提交、推送到任务分支；最后一步可以提 PR、等 CI、合并——Manager 在流程里怎么写就怎么做。 |
 | **全程有记录** | 每一步的对话、工具调用、耗时、token 用量、提问和产物都跟着任务留下来。 |
 
+<p align="center"><img src="docs/readme/task.png" width="100%" alt="Loop Now 任务：两个分支在各自的 worktree 里并行，在汇合步骤合并，再经过审查和修复循环"></p>
+
 ### 3. 在哪都能用，手机也行
 
 打开 **全局设置 › 手机和其它设备 › 从手机访问**，登录一个 Loop Now 账号，你的电脑就会通过 Cloudflare 通道拿到一个公网地址
@@ -139,6 +166,8 @@ Manager Agent 把一个请求变成一个**任务**：由若干步骤组成的�
   看不到控制台的流量，也拿不到设备的登录。
 - 你的电脑要一直开着 Loop Now。在这台电脑上打开控制台不用登录。
 
+<p align="center"><img src="docs/readme/phone.png" width="100%" alt="用二维码配对手机，然后在手机上批准 Agent 的请求"></p>
+
 ### 4. 能扩展：插件
 
 一个插件就是一个文件夹，`package.json` 就是它的清单，最多有两边：
@@ -148,8 +177,6 @@ Manager Agent 把一个请求变成一个**任务**：由若干步骤组成的�
 
 装一次，按项目启用，按 Agent 授权。官方插件里有一个 webhook，把收件箱的事件 POST 到你的地址。
 看 [插件指南](https://ai-for-anyone.github.io/loop-now/zh/plugins/) 和 [插件规范](plugins/SPEC.md)。
-
-<p align="center"><img src="docs/assets/plugins-en.png" width="100%" alt="Loop Now 插件市场"></p>
 
 <a id="文档"></a>
 

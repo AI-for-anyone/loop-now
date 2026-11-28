@@ -2,7 +2,7 @@
 
 <p align="center"><strong>Your coding agents, one workspace. Claude Code, Codex, Antigravity, Grok and Pi working together — on your computer, reachable from your phone.</strong></p>
 
-<p align="center"><img src="docs/assets/console-en.png" width="100%" alt="Loop Now console: an Agent's conversation with its tools, run log and message box"></p>
+<p align="center"><img src="docs/readme/hero.png" width="100%" alt="Loop Now console: an Agent on Claude Code drafts a fix plan, with a file card, a code patch, its tool line and run log"></p>
 
 <p align="center">
   <a href="https://github.com/AI-for-anyone/loop-now/releases/latest"><img src="https://img.shields.io/github/v/release/AI-for-anyone/loop-now?label=release" alt="Latest release"></a>
@@ -77,17 +77,40 @@ The bundle carries its own Node and Pi; the machine needs only Git. Details: [Se
 
 ## 🎬 What you can do
 
-Some things people hand to Loop Now. Type them to your Manager Agent — or to any Agent — in the console.
+Real recordings of a demo project. Type these to your Manager Agent — or to any Agent — in the console.
 
-| You say | What happens |
-| --- | --- |
-| *"Add sign-in with GitHub. Backend and console in parallel, then review, then open a PR and merge when CI is green."* | The Manager writes a task: two branches work at the same time in their own worktrees and merge at a join step, a reviewer Agent checks the result for real, and the last step opens the PR and merges it once CI passes. |
-| *"Read the open issues and draft a fix plan for the bugs."* | An Agent on Claude Code works in your repository with your own login and leaves the plan in its folder; it shows as a card in the reply, one click to open. |
-| *"Continue the conversation I started in Codex yesterday."* | Import the Codex (or Claude Code) conversation; the Agent continues it, on the same CLI or another. |
-| *"Run the full test suite and tell me what fails."* | The Agent starts it in the background; the reply shows `⟳ Bash running in the background`, and the Agent follows up with the result when it ends — on whatever device you are using. |
-| *"Make me an animated HTML page of a pelican riding a bike."* | The file shows as a card; click it to open the page in a sandboxed tab. |
-
-<p align="center"><img src="docs/assets/overview-en.png" width="100%" alt="Loop Now overview: run status for every Agent and today's token usage"></p>
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/01-task-fork-join.gif" width="100%" alt="The Manager turns one request into a task; backend and web run in parallel, merge, get reviewed and merged">
+<p><strong>One sentence becomes a task.</strong><br><em>"Add a 'pin note' feature. Backend and web in parallel, then review, then open a PR."</em><br>Two branches work at the same time in their own worktrees, merge at a join step, go through review and a fix, and land.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/02-background.gif" width="100%" alt="Tests run in the background; the Agent follows up with what failed">
+<p><strong>Long work in the background.</strong><br><em>"Run the test suite in the background and tell me what fails."</em><br>The reply ends while the tests run; when they finish, the Agent comes back with the result on its own.</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/03-file-card.gif" width="100%" alt="An Agent makes an animated HTML page; clicking its file card opens it in a sandboxed tab">
+<p><strong>Files you can open.</strong><br><em>"Make an animated HTML page of a pelican riding a bike."</em><br>What an Agent writes shows as a card; one click opens it in a sandboxed tab.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/04-phone.gif" width="100%" alt="Pairing a phone, then chatting and approving requests from it">
+<p><strong>Your phone, paired in seconds.</strong><br>Scan the QR code, then chat, follow tasks and approve an Agent's requests from the phone.</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/readme/scenes/05-switch-runtime.gif" width="100%" alt="Switching an Agent from Claude Code to Codex mid-conversation; the conversation is handed over">
+<p><strong>Switch who does the work.</strong><br>Move a conversation from Claude Code to Codex at any message; everything said so far goes along. You can also import a conversation you started in Claude Code or Codex.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/readme/overview.png" width="100%" alt="Loop Now overview: run state of every Agent, a request waiting for approval, a background job and today's token usage">
+<p><strong>See everyone at a glance.</strong><br>Who is working, who waits for you, what runs in the background, and today's token usage.</p>
+</td>
+</tr>
+</table>
 
 <a id="why-loop-now"></a>
 
@@ -111,6 +134,8 @@ An Agent runs on one of these, and you can switch at any message — the convers
 | **Antigravity, Grok, any ACP command** | Through the Agent Client Protocol, with the CLI's own login. |
 | **Pi** (bundled) | Loop Now's built-in engine, with the model accounts and API keys you add per project. |
 
+<p align="center"><img src="docs/readme/runtimes.png" width="100%" alt="The 'who runs it' picker in the message box, after a hand-over from Claude Code to Codex"></p>
+
 - **Your own configuration, or a clean one.** **Use my own CLI configuration** lets an Agent on a CLI load your settings,
   `CLAUDE.md`, plugins, skills and MCP servers, exactly as in your terminal; off, it gets only what Loop Now gives it.
 - **Permission modes.** *Supervised*, *Auto-accept edits*, *Auto* or *Full access*. Requests to approve show as cards in the
@@ -133,6 +158,8 @@ approved it.
 | **One PR per task** | Steps commit and push to the task branch; a final step can open the PR, wait for CI and merge it — whatever the Manager writes into the workflow. |
 | **Everything on record** | Each step's conversation, tool calls, timing, token usage, questions and artifacts stay with the task. |
 
+<p align="center"><img src="docs/readme/task.png" width="100%" alt="A Loop Now task: two branches ran in parallel in their own worktrees, merged at a join step, then went through review and a fix loop"></p>
+
 ### 3. From anywhere, on your phone
 
 Turn on **Global settings › Phones and other devices › Access from phones**, sign in to a Loop Now account, and your computer gets a
@@ -144,6 +171,8 @@ chat, approve requests, follow tasks — live.
   out the tunnel and address; it never sees console traffic or device sessions.
 - Your computer must keep Loop Now running. On this computer itself, the console needs no sign-in.
 
+<p align="center"><img src="docs/readme/phone.png" width="100%" alt="Pair a phone with a QR code, then approve an Agent's request from the phone"></p>
+
 ### 4. Built to extend: plugins
 
 A plugin is one directory whose `package.json` is the manifest, with up to two sides:
@@ -154,8 +183,6 @@ A plugin is one directory whose `package.json` is the manifest, with up to two s
 
 Install once, enable per project, grant per Agent. Official plugins include a webhook that POSTs Inbox events to your URL.
 Read the [plugin guide](https://ai-for-anyone.github.io/loop-now/plugins/) and the [specification](plugins/SPEC.md).
-
-<p align="center"><img src="docs/assets/plugins-en.png" width="100%" alt="Loop Now plugin market"></p>
 
 <a id="docs"></a>
 
