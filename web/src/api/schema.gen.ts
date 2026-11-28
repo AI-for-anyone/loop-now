@@ -7538,11 +7538,23 @@ export interface components {
             to: string;
             label: string;
             maxTraversals?: number | null;
+            /** @description The fork (TaskWorkflow.forks) this edge belongs to; omit it for an ordinary edge. A fork's edges all leave the same step, which takes them together by submitting the fork's id as its edgeId (not the id of one of its edges): each edge then starts a branch, and the branches run at the same time. Each fork edge has its own maxTraversals. */
+            fork?: string;
         };
         TaskWorkflow: {
             startStepId: string;
             steps: components["schemas"]["TaskWorkflowStep"][];
             edges: components["schemas"]["TaskWorkflowEdge"][];
+            /** @description Parallel branches; omit for a flow that does one step at a time. A fork is two or more edges leaving one step (the edges whose fork is the fork's id); the step takes them all at once by submitting the fork's id as its edgeId, and each edge starts a branch: the steps reachable from the edge's target without passing the join, named by that first step. The branches run at the same time and meet at join, a step that starts once every branch has arrived (submitted an edge into the join); the join's inputs can map the outputs of the branches' steps. Checked when the task is created: forks are not nested (a fork leaves a step outside every branch, and its join lies outside every branch); a branch is entered only through its fork, and its edges lead only to its own steps or to its join; a branch has no step without outgoing edges, and every step of it can reach the join; branches share no steps, though a second fork may start the same branches with the same join (for example a way back from the join that sends every branch back); an Agent that does a step in a branch does steps only in that branch (a task has one instance per Agent, with one conversation and one working folder). Loops inside a branch and loops around a whole fork need maxTraversals like any other loop. With a git workspace, each branch works in its own worktree on its own branch (<task branch>--<first step>) cut from the task branch when the fork is taken; when every branch has arrived, Loop Now merges the branches into the task branch in the order of the fork's edges, and a conflict stops the merge and is handed to the join step's Agent in the task's worktree. With a copy workspace, each branch works in its own copy of the task's copy, and nothing is merged back. A branch that blocks blocks only itself: the others go on, and the join waits for it. */
+            forks?: components["schemas"]["TaskWorkflowFork"][];
+            /** @description How many branches of a fork run at once; the others start, in the order of the fork's edges, as running ones arrive at the join. Omitted or null means all of them. */
+            maxParallelBranches?: number | null;
+        };
+        TaskWorkflowFork: {
+            /** @description The fork's id, which the step its edges leave submits as edgeId; unique among the forks and not also an edge id. */
+            id: string;
+            /** @description The step where the fork's branches meet; it starts once every branch has arrived. */
+            join: string;
         };
         TaskQuestionRef: {
             /** Format: uuid */
@@ -7573,6 +7585,8 @@ export interface components {
             currentStepTitle: string | null;
             /** Format: uuid */
             currentAgentId: string | null;
+            /** @description Every current node of the task, in the order they became current: the one step outside a fork; inside a fork, one per branch whose step is running, waiting or blocked (a branch that has arrived at the join, or has not started yet, has none). currentNodeRunId, currentStepId, currentStepTitle and currentAgentId name the current node when there is exactly one and are null when there are several. Empty for a moment while a fork's branches start or a join merges them; kept as they were when the task ended. */
+            currentNodes: components["schemas"]["TaskCurrentNode"][];
             reason: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -7590,7 +7604,21 @@ export interface components {
              */
             workspaceMode: "git" | "copy" | null;
         };
+        /** @description A current node of the task. */
+        TaskCurrentNode: {
+            /** Format: uuid */
+            nodeRunId: string;
+            stepId: string;
+            /** @description The step's title in the task's frozen workflow. */
+            stepTitle: string;
+            /** Format: uuid */
+            agentId: string;
+            /** @description The branch the step is in, named by the branch's first step; null for a step outside every branch. */
+            branch: string | null;
+        };
         TaskNodeRun: {
+            /** @description The branch the node's step is in, named by the branch's first step; null for a step outside every branch. */
+            branch: string | null;
             /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
             sleep: components["schemas"]["SleepInfo"] | null;
             /** Format: int64 */
@@ -7917,6 +7945,33 @@ export interface components {
             modeNote: string | null;
             git: null | components["schemas"]["TaskWorkspaceGit"];
             copy: null | components["schemas"]["TaskWorkspaceCopy"];
+            /** @description The workspaces of the task's parallel branches (TaskWorkflow.forks), one per branch in the order they first started; empty for a task whose forks have not run. Taking a fork again starts its branches afresh in the same entries. A kept workspace's counts include its branches, and removing it removes them too. */
+            branches: components["schemas"]["TaskWorkspaceBranch"][];
+        };
+        /** @description The workspace of one parallel branch. git is non-null exactly in git mode. */
+        TaskWorkspaceBranch: {
+            /** @description The branch's first step, which names the branch. */
+            step: string;
+            /** @description The branch's own worktree (git mode) or copy of the task's copy (copy mode), under Loop Now's own data folder. */
+            path: string;
+            /**
+             * @description active while the worktree or copy exists; removed once Loop Now removed it (a worktree after its branch merged cleanly at the join, the rest when the task ended); kept when it was left in place at the task's end because removing it would lose uncommitted changes.
+             * @enum {string}
+             */
+            state: "active" | "removed" | "kept";
+            /**
+             * @description Git mode, set at the join. merged when the branch was merged into the task branch; conflict when merging it stopped on a conflict, which the join step resolves in the task's worktree; skipped when it was not merged because an earlier branch conflicted or the task's worktree had uncommitted changes, which the join step merges. null before the join and in copy mode.
+             * @enum {string|null}
+             */
+            merge: "merged" | "conflict" | "skipped" | null;
+            git: null | components["schemas"]["TaskWorkspaceBranchGit"];
+        };
+        /** @description The git side of a branch's workspace. */
+        TaskWorkspaceBranchGit: {
+            /** @description The branch's own git branch, <task branch>--<first step>. */
+            branch: string;
+            /** @description The task branch's commit the branch was cut from. */
+            baseCommit: string;
         };
         /** @description The git side of a git-mode workspace. */
         TaskWorkspaceGit: {
@@ -7955,6 +8010,7 @@ export interface components {
             output: {
                 [key: string]: unknown;
             };
+            /** @description The exit taken, one of the step's outgoing edges or the id of a fork leaving the step (which takes all of the fork's edges); null exactly for a step without outgoing edges, which ends the task. */
             edgeId: string | null;
         };
         TaskFailInput: {
