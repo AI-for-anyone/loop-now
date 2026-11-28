@@ -175,6 +175,65 @@ describe('BackgroundToolChips in mono skin', () => {
     expect(within(reopened).getAllByRole('listitem')).toHaveLength(2)
   })
 
+  it('returns keyboard focus to that task’s Details button after pressing Back from task details', async () => {
+    const user = userEvent.setup()
+    const tasks = [
+      makeBackgroundTask({ id: 'a1', toolCallId: 'c1', kind: 'subagent', label: 'Wait D', startedAt: '2026-10-12T08:00:10Z', status: 'running' }),
+      makeBackgroundTask({ id: 'a2', toolCallId: 'c2', kind: 'subagent', label: 'Wait E', startedAt: '2026-10-12T08:00:20Z', status: 'running' }),
+      makeBackgroundTask({ id: 'a3', toolCallId: 'c3', kind: 'subagent', label: 'Wait F', startedAt: '2026-10-12T08:00:30Z', status: 'running' }),
+    ]
+    const names = new Map([['c1', 'Agent'], ['c2', 'Agent'], ['c3', 'Agent']])
+
+    render(<ToolList tools={[]} after={<BackgroundToolChips tasks={tasks} toolNames={names} />} />)
+
+    await user.click(screen.getByRole('button', { name: 'Agent Running in the background, 3 tasks' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Agent Running in the background, 3 tasks' })
+
+    // Open the second task's details with the keyboard, confirm focus moves to Back, then press Enter on Back.
+    const secondDetails = within(dialog).getByRole('button', { name: 'View details: Wait E' })
+    secondDetails.focus()
+    await user.keyboard('{Enter}')
+    const back = within(dialog).getByRole('button', { name: 'Back to Agent list (3)' })
+    expect(back).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(within(dialog).getByRole('button', { name: 'View details: Wait E' })).toHaveFocus()
+
+    // Repeat with the third task via click so both keyboard and click Back restore focus to the matching row.
+    await user.click(within(dialog).getByRole('button', { name: 'View details: Wait F' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Agent list (3)' }))
+    expect(within(dialog).getByRole('button', { name: 'View details: Wait F' })).toHaveFocus()
+  })
+
+  it('keeps the keyboard focus ring inside the padded group button so it cannot cover adjacent dot separators', () => {
+    const tasks = [
+      makeBackgroundTask({ id: 'a1', toolCallId: 'c1', kind: 'subagent', label: 'Wait D', startedAt: '2026-10-12T08:00:10Z', status: 'running' }),
+      makeBackgroundTask({ id: 'a2', toolCallId: 'c2', kind: 'subagent', label: 'Wait E', startedAt: '2026-10-12T08:00:20Z', status: 'running' }),
+      makeBackgroundTask({ id: 'a3', toolCallId: 'c3', kind: 'subagent', label: 'Wait F', startedAt: '2026-10-12T08:00:30Z', status: 'stopped', stopReason: 'person', endedAt: '2026-10-12T08:01:00Z' }),
+    ]
+    const events = [tool('r1', 'Bash'), tool('c1', 'Agent'), tool('c2', 'Agent'), tool('c3', 'Agent')]
+    const names = new Map(events.map((event) => [event.toolCallId, event.toolName]))
+
+    render(<ToolList tools={events} exclude={new Set(['c1', 'c2', 'c3'])} after={<BackgroundToolChips tasks={tasks} toolNames={names} />} />)
+
+    const items = within(screen.getByRole('list', { name: 'Tool calls' })).getAllByRole('listitem')
+    expect(items[1].querySelector('[data-tool-separator]')?.className).toContain('mx-1.5')
+    expect(items[2].querySelector('[data-tool-separator]')?.className).toContain('mx-1.5')
+
+    const groupBtn = within(items[1]).getByRole('button', { name: 'Agent Running in the background, 2 tasks' })
+    const classes = groupBtn.className.split(/\s+/)
+    // Horizontal padding and negative margin cancel out (4px < separator's 6px mx-1.5), keeping unfocused spacing unchanged.
+    expect(classes).toContain('-mx-1')
+    expect(classes).toContain('px-1')
+    expect(classes).toContain('-my-0.5')
+    expect(classes).toContain('py-0.5')
+    // Inset ring stays inside the 4px padding instead of outward shadow-focus (4px + 4px = 8px > 6px) that painted over the dots.
+    expect(classes).not.toContain('focus-visible:shadow-focus')
+    expect(classes).toContain('focus-visible:ring-2')
+    expect(classes).toContain('focus-visible:ring-inset')
+    expect(classes).toContain('focus-visible:ring-riso-blue')
+  })
+
   it('treats background_task_ended as already stopped without showing an error alert', async () => {
     const user = userEvent.setup()
     const onStop = vi.fn(async () => {

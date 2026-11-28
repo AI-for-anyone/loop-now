@@ -2,6 +2,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeBackgroundTask } from '@/test/api'
+import { resetThemeForTest, setSkin } from '@/theme/store'
+import { BackgroundFollowUpLine } from '@/features/chat/BackgroundFollowUp'
 import { BackgroundToolChips } from '@/features/chat/BackgroundToolChip'
 import { ToolList } from '@/features/chat/RunStatus'
 
@@ -12,7 +14,11 @@ beforeEach(() => {
   vi.setSystemTime(NOW)
 })
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  window.localStorage.clear()
+  resetThemeForTest()
+})
 
 describe('BackgroundToolChips (Chinese UI)', () => {
   it('groups running and ended background tools onto the quiet line with Chinese labels and group popover', async () => {
@@ -57,5 +63,31 @@ describe('BackgroundToolChips (Chinese UI)', () => {
     await user.click(within(rows[0]).getByRole('button', { name: '查看详情：调查架构 A' }))
     expect(within(dialog).getByRole('button', { name: '返回 Agent 列表（3 个）' })).toHaveTextContent('返回')
     expect(dialog).toHaveTextContent('调查架构 A')
+
+    await user.click(within(dialog).getByRole('button', { name: '返回 Agent 列表（3 个）' }))
+    expect(within(dialog).getByRole('button', { name: '查看详情：调查架构 A' })).toHaveFocus()
+  })
+
+  it('renders follow-up heading tasks in quiet grouped style in mono and keeps pills in Plate', () => {
+    const tasks = [
+      makeBackgroundTask({ id: 'a1', kind: 'command', label: 'npm test', startedAt: '2026-10-12T08:00:10Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:00Z' }),
+      makeBackgroundTask({ id: 'a2', kind: 'command', label: 'npm lint', startedAt: '2026-10-12T08:00:20Z', status: 'completed', exitCode: 0, endedAt: '2026-10-12T08:01:05Z' }),
+    ]
+    const { unmount } = render(<BackgroundFollowUpLine tasks={tasks} runtimeName="Claude Code" at="2026-10-12T08:01:10Z" />)
+
+    const monoNote = screen.getByRole('note')
+    expect(monoNote).toHaveTextContent('后台任务结束后，Claude Code 接着说：')
+    const monoGroup = within(monoNote).getByRole('button', { name: '命令 后台已完成，2 个' })
+    expect(monoGroup.querySelector('[data-tool-text]')).toHaveTextContent('命令×2后台已完成')
+    expect(monoGroup.className).not.toContain('rounded-full')
+    unmount()
+
+    setSkin('plate')
+    render(<BackgroundFollowUpLine tasks={tasks} runtimeName="Claude Code" at="2026-10-12T08:01:10Z" />)
+    const plateNote = screen.getByRole('note')
+    const plateButtons = within(plateNote).getAllByRole('button')
+    expect(plateButtons).toHaveLength(2)
+    expect(plateButtons[0].className).toContain('rounded-full')
+    expect(plateButtons[1].className).toContain('rounded-full')
   })
 })

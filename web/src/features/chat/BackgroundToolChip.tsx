@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, LoaderCircleIcon } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { ApiError, type Schemas } from '@/api/client'
 import { badgeVariants } from '@/components/ui/badge'
@@ -209,15 +209,26 @@ function GroupTaskList({
   group,
   label,
   stopControl,
+  focusTaskId,
   onSelect,
 }: {
   group: BackgroundToolGroup
   label: string
   stopControl?: TaskStopControl
+  focusTaskId: string | null
   onSelect: (taskId: string) => void
 }) {
   const now = useNow(1000, group.status === 'running')
   const status = backgroundStatusText(group.state)
+  const detailsRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+
+  // Restore keyboard focus to the task's Details button when returning from its detail view instead of dropping to <body>.
+  useLayoutEffect(() => {
+    if (!focusTaskId) return
+    const target = detailsRefs.current.get(focusTaskId) ?? detailsRefs.current.values().next().value
+    target?.focus()
+  }, [focusTaskId])
+
   return (
     <>
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface-subtle px-4 py-2.5">
@@ -259,6 +270,12 @@ function GroupTaskList({
                 </p>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <Button
+                    ref={(node) => {
+                      if (node) detailsRefs.current.set(task.id, node)
+                      return () => {
+                        detailsRefs.current.delete(task.id)
+                      }
+                    }}
                     type="button"
                     size="xs"
                     variant="secondary"
@@ -283,7 +300,7 @@ function GroupTaskList({
   )
 }
 
-// One tool of a reply that went on in the background, rendered as a pill chip (used in Plate skin and follow-up headings).
+// One tool of a reply that went on in the background, rendered as a pill chip (used in Plate skin).
 // Name and status share one baseline inside the chip while remaining vertically centered next to the spinner.
 export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: string }) {
   const name = toolName ?? t.background.kind[task.kind]
@@ -316,18 +333,18 @@ export function BackgroundToolChip({ task, toolName }: { task: Task; toolName?: 
   )
 }
 
-// One grouped background tool entry on the quiet tool line (default mono skin): one clickable button per (name, state) group.
-function BackgroundToolGroupItem({
+// One clickable quiet background tool group (default mono skin): one button per (name, state) group,
+// shared by the reply tool line and background follow-up headings.
+export function BackgroundToolGroupButton({
   group,
-  separator,
   stopControl,
 }: {
   group: BackgroundToolGroup
-  separator: boolean
   stopControl?: TaskStopControl
 }) {
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [returnFocusId, setReturnFocusId] = useState<string | null>(null)
   const single = group.tasks.length === 1 ? group.tasks[0] : null
   const status = backgroundStatusText(group.state)
   const ariaLabel = single
@@ -338,9 +355,107 @@ function BackgroundToolGroupItem({
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    if (!next) setSelectedId(null)
+    if (!next) {
+      setSelectedId(null)
+      setReturnFocusId(null)
+    }
   }
 
+  const handleSelect = (taskId: string) => {
+    setReturnFocusId(null)
+    setSelectedId(taskId)
+  }
+
+  const handleBack = () => {
+    if (selected) setReturnFocusId(selected.id)
+    setSelectedId(null)
+  }
+
+  return (
+    <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
+      <PopoverPrimitive.Trigger
+        type="button"
+        data-background-tool={single ? single.id : undefined}
+        data-background-tool-count={group.tasks.length}
+        data-status={group.status}
+        aria-label={ariaLabel}
+        title={single ? single.label : ariaLabel}
+        className={cn(
+          // Keep the focus ring inset inside the 4px horizontal padding so it never paints over the adjacent 6px-spaced dot separators.
+          'group/bg-tool -mx-1 -my-0.5 inline-flex cursor-pointer items-center gap-1 rounded-stamp px-1 py-0.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-riso-blue',
+          group.status === 'failed'
+            ? 'text-red-text hover:bg-tint-red/70 aria-expanded:bg-tint-red/70'
+            : 'text-ink-500 hover:bg-surface-hover hover:text-ink aria-expanded:bg-surface-hover aria-expanded:text-ink',
+        )}
+      >
+        {group.status === 'running' && (
+          <>
+            <LoaderCircleIcon
+              aria-hidden="true"
+              data-slot="tool-spinner"
+              className="size-3 shrink-0 riso-spin motion-reduce:hidden motion-reduce:animate-none"
+            />
+            <span aria-hidden="true" data-slot="tool-static-mark" className="hidden motion-reduce:inline">
+              {t.chat.toolStaticMark}
+            </span>
+          </>
+        )}
+        <span data-tool-text="" className="inline-flex items-baseline gap-1">
+          <span
+            className={cn(
+              'font-mono text-[12px] font-medium',
+              group.status === 'running' || group.status === 'completed'
+                ? 'text-ink-700 group-hover/bg-tool:text-ink group-aria-expanded/bg-tool:text-ink'
+                : undefined,
+            )}
+          >
+            {group.name}
+          </span>
+          {group.tasks.length > 1 && (
+            <span className={cn('tabular-nums', group.status === 'failed' ? 'text-red-text/75' : 'text-ink-500/70')}>
+              ×{group.tasks.length}
+            </span>
+          )}
+          <span>{status}</span>
+        </span>
+      </PopoverPrimitive.Trigger>
+      <BackgroundTaskPopover label={popoverLabel}>
+        {single ? (
+          <Details task={single} name={group.name} stopControl={stopControl} />
+        ) : selected ? (
+          <Details
+            task={selected}
+            name={group.name}
+            stopControl={stopControl}
+            onBack={{
+              label: t.background.card.backLabel(group.name, group.tasks.length),
+              onClick: handleBack,
+            }}
+          />
+        ) : (
+          <GroupTaskList
+            group={group}
+            label={ariaLabel}
+            stopControl={stopControl}
+            focusTaskId={returnFocusId ?? selectedId}
+            onSelect={handleSelect}
+          />
+        )}
+      </BackgroundTaskPopover>
+    </PopoverPrimitive.Root>
+  )
+}
+
+// One grouped background tool entry on the quiet tool line (default mono skin): one list item per (name, state) group.
+function BackgroundToolGroupItem({
+  group,
+  separator,
+  stopControl,
+}: {
+  group: BackgroundToolGroup
+  separator: boolean
+  stopControl?: TaskStopControl
+}) {
   return (
     <li
       data-tool-group=""
@@ -353,70 +468,7 @@ function BackgroundToolGroupItem({
           {t.chat.metaSeparator}
         </span>
       )}
-      <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
-        <PopoverPrimitive.Trigger
-          type="button"
-          data-background-tool={single ? single.id : undefined}
-          data-background-tool-count={group.tasks.length}
-          data-status={group.status}
-          aria-label={ariaLabel}
-          title={single ? single.label : ariaLabel}
-          className={cn(
-            'group/bg-tool -mx-1 inline-flex cursor-pointer items-center gap-1 rounded-stamp px-1 text-left transition-colors outline-none focus-visible:shadow-focus',
-            group.status === 'failed'
-              ? 'text-red-text hover:bg-tint-red/70 aria-expanded:bg-tint-red/70'
-              : 'text-ink-500 hover:bg-surface-hover hover:text-ink aria-expanded:bg-surface-hover aria-expanded:text-ink',
-          )}
-        >
-          {group.status === 'running' && (
-            <>
-              <LoaderCircleIcon
-                aria-hidden="true"
-                data-slot="tool-spinner"
-                className="size-3 shrink-0 riso-spin motion-reduce:hidden motion-reduce:animate-none"
-              />
-              <span aria-hidden="true" data-slot="tool-static-mark" className="hidden motion-reduce:inline">
-                {t.chat.toolStaticMark}
-              </span>
-            </>
-          )}
-          <span data-tool-text="" className="inline-flex items-baseline gap-1">
-            <span
-              className={cn(
-                'font-mono text-[12px] font-medium',
-                group.status === 'running' || group.status === 'completed'
-                  ? 'text-ink-700 group-hover/bg-tool:text-ink group-aria-expanded/bg-tool:text-ink'
-                  : undefined,
-              )}
-            >
-              {group.name}
-            </span>
-            {group.tasks.length > 1 && (
-              <span className={cn('tabular-nums', group.status === 'failed' ? 'text-red-text/75' : 'text-ink-500/70')}>
-                ×{group.tasks.length}
-              </span>
-            )}
-            <span>{status}</span>
-          </span>
-        </PopoverPrimitive.Trigger>
-        <BackgroundTaskPopover label={popoverLabel}>
-          {single ? (
-            <Details task={single} name={group.name} stopControl={stopControl} />
-          ) : selected ? (
-            <Details
-              task={selected}
-              name={group.name}
-              stopControl={stopControl}
-              onBack={{
-                label: t.background.card.backLabel(group.name, group.tasks.length),
-                onClick: () => setSelectedId(null),
-              }}
-            />
-          ) : (
-            <GroupTaskList group={group} label={ariaLabel} stopControl={stopControl} onSelect={setSelectedId} />
-          )}
-        </BackgroundTaskPopover>
-      </PopoverPrimitive.Root>
+      <BackgroundToolGroupButton group={group} stopControl={stopControl} />
     </li>
   )
 }
