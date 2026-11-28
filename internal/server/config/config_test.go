@@ -162,6 +162,10 @@ func TestLoadErrors(t *testing.T) {
 		{"zero Pi stderr length", func(m map[string]string) { m[EnvPiStderrTail] = "0" }, EnvPiStderrTail},
 		{"invalid log format", func(m map[string]string) { m[EnvLogFormat] = "xml" }, EnvLogFormat},
 		{"invalid log level", func(m map[string]string) { m[EnvLogLevel] = "verbose" }, EnvLogLevel},
+		{"relay over plain http", func(m map[string]string) { m[EnvRelayURL] = "http://relay.loop-now.app" }, EnvRelayURL},
+		{"relay with a path", func(m map[string]string) { m[EnvRelayURL] = "https://relay.loop-now.app/v1" }, EnvRelayURL},
+		{"relay without a host", func(m map[string]string) { m[EnvRelayURL] = "https://" }, EnvRelayURL},
+		{"cloudflared path not absolute", func(m map[string]string) { m[EnvCloudflaredPath] = "bin/cloudflared" }, EnvCloudflaredPath},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -496,5 +500,24 @@ func TestACPBackgroundWait(t *testing.T) {
 	env[EnvACPBackgroundWait] = "0s"
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvACPBackgroundWait) {
 		t.Fatalf("0 is refused: %v", err)
+	}
+}
+
+func TestRelaySettings(t *testing.T) {
+	c, err := Load(envOf(requiredEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.RelayURL != "https://relay.loop-now.app" || c.CloudflaredPath != "" {
+		t.Fatalf("defaults: %q %q", c.RelayURL, c.CloudflaredPath)
+	}
+	for in, want := range map[string]string{"https://relay.example.test/": "https://relay.example.test", "http://localhost:8787": "http://localhost:8787", "http://127.0.0.1:8787": "http://127.0.0.1:8787"} {
+		env := requiredEnv()
+		env[EnvRelayURL] = in
+		env[EnvCloudflaredPath] = fixturePath("/opt/homebrew/bin/cloudflared")
+		c, err := Load(envOf(env))
+		if err != nil || c.RelayURL != want || c.CloudflaredPath != fixturePath("/opt/homebrew/bin/cloudflared") {
+			t.Errorf("%s: %q %q %v", in, c.RelayURL, c.CloudflaredPath, err)
+		}
 	}
 }

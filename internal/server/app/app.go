@@ -31,6 +31,7 @@ import (
 	"loop-now/internal/server/cliimport"
 	"loop-now/internal/server/clitemplate"
 	cliverifyservice "loop-now/internal/server/cliverify/service"
+	"loop-now/internal/server/cloudflared"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/conversation"
@@ -56,6 +57,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/providerstate"
+	"loop-now/internal/server/relay"
 	"loop-now/internal/server/remoteaccess"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/runtimes"
@@ -64,6 +66,7 @@ import (
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/tasks/gitbin"
 	"loop-now/internal/server/textgen"
+	"loop-now/internal/server/tunnel"
 	"loop-now/internal/server/webui"
 )
 
@@ -117,6 +120,9 @@ type App struct {
 	external    *http.Server
 	// Remote door: the second loopback listener for paired devices, opened at Serve when its setting is on.
 	Remote *remoteaccess.Door
+	// Tunnel is the Loop Now account and the tunnel to the remote door ("access from phones"); nil when the relay's
+	// file in the data folder could not be read.
+	Tunnel *tunnel.Manager
 }
 
 // Options lets tests replace some dependencies.
@@ -675,6 +681,20 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.API.Devices = &devices.Service{Store: a.Store}
 	a.Remote = &remoteaccess.Door{Store: a.Store, Handler: a.API.RemoteHandler(), BaseContext: baseCtx, Log: log}
 	a.API.RemoteAccess = a.Remote
+	// The Loop Now account and the tunnel: its file (credential, address, switch) lives in the data folder.
+	relayClient := &relay.Client{BaseURL: cfg.RelayURL}
+	account := &relay.Account{Client: relayClient, Path: filepath.Join(cfg.DataDir, "relay", "host.json"), HostName: relay.MachineName, Log: log}
+	if err := account.Load(); err != nil {
+		log.Error("could not read the relay file; signing in to a Loop Now account is off until it is fixed or removed", "err", err)
+	} else {
+		a.Tunnel = &tunnel.Manager{Account: account, Client: relayClient, Door: a.Remote, HostName: relay.MachineName, Log: log,
+			Installer: &cloudflared.Installer{Dir: filepath.Join(cfg.DataDir, "tools", "cloudflared"), Configured: cfg.CloudflaredPath, Log: log,
+				PathDirs: func(ctx context.Context) []string {
+					return append(a.UserPath.Dirs(ctx), filepath.SplitList(os.Getenv("PATH"))...)
+				}}}
+		account.OnChange = a.Tunnel.AccountChanged
+		a.API.Relay = a.Tunnel
+	}
 	if extTLS != nil {
 		ln := o.ExternalListener
 		if ln == nil {
@@ -721,6 +741,9 @@ func (a *App) Serve() error {
 	if err := a.Remote.Start(context.Background()); err != nil {
 		return err
 	}
+	if a.Tunnel != nil {
+		a.Tunnel.Start()
+	}
 	a.Log.Info("serving", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
 		// The listener has long been open and connections queue up before Serve starts, so writing the ready file now
@@ -748,6 +771,11 @@ func (a *App) Shutdown(ctx context.Context) error {
 		// SSE connections never end by themselves: cancel the context shared by all requests so event streams exit
 		// quickly, then wait for the remaining requests.
 		a.baseCancel()
+		if a.Tunnel != nil {
+			// cloudflared first, so phones see the tunnel go away rather than a closed door behind it.
+			a.Tunnel.Close()
+			a.Tunnel.Account.Close()
+		}
 		if a.Remote != nil {
 			_ = a.Remote.Close()
 		}
