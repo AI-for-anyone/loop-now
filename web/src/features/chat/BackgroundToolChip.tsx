@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, LoaderCircleIcon } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { ApiError, type Schemas } from '@/api/client'
 import { badgeVariants } from '@/components/ui/badge'
@@ -209,15 +209,26 @@ function GroupTaskList({
   group,
   label,
   stopControl,
+  focusTaskId,
   onSelect,
 }: {
   group: BackgroundToolGroup
   label: string
   stopControl?: TaskStopControl
+  focusTaskId: string | null
   onSelect: (taskId: string) => void
 }) {
   const now = useNow(1000, group.status === 'running')
   const status = backgroundStatusText(group.state)
+  const detailsRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+
+  // Restore keyboard focus to the task's Details button when returning from its detail view instead of dropping to <body>.
+  useLayoutEffect(() => {
+    if (!focusTaskId) return
+    const target = detailsRefs.current.get(focusTaskId) ?? detailsRefs.current.values().next().value
+    target?.focus()
+  }, [focusTaskId])
+
   return (
     <>
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface-subtle px-4 py-2.5">
@@ -259,6 +270,12 @@ function GroupTaskList({
                 </p>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <Button
+                    ref={(node) => {
+                      if (node) detailsRefs.current.set(task.id, node)
+                      return () => {
+                        detailsRefs.current.delete(task.id)
+                      }
+                    }}
                     type="button"
                     size="xs"
                     variant="secondary"
@@ -328,6 +345,7 @@ function BackgroundToolGroupItem({
 }) {
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [returnFocusId, setReturnFocusId] = useState<string | null>(null)
   const single = group.tasks.length === 1 ? group.tasks[0] : null
   const status = backgroundStatusText(group.state)
   const ariaLabel = single
@@ -338,7 +356,20 @@ function BackgroundToolGroupItem({
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    if (!next) setSelectedId(null)
+    if (!next) {
+      setSelectedId(null)
+      setReturnFocusId(null)
+    }
+  }
+
+  const handleSelect = (taskId: string) => {
+    setReturnFocusId(null)
+    setSelectedId(taskId)
+  }
+
+  const handleBack = () => {
+    if (selected) setReturnFocusId(selected.id)
+    setSelectedId(null)
   }
 
   return (
@@ -409,11 +440,17 @@ function BackgroundToolGroupItem({
               stopControl={stopControl}
               onBack={{
                 label: t.background.card.backLabel(group.name, group.tasks.length),
-                onClick: () => setSelectedId(null),
+                onClick: handleBack,
               }}
             />
           ) : (
-            <GroupTaskList group={group} label={ariaLabel} stopControl={stopControl} onSelect={setSelectedId} />
+            <GroupTaskList
+              group={group}
+              label={ariaLabel}
+              stopControl={stopControl}
+              focusTaskId={returnFocusId ?? selectedId}
+              onSelect={handleSelect}
+            />
           )}
         </BackgroundTaskPopover>
       </PopoverPrimitive.Root>
