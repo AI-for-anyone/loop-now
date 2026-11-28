@@ -3,7 +3,6 @@ import { formatElapsed } from './format'
 export const devices = {
   title: '手机和其它设备',
   localOnly: {
-    title: '只能在电脑上管理',
     body: '手机和其它设备以及远程访问只能在运行 Loop Now 的那台电脑上管理。请在电脑上打开 Loop Now 来开关远程访问、添加或移除设备。',
   },
   remote: {

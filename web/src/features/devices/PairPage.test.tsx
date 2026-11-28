@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -113,6 +113,71 @@ describe('PairPage (/pair)', () => {
 
     expect(await screen.findByText(/This computer doesn't need pairing/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open console' })).toHaveAttribute('href', '/')
+  })
+
+  it('redeems a new fragment code when the hash changes via hashchange while /pair is already mounted', async () => {
+    const received: Schemas['DeviceSessionRequest'][] = []
+    server.use(
+      http.post(apiUrl('/device-sessions'), async ({ request }) => {
+        const body = (await request.json()) as Schemas['DeviceSessionRequest']
+        received.push(body)
+        if (body.code === 'expired-code') {
+          return HttpResponse.json(errorBody('pairing_code_invalid'), { status: 403 })
+        }
+        return HttpResponse.json(pairedDevice, { status: 201 })
+      }),
+      http.get(apiUrl('/context'), () => HttpResponse.json({ ...context, door: 'remote' })),
+      ...baseHandlers([]),
+    )
+
+    window.history.replaceState(null, '', '/pair#expired-code')
+    const replaceSpy = vi.spyOn(window.history, 'replaceState')
+    try {
+      const { router } = renderRoutes(routes, '/pair#expired-code')
+
+      expect(await screen.findByText(/invalid, expired, or has already been used/i)).toBeInTheDocument()
+      expect(window.location.hash).toBe('')
+
+      // Simulate pasting a new pairing link in the same tab (same-document fragment navigation).
+      replaceSpy.mockClear()
+      window.history.pushState(null, '', '/pair#fresh-same-tab-code')
+      act(() => {
+        window.dispatchEvent(new HashChangeEvent('hashchange'))
+      })
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+      expect(window.location.hash).toBe('')
+      expect(replaceSpy).toHaveBeenCalledWith(null, '', '/pair')
+      expect(received).toEqual([{ code: 'expired-code' }, { code: 'fresh-same-tab-code' }])
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
+  })
+
+  it('redeems a new fragment code when React Router updates location.hash while /pair is mounted', async () => {
+    const received: Schemas['DeviceSessionRequest'][] = []
+    server.use(
+      http.post(apiUrl('/device-sessions'), async ({ request }) => {
+        const body = (await request.json()) as Schemas['DeviceSessionRequest']
+        received.push(body)
+        if (body.code === 'old-code') {
+          return HttpResponse.json(errorBody('pairing_code_invalid'), { status: 403 })
+        }
+        return HttpResponse.json(pairedDevice, { status: 201 })
+      }),
+      http.get(apiUrl('/context'), () => HttpResponse.json({ ...context, door: 'remote' })),
+      ...baseHandlers([]),
+    )
+
+    const { router } = renderRoutes(routes, '/pair#old-code')
+    expect(await screen.findByText(/invalid, expired, or has already been used/i)).toBeInTheDocument()
+
+    await act(async () => {
+      await router.navigate('/pair#router-new-code')
+    })
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    expect(received).toEqual([{ code: 'old-code' }, { code: 'router-new-code' }])
   })
 })
 

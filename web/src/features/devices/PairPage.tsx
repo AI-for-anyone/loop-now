@@ -25,9 +25,16 @@ function isLocalDoorRefusal(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'forbidden'
 }
 
+function stripLocationHash() {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`)
+  }
+}
+
 // Standalone pairing view used in two places:
 // - route mode (/pair#<code>): automatically redeems the one-time code from the URL fragment (clearing the fragment from the address bar
-//   immediately) and navigates into the console; falls back to manual entry when opened without a code or when the code fails.
+//   immediately) and navigates into the console; also reacts to same-document fragment changes while /pair stays mounted; falls back to
+//   manual entry when opened without a code or when the code fails.
 // - gate mode (rendered by AppLayout when the remote door returns 401): replaces the console immediately when an unpaired or removed device
 //   opens the remote door, and lets the person pair in place without leaving the URL.
 export function PairPage({ mode = 'route' }: { mode?: 'route' | 'gate' }) {
@@ -36,8 +43,14 @@ export function PairPage({ mode = 'route' }: { mode?: 'route' | 'gate' }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [initialCode] = useState(() => (mode === 'route' ? extractPairingCode(location.hash) : ''))
-  const [autoPairing, setAutoPairing] = useState(() => initialCode !== '')
+  const [activePairing, setActivePairing] = useState<{ code: string } | null>(() => {
+    if (mode !== 'route') return null
+    const code =
+      extractPairingCode(location.hash) ||
+      (typeof window !== 'undefined' ? extractPairingCode(window.location.hash) : '')
+    return code ? { code } : null
+  })
+  const [prevLocationHash, setPrevLocationHash] = useState(location.hash)
   const [codeInput, setCodeInput] = useState('')
   const [nameInput, setNameInput] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -47,14 +60,39 @@ export function PairPage({ mode = 'route' }: { mode?: 'route' | 'gate' }) {
   const codeFieldId = useId()
   const nameFieldId = useId()
 
-  useEffect(() => {
-    if (mode !== 'route' || !initialCode) return
-    // Remove the one-time secret from the browser address bar and session history as soon as it is read.
-    if (typeof window !== 'undefined' && window.location.hash) {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  // React to router-driven fragment changes while /pair is already mounted (e.g. a new pairing link opened in the same tab).
+  if (mode === 'route' && location.hash !== prevLocationHash) {
+    setPrevLocationHash(location.hash)
+    const nextCode = extractPairingCode(location.hash)
+    if (nextCode) {
+      setError(null)
+      setCodeError(null)
+      setActivePairing((prev) => (prev?.code === nextCode ? prev : { code: nextCode }))
     }
+  }
+
+  // Also listen for native same-document hashchange events (e.g. pasting a new /pair#<code> link into the address bar or a QR scanner
+  // navigating the current tab when only the fragment changes).
+  useEffect(() => {
+    if (mode !== 'route') return
+    const onHashChange = () => {
+      const nextCode = extractPairingCode(window.location.hash)
+      if (!nextCode) return
+      stripLocationHash()
+      setError(null)
+      setCodeError(null)
+      setActivePairing((prev) => (prev?.code === nextCode ? prev : { code: nextCode }))
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'route' || !activePairing) return
+    // Remove the one-time secret from the browser address bar and session history as soon as it is read.
+    stripLocationHash()
     let active = true
-    void redeemPairingCode(initialCode)
+    void redeemPairingCode(activePairing.code)
       .then(() => {
         if (!active) return
         queryClient.clear()
@@ -64,12 +102,12 @@ export function PairPage({ mode = 'route' }: { mode?: 'route' | 'gate' }) {
       .catch((cause) => {
         if (!active) return
         setError(cause)
-        setAutoPairing(false)
+        setActivePairing(null)
       })
     return () => {
       active = false
     }
-  }, [initialCode, mode, navigate, queryClient])
+  }, [activePairing, mode, navigate, queryClient])
 
   const submitManual = async (event: FormEvent) => {
     event.preventDefault()
@@ -95,6 +133,7 @@ export function PairPage({ mode = 'route' }: { mode?: 'route' | 'gate' }) {
     }
   }
 
+  const autoPairing = activePairing !== null
   const serverCodeError = fieldError(error, 'code')
   const serverNameError = fieldError(error, 'name')
   const localDoorError = isLocalDoorRefusal(error)

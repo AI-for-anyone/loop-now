@@ -4,7 +4,6 @@ import { formatElapsed } from './format'
 export const devices = {
   title: 'Phones and other devices',
   localOnly: {
-    title: 'Manage on the computer',
     body: 'Phones, other devices, and remote access can only be managed on the computer running Loop Now. Open Loop Now on that computer to turn remote access on or off, add a device, or remove one.',
   },
   remote: {
