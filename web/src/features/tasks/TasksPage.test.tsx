@@ -7,7 +7,7 @@ import { apiUrl, defaultProject, makeAgent, projectsUrl } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
-import { makeTaskDetail } from '@/test/tasks'
+import { forkServerAgentId, forkWebAgentId, makeForkTaskDetail, makeTaskDetail } from '@/test/tasks'
 import { branchParts } from './branch-name'
 
 const long = 'task/15-truncate-long-branch-names-in-the-middle-so-both-ends'
@@ -17,15 +17,19 @@ const longAgentName = 'platform-release-verification-specialist'
 
 function list() {
   const base = makeTaskDetail(defaultProject.id, defaultProject.name).task
+  const parallel = makeForkTaskDetail(defaultProject.id, defaultProject.name).task
   const tasks = [
     { ...base, id: '00000000-0000-7000-8000-000000000301', number: 13, title: 'With a branch', reason: null, branch: long, workspaceMode: 'git' as const, currentStepId: 'implement', currentStepTitle: 'Implement' },
     { ...base, id: '00000000-0000-7000-8000-000000000302', number: 14, title: 'Without a branch', reason: null, branch: null, currentStepId: 'verify', currentStepTitle: null },
     { ...base, id: '00000000-0000-7000-8000-000000000303', number: 15, title: 'On a folder copy', reason: null, branch: null, workspaceMode: 'copy' as const, currentStepId: null, currentStepTitle: null },
     { ...base, id: '00000000-0000-7000-8000-000000000304', number: 16, title: longTitle, reason: null, branch: long, workspaceMode: 'git' as const, currentAgentId: longAgentId, currentStepId: 'pr', currentStepTitle: 'Pull request' },
+    { ...parallel, id: '00000000-0000-7000-8000-000000000305', number: 17, title: 'Parallel branches task' },
   ]
   const agents = [
     makeAgent({ id: base.currentAgentId!, name: 'loop-now-main' }),
     makeAgent({ id: longAgentId, name: longAgentName }),
+    makeAgent({ id: forkServerAgentId, name: 'backend-dev' }),
+    makeAgent({ id: forkWebAgentId, name: 'frontend-dev' }),
   ]
   server.use(
     ...baseHandlers(agents),
@@ -127,5 +131,16 @@ describe('compact task list rows', () => {
     expect(branchParts(long)).toEqual({ head: 'task/15-truncate-long-branch-names-in-the-middle-', tail: 'so-both-ends' })
     expect(branchParts('task/12-x')).toEqual({ head: '', tail: 'task/12-x' })
     expect(branchParts(long).head + branchParts(long).tail).toBe(long)
+  })
+
+  it('a task running parallel branches shows all active step titles and responsible Agents even when single current fields are null', async () => {
+    list()
+    const item = await row('Parallel branches task')
+    const steps = item.querySelector<HTMLElement>('[data-parallel-steps]')!
+    expect(steps).not.toBeNull()
+    expect(steps).toHaveTextContent('Server · Web')
+    expect(steps).toHaveAttribute('title', 'Server (server) · Web (web)')
+    const agents = await within(item).findByText('backend-dev · frontend-dev')
+    expect(agents).toHaveAttribute('title', 'backend-dev · frontend-dev')
   })
 })

@@ -8,7 +8,7 @@ import { apiUrl, defaultProject, errorBody, projectsUrl } from '@/test/api'
 import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
-import { makeTaskDetail, makeTaskMessage, nodeId, taskId } from '@/test/tasks'
+import { makeForkTaskDetail, makeTaskDetail, makeTaskMessage, nodeId, taskId } from '@/test/tasks'
 import { tasksPath } from '@/api/tasks'
 import type { Schemas } from '@/api/client'
 
@@ -70,4 +70,24 @@ it('shows Chinese labels for the step prompt and conversation opt-in mark', asyn
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
   expect(toggle).toHaveTextContent('收起')
   expect(within(promptRegion).getByRole('heading', { level: 3, name: '执行说明' })).toBeVisible()
+})
+
+it('shows Chinese labels for parallel branches, fork/join indicators and branch worktrees', async () => {
+  const detail = makeForkTaskDetail(defaultProject.id, defaultProject.name)
+  detail.workspace!.branches[0].merge = 'merged'
+  detail.workspace!.branches[1].merge = 'conflict'
+  setup(detail)
+  renderRoutes(routes, detailPath())
+  await screen.findByRole('heading', { level: 1, name: 'Build parallel feature' })
+
+  expect(screen.getByRole('region', { name: '2 个分支同时进行' })).toBeVisible()
+  const rail = screen.getByRole('navigation', { name: '固定流程' })
+  expect(within(rail).getByText('2 步并行')).toBeVisible()
+  expect(within(rail).getByText('并行分支')).toBeVisible()
+  expect(within(rail).getAllByText('已到 0/2').length).toBeGreaterThanOrEqual(1)
+
+  const workspace = screen.getByRole('region', { name: '工作区' })
+  expect(within(workspace).getByText('并行分支工作区')).toBeVisible()
+  expect(within(workspace).getByText('已合并')).toBeVisible()
+  expect(within(workspace).getByText('合并冲突')).toBeVisible()
 })

@@ -195,4 +195,74 @@ describe('a copy of a plain folder on the task page', () => {
     expect(screen.getByText(workspace.path)).toHaveClass('line-through')
     expect(screen.queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument()
   })
+
+  it('shows parallel branch worktrees side by side with state, merge outcomes, branch names and copy actions', async () => {
+    const workspace = makeTaskWorkspace({
+      branches: [
+        {
+          step: 'server',
+          path: '/w/t/demo--server',
+          state: 'removed',
+          merge: 'merged',
+          git: { branch: 'task/12--server', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a' },
+        },
+        {
+          step: 'web',
+          path: '/w/t/demo--web',
+          state: 'active',
+          merge: 'conflict',
+          git: { branch: 'task/12--web', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a' },
+        },
+        {
+          step: 'docs',
+          path: '/w/t/demo--docs',
+          state: 'active',
+          merge: 'skipped',
+          git: { branch: 'task/12--docs', baseCommit: '4f2c9a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a' },
+        },
+      ],
+    })
+    const steps: Schemas['TaskWorkflowStep'][] = [
+      { id: 'server', title: 'Server', description: '', agentId: 'a', inputFields: [], outputFields: [], inputs: {} },
+      { id: 'web', title: 'Web', description: '', agentId: 'b', inputFields: [], outputFields: [], inputs: {} },
+      { id: 'docs', title: 'Docs', description: '', agentId: 'c', inputFields: [], outputFields: [], inputs: {} },
+    ]
+    renderWithQuery(<TaskWorkspace taskId={taskId} projectId={projectId} workspace={workspace} steps={steps} />)
+    const block = screen.getByRole('region', { name: 'Worktree' })
+    expect(within(block).getByText('Branch worktrees')).toBeVisible()
+    const list = block.querySelector<HTMLElement>('[data-workspace-branches] ul')!
+    expect(list).toHaveClass('sm:grid-cols-2')
+
+    const serverItem = block.querySelector<HTMLElement>('[data-workspace-branch="server"]')!
+    expect(within(serverItem).getByText('Server')).toBeVisible()
+    expect(within(serverItem).getByText('removed')).toBeVisible()
+    expect(within(serverItem).getByText('merged')).toBeVisible()
+    expect(within(serverItem).getByText('task/12--server')).toBeVisible()
+    expect(within(serverItem).getByText('/w/t/demo--server')).toHaveClass('line-through')
+    expect(within(serverItem).queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument()
+
+    const webItem = block.querySelector<HTMLElement>('[data-workspace-branch="web"]')!
+    expect(within(webItem).getByText('merge conflict')).toBeVisible()
+    expect(within(webItem).getByText('@ 4f2c9a1')).toBeVisible()
+    const user = userEvent.setup()
+    await user.click(within(webItem).getByRole('button', { name: 'Copy' }))
+    expect(await navigator.clipboard.readText()).toBe('/w/t/demo--web')
+
+    const docsItem = block.querySelector<HTMLElement>('[data-workspace-branch="docs"]')!
+    expect(within(docsItem).getByText('not merged')).toBeVisible()
+  })
+
+  it('shows parallel branch copies in copy mode without git branches', () => {
+    const workspace = makeCopyWorkspace({
+      branches: [
+        { step: 'a', path: '/w/t/reports--a/reports', state: 'active', merge: null, git: null },
+        { step: 'b', path: '/w/t/reports--b/reports', state: 'active', merge: null, git: null },
+      ],
+    })
+    show(workspace)
+    const block = screen.getByRole('region', { name: 'Folder copy' })
+    expect(within(block).getByText('Branch copies')).toBeVisible()
+    expect(within(block).getByText('/w/t/reports--a/reports')).toBeVisible()
+    expect(within(block).getByText('/w/t/reports--b/reports')).toBeVisible()
+  })
 })

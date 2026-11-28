@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { GitForkIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { useInboxPending } from '@/api/console-inbox'
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { TaskBadge } from './TaskBadge'
 import { branchParts } from './branch-name'
 import { useTaskLive } from './useTaskLive'
+import { currentNodesOf } from './workflow-steps'
 
 type Task = Schemas['TaskSummary']
 type Filter = 'all' | 'active' | 'blocked' | 'completed'
@@ -201,7 +203,14 @@ function TaskRow({
   pending?: Parameters<typeof PendingBadge>[0]['counts']
 }) {
   const title = task.title || task.id
-  const stepLabel = task.currentStepTitle || task.currentStepId
+  const current = currentNodesOf(task)
+  const parallel = current.length > 1
+  const only = current.length === 1 ? current[0] : null
+  const stepLabel = only ? (only.stepTitle || only.stepId) : null
+  const stepTitleMissing = only ? !only.stepTitle : false
+  const parallelSteps = current.map((c) => c.stepTitle || c.stepId).join(' · ')
+  const parallelStepsTooltip = current.map((c) => (c.stepTitle && c.stepTitle !== c.stepId ? `${c.stepTitle} (${c.stepId})` : c.stepId)).join(' · ')
+  const uniqueAgents = [...new Set(current.map((c) => c.agentId).filter(Boolean))]
   const hasWorkspaceTag = Boolean(task.branch) || task.workspaceMode === 'copy'
   return (
     <li
@@ -252,12 +261,21 @@ function TaskRow({
         </span>
         <span className="min-w-0">
           <span className="sr-only">{t.tasks.currentNode}</span>
-          {stepLabel ? (
+          {parallel ? (
             <span
-              title={task.currentStepId ?? undefined}
+              data-parallel-steps
+              title={parallelStepsTooltip}
+              className="inline-flex max-w-full items-center gap-1 rounded-stamp border border-hairline bg-surface-subtle px-1.5 text-[11.5px] leading-[20px] font-medium text-ink-700"
+            >
+              <GitForkIcon aria-hidden="true" className="size-3 shrink-0 text-ink-500" strokeWidth={2.2} />
+              <span className="min-w-0 truncate">{parallelSteps}</span>
+            </span>
+          ) : stepLabel ? (
+            <span
+              title={only?.stepId || undefined}
               className={cn(
                 'inline-block max-w-full truncate rounded-stamp border border-hairline bg-surface-subtle px-1.5 text-[11.5px] leading-[20px] font-medium text-ink-700',
-                !task.currentStepTitle && 'font-mono font-normal',
+                stepTitleMissing && 'font-mono font-normal',
               )}
             >
               {stepLabel}
@@ -268,11 +286,22 @@ function TaskRow({
         </span>
         <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-700">
           <span className="sr-only">{t.tasks.responsible}</span>
-          {task.currentAgentId ? (
+          {uniqueAgents.length > 1 ? (
             <>
-              <AgentAvatar size="sm" id={task.currentAgentId} />
-              <span className="min-w-0 truncate" title={agentName(task.currentAgentId)}>
-                {agentName(task.currentAgentId)}
+              <span className="flex shrink-0 items-center -space-x-1.5">
+                {uniqueAgents.slice(0, 3).map((id) => (
+                  <AgentAvatar key={id} size="sm" id={id} />
+                ))}
+              </span>
+              <span className="min-w-0 truncate" title={uniqueAgents.map(agentName).join(' · ')}>
+                {uniqueAgents.map(agentName).join(' · ')}
+              </span>
+            </>
+          ) : uniqueAgents.length === 1 ? (
+            <>
+              <AgentAvatar size="sm" id={uniqueAgents[0]} />
+              <span className="min-w-0 truncate" title={agentName(uniqueAgents[0])}>
+                {agentName(uniqueAgents[0])}
               </span>
             </>
           ) : (

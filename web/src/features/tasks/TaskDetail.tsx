@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { GitForkIcon } from 'lucide-react'
 import { useParams, useSearchParams } from 'react-router'
 import { useAgents } from '@/api/queries'
 import { tasksPath, useTask } from '@/api/tasks'
@@ -14,13 +15,14 @@ import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
 import { overviewPath } from '@/lib/scope'
 import { narrowQuery, useMediaQuery } from '@/lib/use-media-query'
+import { cn } from '@/lib/utils'
 import { NodeRecordPanel, type NodeDraft, type NodePanelTab } from './NodeRecordPanel'
 import { StepPrompt, WithConversationBadge } from './StepPrompt'
 import { TaskActions } from './TaskActions'
 import { TaskBadge } from './TaskBadge'
 import { TaskWorkspace } from './TaskWorkspace'
 import { useTaskLive } from './useTaskLive'
-import { stepNumber } from './workflow-steps'
+import { currentNodesOf, stepNumber, taskEnded } from './workflow-steps'
 import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
 
 // Breakpoint matching Tailwind's lg (1024px) where the 216px left step rail collapses to horizontal WorkflowChips.
@@ -41,13 +43,17 @@ export function TaskDetail() {
   const setTab = (next: NodePanelTab) => setTabState({ taskId, tab: next })
   const [drafts, setDrafts] = useState<Record<string, NodeDraft>>({})
   const detail = task.data
-  const currentSleep = detail?.nodes.find((node) => node.id === detail.task.currentNodeRunId)?.sleep
+  const currentList = detail ? currentNodesOf(detail.task) : []
+  const currentIds = new Set(currentList.map((c) => c.nodeRunId))
+  const currentSleep = detail?.nodes.find((n) => currentIds.has(n.id) && n.sleep?.state === 'sleeping' && n.sleep.wakeAt)?.sleep
   const explicitRecord = params.get('record')
   const explicitStep = params.get('step')
   const records = detail?.nodes.filter((n) => !explicitStep || n.stepId === explicitStep) ?? []
   const node = explicitRecord
     ? detail?.nodes.find((n) => n.id === explicitRecord && (!explicitStep || n.stepId === explicitStep))
-    : records.find((n) => n.id === detail?.task.currentNodeRunId) ?? records.at(-1)
+    : currentList.map((c) => records.find((n) => n.id === c.nodeRunId)).find(Boolean) ??
+      records.find((n) => currentIds.has(n.id)) ??
+      records.at(-1)
   const step = explicitStep ?? node?.stepId ?? null
 
   // Persist the initial choice; subsequent SSE updates must not take away a historical selection.
@@ -151,7 +157,7 @@ export function TaskDetail() {
       </PageHeader>
       <div className="flex shrink-0 flex-col px-4 pt-2.5 sm:px-6 empty:hidden">
         <ErrorAlert error={task.error} />
-        <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} />
+        <TaskWorkspace taskId={detail.task.id} projectId={project.id} workspace={detail.workspace} steps={detail.workflow.steps} />
       </div>
       {activeSleep?.wakeAt && (
         <div
@@ -162,6 +168,60 @@ export function TaskDetail() {
         </div>
       )}
       <TaskInstanceSleeps detail={detail} />
+      {!taskEnded(detail.task) && currentList.length > 1 && (
+        <div
+          data-active-branches
+          role="region"
+          aria-label={t.tasks.parallelRunning(currentList.length)}
+          className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-surface-subtle/50 px-4 py-1.5 text-[12px] sm:px-6"
+        >
+          <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-ink">
+            <GitForkIcon aria-hidden="true" className="size-3.5 text-ink-500" strokeWidth={2.2} />
+            <span>{t.tasks.parallelRunning(currentList.length)}</span>
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {currentList.map((active) => {
+              const run = detail.nodes.find((n) => n.id === active.nodeRunId)
+              const stepIdx = detail.workflow.steps.findIndex((s) => s.id === active.stepId)
+              const viewing = node?.id === active.nodeRunId
+              const blocked = run?.status === 'blocked'
+              const status = run?.status ?? 'running'
+              return (
+                <button
+                  key={active.nodeRunId}
+                  type="button"
+                  aria-pressed={viewing}
+                  onClick={() => viewRecord(active.stepId, active.nodeRunId)}
+                  className={cn(
+                    'inline-flex h-7 max-w-full cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors outline-none focus-visible:shadow-focus',
+                    viewing
+                      ? blocked
+                        ? 'border-red-text bg-tint-red font-semibold text-red-text shadow-surface'
+                        : 'border-ink bg-surface-control font-semibold text-ink shadow-surface'
+                      : blocked
+                        ? 'border-red-text/45 bg-tint-red/60 font-medium text-red-text hover:bg-tint-red'
+                        : 'border-hairline-strong bg-surface-canvas font-medium text-ink-700 hover:bg-surface-hover hover:text-ink',
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'size-1.5 shrink-0 rounded-full',
+                      blocked ? 'bg-red-text' : status === 'waiting' ? 'bg-ink-500' : 'bg-pink-text',
+                    )}
+                  />
+                  {stepIdx >= 0 && <span className="shrink-0 font-mono text-[10.5px] text-ink-500 tabular-nums">{stepNumber(stepIdx)}</span>}
+                  <span className="truncate">{active.stepTitle || active.stepId}</span>
+                  <span className="hidden truncate text-[11px] text-ink-500 sm:inline">· {run?.agentName ?? agentName(active.agentId)}</span>
+                  <span className={cn('shrink-0 text-[11px] font-semibold', blocked ? 'text-red-text' : 'text-ink-500')}>
+                    · {t.tasks.nodeStatuses[status]}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
       {narrow && <WorkflowChips detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} />}
       <Sheet className="min-h-0 flex-1 flex-row">
         <WorkflowRuler detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} agentName={agentName} />

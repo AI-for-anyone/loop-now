@@ -5,19 +5,40 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { t } from '@/i18n'
+import { currentNodesOf, isCurrentNode, taskEnded } from './workflow-steps'
 
-export function TaskActions({ task, disabled = false, showRetry = true, showCancel = true }: { task: Schemas['TaskSummary']; disabled?: boolean; showRetry?: boolean; showCancel?: boolean }) {
+export function TaskActions({
+  task,
+  node,
+  disabled = false,
+  showRetry = true,
+  showCancel = true,
+}: {
+  task: Schemas['TaskSummary']
+  node?: Schemas['TaskNodeRun']
+  disabled?: boolean
+  showRetry?: boolean
+  showCancel?: boolean
+}) {
   const [retrying, setRetrying] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [note, setNote] = useState('')
   const target = useRef<{ actionId: string; nodeRunId: string } | null>(null)
   const cancelId = useRef('')
   const action = useTaskAction(task.id, task.projectId)
-  const ended = task.status === 'completed' || task.status === 'cancelled'
+  const ended = taskEnded(task)
+  const currentList = currentNodesOf(task)
+  const retryNodeRunId = node ? node.id : task.currentNodeRunId
+  // Inside a fork, a blocked branch can be retried while the other branches keep running (so task.status may still be running).
+  const canRetry =
+    showRetry &&
+    !ended &&
+    Boolean(retryNodeRunId) &&
+    (node ? isCurrentNode(task, node.id) && (node.status === 'blocked' || (currentList.length === 1 && task.status === 'blocked')) : task.status === 'blocked')
   // Redesign step 5: “重试当前节点” (Retry current node) is the fluorescent-pink primary button (navy outline plus offset shadow);
   // “取消任务” (Cancel task) is a red-outlined pill button.
   return <div className="flex flex-wrap items-center gap-2">
-    {showRetry && task.status === 'blocked' && task.currentNodeRunId && <Button variant="interrupt" size="xs" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: task.currentNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
+    {canRetry && <Button variant="interrupt" size="xs" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: retryNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
     {showCancel && !ended && <Button variant="danger-outline" size="xs" className="px-3.5" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}
     <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={t.tasks.retry} body={t.tasks.retryBody} confirmLabel={t.tasks.retry} onConfirm={async () => {
       if (!target.current || disabled) return Promise.reject(new Error(t.tasks.reconnecting))

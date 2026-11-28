@@ -102,9 +102,9 @@ export function currentNodesOf(task: Schemas['TaskSummary']): Schemas['TaskCurre
     return [
       {
         nodeRunId: task.currentNodeRunId ?? only.nodeRunId,
-        stepId: task.currentStepId ?? only.stepId,
+        stepId: task.currentStepId === null ? '' : (task.currentStepId ?? only.stepId),
         stepTitle: task.currentStepTitle === undefined ? only.stepTitle : (task.currentStepTitle ?? ''),
-        agentId: task.currentAgentId ?? only.agentId,
+        agentId: task.currentAgentId === null ? '' : (task.currentAgentId ?? only.agentId),
         branch: only.branch,
       },
     ]
