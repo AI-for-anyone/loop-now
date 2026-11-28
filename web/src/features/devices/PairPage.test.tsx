@@ -55,7 +55,8 @@ describe('PairPage (/pair)', () => {
       await waitFor(() => expect(router.state.location.pathname).toBe('/'))
       expect(received).toEqual([{ code: 'one-time-secret' }])
       expect(replaceSpy).toHaveBeenCalledWith(null, '', '/pair')
-      expect(contextCalls).toBeGreaterThan(0)
+      // The console asks for /context once it has mounted, which can come after the navigation itself.
+      await waitFor(() => expect(contextCalls).toBeGreaterThan(0))
     } finally {
       window.history.replaceState(null, '', '/')
     }
