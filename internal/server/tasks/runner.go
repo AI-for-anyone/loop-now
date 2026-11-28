@@ -425,10 +425,14 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		}
 		return blocked("The node's turn ended without submitting a result or leaving an open question.")
 	}
-	edge, e := m.Record.View.Workflow.SelectEdge(n.StepID, n.EdgeID, m.Record.EdgeCounts)
+	exit, e := m.Record.View.Workflow.SelectExit(n.StepID, n.EdgeID, m.Record.EdgeCounts)
 	if e != nil {
 		return blocked(e.Error())
 	}
+	if exit.Fork != nil {
+		return blocked("This server cannot run forks yet.")
+	}
+	edge := exit.Edge
 	// Once the node has submitted its result, close any still-unanswered question; the original message history is
 	// kept.
 	if e = s.closeQuestion(ctx, m, n, "node_completed"); e != nil {

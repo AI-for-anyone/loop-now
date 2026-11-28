@@ -50,12 +50,25 @@ type Edge struct {
 	To            string `json:"to"`
 	Label         string `json:"label"`
 	MaxTraversals *int   `json:"maxTraversals,omitempty"`
+	// Fork names the fork (Definition.Forks) this edge belongs to: the step submits the fork's id to take all of its
+	// edges at once, each starting a parallel branch.
+	Fork string `json:"fork,omitempty"`
+}
+
+// Fork is a set of edges leaving one step that are taken together, each starting a branch; the branches run at the same
+// time and meet at Join, which starts once every branch has arrived.
+type Fork struct {
+	ID   string `json:"id"`
+	Join string `json:"join"`
 }
 
 type Definition struct {
 	StartStepID string `json:"startStepId"`
 	Steps       []Step `json:"steps"`
 	Edges       []Edge `json:"edges"`
+	Forks       []Fork `json:"forks,omitempty"`
+	// MaxParallelBranches caps how many branches of a fork run at once; nil means all of them.
+	MaxParallelBranches *int `json:"maxParallelBranches,omitempty"`
 }
 
 // Limits are provided by the platform's runtime configuration; the validator itself does not hard-code graph sizes.
@@ -143,6 +156,9 @@ func (d Definition) Validate(l Limits) error {
 			unbounded[e.From] = append(unbounded[e.From], e.To)
 		}
 	}
+	if err := d.validateForkDeclarations(nodes, edges); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	var reach func(string)
 	reach = func(id string) {
@@ -157,6 +173,13 @@ func (d Definition) Validate(l Limits) error {
 	reach(d.StartStepID)
 	if len(seen) != len(nodes) {
 		return invalid("workflow.steps", "Every step must be reachable from the start step.")
+	}
+	lanes, err := d.branches()
+	if err != nil {
+		return err
+	}
+	if err := d.validateBranchAgents(lanes); err != nil {
+		return err
 	}
 	color := map[string]int{}
 	var cycle func(string) bool
@@ -360,30 +383,6 @@ func CloneValue(v any) (any, error) {
 	d.UseNumber()
 	err = d.Decode(&out)
 	return out, err
-}
-
-// SelectEdge only checks for a valid exit and the limits; it does not evaluate condition expressions and does not
-// modify the counts.
-func (d Definition) SelectEdge(stepID string, edgeID *string, counts map[string]int) (*Edge, error) {
-	edges := d.Outgoing(stepID)
-	if len(edges) == 0 {
-		if edgeID != nil {
-			return nil, invalid("edgeId", "Must be empty: this step has no outgoing edges.")
-		}
-		return nil, nil
-	}
-	if edgeID == nil {
-		return nil, invalid("edgeId", "Must name one of the step's outgoing edges.")
-	}
-	for _, e := range edges {
-		if e.ID == *edgeID {
-			if e.MaxTraversals != nil && counts[e.ID] >= *e.MaxTraversals {
-				return nil, invalid("edgeId", "This edge has reached its maxTraversals limit.")
-			}
-			return &e, nil
-		}
-	}
-	return nil, invalid("edgeId", fmt.Sprintf("Must name an outgoing edge of step %s.", stepID))
 }
 
 // integerNumber decides from the decimal literal, without rounding through float64 and without allocating big integers

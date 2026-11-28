@@ -437,7 +437,7 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 		if err := workflow.ValidateValues(step.OutputFields, in.Output); err != nil {
 			return nil, fieldError(err)
 		}
-		if _, err := m.Record.View.Workflow.SelectEdge(n.StepID, in.EdgeID, nil); err != nil {
+		if _, err := m.Record.View.Workflow.SelectExit(n.StepID, in.EdgeID, nil); err != nil {
 			return nil, fieldError(err)
 		}
 		for _, field := range step.OutputFields {
