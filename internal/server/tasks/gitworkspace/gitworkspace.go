@@ -400,20 +400,9 @@ func Inspect(ctx context.Context, git, path, baseBranch string) (Status, error) 
 		}
 	}
 	var st Status
-	out, err := run(ctx, git, "-C", path, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none")
-	if err != nil {
+	var err error
+	if st.UncommittedFiles, err = Uncommitted(ctx, git, path); err != nil {
 		return Status{}, err
-	}
-	entries := strings.Split(out, "\x00")
-	for i := 0; i < len(entries); i++ {
-		e := entries[i]
-		if len(e) < 4 {
-			continue
-		}
-		st.UncommittedFiles++
-		if e[0] == 'R' || e[0] == 'C' {
-			i++ // the source path of a rename or copy follows as its own entry
-		}
 	}
 	r, err := remote(ctx, git, path)
 	if err != nil {
