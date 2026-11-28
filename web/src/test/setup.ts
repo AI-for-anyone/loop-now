@@ -3,6 +3,7 @@ import { toastStore } from '@/lib/toast'
 import { cleanup } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
 import { deviceAuth, reachability, serverVersionStore } from '@/api/client'
+import { resetPairingRedemptions } from '@/api/devices'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
 import { useOwnEventStreams } from '@/api/events'
 import { resetThemeForTest } from '@/theme/store'
@@ -40,6 +41,7 @@ afterEach(() => {
   server.resetHandlers()
   reachability.reset()
   deviceAuth.reset()
+  resetPairingRedemptions()
   serverVersionStore.reset()
   inboxUnread.reset()
   inboxConnection.reset()

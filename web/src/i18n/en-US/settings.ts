@@ -7,6 +7,7 @@ export const settings = {
     general: 'General & Appearance',
     runtimes: 'Runtimes & Models',
     workspace: 'Workspace & Local Mode',
+    devices: 'Phones and other devices',
     server: 'Server & Diagnostics',
   },
   runtimesViews: {

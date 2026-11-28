@@ -9,6 +9,7 @@ export const settings = {
     general: '常规与外观',
     runtimes: '运行时与模型',
     workspace: '工作区与本机模式',
+    devices: '手机和其它设备',
     server: '服务端与诊断',
   },
   runtimesViews: {

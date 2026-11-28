@@ -44,7 +44,7 @@ describe('Global settings tabs and routing', () => {
     return { ...view, title }
   }
 
-  it('the header shows breadcrumb, server connection state, and 4 URL-backed SubNav tabs without the legacy SectionToc stub', async () => {
+  it('the header shows breadcrumb, server connection state, and 5 URL-backed SubNav tabs without the legacy SectionToc stub', async () => {
     const { title } = await open()
     const header = title.closest('header')!
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Global settings')
@@ -56,6 +56,7 @@ describe('Global settings tabs and routing', () => {
       'General & Appearance',
       'Runtimes & Models',
       'Workspace & Local Mode',
+      'Phones and other devices',
       'Server & Diagnostics',
     ])
   })
