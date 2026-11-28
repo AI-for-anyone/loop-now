@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/taskmodel"
@@ -152,7 +153,9 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 		if e != nil || credential.AuthMethod() != v.AuthMethod {
 			return "chat_unavailable", nil
 		}
-	} else {
+	} else if agentruntime.ForProvider(cfg.Provider).Capabilities.Accounts != agentruntime.AccountsLocal {
+		// A runtime on its own CLI's login on this computer (accounts = local, such as Claude Code) captured no model
+		// key, and its run needs none; only the other runtimes need the captured one.
 		credential, e := modelcredential.LegacySingleKey(cfg.Provider, creds.Model)
 		if e != nil || credential.Kind() == "" {
 			return "chat_unavailable", nil
