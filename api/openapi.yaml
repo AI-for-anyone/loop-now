@@ -20,7 +20,17 @@ info:
     - Inbox and external access (change add-inbox-and-external-access): the Inbox between Agents, the console operator and
       external identities; management of external identities and tokens; finding an Agent by address.
     - Access scope: every operation carries `x-access`. `console` is limited to the console; `console-and-external` is also
-      open to external identities.
+      open to external identities; `local` is the console at the local door only (the person at this computer); `pairing`
+      is the console, and at the remote door it needs no device session (pairing a device).
+      - Remote door (off by default, `GET /remote-access`): a second loopback listener for phones and other devices,
+        reached later through a tunnel. It serves the same console files and `/api/v1`, but every API request needs a
+        device session (the `loop_now_device` cookie, or `__Host-loop_now_device` over HTTPS, from
+        `POST /device-sessions`) except the `x-access: pairing` operations; a missing, removed or expired session returns
+        401 `unauthenticated`. `x-access: local` operations return 403 `forbidden` there even with a session. The
+        listener a request arrived on decides this, never its headers. Requests whose `Origin` is not the remote door's
+        own (`http(s)://` + its Host) return 403 `forbidden_origin`, `Origin: null` included; writes (anything but GET,
+        HEAD and OPTIONS) without an `Origin` do too. `Authorization` headers are refused (403 `forbidden`); `/agent/v1`
+        and the plugin `/hooks` entry are not served there.
       - Console: `/api/v1` on the loopback listener, no login; a request with an `Authorization` header (for example with an
         `lna_` or `lne_` token) returns 403 `forbidden`;
       - External identities: the same `/api/v1` on the external port (TLS); `Authorization: Bearer lne_…` is required, a
@@ -76,6 +86,7 @@ tags:
   - name: local-mode
   - name: text-generation
   - name: path-picks
+  - name: devices
 
 paths:
   "/agents/{agentId}/message-images/{imageId}": {"put":{"tags":["conversation"],"operationId":"uploadAgentMessageImage","x-access":"console","parameters":[{"name":"agentId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}},{"name":"imageId","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}],"responses":{"201":{"description":"Uploads under a stable imageId; the same content in the same scope may be uploaded again. Uploading does not send a message or mark anything as read.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/MessageImage"}}}},"401":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"403":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"404":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"409":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"412":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"413":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"422":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"500":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"503":{"description":"Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}},"requestBody":{"required":true,"content":{"image/png":{"schema":{"type":"string","format":"binary"}},"image/jpeg":{"schema":{"type":"string","format":"binary"}},"image/webp":{"schema":{"type":"string","format":"binary"}}}}}}
@@ -2190,7 +2201,8 @@ paths:
         defaultPath, such as the field's current value, is where the dialog opens when, without surrounding spaces, it is
         an absolute path that exists (a file opens its folder); anything else opens the dialog where it usually opens.
         Only macOS for now, in a logged-in desktop session; Context.pathPicker says whether it works here.
-        Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why); 409
+        Errors: 409 path_picker_unavailable when this computer cannot show the dialog (the message says why), and always
+        at the remote door, where the dialog would open on this computer's screen instead of the device's; 409
         path_picker_busy when a dialog is already open; 422 when defaultPath holds a NUL character.
       requestBody:
         required: true
@@ -2208,6 +2220,176 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /remote-access:
+    get:
+      tags: [devices]
+      operationId: getRemoteAccess
+      x-access: local
+      summary: Read the remote door, the listener phones and other devices use
+      description: |
+        The remote door is a second listener on this computer's loopback address (127.0.0.1), off by default. A tunnel
+        (a later step) forwards to it; until then it can be opened only on this computer. It serves the same console,
+        and every API request on it needs a paired device's session (see the access scope in the description of this
+        file). url is the remote door's own address while it listens, which pairing links use until there is a public
+        address.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The setting and what the listener does now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteAccess" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [devices]
+      operationId: putRemoteAccess
+      x-access: local
+      summary: Turn the remote door on or off, or change its port
+      description: |
+        Saved and applied at once. Turning it on starts listening on 127.0.0.1 at port, or, when port is null or
+        omitted, at a port the server picks and keeps across restarts while it is free. Turning it off or changing the
+        port closes the old listener and every connection on it, open event streams included. When the server cannot
+        listen (for example the port is in use) the setting is still saved and state is failed with the reason; the
+        next start tries again. Paired devices stay paired while the door is off.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoteAccessSettings" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The setting and what the listener does now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteAccess" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /device-pairings:
+    post:
+      tags: [devices]
+      operationId: createDevicePairing
+      x-access: local
+      summary: Make a one-time code that pairs a phone or another device
+      description: |
+        The code works once, for 10 minutes, at the remote door's POST /device-sessions. url is the pairing link,
+        `<remote door address>/pair#<code>`, with the code in the URL fragment so it never reaches a server as a path or
+        query and is never logged; the console shows it as a QR code and a link. Several codes may be open at a time.
+        The server keeps only a hash of each code, in memory: a restart ends all open codes.
+        Errors: 409 remote_access_off when the remote door is not listening.
+      responses:
+        "201":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The new code; shown only now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DevicePairing" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /device-sessions:
+    post:
+      tags: [devices]
+      operationId: createDeviceSession
+      x-access: pairing
+      summary: Pair this device with a code and start its session (the pair page calls it at the remote door)
+      description: |
+        Only at the remote door; the local door returns 403 forbidden, as it needs no session. The code is used up. The
+        answer sets the session cookie: `loop_now_device`, or `__Host-loop_now_device` when the page is HTTPS (the
+        request came over TLS, its Origin is https, or the tunnel says so in X-Forwarded-Proto); HttpOnly,
+        SameSite=Strict, Path=/, Secure over HTTPS, kept by the browser for 400 days. The server keeps only a hash of
+        the session secret. A session that is not used for 30 days expires; the device must pair again.
+        name, when given, names the device; otherwise the name comes from the browser's User-Agent, such as
+        "iPhone · Safari". It can be changed later with PATCH /devices/{deviceId}.
+        Errors: 403 pairing_code_invalid when the code is wrong, has expired or was already used (the three are not told
+        apart); 429 rate_limited after too many wrong codes in a minute (10, counted for the whole remote door, since
+        every request comes through the same tunnel); 422 when the body is invalid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceSessionRequest" }
+      responses:
+        "201":
+          headers:
+            Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }
+            Loop-Now-Version: { $ref: "#/components/headers/Version" }
+            Set-Cookie:
+              description: The device session cookie
+              required: true
+              schema: { type: string, minLength: 1 }
+          description: The paired device
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      x-access: local
+      summary: List the paired devices
+      description: |
+        Devices whose session is live, the most recently seen first. A session not used for 30 days has expired and is
+        no longer listed.
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Paired devices
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /devices/{deviceId}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    patch:
+      tags: [devices]
+      operationId: updateDevice
+      x-access: local
+      summary: Rename a paired device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DevicePatch" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: The device after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [devices]
+      operationId: deleteDevice
+      x-access: local
+      summary: Remove a paired device
+      description: |
+        Ends its session at once: its requests in flight are cancelled and its open event streams close; its next
+        request returns 401 and it must pair again.
+      responses:
+        "204":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -10759,6 +10941,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ProviderId:
       name: providerId
       in: path
@@ -10811,7 +10998,7 @@ components:
   responses:
     Unauthenticated:
       headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
-      description: The token is missing, invalid, expired or revoked, or its identity has been deleted (`unauthenticated`). Occurs only on the external port and on Agent-only endpoints; the error message never echoes the token
+      description: The token is missing, invalid, expired or revoked, or its identity has been deleted (`unauthenticated`). Occurs only on the external port, on Agent-only endpoints, and at the remote door when the device session is missing, removed or expired; the error message never echoes the token
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10822,7 +11009,10 @@ components:
         - `forbidden`: the identity is valid but not allowed to do this: an external identity called an
           `x-access: console` operation, a cross-organization send was rejected, or a token was sent to a console
           endpoint;
-        - `forbidden_origin`, `invalid_host`: the Origin or Host of a console endpoint request is not on the allowlist.
+        - `forbidden_origin`, `invalid_host`: the Origin or Host of a console endpoint request is not on the allowlist,
+          or at the remote door the Origin is not the remote door's own;
+        - `forbidden` at the remote door: an `x-access: local` operation, or a request with an `Authorization` header;
+        - `pairing_code_invalid`: the pairing code is wrong, has expired or was already used.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10839,7 +11029,7 @@ components:
         `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
         project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`,
         `runtime_in_use` (details is RuntimeInUseDetails), `text_generation_unavailable`, `path_picker_unavailable`,
-        `path_picker_busy`.
+        `path_picker_busy`, `remote_access_off`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -10852,6 +11042,12 @@ components:
     PreconditionFailed:
       headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
       description: If-Match does not match the current content
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+      description: Too many attempts; try again in a minute (`rate_limited`)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -11127,6 +11323,9 @@ components:
 - text_generation_failed: the CLI writing with AI failed, tried to use a tool, ran over its time or returned nothing; the message carries its reason (502)
 - path_picker_unavailable: this computer cannot show its own dialog to choose a path (not macOS, no logged-in desktop session, or the dialog failed to open); the message says why (409)
 - path_picker_busy: a dialog to choose a path is already open (409)
+- remote_access_off: a pairing code needs the remote door to be listening (409)
+- pairing_code_invalid: the pairing code is wrong, has expired or was already used (403)
+- rate_limited: too many attempts; try again in a minute (429)
 - internal_error: internal server error (500)
 ",
         "enum": [
@@ -11186,6 +11385,9 @@ components:
           "text_generation_failed",
           "path_picker_unavailable",
           "path_picker_busy",
+          "remote_access_off",
+          "pairing_code_invalid",
+          "rate_limited",
           "background_task_not_found",
           "background_task_ended",
           "permission_request_answered",
@@ -11234,7 +11436,7 @@ components:
 
     Context:
       type: object
-      required: [organization, project, limits, pathPicker]
+      required: [organization, project, limits, pathPicker, door]
       additionalProperties: false
       properties:
         organization:
@@ -11257,7 +11459,15 @@ components:
           type: boolean
           description: |
             Whether POST /path-picks can show this computer's own dialog to choose a folder or file: true on macOS in a
-            logged-in desktop session (other systems later). Always false for an external identity, which may not call it.
+            logged-in desktop session (other systems later). Always false for an external identity, which may not call it,
+            and at the remote door, where the dialog would open on this computer's screen instead of the device's.
+        door:
+          type: string
+          enum: [local, remote, external]
+          description: |
+            Which listener the request came in on: local, the console on this computer (no login); remote, the remote door
+            with a paired device's session, where the `x-access: local` operations (pairing codes, devices, the remote door
+            setting) are refused; external, the external port with an external identity's token.
 
     Limits: {"type":"object","required":["maxUploadFile","maxFolderUpload","maxMessage","maxInboxMessage","maxSkillArchive","maxSkillEntries","maxCredential","textEdit"],"additionalProperties":false,"properties":{"maxUploadFile":{"type":"integer","description":"Byte limit for a single uploaded file"},"maxFolderUpload":{"type":"integer","format":"int64","description":"Byte limit for a single file uploaded to an Agent folder or a context folder"},"maxMessage":{"type":"integer","description":"Byte limit for a single message"},"maxInboxMessage":{"type":"integer","description":"Byte limit for the body of a single Inbox message"},"maxSkillArchive":{"type":"integer","description":"Total byte limit of a Skill archive after extraction"},"maxSkillEntries":{"type":"integer","description":"Maximum number of entries in a Skill archive"},"maxCredential":{"type":"integer","description":"Byte limit for a single credential"},"textEdit":{"type":"object","required":["maxBytes","extensions"],"additionalProperties":false,"properties":{"maxBytes":{"type":"integer"},"extensions":{"type":"array","items":{"type":"string"}}}},"maxMessageImages":{"type":"integer","minimum":1,"maximum":8},"maxMessageImageBytes":{"type":"integer","format":"int64","minimum":1},"maxMessageImagePixels":{"type":"integer","format":"int64","minimum":1}}}
     Health:
@@ -11779,6 +11989,93 @@ components:
       properties:
         kind: { type: string, enum: [directory, file] }
         defaultPath: { type: string, maxLength: 4096 }
+
+    RemoteAccessSettings:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+        port:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+          description: The loopback port to listen on; null or omitted lets the server pick one and keep it
+
+    RemoteAccess:
+      type: object
+      required: [enabled, port, state, url, error]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean, description: The saved switch }
+        port:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+          description: The port that was set; null when the server picks one
+        state:
+          type: string
+          enum: [off, listening, failed]
+          description: off when the switch is off; listening when the remote door is open; failed when it is on but the server could not listen
+        url:
+          type: [string, "null"]
+          description: The remote door's own address while it listens, such as http://127.0.0.1:53124; null otherwise
+        error:
+          type: [string, "null"]
+          description: Why the server could not listen, when state is failed; null otherwise
+
+    DevicePairing:
+      type: object
+      required: [code, url, expiresAt]
+      additionalProperties: false
+      properties:
+        code: { type: string, minLength: 1, description: The one-time code }
+        url: { type: string, minLength: 1, description: "The pairing link: <remote door address>/pair#<code>" }
+        expiresAt: { type: string, format: date-time }
+
+    DeviceSessionRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { type: string, minLength: 1, maxLength: 256 }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: The device's name; omitted means one is made from the User-Agent
+
+    Device:
+      type: object
+      required: [id, name, createdAt, lastSeenAt, lastAddress, expiresAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        createdAt: { type: string, format: date-time, description: When it was paired }
+        lastSeenAt: { type: string, format: date-time, description: "Its last request, recorded at most once a minute" }
+        lastAddress:
+          type: [string, "null"]
+          description: |
+            The address its last request came from, as the tunnel reports it (CF-Connecting-IP or the first
+            X-Forwarded-For entry), else the connection's own; only for showing, never trusted for access
+        expiresAt: { type: string, format: date-time, description: When the session expires if it is not used again (30 days after lastSeenAt) }
+
+    DeviceList:
+      type: object
+      required: [devices]
+      additionalProperties: false
+      properties:
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/Device" }
+
+    DevicePatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
 
     PathPick:
       type: object

@@ -37,6 +37,7 @@ import (
 	"loop-now/internal/server/convimport"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/devices"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/folders"
@@ -55,6 +56,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/providerstate"
+	"loop-now/internal/server/remoteaccess"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/server/selfsigned"
@@ -113,6 +115,8 @@ type App struct {
 	// External port (nil when not configured): TLS, accepts only external tokens.
 	extListener net.Listener
 	external    *http.Server
+	// Remote door: the second loopback listener for paired devices, opened at Serve when its setting is on.
+	Remote *remoteaccess.Door
 }
 
 // Options lets tests replace some dependencies.
@@ -667,6 +671,10 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	})
 	a.http = &http.Server{Handler: a.API.Handler(), ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(net.Listener) context.Context { return baseCtx }}
+	// The remote door serves the same console to paired devices; it opens at Serve when its setting is on.
+	a.API.Devices = &devices.Service{Store: a.Store}
+	a.Remote = &remoteaccess.Door{Store: a.Store, Handler: a.API.RemoteHandler(), BaseContext: baseCtx, Log: log}
+	a.API.RemoteAccess = a.Remote
 	if extTLS != nil {
 		ln := o.ExternalListener
 		if ln == nil {
@@ -710,6 +718,9 @@ func (a *App) Serve() error {
 		a.PluginHost.Start(settings.Disabled)
 		a.Plugins.WakeOnCommit()
 	}
+	if err := a.Remote.Start(context.Background()); err != nil {
+		return err
+	}
 	a.Log.Info("serving", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
 		// The listener has long been open and connections queue up before Serve starts, so writing the ready file now
@@ -737,6 +748,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 		// SSE connections never end by themselves: cancel the context shared by all requests so event streams exit
 		// quickly, then wait for the remaining requests.
 		a.baseCancel()
+		if a.Remote != nil {
+			_ = a.Remote.Close()
+		}
 		if a.external != nil {
 			if err := a.external.Shutdown(ctx); err != nil {
 				_ = a.external.Close()

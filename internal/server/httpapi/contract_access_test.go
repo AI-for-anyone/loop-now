@@ -17,7 +17,8 @@ import (
 
 // TestSameRequestsOnExternalPort sends the same request for every operation in the contract to both the console and the
 // external port (path parameters are random IDs, the body is an empty object): externally open operations get the same
-// status code on both, console-only operations return 403 on the external port; responses on both sides are validated
+// status code on both, console-only operations (local and pairing ones too) return 403 on the external port; responses
+// on both sides are validated
 // against the contract.
 func TestSameRequestsOnExternalPort(t *testing.T) {
 	e := newEnv(t)
@@ -53,7 +54,7 @@ func TestSameRequestsOnExternalPort(t *testing.T) {
 			body = map[string]any{}
 		}
 		extCode, extBody, _ := ext.do(method, path, body, "X-Contract-Invalid-Request", "1")
-		if meta[k].Access == "console" {
+		if access := meta[k].Access; access == "console" || access == "local" || access == "pairing" {
 			if extCode != http.StatusForbidden || !strings.Contains(string(extBody), `"forbidden"`) {
 				t.Errorf("%s is console only, the external port should return 403: %d %s", k, extCode, extBody)
 			}

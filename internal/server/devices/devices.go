@@ -41,6 +41,24 @@ const (
 	MaxNameLength = 64
 )
 
+// The session cookie: __Host- over HTTPS (Secure, no Domain, so a sibling subdomain cannot set or shadow it), the plain
+// name over HTTP (the remote door opened on this computer). The browser keeps it for 400 days, the longest browsers
+// allow; the server ends the session after 30 idle days.
+const (
+	CookieName       = "loop_now_device"
+	SecureCookieName = "__Host-loop_now_device"
+	CookieMaxAge     = 400 * 24 * 60 * 60
+)
+
+// Cookie returns the session cookie carrying token.
+func Cookie(token string, secure bool) *http.Cookie {
+	name := CookieName
+	if secure {
+		name = SecureCookieName
+	}
+	return &http.Cookie{Name: name, Value: token, Path: "/", MaxAge: CookieMaxAge, HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode}
+}
+
 // Service holds the open pairing codes, the failed attempts and the requests in flight per device.
 type Service struct {
 	Store *store.Store

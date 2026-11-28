@@ -15,12 +15,14 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Three entry points:
+// Four entry points:
 //   - /api/v1 on the loopback listener: the console, no login; a request with an Authorization header is accepted
 //     only with a plugin token (lnp_, limited by x-plugin-scope), anything else is rejected;
 //   - /agent/v1 on the loopback listener: Agents, a valid lna_ token is required, requests with an Origin are rejected;
 //   - the external listener: external identities, every request must carry a valid lne_ token and may only call
-//     routes declared as externally open.
+//     routes declared as externally open;
+//   - the remote door (remote_door.go): paired devices acting as the console, with a device session cookie except for
+//     pairing; local-only routes are refused there.
 //
 // Middleware order: request ID and version headers -> authentication -> permission table -> audit -> handler.
 
@@ -32,6 +34,10 @@ func (s *Server) newMux(prefix string, routes []Route) *http.ServeMux {
 		m.HandleFunc(rt.Method+" "+prefix+rt.Pattern, s.guard(rt))
 	}
 	m.HandleFunc(prefix+"/", func(w http.ResponseWriter, r *http.Request) {
+		if p, _ := auth.From(r.Context()); doorOf(r) == DoorRemote && p.Device == uuid.Nil {
+			writeError(w, deviceRequired())
+			return
+		}
 		writeError(w, unknownEndpoint())
 	})
 	return m
@@ -62,7 +68,7 @@ func (s *Server) ExternalHandler(downloads http.Handler) http.Handler {
 	outer.Handle("/hooks/{pluginId}", s.pluginIngress("external"))
 	outer.Handle("/hooks/{pluginId}/{path...}", s.pluginIngress("external"))
 	outer.Handle("/", s.externalAuth(root))
-	return withCommonHeaders(s.logRequests(outer))
+	return withCommonHeaders(s.logRequests(withDoor(DoorExternal, outer)))
 }
 
 func unauthenticated() error {
@@ -154,6 +160,10 @@ func unauthenticatedIfNotFound(err error) error {
 func (s *Server) guard(rt Route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, _ := auth.From(r.Context())
+		if err := remoteRefusal(r, rt, p); err != nil {
+			writeError(w, err)
+			return
+		}
 		if p.Kind == auth.KindExternal && rt.Access != ConsoleAndExternal {
 			writeError(w, apperr.Forbidden("External identities cannot use this endpoint. It is available to the console only."))
 			return

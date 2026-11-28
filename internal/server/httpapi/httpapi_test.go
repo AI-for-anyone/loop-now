@@ -317,7 +317,7 @@ func TestRouteCoverage(t *testing.T) {
 			if !seen[key] {
 				t.Errorf("%s: contract operation is not implemented: %s", file, key)
 			}
-			if withAccess && m.Access != "console" && m.Access != "console-and-external" {
+			if withAccess && m.Access != "console" && m.Access != "console-and-external" && m.Access != "local" && m.Access != "pairing" {
 				t.Errorf("%s: %s has a missing or invalid x-access: %q", file, key, m.Access)
 			}
 		}

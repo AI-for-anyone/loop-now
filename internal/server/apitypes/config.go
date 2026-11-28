@@ -44,8 +44,11 @@ type Context struct {
 		Name           string    `json:"name"`
 	} `json:"project"`
 	Limits Limits `json:"limits"`
-	// PathPicker says whether POST /path-picks can show this computer's own dialog; false for an external identity.
+	// PathPicker says whether POST /path-picks can show this computer's own dialog; false for an external identity and
+	// at the remote door.
 	PathPicker bool `json:"pathPicker"`
+	// Door is the listener the request came in on: local, remote or external.
+	Door string `json:"door"`
 }
 
 // PathPick mirrors the PathPick schema: the chosen path, or null when the person cancelled.
