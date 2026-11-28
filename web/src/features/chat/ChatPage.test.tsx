@@ -206,6 +206,24 @@ describe('Sending messages', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('Message sent while offline')
   })
 
+  it('on a remote-door Cloudflare 502 HTML response shows unreachable without raw HTML and opens the remote cannot-connect banner', async () => {
+    const cfHtml = '<!doctype html><!--[if lt IE 7]><html><body>Bad gateway Ray ID: cf-chat-502</body></html>'
+    const { user } = await renderChat({
+      handlers: [
+        http.get(apiUrl('/context'), () => HttpResponse.json({ ...context, door: 'remote' })),
+        http.post(apiUrl('/agents/:agentId/messages'), () => new HttpResponse(cfHtml, { status: 502, headers: { 'Content-Type': 'text/html' } })),
+      ],
+    })
+    await user.type(screen.getByLabelText('Message'), 'Sent while computer is offline')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Can\'t reach the server', { selector: '[data-slot="alert-description"]' })).toBeInTheDocument()
+    expect(await screen.findByText(/Can't connect to/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('<!doctype html>')
+    expect(document.body.textContent).not.toContain('cf-chat-502')
+    expect(document.body.textContent).not.toContain('LOOP_NOW_CONSOLE_ORIGINS')
+    expect(screen.getByLabelText('Message')).toHaveValue('Sent while computer is offline')
+  })
+
   it('when the server rejects an overlong message, shows the reason and keeps the content', async () => {
     const { user } = await renderChat({
       handlers: [http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(errorBody('payload_too_large', 'The message exceeds 64 KiB'), { status: 413 }))],

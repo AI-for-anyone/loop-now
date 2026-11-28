@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ApiError, call, deviceAuth, type Schemas } from './client'
+import { api, ApiError, call, deviceAuth, isUnreachableResponse, type Schemas } from './client'
 
 export const deviceKeys = {
   remoteAccess: ['remote-access'] as const,
@@ -259,7 +259,7 @@ export function checkDeviceSession(): Promise<boolean> {
   if (activeProbe) return activeProbe
   activeProbe = api
     .GET('/context')
-    .then((result) => result.response.status !== 401 && !deviceAuth.isUnauthenticated())
+    .then((result) => (!isUnreachableResponse(result.response) && result.response.status === 401 ? false : !deviceAuth.isUnauthenticated()))
     .catch(() => !deviceAuth.isUnauthenticated())
     .finally(() => {
       activeProbe = null

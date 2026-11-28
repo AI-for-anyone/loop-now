@@ -3,7 +3,7 @@ import { useQueryClient, type Query, type QueryClient } from '@tanstack/react-qu
 import { RotateCwIcon, WifiOffIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api, deviceAuth, reachability } from '@/api/client'
-import { useContextInfo } from '@/api/queries'
+import { useContextInfo, useHealth } from '@/api/queries'
 import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { isUnreachable } from '@/lib/errors'
@@ -23,8 +23,10 @@ async function retry(client: QueryClient) {
 
 // Show the global connection notice when any request does not reach the server; it disappears as soon as any later request gets a response.
 export function ConnectionBanner() {
-  // Read the default context at startup, which also serves as the first connection probe.
+  // Read the default context at startup, and keep /health polling active even when the sidebar is collapsed so disconnections and
+  // recoveries are detected automatically.
   const context = useContextInfo()
+  useHealth()
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const client = useQueryClient()
   const wasReachable = useRef(reachable)

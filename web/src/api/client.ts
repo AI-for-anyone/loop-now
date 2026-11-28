@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch'
-import { config } from '@/config'
+import { absoluteApiBase, config } from '@/config'
 import type { components, paths } from './schema.gen'
 
 export type Schemas = components['schemas']
@@ -119,6 +119,72 @@ export const deviceAuth = {
   },
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]'
+}
+
+export function isRemoteDoorOrigin(door: Door | null | undefined, apiBase: string, origin: string): boolean {
+  if (door === 'remote') return true
+  if (door === 'local') return false
+  // Before /context has answered (e.g. a phone opening https://<id>.loop-now.app while the host is already offline),
+  // a same-origin console on a non-loopback host is served by the remote door through a tunnel.
+  try {
+    const pageUrl = new URL(origin)
+    const apiUrl = new URL(apiBase)
+    return pageUrl.origin === apiUrl.origin && !isLoopbackHost(pageUrl.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isGatewayStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504 || (status >= 520 && status <= 530)
+}
+
+function isJsonContentType(contentType: string | null): boolean {
+  const ct = (contentType ?? '').toLowerCase()
+  return ct.includes('application/json') || ct.includes('+json')
+}
+
+function isHtmlContentType(contentType: string | null): boolean {
+  const ct = (contentType ?? '').toLowerCase()
+  return ct.includes('text/html') || ct.includes('application/xhtml')
+}
+
+function isCurrentlyRemoteDoor(): boolean {
+  if (typeof window === 'undefined') return knownDoor === 'remote'
+  return isRemoteDoorOrigin(knownDoor, absoluteApiBase(), window.location.origin)
+}
+
+// Whether an HTTP response came from a gateway/intermediary (such as Cloudflare answering 530 or a 502 HTML page when the computer is
+// offline) instead of the Loop Now server. Every genuine Loop Now response carries Loop-Now-Version (written by withCommonHeaders).
+export function isUnreachableHttpResponse(info: {
+  status: number
+  contentType: string | null
+  hasVersionHeader: boolean
+}): boolean {
+  if (info.hasVersionHeader) return false
+  const { status, contentType } = info
+  if (isCurrentlyRemoteDoor()) {
+    if (serverVersion !== null) return true
+    if (isGatewayStatus(status)) return true
+    if ((status < 200 || status >= 300) && !isJsonContentType(contentType)) return true
+    if (isHtmlContentType(contentType)) return true
+    return false
+  }
+  if (status >= 520 && status <= 530) return true
+  if (isGatewayStatus(status) && isHtmlContentType(contentType)) return true
+  return false
+}
+
+export function isUnreachableResponse(response: Response): boolean {
+  return isUnreachableHttpResponse({
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    hasVersionHeader: Boolean(response.headers.get(VERSION_HEADER)),
+  })
+}
+
 export const api = createClient<paths>({
   baseUrl: config.apiBase,
   // Read globalThis.fetch on every request so that a fetch replaced in tests takes effect.
@@ -127,10 +193,13 @@ export const api = createClient<paths>({
     const epoch = authEpoch
     try {
       const response = await globalThis.fetch(request)
-      settle(order, true)
-      noteVersion(response)
-      if (response.status === 401 && epoch === authEpoch && (knownDoor === 'remote' || (knownDoor === null && isContextRequest(request.url)))) {
-        setUnauthenticated(true)
+      const unreachable = isUnreachableResponse(response)
+      settle(order, !unreachable)
+      if (!unreachable) {
+        noteVersion(response)
+        if (response.status === 401 && epoch === authEpoch && (knownDoor === 'remote' || (knownDoor === null && isContextRequest(request.url)))) {
+          setUnauthenticated(true)
+        }
       }
       return response
     } catch (cause) {
@@ -259,6 +328,12 @@ function isErrorBody(value: unknown): value is Schemas['Error'] {
 
 export const REQUEST_ID_HEADER = 'Loop-Now-Request-Id'
 
+// Raw HTML error pages (e.g. Cloudflare 502/530 pages or proxy pages) must never be shown verbatim as error text.
+function looksLikeHtml(text: string): boolean {
+  const trimmed = text.replace(/^\s*(?:<!--[\s\S]*?-->\s*)*/u, '')
+  return /^<(?:!doctype|html|head|body|title|meta|div|h[1-6]|p|pre|center|section|main|article)\b/i.test(trimmed)
+}
+
 export function toApiError(status: number, body: unknown, requestId: string | null = null): ApiError {
   if (isErrorBody(body)) {
     const { code, message, details, fields } = body.error
@@ -271,7 +346,9 @@ export function toApiError(status: number, body: unknown, requestId: string | nu
       requestId,
     })
   }
-  return new ApiError({ status, code: 'unknown', serverMessage: typeof body === 'string' && body !== '' ? body : null, requestId })
+  const raw = typeof body === 'string' ? body.trim() : ''
+  const serverMessage = raw !== '' && !looksLikeHtml(raw) ? raw : null
+  return new ApiError({ status, code: 'unknown', serverMessage, requestId })
 }
 
 // Get the request ID from a response (for cross-origin requests the server exposes it via Access-Control-Expose-Headers).
@@ -292,6 +369,9 @@ export async function call<T>(request: Promise<FetchResult<T>>): Promise<T> {
     result = await request
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+    throw new ApiError({ status: 0, code: 'unreachable' })
+  }
+  if (isUnreachableResponse(result.response)) {
     throw new ApiError({ status: 0, code: 'unreachable' })
   }
   if (!result.response.ok) throw toApiError(result.response.status, result.error, requestIdOf(result.response))

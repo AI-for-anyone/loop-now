@@ -165,4 +165,59 @@ describe('top bar connection status', () => {
     expect(isRemoteDoorConnection(null, 'http://127.0.0.1:8780/api/v1', 'http://localhost:5173')).toBe(false)
     expect(isRemoteDoorConnection(null, 'http://127.0.0.1:8780/api/v1', 'http://127.0.0.1:8780')).toBe(false)
   })
+
+  it('on the remote door through a tunnel, shows the remote-door banner on Cloudflare 530 and 502 HTML without HTML or LOOP_NOW_CONSOLE_ORIGINS, and clears it on recovery', async () => {
+    let mode: 'online' | 'cf530' | 'cf502' = 'online'
+    const cf502Html = '<!doctype html><!--[if lt IE 7]><html><body>Bad gateway Ray ID: cf-502-test</body></html>'
+
+    server.use(
+      http.get(apiUrl('/context'), () =>
+        mode === 'online'
+          ? HttpResponse.json({ ...context, door: 'remote' })
+          : mode === 'cf530'
+            ? new HttpResponse('error code: 1033', { status: 530, headers: { 'Content-Type': 'text/plain' } })
+            : new HttpResponse(cf502Html, { status: 502, headers: { 'Content-Type': 'text/html' } }),
+      ),
+      http.get(apiUrl('/health'), () =>
+        mode === 'online'
+          ? HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })
+          : mode === 'cf530'
+            ? new HttpResponse('error code: 1033', { status: 530, headers: { 'Content-Type': 'text/plain' } })
+            : new HttpResponse(cf502Html, { status: 502, headers: { 'Content-Type': 'text/html' } }),
+      ),
+      ...baseHandlers([]),
+    )
+
+    renderRoutes(routes, defaultAgentsPath)
+    expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
+
+    // Tunnel switched off -> Cloudflare returns 530 (error code: 1033).
+    mode = 'cf530'
+    focusManager.setFocused(false)
+    focusManager.setFocused(true)
+    try {
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/Can't connect to/)
+      expect(alert).not.toHaveTextContent('LOOP_NOW_CONSOLE_ORIGINS')
+      expect(alert).not.toHaveTextContent('1033')
+      expect(within(topStatus()).getByText('Unreachable')).toBeInTheDocument()
+
+      // Server stopped -> Cloudflare returns 502 HTML; banner stays and raw HTML never appears.
+      mode = 'cf502'
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Can't connect to/))
+      expect(document.body.textContent).not.toContain('<!doctype html>')
+      expect(document.body.textContent).not.toContain('cf-502-test')
+
+      // Tunnel back online -> Loop Now responds with Loop-Now-Version and the banner clears automatically.
+      mode = 'online'
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+      expect(await within(topStatus()).findByText('Connected')).toBeInTheDocument()
+    } finally {
+      focusManager.setFocused(undefined)
+    }
+  })
 })
